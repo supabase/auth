@@ -60,6 +60,12 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	}
 }
 
+// Login is the endpoint wrapper over OAuth access token requests and handle only password requests
+func (a *API) Login(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	return a.ResourceOwnerPasswordGrant(ctx, w, r)
+}
+
 // ResourceOwnerPasswordGrant implements the password grant type flow
 func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	params := &PasswordGrantParams{}
