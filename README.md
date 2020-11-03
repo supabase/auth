@@ -81,8 +81,8 @@ Adds a prefix to all table names.
 Migrations are not applied automatically, so you will need to run them after
 you've built gotrue.
 
-* If built locally: `./gotrue migrate`
-* Using Docker: `docker run --rm gotrue gotrue migrate`
+- If built locally: `./gotrue migrate`
+- Using Docker: `docker run --rm gotrue gotrue migrate`
 
 ### Logging
 
@@ -247,7 +247,10 @@ Default Content (if template is unavailable):
 ```html
 <h2>You have been invited</h2>
 
-<p>You have been invited to create a user on {{ .SiteURL }}. Follow this link to accept the invite:</p>
+<p>
+  You have been invited to create a user on {{ .SiteURL }}. Follow this link to
+  accept the invite:
+</p>
 <p><a href="{{ .ConfirmationURL }}">Accept the invite</a></p>
 ```
 
@@ -303,7 +306,10 @@ Default Content (if template is unavailable):
 ```html
 <h2>Confirm Change of Email</h2>
 
-<p>Follow this link to confirm the update of your email from {{ .Email }} to {{ .NewEmail }}:</p>
+<p>
+  Follow this link to confirm the update of your email from {{ .Email }} to {{
+  .NewEmail }}:
+</p>
 <p><a href="{{ .ConfirmationURL }}">Change Email</a></p>
 ```
 
@@ -311,7 +317,7 @@ Default Content (if template is unavailable):
 
 GoTrue exposes the following endpoints:
 
-* **GET /settings**
+- **GET /settings**
 
   Returns the publicly available settings for this gotrue instance.
 
@@ -328,7 +334,7 @@ GoTrue exposes the following endpoints:
   }
   ```
 
-* **POST /signup**
+- **POST /signup**
 
   Register a new user with an email and password.
 
@@ -351,7 +357,7 @@ GoTrue exposes the following endpoints:
   }
   ```
 
-* **POST /invite**
+- **POST /invite**
 
   Invites a new user with an email.
 
@@ -374,7 +380,7 @@ GoTrue exposes the following endpoints:
   }
   ```
 
-* **POST /verify**
+- **POST /verify**
 
   Verify a registration or a password recovery. Type can be `signup` or `recovery`
   and the `token` is a token returned from either `/signup` or `/recover`.
@@ -386,7 +392,7 @@ GoTrue exposes the following endpoints:
     "password": "12345abcdef" // only required if responding to an 'invite'
   }
   ```
-  
+
   `password` is required for signup verification if no existing password exists.
 
   Returns:
@@ -400,28 +406,30 @@ GoTrue exposes the following endpoints:
   }
   ```
 
-* **GET /verify**
+- **GET /verify**
 
   Verify a registration or a password recovery. Type can be `signup` or `recovery`
   and the `token` is a token returned from either `/signup` or `/recover`.
 
   query params:
+
   ```json
   {
     "type": "signup",
-    "token": "confirmation-code-delivered-in-email",
+    "token": "confirmation-code-delivered-in-email"
   }
   ```
-  
+
   `password` is required for signup verification if no existing password exists.
 
   User will be logged in and redirected to:
 
   ```json
-  SITE_URL/#access_token=jwt-token-representing-the-user&token_type=bearer&expires_in=3600&refresh_token=a-refresh-token
+  (SITE_URL / #access_token = (jwt - token - representing - the - user) &
+  token_type = bearer & expires_in = 3600 & refresh_token = a - refresh - token)
   ```
 
-* **POST /magiclink**
+- **POST /magiclink**
 
   Magic Link. Will deliver a link (e.g. `/verify?type=recovery&token=fgtyuf68ddqdaDd`) to the user based on
   email address which they can use to redeem an access_token.
@@ -438,7 +446,7 @@ GoTrue exposes the following endpoints:
   {}
   ```
 
-* **POST /recover**
+- **POST /recover**
 
   Password recovery. Will deliver a password recovery mail to the user based on
   email address.
@@ -455,32 +463,36 @@ GoTrue exposes the following endpoints:
   {}
   ```
 
-* **POST /token**
+- **POST /token**
 
   This is an OAuth2 endpoint that currently implements
   the password and refresh_token grant types
 
   query params:
+
   ```
   ?grant_type=password
   ```
 
   body:
+
   ```json
   {
     "email": "name@domain.com",
-    "password": "somepassword",
+    "password": "somepassword"
   }
   ```
 
   or
 
   query params:
+
   ```
   grant_type=refresh_token
   ```
 
   body:
+
   ```json
   {
     "refresh_token": "a-refresh-token"
@@ -501,7 +513,31 @@ GoTrue exposes the following endpoints:
   }
   ```
 
-* **GET /user**
+- **POST /login**
+
+  Alias to /token?grant_type=password
+
+  body:
+
+  ```json
+  {
+    "email": "name@domain.com",
+    "password": "somepassword"
+  }
+  ```
+
+  Returns:
+
+  ```json
+  {
+    "access_token": "jwt-token-representing-the-user",
+    "token_type": "bearer",
+    "expires_in": 3600,
+    "refresh_token": "a-refresh-token"
+  }
+  ```
+
+- **GET /user**
 
   Get the JSON object for the logged in user (requires authentication)
 
@@ -517,7 +553,7 @@ GoTrue exposes the following endpoints:
   }
   ```
 
-* **PUT /user**
+- **PUT /user**
 
   Update a user (Requires authentication). Apart from changing email/password, this
   method can be used to set custom user data.
@@ -546,35 +582,35 @@ GoTrue exposes the following endpoints:
   }
   ```
 
-* **POST /logout**
+- **POST /logout**
 
   Logout a user (Requires authentication).
 
   This will revoke all refresh tokens for the user. Remember that the JWT tokens
   will still be valid for stateless auth until they expires.
 
-
-* **GET /authorize**
+- **GET /authorize**
 
   Get access_token from external oauth provider
 
   query params:
+
   ```
   provider=google | bitbucket | github | gitlab
   ```
- 
+
   Redirects to provider and then to `/callback`
-  
-* **GET /callback**
+
+- **GET /callback**
 
   External provider should redirect to here
- 
+
   Redirects to `<GOTRUE_SITE_URL>#access_token=<access_token>&refresh_token=<refresh_token>&expires_in=3600&provider=<provider_name>`
-  
+
 ## Pre-built
 
 - [Docker](https://hub.docker.com/repository/docker/supabase/gotrue)
 
 ## TODO
 
-* Schema for custom user data in config file
+- Schema for custom user data in config file
