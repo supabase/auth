@@ -9,7 +9,7 @@ import "github.com/netlify/gotrue/api"
 // Verify a registration or a password recovery and then redirect to app. Type can be `signup` or `recovery` and the `token` is a token returned from either `/signup` or `/recover`.
 //
 // responses:
-//   301: redirect
+//   301: verifyGetResponse
 //   400: httpErrorResponse
 //   404: httpErrorResponse
 //   422: httpErrorResponse
@@ -34,6 +34,26 @@ type verifyGetParams struct {
 	//
 	// in:query
 	Password string `json:"password"`
+}
+
+// Loged in and redirected to user's app with fields
+// swagger:response verifyGetResponse
+type verifyGetResponse struct {
+	// in: query
+	// required: true
+	Token string `json:"access_token"`
+
+	// in: query
+	// required: true
+	TokenType string `json:"token_type"`
+
+	// in: query
+	// required: true
+	ExpiresIn int `json:"expires_in"`
+
+	// in: query
+	// required: true
+	RefreshToken string `json:"refresh_token"`
 }
 
 // swagger:route POST /verify recover verifyPostParams
