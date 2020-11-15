@@ -30,7 +30,7 @@ type verifyGetParams struct {
 	// required: true
 	Token string `json:"token"`
 
-	// set only when user invited
+	// set only when user invited and type is signup
 	//
 	// in:query
 	Password string `json:"password"`
