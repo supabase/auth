@@ -15,6 +15,7 @@ import (
 //   401: httpErrorResponse
 //   400: httpErrorResponse
 //   404: httpErrorResponse
+//   422: httpErrorResponse
 //   500: httpErrorResponse
 
 // User's email who needs password recovery
