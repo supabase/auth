@@ -2,7 +2,9 @@ package docs
 
 // swagger:route POST /logout user logoutPostParams
 //
-// Logout a user.This will revoke all refresh tokens for the user. Remember that the JWT tokens will still be valid for stateless auth until they expires.
+// Logout a user.
+//
+// This will revoke all refresh tokens for the user. Remember that the JWT tokens will still be valid for stateless auth until they expires.
 //
 // Security:
 //  api_key:

@@ -6,7 +6,9 @@ import (
 
 // swagger:route POST /recover recover recoverPostParams
 //
-// Password recovery. Will deliver a password recovery mail to the user based on email address.
+// Start password recovery
+//
+// Will deliver a password recovery mail to the user based on email address.
 //
 // Security:
 //  api_key:

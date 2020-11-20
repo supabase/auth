@@ -46,7 +46,9 @@ type UserConfirms struct {
 
 // swagger:route PUT /user user userupdate
 //
-// Update a user. Apart from changing email/password, this method can be used to set custom user data.
+// Update user's parameters.
+//
+// Apart from changing email/password, this method can be used to set custom user data.
 //
 // Security:
 //  api_key:
