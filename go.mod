@@ -10,6 +10,7 @@ require (
 	github.com/didip/tollbooth/v5 v5.1.1
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/go-chi/chi v4.0.2+incompatible
+	github.com/go-openapi/runtime v0.19.24
 	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gobuffalo/envy v1.9.0 // indirect
 	github.com/gobuffalo/fizz v1.13.0 // indirect
@@ -39,7 +40,7 @@ require (
 	github.com/sethvargo/go-password v0.2.0
 	github.com/sirupsen/logrus v1.7.0
 	github.com/spf13/cobra v1.1.1
-	github.com/stretchr/testify v1.5.1
+	github.com/stretchr/testify v1.6.1
 	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
 	golang.org/x/net v0.0.0-20201031054903-ff519b6c9102 // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
@@ -49,7 +50,6 @@ require (
 	google.golang.org/appengine v1.6.6 // indirect
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df // indirect
 	gopkg.in/yaml.v1 v1.0.0-20140924161607-9f9df34309c0 // indirect
-	gopkg.in/yaml.v2 v2.3.0 // indirect
 )
 
 go 1.13
