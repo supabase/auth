@@ -153,8 +153,8 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 					r.Get("/", api.adminUserGet)
 					r.Put("/", api.adminUserUpdate)
-					r.Patch("/enable", api.adminChangeUserActivity(true))
-					r.Patch("/disable", api.adminChangeUserActivity(false))
+					r.Patch("/enable", api.adminSetUserStatus(true))
+					r.Patch("/disable", api.adminSetUserStatus(false))
 					r.Delete("/", api.adminUserDelete)
 				})
 			})

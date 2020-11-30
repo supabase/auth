@@ -249,8 +249,8 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, map[string]interface{}{})
 }
 
-// adminChangeUserActivity can enable/disable user
-func (a *API) adminChangeUserActivity(isEnabled bool) func(w http.ResponseWriter, r *http.Request) error {
+// adminSetUserStatus can enable/disable user
+func (a *API) adminSetUserStatus(isEnabled bool) func(w http.ResponseWriter, r *http.Request) error {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		ctx := r.Context()
 
