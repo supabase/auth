@@ -31,7 +31,8 @@ func TestSettings_DefaultProviders(t *testing.T) {
 	require.True(t, p.GitLab)
 	require.True(t, p.Bitbucket)
 	require.True(t, p.SAML)
-	require.False(t, p.Facebook)
+	require.True(t, p.Facebook)
+	require.True(t, p.Twitter)
 }
 
 func TestSettings_EmailDisabled(t *testing.T) {
