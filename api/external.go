@@ -11,6 +11,7 @@ import (
 
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gofrs/uuid"
+	"github.com/markbates/goth/gothic"
 	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -37,11 +38,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	providerType := r.URL.Query().Get("provider")
 	scopes := r.URL.Query().Get("scopes")
 
-	provider, err := a.Provider(ctx, providerType, scopes)
-	if err != nil {
-		return badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
-	}
-
 	inviteToken := r.URL.Query().Get("invite_token")
 	if inviteToken != "" {
 		_, userErr := models.FindUserByConfirmationToken(a.db, inviteToken)
@@ -57,6 +53,14 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	if redirectURL == "" {
 		redirectURL = a.getReferrer(r)
 	}
+
+	provider, err := a.Provider(ctx, providerType, scopes)
+	if err != nil {
+		// check if goth supports provider
+		gothic.BeginAuthHandler(w, r)
+		return nil
+	}
+
 	log := getLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 

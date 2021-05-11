@@ -14,6 +14,8 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
 	"github.com/imdario/mergo"
+	"github.com/markbates/goth"
+	"github.com/markbates/goth/providers/twitter"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/mailer"
 	"github.com/netlify/gotrue/storage"
@@ -79,6 +81,10 @@ func NewAPI(globalConfig *conf.GlobalConfiguration, db *storage.Connection) *API
 // NewAPIWithVersion creates a new REST API using the specified version
 func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
 	api := &API{config: globalConfig, db: db, version: version}
+
+	goth.UseProviders(
+		twitter.New(globalConfig.External.Twitter.ClientID, globalConfig.External.Twitter.Secret, globalConfig.External.Twitter.RedirectURI),
+	)
 
 	xffmw, _ := xff.Default()
 	logger := newStructuredLogger(logrus.StandardLogger())
