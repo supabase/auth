@@ -10,18 +10,24 @@ import (
 
 type OAuthProviderData struct {
 	userData *provider.UserProvidedData
-	token string
+	token    string
 }
 
 // loadOAuthState parses the `state` query parameter as a JWS payload,
 // extracting the provider requested
 func (a *API) loadOAuthState(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	ctx := r.Context()
+
+	providerType := r.URL.Query().Get("provider")
+	if providerType == "twitter" {
+		return withSignature(ctx, ""), nil
+	}
+
 	state := r.URL.Query().Get("state")
 	if state == "" {
 		return nil, badRequestError("OAuth state parameter missing")
 	}
 
-	ctx := r.Context()
 	return a.loadExternalState(ctx, state)
 }
 
@@ -61,7 +67,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 
 	return &OAuthProviderData{
 		userData: userData,
-		token: token.AccessToken,
+		token:    token.AccessToken,
 	}, nil
 }
 

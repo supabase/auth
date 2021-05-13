@@ -11,6 +11,9 @@ import (
 
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gofrs/uuid"
+	"github.com/markbates/goth"
+	"github.com/markbates/goth/gothic"
+	"github.com/markbates/goth/providers/twitter"
 	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -36,6 +39,13 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 
 	providerType := r.URL.Query().Get("provider")
 	scopes := r.URL.Query().Get("scopes")
+
+	if providerType == "twitter" {
+		goth.UseProviders(
+			twitter.New(config.External.Twitter.ClientID, config.External.Twitter.Secret, "http://localhost:9999/callback?provider=twitter"),
+		)
+		gothic.BeginAuthHandler(w, r)
+	}
 
 	provider, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
@@ -88,6 +98,11 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 }
 
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
+	if gothUser, err := gothic.CompleteUserAuth(w, r); err == nil {
+		w.Write([]byte(gothUser.Email))
+		return nil
+	}
+
 	ctx := r.Context()
 	config := a.getConfig(ctx)
 	instanceID := getInstanceID(ctx)
