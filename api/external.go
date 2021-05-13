@@ -332,7 +332,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	case "facebook":
 		return provider.NewFacebookProvider(config.External.Facebook, scopes)
 	case "twitter":
-		return provider.NewTwitterProvider(config.External.Twitter, scopes)
+		return nil, fmt.Errorf("Provider %s should not reach this point", name)
 	case "azure":
 		return provider.NewAzureProvider(config.External.Azure, scopes)
 	case "saml":
