@@ -2,21 +2,36 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/gofrs/uuid"
+	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sirupsen/logrus"
 )
+
+type ExternalProviderSession struct {
+	SiteURL     string       `json:"SiteURL"`
+	InstanceID  string       `json:"InstanceID"`
+	NetlifyID   string       `json:"NetlifyID"`
+	ExpiresAt   int64        `json:"ExpiresAt"`
+	Provider    string       `json:"Provider"`
+	InviteToken string       `json:"InviteToken,omitempty"`
+	Referrer    string       `json:"Referrer,omitempty"`
+	Session     goth.Session `json:"Session"`
+}
 
 type ExternalProviderClaims struct {
 	NetlifyMicroserviceClaims
@@ -57,7 +72,40 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	provider, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
 		// check if goth supports provider
-		gothic.BeginAuthHandler(w, r)
+		gothProvider, err := goth.GetProvider(providerType)
+		if err != nil {
+			return internalServerError("Goth cannot find provider").WithInternalError(err)
+		}
+		gothSession, err := gothProvider.BeginAuth(gothic.SetState(r))
+		if err != nil {
+			return internalServerError("Goth cannot authenticate with provider").WithInternalError(err)
+		}
+		url, err := gothSession.GetAuthURL()
+		if err != nil {
+			return internalServerError("Goth cannot retrieve URL for the auth endpoint for the provider").WithInternalError(err)
+		}
+
+		// make use of session-based auth
+		sess := &ExternalProviderSession{
+			SiteURL:     config.SiteURL,
+			InstanceID:  getInstanceID(ctx).String(),
+			NetlifyID:   getNetlifyID(ctx),
+			ExpiresAt:   time.Now().Add(5 * time.Minute).Unix(),
+			Provider:    providerType,
+			InviteToken: inviteToken,
+			Referrer:    redirectURL,
+			Session:     gothSession,
+		}
+
+		err = gothic.StoreInSession(providerType, sess.Marshal(), r, w)
+		if err != nil {
+			return internalServerError("Goth cannot store session").WithInternalError(err)
+		}
+		// err = gothic.StoreInSession(providerType+"_external", sess.Marshal(), r, w)
+		// if err != nil {
+		// 	return internalServerError("Goth cannot store external session").WithInternalError(err)
+		// }
+		http.Redirect(w, r, url, http.StatusFound)
 		return nil
 	}
 
@@ -92,140 +140,191 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 }
 
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	config := a.getConfig(ctx)
-	instanceID := getInstanceID(ctx)
+	// ctx := r.Context()
+	// config := a.getConfig(ctx)
+	// instanceID := getInstanceID(ctx)
 
-	providerType := getExternalProviderType(ctx)
-	var userData *provider.UserProvidedData
-	var providerToken string
-	if providerType == "saml" {
-		samlUserData, err := a.samlCallback(r, ctx)
-		if err != nil {
-			return err
-		}
-		userData = samlUserData
-	} else {
-		oAuthResponseData, err := a.oAuthCallback(ctx, r, providerType)
-		if err != nil {
-			return err
-		}
-		userData = oAuthResponseData.userData
-		providerToken = oAuthResponseData.token
-	}
-
-	var user *models.User
-	var token *AccessTokenResponse
-	err := a.db.Transaction(func(tx *storage.Connection) error {
-		var terr error
-		inviteToken := getInviteToken(ctx)
-		if inviteToken != "" {
-			if user, terr = a.processInvite(ctx, tx, userData, instanceID, inviteToken, providerType); terr != nil {
-				return terr
-			}
-		} else {
-			aud := a.requestAud(ctx, r)
-
-			// search user using all available emails
-			var emailData provider.Email
-			for _, e := range userData.Emails {
-				if e.Verified || config.Mailer.Autoconfirm {
-					user, terr = models.FindUserByEmailAndAudience(tx, instanceID, e.Email, aud)
-					if terr != nil && !models.IsNotFoundError(terr) {
-						return internalServerError("Error checking for duplicate users").WithInternalError(terr)
-					}
-
-					if user != nil {
-						emailData = e
-						break
-					}
-				}
-			}
-
-			if user == nil {
-				if config.DisableSignup {
-					return forbiddenError("Signups not allowed for this instance")
-				}
-
-				// prefer primary email for new signups
-				emailData = userData.Emails[0]
-				for _, e := range userData.Emails {
-					if e.Primary {
-						emailData = e
-						break
-					}
-				}
-
-				params := &SignupParams{
-					Provider: providerType,
-					Email:    emailData.Email,
-					Aud:      aud,
-					Data:     make(map[string]interface{}),
-				}
-				for k, v := range userData.Metadata {
-					if v != "" {
-						params.Data[k] = v
-					}
-				}
-
-				user, terr = a.signupNewUser(ctx, tx, params)
-				if terr != nil {
-					return terr
-				}
-			}
-
-			if !user.IsConfirmed() {
-				if !emailData.Verified && !config.Mailer.Autoconfirm {
-					mailer := a.Mailer(ctx)
-					referrer := a.getReferrer(r)
-					if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
-						return internalServerError("Error sending confirmation mail").WithInternalError(terr)
-					}
-					// email must be verified to issue a token
-					return nil
-				}
-
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
-					return terr
-				}
-				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
-					return terr
-				}
-
-				// fall through to auto-confirm and issue token
-				if terr = user.Confirm(tx); terr != nil {
-					return internalServerError("Error updating user").WithInternalError(terr)
-				}
-			} else {
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
-					return terr
-				}
-				if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
-					return terr
-				}
-			}
-		}
-
-		token, terr = a.issueRefreshToken(ctx, tx, user)
-		if terr != nil {
-			return oauthError("server_error", terr.Error())
-		}
-		return nil
-	})
+	// handle callback using session data
+	providerType, err := gothic.GetProviderName(r)
 	if err != nil {
 		return err
 	}
 
-	rurl := a.getExternalRedirectURL(r)
-	if token != nil {
-		q := url.Values{}
-		q.Set("provider_token", providerToken)
-		q.Set("access_token", token.Token)
-		q.Set("token_type", token.TokenType)
-		q.Set("expires_in", strconv.Itoa(token.ExpiresIn))
-		q.Set("refresh_token", token.RefreshToken)
-		rurl += "#" + q.Encode()
+	var userData *provider.UserProvidedData
+	var providerToken string
+
+	gothProvider, err := goth.GetProvider(providerType)
+	if err != nil {
+		return err
 	}
+	value, err := gothic.GetFromSession(providerType, r)
+	if err != nil {
+		return err
+	}
+	sess, err := unmarshalSession(value, gothProvider)
+	if err != nil {
+		return err
+	}
+	// validate state to ensure that the state token param from the original
+	// AuthURL matches the one included in the current callback req
+	rawAuthURL, err := sess.Session.GetAuthURL()
+	if err != nil {
+		return err
+	}
+	authURL, err := url.Parse(rawAuthURL)
+	if err != nil {
+		return err
+	}
+	reqState := gothic.GetState(r)
+	originalState := authURL.Query().Get("state")
+	if originalState != "" && (originalState != reqState) {
+		return errors.New("state token mismatch")
+	}
+	gothUser, err := gothProvider.FetchUser(sess.Session)
+	if err != nil {
+		params := r.URL.Query()
+		if params.Encode() == "" && r.Method == "POST" {
+			r.ParseForm()
+			params = r.Form
+		}
+		_, err = sess.Session.Authorize(gothProvider, params)
+		if err != nil {
+			return err
+		}
+		gothUser, err = gothProvider.FetchUser(sess.Session)
+		if err != nil {
+			return err
+		}
+	}
+
+	providerToken = gothUser.AccessToken
+	userData = &provider.UserProvidedData{
+		Metadata: map[string]string{
+			"full_name":  gothUser.Name,
+			"avatar_url": gothUser.AvatarURL,
+		},
+	}
+
+	isEmailVerified := gothUser.RawData["verified_email"].(bool)
+
+	if gothUser.Email != "" {
+		userData.Emails = append(userData.Emails, provider.Email{
+			Email:    gothUser.Email,
+			Verified: isEmailVerified,
+		})
+	}
+
+	// err = a.db.Transaction(func(tx *storage.Connection) error {
+	// 	var terr error
+	// 	// inviteToken := getInviteToken(ctx)
+	// 	inviteToken := sess.InviteToken
+	// 	if inviteToken != "" {
+	// 		if user, terr = a.processInvite(ctx, tx, userData, sess.InstanceID, inviteToken, providerType); terr != nil {
+	// 			return terr
+	// 		}
+	// 	} else {
+	// 		aud := a.requestAud(ctx, r)
+
+	// 		// search user using all available emails
+	// 		var emailData provider.Email
+	// 		for _, e := range userData.Emails {
+	// 			if e.Verified || config.Mailer.Autoconfirm {
+	// 				user, terr = models.FindUserByEmailAndAudience(tx, instanceID, e.Email, aud)
+	// 				if terr != nil && !models.IsNotFoundError(terr) {
+	// 					return internalServerError("Error checking for duplicate users").WithInternalError(terr)
+	// 				}
+
+	// 				if user != nil {
+	// 					emailData = e
+	// 					break
+	// 				}
+	// 			}
+	// 		}
+
+	// 		if user == nil {
+	// 			if config.DisableSignup {
+	// 				return forbiddenError("Signups not allowed for this instance")
+	// 			}
+
+	// 			// prefer primary email for new signups
+	// 			emailData = userData.Emails[0]
+	// 			for _, e := range userData.Emails {
+	// 				if e.Primary {
+	// 					emailData = e
+	// 					break
+	// 				}
+	// 			}
+
+	// 			params := &SignupParams{
+	// 				Provider: providerType,
+	// 				Email:    emailData.Email,
+	// 				Aud:      aud,
+	// 				Data:     make(map[string]interface{}),
+	// 			}
+	// 			for k, v := range userData.Metadata {
+	// 				if v != "" {
+	// 					params.Data[k] = v
+	// 				}
+	// 			}
+
+	// 			user, terr = a.signupNewUser(ctx, tx, params)
+	// 			if terr != nil {
+	// 				return terr
+	// 			}
+	// 		}
+
+	// 		if !user.IsConfirmed() {
+	// 			if !emailData.Verified && !config.Mailer.Autoconfirm {
+	// 				mailer := a.Mailer(ctx)
+	// 				referrer := a.getReferrer(r)
+	// 				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
+	// 					return internalServerError("Error sending confirmation mail").WithInternalError(terr)
+	// 				}
+	// 				// email must be verified to issue a token
+	// 				return nil
+	// 			}
+
+	// 			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
+	// 				return terr
+	// 			}
+	// 			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
+	// 				return terr
+	// 			}
+
+	// 			// fall through to auto-confirm and issue token
+	// 			if terr = user.Confirm(tx); terr != nil {
+	// 				return internalServerError("Error updating user").WithInternalError(terr)
+	// 			}
+	// 		} else {
+	// 			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
+	// 				return terr
+	// 			}
+	// 			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+	// 				return terr
+	// 			}
+	// 		}
+	// 	}
+
+	// 	token, terr = a.issueRefreshToken(ctx, tx, user)
+	// 	if terr != nil {
+	// 		return oauthError("server_error", terr.Error())
+	// 	}
+	// 	return nil
+	// })
+
+	// if err != nil {
+	// 	return err
+	// }
+
+	rurl := a.getExternalRedirectURL(r)
+	q := url.Values{}
+	q.Set("provider_token", providerToken)
+	// q.Set("access_token", token.Token)
+	// q.Set("token_type", token.TokenType)
+	q.Set("expires_in", strconv.Itoa(int(sess.ExpiresAt)))
+	// q.Set("refresh_token", token.RefreshToken)
+	rurl += "#" + q.Encode()
+
 	http.Redirect(w, r, rurl, http.StatusFound)
 	return nil
 }
@@ -316,8 +415,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewGithubProvider(config.External.Github, scopes)
 	case "gitlab":
 		return provider.NewGitlabProvider(config.External.Gitlab, scopes)
-	case "google":
-		return provider.NewGoogleProvider(config.External.Google, scopes)
+	// case "google":
+	// 	return provider.NewGoogleProvider(config.External.Google, scopes)
 	case "facebook":
 		return provider.NewFacebookProvider(config.External.Facebook, scopes)
 	case "azure":
@@ -380,4 +479,66 @@ func (a *API) getExternalRedirectURL(r *http.Request) string {
 		return er
 	}
 	return config.SiteURL
+}
+
+func (s ExternalProviderSession) Marshal() string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
+func unmarshalSession(data string, provider goth.Provider) (ExternalProviderSession, error) {
+	var dataMap map[string]json.RawMessage
+	err := json.Unmarshal([]byte(data), &dataMap)
+	sess := &ExternalProviderSession{}
+
+	for k, v := range dataMap {
+		if k == "Session" {
+			gothSession, err := provider.UnmarshalSession(string(v))
+			if err != nil {
+				return *sess, err
+			}
+			if err := SetField(sess, k, gothSession); err != nil {
+				return *sess, err
+			}
+		} else if k == "ExpiresAt" {
+			expiresAt, err := strconv.ParseInt(string(v), 10, 64)
+			if err != nil {
+				return *sess, err
+			}
+			if err := SetField(sess, k, expiresAt); err != nil {
+				return *sess, err
+			}
+		} else {
+			if err := SetField(sess, k, string(v)); err != nil {
+				return *sess, err
+			}
+		}
+	}
+	return *sess, err
+}
+
+func SetField(obj interface{}, name string, value interface{}) error {
+	structValue := reflect.ValueOf(obj).Elem()
+	structFieldValue := structValue.FieldByName(name)
+
+	if !structFieldValue.IsValid() {
+		return fmt.Errorf("No such field: %s in obj", name)
+	}
+
+	if !structFieldValue.CanSet() {
+		return fmt.Errorf("Cannot set %s field value", name)
+	}
+
+	structFieldType := structFieldValue.Type()
+	val := reflect.ValueOf(value)
+	if name == "Session" {
+		structFieldValue.Set(val)
+		return nil
+	}
+	if structFieldType != val.Type() {
+		return errors.New("Provided value type didn't match obj field type")
+	}
+
+	structFieldValue.Set(val)
+	return nil
 }

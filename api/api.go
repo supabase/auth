@@ -15,6 +15,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/imdario/mergo"
 	"github.com/markbates/goth"
+	"github.com/markbates/goth/providers/google"
 	"github.com/markbates/goth/providers/twitter"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/mailer"
@@ -84,6 +85,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 	goth.UseProviders(
 		twitter.New(globalConfig.External.Twitter.ClientID, globalConfig.External.Twitter.Secret, globalConfig.External.Twitter.RedirectURI),
+		google.New(globalConfig.External.Google.ClientID, globalConfig.External.Google.Secret, globalConfig.External.Google.RedirectURI),
 	)
 
 	xffmw, _ := xff.Default()
@@ -99,11 +101,11 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 	r.Route("/callback", func(r *router) {
 		r.UseBypass(logger)
-		r.Use(api.loadOAuthState)
+		// r.Use(api.loadOAuthState)
 
-		if globalConfig.MultiInstanceMode {
-			r.Use(api.loadInstanceConfig)
-		}
+		// if globalConfig.MultiInstanceMode {
+		// 	r.Use(api.loadInstanceConfig)
+		// }
 		r.Get("/", api.ExternalProviderCallback)
 	})
 

@@ -61,7 +61,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 
 	return &OAuthProviderData{
 		userData: userData,
-		token: token.AccessToken,
+		token:    token.AccessToken,
 	}, nil
 }
 
