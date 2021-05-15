@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -68,7 +69,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			}
 		} else {
 			params.Provider = "email"
-			user, terr = a.signupNewUser(ctx, tx, params)
+			user, terr = a.signupNewUser(ctx, tx, params, getInstanceID(ctx))
 			if terr != nil {
 				return terr
 			}
@@ -134,8 +135,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, user)
 }
 
-func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, params *SignupParams) (*models.User, error) {
-	instanceID := getInstanceID(ctx)
+func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, params *SignupParams, instanceID uuid.UUID) (*models.User, error) {
 	config := a.getConfig(ctx)
 
 	user, err := models.NewUser(instanceID, params.Email, params.Password, params.Aud, params.Data)

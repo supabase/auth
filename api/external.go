@@ -101,10 +101,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		if err != nil {
 			return internalServerError("Goth cannot store session").WithInternalError(err)
 		}
-		// err = gothic.StoreInSession(providerType+"_external", sess.Marshal(), r, w)
-		// if err != nil {
-		// 	return internalServerError("Goth cannot store external session").WithInternalError(err)
-		// }
+
 		http.Redirect(w, r, url, http.StatusFound)
 		return nil
 	}
@@ -140,9 +137,8 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 }
 
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
-	// ctx := r.Context()
-	// config := a.getConfig(ctx)
-	// instanceID := getInstanceID(ctx)
+	ctx := r.Context()
+	config := a.getConfig(ctx)
 
 	// handle callback using session data
 	providerType, err := gothic.GetProviderName(r)
@@ -205,14 +201,99 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		},
 	}
 
-	isEmailVerified := gothUser.RawData["verified_email"].(bool)
-
 	if gothUser.Email != "" {
 		userData.Emails = append(userData.Emails, provider.Email{
 			Email:    gothUser.Email,
-			Verified: isEmailVerified,
+			Verified: true, // TODO: check with external provider if email is verified
+			Primary:  true, // TODO: check with external provider if email is primary email
+
 		})
 	}
+
+	var user *models.User
+	var token *AccessTokenResponse
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		inviteToken := sess.InviteToken
+		instanceID, terr := uuid.FromString(sess.InstanceID)
+		if terr != nil {
+			return terr
+		}
+		if inviteToken != "" {
+			if user, terr = a.processInvite(ctx, tx, userData, instanceID, inviteToken, providerType); terr != nil {
+				return terr
+			}
+		} else {
+			// TODO: migrate existing users using JWT Audience claim
+			aud := "authenticated"
+			var emailData provider.Email
+			for _, e := range userData.Emails {
+				if e.Verified || config.Mailer.Autoconfirm {
+					user, terr = models.FindUserByEmailAndAudience(tx, instanceID, e.Email, aud)
+					if terr != nil && !models.IsNotFoundError(terr) {
+						return internalServerError("Error checking for duplicate users").WithInternalError(terr)
+					}
+
+					if user != nil {
+						emailData = e
+						break
+					}
+				}
+			}
+
+			if user == nil {
+				if config.DisableSignup {
+					return forbiddenError("Signups not allowed for this instance")
+				}
+
+				// prefer primary email for new signups
+				emailData = userData.Emails[0]
+				for _, e := range userData.Emails {
+					if e.Primary {
+						emailData = e
+						break
+					}
+				}
+
+				params := &SignupParams{
+					Provider: providerType,
+					Email:    emailData.Email,
+					Aud:      aud,
+					Data:     make(map[string]interface{}),
+				}
+				for k, v := range userData.Metadata {
+					if v != "" {
+						params.Data[k] = v
+					}
+				}
+
+				user, terr = a.signupNewUser(ctx, tx, params, instanceID)
+				if terr != nil {
+					return terr
+				}
+			}
+			if !user.IsConfirmed() {
+				return internalServerError("User confirmation error").WithInternalError(errors.New("TODO: Implement unconfirmed user logic!"))
+			} else {
+				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
+					return terr
+				}
+				if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+					return terr
+				}
+			}
+
+			token, terr = a.issueRefreshToken(ctx, tx, user)
+			if terr != nil {
+				return oauthError("server_error", terr.Error())
+			}
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 
 	// err = a.db.Transaction(func(tx *storage.Connection) error {
 	// 	var terr error
@@ -319,10 +400,10 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	rurl := a.getExternalRedirectURL(r)
 	q := url.Values{}
 	q.Set("provider_token", providerToken)
-	// q.Set("access_token", token.Token)
-	// q.Set("token_type", token.TokenType)
+	q.Set("access_token", token.Token)
+	q.Set("token_type", token.TokenType)
 	q.Set("expires_in", strconv.Itoa(int(sess.ExpiresAt)))
-	// q.Set("refresh_token", token.RefreshToken)
+	q.Set("refresh_token", token.RefreshToken)
 	rurl += "#" + q.Encode()
 
 	http.Redirect(w, r, rurl, http.StatusFound)
@@ -495,22 +576,26 @@ func unmarshalSession(data string, provider goth.Provider) (ExternalProviderSess
 		if k == "Session" {
 			gothSession, err := provider.UnmarshalSession(string(v))
 			if err != nil {
-				return *sess, err
+				return *sess, fmt.Errorf("Unmarshal session error: %s", err)
 			}
 			if err := SetField(sess, k, gothSession); err != nil {
-				return *sess, err
+				return *sess, fmt.Errorf("Unmarshal session error: %s", err)
 			}
 		} else if k == "ExpiresAt" {
 			expiresAt, err := strconv.ParseInt(string(v), 10, 64)
 			if err != nil {
-				return *sess, err
+				return *sess, fmt.Errorf("Unmarshal session error: %s", err)
 			}
 			if err := SetField(sess, k, expiresAt); err != nil {
-				return *sess, err
+				return *sess, fmt.Errorf("Unmarshal session error: %s", err)
 			}
 		} else {
-			if err := SetField(sess, k, string(v)); err != nil {
-				return *sess, err
+			ns, err := strconv.Unquote(string(v))
+			if err != nil {
+				return *sess, fmt.Errorf("Unmarshal session error: %s", err)
+			}
+			if err := SetField(sess, k, ns); err != nil {
+				return *sess, fmt.Errorf("Unmarshal session error: %s", err)
 			}
 		}
 	}
