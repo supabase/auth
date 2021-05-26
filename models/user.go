@@ -61,11 +61,13 @@ func NewUser(instanceID uuid.UUID, email, password, aud string, userData map[str
 		return nil, err
 	}
 
+	e := strings.ToLower(email)
+
 	user := &User{
 		InstanceID:        instanceID,
 		ID:                id,
 		Aud:               aud,
-		Email:             email,
+		Email:             e,
 		UserMetaData:      userData,
 		EncryptedPassword: pw,
 	}
@@ -265,7 +267,7 @@ func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, e
 
 // FindUserByEmailAndAudience finds a user with the matching email and audience.
 func FindUserByEmailAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and email = ? and aud = ?", instanceID, email, aud)
+	return findUser(tx, "instance_id = ? and email COLLATE utf8mb4_unicode_ci  = ? and aud = ?", instanceID, email, aud)
 }
 
 // FindUserByID finds a user matching the provided ID.
