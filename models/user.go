@@ -267,7 +267,7 @@ func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, e
 
 // FindUserByEmailAndAudience finds a user with the matching email and audience.
 func FindUserByEmailAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and email COLLATE utf8mb4_unicode_ci  = ? and aud = ?", instanceID, email, aud)
+	return findUser(tx, "instance_id = ? and LOWER(email) = ? and aud = ?", instanceID, strings.ToLower(email), aud)
 }
 
 // FindUserByID finds a user matching the provided ID.
