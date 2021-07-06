@@ -87,7 +87,7 @@ func (g twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 		return nil, err
 	}
 
-	// set header
+	// set headers
 	req.Header.Set("Client-Id", g.Config.ClientID)
 	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
 
@@ -103,20 +103,23 @@ func (g twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	defer resp.Body.Close()
 
 	if len(u.Data) == 0  {
-		return nil, errors.New("unable to find user with Twitch provider")
+		return nil, errors.New("unable to find user with twitch provider")
 	}
 
-	if u.Data[0].Email == "" {
-		return nil, errors.New("unable to find email with Twitch provider")
+	user := u.Data[0]
+
+	if user.Email == "" {
+		return nil, errors.New("unable to find email with twitch provider")
 	}
 
 	data := &UserProvidedData{
 		Metadata: map[string]string{
-			nameKey:      u.Data[0].DisplayName,
-			avatarURLKey: u.Data[0].ProfileImageURL,
+			nameKey:      user.Login,
+			aliasKey:     user.DisplayName,
+			avatarURLKey: user.ProfileImageURL,
 		},
 		Emails: []Email{{
-			Email:    u.Data[0].Email,
+			Email:    user.Email,
 			Verified: true,
 			Primary: true,
 		}},
