@@ -16,8 +16,8 @@ import (
 // Twitch
 
 const (
-	defaultTwitchAuthBase  = "id.twitch.tv"
-	defaultTwitchAPIBase   = "api.twitch.tv"
+	defaultTwitchAuthBase = "id.twitch.tv"
+	defaultTwitchAPIBase  = "api.twitch.tv"
 )
 
 type twitchProvider struct {
@@ -66,29 +66,29 @@ func NewTwitchProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 				AuthURL:  authHost + "/oauth2/authorize",
 				TokenURL: authHost + "/oauth2/token",
 			},
-			RedirectURL:  ext.RedirectURI,
-			Scopes:       oauthScopes,
+			RedirectURL: ext.RedirectURI,
+			Scopes:      oauthScopes,
 		},
 		APIHost: apiHost,
 	}, nil
 }
 
-func (g twitchProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (t twitchProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+	return t.Exchange(context.Background(), code)
 }
 
-func (g twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
+func (t twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u twitchUsers
 
 	// Perform http request, because we neeed to set the Client-Id header
-	req, err := http.NewRequest("GET", g.APIHost+"/helix/users", nil)
+	req, err := http.NewRequest("GET", t.APIHost+"/helix/users", nil)
 
 	if err != nil {
 		return nil, err
 	}
 
 	// set headers
-	req.Header.Set("Client-Id", g.Config.ClientID)
+	req.Header.Set("Client-Id", t.Config.ClientID)
 	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
 
 	client := &http.Client{}
@@ -102,7 +102,7 @@ func (g twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	json.Unmarshal(body, &u)
 	defer resp.Body.Close()
 
-	if len(u.Data) == 0  {
+	if len(u.Data) == 0 {
 		return nil, errors.New("unable to find user with twitch provider")
 	}
 
@@ -121,7 +121,7 @@ func (g twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 		Emails: []Email{{
 			Email:    user.Email,
 			Verified: true,
-			Primary: true,
+			Primary:  true,
 		}},
 	}
 
