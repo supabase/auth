@@ -2,6 +2,7 @@ package mailer
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/badoux/checkmail"
 	"github.com/netlify/gotrue/conf"
@@ -55,7 +56,7 @@ func (m *TemplateMailer) InviteMail(user *models.User, referrerURL string) error
 
 	redirectParam := ""
 	if len(referrerURL) > 0 {
-		redirectParam = "&redirect_to=" + referrerURL
+		redirectParam = "&redirect_to=" + url.QueryEscape(referrerURL)
 	}
 
 	url, err := getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Invite, "token="+user.ConfirmationToken+"&type=invite"+redirectParam)
