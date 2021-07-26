@@ -35,6 +35,7 @@ func NewDiscordProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 	}
 
 	apiPath := chooseHost(ext.URL, defaultDiscordAPIBase) + "/api"
+	ext.SanitizeCredentials()
 
 	return &discordProvider{
 		Config: &oauth2.Config{

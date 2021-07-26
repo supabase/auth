@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -313,4 +314,9 @@ func (o *OAuthProviderConfiguration) Validate() error {
 		return errors.New("Missing redirect URI")
 	}
 	return nil
+}
+
+func (o *OAuthProviderConfiguration) SanitizeCredentials() {
+	o.ClientID = strings.TrimSpace(o.ClientID)
+	o.Secret = strings.TrimSpace(o.Secret)
 }

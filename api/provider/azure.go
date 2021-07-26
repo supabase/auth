@@ -34,6 +34,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
+	ext.SanitizeCredentials()
 
 	authHost := chooseHost(ext.URL, defaultAzureAuthBase)
 	apiPath := chooseHost(ext.URL, defaultAzureAPIBase)
@@ -47,7 +48,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 				TokenURL: authHost + "/common/oauth2/v2.0/token",
 			},
 			RedirectURL: ext.RedirectURI,
-			Scopes:      []string{
+			Scopes: []string{
 				"openid",
 				scopes,
 			},

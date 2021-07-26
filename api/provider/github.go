@@ -39,6 +39,7 @@ func NewGithubProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
+	ext.SanitizeCredentials()
 
 	authHost := chooseHost(ext.URL, defaultGitHubAuthBase)
 	apiHost := chooseHost(ext.URL, defaultGitHubApiBase)

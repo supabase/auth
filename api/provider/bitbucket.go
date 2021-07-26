@@ -40,6 +40,7 @@ func NewBitbucketProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, e
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
+	ext.SanitizeCredentials()
 
 	authHost := chooseHost(ext.URL, defaultBitbucketAuthBase)
 	apiPath := chooseHost(ext.URL, defaultBitbucketAPIBase) + "/2.0"

@@ -40,6 +40,7 @@ func NewFacebookProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 	authHost := chooseHost(ext.URL, defaultFacebookAuthBase)
 	tokenHost := chooseHost(ext.URL, defaultFacebookTokenBase)
 	profileURL := chooseHost(ext.URL, defaultFacebookAPIBase) + "/me?fields=email,first_name,last_name,name,picture"
+	ext.SanitizeCredentials()
 
 	return &facebookProvider{
 		Config: &oauth2.Config{

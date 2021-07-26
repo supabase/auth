@@ -34,6 +34,7 @@ func NewGitlabProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
+	ext.SanitizeCredentials()
 
 	host := chooseHost(ext.URL, defaultGitLabAuthBase)
 	return &gitlabProvider{
@@ -45,7 +46,7 @@ func NewGitlabProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 				TokenURL: host + "/oauth/token",
 			},
 			RedirectURL: ext.RedirectURI,
-			Scopes:      []string{
+			Scopes: []string{
 				"read_user",
 				scopes,
 			},

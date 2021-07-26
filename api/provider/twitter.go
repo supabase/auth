@@ -39,6 +39,7 @@ type twitterUser struct {
 }
 
 func NewTwitterProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+	ext.SanitizeCredentials()
 	p := &TwitterProvider{
 		ClientKey:   ext.ClientID,
 		Secret:      ext.Secret,

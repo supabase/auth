@@ -46,6 +46,7 @@ func NewTwitchProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
+	ext.SanitizeCredentials()
 
 	apiHost := chooseHost(ext.URL, defaultTwitchAPIBase)
 	authHost := chooseHost(ext.URL, defaultTwitchAuthBase)

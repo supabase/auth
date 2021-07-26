@@ -55,6 +55,8 @@ func NewAppleProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error
 		return nil, err
 	}
 
+	ext.SanitizeCredentials()
+
 	return &AppleProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,

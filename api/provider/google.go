@@ -30,6 +30,7 @@ func NewGoogleProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
+	ext.SanitizeCredentials()
 
 	authHost := chooseHost(ext.URL, defaultGoogleAuthBase)
 	apiPath := chooseHost(ext.URL, defaultGoogleAPIBase) + "/userinfo/v2/me"
