@@ -89,7 +89,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	r.Use(recoverer)
 	r.UseBypass(tracer)
 
-	r.Get("/health", api.HealthCheck)
+	r.Get("/liveness", api.Liveness)
 
 	r.Route("/callback", func(r *router) {
 		r.UseBypass(logger)
@@ -179,24 +179,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		})
 	})
 
-	// if globalConfig.MultiInstanceMode {
-	// 	// Operator microservice API
-	// 	r.WithBypass(logger).With(api.verifyOperatorRequest).Get("/", api.GetAppManifest)
-	// 	r.Route("/instances", func(r *router) {
-	// 		r.UseBypass(logger)
-	// 		r.Use(api.verifyOperatorRequest)
-
-	// 		r.Post("/", api.CreateInstance)
-	// 		r.Route("/{instance_id}", func(r *router) {
-	// 			r.Use(api.loadInstance)
-
-	// 			r.Get("/", api.GetInstance)
-	// 			r.Put("/", api.UpdateInstance)
-	// 			r.Delete("/", api.DeleteInstance)
-	// 		})
-	// 	})
-	// }
-
 	corsHandler := cors.New(cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", audHeaderName, useCookieHeader},
@@ -232,12 +214,8 @@ func NewAPIFromConfigFile(filename string, version string) (*API, *conf.Configur
 	return NewAPIWithVersion(ctx, globalConfig, db, version), config, nil
 }
 
-func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) error {
-	return sendJSON(w, http.StatusOK, map[string]string{
-		"version":     a.version,
-		"name":        "GoTrue",
-		"description": "GoTrue is a user registration and authentication API",
-	})
+func (a *API) Liveness(w http.ResponseWriter, r *http.Request) error {
+	return sendJSON(w, http.StatusOK, map[string]string{})
 }
 
 func WithInstanceConfig(ctx context.Context, config *conf.Configuration, instanceID uuid.UUID) (context.Context, error) {
