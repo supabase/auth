@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	jwt "github.com/golang-jwt/jwt"
@@ -60,6 +61,21 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	default:
 		return oauthError("unsupported_grant_type", "")
 	}
+}
+
+func (a *API) UpdateToken(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	config := a.getConfig(ctx)
+	if len(r.FormValue("expires_in")) > 0 {
+		if expiry, err := strconv.Atoi(r.FormValue("expires_in")); err != nil {
+			return badRequestError("Invalid value provided in expires_in: %v", err)
+		} else {
+			config.SetTokenExpiry(expiry)
+		}
+	} else {
+		return badRequestError("No valid token update values provided")
+	}
+	return sendJSON(w, http.StatusOK, "ok")
 }
 
 // ResourceOwnerPasswordGrant implements the password grant type flow

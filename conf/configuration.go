@@ -217,6 +217,10 @@ func LoadConfig(filename string) (*Configuration, error) {
 	return config, nil
 }
 
+func (config *Configuration) SetTokenExpiry(exp int) {
+	config.JWT.Exp = exp
+}
+
 // ApplyDefaults sets defaults for a Configuration
 func (config *Configuration) ApplyDefaults() {
 	if config.JWT.AdminGroupName == "" {

@@ -128,6 +128,13 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			}).SetBurst(30),
 		)).Post("/token", api.Token)
 
+		r.With(api.requireEmailProvider).With(api.limitHandler(
+			// Allow requests at a rate of 30 per 5 minutes.
+			tollbooth.NewLimiter(30.0/(60*5), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(30),
+		)).Put("/token", api.UpdateToken)
+
 		r.With(api.limitHandler(
 			// Allow requests at a rate of 30 per 5 minutes.
 			tollbooth.NewLimiter(30.0/(60*5), &limiter.ExpirableOptions{
