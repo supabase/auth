@@ -2,15 +2,21 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
+	"github.com/pkg/errors"
+	"github.com/sethvargo/go-password/password"
 )
 
 // GoTrueClaims is a struct thats used for JWT claims
@@ -44,6 +50,28 @@ type RefreshTokenGrantParams struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+// IdTokenGrantParams are the parameters the IdTokenGrant method accepts
+type IdTokenGrantParams struct {
+	IdToken  string `json:"id_token"`
+	Nonce    string `json:"nonce"`
+	Provider string `json:"provider"`
+}
+
+func (p *IdTokenGrantParams) getIssuer(ctx context.Context) (*oidc.Provider, error) {
+	switch p.Provider {
+	case "apple":
+		return oidc.NewProvider(ctx, "https://appleid.apple.com")
+	case "azure":
+		return oidc.NewProvider(ctx, "https://login.microsoftonline.com/common/v2.0")
+	case "facebook":
+		return oidc.NewProvider(ctx, "https://www.facebook.com")
+	case "google":
+		return oidc.NewProvider(ctx, "https://accounts.google.com")
+	default:
+		return nil, fmt.Errorf("Provider %s could not be found", p.Provider)
+	}
+}
+
 const useCookieHeader = "x-use-cookie"
 const useSessionCookie = "session"
 
@@ -57,6 +85,8 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 		return a.ResourceOwnerPasswordGrant(ctx, w, r)
 	case "refresh_token":
 		return a.RefreshTokenGrant(ctx, w, r)
+	case "id_token":
+		return a.IdTokenGrant(ctx, w, r)
 	default:
 		return oauthError("unsupported_grant_type", "")
 	}
@@ -204,6 +234,146 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		TokenType:    "bearer",
 		ExpiresIn:    config.JWT.Exp,
 		RefreshToken: newToken.Token,
+		User:         user,
+	})
+}
+
+// IdTokenGrant implements the id_token grant type flow
+func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	config := a.getConfig(ctx)
+	instanceID := getInstanceID(ctx)
+
+	params := &IdTokenGrantParams{}
+
+	jsonDecoder := json.NewDecoder(r.Body)
+	if err := jsonDecoder.Decode(params); err != nil {
+		return badRequestError("Could not read id token grant params: %v", err)
+	}
+
+	if params.IdToken == "" || params.Nonce == "" || params.Provider == "" {
+		return oauthError("invalid request", "id_token, nonce and provider required")
+	}
+
+	provider, err := params.getIssuer(ctx)
+	if err != nil {
+		return err
+	}
+
+	verifier := provider.Verifier(&oidc.Config{SkipClientIDCheck: true})
+	idToken, err := verifier.Verify(ctx, params.IdToken)
+	if err != nil {
+		return badRequestError("%v", err)
+	}
+
+	claims := make(map[string]interface{})
+	if err := idToken.Claims(&claims); err != nil {
+		return err
+	}
+
+	// verify nonce to mitigate replay attacks
+	hashedNonce, ok := claims["nonce"]
+	if !ok {
+		return oauthError("invalid request", "missing nonce in id_token")
+	}
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
+	if hash != hashedNonce.(string) {
+		return oauthError("invalid nonce", "").WithInternalMessage("Possible abuse attempt: %v", r)
+	}
+
+	// check if user exists already
+	email, ok := claims["email"].(string)
+	if !ok {
+		return errors.New("Unable to find email associated to provider")
+	}
+
+	aud := claims["aud"].(string)
+	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, email, aud)
+
+	if err != nil && !models.IsNotFoundError(err) {
+		return internalServerError("Database error finding user").WithInternalError(err)
+	}
+
+	var token *AccessTokenResponse
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		if user == nil {
+			if config.DisableSignup {
+				return forbiddenError("Signups not allowed for this instance")
+			}
+			password, err := password.Generate(64, 10, 0, false, true)
+			if err != nil {
+				return internalServerError("error creating user").WithInternalError(err)
+			}
+
+			signupParams := &SignupParams{
+				Provider: params.Provider,
+				Email:    email,
+				Password: password,
+				Aud:      aud,
+				Data:     claims,
+			}
+
+			user, terr = a.signupNewUser(ctx, tx, signupParams)
+			if terr != nil {
+				return terr
+			}
+		}
+
+		if !user.IsConfirmed() {
+			isEmailVerified := false
+			emailVerified, ok := claims["email_verified"].(string)
+			if ok {
+				isEmailVerified, terr = strconv.ParseBool(emailVerified)
+				if terr != nil {
+					return terr
+				}
+			}
+			if (!ok || !isEmailVerified) && !config.Mailer.Autoconfirm {
+				mailer := a.Mailer(ctx)
+				referrer := a.getReferrer(r)
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
+					return internalServerError("Error sending confirmation mail").WithInternalError(terr)
+				}
+				return unauthorizedError("Error unverified email")
+			}
+
+			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
+				return terr
+			}
+
+			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
+				return terr
+			}
+
+			if terr = user.Confirm(tx); terr != nil {
+				return internalServerError("Error updating user").WithInternalError(terr)
+			}
+		} else {
+			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
+				return terr
+			}
+			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+				return terr
+			}
+		}
+
+		token, terr = a.issueRefreshToken(ctx, tx, user)
+		if terr != nil {
+			return oauthError("server_error", terr.Error())
+		}
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	metering.RecordLogin("id_token", user.ID, instanceID)
+	return sendJSON(w, http.StatusOK, &AccessTokenResponse{
+		Token:        token.Token,
+		TokenType:    token.TokenType,
+		ExpiresIn:    token.ExpiresIn,
+		RefreshToken: token.RefreshToken,
 		User:         user,
 	})
 }
