@@ -57,23 +57,37 @@ type IdTokenGrantParams struct {
 	Provider string `json:"provider"`
 }
 
-func (p *IdTokenGrantParams) getIssuer(ctx context.Context) (*oidc.Provider, error) {
-	switch p.Provider {
-	case "apple":
-		return oidc.NewProvider(ctx, "https://appleid.apple.com")
-	case "azure":
-		return oidc.NewProvider(ctx, "https://login.microsoftonline.com/common/v2.0")
-	case "facebook":
-		return oidc.NewProvider(ctx, "https://www.facebook.com")
-	case "google":
-		return oidc.NewProvider(ctx, "https://accounts.google.com")
-	default:
-		return nil, fmt.Errorf("Provider %s could not be found", p.Provider)
-	}
-}
-
 const useCookieHeader = "x-use-cookie"
 const useSessionCookie = "session"
+
+func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVerifier, error) {
+	config := getConfig(ctx)
+	var provider *oidc.Provider
+	var err error
+	var clientId string
+	switch p.Provider {
+	case "apple":
+		clientId = config.External.Apple.ClientID
+		provider, err = oidc.NewProvider(ctx, "https://appleid.apple.com")
+	case "azure":
+		clientId = config.External.Azure.ClientID
+		provider, err = oidc.NewProvider(ctx, "https://login.microsoftonline.com/common/v2.0")
+	case "facebook":
+		clientId = config.External.Facebook.ClientID
+		provider, err = oidc.NewProvider(ctx, "https://www.facebook.com")
+	case "google":
+		clientId = config.External.Google.ClientID
+		provider, err = oidc.NewProvider(ctx, "https://accounts.google.com")
+	default:
+		return nil, fmt.Errorf("Provider %s doesn't support the id_token grant flow", p.Provider)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return provider.Verifier(&oidc.Config{ClientID: clientId}), nil
+}
 
 // Token is the endpoint for OAuth access token requests
 func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
@@ -254,12 +268,11 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return oauthError("invalid request", "id_token, nonce and provider required")
 	}
 
-	provider, err := params.getIssuer(ctx)
+	verifier, err := params.getVerifier(ctx)
 	if err != nil {
 		return err
 	}
 
-	verifier := provider.Verifier(&oidc.Config{SkipClientIDCheck: true})
 	idToken, err := verifier.Verify(ctx, params.IdToken)
 	if err != nil {
 		return badRequestError("%v", err)
