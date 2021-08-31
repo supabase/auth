@@ -351,11 +351,15 @@ func (j *JWTConfiguration) Validate() error {
 	if j.Secret == "" && (j.PrivateKeyPath == "" || j.PublicKeyPath == "") {
 		return errors.New("Both RSA public and private key is needed")
 	}
-	if _, err := os.Stat(j.PrivateKeyPath); os.IsNotExist(err) {
-		return errors.New("JWT Private key isn't exist")
+	if j.PrivateKeyPath != "" {
+		if _, err := os.Stat(j.PrivateKeyPath); os.IsNotExist(err) {
+			return errors.New("JWT Private key isn't exist")
+		}
 	}
-	if _, err := os.Stat(j.PublicKeyPath); os.IsNotExist(err) {
-		return errors.New("JWT Public key isn't exist")
+	if j.PublicKeyPath != "" {
+		if _, err := os.Stat(j.PublicKeyPath); os.IsNotExist(err) {
+			return errors.New("JWT Public key isn't exist")
+		}
 	}
 	return nil
 }
