@@ -47,8 +47,8 @@ type DBConfiguration struct {
 type JWTConfiguration struct {
 	SigningKey       interface{} // Either rsa.PrivateKey or []byte
 	ValidateKey      interface{} // Either rsa.PublicKey or []byte
-	PrivateKeyPath   string      `json:"privateKeyPath"`
-	PublicKeyPath    string      `json:"publicKeyPath"`
+	PrivateKeyPath   string      `json:"private_key_path" split_words:"true"`
+	PublicKeyPath    string      `json:"public_key_path" split_words:"true"`
 	Secret           string      `json:"secret"`
 	Exp              int         `json:"exp"`
 	Aud              string      `json:"aud"`
