@@ -47,7 +47,6 @@ type Webhook struct {
 
 	instanceID uuid.UUID
 	signingKey interface{}
-	privateKey *rsa.PrivateKey
 	claims     jwt.Claims
 	payload    []byte
 	headers    map[string]string
