@@ -184,11 +184,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return internalServerError(terr.Error())
 		}
 
-		if config.JWT.UsingPrivateKey() {
-			tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.PrivateKey)
-		} else {
-			tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.PublicKey)
-		}
+		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.SigningKey)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -213,7 +209,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	})
 }
 
-func generateAccessToken(user *models.User, expiresIn time.Duration, key interface{}) (string, error) {
+func generateAccessToken(user *models.User, expiresIn time.Duration, signingKey interface{}) (string, error) {
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
@@ -229,14 +225,14 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, key interfa
 
 	var token *jwt.Token
 
-	switch key.(type) {
+	switch signingKey.(type) {
 	case rsa.PrivateKey:
 		token = jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	default:
 		token = jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	}
 
-	return token.SignedString(key)
+	return token.SignedString(signingKey)
 }
 
 func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User) (*AccessTokenResponse, error) {
@@ -255,12 +251,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		if config.JWT.UsingPrivateKey() {
-			tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.PrivateKey)
-		} else {
-			tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.PublicKey)
-		}
-
+		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.SigningKey)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
