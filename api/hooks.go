@@ -142,7 +142,7 @@ func (w *Webhook) trigger() (io.ReadCloser, error) {
 func (w *Webhook) generateSignature() (string, error) {
 	var token *jwt.Token
 	switch w.signingKey.(type) {
-	case rsa.PrivateKey:
+	case *rsa.PrivateKey:
 		token = jwt.NewWithClaims(jwt.SigningMethodRS256, w.claims)
 	default:
 		token = jwt.NewWithClaims(jwt.SigningMethodHS256, w.claims)

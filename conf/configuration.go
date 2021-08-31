@@ -1,7 +1,6 @@
 package conf
 
 import (
-	"crypto/rsa"
 	"database/sql/driver"
 	"encoding/json"
 	"io/ioutil"
@@ -47,16 +46,15 @@ type DBConfiguration struct {
 // JWTConfiguration holds all the JWT related configuration.
 type JWTConfiguration struct {
 	SigningKey       interface{} // Either rsa.PrivateKey or []byte
-	PublicKey        *rsa.PublicKey
-	PrivateKey       *rsa.PrivateKey
-	PrivateKeyPath   string   `json:"privateKeyPath"`
-	PublicKeyPath    string   `json:"publicKeyPath"`
-	Secret           string   `json:"secret"`
-	Exp              int      `json:"exp"`
-	Aud              string   `json:"aud"`
-	AdminGroupName   string   `json:"admin_group_name" split_words:"true"`
-	AdminRoles       []string `json:"admin_roles" split_words:"true"`
-	DefaultGroupName string   `json:"default_group_name" split_words:"true"`
+	ValidateKey      interface{} // Either rsa.PublicKey or []byte
+	PrivateKeyPath   string      `json:"privateKeyPath"`
+	PublicKeyPath    string      `json:"publicKeyPath"`
+	Secret           string      `json:"secret"`
+	Exp              int         `json:"exp"`
+	Aud              string      `json:"aud"`
+	AdminGroupName   string      `json:"admin_group_name" split_words:"true"`
+	AdminRoles       []string    `json:"admin_roles" split_words:"true"`
+	DefaultGroupName string      `json:"default_group_name" split_words:"true"`
 }
 
 // GlobalConfiguration holds all the configuration that applies to all instances.
@@ -362,10 +360,6 @@ func (j *JWTConfiguration) Validate() error {
 	return nil
 }
 
-func (j *JWTConfiguration) UsingPrivateKey() bool {
-	return j.PrivateKey != nil && j.PublicKey != nil
-}
-
 func (j *JWTConfiguration) Prepare() error {
 	if j.PrivateKeyPath != "" && j.PublicKeyPath != "" {
 		var err error
@@ -378,19 +372,18 @@ func (j *JWTConfiguration) Prepare() error {
 			return errors.Wrap(err, "Failed to open RSA public key file")
 		}
 
-		j.PrivateKey, err = jwt.ParseRSAPrivateKeyFromPEM(privateKey)
+		j.SigningKey, err = jwt.ParseRSAPrivateKeyFromPEM(privateKey)
 		if err != nil {
 			return errors.Wrap(err, "Failed to parse RSA private key")
 		}
 
-		j.PublicKey, err = jwt.ParseRSAPublicKeyFromPEM(publicKey)
+		j.ValidateKey, err = jwt.ParseRSAPublicKeyFromPEM(publicKey)
 		if err != nil {
 			return errors.Wrap(err, "Failed to parse RSA public key")
 		}
-
-		j.SigningKey = j.PrivateKey
 	} else if j.Secret != "" {
 		j.SigningKey = []byte(j.Secret)
+		j.ValidateKey = j.SigningKey
 	}
 	return nil
 }

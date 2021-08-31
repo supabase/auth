@@ -92,7 +92,7 @@ func (a *API) loadInstanceConfig(w http.ResponseWriter, r *http.Request) (contex
 	claims := NetlifyMicroserviceClaims{}
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name, jwt.SigningMethodRS256.Name}}
 	_, err := p.ParseWithClaims(signature, &claims, func(token *jwt.Token) (interface{}, error) {
-		return config.JWT.PublicKey, nil
+		return config.JWT.ValidateKey, nil
 	})
 	if err != nil {
 		return nil, badRequestError("Operator microservice signature is invalid: %v", err)

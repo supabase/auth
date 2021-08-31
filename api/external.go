@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/rsa"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -60,9 +61,10 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
 	var method jwt.SigningMethod
-	if config.JWT.UsingPrivateKey() {
+	switch config.JWT.SigningKey.(type) {
+	case *rsa.PrivateKey:
 		method = jwt.SigningMethodRS256
-	} else {
+	default:
 		method = jwt.SigningMethodHS256
 	}
 
@@ -80,16 +82,9 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		Referrer:    redirectURL,
 	})
 	var tokenString string
-	if config.JWT.UsingPrivateKey() {
-		tokenString, err = token.SignedString(config.JWT.PrivateKey)
-		if err != nil {
-			return internalServerError("Error creating state").WithInternalError(err)
-		}
-	} else {
-		tokenString, err = token.SignedString(config.JWT.PublicKey)
-		if err != nil {
-			return internalServerError("Error creating state").WithInternalError(err)
-		}
+	tokenString, err = token.SignedString(config.JWT.SigningKey)
+	if err != nil {
+		return internalServerError("Error creating state").WithInternalError(err)
 	}
 
 	var authURL string
@@ -329,7 +324,7 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	claims := ExternalProviderClaims{}
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name, jwt.SigningMethodRS256.Name}}
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
-		return config.JWT.PublicKey, nil
+		return config.JWT.ValidateKey, nil
 	})
 	if err != nil || claims.Provider == "" {
 		return nil, badRequestError("OAuth state is invalid: %v", err)

@@ -226,7 +226,7 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, signingKey 
 	var token *jwt.Token
 
 	switch signingKey.(type) {
-	case rsa.PrivateKey:
+	case *rsa.PrivateKey:
 		token = jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 	default:
 		token = jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
