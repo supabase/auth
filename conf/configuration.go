@@ -1,11 +1,15 @@
 package conf
 
 import (
+	"crypto/rsa"
 	"database/sql/driver"
 	"encoding/json"
-	"errors"
+	"io/ioutil"
 	"os"
 	"time"
+
+	"github.com/golang-jwt/jwt"
+	"github.com/pkg/errors"
 
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
@@ -42,7 +46,11 @@ type DBConfiguration struct {
 
 // JWTConfiguration holds all the JWT related configuration.
 type JWTConfiguration struct {
-	Secret           string   `json:"secret" required:"true"`
+	PublicKey        interface{} // *rsa.PublicKey or []byte secret
+	PrivateKey       *rsa.PrivateKey
+	PrivateKeyPath   string   `json:"privateKeyPath"`
+	PublicKeyPath    string   `json:"publicKeyPath"`
+	Secret           string   `json:"secret"`
 	Exp              int      `json:"exp"`
 	Aud              string   `json:"aud"`
 	AdminGroupName   string   `json:"admin_group_name" split_words:"true"`
@@ -214,6 +222,15 @@ func LoadConfig(filename string) (*Configuration, error) {
 		return nil, err
 	}
 	config.ApplyDefaults()
+
+	if err := config.JWT.Validate(); err != nil {
+		return nil, err
+	}
+
+	if err := config.JWT.Prepare(); err != nil {
+		return nil, err
+	}
+
 	return config, nil
 }
 
@@ -324,6 +341,53 @@ func (t *TwilioProviderConfiguration) Validate() error {
 	}
 	if t.MessageServiceSid == "" {
 		return errors.New("Missing Twilio message service SID or Twilio phone number")
+	}
+	return nil
+}
+
+func (j *JWTConfiguration) Validate() error {
+	if j.PrivateKeyPath == "" && j.PublicKeyPath == "" && j.Secret == "" {
+		return errors.New("Missing JWT Secret or RSA Public/Private keys")
+	}
+	if j.Secret == "" && (j.PrivateKeyPath == "" || j.PublicKeyPath == "") {
+		return errors.New("Both RSA public and private key is needed")
+	}
+	if _, err := os.Stat(j.PrivateKeyPath); os.IsNotExist(err) {
+		return errors.New("JWT Private key isn't exist")
+	}
+	if _, err := os.Stat(j.PublicKeyPath); os.IsNotExist(err) {
+		return errors.New("JWT Public key isn't exist")
+	}
+	return nil
+}
+
+func (j *JWTConfiguration) UsingPrivateKey() bool {
+	return j.PrivateKey != nil && j.PublicKey != nil
+}
+
+func (j *JWTConfiguration) Prepare() error {
+	if j.PrivateKeyPath != "" && j.PublicKeyPath != "" {
+		var err error
+		privateKey, err := ioutil.ReadFile(j.PrivateKeyPath)
+		if err != nil {
+			return errors.Wrap(err, "Failed to open RSA private key file")
+		}
+		publicKey, err := ioutil.ReadFile(j.PublicKeyPath)
+		if err != nil {
+			return errors.Wrap(err, "Failed to open RSA public key file")
+		}
+
+		j.PrivateKey, err = jwt.ParseRSAPrivateKeyFromPEM(privateKey)
+		if err != nil {
+			return errors.Wrap(err, "Failed to parse RSA private key")
+		}
+
+		j.PublicKey, err = jwt.ParseRSAPublicKeyFromPEM(publicKey)
+		if err != nil {
+			return errors.Wrap(err, "Failed to parse RSA public key")
+		}
+	} else if j.Secret != "" {
+		j.PublicKey = []byte(j.Secret)
 	}
 	return nil
 }

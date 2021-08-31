@@ -72,9 +72,17 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		InviteToken: inviteToken,
 		Referrer:    redirectURL,
 	})
-	tokenString, err := token.SignedString([]byte(config.JWT.Secret))
-	if err != nil {
-		return internalServerError("Error creating state").WithInternalError(err)
+	var tokenString string
+	if config.JWT.UsingPrivateKey() {
+		tokenString, err = token.SignedString(config.JWT.PrivateKey)
+		if err != nil {
+			return internalServerError("Error creating state").WithInternalError(err)
+		}
+	} else {
+		tokenString, err = token.SignedString(config.JWT.PublicKey)
+		if err != nil {
+			return internalServerError("Error creating state").WithInternalError(err)
+		}
 	}
 
 	var authURL string
@@ -314,7 +322,7 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	claims := ExternalProviderClaims{}
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(config.JWT.Secret), nil
+		return config.JWT.PublicKey, nil
 	})
 	if err != nil || claims.Provider == "" {
 		return nil, badRequestError("OAuth state is invalid: %v", err)

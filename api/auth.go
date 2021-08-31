@@ -60,7 +60,7 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request, w http.ResponseWrit
 
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
 	token, err := p.ParseWithClaims(bearer, &GoTrueClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(config.JWT.Secret), nil
+		return config.JWT.PublicKey, nil
 	})
 	if err != nil {
 		a.clearCookieToken(ctx, w)
