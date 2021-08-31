@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -45,7 +46,8 @@ type Webhook struct {
 	*conf.WebhookConfig
 
 	instanceID uuid.UUID
-	jwtSecret  string
+	signingKey interface{}
+	privateKey *rsa.PrivateKey
 	claims     jwt.Claims
 	payload    []byte
 	headers    map[string]string
@@ -69,7 +71,7 @@ func (w *Webhook) trigger() (io.ReadCloser, error) {
 	hooklog := logrus.WithFields(logrus.Fields{
 		"component":   "webhook",
 		"url":         w.URL,
-		"signed":      w.jwtSecret != "",
+		"signed":      w.signingKey != nil && w.signingKey != "",
 		"instance_id": w.instanceID,
 	})
 	client := http.Client{
@@ -88,7 +90,7 @@ func (w *Webhook) trigger() (io.ReadCloser, error) {
 		req.Header.Set("Content-Type", "application/json")
 		watcher, req := watchForConnection(req)
 
-		if w.jwtSecret != "" {
+		if w.signingKey != nil && w.signingKey != "" {
 			header, jwtErr := w.generateSignature()
 			if jwtErr != nil {
 				return nil, jwtErr
@@ -138,8 +140,14 @@ func (w *Webhook) trigger() (io.ReadCloser, error) {
 }
 
 func (w *Webhook) generateSignature() (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, w.claims)
-	tokenString, err := token.SignedString([]byte(w.jwtSecret))
+	var token *jwt.Token
+	switch w.signingKey.(type) {
+	case rsa.PrivateKey:
+		token = jwt.NewWithClaims(jwt.SigningMethodRS256, w.claims)
+	default:
+		token = jwt.NewWithClaims(jwt.SigningMethodHS256, w.claims)
+	}
+	tokenString, err := token.SignedString(w.signingKey)
 	if err != nil {
 		return "", internalServerError("Failed build signing string").WithInternalError(err)
 	}
@@ -161,7 +169,7 @@ func triggerEventHooks(ctx context.Context, conn *storage.Connection, event Hook
 		if !config.Webhook.HasEvent(string(event)) {
 			return nil
 		}
-		return triggerHook(ctx, hookURL, config.Webhook.Secret, conn, event, user, instanceID, config)
+		return triggerHook(ctx, hookURL, config.Webhook.SigningKey, conn, event, user, instanceID, config)
 	}
 
 	fun := getFunctionHooks(ctx)
@@ -174,7 +182,7 @@ func triggerEventHooks(ctx context.Context, conn *storage.Connection, event Hook
 		if err != nil {
 			return errors.Wrapf(err, "Failed to parse Event Function Hook URL")
 		}
-		err = triggerHook(ctx, hookURL, config.JWT.Secret, conn, event, user, instanceID, config)
+		err = triggerHook(ctx, hookURL, config.JWT.SigningKey, conn, event, user, instanceID, config)
 		if err != nil {
 			return err
 		}
@@ -182,7 +190,7 @@ func triggerEventHooks(ctx context.Context, conn *storage.Connection, event Hook
 	return nil
 }
 
-func triggerHook(ctx context.Context, hookURL *url.URL, secret string, conn *storage.Connection, event HookEvent, user *models.User, instanceID uuid.UUID, config *conf.Configuration) error {
+func triggerHook(ctx context.Context, hookURL *url.URL, signingKey interface{}, conn *storage.Connection, event HookEvent, user *models.User, instanceID uuid.UUID, config *conf.Configuration) error {
 	if !hookURL.IsAbs() {
 		siteURL, err := url.Parse(config.SiteURL)
 		if err != nil {
@@ -223,7 +231,7 @@ func triggerHook(ctx context.Context, hookURL *url.URL, secret string, conn *sto
 
 	w := Webhook{
 		WebhookConfig: &config.Webhook,
-		jwtSecret:     secret,
+		signingKey:    signingKey,
 		instanceID:    instanceID,
 		claims:        claims,
 		payload:       data,

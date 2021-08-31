@@ -87,10 +87,10 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 
 		// verify the signature
 		signature := r.Header.Get("x-webhook-signature")
-		p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+		p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name, jwt.SigningMethodRS256.Name}}
 		claims := new(jwt.StandardClaims)
 		token, err := p.ParseWithClaims(signature, claims, func(token *jwt.Token) (interface{}, error) {
-			return []byte(ts.Config.Webhook.Secret), nil
+			return ts.Config.Webhook.SigningKey, nil
 		})
 		assert.True(token.Valid)
 		assert.Equal(ts.instanceID.String(), claims.Subject) // not configured for multitenancy
@@ -137,7 +137,7 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 		URL:        svr.URL,
 		Retries:    1,
 		TimeoutSec: 1,
-		Secret:     "top-secret",
+		SigningKey: []byte("top-secret"),
 		Events:     []string{"validate"},
 	}
 	var buffer bytes.Buffer

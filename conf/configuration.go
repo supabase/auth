@@ -46,7 +46,8 @@ type DBConfiguration struct {
 
 // JWTConfiguration holds all the JWT related configuration.
 type JWTConfiguration struct {
-	PublicKey        interface{} // *rsa.PublicKey or []byte secret
+	SigningKey       interface{} // Either rsa.PrivateKey or []byte
+	PublicKey        *rsa.PublicKey
 	PrivateKey       *rsa.PrivateKey
 	PrivateKeyPath   string   `json:"privateKeyPath"`
 	PublicKeyPath    string   `json:"publicKeyPath"`
@@ -172,11 +173,11 @@ func loadEnvironment(filename string) error {
 }
 
 type WebhookConfig struct {
-	URL        string   `json:"url"`
-	Retries    int      `json:"retries"`
-	TimeoutSec int      `json:"timeout_sec"`
-	Secret     string   `json:"secret"`
-	Events     []string `json:"events"`
+	URL        string      `json:"url"`
+	Retries    int         `json:"retries"`
+	TimeoutSec int         `json:"timeout_sec"`
+	SigningKey interface{} `json:"signingKey"`
+	Events     []string    `json:"events"`
 }
 
 func (w *WebhookConfig) HasEvent(event string) bool {
@@ -386,8 +387,10 @@ func (j *JWTConfiguration) Prepare() error {
 		if err != nil {
 			return errors.Wrap(err, "Failed to parse RSA public key")
 		}
+
+		j.SigningKey = j.PrivateKey
 	} else if j.Secret != "" {
-		j.PublicKey = []byte(j.Secret)
+		j.SigningKey = []byte(j.Secret)
 	}
 	return nil
 }

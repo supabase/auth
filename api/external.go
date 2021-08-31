@@ -59,7 +59,14 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	log := getLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
+	var method jwt.SigningMethod
+	if config.JWT.UsingPrivateKey() {
+		method = jwt.SigningMethodRS256
+	} else {
+		method = jwt.SigningMethodHS256
+	}
+
+	token := jwt.NewWithClaims(method, ExternalProviderClaims{
 		NetlifyMicroserviceClaims: NetlifyMicroserviceClaims{
 			StandardClaims: jwt.StandardClaims{
 				ExpiresAt: time.Now().Add(5 * time.Minute).Unix(),
@@ -320,7 +327,7 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 func (a *API) loadExternalState(ctx context.Context, state string) (context.Context, error) {
 	config := a.getConfig(ctx)
 	claims := ExternalProviderClaims{}
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name, jwt.SigningMethodRS256.Name}}
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
 		return config.JWT.PublicKey, nil
 	})

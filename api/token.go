@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -226,7 +227,15 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, key interfa
 		Role:         user.Role,
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	var token *jwt.Token
+
+	switch key.(type) {
+	case rsa.PrivateKey:
+		token = jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	default:
+		token = jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	}
+
 	return token.SignedString(key)
 }
 
