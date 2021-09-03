@@ -129,6 +129,7 @@ type SmsProviderConfiguration struct {
 	OtpExp       uint                        `json:"otp_exp" split_words:"true"`
 	OtpLength    int                         `json:"otp_length" split_words:"true"`
 	Provider     string                      `json:"provider"`
+	Template     string                      `json:"template"`
 	Twilio       TwilioProviderConfiguration `json:"twilio"`
 }
 
@@ -136,6 +137,16 @@ type TwilioProviderConfiguration struct {
 	AccountSid        string `json:"account_sid" split_words:"true"`
 	AuthToken         string `json:"auth_token" split_words:"true"`
 	MessageServiceSid string `json:"message_service_sid" split_words:"true"`
+}
+
+type CaptchaConfiguration struct {
+	Enabled  bool   `json:"enabled" default:"false"`
+	Provider string `json:"provider" default:"hcaptcha"`
+	Secret   string `json:"provider_secret"`
+}
+
+type SecurityConfiguration struct {
+	Captcha CaptchaConfiguration `json:"captcha"`
 }
 
 // Configuration holds all the per-instance configuration.
@@ -150,6 +161,7 @@ type Configuration struct {
 	Sms               SmsProviderConfiguration `json:"sms"`
 	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
 	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
+	Security          SecurityConfiguration    `json:"security"`
 	Cookie            struct {
 		Key      string `json:"key"`
 		Duration int    `json:"duration"`
@@ -275,6 +287,10 @@ func (config *Configuration) ApplyDefaults() {
 	if config.Sms.OtpLength == 0 || config.Sms.OtpLength < 6 || config.Sms.OtpLength > 10 {
 		// 6-digit otp by default
 		config.Sms.OtpLength = 6
+	}
+
+	if len(config.Sms.Template) == 0 {
+		config.Sms.Template = ""
 	}
 
 	if config.Cookie.Key == "" {
