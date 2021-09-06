@@ -20,6 +20,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
 type ExternalProviderClaims struct {
 	NetlifyMicroserviceClaims
 	Provider    string `json:"provider"`
@@ -33,6 +34,7 @@ type ExternalSignupParams struct {
 	Code     string `json:"code"`
 }
 
+// ExternalProviderRedirect redirects the request to the corresponding oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
@@ -113,6 +115,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
+// ExternalProviderCallback handles the callback endpoint in the external oauth provider flow
 func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	a.redirectErrors(a.internalExternalProviderCallback, w, r)
 	return nil
@@ -127,7 +130,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var userData *provider.UserProvidedData
 	var providerToken string
 	if providerType == "saml" {
-		samlUserData, err := a.samlCallback(r, ctx)
+		samlUserData, err := a.samlCallback(ctx, r)
 		if err != nil {
 			return err
 		}
