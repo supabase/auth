@@ -6,6 +6,14 @@ API service for handling user registration and authentication for JAM projects.
 It's based on OAuth2 and JWT and will handle user signup, authentication and custom
 user data.
 
+## Quick Start 
+Create a `.env` file to store your own custom env vars. See [`example.env`](example.env) 
+```sh
+./hack/postgresd.sh
+make build
+./gotrue
+```
+
 ## Configuration
 
 You may configure GoTrue using either a configuration file named `.env`,
@@ -439,6 +447,21 @@ Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/req
 - `SMS_TWILIO_ACCOUNT_SID`
 - `SMS_TWILIO_AUTH_TOKEN`
 - `SMS_TWILIO_MESSAGE_SERVICE_SID` - can be set to your twilio sender mobile number
+
+### CAPTCHA
+* If enabled, CAPTCHA will check the request body for the `hcaptcha_token` field and make a verification request to the CAPTCHA provider.
+
+`SECURITY_CAPTCHA_ENABLED` - `string`
+
+Whether captcha middleware is enabled
+
+`SECURITY_CAPTCHA_PROVIDER` - `string`
+
+for now the only option supported is: `hcaptcha`
+
+`SECURITY_CAPTCHA_SECRET` - `string`
+
+Retrieve from hcaptcha account
 
 ## Endpoints
 
