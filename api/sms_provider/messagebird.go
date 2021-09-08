@@ -39,7 +39,7 @@ type MessagebirdErrResponse struct {
 }
 
 func (t MessagebirdErrResponse) Error() string {
-	return fmt.Sprintf("%s More information: %s", t.Errors)
+	return t.Errors[0].Description
 }
 
 // Creates a SmsProvider with the Messagebird Config
