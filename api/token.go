@@ -139,7 +139,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		if models.IsNotFoundError(err) {
 			return oauthError("invalid_grant", "Invalid login credentials")
 		}
-		return internalServerError("Database error finding user").WithInternalError(err)
+		return internalServerError("Database error querying schema").WithInternalError(err)
 	}
 
 	if params.Email != "" && !user.IsConfirmed() {
@@ -303,7 +303,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, email, aud)
 
 	if err != nil && !models.IsNotFoundError(err) {
-		return internalServerError("Database error finding user").WithInternalError(err)
+		return internalServerError("Database error querying schema").WithInternalError(err)
 	}
 
 	var token *AccessTokenResponse
