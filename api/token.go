@@ -64,19 +64,19 @@ func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVeri
 	config := getConfig(ctx)
 	var provider *oidc.Provider
 	var err error
-	var clientId string
+	var oAuthProvider conf.OAuthProviderConfiguration
 	switch p.Provider {
 	case "apple":
-		clientId = config.External.Apple.ClientID
+		oAuthProvider = config.External.Apple
 		provider, err = oidc.NewProvider(ctx, "https://appleid.apple.com")
 	case "azure":
-		clientId = config.External.Azure.ClientID
+		oAuthProvider = config.External.Azure
 		provider, err = oidc.NewProvider(ctx, "https://login.microsoftonline.com/common/v2.0")
 	case "facebook":
-		clientId = config.External.Facebook.ClientID
+		oAuthProvider = config.External.Facebook
 		provider, err = oidc.NewProvider(ctx, "https://www.facebook.com")
 	case "google":
-		clientId = config.External.Google.ClientID
+		oAuthProvider = config.External.Google
 		provider, err = oidc.NewProvider(ctx, "https://accounts.google.com")
 	default:
 		return nil, fmt.Errorf("Provider %s doesn't support the id_token grant flow", p.Provider)
@@ -86,7 +86,11 @@ func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVeri
 		return nil, err
 	}
 
-	return provider.Verifier(&oidc.Config{ClientID: clientId}), nil
+	if !oAuthProvider.Enabled {
+		return nil, badRequestError("Provider is not enabled")
+	}
+
+	return provider.Verifier(&oidc.Config{ClientID: oAuthProvider.ClientID}), nil
 }
 
 // Token is the endpoint for OAuth access token requests
