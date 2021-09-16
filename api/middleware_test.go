@@ -45,9 +45,9 @@ func TestHCaptcha(t *testing.T) {
 func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"email":          "test@example.com",
-		"password":       "secret",
-		"__gotrue_meta_security": map[string]interface{}{
+		"email":    "test@example.com",
+		"password": "secret",
+		"gotrue_meta_security": map[string]interface{}{
 			"hcaptcha_token": HCaptchaResponse,
 		},
 	}))
@@ -72,9 +72,9 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 
 	// re-initialize buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"email":          "test@example.com",
-		"password":       "secret",
-		"__gotrue_meta_security": map[string]interface{}{
+		"email":    "test@example.com",
+		"password": "secret",
+		"gotrue_meta_security": map[string]interface{}{
 			"hcaptcha_token": HCaptchaResponse,
 		},
 	}))
@@ -126,9 +126,9 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 			ts.Config.Security.Captcha = *c.captchaConf
 			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-				"email":          "test@example.com",
-				"password":       "secret",
-				"__gotrue_meta_security": map[string]interface{}{
+				"email":    "test@example.com",
+				"password": "secret",
+				"gotrue_meta_security": map[string]interface{}{
 					"hcaptcha_token": HCaptchaResponse,
 				},
 			}))

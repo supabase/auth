@@ -4,18 +4,19 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type GotrueRequest struct {
-	Security GotrueSecurity `json:"__gotrue_meta_security"`
+	Security GotrueSecurity `json:"gotrue_meta_security"`
 }
 
 type GotrueSecurity struct {
@@ -29,11 +30,13 @@ type VerificationResponse struct {
 }
 
 type VerificationResult int
+
 const (
 	UserRequestFailed VerificationResult = iota
 	VerificationProcessFailure
 	SuccessfullyVerified
 )
+
 var Client *http.Client
 
 func init() {
