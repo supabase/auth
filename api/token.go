@@ -166,6 +166,19 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 	if token.Revoked {
 		a.clearCookieToken(ctx, w)
+		if config.Security.RefreshTokenRotationEnabled {
+			// Revoke all tokens in token family
+			err = a.db.Transaction(func(tx *storage.Connection) error {
+				var terr error
+				if terr = models.RevokeTokenFamily(tx, token); terr != nil {
+					return terr
+				}
+				return nil
+			})
+			if err != nil {
+				return internalServerError(err.Error())
+			}
+		}
 		return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", r)
 	}
 
