@@ -141,7 +141,8 @@ type CaptchaConfiguration struct {
 }
 
 type SecurityConfiguration struct {
-	Captcha CaptchaConfiguration `json:"captcha"`
+	Captcha                     CaptchaConfiguration `json:"captcha"`
+	RefreshTokenRotationEnabled bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
 }
 
 // Configuration holds all the per-instance configuration.
