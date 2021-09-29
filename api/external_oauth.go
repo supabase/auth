@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/markbates/goth/gothic"
 	"github.com/mrjones/oauth"
 	"github.com/netlify/gotrue/api/provider"
+	"github.com/netlify/gotrue/storage"
 	"github.com/sirupsen/logrus"
 )
 
@@ -87,7 +87,10 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		// apple only returns user info the first time
 		oauthUser := rq.Get("user")
 		if oauthUser != "" {
-			userData.Metadata = externalProvider.ParseUser(oauthUser)
+			err := externalProvider.ParseUser(oauthUser, userData)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -102,7 +105,7 @@ func (a *API) oAuth1Callback(ctx context.Context, r *http.Request, providerType 
 	if err != nil {
 		return nil, badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
 	}
-	value, err := gothic.GetFromSession(providerType, r)
+	value, err := storage.GetFromSession(providerType, r)
 	if err != nil {
 		return &OAuthProviderData{}, err
 	}

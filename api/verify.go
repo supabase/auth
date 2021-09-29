@@ -28,6 +28,11 @@ const (
 	smsVerification         = "sms"
 )
 
+const (
+	zeroConfirmation int = iota
+	singleConfirmation
+)
+
 // VerifyParams are the parameters the Verify endpoint accepts
 type VerifyParams struct {
 	Type       string `json:"type"`
@@ -82,6 +87,12 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 			user, terr = a.recoverVerify(ctx, tx, params)
 		case emailChangeVerification:
 			user, terr = a.emailChangeVerify(ctx, tx, params)
+			if user == nil && terr == nil {
+				// when double confirmation is required
+				rurl := a.prepRedirectURL("Confirmation link accepted. Please proceed to confirm link sent to the other email", params.RedirectTo)
+				http.Redirect(w, r, rurl, http.StatusFound)
+				return nil
+			}
 		case smsVerification:
 			if params.Phone == "" {
 				return unprocessableEntityError("Sms Verification requires a phone number")
@@ -292,6 +303,12 @@ func (a *API) prepErrorRedirectURL(err *HTTPError, r *http.Request, rurl string)
 	return rurl + "#" + q.Encode()
 }
 
+func (a *API) prepRedirectURL(message string, rurl string) string {
+	q := url.Values{}
+	q.Set("message", message)
+	return rurl + "#" + q.Encode()
+}
+
 func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, params *VerifyParams) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
@@ -306,7 +323,7 @@ func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, p
 	nextDay := user.EmailChangeSentAt.Add(24 * time.Hour)
 	if user.EmailChangeSentAt != nil && time.Now().After(nextDay) {
 		err = a.db.Transaction(func(tx *storage.Connection) error {
-			user.EmailChangeConfirmStatus = 0
+			user.EmailChangeConfirmStatus = zeroConfirmation
 			return tx.UpdateOnly(user, "email_change_confirm_status")
 		})
 		if err != nil {
@@ -315,25 +332,28 @@ func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, p
 		return nil, expiredTokenError("Email change token expired").WithInternalError(redirectWithQueryError)
 	}
 
-	if user.EmailChangeConfirmStatus < 1 {
-		err = a.db.Transaction(func(tx *storage.Connection) error {
-			user.EmailChangeConfirmStatus++
-			if params.Token == user.EmailChangeTokenCurrent {
-				user.EmailChangeTokenCurrent = ""
-			} else if params.Token == user.EmailChangeTokenNew {
-				user.EmailChangeTokenNew = ""
+	if config.Mailer.SecureEmailChangeEnabled {
+		if user.EmailChangeConfirmStatus == zeroConfirmation {
+			err = a.db.Transaction(func(tx *storage.Connection) error {
+				user.EmailChangeConfirmStatus = singleConfirmation
+				if params.Token == user.EmailChangeTokenCurrent {
+					user.EmailChangeTokenCurrent = ""
+				} else if params.Token == user.EmailChangeTokenNew {
+					user.EmailChangeTokenNew = ""
+				}
+				if terr := tx.UpdateOnly(user, "email_change_confirm_status", "email_change_token_current", "email_change_token_new"); terr != nil {
+					return terr
+				}
+				return nil
+			})
+			if err != nil {
+				return nil, err
 			}
-			if terr := tx.UpdateOnly(user, "email_change_confirm_status", "email_change_token_current", "email_change_token_new"); terr != nil {
-				return terr
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, err
+			return nil, nil
 		}
-		return nil, acceptedTokenError("Email change request accepted")
 	}
 
+	// one email is confirmed at this point
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 
@@ -345,7 +365,7 @@ func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, p
 			return terr
 		}
 
-		if terr = user.ConfirmEmailChange(tx); terr != nil {
+		if terr = user.ConfirmEmailChange(tx, zeroConfirmation); terr != nil {
 			return internalServerError("Error confirm email").WithInternalError(terr)
 		}
 

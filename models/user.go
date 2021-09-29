@@ -214,6 +214,17 @@ func (u *User) UpdateAppMetaData(tx *storage.Connection, updates map[string]inte
 	return tx.UpdateOnly(u, "raw_app_meta_data")
 }
 
+// UpdateAppMetaDataProvider updates the provider field in AppMetaData column
+func (u *User) UpdateAppMetaDataProvider(tx *storage.Connection) error {
+	providers, terr := FindProvidersByUser(tx, u)
+	if terr != nil {
+		return terr
+	}
+	return u.UpdateAppMetaData(tx, map[string]interface{}{
+		"provider": providers,
+	})
+}
+
 // SetEmail sets the user's email
 func (u *User) SetEmail(tx *storage.Connection, email string) error {
 	u.Email = storage.NullString(email)
@@ -279,12 +290,12 @@ func (u *User) UpdateLastSignInAt(tx *storage.Connection) error {
 }
 
 // ConfirmEmailChange confirm the change of email for a user
-func (u *User) ConfirmEmailChange(tx *storage.Connection) error {
+func (u *User) ConfirmEmailChange(tx *storage.Connection, status int) error {
 	u.Email = storage.NullString(u.EmailChange)
 	u.EmailChange = ""
 	u.EmailChangeTokenCurrent = ""
 	u.EmailChangeTokenNew = ""
-	u.EmailChangeConfirmStatus = 0
+	u.EmailChangeConfirmStatus = status
 	return tx.UpdateOnly(
 		u,
 		"email",
