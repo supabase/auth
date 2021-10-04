@@ -9,7 +9,7 @@ import (
 	"net/http/httptrace"
 	"net/url"
 
-	"github.com/gobuffalo/uuid"
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -96,19 +96,73 @@ func (a *API) requestAud(ctx context.Context, r *http.Request) string {
 	return config.JWT.Aud
 }
 
+// tries extract redirect url from header or from query params
+func getRedirectTo(r *http.Request) (reqref string) {
+	reqref = r.Header.Get("redirect_to")
+	if reqref != "" {
+		return
+	}
+
+	if err := r.ParseForm(); err == nil {
+		reqref = r.Form.Get("redirect_to")
+	}
+
+	return
+}
+
+func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
+	if redirectURL == "" {
+		return false
+	}
+
+	base, berr := url.Parse(config.SiteURL)
+	refurl, rerr := url.Parse(redirectURL)
+
+	// As long as the referrer came from the site, we will redirect back there
+	if berr == nil && rerr == nil && base.Hostname() == refurl.Hostname() {
+		return true
+	}
+
+	// For case when user came from mobile app or other permitted resource - redirect back
+	for _, uri := range config.URIAllowList {
+		if redirectURL == uri {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (a *API) getReferrer(r *http.Request) string {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
-	referrer := ""
-	if reqref := r.Referer(); reqref != "" {
-		base, berr := url.Parse(config.SiteURL)
-		refurl, rerr := url.Parse(reqref)
-		// As long as the referrer came from the site, we will redirect back there
-		if berr == nil && rerr == nil && base.Hostname() == refurl.Hostname() {
-			referrer = reqref
-		}
+
+	// try get redirect url from query or post data first
+	reqref := getRedirectTo(r)
+	if isRedirectURLValid(config, reqref) {
+		return reqref
 	}
-	return referrer
+
+	// instead try referrer header value
+	reqref = r.Referer()
+	if isRedirectURLValid(config, reqref) {
+		return reqref
+	}
+
+	return config.SiteURL
+}
+
+// getRedirectURLOrReferrer ensures any redirect URL is from a safe origin
+func (a *API) getRedirectURLOrReferrer(r *http.Request, reqref string) string {
+	ctx := r.Context()
+	config := a.getConfig(ctx)
+
+	// if redirect url fails - try fill by extra variant
+	if isRedirectURLValid(config, reqref) {
+		return reqref
+	}
+
+	return a.getReferrer(r)
 }
 
 var privateIPBlocks []*net.IPNet
@@ -212,4 +266,13 @@ func SafeHTTPClient(client *http.Client, log logrus.FieldLogger) *http.Client {
 	client.Transport = SafeRoundtripper(client.Transport, log)
 
 	return client
+}
+
+func isStringInSlice(checkValue string, list []string) bool {
+	for _, val := range list {
+		if val == checkValue {
+			return true
+		}
+	}
+	return false
 }

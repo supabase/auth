@@ -3,7 +3,7 @@ package models
 import (
 	"testing"
 
-	"github.com/gobuffalo/uuid"
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
@@ -87,11 +87,11 @@ func (ts *UserTestSuite) TestFindUserByConfirmationToken() {
 func (ts *UserTestSuite) TestFindUserByEmailAndAudience() {
 	u := ts.createUser()
 
-	n, err := FindUserByEmailAndAudience(ts.db, u.InstanceID, u.Email, "test")
+	n, err := FindUserByEmailAndAudience(ts.db, u.InstanceID, u.GetEmail(), "test")
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), u.ID, n.ID)
 
-	_, err = FindUserByEmailAndAudience(ts.db, u.InstanceID, u.Email, "invalid")
+	_, err = FindUserByEmailAndAudience(ts.db, u.InstanceID, u.GetEmail(), "invalid")
 	require.EqualError(ts.T(), err, UserNotFoundError{}.Error())
 }
 

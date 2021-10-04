@@ -9,14 +9,15 @@ import (
 	"strings"
 	"time"
 
-	jwt "github.com/dgrijalva/jwt-go"
-	"github.com/gobuffalo/uuid"
+	"github.com/gofrs/uuid"
+	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sirupsen/logrus"
 )
 
+// ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
 type ExternalProviderClaims struct {
 	NetlifyMicroserviceClaims
 	Provider    string `json:"provider"`
@@ -24,18 +25,21 @@ type ExternalProviderClaims struct {
 	Referrer    string `json:"referrer,omitempty"`
 }
 
-// SignupParams are the parameters the Signup endpoint accepts
+// ExternalSignupParams are the parameters the Signup endpoint accepts
 type ExternalSignupParams struct {
 	Provider string `json:"provider"`
 	Code     string `json:"code"`
 }
 
+// ExternalProviderRedirect redirects the request to the corresponding oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
 
 	providerType := r.URL.Query().Get("provider")
-	provider, err := a.Provider(ctx, providerType)
+	scopes := r.URL.Query().Get("scopes")
+
+	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
 		return badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
 	}
@@ -51,7 +55,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		}
 	}
 
-	referrer := a.getReferrer(r)
+	redirectURL := a.getRedirectURLOrReferrer(r, r.URL.Query().Get("redirect_to"))
 	log := getLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
@@ -66,17 +70,30 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		},
 		Provider:    providerType,
 		InviteToken: inviteToken,
-		Referrer:    referrer,
+		Referrer:    redirectURL,
 	})
-	tokenString, err := token.SignedString([]byte(a.config.OperatorToken))
+	tokenString, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
 		return internalServerError("Error creating state").WithInternalError(err)
 	}
 
-	http.Redirect(w, r, provider.AuthCodeURL(tokenString), http.StatusFound)
+	var authURL string
+	switch externalProvider := p.(type) {
+	case *provider.TwitterProvider:
+		authURL = externalProvider.AuthCodeURL(tokenString)
+		err := storage.StoreInSession(providerType, externalProvider.Marshal(), r, w)
+		if err != nil {
+			return internalServerError("Error storing request token in session").WithInternalError(err)
+		}
+	default:
+		authURL = p.AuthCodeURL(tokenString)
+	}
+
+	http.Redirect(w, r, authURL, http.StatusFound)
 	return nil
 }
 
+// ExternalProviderCallback handles the callback endpoint in the external oauth provider flow
 func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	a.redirectErrors(a.internalExternalProviderCallback, w, r)
 	return nil
@@ -89,18 +106,28 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	providerType := getExternalProviderType(ctx)
 	var userData *provider.UserProvidedData
+	var providerToken string
 	if providerType == "saml" {
-		samlUserData, err := a.samlCallback(r, ctx)
+		samlUserData, err := a.samlCallback(ctx, r)
 		if err != nil {
 			return err
 		}
 		userData = samlUserData
-	} else {
-		oAuthUserData, err := a.oAuthCallback(ctx, r, providerType)
+	} else if providerType == "twitter" {
+		// future OAuth1.0 providers will use this method
+		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)
 		if err != nil {
 			return err
 		}
-		userData = oAuthUserData
+		userData = oAuthResponseData.userData
+		providerToken = oAuthResponseData.token
+	} else {
+		oAuthResponseData, err := a.oAuthCallback(ctx, r, providerType)
+		if err != nil {
+			return err
+		}
+		userData = oAuthResponseData.userData
+		providerToken = oAuthResponseData.token
 	}
 
 	var user *models.User
@@ -114,51 +141,84 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			}
 		} else {
 			aud := a.requestAud(ctx, r)
-
-			// search user using all available emails
 			var emailData provider.Email
-			for _, e := range userData.Emails {
-				if e.Verified || config.Mailer.Autoconfirm {
-					user, terr = models.FindUserByEmailAndAudience(tx, instanceID, e.Email, aud)
-					if terr != nil && !models.IsNotFoundError(terr) {
-						return internalServerError("Error checking for duplicate users").WithInternalError(terr)
-					}
-
-					if user != nil {
-						emailData = e
-						break
-					}
+			var identityData map[string]interface{}
+			if userData.Metadata != nil {
+				identityData, terr = userData.Metadata.ToMap()
+				if terr != nil {
+					return terr
 				}
 			}
 
-			if user == nil {
-				if config.DisableSignup {
-					return forbiddenError("Signups not allowed for this instance")
-				}
-
-				// prefer primary email for new signups
-				emailData = userData.Emails[0]
-				for _, e := range userData.Emails {
-					if e.Primary {
-						emailData = e
-						break
+			var identity *models.Identity
+			// check if identity exists
+			if identity, terr = models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType); terr != nil {
+				if models.IsNotFoundError(terr) {
+					// search user using all available emails
+					for _, e := range userData.Emails {
+						if e.Verified || config.Mailer.Autoconfirm {
+							user, terr = models.FindUserByEmailAndAudience(tx, instanceID, e.Email, aud)
+							if terr != nil && !models.IsNotFoundError(terr) {
+								return internalServerError("Error checking for duplicate users").WithInternalError(terr)
+							}
+							if user != nil {
+								emailData = e
+								break
+							}
+						}
 					}
-				}
+					if user != nil {
+						if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+							return terr
+						}
+						if terr = user.UpdateAppMetaDataProvider(tx); terr != nil {
+							return terr
+						}
+					} else {
+						if config.DisableSignup {
+							return forbiddenError("Signups not allowed for this instance")
+						}
 
-				params := &SignupParams{
-					Provider: providerType,
-					Email:    emailData.Email,
-					Aud:      aud,
-					Data:     make(map[string]interface{}),
-				}
-				for k, v := range userData.Metadata {
-					if v != "" {
-						params.Data[k] = v
+						// prefer primary email for new signups
+						emailData = userData.Emails[0]
+						for _, e := range userData.Emails {
+							if e.Primary {
+								emailData = e
+								break
+							}
+						}
+
+						params := &SignupParams{
+							Provider: providerType,
+							Email:    emailData.Email,
+							Aud:      aud,
+							Data:     identityData,
+						}
+
+						user, terr = a.signupNewUser(ctx, tx, params)
+						if terr != nil {
+							return terr
+						}
+
+						if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+							return terr
+						}
 					}
+				} else {
+					return terr
 				}
+			}
 
-				user, terr = a.signupNewUser(ctx, tx, params)
+			if identity != nil && user == nil {
+				// get user associated with identity
+				user, terr = models.FindUserByID(tx, identity.UserID)
 				if terr != nil {
+					return terr
+				}
+				if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
+					return terr
+				}
+				if terr = user.UpdateAppMetaDataProvider(tx); terr != nil {
 					return terr
 				}
 			}
@@ -177,7 +237,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
 					return terr
 				}
-				if terr = triggerHook(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
+				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
 					return terr
 				}
 
@@ -189,7 +249,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
 					return terr
 				}
-				if terr = triggerHook(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+				if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
 					return terr
 				}
 			}
@@ -208,6 +268,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	rurl := a.getExternalRedirectURL(r)
 	if token != nil {
 		q := url.Values{}
+		q.Set("provider_token", providerToken)
 		q.Set("access_token", token.Token)
 		q.Set("token_type", token.TokenType)
 		q.Set("expires_in", strconv.Itoa(token.ExpiresIn))
@@ -232,7 +293,7 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 	var emails []string
 	for _, e := range userData.Emails {
 		emails = append(emails, e.Email)
-		if user.Email == e.Email {
+		if user.GetEmail() == e.Email {
 			emailData = &e
 			break
 		}
@@ -242,26 +303,27 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 		return nil, badRequestError("Invited email does not match emails from external provider").WithInternalMessage("invited=%s external=%s", user.Email, strings.Join(emails, ", "))
 	}
 
-	if err := user.UpdateAppMetaData(tx, map[string]interface{}{
-		"provider": providerType,
-	}); err != nil {
-		return nil, internalServerError("Database error updating user").WithInternalError(err)
-	}
-
-	updates := make(map[string]interface{})
-	for k, v := range userData.Metadata {
-		if v != "" {
-			updates[k] = v
+	var identityData map[string]interface{}
+	if userData.Metadata != nil {
+		identityData, err = userData.Metadata.ToMap()
+		if err != nil {
+			return nil, internalServerError("Error serialising user metadata").WithInternalError(err)
 		}
 	}
-	if err := user.UpdateUserMetaData(tx, updates); err != nil {
+	if _, err := a.createNewIdentity(tx, user, providerType, identityData); err != nil {
+		return nil, err
+	}
+	if err = user.UpdateAppMetaDataProvider(tx); err != nil {
+		return nil, err
+	}
+	if err := user.UpdateUserMetaData(tx, identityData); err != nil {
 		return nil, internalServerError("Database error updating user").WithInternalError(err)
 	}
 
 	if err := models.NewAuditLogEntry(tx, instanceID, user, models.InviteAcceptedAction, nil); err != nil {
 		return nil, err
 	}
-	if err := triggerHook(ctx, tx, SignupEvent, user, instanceID, config); err != nil {
+	if err := triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); err != nil {
 		return nil, err
 	}
 
@@ -273,10 +335,11 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 }
 
 func (a *API) loadExternalState(ctx context.Context, state string) (context.Context, error) {
+	config := a.getConfig(ctx)
 	claims := ExternalProviderClaims{}
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(a.config.OperatorToken), nil
+		return []byte(config.JWT.Secret), nil
 	})
 	if err != nil || claims.Provider == "" {
 		return nil, badRequestError("OAuth state is invalid: %v", err)
@@ -293,21 +356,31 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 }
 
 // Provider returns a Provider interface for the given name.
-func (a *API) Provider(ctx context.Context, name string) (provider.Provider, error) {
+func (a *API) Provider(ctx context.Context, name string, scopes string) (provider.Provider, error) {
 	config := a.getConfig(ctx)
 	name = strings.ToLower(name)
 
 	switch name {
+	case "apple":
+		return provider.NewAppleProvider(config.External.Apple)
+	case "azure":
+		return provider.NewAzureProvider(config.External.Azure, scopes)
 	case "bitbucket":
 		return provider.NewBitbucketProvider(config.External.Bitbucket)
+	case "discord":
+		return provider.NewDiscordProvider(config.External.Discord, scopes)
 	case "github":
-		return provider.NewGithubProvider(config.External.Github)
+		return provider.NewGithubProvider(config.External.Github, scopes)
 	case "gitlab":
-		return provider.NewGitlabProvider(config.External.Gitlab)
+		return provider.NewGitlabProvider(config.External.Gitlab, scopes)
 	case "google":
-		return provider.NewGoogleProvider(config.External.Google)
+		return provider.NewGoogleProvider(config.External.Google, scopes)
 	case "facebook":
-		return provider.NewFacebookProvider(config.External.Facebook)
+		return provider.NewFacebookProvider(config.External.Facebook, scopes)
+	case "twitch":
+		return provider.NewTwitchProvider(config.External.Twitch, scopes)
+	case "twitter":
+		return provider.NewTwitterProvider(config.External.Twitter, scopes)
 	case "saml":
 		return provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
 	default:
@@ -366,4 +439,24 @@ func (a *API) getExternalRedirectURL(r *http.Request) string {
 		return er
 	}
 	return config.SiteURL
+}
+
+func (a *API) createNewIdentity(conn *storage.Connection, user *models.User, providerType string, identityData map[string]interface{}) (*models.Identity, error) {
+	identity, err := models.NewIdentity(user, providerType, identityData)
+	if err != nil {
+		return nil, err
+	}
+
+	err = conn.Transaction(func(tx *storage.Connection) error {
+		if terr := tx.Create(identity); terr != nil {
+			return internalServerError("Error creating identity").WithInternalError(terr)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return identity, nil
 }

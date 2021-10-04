@@ -25,20 +25,25 @@ func TestSettings_DefaultProviders(t *testing.T) {
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 
 	p := resp.ExternalProviders
+
+	require.False(t, p.Phone)
 	require.True(t, p.Email)
+	require.True(t, p.Azure)
+	require.True(t, p.Bitbucket)
+	require.True(t, p.Discord)
+	require.True(t, p.Facebook)
 	require.True(t, p.Google)
 	require.True(t, p.GitHub)
 	require.True(t, p.GitLab)
-	require.True(t, p.Bitbucket)
 	require.True(t, p.SAML)
-	require.False(t, p.Facebook)
+	require.True(t, p.Twitch)
 }
 
 func TestSettings_EmailDisabled(t *testing.T) {
 	api, config, instanceID, err := setupAPIForTestForInstance()
 	require.NoError(t, err)
 
-	config.External.Email.Disabled = true
+	config.External.Email.Enabled = false
 
 	// Setup request
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/settings", nil)

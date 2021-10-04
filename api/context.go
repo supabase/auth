@@ -3,10 +3,10 @@ package api
 import (
 	"context"
 
-	jwt "github.com/dgrijalva/jwt-go"
+	"github.com/gofrs/uuid"
+	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
-	"github.com/gobuffalo/uuid"
 )
 
 type contextKey string
@@ -29,6 +29,8 @@ const (
 	externalReferrerKey     = contextKey("external_referrer")
 	functionHooksKey        = contextKey("function_hooks")
 	adminUserKey            = contextKey("admin_user")
+	oauthTokenKey           = contextKey("oauth_token") // for OAuth1.0, also known as request token
+	oauthVerifierKey        = contextKey("oauth_verifier")
 )
 
 // withToken adds the JWT token to the context.
@@ -196,18 +198,18 @@ func getExternalReferrer(ctx context.Context) string {
 }
 
 // withFunctionHooks adds the provided function hooks to the context.
-func withFunctionHooks(ctx context.Context, hooks map[string]string) context.Context {
+func withFunctionHooks(ctx context.Context, hooks map[string][]string) context.Context {
 	return context.WithValue(ctx, functionHooksKey, hooks)
 }
 
 // getFunctionHooks reads the request ID from the context.
-func getFunctionHooks(ctx context.Context) map[string]string {
+func getFunctionHooks(ctx context.Context) map[string][]string {
 	obj := ctx.Value(functionHooksKey)
 	if obj == nil {
-		return map[string]string{}
+		return map[string][]string{}
 	}
 
-	return obj.(map[string]string)
+	return obj.(map[string][]string)
 }
 
 // withAdminUser adds the admin user to the context.
@@ -222,4 +224,29 @@ func getAdminUser(ctx context.Context) *models.User {
 		return nil
 	}
 	return obj.(*models.User)
+}
+
+// withRequestToken adds the request token to the context
+func withRequestToken(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, oauthTokenKey, token)
+}
+
+func getRequestToken(ctx context.Context) string {
+	obj := ctx.Value(oauthTokenKey)
+	if obj == nil {
+		return ""
+	}
+	return obj.(string)
+}
+
+func withOAuthVerifier(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, oauthVerifierKey, token)
+}
+
+func getOAuthVerifier(ctx context.Context) string {
+	obj := ctx.Value(oauthVerifierKey)
+	if obj == nil {
+		return ""
+	}
+	return obj.(string)
 }

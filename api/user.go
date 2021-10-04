@@ -2,20 +2,21 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
-	"github.com/gobuffalo/uuid"
 )
 
 // UserUpdateParams parameters for updating a user
 type UserUpdateParams struct {
-	Email            string                 `json:"email"`
-	Password         string                 `json:"password"`
-	EmailChangeToken string                 `json:"email_change_token"`
-	Data             map[string]interface{} `json:"data"`
-	AppData          map[string]interface{} `json:"app_metadata,omitempty"`
+	Email    string                 `json:"email"`
+	Password string                 `json:"password"`
+	Data     map[string]interface{} `json:"data"`
+	AppData  map[string]interface{} `json:"app_metadata,omitempty"`
+	Phone    string                 `json:"phone"`
 }
 
 // UserGet returns a user
@@ -80,6 +81,10 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if params.Password != "" {
+			if len(params.Password) < config.PasswordMinLength {
+				return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", config.PasswordMinLength))
+			}
+
 			if terr = user.UpdatePassword(tx, params.Password); terr != nil {
 				return internalServerError("Error during password storage").WithInternalError(terr)
 			}
@@ -101,17 +106,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if params.EmailChangeToken != "" {
-			log.Debugf("Got change token %v", params.EmailChangeToken)
-
-			if params.EmailChangeToken != user.EmailChangeToken {
-				return unauthorizedError("Email Change Token didn't match token on file")
-			}
-
-			if terr = user.ConfirmEmailChange(tx); terr != nil {
-				return internalServerError("Error updating user").WithInternalError(terr)
-			}
-		} else if params.Email != "" && params.Email != user.Email {
+		if params.Email != "" && params.Email != user.GetEmail() {
 			if terr = a.validateEmail(ctx, params.Email); terr != nil {
 				return terr
 			}
@@ -120,13 +115,19 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			if exists, terr = models.IsDuplicatedEmail(tx, instanceID, params.Email, user.Aud); terr != nil {
 				return internalServerError("Database error checking email").WithInternalError(terr)
 			} else if exists {
-				return unprocessableEntityError("Email address already registered by another user")
+				return unprocessableEntityError(DuplicateEmailMsg)
 			}
 
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)
-			if terr = a.sendEmailChange(tx, user, mailer, params.Email, referrer); terr != nil {
-				return internalServerError("Error sending change email").WithInternalError(terr)
+			if config.Mailer.SecureEmailChangeEnabled {
+				if terr = a.sendSecureEmailChange(tx, user, mailer, params.Email, referrer); terr != nil {
+					return internalServerError("Error sending change email").WithInternalError(terr)
+				}
+			} else {
+				if terr = a.sendEmailChange(tx, user, mailer, params.Email, referrer); terr != nil {
+					return internalServerError("Error sending change email").WithInternalError(terr)
+				}
 			}
 		}
 

@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gobuffalo/uuid"
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
-	"github.com/netlify/gotrue/storage/namespace"
 	"github.com/pkg/errors"
 )
 
@@ -15,16 +14,17 @@ type AuditAction string
 type auditLogType string
 
 const (
-	LoginAction                 AuditAction = "login"
-	LogoutAction                AuditAction = "logout"
-	InviteAcceptedAction        AuditAction = "invite_accepted"
-	UserSignedUpAction          AuditAction = "user_signedup"
-	UserInvitedAction           AuditAction = "user_invited"
-	UserDeletedAction           AuditAction = "user_deleted"
-	UserModifiedAction          AuditAction = "user_modified"
-	UserRecoveryRequestedAction AuditAction = "user_recovery_requested"
-	TokenRevokedAction          AuditAction = "token_revoked"
-	TokenRefreshedAction        AuditAction = "token_refreshed"
+	LoginAction                     AuditAction = "login"
+	LogoutAction                    AuditAction = "logout"
+	InviteAcceptedAction            AuditAction = "invite_accepted"
+	UserSignedUpAction              AuditAction = "user_signedup"
+	UserInvitedAction               AuditAction = "user_invited"
+	UserDeletedAction               AuditAction = "user_deleted"
+	UserModifiedAction              AuditAction = "user_modified"
+	UserRecoveryRequestedAction     AuditAction = "user_recovery_requested"
+	UserConfirmationRequestedAction AuditAction = "user_confirmation_requested"
+	TokenRevokedAction              AuditAction = "token_revoked"
+	TokenRefreshedAction            AuditAction = "token_refreshed"
 
 	account auditLogType = "account"
 	team    auditLogType = "team"
@@ -33,16 +33,17 @@ const (
 )
 
 var actionLogTypeMap = map[AuditAction]auditLogType{
-	LoginAction:                 account,
-	LogoutAction:                account,
-	InviteAcceptedAction:        account,
-	UserSignedUpAction:          team,
-	UserInvitedAction:           team,
-	UserDeletedAction:           team,
-	TokenRevokedAction:          token,
-	TokenRefreshedAction:        token,
-	UserModifiedAction:          user,
-	UserRecoveryRequestedAction: user,
+	LoginAction:                     account,
+	LogoutAction:                    account,
+	InviteAcceptedAction:            account,
+	UserSignedUpAction:              team,
+	UserInvitedAction:               team,
+	UserDeletedAction:               team,
+	TokenRevokedAction:              token,
+	TokenRefreshedAction:            token,
+	UserModifiedAction:              user,
+	UserRecoveryRequestedAction:     user,
+	UserConfirmationRequestedAction: user,
 }
 
 // AuditLogEntry is the database model for audit log entries.
@@ -57,11 +58,6 @@ type AuditLogEntry struct {
 
 func (AuditLogEntry) TableName() string {
 	tableName := "audit_log_entries"
-
-	if namespace.GetNamespace() != "" {
-		return namespace.GetNamespace() + "_" + tableName
-	}
-
 	return tableName
 }
 
@@ -70,15 +66,22 @@ func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User,
 	if err != nil {
 		return errors.Wrap(err, "Error generating unique id")
 	}
+
+	username := actor.GetEmail()
+
+	if actor.GetPhone() != "" {
+		username = actor.GetPhone()
+	}
+
 	l := AuditLogEntry{
 		InstanceID: instanceID,
 		ID:         id,
 		Payload: JSONMap{
-			"timestamp":   time.Now().UTC().Format(time.RFC3339),
-			"actor_id":    actor.ID,
-			"actor_email": actor.Email,
-			"action":      action,
-			"log_type":    actionLogTypeMap[action],
+			"timestamp":      time.Now().UTC().Format(time.RFC3339),
+			"actor_id":       actor.ID,
+			"actor_username": username,
+			"action":         action,
+			"log_type":       actionLogTypeMap[action],
 		},
 	}
 
@@ -103,7 +106,7 @@ func FindAuditLogEntries(tx *storage.Connection, instanceID uuid.UUID, filterCol
 		values := make([]interface{}, len(filterColumns))
 
 		for idx, col := range filterColumns {
-			builder.WriteString(fmt.Sprintf("payload->>'$.%s' COLLATE utf8mb4_unicode_ci LIKE ?", col))
+			builder.WriteString(fmt.Sprintf("payload->>'%s' ILIKE ?", col))
 			values[idx] = lf
 
 			if idx+1 < len(filterColumns) {

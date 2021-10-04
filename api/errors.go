@@ -8,6 +8,11 @@ import (
 	"runtime/debug"
 )
 
+// Common error messages during signup flow
+var (
+	DuplicateEmailMsg = "A user with this email address has already been registered"
+)
+
 var oauthErrorMap = map[int]string{
 	http.StatusBadRequest:          "invalid_request",
 	http.StatusUnauthorized:        "unauthorized_client",
@@ -65,6 +70,10 @@ func internalServerError(fmtString string, args ...interface{}) *HTTPError {
 
 func notFoundError(fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusNotFound, fmtString, args...)
+}
+
+func acceptedTokenError(fmtString string, args ...interface{}) *HTTPError {
+	return httpError(http.StatusAccepted, fmtString, args...)
 }
 
 func expiredTokenError(fmtString string, args ...interface{}) *HTTPError {
@@ -130,6 +139,33 @@ func httpError(code int, fmtString string, args ...interface{}) *HTTPError {
 	}
 }
 
+// OTPError is a custom error struct for phone auth errors
+type OTPError struct {
+	Err             string `json:"error"`
+	Description     string `json:"error_description,omitempty"`
+	InternalError   error  `json:"-"`
+	InternalMessage string `json:"-"`
+}
+
+func (e *OTPError) Error() string {
+	if e.InternalMessage != "" {
+		return e.InternalMessage
+	}
+	return fmt.Sprintf("%s: %s", e.Err, e.Description)
+}
+
+// Cause returns the root cause error
+func (e *OTPError) Cause() error {
+	if e.InternalError != nil {
+		return e.InternalError
+	}
+	return e
+}
+
+func otpError(err string, description string) *OTPError {
+	return &OTPError{Err: err, Description: description}
+}
+
 // Recoverer is a middleware that recovers from panics, logs the panic (and a
 // backtrace), and returns a HTTP 500 (Internal Server Error) status if
 // possible. Recoverer prints a request ID if one is provided.
@@ -156,6 +192,7 @@ func recoverer(w http.ResponseWriter, r *http.Request) (context.Context, error) 
 	return nil, nil
 }
 
+// ErrorCause is an error interface that contains the method Cause() for returning root cause errors
 type ErrorCause interface {
 	Cause() error
 }

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	jwt "github.com/dgrijalva/jwt-go"
-	"github.com/gobuffalo/uuid"
+	"github.com/gofrs/uuid"
+	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/assert"
@@ -51,7 +51,7 @@ func (ts *SignupTestSuite) TestSignup() {
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"email":    "test@example.com",
-		"password": "test",
+		"password": "test123",
 		"data": map[string]interface{}{
 			"a": 1,
 		},
@@ -70,10 +70,10 @@ func (ts *SignupTestSuite) TestSignup() {
 
 	data := models.User{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-	assert.Equal(ts.T(), "test@example.com", data.Email)
+	assert.Equal(ts.T(), "test@example.com", data.GetEmail())
 	assert.Equal(ts.T(), ts.Config.JWT.Aud, data.Aud)
 	assert.Equal(ts.T(), 1.0, data.UserMetaData["a"])
-	assert.Equal(ts.T(), "email", data.AppMetaData["provider"])
+	assert.Equal(ts.T(), []interface{}{"email"}, data.AppMetaData["provider"])
 }
 
 func (ts *SignupTestSuite) TestWebhookTriggered() {
@@ -111,16 +111,16 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 
 		u, ok := data["user"].(map[string]interface{})
 		require.True(ok)
-		assert.Len(u, 8)
+		assert.Len(u, 10)
 		// assert.Equal(t, user.ID, u["id"]) TODO
-		assert.Equal("api.netlify.com", u["aud"])
-		assert.Equal("", u["role"])
+		assert.Equal("authenticated", u["aud"])
+		assert.Equal("authenticated", u["role"])
 		assert.Equal("test@example.com", u["email"])
 
 		appmeta, ok := u["app_metadata"].(map[string]interface{})
 		require.True(ok)
 		assert.Len(appmeta, 1)
-		assert.EqualValues("email", appmeta["provider"])
+		assert.EqualValues([]interface{}{"email"}, appmeta["provider"])
 
 		usermeta, ok := u["user_metadata"].(map[string]interface{})
 		require.True(ok)
@@ -143,7 +143,7 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 	var buffer bytes.Buffer
 	require.NoError(json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"email":    "test@example.com",
-		"password": "test",
+		"password": "test123",
 		"data": map[string]interface{}{
 			"a": 1,
 		},
@@ -167,7 +167,7 @@ func (ts *SignupTestSuite) TestFailingWebhook() {
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"email":    "test@example.com",
-		"password": "test",
+		"password": "test123",
 		"data": map[string]interface{}{
 			"a": 1,
 		},
@@ -191,7 +191,7 @@ func (ts *SignupTestSuite) TestSignupTwice() {
 	encode := func() {
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 			"email":    "test1@example.com",
-			"password": "test1",
+			"password": "test123",
 			"data": map[string]interface{}{
 				"a": 1,
 			},
@@ -227,6 +227,8 @@ func (ts *SignupTestSuite) TestSignupTwice() {
 func (ts *SignupTestSuite) TestVerifySignup() {
 	user, err := models.NewUser(ts.instanceID, "test@example.com", "testing", ts.Config.JWT.Aud, nil)
 	user.ConfirmationToken = "asdf3"
+	now := time.Now()
+	user.ConfirmationSentAt = &now
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Create(user))
 

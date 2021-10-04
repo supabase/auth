@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/gobuffalo/uuid"
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/require"
@@ -41,13 +41,13 @@ func (ts *ExternalTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 }
 
-func (ts *ExternalTestSuite) createUser(email string, name string, avatar string, confirmationToken string) (*models.User, error) {
+func (ts *ExternalTestSuite) createUser(providerId string, email string, name string, avatar string, confirmationToken string) (*models.User, error) {
 	// Cleanup existing user, if they already exist
 	if u, _ := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, email, ts.Config.JWT.Aud); u != nil {
 		require.NoError(ts.T(), ts.API.db.Destroy(u), "Error deleting user")
 	}
 
-	u, err := models.NewUser(ts.instanceID, email, "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": name, "avatar_url": avatar})
+	u, err := models.NewUser(ts.instanceID, email, "test", ts.Config.JWT.Aud, map[string]interface{}{"provider_id": providerId, "full_name": name, "avatar_url": avatar})
 
 	if confirmationToken != "" {
 		u.ConfirmationToken = confirmationToken
@@ -98,13 +98,15 @@ func performAuthorization(ts *ExternalTestSuite, provider string, code string, i
 	return u
 }
 
-func assertAuthorizationSuccess(ts *ExternalTestSuite, u *url.URL, tokenCount int, userCount int, email string, name string, avatar string) {
+func assertAuthorizationSuccess(ts *ExternalTestSuite, u *url.URL, tokenCount int, userCount int, email string, name string, providerId string, avatar string) {
 	// ensure redirect has #access_token=...
-	v, err := url.ParseQuery(u.Fragment)
+	v, err := url.ParseQuery(u.RawQuery)
 	ts.Require().NoError(err)
 	ts.Require().Empty(v.Get("error_description"))
 	ts.Require().Empty(v.Get("error"))
 
+	v, err = url.ParseQuery(u.Fragment)
+	ts.Require().NoError(err)
 	ts.NotEmpty(v.Get("access_token"))
 	ts.NotEmpty(v.Get("refresh_token"))
 	ts.NotEmpty(v.Get("expires_in"))
@@ -116,17 +118,20 @@ func assertAuthorizationSuccess(ts *ExternalTestSuite, u *url.URL, tokenCount in
 	// ensure user has been created with metadata
 	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, email, ts.Config.JWT.Aud)
 	ts.Require().NoError(err)
+	ts.Equal(providerId, user.UserMetaData["provider_id"])
 	ts.Equal(name, user.UserMetaData["full_name"])
 	ts.Equal(avatar, user.UserMetaData["avatar_url"])
 }
 
 func assertAuthorizationFailure(ts *ExternalTestSuite, u *url.URL, errorDescription string, errorType string, email string) {
 	// ensure new sign ups error
-	v, err := url.ParseQuery(u.Fragment)
+	v, err := url.ParseQuery(u.RawQuery)
 	ts.Require().NoError(err)
 	ts.Require().Equal(errorDescription, v.Get("error_description"))
 	ts.Require().Equal(errorType, v.Get("error"))
 
+	v, err = url.ParseQuery(u.Fragment)
+	ts.Require().NoError(err)
 	ts.Empty(v.Get("access_token"))
 	ts.Empty(v.Get("refresh_token"))
 	ts.Empty(v.Get("expires_in"))

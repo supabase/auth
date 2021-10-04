@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/netlify/gotrue/conf"
 	"golang.org/x/oauth2"
@@ -19,6 +20,7 @@ type googleProvider struct {
 }
 
 type googleUser struct {
+	ID            string `json:"id"`
 	Name          string `json:"name"`
 	AvatarURL     string `json:"picture"`
 	Email         string `json:"email"`
@@ -26,13 +28,22 @@ type googleUser struct {
 }
 
 // NewGoogleProvider creates a Google account provider.
-func NewGoogleProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
+func NewGoogleProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
 
 	authHost := chooseHost(ext.URL, defaultGoogleAuthBase)
 	apiPath := chooseHost(ext.URL, defaultGoogleAPIBase) + "/userinfo/v2/me"
+
+	oauthScopes := []string{
+		"email",
+		"profile",
+	}
+
+	if scopes != "" {
+		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
+	}
 
 	return &googleProvider{
 		Config: &oauth2.Config{
@@ -42,10 +53,7 @@ func NewGoogleProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, erro
 				AuthURL:  authHost + "/o/oauth2/auth",
 				TokenURL: authHost + "/o/oauth2/token",
 			},
-			Scopes: []string{
-				"email",
-				"profile",
-			},
+			Scopes:      oauthScopes,
 			RedirectURL: ext.RedirectURI,
 		},
 		APIPath: apiPath,
@@ -62,12 +70,7 @@ func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 		return nil, err
 	}
 
-	data := &UserProvidedData{
-		Metadata: map[string]string{
-			nameKey:      u.Name,
-			avatarURLKey: u.AvatarURL,
-		},
-	}
+	data := &UserProvidedData{}
 
 	if u.Email != "" {
 		data.Emails = append(data.Emails, Email{
@@ -79,6 +82,20 @@ func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 
 	if len(data.Emails) <= 0 {
 		return nil, errors.New("Unable to find email with Google provider")
+	}
+
+	data.Metadata = &Claims{
+		Issuer:        g.APIPath,
+		Subject:       u.ID,
+		Name:          u.Name,
+		Picture:       u.AvatarURL,
+		Email:         u.Email,
+		EmailVerified: u.EmailVerified,
+
+		// To be deprecated
+		AvatarURL:  u.AvatarURL,
+		FullName:   u.Name,
+		ProviderId: u.ID,
 	}
 
 	return data, nil

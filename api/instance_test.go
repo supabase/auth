@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gobuffalo/uuid"
+	"github.com/gofrs/uuid"
 
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
@@ -144,7 +144,7 @@ func (ts *InstanceTestSuite) TestUpdate_DisableEmail() {
 		BaseConfig: &conf.Configuration{
 			External: conf.ProviderConfiguration{
 				Email: conf.EmailProviderConfiguration{
-					Disabled: false,
+					Enabled: true,
 				},
 			},
 		},
@@ -156,7 +156,7 @@ func (ts *InstanceTestSuite) TestUpdate_DisableEmail() {
 		"config": &conf.Configuration{
 			External: conf.ProviderConfiguration{
 				Email: conf.EmailProviderConfiguration{
-					Disabled: true,
+					Enabled: false,
 				},
 			},
 		},
@@ -172,5 +172,81 @@ func (ts *InstanceTestSuite) TestUpdate_DisableEmail() {
 
 	i, err := models.GetInstanceByUUID(ts.API.db, testUUID)
 	require.NoError(ts.T(), err)
-	require.True(ts.T(), i.BaseConfig.External.Email.Disabled)
+	require.False(ts.T(), i.BaseConfig.External.Email.Enabled)
+}
+
+func (ts *InstanceTestSuite) TestUpdate_PreserveSMTPConfig() {
+	instanceID := uuid.Must(uuid.NewV4())
+	err := ts.API.db.Create(&models.Instance{
+		ID:   instanceID,
+		UUID: testUUID,
+		BaseConfig: &conf.Configuration{
+			SMTP: conf.SMTPConfiguration{
+				Host: "foo.com",
+				User: "Admin",
+				Pass: "password123",
+			},
+		},
+	})
+	require.NoError(ts.T(), err)
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"config": &conf.Configuration{
+			Mailer: conf.MailerConfiguration{
+				Subjects:  conf.EmailContentConfiguration{Invite: "foo"},
+				Templates: conf.EmailContentConfiguration{Invite: "bar"},
+			},
+		},
+	}))
+
+	req := httptest.NewRequest(http.MethodPut, "/instances/"+instanceID.String(), &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+operatorToken)
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), w.Code, http.StatusOK)
+
+	i, err := models.GetInstanceByUUID(ts.API.db, testUUID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), "password123", i.BaseConfig.SMTP.Pass)
+}
+
+func (ts *InstanceTestSuite) TestUpdate_ClearPassword() {
+	instanceID := uuid.Must(uuid.NewV4())
+	err := ts.API.db.Create(&models.Instance{
+		ID:   instanceID,
+		UUID: testUUID,
+		BaseConfig: &conf.Configuration{
+			SMTP: conf.SMTPConfiguration{
+				Host: "foo.com",
+				User: "Admin",
+				Pass: "password123",
+			},
+		},
+	})
+	require.NoError(ts.T(), err)
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"config": map[string]interface{}{
+			"smtp": map[string]interface{}{
+				"pass": "",
+			},
+		},
+	}))
+	ts.T().Log(buffer.String())
+
+	req := httptest.NewRequest(http.MethodPut, "/instances/"+instanceID.String(), &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+operatorToken)
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), w.Code, http.StatusOK)
+
+	i, err := models.GetInstanceByUUID(ts.API.db, testUUID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), "", i.BaseConfig.SMTP.Pass)
 }

@@ -6,10 +6,9 @@ import (
 
 	_ "github.com/GoogleCloudPlatform/cloudsql-proxy/proxy/dialers/mysql"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/gobuffalo/pop"
-	"github.com/gobuffalo/pop/columns"
+	"github.com/gobuffalo/pop/v5"
+	"github.com/gobuffalo/pop/v5/columns"
 	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/storage/namespace"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -39,11 +38,6 @@ func Dial(config *conf.GlobalConfiguration) (*Connection, error) {
 	if err := db.Open(); err != nil {
 		return nil, errors.Wrap(err, "checking database connection")
 	}
-
-	if config.DB.Namespace != "" {
-		namespace.SetNamespace(config.DB.Namespace)
-	}
-
 	if logrus.StandardLogger().Level == logrus.DebugLevel {
 		pop.Debug = true
 	}
@@ -68,7 +62,7 @@ func getExcludedColumns(model interface{}, includeColumns ...string) ([]string, 
 	}
 
 	// get all columns and remove included to get excluded set
-	cols := columns.ForStructWithAlias(model, sm.TableName(), sm.As)
+	cols := columns.ForStructWithAlias(model, sm.TableName(), sm.As, sm.IDField())
 	for _, f := range includeColumns {
 		if _, ok := cols.Cols[f]; !ok {
 			return nil, errors.Errorf("Invalid column name %s", f)

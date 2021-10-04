@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	jwt "github.com/dgrijalva/jwt-go"
+	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
@@ -17,8 +17,10 @@ import (
 type GoTrueClaims struct {
 	jwt.StandardClaims
 	Email        string                 `json:"email"`
+	Phone        string                 `json:"phone"`
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	UserMetaData map[string]interface{} `json:"user_metadata"`
+	Identities   []*models.Identity     `json:"identities"`
 	Role         string                 `json:"role"`
 }
 
@@ -34,6 +36,7 @@ type AccessTokenResponse struct {
 // PasswordGrantParams are the parameters the ResourceOwnerPasswordGrant method accepts
 type PasswordGrantParams struct {
 	Email    string `json:"email"`
+	Phone    string `json:"phone"`
 	Password string `json:"password"`
 }
 
@@ -75,20 +78,35 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
 
-	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+	if params.Email != "" && params.Phone != "" {
+		return unprocessableEntityError("Only an email address or phone number should be provided on login.")
+	}
+	var user *models.User
+	var err error
+	if params.Email != "" {
+		user, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+	} else if params.Phone != "" {
+		params.Phone = a.formatPhoneNumber(params.Phone)
+		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
+	} else {
+		return oauthError("invalid_grant", "Invalid login credentials")
+	}
+
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return oauthError("invalid_grant", "No user found with this email")
+			return oauthError("invalid_grant", "Invalid login credentials")
 		}
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}
 
-	if !user.IsConfirmed() {
+	if params.Email != "" && !user.IsConfirmed() {
 		return oauthError("invalid_grant", "Email not confirmed")
+	} else if params.Phone != "" && !user.IsPhoneConfirmed() {
+		return oauthError("invalid_grant", "Phone not confirmed")
 	}
 
 	if !user.Authenticate(params.Password) {
-		return oauthError("invalid_grant", "Invalid Password")
+		return oauthError("invalid_grant", "Invalid email or password")
 	}
 
 	var token *AccessTokenResponse
@@ -97,7 +115,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
 			return terr
 		}
-		if terr = triggerHook(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
 			return terr
 		}
 
@@ -130,7 +148,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 	jsonDecoder := json.NewDecoder(r.Body)
 	if err := jsonDecoder.Decode(params); err != nil {
-		return badRequestError("Could not read password grant params: %v", err)
+		return badRequestError("Could not read refresh token grant params: %v", err)
 	}
 
 	cookie := r.Header.Get(useCookieHeader)
@@ -166,7 +184,13 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return internalServerError(terr.Error())
 		}
 
-		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		identities := make([]*models.Identity, 0)
+		identities, terr = models.FindIdentitiesByUser(tx, user)
+		if terr != nil {
+			return internalServerError("error retrieving identities").WithInternalError(terr)
+		}
+
+		tokenString, terr = generateAccessToken(user, identities, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -191,16 +215,18 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	})
 }
 
-func generateAccessToken(user *models.User, expiresIn time.Duration, secret string) (string, error) {
+func generateAccessToken(user *models.User, identities []*models.Identity, expiresIn time.Duration, secret string) (string, error) {
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
 			Audience:  user.Aud,
 			ExpiresAt: time.Now().Add(expiresIn).Unix(),
 		},
-		Email:        user.Email,
+		Email:        user.GetEmail(),
+		Phone:        user.GetPhone(),
 		AppMetaData:  user.AppMetaData,
 		UserMetaData: user.UserMetaData,
+		Identities:   identities,
 		Role:         user.Role,
 	}
 
@@ -223,8 +249,12 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		if terr != nil {
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
+		identities, terr := models.FindIdentitiesByUser(tx, user)
+		if terr != nil {
+			return internalServerError("Database error granting user").WithInternalError(terr)
+		}
 
-		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessToken(user, identities, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}

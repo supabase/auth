@@ -24,6 +24,7 @@ type facebookProvider struct {
 }
 
 type facebookUser struct {
+	ID        string `json:"id"`
 	Email     string `json:"email"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
@@ -36,10 +37,22 @@ type facebookUser struct {
 }
 
 // NewFacebookProvider creates a Facebook account provider.
-func NewFacebookProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
+func NewFacebookProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+	if err := ext.Validate(); err != nil {
+		return nil, err
+	}
+
 	authHost := chooseHost(ext.URL, defaultFacebookAuthBase)
 	tokenHost := chooseHost(ext.URL, defaultFacebookTokenBase)
 	profileURL := chooseHost(ext.URL, defaultFacebookAPIBase) + "/me?fields=email,first_name,last_name,name,picture"
+
+	oauthScopes := []string{
+		"email",
+	}
+
+	if scopes != "" {
+		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
+	}
 
 	return &facebookProvider{
 		Config: &oauth2.Config{
@@ -50,7 +63,7 @@ func NewFacebookProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, er
 				AuthURL:  authHost + "/dialog/oauth",
 				TokenURL: tokenHost + "/oauth/access_token",
 			},
-			Scopes: []string{"email"},
+			Scopes: oauthScopes,
 		},
 		ProfileURL: profileURL,
 	}, nil
@@ -76,10 +89,20 @@ func (p facebookProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 	}
 
 	return &UserProvidedData{
-		Metadata: map[string]string{
-			aliasKey:     u.Alias,
-			nameKey:      strings.TrimSpace(u.FirstName + " " + u.LastName),
-			avatarURLKey: u.Avatar.Data.URL,
+		Metadata: &Claims{
+			Issuer:        p.ProfileURL,
+			Subject:       u.ID,
+			Name:          strings.TrimSpace(u.FirstName + " " + u.LastName),
+			NickName:      u.Alias,
+			Email:         u.Email,
+			EmailVerified: true, // if email is returned, the email is verified by facebook already
+			Picture:       u.Avatar.Data.URL,
+
+			// To be deprecated
+			Slug:       u.Alias,
+			AvatarURL:  u.Avatar.Data.URL,
+			FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
+			ProviderId: u.ID,
 		},
 		Emails: []Email{{
 			Email:    u.Email,

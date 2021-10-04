@@ -18,7 +18,7 @@ func (a *API) loadSAMLState(w http.ResponseWriter, r *http.Request) (context.Con
 	return a.loadExternalState(ctx, state)
 }
 
-func (a *API) samlCallback(r *http.Request, ctx context.Context) (*provider.UserProvidedData, error) {
+func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.UserProvidedData, error) {
 	config := a.getConfig(ctx)
 
 	samlProvider, err := provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
@@ -52,10 +52,14 @@ func (a *API) samlCallback(r *http.Request, ctx context.Context) (*provider.User
 			Email:    assertionInfo.NameID,
 			Verified: true,
 		}},
+		Metadata: &provider.Claims{
+			Subject: assertionInfo.NameID,
+		},
 	}
 	return userData, nil
 }
 
+// SAMLMetadata returns metadata information about the SAML provider
 func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := getConfig(ctx)

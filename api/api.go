@@ -13,7 +13,7 @@ import (
 	"github.com/didip/tollbooth/v5/limiter"
 	"github.com/go-chi/chi"
 	swaggerMdw "github.com/go-openapi/runtime/middleware"
-	"github.com/gobuffalo/uuid"
+	"github.com/gofrs/uuid"
 	"github.com/imdario/mergo"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/mailer"
@@ -88,6 +88,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	r.UseBypass(xffmw.Handler)
 	r.Use(addRequestID(globalConfig))
 	r.Use(recoverer)
+	r.UseBypass(tracer)
 
 	r.UseBypass(func(next http.Handler) http.Handler {
 		opts := swaggerMdw.SwaggerUIOpts{}
@@ -110,6 +111,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Use(api.loadInstanceConfig)
 		}
 		r.Get("/", api.ExternalProviderCallback)
+		r.Post("/", api.ExternalProviderCallback)
 	})
 
 	r.Route("/", func(r *router) {
@@ -124,11 +126,14 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		r.Get("/authorize", api.ExternalProviderRedirect)
 
-		r.With(api.requireAdminCredentials).Post("/invite", api.Invite)
+		sharedLimiter := api.limitEmailSentHandler()
+		r.With(sharedLimiter).With(api.requireAdminCredentials).Post("/invite", api.Invite)
+		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/signup", api.Signup)
+		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
+		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
 
-		r.With(api.requireEmailProvider).Post("/signup", api.Signup)
-		r.With(api.requireEmailProvider).Post("/recover", api.Recover)
-		r.With(api.requireEmailProvider).Post("/magiclink", api.MagicLink)
+		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
+
 		r.With(api.requireEmailProvider).With(api.limitHandler(
 			// Allow requests at a rate of 30 per 5 minutes.
 			tollbooth.NewLimiter(30.0/(60*5), &limiter.ExpirableOptions{
@@ -136,7 +141,12 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			}).SetBurst(30),
 		)).Post("/token", api.Token)
 
-		r.Route("/verify", func(r *router) {
+		r.With(api.limitHandler(
+			// Allow requests at a rate of 30 per 5 minutes.
+			tollbooth.NewLimiter(30.0/(60*5), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(30),
+		)).Route("/verify", func(r *router) {
 			r.Get("/", api.Verify)
 			r.Post("/", api.Verify)
 		})
@@ -146,7 +156,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.Route("/user", func(r *router) {
 			r.Use(api.requireAuthentication)
 			r.Get("/", api.UserGet)
-			r.Put("/", api.UserUpdate)
+			r.With(sharedLimiter).Put("/", api.UserUpdate)
 		})
 
 		r.Route("/admin", func(r *router) {
@@ -158,7 +168,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 			r.Route("/users", func(r *router) {
 				r.Get("/", api.adminUsers)
-				r.With(api.requireEmailProvider).Post("/", api.adminUserCreate)
+				r.Post("/", api.adminUserCreate)
 
 				r.Route("/{user_id}", func(r *router) {
 					r.Use(api.loadUser)
@@ -168,6 +178,8 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 					r.Delete("/", api.adminUserDelete)
 				})
 			})
+
+			r.Post("/generate_link", api.GenerateLink)
 		})
 
 		r.Route("/saml", func(r *router) {
@@ -182,10 +194,9 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 	if globalConfig.MultiInstanceMode {
 		// Operator microservice API
-		r.WithBypass(logger).With(api.verifyOperatorRequest).Get("/", api.GetAppManifest)
+		r.WithBypass(logger).Get("/", api.GetAppManifest)
 		r.Route("/instances", func(r *router) {
 			r.UseBypass(logger)
-			r.Use(api.verifyOperatorRequest)
 
 			r.Post("/", api.CreateInstance)
 			r.Route("/{instance_id}", func(r *router) {
@@ -233,6 +244,7 @@ func NewAPIFromConfigFile(filename string, version string) (*API, *conf.Configur
 	return NewAPIWithVersion(ctx, globalConfig, db, version), config, nil
 }
 
+// HealthCheck endpoint indicates if the gotrue api service is available
 func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, map[string]string{
 		"version":     a.version,
@@ -241,12 +253,14 @@ func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
+// WithInstanceConfig adds the instanceID and tenant config to the context
 func WithInstanceConfig(ctx context.Context, config *conf.Configuration, instanceID uuid.UUID) (context.Context, error) {
 	ctx = withConfig(ctx, config)
 	ctx = withInstanceID(ctx, instanceID)
 	return ctx, nil
 }
 
+// Mailer returns NewMailer with the current tenant config
 func (a *API) Mailer(ctx context.Context) mailer.Mailer {
 	config := a.getConfig(ctx)
 	return mailer.NewMailer(config)
@@ -260,17 +274,21 @@ func (a *API) getConfig(ctx context.Context) *conf.Configuration {
 
 	config := obj.(*conf.Configuration)
 
-	extConfig := (*a.config).External
-	if err := mergo.MergeWithOverwrite(&extConfig, config.External); err != nil {
-		return nil
-	}
-	config.External = extConfig
+	// Merge global & per-instance external config for multi-instance mode
+	if a.config.MultiInstanceMode {
+		extConfig := (*a.config).External
+		if err := mergo.MergeWithOverwrite(&extConfig, config.External); err != nil {
+			return nil
+		}
+		config.External = extConfig
 
-	smtpConfig := (*a.config).SMTP
-	if err := mergo.MergeWithOverwrite(&smtpConfig, config.SMTP); err != nil {
-		return nil
+		// Merge global & per-instance smtp config for multi-instance mode
+		smtpConfig := (*a.config).SMTP
+		if err := mergo.MergeWithOverwrite(&smtpConfig, config.SMTP); err != nil {
+			return nil
+		}
+		config.SMTP = smtpConfig
 	}
-	config.SMTP = smtpConfig
 
 	return config
 }

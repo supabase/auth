@@ -13,7 +13,7 @@ import (
 
 const (
 	defaultGitHubAuthBase = "github.com"
-	defaultGitHubApiBase  = "api.github.com"
+	defaultGitHubAPIBase  = "api.github.com"
 )
 
 type githubProvider struct {
@@ -22,6 +22,8 @@ type githubProvider struct {
 }
 
 type githubUser struct {
+	ID        string `json:"id"`
+	UserName  string `json:"login"`
 	Email     string `json:"email"`
 	Name      string `json:"name"`
 	AvatarURL string `json:"avatar_url"`
@@ -34,15 +36,23 @@ type githubUserEmail struct {
 }
 
 // NewGithubProvider creates a Github account provider.
-func NewGithubProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
+func NewGithubProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
 
 	authHost := chooseHost(ext.URL, defaultGitHubAuthBase)
-	apiHost := chooseHost(ext.URL, defaultGitHubApiBase)
-	if !strings.HasSuffix(apiHost, defaultGitHubApiBase) {
+	apiHost := chooseHost(ext.URL, defaultGitHubAPIBase)
+	if !strings.HasSuffix(apiHost, defaultGitHubAPIBase) {
 		apiHost += "/api/v3"
+	}
+
+	oauthScopes := []string{
+		"user:email",
+	}
+
+	if scopes != "" {
+		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
 	return &githubProvider{
@@ -54,7 +64,7 @@ func NewGithubProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, erro
 				TokenURL: authHost + "/login/oauth/access_token",
 			},
 			RedirectURL: ext.RedirectURI,
-			Scopes:      []string{"user:email"},
+			Scopes:      oauthScopes,
 		},
 		APIHost: apiHost,
 	}, nil
@@ -71,9 +81,17 @@ func (g githubProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	}
 
 	data := &UserProvidedData{
-		Metadata: map[string]string{
-			nameKey:      u.Name,
-			avatarURLKey: u.AvatarURL,
+		Metadata: &Claims{
+			Issuer:            g.APIHost,
+			Subject:           u.ID,
+			Name:              u.Name,
+			PreferredUsername: u.UserName,
+
+			// To be deprecated
+			AvatarURL:   u.AvatarURL,
+			FullName:    u.Name,
+			ProviderId:  u.ID,
+			UserNameKey: u.UserName,
 		},
 	}
 
@@ -85,6 +103,11 @@ func (g githubProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	for _, e := range emails {
 		if e.Email != "" {
 			data.Emails = append(data.Emails, Email{Email: e.Email, Verified: e.Verified, Primary: e.Primary})
+		}
+
+		if e.Primary {
+			data.Metadata.Email = e.Email
+			data.Metadata.EmailVerified = e.Verified
 		}
 	}
 
