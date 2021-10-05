@@ -1,6 +1,6 @@
 package docs
 
-// Occuered error description
+// Occurred error description
 // swagger:response httpErrorResponse
 type httpErrorResponse struct {
 	// in:body

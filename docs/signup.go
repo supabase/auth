@@ -6,7 +6,7 @@ import (
 
 // swagger:route POST /signup signup signupPostParams
 //
-// Register a new user with an email and password.
+// Register a new user with an email and password or a phone and password.
 //
 // responses:
 //   200: signupPostResponse
