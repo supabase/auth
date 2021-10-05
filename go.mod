@@ -1,16 +1,23 @@
 module github.com/netlify/gotrue
 
 require (
-	cloud.google.com/go v0.67.0 // indirect
 	github.com/GoogleCloudPlatform/cloudsql-proxy v0.0.0-20170623214735-571947b0f240
 	github.com/Masterminds/semver/v3 v3.1.1 // indirect
 	github.com/badoux/checkmail v0.0.0-20170203135005-d0a759655d62
 	github.com/beevik/etree v1.1.0
+	github.com/corbym/gocrest v1.0.3 // indirect
 	github.com/didip/tollbooth/v5 v5.1.1
 	github.com/fatih/color v1.10.0 // indirect
+	github.com/felixge/httpsnoop v1.0.2 // indirect
 	github.com/go-chi/chi v4.0.2+incompatible
-	github.com/go-openapi/runtime v0.19.24
+	github.com/go-openapi/analysis v0.20.1 // indirect
+	github.com/go-openapi/errors v0.20.1 // indirect
+	github.com/go-openapi/jsonreference v0.19.6 // indirect
+	github.com/go-openapi/runtime v0.19.31
+	github.com/go-openapi/strfmt v0.20.2 // indirect
 	github.com/go-sql-driver/mysql v1.5.0
+	github.com/go-stack/stack v1.8.1 // indirect
+	github.com/go-swagger/go-swagger v0.27.0 // indirect
 	github.com/gobuffalo/envy v1.9.0 // indirect
 	github.com/gobuffalo/fizz v1.13.0 // indirect
 	github.com/gobuffalo/flect v0.2.2 // indirect
@@ -34,7 +41,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.5 // indirect
 	github.com/mrjones/oauth v0.0.0-20190623134757-126b35219450
 	github.com/netlify/mailme v1.1.1
-	github.com/opentracing/opentracing-go v1.1.0
+	github.com/opentracing/opentracing-go v1.2.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/rs/cors v1.6.0
@@ -44,15 +51,18 @@ require (
 	github.com/sethvargo/go-password v0.2.0
 	github.com/sirupsen/logrus v1.7.0
 	github.com/spf13/cobra v1.1.3
-	github.com/stretchr/testify v1.6.1
-	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
-	golang.org/x/net v0.0.0-20210119194325-5f4716e94777 // indirect
-	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
-	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a // indirect
-	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
+	github.com/spf13/viper v1.9.0 // indirect
+	github.com/stretchr/testify v1.7.0
+	go.mongodb.org/mongo-driver v1.7.2 // indirect
+	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
+	golang.org/x/mod v0.5.1 // indirect
+	golang.org/x/net v0.0.0-20210929193557-e81a3d93ecf6 // indirect
+	golang.org/x/oauth2 v0.0.0-20210819190943-2bc19b11175f
+	golang.org/x/sys v0.0.0-20211003122950-b1ebd4e1001c // indirect
 	golang.org/x/term v0.0.0-20201210144234-2321bbc49cbf // indirect
-	golang.org/x/text v0.3.5 // indirect
+	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1 // indirect
+	golang.org/x/tools v0.1.7 // indirect
 	gopkg.in/DataDog/dd-trace-go.v1 v1.12.1
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	gopkg.in/yaml.v1 v1.0.0-20140924161607-9f9df34309c0 // indirect

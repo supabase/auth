@@ -1,5 +1,7 @@
 package docs
 
+import "github.com/netlify/gotrue/api"
+
 // swagger:route POST /token token tokenPostParams
 //
 // This is an OAuth2 endpoint that currently implements the password and refresh_token grant types.
@@ -19,16 +21,17 @@ type tokenPostParams struct {
 	//
 	// in:query
 	// required: true
-	// enum: password, refresh_token
+	// enum: password,refresh_token
 	Type string `json:"grant_type"`
 
-	// Provided info by user. Email + password or refresh_token only needed
+	// Provided info by user.
+	// If using the password grant type, the email and password or phone and password fields are required.
+	// If using the refresh_token grant type, the refresh_token field is required.
 	// required: true
 	// in: body
 	Body struct {
-		Email        string `json:"email"`
-		Password     string `json:"password"`
-		RefreshToken string `json:"refresh_token"`
+		api.PasswordGrantParams
+		api.RefreshTokenGrantParams
 	}
 }
 
@@ -36,5 +39,7 @@ type tokenPostParams struct {
 // swagger:response tokenPostResponse
 type tokenPostResponse struct {
 	// swagger: allOf
-	Body verifyGetResponse
+	Body struct {
+		api.AccessTokenResponse
+	}
 }

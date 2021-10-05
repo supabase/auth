@@ -11,7 +11,7 @@ import (
 // Will deliver a password recovery mail to the user based on email address.
 //
 // Security:
-//  api_key:
+//  bearer:
 // responses:
 //   200: recoverPostResponse
 //   401: httpErrorResponse

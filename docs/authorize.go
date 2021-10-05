@@ -4,7 +4,7 @@ package docs
 //
 // Get access_token from external oauth provider.
 //
-// Start procedure of getting access_token by calling of external oauth provider and then to `/callback`.
+// Redirects to provider to start the OAuth1.0 or OAuth2.0 protocol.
 //
 // responses:
 //   302: authorizeGetResponse
@@ -18,8 +18,13 @@ type authorizeGetParams struct {
 	//
 	// in:query
 	// required: true
-	// enum: bitbucket, github, gitlab, google, facebook, saml
-	Type string `json:"type"`
+	// enum: apple,azure,bitbucket,discord,facebook,github,gitlab,google,twitch,twitter
+	Provider string `json:"provider"`
+
+	// Oauth scopes (email and name are requested by default)
+	//
+	// in:query
+	Scopes string `json:"scopes"`
 }
 
 // User redirected to external source

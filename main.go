@@ -4,7 +4,7 @@ import (
 	"log"
 
 	"github.com/netlify/gotrue/cmd"
-	_ "github.com/netlify/gotrue/docs"
+	_ "github.com/netlify/gotrue/docs" // used by go-swagger to find docs
 )
 
 func main() {

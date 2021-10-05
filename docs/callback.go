@@ -2,7 +2,7 @@ package docs
 
 // swagger:route GET /callback oauth callbackGetParams
 //
-// External provider redirects to here
+// External provider should redirect to here
 //
 // Start procedure of creating token
 //
@@ -19,10 +19,20 @@ type callbackGetParams struct {
 	// in:query
 	Error string `json:"error"`
 
-	// Auth code returned by provider
+	// State set by OAuth1.0 or OAuth2.0 provider
 	//
 	// in:query
-	Code string `json:"code"`
+	State string `json:"state"`
+
+	// OAuth Token set by OAuth1.0 provider
+	//
+	// in:query
+	OAuthToken string `json:"oauth_token"`
+
+	// OAuth Verifier set by OAuth1.0 provider
+	//
+	// in:query
+	OAuthVerifier string `json:"oauth_verifier"`
 }
 
 // User redirected to GOTRUE_SITE_URL with query parameters splitted by #

@@ -41,4 +41,4 @@ swagger: check-swagger
 	GO11MODULE=on go mod vendor  && GO11MODULE=off swagger generate spec -o ./swagger.json --scan-models
 
 serve-swagger: check-swagger
-	swagger serve -F=swagger swagger.yaml
+	swagger serve -F=swagger swagger.json

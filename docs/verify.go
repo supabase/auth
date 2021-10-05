@@ -17,11 +17,11 @@ import "github.com/netlify/gotrue/api"
 
 // swagger:parameters verifyGetParams
 type verifyGetParams struct {
-	// specific verification type
-	//
+	// verification type
+
 	// in:query
 	// required: true
-	// enum: signup, recovery
+	// enum: signup,recovery,magiclink
 	Type string `json:"type"`
 
 	// user's token
@@ -30,10 +30,15 @@ type verifyGetParams struct {
 	// required: true
 	Token string `json:"token"`
 
-	// set only when user invited and type is signup
+	// required for signup verification if no existing password exists
 	//
 	// in:query
 	Password string `json:"password"`
+
+	// required only `redirect_url` is different from `site_url`
+	//
+	// in:query
+	RedirectTo string `json:"redirect_to"`
 }
 
 // Loged in and redirected to user's app with fields
@@ -60,7 +65,8 @@ type verifyGetResponse struct {
 //
 // Verify a registration or a password recovery.
 //
-// Verify a registration or a password recovery. Type can be `signup` or `recovery` and the `token` is a token returned from either `/signup` or `/recover`.
+// Verify an invite or email change link or sms otp.
+// Type can be `invite` or `email_change` or `sms`.
 //
 // responses:
 //   200: verifyPostResponse
@@ -72,9 +78,26 @@ type verifyGetResponse struct {
 
 // swagger:parameters verifyPostParams
 type verifyPostParams struct {
-	// All permited to change fields
 	// in: body
-	Body api.UserUpdateParams
+	Body struct {
+		// verification type
+		//
+		// required: true
+		Type string `json:"type"`
+		// user's token or sms otp
+		//
+		// required: true
+		Token string `json:"token"`
+
+		// required only when type = `phone`
+		Phone string `json:"phone"`
+
+		// required for signup verification if no existing password exists
+		Password string `json:"password"`
+
+		// required only `redirect_url` is different from `site_url`
+		RedirectTo string `json:"redirect_to"`
+	}
 }
 
 // Successfully updated user info
@@ -82,10 +105,6 @@ type verifyPostParams struct {
 type verifyPostResponse struct {
 	// swagger:allOf
 	Body struct {
-		Token        string `json:"access_token"`
-		TokenType    string `json:"token_type"`
-		ExpiresIn    int    `json:"expires_in"`
-		RefreshToken string `json:"refresh_token"`
-		User
+		api.AccessTokenResponse
 	}
 }

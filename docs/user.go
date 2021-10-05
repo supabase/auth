@@ -7,7 +7,7 @@ import "github.com/netlify/gotrue/api"
 // Get the JSON object for the logged in user.
 //
 // Security:
-//  api_key:
+//  bearer:
 // responses:
 //   200: userGetResponse
 //   400: httpErrorResponse
@@ -51,7 +51,7 @@ type UserConfirms struct {
 // Apart from changing email/password, this method can be used to set custom user data.
 //
 // Security:
-//  api_key:
+//  bearer:
 // responses:
 //   200: userGetResponse
 //   400: httpErrorResponse

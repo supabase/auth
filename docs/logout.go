@@ -7,7 +7,7 @@ package docs
 // This will revoke all refresh tokens for the user. Remember that the JWT tokens will still be valid for stateless auth until they expires.
 //
 // Security:
-//  api_key:
+//  bearer:
 //  responses:
 //   204: logoutPostResponse
 //   401: httpErrorResponse

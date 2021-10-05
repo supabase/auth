@@ -1,10 +1,8 @@
 // Package classification GoTrue API
 //
-// GoTrue is a small open-source API written in golang, that can act as a self-standing
-// API service for handling user registration and authentication for JAM projects.
+// GoTrue is a JWT based API for managing users and issuing JWT tokens and is an open-source project written in go.
 //
-// It's based on OAuth2 and JWT and will handle user signup, authentication and custom
-// user data.
+// GoTrue supports both password-based and passwordless authentication methods as well as OAuth1.0, OAuth2.0 and OIDC.
 //
 //     Schemes: http, https
 //     BasePath: /
@@ -18,12 +16,12 @@
 //     - application/json
 //
 //     Security:
-//     - api_key
+//     - bearer
 //
 //    SecurityDefinitions:
-//    api_key:
+//    bearer:
 //      type: "apiKey"
-//      description: "Auth token"
+//      description: "Auth Token"
 //      name: "Authorization"
 //      in: "header"
 //      tokenUrl: "/token"

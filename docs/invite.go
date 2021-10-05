@@ -6,10 +6,10 @@ import (
 
 // swagger:route POST /invite recover invitePostParams
 //
-// Invite a new user by email (require admin privilege).
+// Invite a new user by email (requires admin privilege).
 //
 // Security:
-//  api_key:
+//  bearer:
 // responses:
 //   200: invitePostResponse
 //   401: httpErrorResponse
