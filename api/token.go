@@ -15,8 +15,6 @@ import (
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
-	"github.com/pkg/errors"
-	"github.com/sethvargo/go-password/password"
 )
 
 // GoTrueClaims is a struct thats used for JWT claims
@@ -63,21 +61,27 @@ const useSessionCookie = "session"
 
 func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVerifier, error) {
 	config := getConfig(ctx)
+
 	var provider *oidc.Provider
 	var err error
 	var oAuthProvider conf.OAuthProviderConfiguration
+	var oAuthProviderClientId string
 	switch p.Provider {
 	case "apple":
 		oAuthProvider = config.External.Apple
+		oAuthProviderClientId = config.External.IosBundleId
 		provider, err = oidc.NewProvider(ctx, "https://appleid.apple.com")
 	case "azure":
 		oAuthProvider = config.External.Azure
+		oAuthProviderClientId = oAuthProvider.ClientID
 		provider, err = oidc.NewProvider(ctx, "https://login.microsoftonline.com/common/v2.0")
 	case "facebook":
 		oAuthProvider = config.External.Facebook
+		oAuthProviderClientId = oAuthProvider.ClientID
 		provider, err = oidc.NewProvider(ctx, "https://www.facebook.com")
 	case "google":
 		oAuthProvider = config.External.Google
+		oAuthProviderClientId = oAuthProvider.ClientID
 		provider, err = oidc.NewProvider(ctx, "https://accounts.google.com")
 	default:
 		return nil, fmt.Errorf("Provider %s doesn't support the id_token grant flow", p.Provider)
@@ -91,7 +95,24 @@ func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVeri
 		return nil, badRequestError("Provider is not enabled")
 	}
 
-	return provider.Verifier(&oidc.Config{ClientID: oAuthProvider.ClientID}), nil
+	return provider.Verifier(&oidc.Config{ClientID: oAuthProviderClientId}), nil
+}
+
+func getEmailVerified(v interface{}) bool {
+	var emailVerified bool
+	var err error
+	switch v.(type) {
+	case string:
+		emailVerified, err = strconv.ParseBool(v.(string))
+	case bool:
+		emailVerified = v.(bool)
+	default:
+		emailVerified = false
+	}
+	if err != nil {
+		return false
+	}
+	return emailVerified
 }
 
 // Token is the endpoint for OAuth access token requests
@@ -304,53 +325,67 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return oauthError("invalid nonce", "").WithInternalMessage("Possible abuse attempt: %v", r)
 	}
 
-	// check if user exists already
+	sub, ok := claims["sub"].(string)
+	if !ok {
+		return oauthError("invalid request", "missing sub claim in id_token")
+	}
+
 	email, ok := claims["email"].(string)
 	if !ok {
-		return errors.New("Unable to find email associated to provider")
+		email = ""
 	}
 
-	aud := claims["aud"].(string)
-	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, email, aud)
-
-	if err != nil && !models.IsNotFoundError(err) {
-		return internalServerError("Database error querying schema").WithInternalError(err)
-	}
-
+	var user *models.User
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if user == nil {
-			if config.DisableSignup {
-				return forbiddenError("Signups not allowed for this instance")
-			}
-			password, err := password.Generate(64, 10, 0, false, true)
-			if err != nil {
-				return internalServerError("error creating user").WithInternalError(err)
-			}
+		var identity *models.Identity
 
-			signupParams := &SignupParams{
-				Provider: params.Provider,
-				Email:    email,
-				Password: password,
-				Aud:      aud,
-				Data:     claims,
-			}
+		if identity, terr = models.FindIdentityByIdAndProvider(tx, sub, params.Provider); terr != nil {
+			// create new identity & user if identity is not found
+			if models.IsNotFoundError(terr) {
+				if config.DisableSignup {
+					return forbiddenError("Signups not allowed for this instance")
+				}
+				aud := a.requestAud(ctx, r)
+				signupParams := &SignupParams{
+					Provider: params.Provider,
+					Email:    email,
+					Aud:      aud,
+					Data:     claims,
+				}
 
-			user, terr = a.signupNewUser(ctx, tx, signupParams)
+				user, terr = a.signupNewUser(ctx, tx, signupParams)
+				if terr != nil {
+					return terr
+				}
+				if identity, terr = a.createNewIdentity(tx, user, params.Provider, claims); terr != nil {
+					return terr
+				}
+			} else {
+				return terr
+			}
+		} else {
+			user, terr = models.FindUserByID(tx, identity.UserID)
 			if terr != nil {
+				return terr
+			}
+			if email != "" {
+				identity.IdentityData["email"] = email
+			}
+			if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
+				return terr
+			}
+			if terr = user.UpdateAppMetaDataProvider(tx); terr != nil {
 				return terr
 			}
 		}
 
 		if !user.IsConfirmed() {
 			isEmailVerified := false
-			emailVerified, ok := claims["email_verified"].(string)
+			emailVerified, ok := claims["email_verified"]
 			if ok {
-				isEmailVerified, terr = strconv.ParseBool(emailVerified)
-				if terr != nil {
-					return terr
-				}
+				isEmailVerified = getEmailVerified(emailVerified)
 			}
 			if (!ok || !isEmailVerified) && !config.Mailer.Autoconfirm {
 				mailer := a.Mailer(ctx)
