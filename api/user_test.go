@@ -83,7 +83,10 @@ func (ts *UserTestSuite) TestUser_UpdatePassword() {
 			req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
 			req.Header.Set("Content-Type", "application/json")
 
-			token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+			key, err := models.FindMainAsymmetricKeyByUser(ts.API.db, u)
+			require.NoError(ts.T(), err, "error finding keys")
+
+			token, err := generateAccessToken(u, key, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.GetSigningMethod(), ts.Config.JWT.GetSigningKey())
 			require.NoError(ts.T(), err)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 

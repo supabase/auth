@@ -8,6 +8,7 @@ require (
 	github.com/beevik/etree v1.1.0
 	github.com/coreos/go-oidc/v3 v3.0.0
 	github.com/didip/tollbooth/v5 v5.1.1
+	github.com/ethereum/go-ethereum v1.10.9
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/go-sql-driver/mysql v1.5.0
@@ -36,19 +37,17 @@ require (
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pkg/errors v0.9.1
-	github.com/rs/cors v1.6.0
+	github.com/rs/cors v1.7.0
 	github.com/russellhaering/gosaml2 v0.6.1-0.20210916051624-757d23f1bc28
 	github.com/russellhaering/goxmldsig v1.1.1
 	github.com/sebest/xff v0.0.0-20160910043805-6c115e0ffa35
 	github.com/sethvargo/go-password v0.2.0
 	github.com/sirupsen/logrus v1.7.0
 	github.com/spf13/cobra v1.1.3
-	github.com/stretchr/testify v1.6.1
-	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
+	github.com/stretchr/testify v1.7.0
+	golang.org/x/crypto v0.0.0-20210322153248-0c34fe9e7dc2
 	golang.org/x/net v0.0.0-20220121210141-e204ce36a2ba // indirect
 	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
-	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a // indirect
-	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1 // indirect
 	gopkg.in/DataDog/dd-trace-go.v1 v1.12.1
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	gopkg.in/yaml.v1 v1.0.0-20140924161607-9f9df34309c0 // indirect

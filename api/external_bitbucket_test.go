@@ -29,7 +29,7 @@ func (ts *ExternalTestSuite) TestSignupExternalBitbucket() {
 	claims := ExternalProviderClaims{}
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
 	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
+		return ts.Config.JWT.GetVerificationKey(), nil
 	})
 	ts.Require().NoError(err)
 

@@ -2,12 +2,22 @@ package api
 
 import (
 	"bytes"
+	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/golang-jwt/jwt"
+	"github.com/netlify/gotrue/storage"
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
@@ -163,4 +173,62 @@ func (ts *TokenTestSuite) createBannedUser() *models.User {
 	require.NoError(ts.T(), err, "Error creating refresh token")
 
 	return u
+}
+
+func (ts *TokenTestSuite) TestRSAToken() {
+	privatekey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(ts.T(), err)
+
+	privateKeyBytes, err := x509.MarshalPKCS8PrivateKey(privatekey)
+	require.NoError(ts.T(), err)
+
+	keyPEM := pem.EncodeToMemory(
+		&pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: privateKeyBytes,
+		},
+	)
+
+	ts.Config.JWT.Secret = base64.URLEncoding.EncodeToString(keyPEM)
+	ts.Config.JWT.Algorithm = "RS256"
+	ts.Config.JWT.InitializeSigningSecret()
+
+	ctx, err := WithInstanceConfig(context.Background(), ts.Config, uuid.Nil)
+
+	var token *AccessTokenResponse
+	err = ts.API.db.Transaction(func(tx *storage.Connection) error {
+		user, terr := ts.API.signupNewUser(ctx, ts.API.db, &SignupParams{
+			Aud: "authenticated",
+		})
+		if terr != nil {
+			return terr
+		}
+
+		token, err = ts.API.issueRefreshToken(ctx, tx, user)
+		return err
+	})
+	require.NoError(ts.T(), err)
+
+	jwtToken, err := jwt.ParseWithClaims(token.Token, &GoTrueClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return ts.Config.JWT.GetVerificationKey(), nil
+	})
+
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), jwtToken.Valid)
+	require.Equal(ts.T(), jwt.SigningMethodRS256, jwtToken.Method)
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"password": "newpass",
+	}))
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/user", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token.Token))
+
+	// Setup response recorder
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), w.Code, http.StatusOK)
 }

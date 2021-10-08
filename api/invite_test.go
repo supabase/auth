@@ -60,12 +60,15 @@ func (ts *InviteTestSuite) makeSuperAdmin(email string) string {
 
 	u.Role = "supabase_admin"
 
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	key, err := models.FindMainAsymmetricKeyByUser(ts.API.db, u)
+	require.NoError(ts.T(), err, "Error finding keys")
+
+	token, err := generateAccessToken(u, key, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.GetSigningMethod(), ts.Config.JWT.GetSigningKey())
 	require.NoError(ts.T(), err, "Error generating access token")
 
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
 	_, err = p.Parse(token, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
+		return ts.Config.JWT.GetVerificationKey(), nil
 	})
 	require.NoError(ts.T(), err, "Error parsing token")
 

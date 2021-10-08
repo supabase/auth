@@ -26,6 +26,9 @@ type GoTrueClaims struct {
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	UserMetaData map[string]interface{} `json:"user_metadata"`
 	Role         string                 `json:"role"`
+
+	MainAsymmetricKey          string `json:"asymmetric_key"`
+	MainAsymmetricKeyAlgorithm string `json:"asymmetric_key_algorithm"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -307,7 +310,12 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return internalServerError(terr.Error())
 		}
 
-		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		key, terr := models.FindMainAsymmetricKeyByUser(tx, user)
+		if terr != nil {
+			return internalServerError("Database error granting user").WithInternalError(terr)
+		}
+
+		tokenString, terr = generateAccessToken(user, key, time.Second*time.Duration(config.JWT.Exp), config.JWT.GetSigningMethod(), config.JWT.GetSigningKey())
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -502,7 +510,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func generateAccessToken(user *models.User, expiresIn time.Duration, secret string) (string, error) {
+func generateAccessToken(user *models.User, key *models.AsymmetricKey, expiresIn time.Duration, algorithm jwt.SigningMethod, secret interface{}) (string, error) {
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
@@ -516,8 +524,13 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, secret stri
 		Role:         user.Role,
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(secret))
+	if key != nil {
+		claims.MainAsymmetricKey = key.Key
+		claims.MainAsymmetricKeyAlgorithm = key.Algorithm
+	}
+
+	token := jwt.NewWithClaims(algorithm, claims)
+	return token.SignedString(secret)
 }
 
 func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User) (*AccessTokenResponse, error) {
@@ -536,7 +549,12 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		key, terr := models.FindMainAsymmetricKeyByUser(tx, user)
+		if terr != nil {
+			return internalServerError("Database error granting user").WithInternalError(terr)
+		}
+
+		tokenString, terr = generateAccessToken(user, key, time.Second*time.Duration(config.JWT.Exp), config.JWT.GetSigningMethod(), config.JWT.GetSigningKey())
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}

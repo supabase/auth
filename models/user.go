@@ -404,6 +404,24 @@ func FindUserWithRefreshToken(tx *storage.Connection, token string) (*User, *Ref
 	return user, refreshToken, nil
 }
 
+// FindUserWithRefreshToken finds a user from the provided refresh token.
+func FindUserWithAsymmetrickey(tx *storage.Connection, key string) (*User, *AsymmetricKey, error) {
+	asymmetricKey := &AsymmetricKey{}
+	if err := tx.Where("key = ? and main = true", key).First(asymmetricKey); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, nil, AsymmetricKeyNotFoundError{}
+		}
+		return nil, nil, errors.Wrap(err, "error finding asymmetric key")
+	}
+
+	user, err := findUser(tx, "id = ?", asymmetricKey.UserID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return user, asymmetricKey, nil
+}
+
 // FindUsersInAudience finds users with the matching audience.
 func FindUsersInAudience(tx *storage.Connection, instanceID uuid.UUID, aud string, pageParams *Pagination, sortParams *SortParams, filter string) ([]*User, error) {
 	users := []*User{}

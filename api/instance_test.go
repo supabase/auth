@@ -132,7 +132,7 @@ func (ts *InstanceTestSuite) TestUpdate() {
 
 	i, err := models.GetInstanceByUUID(ts.API.db, testUUID)
 	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), i.BaseConfig.JWT.Secret, "testsecret")
+	require.Equal(ts.T(), []byte("testsecret"), i.BaseConfig.JWT.GetVerificationKey())
 	require.Equal(ts.T(), i.BaseConfig.SiteURL, "https://test.mysite.com")
 }
 

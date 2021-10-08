@@ -167,13 +167,17 @@ The name to use for the service.
 
 ```properties
 GOTRUE_JWT_SECRET=supersecretvalue
+GOTRUE_JWT_ALGORITHM=RS256
 GOTRUE_JWT_EXP=3600
 GOTRUE_JWT_AUD=netlify
 ```
+`JWT_ALGORITHM` - `string`
+
+The signing algorithm for the JWT. Defaults to HS256.
 
 `JWT_SECRET` - `string` **required**
 
-The secret used to sign JWT tokens with.
+The secret used to sign JWT tokens with. If signing alogrithm is RS256, secret has to be Base64 encoded RSA private key.
 
 `JWT_EXP` - `number`
 
@@ -936,3 +940,52 @@ External provider should redirect to here
 
 Redirects to `<GOTRUE_SITE_URL>#access_token=<access_token>&refresh_token=<refresh_token>&provider_token=<provider_oauth_token>&expires_in=3600&provider=<provider_name>`
 If additional scopes were requested then `provider_token` will be populated, you can use this to fetch additional data from the provider or interact with their services
+### **POST /sign_challenge**
+
+  This is an endpoint for user sign up with Asymmetric key.
+  Currently implemets only sign up with Ethereum address( not public key).
+  
+  body:
+  ```json
+  // Sign up with Metamask browser extension
+  {
+    "key": "0x6BE46d7D863666546b77951D5dfffcF075F36E68",
+    "algorithm": "ETH"
+  }
+  ```
+
+  Returns:
+  ```json
+  {
+    "challenge_token": "d188f5a4-f9d6-4ede-8cfd-2a45927b0edc"
+  }
+  ```
+  Returned challenge token has to be signed with Metamask and sent back to /asymmetric_login
+  
+### **POST /asymmetric_login**
+
+  This is an endpoint for user sign in with Asymmetric key.
+  Accepts signed challenge token from `/sign_challenge` endpoint
+  
+  body:
+  ```json
+  // Login with with Metamask browser extension
+  {
+    "key": "0x6BE46d7D863666546b77951D5dfffcF075F36E68",
+    "challenge_token_signature": "0x3129682f92a0f3f6ef648623c3256ae39ab16de4fefcc50c60a375c8dd224dde291f750d0fd3d475b403a00a631dd8979583b8d036d2e3b2408668a1b4ea6b321c"
+  }
+  ```
+
+  Returns:
+  ```json
+  {
+    "access_token": "jwt-token-representing-the-user",
+    "token_type": "bearer",
+    "expires_in": 3600,
+    "refresh_token": "a-refresh-token"
+  }
+  ```
+  
+  Once you have an access token, you can access the methods requiring authentication
+  by settings the `Authorization: Bearer YOUR_ACCESS_TOKEN_HERE` header.
+

@@ -9,6 +9,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case RefreshTokenNotFoundError:
 		return true
+	case AsymmetricKeyNotFoundError:
+		return true
 	case InstanceNotFoundError:
 		return true
 	case TotpSecretNotFoundError:
@@ -45,6 +47,12 @@ type RefreshTokenNotFoundError struct{}
 
 func (e RefreshTokenNotFoundError) Error() string {
 	return "Refresh Token not found"
+}
+
+type AsymmetricKeyNotFoundError struct{}
+
+func (e AsymmetricKeyNotFoundError) Error() string {
+	return "Asymmetric Key not found"
 }
 
 // InstanceNotFoundError represents when an instance is not found.

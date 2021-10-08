@@ -20,11 +20,11 @@ import (
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	saml2 "github.com/russellhaering/gosaml2"
 	"github.com/russellhaering/gosaml2/types"
 	dsig "github.com/russellhaering/goxmldsig"
-	"github.com/gofrs/uuid"
 	"golang.org/x/oauth2"
 )
 
