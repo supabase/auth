@@ -78,7 +78,27 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		}
 		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, params.Aud)
 	default:
-		return unprocessableEntityError("Signup provider must be either email or phone")
+		if !config.External.Phone.Enabled && !config.External.Email.Enabled {
+			return unprocessableEntityError("Please enable at least one auth provider, email or phone number")
+		}
+
+		// define base string for string building
+		errorMessage := "To signup, please provide your "
+
+		// if email auth is enabled then add "email" to string
+		if config.External.Email.Enabled {
+			errorMessage += "email "
+
+			// if email and phone is enabled, add "or" to string
+			if config.External.Phone.Enabled {
+				errorMessage += "or "
+			}
+		}
+		// if phone is enabled, add "phone number" to string
+		if config.External.Phone.Enabled {
+			errorMessage += "phone number"
+		}
+		return unprocessableEntityError(errorMessage)
 	}
 
 	if err != nil && !models.IsNotFoundError(err) {
@@ -89,7 +109,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		if user != nil {
 			if params.Provider == "email" && user.IsConfirmed() {
-				return badRequestError("Thanks for registering, now check your email to complete the process.")
+				return badRequestError("Email has already been used")
 			}
 
 			if params.Provider == "phone" && user.IsPhoneConfirmed() {
