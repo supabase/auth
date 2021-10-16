@@ -109,7 +109,14 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		if user != nil {
 			if params.Provider == "email" && user.IsConfirmed() {
-				return badRequestError("Email has already been used")
+				errorMessage := "User registered"
+
+				// if email confirmation is enabled in configuration, append check email in string
+				if config.Mailer.Autoconfirm {
+					errorMessage += ", check your email to complete the process"
+				}
+
+				return badRequestError(errorMessage)
 			}
 
 			if params.Provider == "phone" && user.IsPhoneConfirmed() {
