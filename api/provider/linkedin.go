@@ -55,11 +55,8 @@ type linkedinLocale struct {
 	Language	  string `json:"language"`
 }
 
-type linkedinLocalized struct {
-	En_US	  string `json:"en_US"` // how to modelize catch all for lang ?
-}
 type linkedinName struct {
-	Localized           linkedinLocalized `json:"localized"`
+	Localized           interface{} `json:"localized"` // try to catch all possible value
 	PreferredLocale     linkedinLocale `json:"preferredLocale"`
 }
 
