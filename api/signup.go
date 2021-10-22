@@ -78,27 +78,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		}
 		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, params.Aud)
 	default:
-		if !config.External.Phone.Enabled && !config.External.Email.Enabled {
-			return unprocessableEntityError("Please enable at least one auth provider, email or phone number")
-		}
-
-		// define base string for string building
-		errorMessage := "To signup, please provide your "
-
-		// if email auth is enabled then add "email" to string
-		if config.External.Email.Enabled {
-			errorMessage += "email "
-
-			// if email and phone is enabled, add "or" to string
-			if config.External.Phone.Enabled {
-				errorMessage += "or "
-			}
-		}
-		// if phone is enabled, add "phone number" to string
-		if config.External.Phone.Enabled {
-			errorMessage += "phone number"
-		}
-		return unprocessableEntityError(errorMessage)
+		return invalidSignupError(config)
 	}
 
 	if err != nil && !models.IsNotFoundError(err) {
@@ -109,18 +89,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		if user != nil {
 			if params.Provider == "email" && user.IsConfirmed() {
-				errorMessage := "User registered"
-
-				// if email confirmation is enabled in configuration, append check email in string
-				if config.Mailer.Autoconfirm {
-					errorMessage += ", check your email to complete the process"
-				}
-
-				return badRequestError(errorMessage)
+				return statusOkError("User registered, check your email to complete the process")
 			}
 
 			if params.Provider == "phone" && user.IsPhoneConfirmed() {
-				return badRequestError("A user with this phone number has already been registered")
+				return statusOkError("A user with this phone number has already been registered")
 			}
 
 			if err := user.UpdateUserMetaData(tx, params.Data); err != nil {

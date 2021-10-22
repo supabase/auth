@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+
+	"github.com/netlify/gotrue/conf"
 )
 
 // Common error messages during signup flow
@@ -54,6 +56,25 @@ func (e *OAuthError) Cause() error {
 		return e.InternalError
 	}
 	return e
+}
+
+func invalidSignupError(config *conf.Configuration) *HTTPError {
+	var msg string
+	if config.External.Email.Enabled && config.External.Phone.Enabled {
+		msg = "To signup, please provide your email or phone number"
+	} else if config.External.Email.Enabled {
+		msg = "To signup, please provide your email"
+	} else if config.External.Phone.Enabled {
+		msg = "To signup, please provide your phone number"
+	} else {
+		// 3rd party OAuth signups
+		msg = "To signup, please provide required fields"
+	}
+	return unprocessableEntityError(msg)
+}
+
+func statusOkError(fmtString string, args ...interface{}) *HTTPError {
+	return httpError(http.StatusOK, fmtString, args...)
 }
 
 func oauthError(err string, description string) *OAuthError {
