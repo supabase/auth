@@ -10,9 +10,9 @@ import (
 )
 
 const (
-	defaultLinkedinAPIBase = "api.linkedin.com"
-	endpointProfile        = "/v2/me?projection=(id,firstName,lastName,profilePicture(displayImage~:playableStreams))"
-	endpointEmail          = "/v2/emailAddress?q=members&projection=(elements*(handle~))"
+	defaultLinkedinAPIBase  = "api.linkedin.com"
+	endpointLinkedinProfile = "/v2/me?projection=(id,firstName,lastName,profilePicture(displayImage~:playableStreams))"
+	endpointLinkedinEmail   = "/v2/emailAddress?q=members&projection=(elements*(handle~))"
 )
 
 type linkedinProvider struct {
@@ -135,14 +135,14 @@ func GetName(name linkedinName) string {
 
 func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u linkedinUser
-	if err := makeRequest(ctx, tok, g.Config, defaultLinkedinAPIBase+endpointProfile, &u); err != nil {
+	if err := makeRequest(ctx, tok, g.Config, defaultLinkedinAPIBase+endpointLinkedinProfile, &u); err != nil {
 		return nil, err
 	}
 
 	data := &UserProvidedData{}
 
 	var email linkedinUserEmail
-	if err := makeRequest(ctx, tok, g.Config, defaultLinkedinAPIBase+endpointEmail, &email); err != nil {
+	if err := makeRequest(ctx, tok, g.Config, defaultLinkedinAPIBase+endpointLinkedinEmail, &email); err != nil {
 		return nil, err
 	}
 
