@@ -89,11 +89,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		if user != nil {
 			if params.Provider == "email" && user.IsConfirmed() {
-				return statusOkError("User registered, check your email to complete the process")
+				return UserExistsError
 			}
 
 			if params.Provider == "phone" && user.IsPhoneConfirmed() {
-				return statusOkError("A user with this phone number has already been registered")
+				return UserExistsError
 			}
 
 			if err := user.UpdateUserMetaData(tx, params.Data); err != nil {
@@ -159,6 +159,43 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {
 			return tooManyRequestsError("For security purposes, you can only request this once every minute")
+		}
+		if errors.Is(err, UserExistsError) {
+			sanitizedUser := user
+			now := time.Now()
+
+			// sanitize confirmation_sent_at, created_at and updated_at
+			sanitizedUser.CreatedAt = now
+			sanitizedUser.UpdatedAt = now
+			sanitizedUser.ConfirmationSentAt = &now
+
+			// sanitize user_metadata
+			sanitizedUser.UserMetaData = make(map[string]interface{})
+
+			// sanitize app_metadata
+			sanitizedAppMetadata := make(map[string]interface{})
+			var sanitizedProviders [1]string
+			sanitizedProviders[0] = params.Provider
+			sanitizedAppMetadata["provider"] = params.Provider
+			sanitizedAppMetadata["providers"] = sanitizedProviders
+			sanitizedUser.AppMetaData = sanitizedAppMetadata
+
+			// sanitize email_change_confirm_status
+			sanitizedUser.EmailChangeConfirmStatus = 0
+
+			// sanitize param fields
+			switch params.Provider {
+			case "email":
+				sanitizedUser.Phone = ""
+			case "phone":
+				sanitizedUser.Email = ""
+			default:
+				sanitizedUser.Phone = ""
+				sanitizedUser.Email = ""
+			}
+
+			// return sanitized user
+			return sendJSON(w, http.StatusOK, sanitizedUser)
 		}
 		return err
 	}

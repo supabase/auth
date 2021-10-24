@@ -8,11 +8,13 @@ import (
 	"runtime/debug"
 
 	"github.com/netlify/gotrue/conf"
+	"github.com/pkg/errors"
 )
 
 // Common error messages during signup flow
 var (
-	DuplicateEmailMsg = "A user with this email address has already been registered"
+	DuplicateEmailMsg       = "A user with this email address has already been registered"
+	UserExistsError   error = errors.New("User already exists")
 )
 
 var oauthErrorMap = map[int]string{
@@ -71,10 +73,6 @@ func invalidSignupError(config *conf.Configuration) *HTTPError {
 		msg = "To signup, please provide required fields"
 	}
 	return unprocessableEntityError(msg)
-}
-
-func statusOkError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusOK, fmtString, args...)
 }
 
 func oauthError(err string, description string) *OAuthError {
