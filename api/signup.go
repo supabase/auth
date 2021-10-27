@@ -205,52 +205,31 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 }
 
 func sanitizeUser(user *models.User, params *SignupParams) *models.User {
-	sanitizedUser := user
+	u := user
 	now := time.Now()
 
-	// sanitize confirmation_sent_at, created_at and updated_at
-	// sanitize confirmed_at and last_sign_in_at
-	sanitizedUser.CreatedAt = now
-	sanitizedUser.UpdatedAt = now
-	sanitizedUser.ConfirmationSentAt = &now
-	sanitizedUser.LastSignInAt = &now
-	sanitizedUser.ConfirmedAt = &now
-
-	// sanitize identities
-	sanitizedUser.Identities = make([]models.Identity, 0)
-
-	// sanitize user_metadata
-	sanitizedUser.UserMetaData = params.Data
-
-	// sanitize aud
-	sanitizedUser.Aud = params.Aud
+	u.CreatedAt, u.UpdatedAt, u.ConfirmationSentAt, u.LastSignInAt, u.ConfirmedAt = now, now, &now, &now, &now
+	u.Identities = make([]models.Identity, 0)
+	u.UserMetaData = params.Data
+	u.Aud = params.Aud
 
 	// sanitize app_metadata
-	sanitizedAppMetadata := make(map[string]interface{})
-	var sanitizedProviders [1]string
-	sanitizedProviders[0] = params.Provider
-	sanitizedAppMetadata["provider"] = params.Provider
-	sanitizedAppMetadata["providers"] = sanitizedProviders
-	sanitizedUser.AppMetaData = sanitizedAppMetadata
+	u.AppMetaData = map[string]interface{}{
+		"provider":  params.Provider,
+		"providers": []string{params.Provider},
+	}
 
 	// sanitize param fields
 	switch params.Provider {
 	case "email":
-		sanitizedUser.PhoneConfirmedAt = nil
-		sanitizedUser.EmailConfirmedAt = &now
-		sanitizedUser.Phone = ""
+		u.PhoneConfirmedAt, u.EmailConfirmedAt, u.Phone = nil, &now, ""
 	case "phone":
-		sanitizedUser.PhoneConfirmedAt = &now
-		sanitizedUser.EmailConfirmedAt = nil
-		sanitizedUser.Email = ""
+		u.PhoneConfirmedAt, u.EmailConfirmedAt, u.Email = &now, nil, ""
 	default:
-		sanitizedUser.Phone = ""
-		sanitizedUser.EmailConfirmedAt = nil
-		sanitizedUser.PhoneConfirmedAt = nil
-		sanitizedUser.Email = ""
+		u.Phone, u.EmailConfirmedAt, u.PhoneConfirmedAt, u.Email = "", nil, nil, ""
 	}
 
-	return sanitizedUser
+	return u
 }
 
 func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, params *SignupParams) (*models.User, error) {
