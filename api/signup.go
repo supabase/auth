@@ -220,7 +220,7 @@ func sanitizeUser(user *models.User, params *SignupParams) *models.User {
 	sanitizedUser.Identities = make([]models.Identity, 0)
 
 	// sanitize user_metadata
-	sanitizedUser.UserMetaData = make(map[string]interface{})
+	sanitizedUser.UserMetaData = nil
 
 	// sanitize app_metadata
 	sanitizedAppMetadata := make(map[string]interface{})
