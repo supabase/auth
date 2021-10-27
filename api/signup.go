@@ -161,47 +161,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			return tooManyRequestsError("For security purposes, you can only request this once every minute")
 		}
 		if errors.Is(err, UserExistsError) {
-			sanitizedUser := user
-			now := time.Now()
-
-			// sanitize confirmation_sent_at, created_at and updated_at
-			// sanitize confirmed_at and last_sign_in_at
-			sanitizedUser.CreatedAt = now
-			sanitizedUser.UpdatedAt = now
-			sanitizedUser.ConfirmationSentAt = &now
-			sanitizedUser.LastSignInAt = &now
-			sanitizedUser.ConfirmedAt = &now
-
-			// sanitize identities
-			sanitizedUser.Identities = make([]models.Identity, 0)
-
-			// sanitize user_metadata
-			sanitizedUser.UserMetaData = make(map[string]interface{})
-
-			// sanitize app_metadata
-			sanitizedAppMetadata := make(map[string]interface{})
-			var sanitizedProviders [1]string
-			sanitizedProviders[0] = params.Provider
-			sanitizedAppMetadata["provider"] = params.Provider
-			sanitizedAppMetadata["providers"] = sanitizedProviders
-			sanitizedUser.AppMetaData = sanitizedAppMetadata
-
-			// sanitize param fields
-			switch params.Provider {
-			case "email":
-				sanitizedUser.PhoneConfirmedAt = nil
-				sanitizedUser.EmailConfirmedAt = &now
-				sanitizedUser.Phone = ""
-			case "phone":
-				sanitizedUser.PhoneConfirmedAt = &now
-				sanitizedUser.EmailConfirmedAt = nil
-				sanitizedUser.Email = ""
-			default:
-				sanitizedUser.Phone = ""
-				sanitizedUser.EmailConfirmedAt = nil
-				sanitizedUser.PhoneConfirmedAt = nil
-				sanitizedUser.Email = ""
-			}
+			sanitizedUser := sanitizeUser(user, params)
 
 			// return sanitized user
 			return sendJSON(w, http.StatusOK, sanitizedUser)
@@ -242,6 +202,52 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, user)
+}
+
+func sanitizeUser(user *models.User, params *SignupParams) *models.User {
+	sanitizedUser := user
+	now := time.Now()
+
+	// sanitize confirmation_sent_at, created_at and updated_at
+	// sanitize confirmed_at and last_sign_in_at
+	sanitizedUser.CreatedAt = now
+	sanitizedUser.UpdatedAt = now
+	sanitizedUser.ConfirmationSentAt = &now
+	sanitizedUser.LastSignInAt = &now
+	sanitizedUser.ConfirmedAt = &now
+
+	// sanitize identities
+	sanitizedUser.Identities = make([]models.Identity, 0)
+
+	// sanitize user_metadata
+	sanitizedUser.UserMetaData = make(map[string]interface{})
+
+	// sanitize app_metadata
+	sanitizedAppMetadata := make(map[string]interface{})
+	var sanitizedProviders [1]string
+	sanitizedProviders[0] = params.Provider
+	sanitizedAppMetadata["provider"] = params.Provider
+	sanitizedAppMetadata["providers"] = sanitizedProviders
+	sanitizedUser.AppMetaData = sanitizedAppMetadata
+
+	// sanitize param fields
+	switch params.Provider {
+	case "email":
+		sanitizedUser.PhoneConfirmedAt = nil
+		sanitizedUser.EmailConfirmedAt = &now
+		sanitizedUser.Phone = ""
+	case "phone":
+		sanitizedUser.PhoneConfirmedAt = &now
+		sanitizedUser.EmailConfirmedAt = nil
+		sanitizedUser.Email = ""
+	default:
+		sanitizedUser.Phone = ""
+		sanitizedUser.EmailConfirmedAt = nil
+		sanitizedUser.PhoneConfirmedAt = nil
+		sanitizedUser.Email = ""
+	}
+
+	return sanitizedUser
 }
 
 func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, params *SignupParams) (*models.User, error) {
