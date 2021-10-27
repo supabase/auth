@@ -165,9 +165,12 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			now := time.Now()
 
 			// sanitize confirmation_sent_at, created_at and updated_at
+			// sanitizer confirmed_at and last_sign_in_at
 			sanitizedUser.CreatedAt = now
 			sanitizedUser.UpdatedAt = now
 			sanitizedUser.ConfirmationSentAt = &now
+			sanitizedUser.LastSignInAt = &now
+			sanitizedUser.ConfirmedAt = &now
 
 			// sanitize user_metadata
 			sanitizedUser.UserMetaData = make(map[string]interface{})
@@ -186,11 +189,17 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			// sanitize param fields
 			switch params.Provider {
 			case "email":
+				sanitizedUser.PhoneConfirmedAt = nil
+				sanitizedUser.EmailConfirmedAt = &now
 				sanitizedUser.Phone = ""
 			case "phone":
+				sanitizedUser.PhoneConfirmedAt = &now
+				sanitizedUser.EmailConfirmedAt = nil
 				sanitizedUser.Email = ""
 			default:
 				sanitizedUser.Phone = ""
+				sanitizedUser.EmailConfirmedAt = nil
+				sanitizedUser.PhoneConfirmedAt = nil
 				sanitizedUser.Email = ""
 			}
 
