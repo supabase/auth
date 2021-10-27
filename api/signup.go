@@ -165,12 +165,15 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			now := time.Now()
 
 			// sanitize confirmation_sent_at, created_at and updated_at
-			// sanitizer confirmed_at and last_sign_in_at
+			// sanitize confirmed_at and last_sign_in_at
 			sanitizedUser.CreatedAt = now
 			sanitizedUser.UpdatedAt = now
 			sanitizedUser.ConfirmationSentAt = &now
 			sanitizedUser.LastSignInAt = &now
 			sanitizedUser.ConfirmedAt = &now
+
+			// sanitize identities
+			sanitizedUser.Identities = make([]models.Identity, 0)
 
 			// sanitize user_metadata
 			sanitizedUser.UserMetaData = make(map[string]interface{})
