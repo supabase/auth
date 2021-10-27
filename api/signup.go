@@ -183,9 +183,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			sanitizedAppMetadata["providers"] = sanitizedProviders
 			sanitizedUser.AppMetaData = sanitizedAppMetadata
 
-			// sanitize email_change_confirm_status
-			sanitizedUser.EmailChangeConfirmStatus = 0
-
 			// sanitize param fields
 			switch params.Provider {
 			case "email":
