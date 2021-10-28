@@ -14,6 +14,16 @@ make build
 ./gotrue
 ```
 
+## Run Tests
+
+Make sure docker is running on your computer
+
+```sh
+./hack/postgresd.sh
+make migrate_test
+make test
+```
+
 ## Configuration
 
 You may configure GoTrue using either a configuration file named `.env`,
