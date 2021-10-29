@@ -450,7 +450,7 @@ Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/req
 
 Or Messagebird credentials, which can be obtained in the [Dashboard](https://dashboard.messagebird.com/en/developers/access):
 - `SMS_MESSAGEBIRD_ACCESS_KEY` - your Messagebird access key
-- `SMS_MESSAGEBIRD_ORIGINATOR` - your Messagebird phone number with +
+- `SMS_MESSAGEBIRD_ORIGINATOR` - SMS sender (your Messagebird phone number with + or company name)
 
 ### CAPTCHA
 * If enabled, CAPTCHA will check the request body for the `hcaptcha_token` field and make a verification request to the CAPTCHA provider.
