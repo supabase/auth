@@ -77,7 +77,7 @@ func (t MessagebirdProvider) SendSms(phone string, message string) error {
 		return err
 	}
 
-	if res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusUnauthorized {
+	if res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusUnprocessableEntity {
 		resp := &MessagebirdErrResponse{}
 		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
 			return err
