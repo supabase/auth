@@ -73,7 +73,8 @@ func (ts *SignupTestSuite) TestSignup() {
 	assert.Equal(ts.T(), "test@example.com", data.GetEmail())
 	assert.Equal(ts.T(), ts.Config.JWT.Aud, data.Aud)
 	assert.Equal(ts.T(), 1.0, data.UserMetaData["a"])
-	assert.Equal(ts.T(), []interface{}{"email"}, data.AppMetaData["provider"])
+	assert.Equal(ts.T(), "email", data.AppMetaData["provider"])
+	assert.Equal(ts.T(), []interface{}{"email"}, data.AppMetaData["providers"])
 }
 
 func (ts *SignupTestSuite) TestWebhookTriggered() {
@@ -119,8 +120,9 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 
 		appmeta, ok := u["app_metadata"].(map[string]interface{})
 		require.True(ok)
-		assert.Len(appmeta, 1)
-		assert.EqualValues([]interface{}{"email"}, appmeta["provider"])
+		assert.Len(appmeta, 2)
+		assert.EqualValues("email", appmeta["provider"])
+		assert.EqualValues([]interface{}{"email"}, appmeta["providers"])
 
 		usermeta, ok := u["user_metadata"].(map[string]interface{})
 		require.True(ok)
@@ -217,11 +219,17 @@ func (ts *SignupTestSuite) TestSignupTwice() {
 	encode()
 	ts.API.handler.ServeHTTP(w, req)
 
-	data := make(map[string]interface{})
+	data := models.User{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 
-	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
-	assert.Equal(ts.T(), float64(http.StatusBadRequest), data["code"])
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	assert.NotEqual(ts.T(), u.ID, data.ID)
+	assert.Equal(ts.T(), "test1@example.com", data.GetEmail())
+	assert.Equal(ts.T(), ts.Config.JWT.Aud, data.Aud)
+	assert.Equal(ts.T(), 1.0, data.UserMetaData["a"])
+	assert.Equal(ts.T(), "email", data.AppMetaData["provider"])
+	assert.Equal(ts.T(), []interface{}{"email"}, data.AppMetaData["providers"])
 }
 
 func (ts *SignupTestSuite) TestVerifySignup() {

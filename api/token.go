@@ -24,7 +24,6 @@ type GoTrueClaims struct {
 	Phone        string                 `json:"phone"`
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	UserMetaData map[string]interface{} `json:"user_metadata"`
-	Identities   []*models.Identity     `json:"identities"`
 	Role         string                 `json:"role"`
 }
 
@@ -58,6 +57,7 @@ type IdTokenGrantParams struct {
 
 const useCookieHeader = "x-use-cookie"
 const useSessionCookie = "session"
+const InvalidLoginMessage = "Invalid login credentials"
 
 func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVerifier, error) {
 	config := getConfig(ctx)
@@ -158,12 +158,12 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		params.Phone = a.formatPhoneNumber(params.Phone)
 		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
 	} else {
-		return oauthError("invalid_grant", "Invalid login credentials")
+		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return oauthError("invalid_grant", "Invalid login credentials")
+			return oauthError("invalid_grant", InvalidLoginMessage)
 		}
 		return internalServerError("Database error querying schema").WithInternalError(err)
 	}
@@ -175,7 +175,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	}
 
 	if !user.Authenticate(params.Password) {
-		return oauthError("invalid_grant", "Invalid email or password")
+		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
 
 	var token *AccessTokenResponse
@@ -253,13 +253,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return internalServerError(terr.Error())
 		}
 
-		identities := make([]*models.Identity, 0)
-		identities, terr = models.FindIdentitiesByUser(tx, user)
-		if terr != nil {
-			return internalServerError("error retrieving identities").WithInternalError(terr)
-		}
-
-		tokenString, terr = generateAccessToken(user, identities, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -376,7 +370,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
 				return terr
 			}
-			if terr = user.UpdateAppMetaDataProvider(tx); terr != nil {
+			if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
 				return terr
 			}
 		}
@@ -437,7 +431,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	})
 }
 
-func generateAccessToken(user *models.User, identities []*models.Identity, expiresIn time.Duration, secret string) (string, error) {
+func generateAccessToken(user *models.User, expiresIn time.Duration, secret string) (string, error) {
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
@@ -448,7 +442,6 @@ func generateAccessToken(user *models.User, identities []*models.Identity, expir
 		Phone:        user.GetPhone(),
 		AppMetaData:  user.AppMetaData,
 		UserMetaData: user.UserMetaData,
-		Identities:   identities,
 		Role:         user.Role,
 	}
 
@@ -471,12 +464,8 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		if terr != nil {
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
-		identities, terr := models.FindIdentitiesByUser(tx, user)
-		if terr != nil {
-			return internalServerError("Database error granting user").WithInternalError(terr)
-		}
 
-		tokenString, terr = generateAccessToken(user, identities, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
