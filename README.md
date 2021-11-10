@@ -191,7 +191,7 @@ The default group to assign all new users to.
 
 ### External Authentication Providers
 
-We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `spotify`, `slack`, `twitch` and `twitter` for external authentication.
+We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `spotify`, `slack`, `tiktok`, `twitch` and `twitter` for external authentication.
 
 Use the names as the keys underneath `external` to configure each separately.
 
@@ -885,7 +885,7 @@ Get access_token from external oauth provider
 query params:
 
 ```
-provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | slack | spotify | twitch | twitter
+provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | slack | spotify | tiktok | twitch | twitter
 scopes=<optional additional scopes depending on the provider (email and name are requested by default)>
 ```
 

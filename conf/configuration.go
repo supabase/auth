@@ -90,6 +90,7 @@ type ProviderConfiguration struct {
 	Google      OAuthProviderConfiguration `json:"google"`
 	Spotify     OAuthProviderConfiguration `json:"spotify"`
 	Slack       OAuthProviderConfiguration `json:"slack"`
+	TikTok      OAuthProviderConfiguration `json:"tiktok"`
 	Twitter     OAuthProviderConfiguration `json:"twitter"`
 	Twitch      OAuthProviderConfiguration `json:"twitch"`
 	Email       EmailProviderConfiguration `json:"email"`

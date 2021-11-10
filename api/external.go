@@ -387,6 +387,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewSpotifyProvider(config.External.Spotify, scopes)
 	case "slack":
 		return provider.NewSlackProvider(config.External.Slack, scopes)
+	case "tiktok":
+		return provider.NewTikTokProvider(config.External.TikTok, scopes)
 	case "twitch":
 		return provider.NewTwitchProvider(config.External.Twitch, scopes)
 	case "twitter":
