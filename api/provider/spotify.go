@@ -86,22 +86,19 @@ func (g spotifyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 
 	return &UserProvidedData{
 		Metadata: &Claims{
-			Issuer:        g.APIPath,
-			Subject:       u.ID,
-			Name:          u.DisplayName,
-			Picture:       avatarURL,
-			Email:         u.Email,
-			EmailVerified: true, // Spotify dosen't provide data on if email is verified.
-
+			Issuer:  g.APIPath,
+			Subject: u.ID,
+			Name:    u.DisplayName,
+			Picture: avatarURL,
+			Email:   u.Email,
 			// To be deprecated
 			AvatarURL:  avatarURL,
 			FullName:   u.DisplayName,
 			ProviderId: u.ID,
 		},
 		Emails: []Email{{
-			Email:    u.Email,
-			Verified: true, // Spotify dosen't provide data on if email is verified.
-			Primary:  true,
+			Email:   u.Email,
+			Primary: true,
 		}},
 	}, nil
 }

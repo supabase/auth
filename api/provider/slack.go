@@ -74,12 +74,11 @@ func (g slackProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 
 	return &UserProvidedData{
 		Metadata: &Claims{
-			Issuer:        g.APIPath,
-			Subject:       u.ID,
-			Name:          u.Name,
-			Picture:       u.AvatarURL,
-			Email:         u.Email,
-			EmailVerified: true, // Slack dosen't provide data on if email is verified.
+			Issuer:  g.APIPath,
+			Subject: u.ID,
+			Name:    u.Name,
+			Picture: u.AvatarURL,
+			Email:   u.Email,
 
 			// To be deprecated
 			AvatarURL:  u.AvatarURL,
@@ -87,9 +86,8 @@ func (g slackProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 			ProviderId: u.ID,
 		},
 		Emails: []Email{{
-			Email:    u.Email,
-			Verified: true, // Slack dosen't provide data on if email is verified.
-			Primary:  true,
+			Email:   u.Email,
+			Primary: true,
 		}},
 	}, nil
 }
