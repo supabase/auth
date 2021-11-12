@@ -227,7 +227,8 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
 	}
-	u.CreatedAt, u.UpdatedAt, u.ConfirmationSentAt, u.LastSignInAt, u.ConfirmedAt = now, now, &now, &now, &now
+	u.CreatedAt, u.UpdatedAt, u.ConfirmationSentAt = now, now, &now
+	u.LastSignInAt, u.ConfirmedAt, u.EmailConfirmedAt, u.PhoneConfirmedAt = nil, nil, nil, nil
 	u.Identities = make([]models.Identity, 0)
 	u.UserMetaData = params.Data
 	u.Aud = params.Aud
@@ -241,11 +242,11 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 	// sanitize param fields
 	switch params.Provider {
 	case "email":
-		u.PhoneConfirmedAt, u.EmailConfirmedAt, u.Phone = nil, &now, ""
+		u.Phone = ""
 	case "phone":
-		u.PhoneConfirmedAt, u.EmailConfirmedAt, u.Email = &now, nil, ""
+		u.Email = ""
 	default:
-		u.Phone, u.EmailConfirmedAt, u.PhoneConfirmedAt, u.Email = "", nil, nil, ""
+		u.Phone, u.Email = "", ""
 	}
 
 	return u, nil
