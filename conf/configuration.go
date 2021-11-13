@@ -93,6 +93,7 @@ type ProviderConfiguration struct {
 	TikTok      OAuthProviderConfiguration `json:"tiktok"`
 	Twitter     OAuthProviderConfiguration `json:"twitter"`
 	Twitch      OAuthProviderConfiguration `json:"twitch"`
+	WorkOS      OAuthProviderConfiguration `json:"workos"`
 	Email       EmailProviderConfiguration `json:"email"`
 	Phone       PhoneProviderConfiguration `json:"phone"`
 	Saml        SamlProviderConfiguration  `json:"saml"`
