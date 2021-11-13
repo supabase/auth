@@ -41,6 +41,7 @@ func TestSettings_DefaultProviders(t *testing.T) {
 	require.True(t, p.GitLab)
 	require.True(t, p.SAML)
 	require.True(t, p.Twitch)
+	require.True(t, p.WorkOS)
 }
 
 func TestSettings_EmailDisabled(t *testing.T) {
