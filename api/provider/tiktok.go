@@ -22,9 +22,13 @@ type tiktokUser struct {
 	UnionID        string `json:"union_id"`
 	DisplayName    string `json:"display_name"`
 	AvatarUrl      string `json:"avatar_url"`
-	AvatarUrl100   string `json:"avatar_url_100"`
-	AvatarUrl200   string `json:"avatar_url_200"`
 	AvatarUrlLarge string `json:"avatar_large_url"`
+}
+
+type tiktokUserRequestBody struct {
+	Id          string   `json:"open_id"`
+	AccessToken string   `json:"access_token"`
+	Fields      []string `json:"fields"`
 }
 
 // NewTikTokProvider creates a TikTok account provider.
@@ -64,7 +68,17 @@ func (g tiktokProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 
 func (g tiktokProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u tiktokUser
-	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/user/info", &u); err != nil {
+	if err := makePostRequest(ctx, tok, g.Config, g.APIPath+"/user/info", &tiktokUserRequestBody{
+		Id:          tok.Extra("open_id").(string),
+		AccessToken: tok.AccessToken,
+		Fields: []string{
+			"open_id",
+			"union_id",
+			"display_name",
+			"avatar_url",
+			"avatar_large_url",
+		},
+	}, &u); err != nil {
 		return nil, err
 	}
 

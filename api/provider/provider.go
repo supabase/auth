@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 
@@ -101,6 +102,28 @@ func chooseHost(base, defaultHost string) string {
 func makeRequest(ctx context.Context, tok *oauth2.Token, g *oauth2.Config, url string, dst interface{}) error {
 	client := g.Client(ctx, tok)
 	res, err := client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if err := json.NewDecoder(res.Body).Decode(dst); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func makePostRequest(ctx context.Context, tok *oauth2.Token, g *oauth2.Config, url string, body interface{}, dst interface{}) error {
+	client := g.Client(ctx, tok)
+
+	json_data, err := json.Marshal(body)
+
+	if err != nil {
+		return err
+	}
+
+	res, err := client.Post(url, "application/json", bytes.NewBuffer(json_data))
 	if err != nil {
 		return err
 	}
