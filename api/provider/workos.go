@@ -18,19 +18,6 @@ type workosProvider struct {
 	APIPath string
 }
 
-/*
-{
-  "id": "prof_01DMC79VCBZ0NY2099737PSVF1",
-  "connection_id": "conn_01E4ZCR3C56J083X43JQXF3JK5",
-  "connection_type": "okta",
-  "email": "todd@foo-corp.com",
-  "first_name": "Todd",
-  "idp_id": "00u1a0ufowBJlzPlk357",
-  "last_name": "Rundgren",
-  "object": "profile",
-  "raw_attributes": {...}
-}
-*/
 type workosUser struct {
 	ID             string                 `json:"id"`
 	ConnectionId   string                 `json:"connection_id"`
@@ -73,16 +60,11 @@ func NewWorkOSProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 }
 
 func (g workosProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	// TODO rework this as the TokenURL returns only an access token and the profile
 	return g.Exchange(oauth2.NoContext, code)
 }
 
 func (g workosProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	var u workosUser
-	// TODO rework this as the only way to get profile is with TokenURL
-	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/sso/token", &u); err != nil {
-		return nil, err
-	}
+	u := tok.Extra("profile").(workosUser)
 
 	return &UserProvidedData{
 		Metadata: &Claims{
