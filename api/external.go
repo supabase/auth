@@ -381,6 +381,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewGitlabProvider(config.External.Gitlab, scopes)
 	case "google":
 		return provider.NewGoogleProvider(config.External.Google, scopes)
+	case "linkedin":
+		return provider.NewLinkedInProvider(config.External.Google, scopes)
 	case "facebook":
 		return provider.NewFacebookProvider(config.External.Facebook, scopes)
 	case "spotify":
