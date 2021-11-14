@@ -16,8 +16,8 @@ func (ts *ExternalTestSuite) TestSignupExternalTikTok() {
 	u, err := url.Parse(w.Header().Get("Location"))
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
-	ts.Equal(ts.Config.External.Spotify.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Spotify.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.TikTok.RedirectURI, q.Get("redirect_uri"))
+	ts.Equal(ts.Config.External.TikTok.ClientID, q.Get("client_id"))
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("user.info.basic", q.Get("scope"))
 
