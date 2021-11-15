@@ -3,14 +3,15 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
+	"github.com/pkg/errors"
 )
 
 // SignupParams are the parameters the Signup endpoint accepts
@@ -54,6 +55,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	} else if params.Phone != "" {
 		params.Provider = "phone"
 	}
+	if params.Data == nil {
+		params.Data = make(map[string]interface{})
+	}
 
 	var user *models.User
 	instanceID := getInstanceID(ctx)
@@ -78,7 +82,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		}
 		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, params.Aud)
 	default:
-		return unprocessableEntityError("Signup provider must be either email or phone")
+		return invalidSignupError(config)
 	}
 
 	if err != nil && !models.IsNotFoundError(err) {
@@ -88,12 +92,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if user != nil {
-			if params.Provider == "email" && user.IsConfirmed() {
-				return badRequestError("Thanks for registering, now check your email to complete the process.")
-			}
-
-			if params.Provider == "phone" && user.IsPhoneConfirmed() {
-				return badRequestError("A user with this phone number has already been registered")
+			if (params.Provider == "email" && user.IsConfirmed()) || (params.Provider == "phone" && user.IsPhoneConfirmed()) {
+				return UserExistsError
 			}
 
 			if err := user.UpdateUserMetaData(tx, params.Data); err != nil {
@@ -160,6 +160,25 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if errors.Is(err, MaxFrequencyLimitError) {
 			return tooManyRequestsError("For security purposes, you can only request this once every minute")
 		}
+		if errors.Is(err, UserExistsError) {
+			err = a.db.Transaction(func(tx *storage.Connection) error {
+				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRepeatedSignUpAction, nil); terr != nil {
+					return terr
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			if config.Mailer.Autoconfirm || config.Sms.Autoconfirm {
+				return badRequestError("User already registered")
+			}
+			sanitizedUser, err := sanitizeUser(user, params)
+			if err != nil {
+				return err
+			}
+			return sendJSON(w, http.StatusOK, sanitizedUser)
+		}
 		return err
 	}
 
@@ -198,6 +217,41 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, user)
 }
 
+// sanitizeUser removes all user sensitive information from the user object
+// Should be used whenever we want to prevent information about whether a user is registered or not from leaking
+func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
+	var err error
+	now := time.Now()
+
+	u.ID, err = uuid.NewV4()
+	if err != nil {
+		return nil, errors.Wrap(err, "Error generating unique id")
+	}
+	u.CreatedAt, u.UpdatedAt, u.ConfirmationSentAt = now, now, &now
+	u.LastSignInAt, u.ConfirmedAt, u.EmailConfirmedAt, u.PhoneConfirmedAt = nil, nil, nil, nil
+	u.Identities = make([]models.Identity, 0)
+	u.UserMetaData = params.Data
+	u.Aud = params.Aud
+
+	// sanitize app_metadata
+	u.AppMetaData = map[string]interface{}{
+		"provider":  params.Provider,
+		"providers": []string{params.Provider},
+	}
+
+	// sanitize param fields
+	switch params.Provider {
+	case "email":
+		u.Phone = ""
+	case "phone":
+		u.Email = ""
+	default:
+		u.Phone, u.Email = "", ""
+	}
+
+	return u, nil
+}
+
 func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, params *SignupParams) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
@@ -221,8 +275,13 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 	if user.AppMetaData == nil {
 		user.AppMetaData = make(map[string]interface{})
 	}
+
+	user.Identities = make([]models.Identity, 0)
+
+	// TODO: Depcreate "provider" field
 	user.AppMetaData["provider"] = params.Provider
 
+	user.AppMetaData["providers"] = []string{params.Provider}
 	if params.Password == "" {
 		user.EncryptedPassword = ""
 	}

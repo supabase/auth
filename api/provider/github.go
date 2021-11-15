@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/netlify/gotrue/conf"
@@ -22,6 +23,7 @@ type githubProvider struct {
 }
 
 type githubUser struct {
+	ID        int    `json:"id"`
 	UserName  string `json:"login"`
 	Email     string `json:"email"`
 	Name      string `json:"name"`
@@ -80,10 +82,17 @@ func (g githubProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	}
 
 	data := &UserProvidedData{
-		Metadata: map[string]string{
-			userNameKey:  u.UserName,
-			nameKey:      u.Name,
-			avatarURLKey: u.AvatarURL,
+		Metadata: &Claims{
+			Issuer:            g.APIHost,
+			Subject:           strconv.Itoa(u.ID),
+			Name:              u.Name,
+			PreferredUsername: u.UserName,
+
+			// To be deprecated
+			AvatarURL:   u.AvatarURL,
+			FullName:    u.Name,
+			ProviderId:  strconv.Itoa(u.ID),
+			UserNameKey: u.UserName,
 		},
 	}
 
@@ -95,6 +104,11 @@ func (g githubProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	for _, e := range emails {
 		if e.Email != "" {
 			data.Emails = append(data.Emails, Email{Email: e.Email, Verified: e.Verified, Primary: e.Primary})
+		}
+
+		if e.Primary {
+			data.Metadata.Email = e.Email
+			data.Metadata.EmailVerified = e.Verified
 		}
 	}
 
