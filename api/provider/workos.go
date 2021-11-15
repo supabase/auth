@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/netlify/gotrue/conf"
@@ -92,7 +91,7 @@ func (g workosProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 			Email:   u.Email,
 
 			// To be deprecated
-			FullName:   fmt.Sprintf("%s %s", u.FirstName, u.LastName),
+			FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
 			ProviderId: u.ID,
 		},
 		Emails: []Email{{
