@@ -49,7 +49,7 @@ func (ts *UserTestSuite) SetupTest() {
 }
 
 func (ts *UserTestSuite) TestUser_UpdatePassword() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test2@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
 	// Request body
