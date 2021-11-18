@@ -199,6 +199,7 @@ Use the names as the keys underneath `external` to configure each separately.
 GOTRUE_EXTERNAL_GITHUB_ENABLED=true
 GOTRUE_EXTERNAL_GITHUB_CLIENT_ID=myappclientid
 GOTRUE_EXTERNAL_GITHUB_SECRET=clientsecretvaluessssh
+GOTRUE_EXTERNAL_GITHUB_REDIRECT_URI=http://localhost:3000/callback
 ```
 
 No external providers are required, but you must provide the required values if you choose to enable any.
