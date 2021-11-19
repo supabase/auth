@@ -154,7 +154,7 @@ type SecurityConfiguration struct {
 }
 
 type Web3Configuration struct {
-	NonceEncryptionKey string `json:"nonce_encryption_key"`
+	NonceEncryptionKey string `json:"nonce_encryption_key" split_words:"true"`
 	Enabled            bool   `json:"enabled" default:"false"`
 }
 
