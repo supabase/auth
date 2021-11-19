@@ -35,6 +35,7 @@ func TestSettings_DefaultProviders(t *testing.T) {
 	require.True(t, p.Spotify)
 	require.True(t, p.Slack)
 	require.True(t, p.Google)
+	require.True(t, p.LinkedIn)
 	require.True(t, p.GitHub)
 	require.True(t, p.GitLab)
 	require.True(t, p.SAML)

@@ -8,7 +8,7 @@ import (
 	jwt "github.com/golang-jwt/jwt"
 )
 
-func (ts *ExternalTestSuite) TestSignupExternalLinkedin() {
+func (ts *ExternalTestSuite) TestSignupExternalLinkedIn() {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=linkedin", nil)
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
@@ -16,8 +16,8 @@ func (ts *ExternalTestSuite) TestSignupExternalLinkedin() {
 	u, err := url.Parse(w.Header().Get("Location"))
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
-	ts.Equal(ts.Config.External.Apple.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Apple.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.LinkedIn.RedirectURI, q.Get("redirect_uri"))
+	ts.Equal(ts.Config.External.LinkedIn.ClientID, q.Get("client_id"))
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("r_emailaddress r_liteprofile", q.Get("scope"))
 
