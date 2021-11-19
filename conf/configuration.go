@@ -153,6 +153,11 @@ type SecurityConfiguration struct {
 	Captcha CaptchaConfiguration `json:"captcha"`
 }
 
+type Web3Configuration struct {
+	NonceEncryptionKey string `json:"nonce_encryption_key"`
+	Enabled            bool   `json:"enabled" default:"false"`
+}
+
 // Configuration holds all the per-instance configuration.
 type Configuration struct {
 	SiteURL           string                   `json:"site_url" split_words:"true" required:"true"`
@@ -163,6 +168,7 @@ type Configuration struct {
 	Mailer            MailerConfiguration      `json:"mailer"`
 	External          ProviderConfiguration    `json:"external"`
 	Sms               SmsProviderConfiguration `json:"sms"`
+	Web3              Web3Configuration        `json:"web3"`
 	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
 	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
 	Security          SecurityConfiguration    `json:"security"`
