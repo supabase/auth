@@ -72,6 +72,20 @@ CREATE TABLE auth.audit_log_entries (
 CREATE INDEX audit_logs_instance_id_idx ON auth.audit_log_entries USING btree (instance_id);
 comment on table auth.audit_log_entries is 'Auth: Audit trail for user actions.';
 
+-- auth.nonces definition
+CREATE TABLE auth.nonces (
+	instance_id uuid NULL,
+	id uuid NOT NULL,
+	hashed_ip text NOT NULL,
+	nonce varchar(64)
+	created_at timestamptz NULL,
+	expires_at timestamptz NULL,
+	consumed_at timestamptz NULL,
+	CONSTRAINT audit_log_entries_pkey PRIMARY KEY (id)
+);
+CREATE INDEX nonces_instance_id_idx ON auth.nonces USING btree (instance_id);
+comment on table auth.nonces is 'Auth: Stored generated nonces used for validating Web3 login requests.';
+
 -- auth.schema_migrations definition
 
 CREATE TABLE auth.schema_migrations (
