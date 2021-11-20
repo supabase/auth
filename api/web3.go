@@ -18,6 +18,13 @@ type Web3Params struct {
 }
 
 func (a *API) Web3(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	config := a.getConfig(ctx)
+
+	if !config.Web3.Enabled {
+		return badRequestError("Unsupported web3 provider")
+	}
+
 	params := &Web3Params{}
 	body, err := ioutil.ReadAll(r.Body)
 	jsonDecoder := json.NewDecoder(bytes.NewReader(body))

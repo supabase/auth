@@ -9,10 +9,16 @@ import (
 )
 
 func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	config := a.getConfig(ctx)
+	instanceID := getInstanceID(ctx)
+
+	if !config.Web3.Enabled {
+		return badRequestError("Unsupported web3 provider")
+	}
+
 	clientIP := strings.Split(r.RemoteAddr, ":")[0]
 
-	ctx := r.Context()
-	instanceID := getInstanceID(ctx)
 	nonce, err := models.NewNonce(instanceID, clientIP)
 	if err != nil || nonce == nil {
 		return internalServerError("Failed to generate nonce")
