@@ -31,6 +31,8 @@ type User struct {
 	Phone            storage.NullString `json:"phone" db:"phone"`
 	PhoneConfirmedAt *time.Time         `json:"phone_confirmed_at,omitempty" db:"phone_confirmed_at"`
 
+	WalletAddress storage.NullString `json:"wallet_address" db:"wallet_address"`
+
 	ConfirmationToken  string     `json:"-" db:"confirmation_token"`
 	ConfirmationSentAt *time.Time `json:"confirmation_sent_at,omitempty" db:"confirmation_sent_at"`
 
@@ -183,6 +185,11 @@ func (u *User) GetPhone() string {
 	return string(u.Phone)
 }
 
+// GetWalletAddress returns the user's wallet address as a string
+func (u *User) GetWalletAddress() string {
+	return string(u.WalletAddress)
+}
+
 // UpdateUserMetaData sets all user data from a map of updates,
 // ensuring that it doesn't override attributes that are not
 // in the provided map.
@@ -238,6 +245,12 @@ func (u *User) SetEmail(tx *storage.Connection, email string) error {
 func (u *User) SetPhone(tx *storage.Connection, phone string) error {
 	u.Phone = storage.NullString(phone)
 	return tx.UpdateOnly(u, "phone")
+}
+
+// SetWalletAddress sets the user's wallet address
+func (u *User) SetWalletAddress(tx *storage.Connection, wallet_address string) error {
+	u.WalletAddress = storage.NullString(wallet_address)
+	return tx.UpdateOnly(u, "wallet_address")
 }
 
 // hashPassword generates a hashed password from a plaintext string
@@ -360,6 +373,11 @@ func FindUserByEmailAndAudience(tx *storage.Connection, instanceID uuid.UUID, em
 // FindUserByPhoneAndAudience finds a user with the matching email and audience.
 func FindUserByPhoneAndAudience(tx *storage.Connection, instanceID uuid.UUID, phone, aud string) (*User, error) {
 	return findUser(tx, "instance_id = ? and phone = ? and aud = ?", instanceID, phone, aud)
+}
+
+// FindUserByWalletAddressAndAudience find a user by their ETH wallet address and audience.
+func FindUserByWalletAddressAndAudience(tx *storage.Connection, instanceID uuid.UUID, wallet_address, aud string) (*User, error) {
+	return findUser(tx, "instance_id = ? and wallet_address = ? and aud = ?", instanceID, wallet_address, aud)
 }
 
 // FindUserByID finds a user matching the provided ID.

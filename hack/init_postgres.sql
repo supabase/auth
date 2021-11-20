@@ -80,7 +80,6 @@ CREATE TABLE auth.nonces (
 	nonce varchar(255),
 	created_at timestamptz NULL,
 	expires_at timestamptz NULL,
-	consumed_at timestamptz NULL,
 	CONSTRAINT nonces_pkey PRIMARY KEY (id)
 );
 CREATE INDEX nonces_instance_id_idx ON auth.nonces USING btree (instance_id);

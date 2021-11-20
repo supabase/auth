@@ -119,7 +119,10 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/signup", api.Signup)
 		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
-		r.With(sharedLimiter).With(api.verifyCaptcha).Get("/nonce", api.Nonce)
+		r.With(sharedLimiter).With(api.verifyCaptcha).Route("/nonce", func(r *router) {
+			r.Get("/", api.Nonce)
+			r.Get("/{nonce_id}", api.NonceById)
+		})
 
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/web3", api.Web3)

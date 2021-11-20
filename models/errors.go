@@ -59,3 +59,9 @@ type TotpSecretNotFoundError struct{}
 func (e TotpSecretNotFoundError) Error() string {
 	return "Totp Secret not found"
 }
+
+type NonceNotFoundError struct{}
+
+func (e NonceNotFoundError) Error() string {
+	return "Nonce not found"
+}

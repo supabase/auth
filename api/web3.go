@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/netlify/gotrue/models"
+	"github.com/netlify/gotrue/storage"
+	"github.com/sethvargo/go-password/password"
 )
 
 // Web3Params contains the request body params for the web3 endpoint
@@ -20,6 +24,7 @@ type Web3Params struct {
 func (a *API) Web3(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
+	instanceID := getInstanceID(ctx)
 
 	if !config.Web3.Enabled {
 		return badRequestError("Unsupported web3 provider")
@@ -32,7 +37,15 @@ func (a *API) Web3(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
-	// TODO (HarryET): Check if nonce was issued by GoTrue
+	nonce, err := models.GetNonce(a.db, params.Nonce)
+	if err != nil {
+		return badRequestError("Failed to find nonce: %v", err)
+	}
+
+	clientIP := strings.Split(r.RemoteAddr, ":")[0]
+	if !nonce.VerifyIp(clientIP) {
+		return badRequestError("IP not the same as the IP this nonce was issued too")
+	}
 
 	nonceHash := crypto.Keccak256Hash([]byte(params.Nonce))
 
@@ -62,7 +75,39 @@ func (a *API) Web3(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Invalid signature")
 	}
 
-	// TODO (HarryET): Get or create user
+	aud := a.requestAud(ctx, r)
+	user, uerr := models.FindUserByWalletAddressAndAudience(a.db, instanceID, params.WalletAddress, aud)
+	if uerr != nil {
+		// if user does not exists, sign up the user
+		if models.IsNotFoundError(uerr) {
+			password, err := password.Generate(64, 10, 0, false, true)
+			if err != nil {
+				internalServerError("error creating user").WithInternalError(err)
+			}
+			newBodyContent := `{"wallet_address":"` + params.WalletAddress + `","password":"` + password + `"}`
+			r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
+			r.ContentLength = int64(len(newBodyContent))
 
-	return sendJSON(w, http.StatusOK, verified && matches)
+			fakeResponse := &responseStub{}
+
+			if err := a.Signup(fakeResponse, r); err != nil {
+				return err
+			}
+			return sendJSON(w, http.StatusOK, make(map[string]string))
+		}
+		return internalServerError("Database error finding user").WithInternalError(uerr)
+	}
+
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.NonceConsumed, nil); terr != nil {
+			return terr
+		}
+		return nonce.Consume(tx)
+	})
+
+	if err != nil {
+		return internalServerError("Failed to consume nonce").WithInternalError(err)
+	}
+
+	return sendJSON(w, http.StatusOK, make(map[string]string))
 }

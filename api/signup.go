@@ -16,12 +16,13 @@ import (
 
 // SignupParams are the parameters the Signup endpoint accepts
 type SignupParams struct {
-	Email    string                 `json:"email"`
-	Phone    string                 `json:"phone"`
-	Password string                 `json:"password"`
-	Data     map[string]interface{} `json:"data"`
-	Provider string                 `json:"-"`
-	Aud      string                 `json:"-"`
+	Email         string                 `json:"email"`
+	Phone         string                 `json:"phone"`
+	WalletAddress string                 `json:"wallet_address"`
+	Password      string                 `json:"password"`
+	Data          map[string]interface{} `json:"data"`
+	Provider      string                 `json:"-"`
+	Aud           string                 `json:"-"`
 }
 
 // Signup is the endpoint for registering a new user
@@ -54,6 +55,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		params.Provider = "email"
 	} else if params.Phone != "" {
 		params.Provider = "phone"
+	} else if params.WalletAddress != "" {
+		params.Provider = "web3"
 	}
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
@@ -81,6 +84,14 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			return unprocessableEntityError("Invalid phone number format")
 		}
 		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, params.Aud)
+	case "web3":
+		if !config.Web3.Enabled {
+			return badRequestError("Unsupported web3 provider")
+		}
+
+		// TODO (HarryET): Validate wallet address
+
+		user, err = models.FindUserByWalletAddressAndAudience(a.db, instanceID, params.WalletAddress, params.Aud)
 	default:
 		return invalidSignupError(config)
 	}
@@ -151,6 +162,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
 			}
+		} else if params.Provider == "web3" {
+
 		}
 
 		return nil
@@ -183,7 +196,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// handles case where Mailer.Autoconfirm is true or Phone.Autoconfirm is true
-	if user.IsConfirmed() || user.IsPhoneConfirmed() {
+	if user.IsConfirmed() || user.IsPhoneConfirmed() || user.GetWalletAddress() != "" {
 		var token *AccessTokenResponse
 		err = a.db.Transaction(func(tx *storage.Connection) error {
 			var terr error
