@@ -24,11 +24,8 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Failed to generate nonce")
 	}
 
-	// TODO (HarryET): Store nonce in the database
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if err := tx.Create(nonce); err != nil {
-			// TODO (HarryET): Debug why "nonces" RELATIONSHIP isn't found by pop
-			println(err.Error())
 			return internalServerError("Failed to save nonce")
 		}
 

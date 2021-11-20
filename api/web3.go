@@ -14,7 +14,7 @@ import (
 type Web3Params struct {
 	WalletAddress string `json:"wallet_address"`
 	Nonce         string `json:"nonce"`
-	SignedNonce   string `json:"signature"`
+	Signature     string `json:"signature"`
 }
 
 func (a *API) Web3(w http.ResponseWriter, r *http.Request) error {
@@ -32,7 +32,7 @@ func (a *API) Web3(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
-	// TODO (HarryET): Check if nonce was issues by GoTrue
+	// TODO (HarryET): Check if nonce was issued by GoTrue
 
 	nonceHash := crypto.Keccak256Hash([]byte(params.Nonce))
 
@@ -41,7 +41,7 @@ func (a *API) Web3(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Failed to decode wallet address: %v", err)
 	}
 
-	signatureBytes, err := hexutil.Decode(params.SignedNonce)
+	signatureBytes, err := hexutil.Decode(params.Signature)
 	if err != nil {
 		return badRequestError("Failed to decode signature: %v", err)
 	}

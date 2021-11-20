@@ -20,11 +20,12 @@ type Nonce struct {
 
 	ConsumedAt *time.Time `json:"consumed_at" db:"consumed_at"`
 	CreatedAt  time.Time  `json:"created_at" db:"created_at"`
-	ExpiresAt  time.Time  `json:"expired_at" db:"expired_at"`
+	ExpiresAt  time.Time  `json:"expires_at" db:"expires_at"`
 }
 
 func (Nonce) TableName() string {
-	tableName := "nonces"
+	// TODO (HarryET): see why doesn't work without auth.*
+	tableName := "auth.nonces"
 	return tableName
 }
 
