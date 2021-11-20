@@ -26,6 +26,7 @@ const (
 	UserRepeatedSignUpAction        AuditAction = "user_repeated_signup"
 	TokenRevokedAction              AuditAction = "token_revoked"
 	TokenRefreshedAction            AuditAction = "token_refreshed"
+	NonceConsumed                   AuditAction = "nonce_consumed"
 
 	account auditLogType = "account"
 	team    auditLogType = "team"
@@ -42,6 +43,7 @@ var actionLogTypeMap = map[AuditAction]auditLogType{
 	UserDeletedAction:               team,
 	TokenRevokedAction:              token,
 	TokenRefreshedAction:            token,
+	NonceConsumed:                   token,
 	UserModifiedAction:              user,
 	UserRecoveryRequestedAction:     user,
 	UserConfirmationRequestedAction: user,

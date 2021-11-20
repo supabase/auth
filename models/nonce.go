@@ -3,8 +3,10 @@ package models
 import (
 	"time"
 
+	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/crypto"
+	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -14,8 +16,8 @@ type Nonce struct {
 	ID         uuid.UUID `json:"id" db:"id"`
 
 	HashedIp string `json:"-" db:"hashed_ip"`
+	Nonce    string `json:"nonce" db:"nonce"`
 
-	Nonce      string     `json:"nonce" db:"nonce"`
 	ConsumedAt *time.Time `json:"consumed_at" db:"consumed_at"`
 	CreatedAt  time.Time  `json:"created_at" db:"created_at"`
 	ExpiresAt  time.Time  `json:"expired_at" db:"expired_at"`
@@ -46,7 +48,32 @@ func NewNonce(instanceID uuid.UUID, ip string) (*Nonce, error) {
 		CreatedAt:  time.Now().UTC(),
 		ExpiresAt:  time.Now().UTC().Add(time.Minute * 2),
 	}
+
 	return nonce, nil
+}
+
+// BeforeCreate is invoked before a create operation is ran
+func (n *Nonce) BeforeCreate(tx *pop.Connection) error {
+	return n.BeforeUpdate(tx)
+}
+
+// BeforeUpdate is invoked before an update operation is ran
+func (n *Nonce) BeforeUpdate(tx *pop.Connection) error {
+	return nil
+}
+
+// BeforeSave is invoked before the nonce is saved to the database
+func (n *Nonce) BeforeSave(tx *pop.Connection) error {
+	if n.ConsumedAt != nil && n.ConsumedAt.IsZero() {
+		n.ConsumedAt = nil
+	}
+	return nil
+}
+
+func (n *Nonce) Consume(tx *storage.Connection) error {
+	now := time.Now().UTC()
+	n.ConsumedAt = &now
+	return tx.UpdateOnly(n, "consumed_at")
 }
 
 // TODO (HarryET): Look at if this is secure enough or even needed

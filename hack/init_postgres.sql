@@ -76,12 +76,12 @@ comment on table auth.audit_log_entries is 'Auth: Audit trail for user actions.'
 CREATE TABLE auth.nonces (
 	instance_id uuid NULL,
 	id uuid NOT NULL,
-	hashed_ip text NOT NULL,
-	nonce varchar(64)
+	hashed_ip varchar(255) NOT NULL,
+	nonce varchar(255),
 	created_at timestamptz NULL,
 	expires_at timestamptz NULL,
 	consumed_at timestamptz NULL,
-	CONSTRAINT audit_log_entries_pkey PRIMARY KEY (id)
+	CONSTRAINT nonces_pkey PRIMARY KEY (id)
 );
 CREATE INDEX nonces_instance_id_idx ON auth.nonces USING btree (instance_id);
 comment on table auth.nonces is 'Auth: Stored generated nonces used for validating Web3 login requests.';
@@ -101,7 +101,8 @@ VALUES  ('20171026211738'),
         ('20180103212743'),
         ('20180108183307'),
         ('20180119214651'),
-        ('20180125194653');
+        ('20180125194653'),
+		('20211120104808');
 		
 -- Gets the User ID from the request cookie
 create or replace function auth.uid() returns uuid as $$
