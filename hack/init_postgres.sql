@@ -76,8 +76,13 @@ comment on table auth.audit_log_entries is 'Auth: Audit trail for user actions.'
 CREATE TABLE auth.nonces (
 	instance_id uuid NULL,
 	id uuid NOT NULL,
+	
 	hashed_ip varchar(255) NOT NULL,
-	nonce varchar(255),
+
+	uri text NOT NULL,
+	wallet_address text NOT NULL,
+	chain_id integer NOT NULL,
+
 	created_at timestamptz NULL,
 	expires_at timestamptz NULL,
 	CONSTRAINT nonces_pkey PRIMARY KEY (id)

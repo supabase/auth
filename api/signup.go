@@ -84,14 +84,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			return unprocessableEntityError("Invalid phone number format")
 		}
 		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, params.Aud)
-	case "web3":
-		if !config.Web3.Enabled {
-			return badRequestError("Unsupported web3 provider")
-		}
-
-		// TODO (HarryET): Validate wallet address
-
-		user, err = models.FindUserByWalletAddressAndAudience(a.db, instanceID, params.WalletAddress, params.Aud)
 	default:
 		return invalidSignupError(config)
 	}

@@ -9,35 +9,35 @@ import (
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
-	"github.com/sethvargo/go-password/password"
 )
 
-// Web3Params contains the request body params for the web3 endpoint
-type Web3Params struct {
+// EthParams contains the request body params for the eth endpoint
+type EthParams struct {
 	WalletAddress string `json:"wallet_address"`
-	Nonce         string `json:"nonce"`
+	NonceId       string `json:"nonce_id"`
 	Signature     string `json:"signature"`
 }
 
-func (a *API) Web3(w http.ResponseWriter, r *http.Request) error {
+func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
 	instanceID := getInstanceID(ctx)
 
-	if !config.Web3.Enabled {
-		return badRequestError("Unsupported web3 provider")
+	if !config.External.Eth.Enabled {
+		return badRequestError("Unsupported eth provider")
 	}
 
-	params := &Web3Params{}
+	params := &EthParams{}
 	body, err := ioutil.ReadAll(r.Body)
 	jsonDecoder := json.NewDecoder(bytes.NewReader(body))
 	if err = jsonDecoder.Decode(params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
-	nonce, err := models.GetNonce(a.db, params.Nonce)
+	nonce, err := models.GetNonceById(a.db, uuid.FromStringOrNil(params.NonceId))
 	if err != nil {
 		return badRequestError("Failed to find nonce: %v", err)
 	}
@@ -47,7 +47,11 @@ func (a *API) Web3(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("IP not the same as the IP this nonce was issued too")
 	}
 
-	nonceHash := crypto.Keccak256Hash([]byte(params.Nonce))
+	builtNonce, err := nonce.Build()
+	if err != nil {
+		return internalServerError("Failed to verify nonce")
+	}
+	nonceHash := crypto.Keccak256Hash([]byte(builtNonce))
 
 	walletAddressBytes, err := hexutil.Decode(params.WalletAddress)
 	if err != nil {
@@ -80,20 +84,7 @@ func (a *API) Web3(w http.ResponseWriter, r *http.Request) error {
 	if uerr != nil {
 		// if user does not exists, sign up the user
 		if models.IsNotFoundError(uerr) {
-			password, err := password.Generate(64, 10, 0, false, true)
-			if err != nil {
-				internalServerError("error creating user").WithInternalError(err)
-			}
-			newBodyContent := `{"wallet_address":"` + params.WalletAddress + `","password":"` + password + `"}`
-			r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
-			r.ContentLength = int64(len(newBodyContent))
-
-			fakeResponse := &responseStub{}
-
-			if err := a.Signup(fakeResponse, r); err != nil {
-				return err
-			}
-			return sendJSON(w, http.StatusOK, make(map[string]string))
+			// TODO (HarryET): Signup User account
 		}
 		return internalServerError("Database error finding user").WithInternalError(uerr)
 	}

@@ -24,6 +24,10 @@ type EmailProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"true"`
 }
 
+type EthProviderConfiguration struct {
+	Enabled bool `json:"enabled" default:"false"`
+}
+
 type SamlProviderConfiguration struct {
 	Enabled     bool   `json:"enabled"`
 	MetadataURL string `json:"metadata_url" envconfig:"METADATA_URL"`
@@ -94,6 +98,7 @@ type ProviderConfiguration struct {
 	Twitch      OAuthProviderConfiguration `json:"twitch"`
 	Email       EmailProviderConfiguration `json:"email"`
 	Phone       PhoneProviderConfiguration `json:"phone"`
+	Eth         EthProviderConfiguration   `json:"eth"`
 	Saml        SamlProviderConfiguration  `json:"saml"`
 	IosBundleId string                     `json:"ios_bundle_id" split_words:"true"`
 	RedirectURL string                     `json:"redirect_url"`
@@ -167,7 +172,6 @@ type Configuration struct {
 	Mailer            MailerConfiguration      `json:"mailer"`
 	External          ProviderConfiguration    `json:"external"`
 	Sms               SmsProviderConfiguration `json:"sms"`
-	Web3              Web3Configuration        `json:"web3"`
 	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
 	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
 	Security          SecurityConfiguration    `json:"security"`

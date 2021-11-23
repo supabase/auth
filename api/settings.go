@@ -15,6 +15,7 @@ type ProviderSettings struct {
 	Slack     bool `json:"slack"`
 	Twitch    bool `json:"twitch"`
 	Twitter   bool `json:"twitter"`
+	Eth       bool `json:"eth"`
 	Email     bool `json:"email"`
 	Phone     bool `json:"phone"`
 	SAML      bool `json:"saml"`
@@ -26,7 +27,6 @@ type ProviderLabels struct {
 
 type Settings struct {
 	ExternalProviders ProviderSettings `json:"external"`
-	Web3Enabled       bool             `json:"web3_enabled"`
 	ExternalLabels    ProviderLabels   `json:"external_labels"`
 	DisableSignup     bool             `json:"disable_signup"`
 	MailerAutoconfirm bool             `json:"mailer_autoconfirm"`
@@ -51,11 +51,11 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Slack:     config.External.Slack.Enabled,
 			Twitch:    config.External.Twitch.Enabled,
 			Twitter:   config.External.Twitter.Enabled,
+			Eth:       config.External.Eth.Enabled,
 			Email:     config.External.Email.Enabled,
 			Phone:     config.External.Phone.Enabled,
 			SAML:      config.External.Saml.Enabled,
 		},
-		Web3Enabled: config.Web3.Enabled,
 		ExternalLabels: ProviderLabels{
 			SAML: config.External.Saml.Name,
 		},

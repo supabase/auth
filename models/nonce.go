@@ -2,11 +2,12 @@ package models
 
 import (
 	"database/sql"
+	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/bcrypt"
@@ -16,8 +17,10 @@ type Nonce struct {
 	InstanceID uuid.UUID `json:"-" db:"instance_id"`
 	ID         uuid.UUID `json:"id" db:"id"`
 
-	HashedIp string `json:"-" db:"hashed_ip"`
-	Nonce    string `json:"nonce" db:"nonce"`
+	HashedIp      string `json:"-" db:"hashed_ip"`
+	ChainId       int    `json:"chain_id" db:"chain_id"`
+	Url           string `json:"url" db:"uri"`
+	WalletAddress string `json:"wallet_address" db:"wallet_address"`
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
@@ -29,7 +32,7 @@ func (Nonce) TableName() string {
 	return tableName
 }
 
-func NewNonce(instanceID uuid.UUID, ip string) (*Nonce, error) {
+func NewNonce(instanceID uuid.UUID, chainId int, url string, walletAddress string, ip string) (*Nonce, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -41,12 +44,14 @@ func NewNonce(instanceID uuid.UUID, ip string) (*Nonce, error) {
 	}
 
 	nonce := &Nonce{
-		InstanceID: instanceID,
-		ID:         id,
-		HashedIp:   hashedIp,
-		Nonce:      crypto.SecureToken(),
-		CreatedAt:  time.Now().UTC(),
-		ExpiresAt:  time.Now().UTC().Add(time.Minute * 2),
+		InstanceID:    instanceID,
+		ID:            id,
+		HashedIp:      hashedIp,
+		ChainId:       chainId,
+		WalletAddress: walletAddress,
+		Url:           url,
+		CreatedAt:     time.Now().UTC(),
+		ExpiresAt:     time.Now().UTC().Add(time.Minute * 2),
 	}
 
 	return nonce, nil
@@ -85,6 +90,25 @@ func hashIp(ip string) (string, error) {
 func (n *Nonce) VerifyIp(ip string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(n.HashedIp), []byte(ip))
 	return err == nil
+}
+
+func (n *Nonce) Build() (string, error) {
+	uri, err := url.Parse(n.Url)
+	if err != nil {
+		return "", err
+	}
+	// TODO (HarryET): See if external hostname can be acquired through variables/config
+	return fmt.Sprintf(`%v wants you to sign in with your Ethereum account:
+%v
+
+URI: %v
+Version: 1
+Nonce: %v
+Issued At: %v
+Expiration Time: %v
+Chain ID: %v
+Resources:
+- %v/nonce/%v`, uri.Hostname(), n.WalletAddress, uri.String(), n.CreatedAt.UnixMilli(), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId, "", n.ID), nil
 }
 
 func GetNonce(tx *storage.Connection, raw_nonce string) (*Nonce, error) {
