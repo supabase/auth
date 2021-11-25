@@ -66,7 +66,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	switch params.Provider {
 	case "email":
 		if !config.External.Email.Enabled {
-			return badRequestError("Email logins are disabled")
+			return badRequestError("Email signups are disabled")
 		}
 		if err := a.validateEmail(ctx, params.Email); err != nil {
 			return err
@@ -74,7 +74,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		user, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, params.Aud)
 	case "phone":
 		if !config.External.Phone.Enabled {
-			return badRequestError("Unsupported phone provider")
+			return badRequestError("Phone signups are disabled")
 		}
 		params.Phone = a.formatPhoneNumber(params.Phone)
 		if isValid := a.validateE164Format(params.Phone); !isValid {
@@ -289,6 +289,12 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 	err = conn.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(user); terr != nil {
 			return internalServerError("Database error saving new user").WithInternalError(terr)
+		}
+		if _, terr := a.createNewIdentity(tx, user, params.Provider, map[string]interface{}{"sub": user.ID.String()}); terr != nil {
+			return terr
+		}
+		if terr := user.UpdateAppMetaDataProviders(tx); terr != nil {
+			return terr
 		}
 		if terr := user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
 			return internalServerError("Database error updating user").WithInternalError(terr)

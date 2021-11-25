@@ -122,7 +122,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
 
-		r.With(api.requireEmailProvider).With(api.limitHandler(
+		r.With(api.limitHandler(
 			// Allow requests at a rate of 30 per 5 minutes.
 			tollbooth.NewLimiter(30.0/(60*5), &limiter.ExpirableOptions{
 				DefaultExpirationTTL: time.Hour,
