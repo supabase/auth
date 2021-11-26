@@ -104,6 +104,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
+			identity, terr := a.createNewIdentity(tx, user, params.Provider, map[string]interface{}{"sub": user.ID.String()})
+			if terr != nil {
+				return terr
+			}
+			user.Identities = []models.Identity{*identity}
 		}
 
 		if params.Provider == "email" && !user.IsConfirmed() {
@@ -278,7 +283,7 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 
 	user.Identities = make([]models.Identity, 0)
 
-	// TODO: Depcreate "provider" field
+	// TODO: Deprecate "provider" field
 	user.AppMetaData["provider"] = params.Provider
 
 	user.AppMetaData["providers"] = []string{params.Provider}
@@ -287,19 +292,14 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 	}
 
 	err = conn.Transaction(func(tx *storage.Connection) error {
-		if terr := tx.Create(user); terr != nil {
+		var terr error
+		if terr = tx.Create(user); terr != nil {
 			return internalServerError("Database error saving new user").WithInternalError(terr)
 		}
-		if _, terr := a.createNewIdentity(tx, user, params.Provider, map[string]interface{}{"sub": user.ID.String()}); terr != nil {
-			return terr
-		}
-		if terr := user.UpdateAppMetaDataProviders(tx); terr != nil {
-			return terr
-		}
-		if terr := user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
+		if terr = user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
 			return internalServerError("Database error updating user").WithInternalError(terr)
 		}
-		if terr := triggerEventHooks(ctx, tx, ValidateEvent, user, instanceID, config); terr != nil {
+		if terr = triggerEventHooks(ctx, tx, ValidateEvent, user, instanceID, config); terr != nil {
 			return terr
 		}
 		return nil
