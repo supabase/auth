@@ -296,10 +296,6 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 		if terr = tx.Create(user); terr != nil {
 			return internalServerError("Database error saving new user").WithInternalError(terr)
 		}
-
-		if terr := user.UpdateAppMetaDataProviders(tx); terr != nil {
-			return terr
-		}
 		if terr = user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
 			return internalServerError("Database error updating user").WithInternalError(terr)
 		}
