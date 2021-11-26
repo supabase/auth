@@ -153,8 +153,14 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	var user *models.User
 	var err error
 	if params.Email != "" {
+		if !config.External.Email.Enabled {
+			return badRequestError("Email logins are disabled")
+		}
 		user, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
 	} else if params.Phone != "" {
+		if !config.External.Phone.Enabled {
+			return badRequestError("Phone logins are disabled")
+		}
 		params.Phone = a.formatPhoneNumber(params.Phone)
 		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
 	} else {
@@ -168,14 +174,14 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return internalServerError("Database error querying schema").WithInternalError(err)
 	}
 
+	if !user.Authenticate(params.Password) {
+		return oauthError("invalid_grant", InvalidLoginMessage)
+	}
+
 	if params.Email != "" && !user.IsConfirmed() {
 		return oauthError("invalid_grant", "Email not confirmed")
 	} else if params.Phone != "" && !user.IsPhoneConfirmed() {
 		return oauthError("invalid_grant", "Phone not confirmed")
-	}
-
-	if !user.Authenticate(params.Password) {
-		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
 
 	var token *AccessTokenResponse
@@ -234,8 +240,36 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return internalServerError(err.Error())
 	}
 
+	if !(config.External.Email.Enabled && config.External.Phone.Enabled) {
+		providers, err := models.FindProvidersByUser(a.db, user)
+		if err != nil {
+			return internalServerError(err.Error())
+		}
+		for _, provider := range providers {
+			if provider == "email" && !config.External.Email.Enabled {
+				return badRequestError("Email logins are disabled")
+			}
+			if provider == "phone" && !config.External.Phone.Enabled {
+				return badRequestError("Phone logins are disabled")
+			}
+		}
+	}
+
 	if token.Revoked {
 		a.clearCookieToken(ctx, w)
+		if config.Security.RefreshTokenRotationEnabled {
+			// Revoke all tokens in token family
+			err = a.db.Transaction(func(tx *storage.Connection) error {
+				var terr error
+				if terr = models.RevokeTokenFamily(tx, token); terr != nil {
+					return terr
+				}
+				return nil
+			})
+			if err != nil {
+				return internalServerError(err.Error())
+			}
+		}
 		return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", r)
 	}
 
