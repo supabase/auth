@@ -16,12 +16,13 @@ import (
 
 // SignupParams are the parameters the Signup endpoint accepts
 type SignupParams struct {
-	Email    string                 `json:"email"`
-	Phone    string                 `json:"phone"`
-	Password string                 `json:"password"`
-	Data     map[string]interface{} `json:"data"`
-	Provider string                 `json:"-"`
-	Aud      string                 `json:"-"`
+	Email      string                 `json:"email"`
+	Phone      string                 `json:"phone"`
+	EthAddress string                 `json:"-"`
+	Password   string                 `json:"password"`
+	Data       map[string]interface{} `json:"data"`
+	Provider   string                 `json:"-"`
+	Aud        string                 `json:"-"`
 }
 
 // Signup is the endpoint for registering a new user
@@ -151,8 +152,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
 			}
-		} else if params.Provider == "web3" {
-
 		}
 
 		return nil
@@ -266,6 +265,9 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 	case "phone":
 		user, err = models.NewUser(instanceID, "", params.Password, params.Aud, params.Data)
 		user.Phone = storage.NullString(params.Phone)
+	case "eth":
+		user, err = models.NewUser(instanceID, "", "", params.Aud, params.Data)
+		user.EthAddress = storage.NullString(params.EthAddress)
 	default:
 		// handles external provider case
 		user, err = models.NewUser(instanceID, params.Email, params.Password, params.Aud, params.Data)
@@ -280,7 +282,7 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 
 	user.Identities = make([]models.Identity, 0)
 
-	// TODO: Depcreate "provider" field
+	// TODO: Deprecate "provider" field
 	user.AppMetaData["provider"] = params.Provider
 
 	user.AppMetaData["providers"] = []string{params.Provider}

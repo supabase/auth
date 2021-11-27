@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 )
@@ -32,6 +33,7 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
 	instanceID := getInstanceID(ctx)
+	useCookie := r.Header.Get(useCookieHeader)
 
 	if !config.External.Eth.Enabled {
 		return badRequestError("Unsupported eth provider")
@@ -81,15 +83,37 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Invalid Signature: Wallet address not the same as suplied address")
 	}
 
+	didUserExist := true
+
 	aud := a.requestAud(ctx, r)
 	user, uerr := models.FindUserByEthAddressAndAudience(a.db, instanceID, params.WalletAddress, aud)
-	if uerr != nil {
-		// if user does not exists, sign up the user
-		if models.IsNotFoundError(uerr) {
-			// TODO (HarryET): Signup User account
-			return internalServerError("Not finished: Need to finish user signup")
+
+	if err != nil && !models.IsNotFoundError(err) {
+		return internalServerError("Database error finding user").WithInternalError(err)
+	}
+
+	if models.IsNotFoundError(uerr) {
+		uerr = a.db.Transaction(func(tx *storage.Connection) error {
+			user, uerr = a.signupNewUser(ctx, tx, &SignupParams{
+				EthAddress: params.WalletAddress,
+				Provider:   "eth",
+				Aud:        aud,
+			})
+			didUserExist = false
+
+			if uerr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); uerr != nil {
+				return uerr
+			}
+			if uerr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); uerr != nil {
+				return uerr
+			}
+
+			return uerr
+		})
+
+		if uerr != nil {
+			return uerr
 		}
-		return internalServerError("Database error finding user").WithInternalError(uerr)
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -103,5 +127,37 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Failed to consume nonce").WithInternalError(err)
 	}
 
-	return sendJSON(w, http.StatusOK, make(map[string]string))
+	var token *AccessTokenResponse
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
+			return terr
+		}
+		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+			return terr
+		}
+
+		token, terr = a.issueRefreshToken(ctx, tx, user)
+		if terr != nil {
+			return terr
+		}
+
+		if useCookie != "" && config.Cookie.Duration > 0 {
+			if terr = a.setCookieToken(config, token.Token, useCookie == useSessionCookie, w); terr != nil {
+				return internalServerError("Failed to set JWT cookie. %s", terr)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	metering.RecordLogin("eth", user.ID, instanceID)
+	token.User = user
+
+	status := http.StatusOK
+	if !didUserExist {
+		status = http.StatusCreated
+	}
+	return sendJSON(w, status, token)
 }
