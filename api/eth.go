@@ -3,10 +3,12 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gofrs/uuid"
@@ -14,11 +16,16 @@ import (
 	"github.com/netlify/gotrue/storage"
 )
 
-// EthParams contains the request body params for the eth endpoint
+// EthParams contains the request body params for the eth endpoint, all values hex encoded
 type EthParams struct {
 	WalletAddress string `json:"wallet_address"`
 	NonceId       string `json:"nonce_id"`
 	Signature     string `json:"signature"`
+}
+
+func signHash(data []byte) []byte {
+	msg := fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(data), data)
+	return crypto.Keccak256([]byte(msg))
 }
 
 func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
@@ -42,46 +49,42 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Failed to find nonce: %v", err)
 	}
 
+	// TODO (HarryET): Validate nonce expiry time
+
 	clientIP := strings.Split(r.RemoteAddr, ":")[0]
 	if !nonce.VerifyIp(clientIP) {
 		return badRequestError("IP not the same as the IP this nonce was issued too")
 	}
 
-	builtNonce, err := nonce.Build()
+	walletAddress := common.HexToAddress(params.WalletAddress)
+
+	sig, err := hexutil.Decode(params.Signature)
 	if err != nil {
-		return internalServerError("Failed to verify nonce")
+		return badRequestError("Invalid Signature: Failed to decode, not valid hex")
 	}
-	nonceHash := crypto.Keccak256Hash([]byte(builtNonce))
 
-	walletAddressBytes, err := hexutil.Decode(params.WalletAddress)
+	// https://github.com/ethereum/go-ethereum/blob/55599ee95d4151a2502465e0afc7c47bd1acba77/internal/ethapi/api.go#L442
+	if sig[64] != 27 && sig[64] != 28 {
+		return badRequestError("Invalid Signature: Invalid formatting")
+	}
+	sig[64] -= 27
+
+	nonceString, err := nonce.Build()
+	msg := []byte(nonceString)
+	pubKey, err := crypto.SigToPub(signHash(msg), sig)
 	if err != nil {
-		return badRequestError("Failed to decode wallet address: %v", err)
+		return badRequestError("Invalid Signature: Failed to extract public key")
 	}
 
-	signatureBytes, err := hexutil.Decode(params.Signature)
-	if err != nil {
-		return badRequestError("Failed to decode signature: %v", err)
-	}
-
-	publicKeySignatureBytes, err := crypto.Ecrecover(nonceHash.Bytes(), signatureBytes)
-	if err != nil {
-		return badRequestError("Failed to recover signature public key: %v", err)
-	}
-
-	matches := bytes.Equal(publicKeySignatureBytes, walletAddressBytes)
-	if !matches {
-		return badRequestError("Wallet address and signature public key didn't match")
-	}
-
-	signatureNoRecoverID := signatureBytes[:len(signatureBytes)-1]
-	verified := crypto.VerifySignature(walletAddressBytes, nonceHash.Bytes(), signatureNoRecoverID)
-	if !verified {
-		return badRequestError("Invalid signature")
+	recoveredWalletAddress := crypto.PubkeyToAddress(*pubKey)
+	if walletAddress != recoveredWalletAddress {
+		return badRequestError("Invalid Signature: Wallet address not the same as suplied address")
 	}
 
 	aud := a.requestAud(ctx, r)
 	user, uerr := models.FindUserByWalletAddressAndAudience(a.db, instanceID, params.WalletAddress, aud)
 	if uerr != nil {
+		return internalServerError("Not finished")
 		// if user does not exists, sign up the user
 		if models.IsNotFoundError(uerr) {
 			// TODO (HarryET): Signup User account

@@ -97,7 +97,7 @@ func (n *Nonce) Build() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// TODO (HarryET): See if external hostname can be acquired through variables/config
+
 	return fmt.Sprintf(`%v wants you to sign in with your Ethereum account:
 %v
 
@@ -106,9 +106,7 @@ Version: 1
 Nonce: %v
 Issued At: %v
 Expiration Time: %v
-Chain ID: %v
-Resources:
-- %v/nonce/%v`, uri.Hostname(), n.WalletAddress, uri.String(), n.CreatedAt.UnixMilli(), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId, "", n.ID), nil
+Chain ID: %v`, uri.Hostname(), n.WalletAddress, uri.String(), n.CreatedAt.UnixMilli(), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
 }
 
 func GetNonce(tx *storage.Connection, raw_nonce string) (*Nonce, error) {

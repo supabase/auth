@@ -20,6 +20,11 @@ type NonceParams struct {
 	Url           string `json:"url"`
 }
 
+type NonceResponse struct {
+	Id    string `json:"id"`
+	Nonce string `json:"nonce"`
+}
+
 func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
@@ -60,11 +65,10 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Failed to build nonce")
 	}
 
-	w.Header().Set("Content-Type", "text/plain")
-	w.Header().Add("X-Nonce-Id", nonce.ID.String())
-	w.WriteHeader(http.StatusCreated)
-	_, err = w.Write([]byte(builtNonce))
-	return err
+	return sendJSON(w, http.StatusCreated, &NonceResponse{
+		Id:    nonce.ID.String(),
+		Nonce: builtNonce,
+	})
 }
 
 func (a *API) NonceById(w http.ResponseWriter, r *http.Request) error {
@@ -88,9 +92,8 @@ func (a *API) NonceById(w http.ResponseWriter, r *http.Request) error {
 
 	// TODO (HarryET): Concider checking IP?
 
-	w.Header().Set("Content-Type", "text/plain")
-	w.Header().Add("X-Nonce-Id", nonce.ID.String())
-	w.WriteHeader(http.StatusOK)
-	_, err = w.Write([]byte(builtNonce))
-	return err
+	return sendJSON(w, http.StatusCreated, &NonceResponse{
+		Id:    nonce.ID.String(),
+		Nonce: builtNonce,
+	})
 }
