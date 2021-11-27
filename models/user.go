@@ -31,7 +31,7 @@ type User struct {
 	Phone            storage.NullString `json:"phone" db:"phone"`
 	PhoneConfirmedAt *time.Time         `json:"phone_confirmed_at,omitempty" db:"phone_confirmed_at"`
 
-	WalletAddress storage.NullString `json:"wallet_address" db:"wallet_address"`
+	EthAddress storage.NullString `json:"eth_address" db:"eth_address"`
 
 	ConfirmationToken  string     `json:"-" db:"confirmation_token"`
 	ConfirmationSentAt *time.Time `json:"confirmation_sent_at,omitempty" db:"confirmation_sent_at"`
@@ -185,9 +185,9 @@ func (u *User) GetPhone() string {
 	return string(u.Phone)
 }
 
-// GetWalletAddress returns the user's wallet address as a string
-func (u *User) GetWalletAddress() string {
-	return string(u.WalletAddress)
+// GetEthAddress returns the user's ethereum address as a string
+func (u *User) GetEthAddress() string {
+	return string(u.EthAddress)
 }
 
 // UpdateUserMetaData sets all user data from a map of updates,
@@ -247,10 +247,10 @@ func (u *User) SetPhone(tx *storage.Connection, phone string) error {
 	return tx.UpdateOnly(u, "phone")
 }
 
-// SetWalletAddress sets the user's wallet address
-func (u *User) SetWalletAddress(tx *storage.Connection, wallet_address string) error {
-	u.WalletAddress = storage.NullString(wallet_address)
-	return tx.UpdateOnly(u, "wallet_address")
+// SetEthAddress sets the user's ethereum address
+func (u *User) SetEthAddress(tx *storage.Connection, eth_address string) error {
+	u.EthAddress = storage.NullString(eth_address)
+	return tx.UpdateOnly(u, "eth_address")
 }
 
 // hashPassword generates a hashed password from a plaintext string
@@ -375,9 +375,9 @@ func FindUserByPhoneAndAudience(tx *storage.Connection, instanceID uuid.UUID, ph
 	return findUser(tx, "instance_id = ? and phone = ? and aud = ?", instanceID, phone, aud)
 }
 
-// FindUserByWalletAddressAndAudience find a user by their ETH wallet address and audience.
-func FindUserByWalletAddressAndAudience(tx *storage.Connection, instanceID uuid.UUID, wallet_address, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and wallet_address = ? and aud = ?", instanceID, wallet_address, aud)
+// FindUserByEthAddressAndAudience find a user by their ETH wallet address and audience.
+func FindUserByEthAddressAndAudience(tx *storage.Connection, instanceID uuid.UUID, eth_address, aud string) (*User, error) {
+	return findUser(tx, "instance_id = ? and eth_address = ? and aud = ?", instanceID, eth_address, aud)
 }
 
 // FindUserByID finds a user matching the provided ID.

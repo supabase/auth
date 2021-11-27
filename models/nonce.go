@@ -17,18 +17,17 @@ type Nonce struct {
 	InstanceID uuid.UUID `json:"-" db:"instance_id"`
 	ID         uuid.UUID `json:"id" db:"id"`
 
-	HashedIp      string `json:"-" db:"hashed_ip"`
-	ChainId       int    `json:"chain_id" db:"chain_id"`
-	Url           string `json:"url" db:"uri"`
-	WalletAddress string `json:"wallet_address" db:"wallet_address"`
+	HashedIp   string `json:"-" db:"hashed_ip"`
+	ChainId    int    `json:"chain_id" db:"chain_id"`
+	Url        string `json:"url" db:"uri"`
+	EthAddress string `json:"eth_address" db:"eth_address"`
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
 }
 
 func (Nonce) TableName() string {
-	// TODO (HarryET): see why doesn't work without auth.*
-	tableName := "auth.nonces"
+	tableName := "nonces"
 	return tableName
 }
 
@@ -44,14 +43,14 @@ func NewNonce(instanceID uuid.UUID, chainId int, url string, walletAddress strin
 	}
 
 	nonce := &Nonce{
-		InstanceID:    instanceID,
-		ID:            id,
-		HashedIp:      hashedIp,
-		ChainId:       chainId,
-		WalletAddress: walletAddress,
-		Url:           url,
-		CreatedAt:     time.Now().UTC(),
-		ExpiresAt:     time.Now().UTC().Add(time.Minute * 2),
+		InstanceID: instanceID,
+		ID:         id,
+		HashedIp:   hashedIp,
+		ChainId:    chainId,
+		EthAddress: walletAddress,
+		Url:        url,
+		CreatedAt:  time.Now().UTC(),
+		ExpiresAt:  time.Now().UTC().Add(time.Minute * 2),
 	}
 
 	return nonce, nil
@@ -106,7 +105,7 @@ Version: 1
 Nonce: %v
 Issued At: %v
 Expiration Time: %v
-Chain ID: %v`, uri.Hostname(), n.WalletAddress, uri.String(), n.CreatedAt.UnixMilli(), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
+Chain ID: %v`, uri.Hostname(), n.EthAddress, uri.String(), n.CreatedAt.UnixMilli(), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
 }
 
 func GetNonce(tx *storage.Connection, raw_nonce string) (*Nonce, error) {

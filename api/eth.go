@@ -82,12 +82,12 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, uerr := models.FindUserByWalletAddressAndAudience(a.db, instanceID, params.WalletAddress, aud)
+	user, uerr := models.FindUserByEthAddressAndAudience(a.db, instanceID, params.WalletAddress, aud)
 	if uerr != nil {
-		return internalServerError("Not finished")
 		// if user does not exists, sign up the user
 		if models.IsNotFoundError(uerr) {
 			// TODO (HarryET): Signup User account
+			return internalServerError("Not finished: Need to finish user signup")
 		}
 		return internalServerError("Database error finding user").WithInternalError(uerr)
 	}

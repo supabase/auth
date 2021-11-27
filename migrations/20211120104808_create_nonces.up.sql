@@ -5,7 +5,7 @@ CREATE TABLE auth.nonces (
 	hashed_ip varchar(255) NOT NULL,
 
 	uri text NOT NULL,
-	wallet_address text NOT NULL,
+	eth_address text NOT NULL,
 	chain_id integer NOT NULL,
 
 	created_at timestamptz NULL,
