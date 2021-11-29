@@ -72,24 +72,6 @@ CREATE TABLE auth.audit_log_entries (
 CREATE INDEX audit_logs_instance_id_idx ON auth.audit_log_entries USING btree (instance_id);
 comment on table auth.audit_log_entries is 'Auth: Audit trail for user actions.';
 
--- auth.nonces definition
-CREATE TABLE auth.nonces (
-	instance_id uuid NULL,
-	id uuid NOT NULL,
-	
-	hashed_ip varchar(255) NOT NULL,
-
-	uri text NOT NULL,
-	wallet_address text NOT NULL,
-	chain_id integer NOT NULL,
-
-	created_at timestamptz NULL,
-	expires_at timestamptz NULL,
-	CONSTRAINT nonces_pkey PRIMARY KEY (id)
-);
-CREATE INDEX nonces_instance_id_idx ON auth.nonces USING btree (instance_id);
-comment on table auth.nonces is 'Auth: Stored generated nonces used for validating Web3 login requests.';
-
 -- auth.schema_migrations definition
 
 CREATE TABLE auth.schema_migrations (
@@ -105,8 +87,7 @@ VALUES  ('20171026211738'),
         ('20180103212743'),
         ('20180108183307'),
         ('20180119214651'),
-        ('20180125194653'),
-		('20211120104808');
+        ('20180125194653');
 		
 -- Gets the User ID from the request cookie
 create or replace function auth.uid() returns uuid as $$
