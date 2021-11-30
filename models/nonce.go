@@ -91,7 +91,7 @@ func (n *Nonce) VerifyIp(ip string) bool {
 	return err == nil
 }
 
-func (n *Nonce) Build() (string, error) {
+func (n *Nonce) Build(statement string) (string, error) {
 	uri, err := url.Parse(n.Url)
 	if err != nil {
 		return "", err
@@ -100,12 +100,14 @@ func (n *Nonce) Build() (string, error) {
 	return fmt.Sprintf(`%v wants you to sign in with your Ethereum account:
 %v
 
+%v
+
 URI: %v
 Version: 1
 Nonce: %v
 Issued At: %v
 Expiration Time: %v
-Chain ID: %v`, uri.Hostname(), n.EthAddress, uri.String(), n.CreatedAt.UnixMilli(), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
+Chain ID: %v`, uri.Hostname(), n.EthAddress, statement, uri.String(), n.CreatedAt.UnixMilli(), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
 }
 
 func GetNonce(tx *storage.Connection, raw_nonce string) (*Nonce, error) {

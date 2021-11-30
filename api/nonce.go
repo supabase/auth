@@ -60,7 +60,11 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	builtNonce, err := nonce.Build()
+	statement := config.External.Eth.Message
+	if statement == "" {
+		statement = config.SiteURL
+	}
+	builtNonce, err := nonce.Build(statement)
 	if err != nil {
 		return internalServerError("Failed to build nonce")
 	}
@@ -72,6 +76,9 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) NonceById(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	config := a.getConfig(ctx)
+
 	nonceId, err := uuid.FromString(chi.URLParam(r, "nonce_id"))
 	if err != nil {
 		return badRequestError("nonce_id must be an UUID")
@@ -85,7 +92,11 @@ func (a *API) NonceById(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Failed to find nonce")
 	}
 
-	builtNonce, err := nonce.Build()
+	statement := config.External.Eth.Message
+	if statement == "" {
+		statement = config.SiteURL
+	}
+	builtNonce, err := nonce.Build(statement)
 	if err != nil {
 		return internalServerError("Failed to build nonce")
 	}

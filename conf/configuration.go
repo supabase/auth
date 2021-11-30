@@ -25,7 +25,8 @@ type EmailProviderConfiguration struct {
 }
 
 type EthProviderConfiguration struct {
-	Enabled bool `json:"enabled" default:"false"`
+	Enabled bool   `json:"enabled" default:"false"`
+	Message string `json:"message"`
 }
 
 type SamlProviderConfiguration struct {

@@ -71,7 +71,11 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 	}
 	sig[64] -= 27
 
-	nonceString, err := nonce.Build()
+	statement := config.External.Eth.Message
+	if statement == "" {
+		statement = config.SiteURL
+	}
+	nonceString, err := nonce.Build(statement)
 	msg := []byte(nonceString)
 	pubKey, err := crypto.SigToPub(signHash(msg), sig)
 	if err != nil {
