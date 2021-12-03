@@ -74,7 +74,11 @@ func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVeri
 	case "azure":
 		oAuthProvider = config.External.Azure
 		oAuthProviderClientId = oAuthProvider.ClientID
-		provider, err = oidc.NewProvider(ctx, "https://login.microsoftonline.com/common/v2.0")
+		url := oAuthProvider.URL
+		if url == "" {
+			url = "https://login.microsoftonline.com/common"
+		}
+		provider, err = oidc.NewProvider(ctx, url + "/v2.0")
 	case "facebook":
 		oAuthProvider = config.External.Facebook
 		oAuthProviderClientId = oAuthProvider.ClientID
