@@ -17,7 +17,7 @@ type adminUserParams struct {
 	Role         string                 `json:"role"`
 	Email        string                 `json:"email"`
 	Phone        string                 `json:"phone"`
-	Password     string                 `json:"password"`
+	Password     *string                `json:"password"`
 	EmailConfirm bool                   `json:"email_confirm"`
 	PhoneConfirm bool                   `json:"phone_confirm"`
 	UserMetaData map[string]interface{} `json:"user_metadata"`
@@ -121,12 +121,12 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if params.Password != "" {
-			if len(params.Password) < config.PasswordMinLength {
+		if params.Password != nil {
+			if len(*params.Password) < config.PasswordMinLength {
 				return fmt.Errorf("Password should be at least %d characters", config.PasswordMinLength)
 			}
 
-			if terr := user.UpdatePassword(tx, params.Password); terr != nil {
+			if terr := user.UpdatePassword(tx, *params.Password); terr != nil {
 				return terr
 			}
 		}
@@ -216,7 +216,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	user, err := models.NewUser(instanceID, params.Email, params.Password, aud, params.UserMetaData)
+	user, err := models.NewUser(instanceID, params.Email, *params.Password, aud, params.UserMetaData)
 	if err != nil {
 		return internalServerError("Error creating user").WithInternalError(err)
 	}
