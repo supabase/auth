@@ -412,7 +412,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 
 		ts.API.handler.ServeHTTP(w, req)
-		require.Equal(ts.T(), http.StatusInternalServerError, w.Code)
+		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
 	})
 }
 

@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/gofrs/uuid"
@@ -82,7 +81,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		if params.Password != nil {
 			if len(*params.Password) < config.PasswordMinLength {
-				return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", config.PasswordMinLength))
+				return invalidPasswordLengthError(config)
 			}
 
 			if terr = user.UpdatePassword(tx, *params.Password); terr != nil {

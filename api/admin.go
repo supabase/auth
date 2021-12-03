@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi"
@@ -123,7 +123,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		if params.Password != nil {
 			if len(*params.Password) < config.PasswordMinLength {
-				return fmt.Errorf("Password should be at least %d characters", config.PasswordMinLength)
+				return invalidPasswordLengthError(config)
 			}
 
 			if terr := user.UpdatePassword(tx, *params.Password); terr != nil {
@@ -166,6 +166,9 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
+		if errors.Is(err, invalidPasswordLengthError(config)) {
+			return err
+		}
 		return internalServerError("Error updating user").WithInternalError(err)
 	}
 
