@@ -1,4 +1,4 @@
--- create index on identities.user_id
+-- update auth functions
 
 create or replace function auth.uid() 
 returns uuid 
