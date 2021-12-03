@@ -394,6 +394,28 @@ func (ts *AdminTestSuite) TestAdminUserUpdateAsSystemUser() {
 	assert.Contains(ts.T(), u.AppMetaData["roles"], "editor")
 }
 
+func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
+	u, err := models.NewUser(ts.instanceID, "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	var updateEndpoint = fmt.Sprintf("/admin/users/%s", u.ID)
+	ts.Run("Password doesn't meet minimum length", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"password": "",
+		}))
+
+		// Setup request
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPut, updateEndpoint, &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusInternalServerError, w.Code)
+	})
+}
+
 // TestAdminUserDelete tests API /admin/user route (DELETE)
 func (ts *AdminTestSuite) TestAdminUserDelete() {
 	u, err := models.NewUser(ts.instanceID, "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
