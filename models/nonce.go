@@ -91,7 +91,24 @@ func (n *Nonce) VerifyIp(ip string) bool {
 	return err == nil
 }
 
-func (n *Nonce) Build(statement string) (string, error) {
+func (n *Nonce) Build() (string, error) {
+	uri, err := url.Parse(n.Url)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf(`%v wants you to sign in with your Ethereum account:
+%v
+
+URI: %v
+Version: 1
+Nonce: %v
+Issued At: %v
+Expiration Time: %v
+Chain ID: %v`, uri.Hostname(), n.EthAddress, uri.String(), n.CreatedAt.UnixNano()/int64(time.Millisecond), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
+}
+
+func (n *Nonce) BuildWithStatement(statement string) (string, error) {
 	uri, err := url.Parse(n.Url)
 	if err != nil {
 		return "", err

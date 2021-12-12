@@ -69,15 +69,21 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	// The nonce string that was built
+	var builtNonce string
+
 	// Get Statement
-	// TODO (HarryET): remove statement line if not set in config
 	statement := config.External.Eth.Message
-	if statement == "" {
-		statement = config.SiteURL
+
+	// Check if statement was set
+	if statement != "" {
+		// Build the nonce string - with a statement - that is compliant with EIP-4361
+		builtNonce, err = nonce.BuildWithStatement(statement)
+	} else {
+		// Build the nonce string that is compliant with EIP-4361
+		builtNonce, err = nonce.Build()
 	}
 
-	// Build the nonce string that is compliant with EIP-4361
-	builtNonce, err := nonce.Build(statement)
 	if err != nil {
 		return internalServerError("Failed to build nonce")
 	}
@@ -110,15 +116,21 @@ func (a *API) NonceById(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Failed to find nonce")
 	}
 
+	// The nonce string that was built
+	var builtNonce string
+
 	// Get Statement
-	// TODO (HarryET): remove statement line if not set in config
 	statement := config.External.Eth.Message
-	if statement == "" {
-		statement = config.SiteURL
+
+	// Check if statement was set
+	if statement != "" {
+		// Build the nonce string - with a statement - that is compliant with EIP-4361
+		builtNonce, err = nonce.BuildWithStatement(statement)
+	} else {
+		// Build the nonce string that is compliant with EIP-4361
+		builtNonce, err = nonce.Build()
 	}
 
-	// Build the nonce string that is compliant with EIP-4361
-	builtNonce, err := nonce.Build(statement)
 	if err != nil {
 		return internalServerError("Failed to build nonce")
 	}

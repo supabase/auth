@@ -80,15 +80,20 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 	}
 	sig[64] -= 27
 
-	// Get Statement
-	// TODO (HarryET): remove statement line if not set in config
-	statement := config.External.Eth.Message
-	if statement == "" {
-		statement = config.SiteURL
-	}
+	// The nonce string that was built
+	var nonceString string
 
-	// Build the nonce string
-	nonceString, err := nonce.Build(statement)
+	// Get Statement
+	statement := config.External.Eth.Message
+
+	// Check if statement was set
+	if statement != "" {
+		// Build the nonce string - with a statement - that is compliant with EIP-4361
+		nonceString, err = nonce.BuildWithStatement(statement)
+	} else {
+		// Build the nonce string that is compliant with EIP-4361
+		nonceString, err = nonce.Build()
+	}
 	msg := []byte(nonceString)
 
 	// Use the signature and hashed nonce string to extract the public key
@@ -146,7 +151,7 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		// Add audit log entry for consuming nonce
-		return models.NewAuditLogEntry(tx, instanceID, user, models.NonceConsumed, nil);
+		return models.NewAuditLogEntry(tx, instanceID, user, models.NonceConsumed, nil)
 	})
 
 	if err != nil {
