@@ -5,6 +5,7 @@ gotrue-arm64
 
 .DS_Store
 .vscode
+.idea
 www/dist/
 www/.DS_Store
 www/node_modules
