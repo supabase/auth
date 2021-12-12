@@ -31,6 +31,7 @@ type User struct {
 	Phone            storage.NullString `json:"phone" db:"phone"`
 	PhoneConfirmedAt *time.Time         `json:"phone_confirmed_at,omitempty" db:"phone_confirmed_at"`
 
+	// TODO (HarryET): Rename & Rework, waiting for comments
 	EthAddress storage.NullString `json:"eth_address" db:"eth_address"`
 
 	ConfirmationToken  string     `json:"-" db:"confirmation_token"`
