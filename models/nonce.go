@@ -107,7 +107,7 @@ Version: 1
 Nonce: %v
 Issued At: %v
 Expiration Time: %v
-Chain ID: %v`, uri.Hostname(), n.EthAddress, statement, uri.String(), n.CreatedAt.UnixMilli(), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
+Chain ID: %v`, uri.Hostname(), n.EthAddress, statement, uri.String(), n.CreatedAt.UnixNano()/int64(time.Millisecond), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
 }
 
 func GetNonce(tx *storage.Connection, raw_nonce string) (*Nonce, error) {
