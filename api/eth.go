@@ -24,7 +24,7 @@ type EthParams struct {
 	Signature     string `json:"signature"`
 }
 
-func signHash(data []byte) []byte {
+func hashMessageWithKeccak256(data []byte) []byte {
 	msg := fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(data), data)
 	return crypto.Keccak256([]byte(msg))
 }
@@ -35,10 +35,12 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 	instanceID := getInstanceID(ctx)
 	useCookie := r.Header.Get(useCookieHeader)
 
+	// Check if ethereum is enabled
 	if !config.External.Eth.Enabled {
 		return badRequestError("Unsupported eth provider")
 	}
 
+	// Get the params
 	params := &EthParams{}
 	body, err := ioutil.ReadAll(r.Body)
 	jsonDecoder := json.NewDecoder(bytes.NewReader(body))
@@ -46,6 +48,7 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
+	// Get the nonce from the id in params
 	nonce, err := models.GetNonceById(a.db, uuid.FromStringOrNil(params.NonceId))
 	if err != nil {
 		return badRequestError("Failed to find nonce: %v", err)
@@ -53,40 +56,56 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 
 	// TODO (HarryET): Validate nonce expiry time
 
+	// Get the client's IP
 	clientIP := strings.Split(r.RemoteAddr, ":")[0]
+
+	// Validate the client's IP is the same as the one that created the nonce
 	if !nonce.VerifyIp(clientIP) {
 		return badRequestError("IP not the same as the IP this nonce was issued too")
 	}
 
+	// Convert the wallet address from params to an address struct
 	walletAddress := common.HexToAddress(params.WalletAddress)
 
+	// Decode the signature
 	sig, err := hexutil.Decode(params.Signature)
 	if err != nil {
 		return badRequestError("Invalid Signature: Failed to decode, not valid hex")
 	}
 
+	// Check the nonce is correctly formatted
 	// https://github.com/ethereum/go-ethereum/blob/55599ee95d4151a2502465e0afc7c47bd1acba77/internal/ethapi/api.go#L442
 	if sig[64] != 27 && sig[64] != 28 {
 		return badRequestError("Invalid Signature: Invalid formatting")
 	}
 	sig[64] -= 27
 
+	// Get Statement
+	// TODO (HarryET): remove statement line if not set in config
 	statement := config.External.Eth.Message
 	if statement == "" {
 		statement = config.SiteURL
 	}
+
+	// Build the nonce string
 	nonceString, err := nonce.Build(statement)
 	msg := []byte(nonceString)
-	pubKey, err := crypto.SigToPub(signHash(msg), sig)
+
+	// Use the signature and hashed nonce string to extract the public key
+	pubKey, err := crypto.SigToPub(hashMessageWithKeccak256(msg), sig)
 	if err != nil {
 		return badRequestError("Invalid Signature: Failed to extract public key")
 	}
 
+	// Convert the public key to an address
 	recoveredWalletAddress := crypto.PubkeyToAddress(*pubKey)
+
+	// Check if the address from params is the same as the recovered address
 	if walletAddress != recoveredWalletAddress {
 		return badRequestError("Invalid Signature: Wallet address not the same as suplied address")
 	}
 
+	// Default Signin/Signup logic from `./signup.go`
 	didUserExist := true
 
 	aud := a.requestAud(ctx, r)
@@ -121,10 +140,13 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.NonceConsumed, nil); terr != nil {
+		// Consume the nonce
+		if terr := nonce.Consume(tx); terr != nil {
 			return terr
 		}
-		return nonce.Consume(tx)
+
+		// Add audit log entry for consuming nonce
+		return models.NewAuditLogEntry(tx, instanceID, user, models.NonceConsumed, nil);
 	})
 
 	if err != nil {
