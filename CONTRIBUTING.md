@@ -213,6 +213,157 @@ To see the current settings, make a request to `http://localhost:9999/settings` 
 }
 ```
 
+## How to Use Admin API Endpoints
+
+To test the admin endpoints (or other api endping), you can invoke via HTTP requests. Using [Insomnia](https://insomnia.rest/products/insomnia) can help you issue these requests.
+
+You will need to know the `GOTRUE_JWT_SECRET` configured in the `.env` settings.
+
+Also, you must generate a JWT with the signature which has the `supabase_admin` role (or one that is specified in `GOTRUE_JWT_ADMIN_ROLES`).
+
+For example:
+
+```json
+{
+  "role": "supabase_admin"
+}
+```
+
+You can sign this payload using the [JWT.io Debugger](https://jwt.io/#debugger-io) but make sure that `secret base64 encoded` is unchecked.
+
+Then you can use this JWT as a Bearer token for admin requests.
+
+### Create User (aka Sign Up a User)
+
+To create a new user, `POST /admin/users` with the payload:
+
+```json
+{
+  "email": "user@example.com",
+  "password": "12345678"
+}
+```
+
+#### Request
+
+```
+POST /admin/users HTTP/1.1
+Host: localhost:9999
+User-Agent: insomnia/2021.7.2
+Content-Type: application/json
+Authorization: Bearer <YOUR_SIGNED_JWT>
+Accept: */*
+Content-Length: 57
+```
+
+#### Response
+
+And you should get a new user:
+
+```json
+{
+  "id": "e78c512d-68e4-482b-901b-75003e89acae",
+  "aud": "authenticated",
+  "role": "authenticated",
+  "email": "user@example.com",
+  "phone": "",
+  "app_metadata": {
+    "provider": "email",
+    "providers": ["email"]
+  },
+  "user_metadata": {},
+  "identities": null,
+  "created_at": "2021-12-15T12:40:03.507551-05:00",
+  "updated_at": "2021-12-15T12:40:03.512067-05:00"
+}
+```
+
+### List/Find Users
+
+To create a new user, make a request to `GET /admin/users`.
+
+#### Request
+
+```
+GET /admin/users HTTP/1.1
+Host: localhost:9999
+User-Agent: insomnia/2021.7.2
+Authorization: Bearer <YOUR*SIGNED_JWT>
+Accept: */\_
+```
+
+#### Response
+
+The response from `/admin/users` should return all users:
+
+```json
+{
+  "aud": "authenticated",
+  "users": [
+    {
+      "id": "b7fd0253-6e16-4d4e-b61b-5943cb1b2102",
+      "aud": "authenticated",
+      "role": "authenticated",
+      "email": "user+4@example.com",
+      "phone": "",
+      "app_metadata": {
+        "provider": "email",
+        "providers": ["email"]
+      },
+      "user_metadata": {},
+      "identities": null,
+      "created_at": "2021-12-15T12:43:58.12207-05:00",
+      "updated_at": "2021-12-15T12:43:58.122073-05:00"
+    },
+    {
+      "id": "d69ae847-99be-4642-868f-439c2cdd9af4",
+      "aud": "authenticated",
+      "role": "authenticated",
+      "email": "user+3@example.com",
+      "phone": "",
+      "app_metadata": {
+        "provider": "email",
+        "providers": ["email"]
+      },
+      "user_metadata": {},
+      "identities": null,
+      "created_at": "2021-12-15T12:43:56.730209-05:00",
+      "updated_at": "2021-12-15T12:43:56.730213-05:00"
+    },
+    {
+      "id": "7282cf42-344e-4474-bdf6-d48e4968a2e4",
+      "aud": "authenticated",
+      "role": "authenticated",
+      "email": "user+2@example.com",
+      "phone": "",
+      "app_metadata": {
+        "provider": "email",
+        "providers": ["email"]
+      },
+      "user_metadata": {},
+      "identities": null,
+      "created_at": "2021-12-15T12:43:54.867676-05:00",
+      "updated_at": "2021-12-15T12:43:54.867679-05:00"
+    },
+    {
+      "id": "e78c512d-68e4-482b-901b-75003e89acae",
+      "aud": "authenticated",
+      "role": "authenticated",
+      "email": "user@example.com",
+      "phone": "",
+      "app_metadata": {
+        "provider": "email",
+        "providers": ["email"]
+      },
+      "user_metadata": {},
+      "identities": null,
+      "created_at": "2021-12-15T12:40:03.507551-05:00",
+      "updated_at": "2021-12-15T12:40:03.507554-05:00"
+    }
+  ]
+}
+```
+
 ### Running Database Migrations
 
 If you need to run any new migrations:
