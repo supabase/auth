@@ -1,6 +1,6 @@
 # CONTRIBUTING
 
-We would love to have contributions from each and every one of you in the community be it big or small and you are the ones who motivate us to do better than what we do today
+We would love to have contributions from each and every one of you in the community be it big or small and you are the ones who motivate us to do better than what we do today.
 
 ## Code Of Conduct
 
@@ -10,10 +10,10 @@ Please help us keep all our projects open and inclusive. Kindly follow our [Code
 
 GoTrue -- as the name implies -- is a user registration and authentication API developed in [Go](https://go.dev).
 
-It connects to a [PostgreSQL](https://www.postgresql.org) database in ordder to store authentication data, [Soda CLI](https://gobuffalo.io/en/docs/db/toolbox) to manage database schema and migrations,
+It connects to a [PostgreSQL](https://www.postgresql.org) database in order to store authentication data, [Soda CLI](https://gobuffalo.io/en/docs/db/toolbox) to manage database schema and migrations,
 and runs inside a [Docker](https://www.docker.com/get-started) container.
 
-Therefore, to contribute to GoTrue you will need to install those tools.
+Therefore, to contribute to GoTrue you will need to install these tools.
 
 ### Install Tools
 
@@ -39,7 +39,7 @@ Or, if you prefer, download [Docker Desktop](https://www.docker.com/get-started)
 go install github.com/gobuffalo/pop/soda@latest
 ```
 
-- Clone the GoTrue repository
+- Clone the GoTrue [repository](https://github.com/supabase/gotrue)
 
 ```
 git clone https://github.com/supabase/gotrue
@@ -47,9 +47,11 @@ git clone https://github.com/supabase/gotrue
 
 ### Install GoTrue
 
+To begin installation, be sure to start from the root directory.
+
 - `cd gotrue`
 
-To run the GoTrue PostgreSQL container locally, you'll need to:
+To complete installation, you will:
 
 - Install the PostgreSQL Docker image
 - Create the DB Schema and Migrations
@@ -59,9 +61,8 @@ To run the GoTrue PostgreSQL container locally, you'll need to:
 
 #### Installation Steps
 
-- Make sure you are in the `gotrue`
-- Start Docker
-- To install the PostgreSQL Docker image, run:
+1. Start Docker
+2. To install the PostgreSQL Docker image, run:
 
 ```
 ./hack/postgresd.sh
@@ -111,15 +112,17 @@ You should then see in Docker that `gotrue_postgresql` is running on `port: 5432
 >
 > If you need to run the test environment on another port, you will need to modify several configuration files to use a different custom port.
 
-- Next compile the GoTrue binary:
+3. Next compile the GoTrue binary:
 
 ```
 make build
 ```
 
-- Run `make migrate_test` to setup the database schema.
+4. To setup the database schema via Soda, run:
 
-> Note: This uses Soda to create the database an run the migration scripts
+```
+make migrate_test
+```
 
 You should see log messages that indicate that the GoTrue migrations were applied successfully:
 
@@ -141,14 +144,17 @@ Version          Name                         Status
 
 That lists each migration that was applied. Note: there may be more migrations than those listed.
 
-- Create a `.env` file in the root of the project and copy the following config in [example.env](example.env)
-- In order to have GoTrue connect to your PostgreSQL database running in Docket, it is important to set a connection string like:
+4. Create a `.env` file in the root of the project and copy the following config in [example.env](example.env)
+5. In order to have GoTrue connect to your PostgreSQL database running in Docket, it is important to set a connection string like:
 
 ```
 DATABASE_URL="postgres://supabase_auth_admin:root@localhost:5432/postgres"
 ```
 
 > Important: GoTrue requires a set of SMTP credentials to run, you can generate your own SMTP credentials via an SMTP provider such as AWS SES, SendGrid, MailChimp, SendInBlue or any other SMTP providers.
+
+6. Then finally Start GoTrue
+7. Verify that GoTrue is Available
 
 ### Starting GoTrue
 
@@ -209,7 +215,7 @@ To see the current settings, make a request to `http://localhost:9999/settings` 
 
 ### Running Database Migrations
 
-If you need to run new migrations:`
+If you need to run any new migrations:
 
 ```
 make migrate_test
@@ -232,7 +238,7 @@ $ make migrate_test
 $ make test
 ```
 
-### Customizing Port
+### Customizing the POostgreSQL Port
 
 if you already run PostgreSQL and need to run your database on a different, custom port,
 you will need to make several configuration changes to the following files:
@@ -242,7 +248,7 @@ In these examples, we change the port from 5432 to 7432.
 > Note: This is not recommended, but if you do, please do not check in changes.
 
 ```
-///file: postgresd.sh
+// file: postgresd.sh
 docker run --name gotrue_postgresql
 -p 7432:5432 \ 👈 set the first value to your external facing port
 ```
@@ -264,11 +270,11 @@ DATABASE_URL="postgres://supabase_auth_admin:root@localhost:7432/postgres" 👈 
 ```
 
 ```
-//file: migrate.sh
+// file: migrate.sh
 export GOTRUE_DB_DATABASE_URL="postgres://supabase_auth_admin:root@localhost:7432/$DB_ENV"
 ```
 
-### Helpful Docker Commands
+## Helpful Docker Commands
 
 ```
 # Command line into bash on the PostgreSQL container
@@ -322,5 +328,5 @@ Since implementing an additional oauth provider consists of making api calls to 
 
 ## License
 
-By contributing to Gotrue, you agree that your contributions will be licensed
+By contributing to GoTrue, you agree that your contributions will be licensed
 under its [MIT license](LICENSE).
