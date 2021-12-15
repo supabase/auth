@@ -69,11 +69,15 @@ To run the GoTrue PostgreSQL container locally, you'll need to:
 
 You may see a message like:
 
-> Unable to find image 'postgres:13' locally
+```
+Unable to find image 'postgres:13' locally
+```
 
 And then
 
-> Pulling from library/postgres
+```
+Pulling from library/postgres
+```
 
 as Docker installs the image:
 
@@ -99,6 +103,13 @@ f709b97d83fddc3b099e4f2ddc4cb2fbf68052e7a8093332bec57672f38cfa36
 ```
 
 You should then see in Docker that `gotrue_postgresql` is running on `port: 5432`.
+
+> **Important** If you happen to already have a local running instance of Postgres running on the port `5432` because you
+> may have installed via [homebrew on OSX](https://formulae.brew.sh/formula/postgresql) then be certain to stop the process using:
+>
+> - `brew services stop postgresql`
+>
+> If you need to run the test environment on another port, you will need to modify several configuration files to use a different custom port.
 
 - Next compile the GoTrue binary:
 
@@ -218,7 +229,56 @@ $ ./hack/postgresd.sh
 $ make migrate_test
 
 # Executes the tests
-$ make testß
+$ make test
+```
+
+### Customizing Port
+
+if you already run PostgreSQL and need to run your database on a different, custom port,
+you will need to make several configuration changes to the following files:
+
+In these examples, we change the port from 5432 to 7432.
+
+> Note: This is not recommended, but if you do, please do not check in changes.
+
+```
+///file: postgresd.sh
+docker run --name gotrue_postgresql
+-p 7432:5432 \ 👈 set the first value to your external facing port
+```
+
+The port you customize here can them be used in the subsequent configuration:
+
+```
+// file: database.yaml
+test:
+dialect: "postgres"
+database: "postgres"
+host: {{ envOr "POSTGRES_HOST" "127.0.0.1" }}
+port: {{ envOr "POSTGRES_PORT" "7432" }} 👈 set to your port
+```
+
+```
+// file: test.env
+DATABASE_URL="postgres://supabase_auth_admin:root@localhost:7432/postgres" 👈 set to your port
+```
+
+```
+//file: migrate.sh
+export GOTRUE_DB_DATABASE_URL="postgres://supabase_auth_admin:root@localhost:7432/$DB_ENV"
+```
+
+### Helpful Docker Commands
+
+```
+# Command line into bash on the PostgreSQL container
+docker exec -it gotrue_postgresql bash
+
+# Removes Container
+docker container rm -f gotrue_postgresql
+
+# Removes volume
+docker volume rm postgres_data
 ```
 
 ## Updating Package Dependencies
