@@ -22,6 +22,12 @@ Therefore, to contribute to GoTrue you will need to install these tools.
 ```terminal
 # Via Homebrew on OSX
 brew install go@1.16
+
+# Set the GOPATH environment variable in the ~/.zshrc file
+export GOPATH="$HOME/go"
+
+# Add the GOPATH to your path
+echo 'export PATH="$GOPATH/bin:$PATH"' >> ~/.zshrc
 ```
 
 - Install [Docker](https://www.docker.com/get-started)
@@ -215,7 +221,7 @@ To see the current settings, make a request to `http://localhost:9999/settings` 
 
 ## How to Use Admin API Endpoints
 
-To test the admin endpoints (or other api endping), you can invoke via HTTP requests. Using [Insomnia](https://insomnia.rest/products/insomnia) can help you issue these requests.
+To test the admin endpoints (or other api endpoints), you can invoke via HTTP requests. Using [Insomnia](https://insomnia.rest/products/insomnia) can help you issue these requests.
 
 You will need to know the `GOTRUE_JWT_SECRET` configured in the `.env` settings.
 
