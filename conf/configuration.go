@@ -130,6 +130,7 @@ type SmsProviderConfiguration struct {
 	Template     string                           `json:"template"`
 	Twilio       TwilioProviderConfiguration      `json:"twilio"`
 	Messagebird  MessagebirdProviderConfiguration `json:"messagebird"`
+	TextLocal    TextLocalProviderConfiguration   `json:"textlocal"`
 }
 
 type TwilioProviderConfiguration struct {
@@ -141,6 +142,11 @@ type TwilioProviderConfiguration struct {
 type MessagebirdProviderConfiguration struct {
 	AccessKey  string `json:"access_key" split_words:"true"`
 	Originator string `json:"originator" split_words:"true"`
+}
+
+type TextLocalProviderConfiguration struct {
+	ApiKey string `json:"api_key" split_words:"true"`
+	Sender string `json:"sender" split_words:"true"`
 }
 
 type CaptchaConfiguration struct {
@@ -361,6 +367,16 @@ func (t *MessagebirdProviderConfiguration) Validate() error {
 		return errors.New("Missing Messagebird access key")
 	}
 	if t.Originator == "" {
+		return errors.New("Missing Messagebird originator")
+	}
+	return nil
+}
+
+func (t *TextLocalProviderConfiguration) Validate() error {
+	if t.ApiKey == "" {
+		return errors.New("Missing Messagebird access key")
+	}
+	if t.Sender == "" {
 		return errors.New("Missing Messagebird originator")
 	}
 	return nil
