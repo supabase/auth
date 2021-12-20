@@ -10,6 +10,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
+	"github.com/sethvargo/go-password/password"
 )
 
 type adminUserParams struct {
@@ -217,6 +218,14 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		} else if exists {
 			return unprocessableEntityError("Phone number already registered by another user")
 		}
+	}
+
+	if params.Password == nil || *params.Password == "" {
+		password, err := password.Generate(64, 10, 0, false, true)
+		if err != nil {
+			return internalServerError("Error generating password").WithInternalError(err)
+		}
+		params.Password = &password
 	}
 
 	user, err := models.NewUser(instanceID, params.Email, *params.Password, aud, params.UserMetaData)
