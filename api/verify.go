@@ -62,6 +62,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		if err := jsonDecoder.Decode(params); err != nil {
 			return badRequestError("Could not read verification params: %v", err)
 		}
+		params.RedirectTo = a.getRedirectURLOrReferrer(r, params.RedirectTo)
 	default:
 		unprocessableEntityError("Sorry, only GET and POST methods are supported.")
 	}
