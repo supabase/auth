@@ -713,9 +713,12 @@ or show an account confirmed/welcome message in the case of `signup`, or direct 
 
 One-Time-Password. Will deliver a magiclink or sms otp to the user depending on whether the request body contains an "email" or "phone" key.
 
+If `"no_signup": true`, user will not be automatically signed up if the user doesn't exist.
+
 ```js
 {
   "phone": "12345678" // follows the E.164 format
+  "no_signup": true
 }
 
 OR
@@ -723,6 +726,7 @@ OR
 // exactly the same as /magiclink
 {
   "email": "email@example.com"
+  "no_signup": true
 }
 ```
 
