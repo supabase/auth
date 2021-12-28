@@ -374,10 +374,10 @@ func (t *MessagebirdProviderConfiguration) Validate() error {
 
 func (t *TextLocalProviderConfiguration) Validate() error {
 	if t.ApiKey == "" {
-		return errors.New("Missing Messagebird access key")
+		return errors.New("Missing TextLocal access key")
 	}
 	if t.Sender == "" {
-		return errors.New("Missing Messagebird originator")
+		return errors.New("Missing TextLocal originator")
 	}
 	return nil
 }
