@@ -9,13 +9,20 @@ import (
 	"github.com/netlify/gotrue/storage"
 )
 
+const (
+	InvalidMissingCurrentPassword    = "Current password not provided for password update"
+	InvalidCurrentPasswordMessage    = "Current password doesn't match"
+	InvalidSameCurrentAndNewPassword = "New password cannot be the same as the old password"
+)
+
 // UserUpdateParams parameters for updating a user
 type UserUpdateParams struct {
-	Email    string                 `json:"email"`
-	Password *string                `json:"password"`
-	Data     map[string]interface{} `json:"data"`
-	AppData  map[string]interface{} `json:"app_metadata,omitempty"`
-	Phone    string                 `json:"phone"`
+	Email           string                 `json:"email"`
+	CurrentPassword *string                `json:"current_password"`
+	Password        *string                `json:"password"`
+	Data            map[string]interface{} `json:"data"`
+	AppData         map[string]interface{} `json:"app_metadata,omitempty"`
+	Phone           string                 `json:"phone"`
 }
 
 // UserGet returns a user
@@ -80,10 +87,18 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if params.Password != nil {
+			if params.CurrentPassword == nil {
+				return oauthError("Missing current password", InvalidMissingCurrentPassword)
+			}
+			if !user.Authenticate(*params.CurrentPassword) {
+				return oauthError("Invalid password", InvalidCurrentPasswordMessage)
+			}
 			if len(*params.Password) < config.PasswordMinLength {
 				return invalidPasswordLengthError(config)
 			}
-
+			if *params.CurrentPassword == *params.Password {
+				return oauthError("Invalid new password", InvalidSameCurrentAndNewPassword)
+			}
 			if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
 				return internalServerError("Error during password storage").WithInternalError(terr)
 			}

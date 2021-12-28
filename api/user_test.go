@@ -58,20 +58,48 @@ func (ts *UserTestSuite) TestUser_UpdatePassword() {
 		isAuthenticated bool
 	}{
 		{
-			"Valid password length",
+			"Missing current password",
 			map[string]interface{}{
 				"password": "newpass",
 			},
-			http.StatusOK,
-			true,
+			http.StatusBadRequest,
+			false,
+		},
+		{
+			"Invalid current password",
+			map[string]interface{}{
+				"current_password": "invalid_password",
+				"password":         "newpass",
+			},
+			http.StatusBadRequest,
+			false,
 		},
 		{
 			"Invalid password length",
 			map[string]interface{}{
-				"password": "",
+				"current_password": "password",
+				"password":         "",
 			},
 			http.StatusUnprocessableEntity,
 			false,
+		},
+		{
+			"Invalid new password cannot be the same as current password",
+			map[string]interface{}{
+				"current_password": "password",
+				"password":         "password",
+			},
+			http.StatusBadRequest,
+			true,
+		},
+		{
+			"Valid password length",
+			map[string]interface{}{
+				"current_password": "password",
+				"password":         "newpass",
+			},
+			http.StatusOK,
+			true,
 		},
 	}
 
@@ -96,6 +124,8 @@ func (ts *UserTestSuite) TestUser_UpdatePassword() {
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
+			// Checks if password is actually updated
+			// For case where new password matches current password, this will resolve to true even though the password isn't actually being updated.
 			passwordUpdate, _ := c.update["password"].(string)
 			require.Equal(ts.T(), c.isAuthenticated, u.Authenticate(passwordUpdate))
 		})
