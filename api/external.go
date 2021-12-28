@@ -226,13 +226,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 			if !user.IsConfirmed() {
 				if !emailData.Verified && !config.Mailer.Autoconfirm {
-					// mailer := a.Mailer(ctx)
-					// referrer := a.getReferrer(r)
-					// if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
-					// 	return internalServerError("Error sending confirmation mail").WithInternalError(terr)
-					// }
-					// email must be verified to issue a token
-					// return nil
 					return badRequestError("Please verify your email (%v) with %v", emailData.Email, providerType)
 				}
 
