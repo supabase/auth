@@ -127,7 +127,7 @@ func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) bool {
 			_, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
 		}
 
-		if models.IsNotFoundError(err) {
+		if err != nil && models.IsNotFoundError(err) {
 			return false
 		}
 	}
