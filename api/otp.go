@@ -14,9 +14,9 @@ import (
 
 // OtpParams contains the request body params for the otp endpoint
 type OtpParams struct {
-	Email    string `json:"email"`
-	Phone    string `json:"phone"`
-	NoSignup bool   `json:"no_signup"`
+	Email      string `json:"email"`
+	Phone      string `json:"phone"`
+	CreateUser bool   `json:"create_user"`
 }
 
 // SmsParams contains the request body params for sms otp
@@ -38,7 +38,7 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 
 	r.Body = ioutil.NopCloser(strings.NewReader(string(body)))
 
-	if !a.otpUserExists(r, params) {
+	if !a.shouldCreateUser(r, params) {
 		return badRequestError("Signups not allowed for otp")
 	}
 
@@ -115,8 +115,8 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, make(map[string]string))
 }
 
-func (a *API) otpUserExists(r *http.Request, params *OtpParams) bool {
-	if params.NoSignup {
+func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) bool {
+	if !params.CreateUser {
 		ctx := r.Context()
 		instanceID := getInstanceID(ctx)
 		aud := a.requestAud(ctx, r)
