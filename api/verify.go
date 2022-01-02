@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	// used below to specify need to return answer to user via specific redirect
-	redirectWithQueryError = errors.New("need return answer with query params")
+	// indicates that a user should be redirected due to an error
+	redirectWithQueryError = errors.New("redirect user")
 )
 
 const (
@@ -62,6 +62,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		if err := jsonDecoder.Decode(params); err != nil {
 			return badRequestError("Could not read verification params: %v", err)
 		}
+		params.RedirectTo = a.getRedirectURLOrReferrer(r, params.RedirectTo)
 	default:
 		unprocessableEntityError("Sorry, only GET and POST methods are supported.")
 	}
@@ -170,7 +171,7 @@ func (a *API) signupVerify(ctx context.Context, conn *storage.Connection, params
 
 	nextDay := user.ConfirmationSentAt.Add(24 * time.Hour)
 	if user.ConfirmationSentAt != nil && time.Now().After(nextDay) {
-		return nil, expiredTokenError("Confirmation token expired")
+		return nil, expiredTokenError("Confirmation token expired").WithInternalError(redirectWithQueryError)
 	}
 
 	err = conn.Transaction(func(tx *storage.Connection) error {
@@ -265,7 +266,7 @@ func (a *API) smsVerify(ctx context.Context, conn *storage.Connection, params *V
 
 	// check if token has expired or is invalid
 	if isOtpValid := now.Before(expiresAt) && params.Token == user.ConfirmationToken; !isOtpValid {
-		return nil, expiredTokenError("Otp has expired or is invalid")
+		return nil, expiredTokenError("Otp has expired or is invalid").WithInternalError(redirectWithQueryError)
 	}
 
 	err = conn.Transaction(func(tx *storage.Connection) error {

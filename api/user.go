@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"github.com/gofrs/uuid"
@@ -13,7 +12,7 @@ import (
 // UserUpdateParams parameters for updating a user
 type UserUpdateParams struct {
 	Email    string                 `json:"email"`
-	Password string                 `json:"password"`
+	Password *string                `json:"password"`
 	Data     map[string]interface{} `json:"data"`
 	AppData  map[string]interface{} `json:"app_metadata,omitempty"`
 	Phone    string                 `json:"phone"`
@@ -80,12 +79,12 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if params.Password != "" {
-			if len(params.Password) < config.PasswordMinLength {
-				return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", config.PasswordMinLength))
+		if params.Password != nil {
+			if len(*params.Password) < config.PasswordMinLength {
+				return invalidPasswordLengthError(config)
 			}
 
-			if terr = user.UpdatePassword(tx, params.Password); terr != nil {
+			if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
 				return internalServerError("Error during password storage").WithInternalError(terr)
 			}
 		}

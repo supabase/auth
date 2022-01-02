@@ -184,3 +184,15 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalGitHubErrorWhenEmailDoesntMa
 
 	assertAuthorizationFailure(ts, u, "Invited email does not match emails from external provider", "invalid_request", "")
 }
+
+func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenVerifiedFalse() {
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"email":"github@example.com", "primary": true, "verified": false}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "github", code, "")
+
+	assertAuthorizationFailure(ts, u, "Please verify your email (github@example.com) with github", "invalid_request", "")
+}

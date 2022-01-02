@@ -119,8 +119,11 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	w := httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusFound, w.Code)
 
-	assert.Equal(ts.T(), http.StatusGone, w.Code, w.Body.String())
+	url, err := w.Result().Location()
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), "error_code=410&error_description=Confirmation+token+expired", url.Fragment)
 }
 
 func (ts *VerifyTestSuite) TestInvalidSmsOtp() {
@@ -131,47 +134,68 @@ func (ts *VerifyTestSuite) TestInvalidSmsOtp() {
 	u.ConfirmationSentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
-	// Request body for expired OTP
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"type":  smsVerification,
-		"token": u.ConfirmationToken,
-		"phone": u.GetPhone(),
-	}))
+	type expected struct {
+		code      int
+		fragments string
+	}
 
-	// Setup request
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+	expectedResponse := expected{
+		code:      http.StatusFound,
+		fragments: "error_code=410&error_description=Otp+has+expired+or+is+invalid",
+	}
 
-	// Setup response recorder
-	w := httptest.NewRecorder()
+	cases := []struct {
+		desc     string
+		sentTime time.Time
+		body     map[string]interface{}
+		expected
+	}{
+		{
+			desc:     "Expired OTP",
+			sentTime: time.Now().Add(-48 * time.Hour),
+			body: map[string]interface{}{
+				"type":  smsVerification,
+				"token": u.ConfirmationToken,
+				"phone": u.GetPhone(),
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Incorrect OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  smsVerification,
+				"token": "incorrect_otp",
+				"phone": u.GetPhone(),
+			},
+			expected: expectedResponse,
+		},
+	}
 
-	ts.API.handler.ServeHTTP(w, req)
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			// update token sent time
+			sentTime = time.Now()
+			u.ConfirmationSentAt = &c.sentTime
+			require.NoError(ts.T(), ts.API.db.Update(u))
 
-	assert.Equal(ts.T(), http.StatusGone, w.Code, w.Body.String())
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
 
-	// Reset confirmation sent at
-	sentTime = time.Now()
-	u.ConfirmationSentAt = &sentTime
-	require.NoError(ts.T(), ts.API.db.Update(u))
+			// Setup request
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+			req.Header.Set("Content-Type", "application/json")
 
-	// Request Body for invalid otp
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"type":  smsVerification,
-		"token": "654321",
-		"phone": u.GetPhone(),
-	}))
+			// Setup response recorder
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), c.expected.code, w.Code)
 
-	// Setup request
-	req = httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
-	req.Header.Set("Content-Type", "application/json")
-
-	// Setup response recorder
-	w = httptest.NewRecorder()
-
-	ts.API.handler.ServeHTTP(w, req)
-
-	assert.Equal(ts.T(), http.StatusGone, w.Code, w.Body.String())
+			url, err := w.Result().Location()
+			require.NoError(ts.T(), err)
+			assert.Equal(ts.T(), c.expected.fragments, url.Fragment)
+		})
+	}
 }
 
 func (ts *VerifyTestSuite) TestExpiredRecoveryToken() {

@@ -10,11 +10,13 @@ user data.
 
 Create a `.env` file to store your own custom env vars. See [`example.env`](example.env)
 
-```sh
-./hack/postgresd.sh
-make build
-./gotrue
+1. Start the local postgres database in a postgres container: `./hack/postgresd.sh` 
+2. Build the gotrue binary: `make build` . You should see an output like this:
 ```
+go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`"
+GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`" -o gotrue-arm64
+```
+3. Execute the gotrue binary: `./gotrue` (if you're on x86) `./gotrue-arm64` (if you're on arm)
 
 ## Configuration
 
