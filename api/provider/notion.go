@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io/ioutil"
 	"net/http"
-	"fmt"
 
 	"github.com/netlify/gotrue/conf"
 	"golang.org/x/oauth2"
@@ -88,7 +87,6 @@ func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	if u.Bot.Owner.User.Person.Email == "" {
 		return nil, errors.New("unable to find email with notion provider")
 	}
-	fmt.Printf("%+v\n", u)
 
 	return &UserProvidedData{
 		Metadata: &Claims{
