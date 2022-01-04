@@ -10,6 +10,7 @@ type ProviderSettings struct {
 	GitHub    bool `json:"github"`
 	GitLab    bool `json:"gitlab"`
 	Google    bool `json:"google"`
+	Linkedin  bool `json:"linkedin"`
 	Facebook  bool `json:"facebook"`
 	Spotify   bool `json:"spotify"`
 	Slack     bool `json:"slack"`
@@ -45,6 +46,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			GitHub:    config.External.Github.Enabled,
 			GitLab:    config.External.Gitlab.Enabled,
 			Google:    config.External.Google.Enabled,
+			Linkedin:  config.External.Linkedin.Enabled,
 			Facebook:  config.External.Facebook.Enabled,
 			Spotify:   config.External.Spotify.Enabled,
 			Slack:     config.External.Slack.Enabled,
