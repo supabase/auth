@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	defaultLinkedInAPIBase = "api.linkedin.com"
+	defaultLinkedinAPIBase = "api.linkedin.com"
 )
 
 type linkedinProvider struct {
@@ -59,13 +59,13 @@ type linkedinElements struct {
 }
 
 // NewLinkedinProvider creates a Linkedin account provider.
-func NewLinkedInProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
 
 	// authHost := chooseHost(ext.URL, defaultLinkedinAuthBase)
-	apiPath := chooseHost(ext.URL, defaultLinkedInAPIBase)
+	apiPath := chooseHost(ext.URL, defaultLinkedinAPIBase)
 
 	oauthScopes := []string{
 		"r_emailaddress",
@@ -121,8 +121,9 @@ func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 
 	if e.Elements[0].HandleTilde.EmailAddress != "" {
 		emails = append(emails, Email{
-			Email:   e.Elements[0].HandleTilde.EmailAddress,
-			Primary: true,
+			Email:    e.Elements[0].HandleTilde.EmailAddress,
+			Primary:  true,
+			Verified: true,
 		})
 	}
 

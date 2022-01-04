@@ -376,7 +376,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	case "google":
 		return provider.NewGoogleProvider(config.External.Google, scopes)
 	case "linkedin":
-		return provider.NewLinkedInProvider(config.External.LinkedIn, scopes)
+		return provider.NewLinkedinProvider(config.External.Linkedin, scopes)
 	case "facebook":
 		return provider.NewFacebookProvider(config.External.Facebook, scopes)
 	case "spotify":
