@@ -151,7 +151,7 @@ Version          Name                         Status
 That lists each migration that was applied. Note: there may be more migrations than those listed.
 
 4. Create a `.env` file in the root of the project and copy the following config in [example.env](example.env)
-5. In order to have GoTrue connect to your PostgreSQL database running in Docket, it is important to set a connection string like:
+5. In order to have GoTrue connect to your PostgreSQL database running in Docker, it is important to set a connection string like:
 
 ```
 DATABASE_URL="postgres://supabase_auth_admin:root@localhost:5432/postgres"
@@ -395,7 +395,7 @@ $ make migrate_test
 $ make test
 ```
 
-### Customizing the POostgreSQL Port
+### Customizing the PostgreSQL Port
 
 if you already run PostgreSQL and need to run your database on a different, custom port,
 you will need to make several configuration changes to the following files:
@@ -469,7 +469,7 @@ We actively welcome your pull requests.
 
 ## Guidelines for Implementing Additional oAuth Providers
 
-Please ensure that an end-to-end test is done for the oAuth provider implemented.
+Please ensure that an end-to-end test is done for the OAuth provider implemented.
 
 An end-to-end test includes:
 
@@ -481,7 +481,7 @@ An end-to-end test includes:
 
 ### Writing tests for the new oAuth provider implemented
 
-Since implementing an additional oauth provider consists of making api calls to an external api, we set up a mock server to attempt to mock the responses expected from the oauth provider.
+Since implementing an additional OAuth provider consists of making api calls to an external api, we set up a mock server to attempt to mock the responses expected from the OAuth provider.
 
 ## License
 
