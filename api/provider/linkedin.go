@@ -20,12 +20,13 @@ type linkedinProvider struct {
 	UserEmailUrl string
 }
 
-// https://docs.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin?context=linkedin/consumer/context
+// See https://docs.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin?context=linkedin/consumer/context
+// for retrieving a member's profile. This requires the r_liteprofile scope.
 type linkedinUser struct {
 	ID        string       `json:"id"`
-	FirstName linkedinName `json:"firstName"` // i tried to parse data but not sure
-	LastName  linkedinName `json:"lastName"`  // i tried to parse data but not sure
-	AvatarURL struct {     // I don't know if we can do better than that
+	FirstName linkedinName `json:"firstName"`
+	LastName  linkedinName `json:"lastName"`
+	AvatarURL struct {
 		DisplayImage struct {
 			Elements []struct {
 				Identifiers []struct {
@@ -36,23 +37,25 @@ type linkedinUser struct {
 	} `json:"profilePicture"`
 }
 
+type linkedinName struct {
+	Localized       interface{}    `json:"localized"`
+	PreferredLocale linkedinLocale `json:"preferredLocale"`
+}
+
 type linkedinLocale struct {
 	Country  string `json:"country"`
 	Language string `json:"language"`
 }
 
-type linkedinName struct {
-	Localized       interface{}    `json:"localized"` // try to catch all possible value
-	PreferredLocale linkedinLocale `json:"preferredLocale"`
-}
-
-type linkedinEmail struct {
-	EmailAddress string `json:"emailAddress"`
-}
-
-type linkedinUserEmail struct {
-	Handle       string        `json:"handle"`
-	Handle_email linkedinEmail `json:"handle~"`
+// See https://docs.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin?context=linkedin/consumer/context#retrieving-member-email-address
+// for retrieving a member email address. This requires the r_email_address scope.
+type linkedinElements struct {
+	Elements []struct {
+		Handle      string `json:"handle"`
+		HandleTilde struct {
+			EmailAddress string `json:"emailAddress"`
+		} `json:"handle~"`
+	} `json:"elements"`
 }
 
 // NewLinkedinProvider creates a Linkedin account provider.
@@ -104,22 +107,23 @@ func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 		return nil, err
 	}
 
-	var email linkedinUserEmail
-	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/v2/emailAddress?q=members&projection=(elements*(handle~))", &email); err != nil {
+	var e linkedinElements
+	// Note: Use primary contact api for handling phone numbers
+	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/v2/emailAddress?q=members&projection=(elements*(handle~))", &e); err != nil {
 		return nil, err
+	}
+
+	if len(e.Elements) <= 0 {
+		return nil, errors.New("Unable to find email with Linkedin provider")
 	}
 
 	emails := []Email{}
 
-	if email.Handle_email.EmailAddress != "" {
+	if e.Elements[0].HandleTilde.EmailAddress != "" {
 		emails = append(emails, Email{
-			Email:   email.Handle_email.EmailAddress,
+			Email:   e.Elements[0].HandleTilde.EmailAddress,
 			Primary: true,
 		})
-	}
-
-	if len(emails) <= 0 {
-		return nil, errors.New("Unable to find email with Linkedin provider")
 	}
 
 	return &UserProvidedData{
@@ -128,7 +132,7 @@ func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 			Subject: u.ID,
 			Name:    strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
 			Picture: u.AvatarURL.DisplayImage.Elements[0].Identifiers[0].Identifier,
-			Email:   email.Handle_email.EmailAddress,
+			Email:   e.Elements[0].HandleTilde.EmailAddress,
 
 			// To be deprecated
 			AvatarURL:  u.AvatarURL.DisplayImage.Elements[0].Identifiers[0].Identifier,
