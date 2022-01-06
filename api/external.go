@@ -12,6 +12,7 @@ import (
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/api/provider"
+	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sirupsen/logrus"
@@ -154,18 +155,9 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			// check if identity exists
 			if identity, terr = models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType); terr != nil {
 				if models.IsNotFoundError(terr) {
-					// search user using all available emails
-					for _, e := range userData.Emails {
-						if e.Verified || config.Mailer.Autoconfirm {
-							user, terr = models.FindUserByEmailAndAudience(tx, instanceID, e.Email, aud)
-							if terr != nil && !models.IsNotFoundError(terr) {
-								return internalServerError("Error checking for duplicate users").WithInternalError(terr)
-							}
-							if user != nil {
-								emailData = e
-								break
-							}
-						}
+					user, emailData, terr = a.getUserByVerifiedEmail(tx, config, userData.Emails, instanceID, aud)
+					if terr != nil && !models.IsNotFoundError(terr) {
+						return internalServerError("Error checking for existing users").WithInternalError(terr)
 					}
 					if user != nil {
 						if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
@@ -217,6 +209,14 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				}
 				identity.IdentityData = identityData
 				if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
+					return terr
+				}
+				// email & verified status might have changed if identity's email changed
+				emailData = provider.Email{
+					Email:    userData.Metadata.Email,
+					Verified: userData.Metadata.EmailVerified,
+				}
+				if terr = user.UpdateUserMetaData(tx, identityData); terr != nil {
 					return terr
 				}
 				if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
@@ -465,4 +465,25 @@ func (a *API) createNewIdentity(conn *storage.Connection, user *models.User, pro
 	}
 
 	return identity, nil
+}
+
+// getUserByVerifiedEmail checks if one of the verified emails already belongs to a user
+func (a *API) getUserByVerifiedEmail(tx *storage.Connection, config *conf.Configuration, emails []provider.Email, instanceID uuid.UUID, aud string) (*models.User, provider.Email, error) {
+	var user *models.User
+	var emailData provider.Email
+	var err error
+
+	for _, e := range emails {
+		if e.Verified || config.Mailer.Autoconfirm {
+			user, err = models.FindUserByEmailAndAudience(tx, instanceID, e.Email, aud)
+			if err != nil && !models.IsNotFoundError(err) {
+				return user, emailData, err
+			}
+			if user != nil {
+				emailData = e
+				break
+			}
+		}
+	}
+	return user, emailData, err
 }
