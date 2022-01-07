@@ -258,29 +258,84 @@ func (ts *AdminTestSuite) TestAdminUsers_FilterName() {
 
 // TestAdminUserCreate tests API /admin/user route (POST)
 func (ts *AdminTestSuite) TestAdminUserCreate() {
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"email":    "test1@example.com",
-		"phone":    "123456789",
-		"password": "test1",
-	}))
+	cases := []struct {
+		desc     string
+		params   map[string]interface{}
+		expected map[string]interface{}
+	}{
+		{
+			desc: "With password",
+			params: map[string]interface{}{
+				"email":    "test1@example.com",
+				"phone":    "123456789",
+				"password": "test1",
+			},
+			expected: map[string]interface{}{
+				"email":           "test1@example.com",
+				"phone":           "123456789",
+				"isAuthenticated": true,
+			},
+		},
+		{
+			desc: "Without password",
+			params: map[string]interface{}{
+				"email": "test2@example.com",
+				"phone": "",
+			},
+			expected: map[string]interface{}{
+				"email":           "test2@example.com",
+				"phone":           "",
+				"isAuthenticated": false,
+			},
+		},
+		{
+			desc: "With empty string password",
+			params: map[string]interface{}{
+				"email":    "test3@example.com",
+				"phone":    "",
+				"password": "",
+			},
+			expected: map[string]interface{}{
+				"email":           "test3@example.com",
+				"phone":           "",
+				"isAuthenticated": false,
+			},
+		},
+	}
 
-	// Setup request
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.params))
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
-	ts.Config.External.Phone.Enabled = true
+			// Setup request
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
 
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+			ts.Config.External.Phone.Enabled = true
 
-	data := models.User{}
-	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-	assert.Equal(ts.T(), "test1@example.com", data.GetEmail())
-	assert.Equal(ts.T(), "123456789", data.GetPhone())
-	assert.Equal(ts.T(), "email", data.AppMetaData["provider"])
-	assert.Equal(ts.T(), []interface{}{"email"}, data.AppMetaData["providers"])
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
+
+			data := models.User{}
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			assert.Equal(ts.T(), c.expected["email"], data.GetEmail())
+			assert.Equal(ts.T(), c.expected["phone"], data.GetPhone())
+			assert.Equal(ts.T(), "email", data.AppMetaData["provider"])
+			assert.Equal(ts.T(), []interface{}{"email"}, data.AppMetaData["providers"])
+
+			u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, data.GetEmail(), ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+
+			var expectedPassword string
+			if _, ok := c.params["password"]; ok {
+				expectedPassword = fmt.Sprintf("%v", c.params["password"])
+			}
+
+			assert.Equal(ts.T(), c.expected["isAuthenticated"], u.Authenticate(expectedPassword))
+		})
+	}
 }
 
 // TestAdminUserGet tests API /admin/user route (GET)
