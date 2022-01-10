@@ -15,6 +15,7 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/gobwas/glob"
 )
 
 func addRequestID(globalConfig *conf.GlobalConfiguration) middlewareHandler {
@@ -125,7 +126,9 @@ func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
 
 	// For case when user came from mobile app or other permitted resource - redirect back
 	for _, uri := range config.URIAllowList {
-		if redirectURL == uri {
+		g := glob.MustCompile(uri)
+
+		if g.Match(redirectURL) {
 			return true
 		}
 	}

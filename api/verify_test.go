@@ -341,6 +341,27 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			requestredirectURL:  "http://localhost:3000/docs",
 			expectedredirectURL: "https://someapp-something.codemagic.app/#/",
 		},
+		{
+			desc:                "same wildcard site url and redirect url in allow list",
+			siteURL:             "http://sub.test.dev:3000/#/",
+			uriAllowList:        []string{"http://*.test.dev:3000"},
+			requestredirectURL:  "http://sub.test.dev:3000/#/",
+			expectedredirectURL: "http://sub.test.dev:3000/#/",
+		},
+		{
+			desc:                "different wildcard site url and redirect url in allow list",
+			siteURL:             "http://sub.test.dev/#/",
+			uriAllowList:        []string{"http://*.other.dev:3000"},
+			requestredirectURL:  "http://sub.other.dev:3000",
+			expectedredirectURL: "http://sub.other.dev:3000",
+		},
+		{
+			desc:                "different wildcard site url and redirect url not in allow list",
+			siteURL:             "http://test.dev:3000/#/",
+			uriAllowList:        []string{"http://*.allowed.dev:3000"},
+			requestredirectURL:  "http://sub.test.dev:3000/#/",
+			expectedredirectURL: "http://test.dev:3000/#/",
+		},
 	}
 
 	for _, tC := range testCases {
