@@ -376,7 +376,7 @@ func (t *MessagebirdProviderConfiguration) Validate() error {
 
 func (t *VonageProviderConfiguration) Validate() error {
 	if t.ApiKey == "" {
-		return errors.New("Missing Vonage api key")
+		return errors.New("Missing Vonage API key")
 	}
 	if t.ApiSecret == "" {
 		return errors.New("Missing Vonage api secret")
