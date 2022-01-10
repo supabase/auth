@@ -35,7 +35,7 @@ The base URL your site is located at. Currently used in combination with other s
 
 `URI_ALLOW_LIST` - `string`
 
-A comma separated list of URIs (e.g. "https://supabase.io/welcome,io.supabase.gotruedemo://logincallback") which are permitted as valid `redirect_to` destinations, in addition to SITE_URL. Defaults to [].
+A comma separated list of URIs (e.g. "https://supabase.io/welcome,io.supabase.gotruedemo://logincallback") which are permitted as valid `redirect_to` destinations, in addition to SITE_URL. Defaults to []. Supports wildcard matching trough globbing. e.g. add `*.mydomain.com/welcome` -> `x.mydomain.com/welcome` and `y.mydomain.com/welcome` would be accepted.
 
 `OPERATOR_TOKEN` - `string` _Multi-instance mode only_
 
