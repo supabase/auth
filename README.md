@@ -458,7 +458,7 @@ Controls the number of digits of the sms otp sent.
 
 `SMS_PROVIDER` - `string`
 
-Available options are: `twilio` and `messagebird`
+Available options are: `twilio`, `messagebird` and `vonage`
 
 Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/requests-to-twilio#credentials):
 
