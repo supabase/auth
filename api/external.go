@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -226,7 +227,16 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 			if !user.IsConfirmed() {
 				if !emailData.Verified && !config.Mailer.Autoconfirm {
-					return badRequestError("Please verify your email (%v) with %v", emailData.Email, providerType)
+					mailer := a.Mailer(ctx)
+					referrer := a.getReferrer(r)
+					if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
+						if errors.Is(terr, MaxFrequencyLimitError) {
+							return tooManyRequestsError("For security purposes, you can only request this once every minute")
+						}
+						return internalServerError("Error sending confirmation mail").WithInternalError(terr)
+					}
+					// email must be verified to issue a token
+					return nil
 				}
 
 				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
@@ -269,6 +279,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		q.Set("expires_in", strconv.Itoa(token.ExpiresIn))
 		q.Set("refresh_token", token.RefreshToken)
 		rurl += "#" + q.Encode()
+	} else {
+		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), r, rurl)
 	}
 	http.Redirect(w, r, rurl, http.StatusFound)
 	return nil
