@@ -10,9 +10,51 @@ import (
 )
 
 const (
-	notionUser           string = `{"id":"notionTestId","name":"Notion Test","picture":"http://example.com/avatar","email":"notion@example.com","verified_email":true}}`
-	notionUserWrongEmail string = `{"id":"notionTestId","name":"Notion Test","picture":"http://example.com/avatar","email":"other@example.com","verified_email":true}}`
-	notionUserNoEmail    string = `{"id":"notionTestId","name":"Notion Test","picture":"http://example.com/avatar","verified_email":true}}`
+	notionUser string = `{
+		"bot": {
+			"owner": {
+				"user": {
+					"id": "notionTestId",
+					"name": "Notion Test",
+					"avatar_url": "http://example.com/avatar",
+					"person": {
+						"email": "notion@example.com"
+					},
+					"verified_email":true
+				}
+			}
+		}
+	}}`
+
+	notionUserWrongEmail string = `{
+		"bot": {
+			"owner": {
+				"user": {
+					"id": "notionTestId",
+					"name": "Notion Test",
+					"avatar_url": "http://example.com/avatar",
+					"person": {
+						"email": "other@example.com"
+					},
+					"verified_email":true
+				}
+			}
+		}
+	}}`
+
+
+	notionUserNoEmail string = `{
+		"bot": {
+			"owner": {
+					"user": {
+					"id": "notionTestId",
+					"name": "Notion Test",
+					"avatar_url": "http://example.com/avatar",
+					"verified_email":true
+				}
+			}
+		}
+	}}`
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalNotion() {
