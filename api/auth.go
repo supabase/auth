@@ -14,8 +14,9 @@ import (
 // requireAuthentication checks incoming requests for tokens presented using the Authorization header
 func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	token, err := a.extractBearerToken(w, r)
+	config := getConfig(r.Context())
 	if err != nil {
-		a.clearCookieToken(r.Context(), w)
+		a.clearCookieTokens(config, w)
 		return nil, err
 	}
 
@@ -64,7 +65,7 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request, w http.ResponseWrit
 		return []byte(config.JWT.Secret), nil
 	})
 	if err != nil {
-		a.clearCookieToken(ctx, w)
+		a.clearCookieTokens(config, w)
 		return nil, unauthorizedError("Invalid token: %v", err)
 	}
 
