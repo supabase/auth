@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -521,16 +522,17 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 
 // setCookieTokens sets the access_token & refresh_token in the cookies
 func (a *API) setCookieTokens(config *conf.Configuration, token *AccessTokenResponse, session bool, w http.ResponseWriter) error {
-	_ = a.setCookieToken(config, "access_token", token.Token, session, w)
-	_ = a.setCookieToken(config, "refresh_token", token.RefreshToken, session, w)
+	// don't need to catch error here since we always set the cookie name
+	_ = a.setCookieToken(config, "accesstoken", token.Token, session, w)
+	_ = a.setCookieToken(config, "refreshtoken", token.RefreshToken, session, w)
 	return nil
 }
 
 func (a *API) setCookieToken(config *conf.Configuration, name string, tokenString string, session bool, w http.ResponseWriter) error {
-	cookieName := config.Cookie.Key
-	if name != "" {
-		cookieName += "_" + name
+	if name == "" {
+		return errors.New("Failed to set cookie, invalid name")
 	}
+	cookieName := config.Cookie.Key + "_" + name
 	exp := time.Second * time.Duration(config.Cookie.Duration)
 	cookie := &http.Cookie{
 		Name:     cookieName,
@@ -549,8 +551,8 @@ func (a *API) setCookieToken(config *conf.Configuration, name string, tokenStrin
 }
 
 func (a *API) clearCookieTokens(config *conf.Configuration, w http.ResponseWriter) {
-	a.clearCookieToken(config, "access_token", w)
-	a.clearCookieToken(config, "refresh_token", w)
+	a.clearCookieToken(config, "accesstoken", w)
+	a.clearCookieToken(config, "refreshtoken", w)
 }
 
 func (a *API) clearCookieToken(config *conf.Configuration, name string, w http.ResponseWriter) {
