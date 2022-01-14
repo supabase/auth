@@ -60,6 +60,7 @@ type User struct {
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	BanUntil  time.Time `json:"ban_until,omitempty" db:"ban_until"`
 }
 
 // NewUser initializes a new user from an email, password and user data.
@@ -455,4 +456,9 @@ func IsDuplicatedPhone(tx *storage.Connection, instanceID uuid.UUID, phone, aud 
 		return false, err
 	}
 	return true, nil
+}
+
+// IsBanned checks if a user is banned or not
+func (u *User) IsBanned() bool {
+	return time.Now().Before(u.BanUntil)
 }
