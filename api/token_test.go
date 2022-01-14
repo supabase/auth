@@ -2,10 +2,12 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
@@ -20,8 +22,8 @@ type TokenTestSuite struct {
 	API    *API
 	Config *conf.Configuration
 
-	token      string
-	instanceID uuid.UUID
+	RefreshToken *models.RefreshToken
+	instanceID   uuid.UUID
 }
 
 func TestToken(t *testing.T) {
@@ -41,6 +43,17 @@ func TestToken(t *testing.T) {
 
 func (ts *TokenTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
+
+	// Create user & refresh token
+	u, err := models.NewUser(ts.instanceID, "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	t := time.Now()
+	u.EmailConfirmedAt = &t
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+
+	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u)
+	require.NoError(ts.T(), err, "Error creating refresh token")
+
 }
 
 func (ts *TokenTestSuite) TestRateLimitToken() {
@@ -72,4 +85,33 @@ func (ts *TokenTestSuite) TestRateLimitToken() {
 	w = httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+}
+
+func (ts *TokenTestSuite) TestTokenPasswordGrantSuccess() {
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    "test@example.com",
+		"password": "password",
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
+func (ts *TokenTestSuite) TestTokenRefreshTokenGrantSuccess() {
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"refresh_token": ts.RefreshToken.Token,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
 }
