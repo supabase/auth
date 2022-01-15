@@ -119,7 +119,7 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	w := httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusFound, w.Code)
+	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
 
 	url, err := w.Result().Location()
 	require.NoError(ts.T(), err)
@@ -140,7 +140,7 @@ func (ts *VerifyTestSuite) TestInvalidSmsOtp() {
 	}
 
 	expectedResponse := expected{
-		code:      http.StatusFound,
+		code:      http.StatusSeeOther,
 		fragments: "error_code=410&error_description=Otp+has+expired+or+is+invalid",
 	}
 
@@ -222,7 +222,7 @@ func (ts *VerifyTestSuite) TestExpiredRecoveryToken() {
 
 	ts.API.handler.ServeHTTP(w, req)
 
-	assert.Equal(ts.T(), http.StatusFound, w.Code, w.Body.String())
+	assert.Equal(ts.T(), http.StatusSeeOther, w.Code, w.Body.String())
 }
 
 func (ts *VerifyTestSuite) TestVerifyPermitedCustomUri() {

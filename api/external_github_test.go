@@ -5,8 +5,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"time"
 
 	jwt "github.com/golang-jwt/jwt"
+	"github.com/netlify/gotrue/models"
+	"github.com/stretchr/testify/require"
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalGithub() {
@@ -195,4 +198,24 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenVerifiedFalse() {
 	u := performAuthorization(ts, "github", code, "")
 
 	assertAuthorizationFailure(ts, u, "Please verify your email (github@example.com) with github", "invalid_request", "")
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenUserBanned() {
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"email":"github@example.com", "primary": true, "verified": true}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "github", code, "")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "github@example.com", "GitHub Test", "123", "http://example.com/avatar")
+
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "github@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	t := time.Now().Add(24 * time.Hour)
+	user.BanUntil = &t
+	require.NoError(ts.T(), ts.API.db.UpdateOnly(user, "ban_until"))
+
+	u = performAuthorization(ts, "github", code, "")
+	assertAuthorizationFailure(ts, u, "User is unauthorized", "unauthorized_client", "")
 }
