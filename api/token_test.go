@@ -50,6 +50,7 @@ func (ts *TokenTestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating test user model")
 	t := time.Now()
 	u.EmailConfirmedAt = &t
+	u.BanUntil = nil
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 
 	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u)
@@ -154,7 +155,8 @@ func (ts *TokenTestSuite) createBannedUser() *models.User {
 	require.NoError(ts.T(), err, "Error creating test user model")
 	t := time.Now()
 	u.EmailConfirmedAt = &t
-	u.BanUntil = time.Now().Add(24 * time.Hour)
+	t = t.Add(24 * time.Hour)
+	u.BanUntil = &t
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test banned user")
 
 	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u)
