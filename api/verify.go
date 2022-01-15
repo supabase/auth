@@ -80,9 +80,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
-		case signupVerification:
-			user, terr = a.signupVerify(ctx, tx, params)
-		case inviteVerification:
+		case signupVerification, inviteVerification:
 			user, terr = a.signupVerify(ctx, tx, params)
 		case recoveryVerification, magicLinkVerification:
 			user, terr = a.recoverVerify(ctx, tx, params)
@@ -91,7 +89,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 			if user == nil && terr == nil {
 				// when double confirmation is required
 				rurl := a.prepRedirectURL("Confirmation link accepted. Please proceed to confirm link sent to the other email", params.RedirectTo)
-				http.Redirect(w, r, rurl, http.StatusFound)
+				http.Redirect(w, r, rurl, http.StatusSeeOther)
 				return nil
 			}
 		case smsVerification:
@@ -113,7 +111,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 			if errors.As(terr, &e) {
 				if errors.Is(e.InternalError, redirectWithQueryError) {
 					rurl := a.prepErrorRedirectURL(e, r, params.RedirectTo)
-					http.Redirect(w, r, rurl, http.StatusFound)
+					http.Redirect(w, r, rurl, http.StatusSeeOther)
 					return nil
 				}
 			}
@@ -169,6 +167,10 @@ func (a *API) signupVerify(ctx context.Context, conn *storage.Connection, params
 		return nil, internalServerError("Database error finding user").WithInternalError(err)
 	}
 
+	if user.IsBanned() {
+		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
+	}
+
 	nextDay := user.ConfirmationSentAt.Add(24 * time.Hour)
 	if user.ConfirmationSentAt != nil && time.Now().After(nextDay) {
 		return nil, expiredTokenError("Confirmation token expired").WithInternalError(redirectWithQueryError)
@@ -220,6 +222,10 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, param
 		return nil, internalServerError("Database error finding user").WithInternalError(err)
 	}
 
+	if user.IsBanned() {
+		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
+	}
+
 	nextDay := user.RecoverySentAt.Add(24 * time.Hour)
 	if user.RecoverySentAt != nil && time.Now().After(nextDay) {
 		return nil, expiredTokenError("Recovery token expired").WithInternalError(redirectWithQueryError)
@@ -261,6 +267,11 @@ func (a *API) smsVerify(ctx context.Context, conn *storage.Connection, params *V
 		}
 		return nil, internalServerError("Database error finding user").WithInternalError(err)
 	}
+
+	if user.IsBanned() {
+		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
+	}
+
 	now := time.Now()
 	expiresAt := user.ConfirmationSentAt.Add(time.Second * time.Duration(config.Sms.OtpExp))
 
@@ -319,6 +330,10 @@ func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, p
 			return nil, notFoundError(err.Error()).WithInternalError(redirectWithQueryError)
 		}
 		return nil, internalServerError("Database error finding user").WithInternalError(err)
+	}
+
+	if user.IsBanned() {
+		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
 	}
 
 	nextDay := user.EmailChangeSentAt.Add(24 * time.Hour)

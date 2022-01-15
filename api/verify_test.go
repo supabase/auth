@@ -373,3 +373,87 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 		})
 	}
 }
+
+func (ts *VerifyTestSuite) TestVerifyBannedUser() {
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	u.ConfirmationToken = "confirmation_token"
+	u.RecoveryToken = "recovery_token"
+	u.EmailChangeTokenCurrent = "current_email_change_token"
+	u.EmailChangeTokenNew = "new_email_change_token"
+	t := time.Now()
+	u.ConfirmationSentAt = &t
+	u.RecoverySentAt = &t
+	u.EmailChangeSentAt = &t
+
+	t = time.Now().Add(24 * time.Hour)
+	u.BanUntil = &t
+	require.NoError(ts.T(), ts.API.db.Update(u))
+
+	cases := []struct {
+		desc    string
+		payload *VerifyParams
+	}{
+		{
+			"Verify banned user on signup",
+			&VerifyParams{
+				Type:  "signup",
+				Token: u.ConfirmationToken,
+			},
+		},
+		{
+			"Verify banned user on invite",
+			&VerifyParams{
+				Type:  "invite",
+				Token: u.ConfirmationToken,
+			},
+		},
+		{
+			"Verify banned phone user on sms",
+			&VerifyParams{
+				Type:  "sms",
+				Token: u.ConfirmationToken,
+				Phone: u.GetPhone(),
+			},
+		},
+		{
+			"Verify banned user on recover",
+			&VerifyParams{
+				Type:  "recovery",
+				Token: u.RecoveryToken,
+			},
+		},
+		{
+			"Verify banned user on magiclink",
+			&VerifyParams{
+				Type:  "magiclink",
+				Token: u.RecoveryToken,
+			},
+		},
+		{
+			"Verify banned user on email change",
+			&VerifyParams{
+				Type:  "email_change",
+				Token: u.EmailChangeTokenCurrent,
+			},
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.payload))
+
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
+
+			url, err := w.Result().Location()
+			require.NoError(ts.T(), err)
+			assert.Equal(ts.T(), "error=unauthorized_client&error_code=401&error_description=Error+confirming+user", url.Fragment)
+		})
+	}
+}
