@@ -301,6 +301,20 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": false,
 			},
 		},
+		{
+			desc: "Ban created user",
+			params: map[string]interface{}{
+				"email":        "test4@example.com",
+				"phone":        "",
+				"password":     "test1",
+				"ban_duration": "24h",
+			},
+			expected: map[string]interface{}{
+				"email":           "test4@example.com",
+				"phone":           "",
+				"isAuthenticated": true,
+			},
+		},
 	}
 
 	for _, c := range cases {
@@ -379,6 +393,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 		"user_metadata": map[string]interface{}{
 			"name": "David",
 		},
+		"ban_duration": "24h",
 	}))
 
 	// Setup request
@@ -401,6 +416,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 	assert.Len(ts.T(), data.AppMetaData["roles"], 2)
 	assert.Contains(ts.T(), data.AppMetaData["roles"], "writer")
 	assert.Contains(ts.T(), data.AppMetaData["roles"], "editor")
+	assert.NotNil(ts.T(), data.BanUntil)
 }
 
 // TestAdminUserUpdate tests API /admin/user route (UPDATE) as system user
@@ -469,6 +485,29 @@ func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
 
 		ts.API.handler.ServeHTTP(w, req)
 		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
+	})
+}
+
+func (ts *AdminTestSuite) TestAdminUserUpdateBanUntilFailed() {
+	u, err := models.NewUser(ts.instanceID, "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	var updateEndpoint = fmt.Sprintf("/admin/users/%s", u.ID)
+	ts.Config.PasswordMinLength = 6
+	ts.Run("Incorrect format for ban_duration", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"ban_duration": "24",
+		}))
+
+		// Setup request
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPut, updateEndpoint, &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusBadRequest, w.Code)
 	})
 }
 

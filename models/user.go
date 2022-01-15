@@ -468,3 +468,8 @@ func (u *User) IsBanned() bool {
 	}
 	return time.Now().Before(*u.BanUntil)
 }
+
+func (u *User) UpdateBanUntil(tx *storage.Connection) error {
+	return tx.UpdateOnly(u, "ban_until")
+
+}
