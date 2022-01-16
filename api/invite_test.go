@@ -58,7 +58,7 @@ func (ts *InviteTestSuite) makeSuperAdmin(email string) string {
 	u, err := models.NewUser(ts.instanceID, email, "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test User"})
 	require.NoError(ts.T(), err, "Error making new user")
 
-	u.Role = "supabase_admin"
+	u.Role = "octowink_admin"
 
 	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err, "Error generating access token")

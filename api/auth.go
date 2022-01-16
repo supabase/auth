@@ -37,7 +37,7 @@ func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.R
 		return withAdminUser(ctx, &models.User{Role: claims.Role, Email: storage.NullString(claims.Role)}), nil
 	}
 
-	fmt.Printf("[%s] %s %s %d %s\n", time.Now().Format("2006-01-02 15:04:05"), r.Method, r.RequestURI, http.StatusForbidden, "this token needs role 'supabase_admin' or 'service_role'")
+	fmt.Printf("[%s] %s %s %d %s\n", time.Now().Format("2006-01-02 15:04:05"), r.Method, r.RequestURI, http.StatusForbidden, "this token needs role 'octowink_admin' or 'service_role'")
 	return nil, unauthorizedError("User not allowed")
 }
 

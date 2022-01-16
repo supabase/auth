@@ -36,7 +36,7 @@ func TestIdentity(t *testing.T) {
 }
 
 func (ts *IdentityTestSuite) TestNewIdentity() {
-	u := ts.createUserWithEmail("test@supabase.io")
+	u := ts.createUserWithEmail("test@octowink.io")
 	ts.Run("Test create identity with no provider id", func() {
 		identityData := map[string]interface{}{}
 		_, err := NewIdentity(u, "email", identityData)
@@ -52,7 +52,7 @@ func (ts *IdentityTestSuite) TestNewIdentity() {
 }
 
 func (ts *IdentityTestSuite) TestFindUserIdentities() {
-	u := ts.createUserWithIdentity("test@supabase.io")
+	u := ts.createUserWithIdentity("test@octowink.io")
 	identities, err := FindIdentitiesByUser(ts.db, u)
 	require.NoError(ts.T(), err)
 
