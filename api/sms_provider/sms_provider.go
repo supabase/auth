@@ -2,7 +2,6 @@ package sms_provider
 
 import (
 	"fmt"
-
 	"github.com/netlify/gotrue/conf"
 )
 
@@ -16,6 +15,8 @@ func GetSmsProvider(config conf.Configuration) (SmsProvider, error) {
 		return NewTwilioProvider(config.Sms.Twilio)
 	case "messagebird":
 		return NewMessagebirdProvider(config.Sms.Messagebird)
+	case "textlocal":
+		return NewTextLocalProvider(config.Sms.Textlocal)
 	default:
 		return nil, fmt.Errorf("Sms Provider %s could not be found", name)
 	}

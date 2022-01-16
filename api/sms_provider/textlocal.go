@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-
+	"strings"
 	"github.com/netlify/gotrue/conf"
 )
 
@@ -18,74 +18,59 @@ type TextLocalProvider struct {
 	APIPath string
 }
 
-type TextLocalResponse struct {
-	Status int `json:"status"`
-}
-
-type TextLocalError struct {
+type TextlocalError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
 
-type TextLocalErrResponse struct {
-	Errors []TextLocalError `json:"errors"`
+type TextlocalResponse struct {
+	Status string           `json:"status"`
+	Errors []TextlocalError `json:"errors"`
 }
 
-func (t TextLocalErrResponse) Error() string {
-	return t.Errors[0].Message
-}
-
-// Creates a SmsProvider with the TextLocal Config
+// Creates a SmsProvider with the Textlocal Config
 func NewTextLocalProvider(config conf.TextLocalProviderConfiguration) (SmsProvider, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
 
-	apiPath := defaultTextLocalApiBase + "/send/?"
+	apiPath := defaultTextLocalApiBase + "/send"
 	return &TextLocalProvider{
 		Config:  &config,
 		APIPath: apiPath,
 	}, nil
 }
 
-// Send an SMS containing the OTP with TextLocal's API
+// Send an SMS containing the OTP with Textlocal's API
 func (t TextLocalProvider) SendSms(phone string, message string) error {
-	params := url.Values{
-		"apikey":  {t.Config.ApiKey},
+	body := url.Values{
 		"sender":  {t.Config.Sender},
+		"apikey":  {t.Config.ApiKey},
 		"message": {message},
 		"numbers": {phone},
 	}
 
 	client := &http.Client{}
-	r, err := http.NewRequest("GET", t.APIPath+params.Encode(), nil)
+	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
 	if err != nil {
 		return err
 	}
 
+	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	res, err := client.Do(r)
 	if err != nil {
 		return err
 	}
-
-	if res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusUnprocessableEntity {
-		resp := &TextLocalErrResponse{}
-		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
-			return err
-		}
-		return resp
-	}
 	defer res.Body.Close()
 
-	// validate sms status
-	resp := &TextLocalResponse{}
+	resp := &TextlocalResponse{}
 	derr := json.NewDecoder(res.Body).Decode(resp)
 	if derr != nil {
 		return derr
 	}
 
-	if resp.Status != 200 {
-		return fmt.Errorf("TextLocal error: error in sending status.")
+	if resp.Status != "success" && len(resp.Errors) > 0 {
+		return fmt.Errorf("Textlocal error: %v (code: %v)", resp.Errors[0].Message, resp.Errors[0].Code)
 	}
 
 	return nil
