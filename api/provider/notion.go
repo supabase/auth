@@ -11,9 +11,9 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const ( 
-	defaultNotionApiBase 	= "api.notion.com"
-	notionApiVersion = "2021-08-16"
+const (
+	defaultNotionApiBase = "api.notion.com"
+	notionApiVersion     = "2021-08-16"
 )
 
 type notionProvider struct {
@@ -28,8 +28,8 @@ type notionUser struct {
 				ID        string `json:"id"`
 				Name      string `json:"name"`
 				AvatarURL string `json:"avatar_url"`
-				Person struct {
-					Email     string `json:"email"`
+				Person    struct {
+					Email string `json:"email"`
 				} `json:"person"`
 			} `json:"user"`
 		} `json:"owner"`
@@ -66,7 +66,7 @@ func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	var u notionUser
 
 	// Perform http request, because we need to set the Notion-Version header
-	req, err := http.NewRequest("GET", g.APIPath + "/v1/users/me", nil)
+	req, err := http.NewRequest("GET", g.APIPath+"/v1/users/me", nil)
 
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 
 	// set headers
 	req.Header.Set("Notion-Version", notionApiVersion)
-	req.Header.Set("Authorization", "Bearer " + tok.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)

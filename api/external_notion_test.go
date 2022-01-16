@@ -10,51 +10,9 @@ import (
 )
 
 const (
-	notionUser string = `{
-		"bot": {
-			"owner": {
-				"user": {
-					"id": "notionTestId",
-					"name": "Notion Test",
-					"avatar_url": "http://example.com/avatar",
-					"person": {
-						"email": "notion@example.com"
-					},
-					"verified_email":true
-				}
-			}
-		}
-	}}`
-
-	notionUserWrongEmail string = `{
-		"bot": {
-			"owner": {
-				"user": {
-					"id": "notionTestId",
-					"name": "Notion Test",
-					"avatar_url": "http://example.com/avatar",
-					"person": {
-						"email": "other@example.com"
-					},
-					"verified_email":true
-				}
-			}
-		}
-	}}`
-
-
-	notionUserNoEmail string = `{
-		"bot": {
-			"owner": {
-					"user": {
-					"id": "notionTestId",
-					"name": "Notion Test",
-					"avatar_url": "http://example.com/avatar",
-					"verified_email":true
-				}
-			}
-		}
-	}}`
+	notionUser           string = `{"bot":{"owner":{"user":{"id":"notionTestId","name":"Notion Test","avatar_url":"http://example.com/avatar","person":{"email":"notion@example.com"},"verified_email":true}}}}`
+	notionUserWrongEmail string = `{"bot":{"owner":{"user":{"id":"notionTestId","name":"Notion Test","avatar_url":"http://example.com/avatar","person":{"email":"other@example.com"},"verified_email":true}}}}`
+	notionUserNoEmail    string = `{"bot":{"owner":{"user":{"id":"notionTestId","name":"Notion Test","avatar_url":"http://example.com/avatar","verified_email":true}}}}}`
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalNotion() {
@@ -93,6 +51,8 @@ func NotionTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *in
 			fmt.Fprint(w, `{"access_token":"notion_token","expires_in":100000}`)
 		case "/v1/users/me":
 			*userCount++
+			ts.Contains(r.Header, "Authorization")
+			ts.Contains(r.Header, "Notion-Version")
 			w.Header().Add("Content-Type", "application/json")
 			fmt.Fprint(w, user)
 		default:
