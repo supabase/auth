@@ -12,6 +12,7 @@ type ProviderSettings struct {
 	Google    bool `json:"google"`
 	Linkedin  bool `json:"linkedin"`
 	Facebook  bool `json:"facebook"`
+	Notion    bool `json:"notion"`
 	Spotify   bool `json:"spotify"`
 	Slack     bool `json:"slack"`
 	Twitch    bool `json:"twitch"`
@@ -48,6 +49,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Google:    config.External.Google.Enabled,
 			Linkedin:  config.External.Linkedin.Enabled,
 			Facebook:  config.External.Facebook.Enabled,
+			Notion:    config.External.Notion.Enabled,
 			Spotify:   config.External.Spotify.Enabled,
 			Slack:     config.External.Slack.Enabled,
 			Twitch:    config.External.Twitch.Enabled,

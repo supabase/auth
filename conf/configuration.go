@@ -88,6 +88,7 @@ type ProviderConfiguration struct {
 	Github      OAuthProviderConfiguration `json:"github"`
 	Gitlab      OAuthProviderConfiguration `json:"gitlab"`
 	Google      OAuthProviderConfiguration `json:"google"`
+	Notion      OAuthProviderConfiguration `json:"notion"`
 	Linkedin    OAuthProviderConfiguration `json:"linkedin"`
 	Spotify     OAuthProviderConfiguration `json:"spotify"`
 	Slack       OAuthProviderConfiguration `json:"slack"`
@@ -132,6 +133,7 @@ type SmsProviderConfiguration struct {
 	Twilio       TwilioProviderConfiguration      `json:"twilio"`
 	Messagebird  MessagebirdProviderConfiguration `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration   `json:"textlocal"`
+	Vonage       VonageProviderConfiguration      `json:"vonage"`
 }
 
 type TwilioProviderConfiguration struct {
@@ -148,6 +150,11 @@ type MessagebirdProviderConfiguration struct {
 type TextlocalProviderConfiguration struct {
 	ApiKey string `json:"api_key" split_words:"true"`
 	Sender string `json:"sender" split_words:"true"`
+
+type VonageProviderConfiguration struct {
+	ApiKey    string `json:"api_key" split_words:"true"`
+	ApiSecret string `json:"api_secret" split_words:"true"`
+	From      string `json:"from" split_words:"true"`
 }
 
 type CaptchaConfiguration struct {
@@ -379,6 +386,19 @@ func (t *TextlocalProviderConfiguration) Validate() error {
 	}
 	if t.Sender == "" {
 		return errors.New("Missing Textlocal sender")
+	}
+  return nil
+}
+  
+func (t *VonageProviderConfiguration) Validate() error {
+	if t.ApiKey == "" {
+		return errors.New("Missing Vonage API key")
+	}
+	if t.ApiSecret == "" {
+		return errors.New("Missing Vonage API secret")
+	}
+	if t.From == "" {
+		return errors.New("Missing Vonage 'from' parameter")
 	}
 	return nil
 }
