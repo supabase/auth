@@ -45,10 +45,10 @@ Or, if you prefer, download [Docker Desktop](https://www.docker.com/get-started)
 go install github.com/gobuffalo/pop/soda@latest
 ```
 
-- Clone the GoTrue [repository](https://github.com/supabase/gotrue)
+- Clone the GoTrue [repository](https://github.com/octowink/gotrue)
 
 ```
-git clone https://github.com/supabase/gotrue
+git clone https://github.com/octowink/gotrue
 ```
 
 ### Install GoTrue
