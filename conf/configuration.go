@@ -132,6 +132,7 @@ type SmsProviderConfiguration struct {
 	Template     string                           `json:"template"`
 	Twilio       TwilioProviderConfiguration      `json:"twilio"`
 	Messagebird  MessagebirdProviderConfiguration `json:"messagebird"`
+	Textlocal    TextlocalProviderConfiguration   `json:"textlocal"`
 	Vonage       VonageProviderConfiguration      `json:"vonage"`
 }
 
@@ -144,6 +145,11 @@ type TwilioProviderConfiguration struct {
 type MessagebirdProviderConfiguration struct {
 	AccessKey  string `json:"access_key" split_words:"true"`
 	Originator string `json:"originator" split_words:"true"`
+}
+
+type TextlocalProviderConfiguration struct {
+	ApiKey string `json:"api_key" split_words:"true"`
+	Sender string `json:"sender" split_words:"true"`
 }
 
 type VonageProviderConfiguration struct {
@@ -375,6 +381,16 @@ func (t *MessagebirdProviderConfiguration) Validate() error {
 	return nil
 }
 
+func (t *TextlocalProviderConfiguration) Validate() error {
+	if t.ApiKey == "" {
+		return errors.New("Missing Textlocal API key")
+	}
+	if t.Sender == "" {
+		return errors.New("Missing Textlocal sender")
+	}
+  return nil
+}
+  
 func (t *VonageProviderConfiguration) Validate() error {
 	if t.ApiKey == "" {
 		return errors.New("Missing Vonage API key")
@@ -385,6 +401,5 @@ func (t *VonageProviderConfiguration) Validate() error {
 	if t.From == "" {
 		return errors.New("Missing Vonage 'from' parameter")
 	}
-
 	return nil
 }
