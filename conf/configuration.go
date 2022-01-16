@@ -150,6 +150,7 @@ type MessagebirdProviderConfiguration struct {
 type TextlocalProviderConfiguration struct {
 	ApiKey string `json:"api_key" split_words:"true"`
 	Sender string `json:"sender" split_words:"true"`
+}
 
 type VonageProviderConfiguration struct {
 	ApiKey    string `json:"api_key" split_words:"true"`
