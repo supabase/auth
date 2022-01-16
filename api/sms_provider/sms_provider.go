@@ -16,6 +16,8 @@ func GetSmsProvider(config conf.Configuration) (SmsProvider, error) {
 		return NewTwilioProvider(config.Sms.Twilio)
 	case "messagebird":
 		return NewMessagebirdProvider(config.Sms.Messagebird)
+	case "vonage":
+		return NewVonageProvider(config.Sms.Vonage)
 	default:
 		return nil, fmt.Errorf("Sms Provider %s could not be found", name)
 	}

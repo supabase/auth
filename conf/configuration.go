@@ -131,6 +131,7 @@ type SmsProviderConfiguration struct {
 	Template     string                           `json:"template"`
 	Twilio       TwilioProviderConfiguration      `json:"twilio"`
 	Messagebird  MessagebirdProviderConfiguration `json:"messagebird"`
+	Vonage       VonageProviderConfiguration      `json:"vonage"`
 }
 
 type TwilioProviderConfiguration struct {
@@ -142,6 +143,12 @@ type TwilioProviderConfiguration struct {
 type MessagebirdProviderConfiguration struct {
 	AccessKey  string `json:"access_key" split_words:"true"`
 	Originator string `json:"originator" split_words:"true"`
+}
+
+type VonageProviderConfiguration struct {
+	ApiKey    string `json:"api_key" split_words:"true"`
+	ApiSecret string `json:"api_secret" split_words:"true"`
+	From      string `json:"from" split_words:"true"`
 }
 
 type CaptchaConfiguration struct {
@@ -364,5 +371,19 @@ func (t *MessagebirdProviderConfiguration) Validate() error {
 	if t.Originator == "" {
 		return errors.New("Missing Messagebird originator")
 	}
+	return nil
+}
+
+func (t *VonageProviderConfiguration) Validate() error {
+	if t.ApiKey == "" {
+		return errors.New("Missing Vonage API key")
+	}
+	if t.ApiSecret == "" {
+		return errors.New("Missing Vonage API secret")
+	}
+	if t.From == "" {
+		return errors.New("Missing Vonage 'from' parameter")
+	}
+
 	return nil
 }
