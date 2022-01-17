@@ -878,8 +878,17 @@ Returns:
 
 Logout a user (Requires authentication).
 
-This will revoke all refresh tokens for the user. Remember that the JWT tokens
+If a specific refresh token is provided, that refresh token (and all others descending from it)
+will be revoked. Otherwise, all refresh tokens for the user will be revoked. Remember that the JWT tokens
 will still be valid for stateless auth until they expires.
+
+Body (optional):
+
+```json
+{
+  "refresh_token": "a-refresh-token"
+}
+```
 
 ### **GET /authorize**
 

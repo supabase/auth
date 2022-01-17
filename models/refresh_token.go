@@ -70,9 +70,22 @@ func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
 	return nil
 }
 
-// Logout deletes all refresh tokens for a user.
-func Logout(tx *storage.Connection, instanceID uuid.UUID, id uuid.UUID) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: RefreshToken{}}).TableName()+" WHERE instance_id = ? AND user_id = ?", instanceID, id).Exec()
+// Logout either deletes a specific refresh token and its descendants, or deletes all refresh tokens for a user.
+func Logout(tx *storage.Connection, instanceID uuid.UUID, id uuid.UUID, refreshToken string) error {
+	if refreshToken == "" {
+		// Delete all refresh tokens.
+		return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: RefreshToken{}}).TableName()+" WHERE instance_id = ? AND user_id = ?", instanceID, id).Exec()
+	} else {
+		// Delete the given refresh token, and all its descendants.
+		return tx.RawQuery(`
+		with recursive token_family as (
+			select id, token, parent from refresh_tokens where instance_id = ? and user_id = ? and token = ?
+			union
+			select r.id, r.token, r.parent from `+(&pop.Model{Value: RefreshToken{}}).TableName()+` r inner join token_family t on t.token = r.parent
+		)
+		delete from `+(&pop.Model{Value: RefreshToken{}}).TableName()+` r
+			using token_family where token_family.id = r.id;`, instanceID, id, refreshToken).Exec()
+	}
 }
 
 func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshToken) (*RefreshToken, error) {
