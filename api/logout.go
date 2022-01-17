@@ -40,7 +40,7 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 		return unauthorizedError("Invalid user").WithInternalError(err)
 	}
 
-	var traits map[string]interface{} = nil;
+	var traits map[string]interface{} = nil
 	if refreshToken != "" {
 		traits = map[string]interface{}{
 			"refresh_token": refreshToken,
