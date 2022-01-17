@@ -40,8 +40,15 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 		return unauthorizedError("Invalid user").WithInternalError(err)
 	}
 
+	var traits map[string]interface{} = nil;
+	if refreshToken != "" {
+		traits = map[string]interface{}{
+			"refresh_token": refreshToken,
+		}
+	}
+
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, u, models.LogoutAction, nil); terr != nil {
+		if terr := models.NewAuditLogEntry(tx, instanceID, u, models.LogoutAction, traits); terr != nil {
 			return terr
 		}
 		return models.Logout(tx, instanceID, u.ID, refreshToken)
