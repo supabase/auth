@@ -28,8 +28,6 @@ type adminUserParams struct {
 	BanDuration  string                 `json:"ban_duration"`
 }
 
-const RemoveBan string = "0"
-
 func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
@@ -162,7 +160,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.BanDuration != "" {
-			if params.BanDuration == RemoveBan {
+			if params.BanDuration == "unban" {
 				user.BannedUntil = nil
 			} else {
 				duration, terr := time.ParseDuration(params.BanDuration)
