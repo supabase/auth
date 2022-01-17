@@ -509,7 +509,6 @@ Returns the publicly available settings for this gotrue instance.
     "spotify": true,
     "twitch": true,
     "twitter": true,
-    "tiktok": true,
     "workos": true,
   },
   "disable_signup": false,
