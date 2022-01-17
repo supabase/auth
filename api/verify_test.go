@@ -387,7 +387,7 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 	u.EmailChangeSentAt = &t
 
 	t = time.Now().Add(24 * time.Hour)
-	u.BanUntil = &t
+	u.BannedUntil = &t
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
 	cases := []struct {

@@ -416,7 +416,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 	assert.Len(ts.T(), data.AppMetaData["roles"], 2)
 	assert.Contains(ts.T(), data.AppMetaData["roles"], "writer")
 	assert.Contains(ts.T(), data.AppMetaData["roles"], "editor")
-	assert.NotNil(ts.T(), data.BanUntil)
+	assert.NotNil(ts.T(), data.BannedUntil)
 }
 
 // TestAdminUserUpdate tests API /admin/user route (UPDATE) as system user
@@ -488,7 +488,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
 	})
 }
 
-func (ts *AdminTestSuite) TestAdminUserUpdateBanUntilFailed() {
+func (ts *AdminTestSuite) TestAdminUserUpdateBannedUntilFailed() {
 	u, err := models.NewUser(ts.instanceID, "test1@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")

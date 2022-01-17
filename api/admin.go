@@ -163,16 +163,16 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		if params.BanDuration != "" {
 			if params.BanDuration == RemoveBan {
-				user.BanUntil = nil
+				user.BannedUntil = nil
 			} else {
 				duration, terr := time.ParseDuration(params.BanDuration)
 				if terr != nil {
 					return badRequestError("Invalid format for ban_duration: %v", terr)
 				}
 				t := time.Now().Add(duration)
-				user.BanUntil = &t
+				user.BannedUntil = &t
 			}
-			if terr := user.UpdateBanUntil(tx); terr != nil {
+			if terr := user.UpdateBannedUntil(tx); terr != nil {
 				return terr
 			}
 		}
@@ -271,7 +271,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			return badRequestError("Invalid format for ban_duration: %v", terr)
 		}
 		t := time.Now().Add(duration)
-		user.BanUntil = &t
+		user.BannedUntil = &t
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {

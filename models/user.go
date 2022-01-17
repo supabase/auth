@@ -58,9 +58,9 @@ type User struct {
 	IsSuperAdmin bool       `json:"-" db:"is_super_admin"`
 	Identities   []Identity `json:"identities" has_many:"identities"`
 
-	CreatedAt time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
-	BanUntil  *time.Time `json:"ban_until,omitempty" db:"ban_until"`
+	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
+	BannedUntil *time.Time `json:"banned_until,omitempty" db:"banned_until"`
 }
 
 // NewUser initializes a new user from an email, password and user data.
@@ -148,8 +148,8 @@ func (u *User) BeforeSave(tx *pop.Connection) error {
 	if u.LastSignInAt != nil && u.LastSignInAt.IsZero() {
 		u.LastSignInAt = nil
 	}
-	if u.BanUntil != nil && u.BanUntil.IsZero() {
-		u.BanUntil = nil
+	if u.BannedUntil != nil && u.BannedUntil.IsZero() {
+		u.BannedUntil = nil
 	}
 	return nil
 }
@@ -463,13 +463,13 @@ func IsDuplicatedPhone(tx *storage.Connection, instanceID uuid.UUID, phone, aud 
 
 // IsBanned checks if a user is banned or not
 func (u *User) IsBanned() bool {
-	if u.BanUntil == nil {
+	if u.BannedUntil == nil {
 		return false
 	}
-	return time.Now().Before(*u.BanUntil)
+	return time.Now().Before(*u.BannedUntil)
 }
 
-func (u *User) UpdateBanUntil(tx *storage.Connection) error {
-	return tx.UpdateOnly(u, "ban_until")
+func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
+	return tx.UpdateOnly(u, "banned_until")
 
 }
