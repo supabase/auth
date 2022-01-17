@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -200,7 +201,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		}
 
 		if cookie != "" && config.Cookie.Duration > 0 {
-			if terr = a.setCookieToken(config, token.Token, cookie == useSessionCookie, w); terr != nil {
+			if terr = a.setCookieTokens(config, token, cookie == useSessionCookie, w); terr != nil {
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
 		}
@@ -256,7 +257,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	}
 
 	if token.Revoked {
-		a.clearCookieToken(ctx, w)
+		a.clearCookieTokens(config, w)
 		if config.Security.RefreshTokenRotationEnabled {
 			// Revoke all tokens in token family
 			err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -275,6 +276,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 	var tokenString string
 	var newToken *models.RefreshToken
+	var newTokenResponse *AccessTokenResponse
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -293,7 +295,14 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		}
 
 		if cookie != "" && config.Cookie.Duration > 0 {
-			if terr = a.setCookieToken(config, tokenString, cookie == useSessionCookie, w); terr != nil {
+			newTokenResponse = &AccessTokenResponse{
+				Token:        tokenString,
+				TokenType:    "bearer",
+				ExpiresIn:    config.JWT.Exp,
+				RefreshToken: newToken.Token,
+				User:         user,
+			}
+			if terr = a.setCookieTokens(config, newTokenResponse, cookie == useSessionCookie, w); terr != nil {
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
 		}
@@ -303,13 +312,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return err
 	}
 	metering.RecordLogin("token", user.ID, instanceID)
-	return sendJSON(w, http.StatusOK, &AccessTokenResponse{
-		Token:        tokenString,
-		TokenType:    "bearer",
-		ExpiresIn:    config.JWT.Exp,
-		RefreshToken: newToken.Token,
-		User:         user,
-	})
+	return sendJSON(w, http.StatusOK, newTokenResponse)
 }
 
 // IdTokenGrant implements the id_token grant type flow
@@ -517,10 +520,22 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 	}, nil
 }
 
-func (a *API) setCookieToken(config *conf.Configuration, tokenString string, session bool, w http.ResponseWriter) error {
+// setCookieTokens sets the access_token & refresh_token in the cookies
+func (a *API) setCookieTokens(config *conf.Configuration, token *AccessTokenResponse, session bool, w http.ResponseWriter) error {
+	// don't need to catch error here since we always set the cookie name
+	_ = a.setCookieToken(config, "access-token", token.Token, session, w)
+	_ = a.setCookieToken(config, "refresh-token", token.RefreshToken, session, w)
+	return nil
+}
+
+func (a *API) setCookieToken(config *conf.Configuration, name string, tokenString string, session bool, w http.ResponseWriter) error {
+	if name == "" {
+		return errors.New("Failed to set cookie, invalid name")
+	}
+	cookieName := config.Cookie.Key + "-" + name
 	exp := time.Second * time.Duration(config.Cookie.Duration)
 	cookie := &http.Cookie{
-		Name:     config.Cookie.Key,
+		Name:     cookieName,
 		Value:    tokenString,
 		Secure:   true,
 		HttpOnly: true,
@@ -535,10 +550,18 @@ func (a *API) setCookieToken(config *conf.Configuration, tokenString string, ses
 	return nil
 }
 
-func (a *API) clearCookieToken(ctx context.Context, w http.ResponseWriter) {
-	config := getConfig(ctx)
+func (a *API) clearCookieTokens(config *conf.Configuration, w http.ResponseWriter) {
+	a.clearCookieToken(config, "access-token", w)
+	a.clearCookieToken(config, "refresh-token", w)
+}
+
+func (a *API) clearCookieToken(config *conf.Configuration, name string, w http.ResponseWriter) {
+	cookieName := config.Cookie.Key
+	if name != "" {
+		cookieName += "-" + name
+	}
 	http.SetCookie(w, &http.Cookie{
-		Name:     config.Cookie.Key,
+		Name:     cookieName,
 		Value:    "",
 		Expires:  time.Now().Add(-1 * time.Hour * 10),
 		MaxAge:   -1,
