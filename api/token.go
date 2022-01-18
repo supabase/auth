@@ -200,10 +200,8 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 
-		if cookie != "" && config.Cookie.Duration > 0 {
-			if terr = a.setCookieTokens(config, token, cookie == useSessionCookie, w); terr != nil {
-				return internalServerError("Failed to set JWT cookie. %s", terr)
-			}
+		if terr = a.setCookieTokens(config, token, cookie == useSessionCookie, w); terr != nil {
+			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
 		return nil
 	})
@@ -294,18 +292,17 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
 
-		if cookie != "" && config.Cookie.Duration > 0 {
-			newTokenResponse = &AccessTokenResponse{
-				Token:        tokenString,
-				TokenType:    "bearer",
-				ExpiresIn:    config.JWT.Exp,
-				RefreshToken: newToken.Token,
-				User:         user,
-			}
-			if terr = a.setCookieTokens(config, newTokenResponse, cookie == useSessionCookie, w); terr != nil {
-				return internalServerError("Failed to set JWT cookie. %s", terr)
-			}
+		newTokenResponse = &AccessTokenResponse{
+			Token:        tokenString,
+			TokenType:    "bearer",
+			ExpiresIn:    config.JWT.Exp,
+			RefreshToken: newToken.Token,
+			User:         user,
 		}
+		if terr = a.setCookieTokens(config, newTokenResponse, cookie == useSessionCookie, w); terr != nil {
+			return internalServerError("Failed to set JWT cookie. %s", terr)
+		}
+
 		return nil
 	})
 	if err != nil {

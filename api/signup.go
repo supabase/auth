@@ -204,10 +204,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 
-			if cookie != "" && config.Cookie.Duration > 0 {
-				if terr = a.setCookieTokens(config, token, cookie == useSessionCookie, w); terr != nil {
-					return internalServerError("Failed to set JWT cookie. %s", terr)
-				}
+			if terr = a.setCookieTokens(config, token, cookie == useSessionCookie, w); terr != nil {
+				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
 			return nil
 		})
