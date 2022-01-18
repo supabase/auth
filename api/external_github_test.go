@@ -194,5 +194,10 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenVerifiedFalse() {
 
 	u := performAuthorization(ts, "github", code, "")
 
-	assertAuthorizationFailure(ts, u, "Please verify your email (github@example.com) with github", "invalid_request", "")
+	v, err := url.ParseQuery(u.Fragment)
+	ts.Require().NoError(err)
+	ts.Equal("unauthorized_client", v.Get("error"))
+	ts.Equal("401", v.Get("error_code"))
+	ts.Equal("Unverified email with github", v.Get("error_description"))
+	assertAuthorizationFailure(ts, u, "", "", "")
 }
