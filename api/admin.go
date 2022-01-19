@@ -160,7 +160,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.BanDuration != "" {
-			if params.BanDuration == "unban" {
+			if params.BanDuration == "none" {
 				user.BannedUntil = nil
 			} else {
 				duration, terr := time.ParseDuration(params.BanDuration)

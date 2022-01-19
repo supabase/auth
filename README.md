@@ -517,7 +517,7 @@ Returns the publicly available settings for this gotrue instance.
 
 ### **POST, PUT /admin/users/<user_id>**
 
-Creates (POST) or Updates (PUT) the user based on the `user_id` specified. The `ban_duration` field accepts the following time units: "ns", "us", "ms", "s", "m", "h". 
+Creates (POST) or Updates (PUT) the user based on the `user_id` specified. The `ban_duration` field accepts the following time units: "ns", "us", "ms", "s", "m", "h". See [`time.ParseDuration`](https://pkg.go.dev/time#ParseDuration) for more details on the format used.
 
 ```js
 headers:
@@ -535,7 +535,7 @@ body:
   "phone_confirm": true,
   "user_metadata": {},
   "app_metadata": {},
-  "ban_duration": "24h"
+  "ban_duration": "24h" or "none" // to unban a user
 }
 ```
 
