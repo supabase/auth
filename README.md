@@ -515,6 +515,30 @@ Returns the publicly available settings for this gotrue instance.
 }
 ```
 
+### **POST, PUT /admin/users/<user_id>**
+
+Creates (POST) or Updates (PUT) the user based on the `user_id` specified. The `ban_duration` field accepts the following time units: "ns", "us", "ms", "s", "m", "h". See [`time.ParseDuration`](https://pkg.go.dev/time#ParseDuration) for more details on the format used.
+
+```js
+headers:
+{
+  "Authorization": "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO" // admin role required
+}
+
+body:
+{
+  "role": "test-user",
+  "email": "email@example.com",
+  "phone": "12345678",
+  "password": "secret", // only if type = signup
+  "email_confirm": true,
+  "phone_confirm": true,
+  "user_metadata": {},
+  "app_metadata": {},
+  "ban_duration": "24h" or "none" // to unban a user
+}
+```
+
 ### **POST /admin/generate_link**
 
 Returns the corresponding email action link based on the type specified.

@@ -225,6 +225,10 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				}
 			}
 
+			if user.IsBanned() {
+				return unauthorizedError("User is unauthorized")
+			}
+
 			if !user.IsConfirmed() {
 				if !emailData.Verified && !config.Mailer.Autoconfirm {
 					mailer := a.Mailer(ctx)

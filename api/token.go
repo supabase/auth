@@ -173,7 +173,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return internalServerError("Database error querying schema").WithInternalError(err)
 	}
 
-	if !user.Authenticate(params.Password) {
+	if user.IsBanned() || !user.Authenticate(params.Password) {
 		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
 
@@ -233,6 +233,10 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return oauthError("invalid_grant", "Invalid Refresh Token")
 		}
 		return internalServerError(err.Error())
+	}
+
+	if user.IsBanned() {
+		return oauthError("invalid_grant", "Invalid Refresh Token")
 	}
 
 	if !(config.External.Email.Enabled && config.External.Phone.Enabled) {
@@ -396,6 +400,9 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			}
 			if email != "" {
 				identity.IdentityData["email"] = email
+			}
+			if user.IsBanned() {
+				return oauthError("invalid_grant", "invalid id token grant")
 			}
 			if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
 				return terr
