@@ -54,7 +54,7 @@ func (ts *AdminTestSuite) makeSuperAdmin(email string) string {
 
 	u.Role = "octowink_admin"
 
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, ts.Config.JWT.Issuer)
 	require.NoError(ts.T(), err, "Error generating access token")
 
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
@@ -70,7 +70,7 @@ func (ts *AdminTestSuite) makeSystemUser() string {
 	u := models.NewSystemUser(uuid.Nil, ts.Config.JWT.Aud)
 	u.Role = "service_role"
 
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, ts.Config.JWT.Issuer)
 	require.NoError(ts.T(), err, "Error generating access token")
 
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
