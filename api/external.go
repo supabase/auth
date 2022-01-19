@@ -279,12 +279,12 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		q.Set("expires_in", strconv.Itoa(token.ExpiresIn))
 		q.Set("refresh_token", token.RefreshToken)
 		rurl += "#" + q.Encode()
+
+		if err := a.setCookieTokens(config, token, false, w); err != nil {
+			return internalServerError("Failed to set JWT cookie. %s", err)
+		}
 	} else {
 		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), r, rurl)
-	}
-
-	if err := a.setCookieTokens(config, token, false, w); err != nil {
-		return internalServerError("Failed to set JWT cookie. %s", err)
 	}
 
 	http.Redirect(w, r, rurl, http.StatusFound)
