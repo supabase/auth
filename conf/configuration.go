@@ -305,7 +305,7 @@ func (config *Configuration) ApplyDefaults() {
 	}
 
 	if config.Cookie.Key == "" {
-		config.Cookie.Key = "nf_jwt"
+		config.Cookie.Key = "sb"
 	}
 
 	if config.Cookie.Duration == 0 {
@@ -388,9 +388,9 @@ func (t *TextlocalProviderConfiguration) Validate() error {
 	if t.Sender == "" {
 		return errors.New("Missing Textlocal sender")
 	}
-  return nil
+	return nil
 }
-  
+
 func (t *VonageProviderConfiguration) Validate() error {
 	if t.ApiKey == "" {
 		return errors.New("Missing Vonage API key")
