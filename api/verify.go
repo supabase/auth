@@ -48,7 +48,6 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 	config := a.getConfig(ctx)
 
 	params := &VerifyParams{}
-	cookie := r.Header.Get(useCookieHeader)
 
 	switch r.Method {
 	// GET only supports signup type
@@ -125,10 +124,8 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		if config.Cookie.Duration > 0 {
-			if terr = a.setCookieTokens(config, token, cookie == useSessionCookie, w); terr != nil {
-				return internalServerError("Failed to set JWT cookie. %s", terr)
-			}
+		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
 		return nil
 	})

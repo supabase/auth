@@ -142,8 +142,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return badRequestError("Could not read password grant params: %v", err)
 	}
 
-	cookie := r.Header.Get(useCookieHeader)
-
 	aud := a.requestAud(ctx, r)
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
@@ -200,7 +198,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 
-		if terr = a.setCookieTokens(config, token, cookie == useSessionCookie, w); terr != nil {
+		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
 			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
 		return nil
@@ -224,8 +222,6 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	if err := jsonDecoder.Decode(params); err != nil {
 		return badRequestError("Could not read refresh token grant params: %v", err)
 	}
-
-	cookie := r.Header.Get(useCookieHeader)
 
 	if params.RefreshToken == "" {
 		return oauthError("invalid_request", "refresh_token required")
@@ -299,7 +295,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			RefreshToken: newToken.Token,
 			User:         user,
 		}
-		if terr = a.setCookieTokens(config, newTokenResponse, cookie == useSessionCookie, w); terr != nil {
+		if terr = a.setCookieTokens(config, newTokenResponse, false, w); terr != nil {
 			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
 
@@ -453,6 +449,10 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	if err != nil {
 		return err
+	}
+
+	if err := a.setCookieTokens(config, token, false, w); err != nil {
+		return internalServerError("Failed to set JWT cookie. %s", err)
 	}
 
 	metering.RecordLogin("id_token", user.ID, instanceID)
