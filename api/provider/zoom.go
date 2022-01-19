@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/netlify/gotrue/conf"
@@ -19,10 +20,12 @@ type zoomProvider struct {
 }
 
 type zoomUser struct {
-	ID        string `json:"https://slack.com/user_id"`
-	Email     string `json:"email"`
-	Name      string `json:"name"`
-	AvatarURL string `json:"picture"`
+	ID            string `json:"id"`
+	FirstName     string `json:"first_name"`
+	LastName      string `json:"last_name"`
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"verified"`
+	AvatarURL     string `json:"pic_url"`
 }
 
 // NewZoomProvider creates a Zoom account provider.
@@ -69,25 +72,30 @@ func (g zoomProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*User
 		return nil, err
 	}
 
-	data := &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        g.APIPath,
-			Subject:       u.ID,
-			Name:          u.Name,
-			Picture:       u.AvatarURL,
-			Email:         u.Email,
-			EmailVerified: true, // Slack dosen't provide data on if email is verified.
+	if u.Email == "" {
+		return nil, errors.New("Unable to find email with Zoom provider")
+	}
 
-			// To be deprecated
-			AvatarURL:  u.AvatarURL,
-			FullName:   u.Name,
-			ProviderId: u.ID,
-		},
-		Emails: []Email{{
-			Email:    u.Email,
-			Verified: true, // Slack dosen't provide data on if email is verified.
-			Primary:  true,
-		}},
+	data := &UserProvidedData{}
+
+	data.Emails = []Email{{
+		Email:    u.Email,
+		Verified: u.EmailVerified,
+		Primary:  true,
+	}}
+
+	data.Metadata = &Claims{
+		Issuer:        g.APIPath,
+		Subject:       u.ID,
+		Name:          strings.TrimSpace(u.FirstName + " " + u.LastName),
+		Picture:       u.AvatarURL,
+		Email:         u.Email,
+		EmailVerified: u.EmailVerified,
+
+		// To be deprecated
+		AvatarURL:  u.AvatarURL,
+		FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
+		ProviderId: u.ID,
 	}
 
 	return data, nil
