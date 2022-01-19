@@ -24,7 +24,7 @@ type zoomUser struct {
 	FirstName     string `json:"first_name"`
 	LastName      string `json:"last_name"`
 	Email         string `json:"email"`
-	EmailVerified bool   `json:"verified"`
+	EmailVerified int    `json:"verified"`
 	AvatarURL     string `json:"pic_url"`
 }
 
@@ -37,16 +37,6 @@ func NewZoomProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthP
 	apiPath := chooseHost(ext.URL, defaultZoomAPIBase) + "/v2"
 	authPath := chooseHost(ext.URL, defaultZoomAuthBase) + "/oauth"
 
-	oauthScopes := []string{
-		"profile",
-		"email",
-		"openid",
-	}
-
-	if scopes != "" {
-		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
-	}
-
 	return &zoomProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,
@@ -55,7 +45,6 @@ func NewZoomProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthP
 				AuthURL:  authPath + "/authorize",
 				TokenURL: authPath + "/token",
 			},
-			Scopes:      oauthScopes,
 			RedirectURL: ext.RedirectURI,
 		},
 		APIPath: apiPath,
@@ -76,27 +65,29 @@ func (g zoomProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*User
 		return nil, errors.New("Unable to find email with Zoom provider")
 	}
 
-	data := &UserProvidedData{}
-
-	data.Emails = []Email{{
-		Email:    u.Email,
-		Verified: u.EmailVerified,
-		Primary:  true,
-	}}
-
-	data.Metadata = &Claims{
-		Issuer:        g.APIPath,
-		Subject:       u.ID,
-		Name:          strings.TrimSpace(u.FirstName + " " + u.LastName),
-		Picture:       u.AvatarURL,
-		Email:         u.Email,
-		EmailVerified: u.EmailVerified,
-
-		// To be deprecated
-		AvatarURL:  u.AvatarURL,
-		FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
-		ProviderId: u.ID,
+	verified := false
+	if u.EmailVerified == 1 {
+		verified = true
 	}
 
-	return data, nil
+	return &UserProvidedData{
+		Metadata: &Claims{
+			Issuer:        g.APIPath,
+			Subject:       u.ID,
+			Name:          strings.TrimSpace(u.FirstName + " " + u.LastName),
+			Picture:       u.AvatarURL,
+			Email:         u.Email,
+			EmailVerified: verified,
+
+			// To be deprecated
+			AvatarURL:  u.AvatarURL,
+			FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
+			ProviderId: u.ID,
+		},
+		Emails: []Email{{
+			Email:    u.Email,
+			Verified: verified,
+			Primary:  true,
+		}},
+	}, nil
 }
