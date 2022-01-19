@@ -14,8 +14,9 @@ import (
 
 // OtpParams contains the request body params for the otp endpoint
 type OtpParams struct {
-	Email string `json:"email"`
-	Phone string `json:"phone"`
+	Email      string `json:"email"`
+	Phone      string `json:"phone"`
+	CreateUser bool   `json:"create_user"`
 }
 
 // SmsParams contains the request body params for sms otp
@@ -36,6 +37,11 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	r.Body = ioutil.NopCloser(strings.NewReader(string(body)))
+
+	if !a.shouldCreateUser(r, params) {
+		return badRequestError("Signups not allowed for otp")
+	}
+
 	if params.Email != "" {
 		return a.MagicLink(w, r)
 	} else if params.Phone != "" {
@@ -107,4 +113,23 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, make(map[string]string))
+}
+
+func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) bool {
+	if !params.CreateUser {
+		ctx := r.Context()
+		instanceID := getInstanceID(ctx)
+		aud := a.requestAud(ctx, r)
+		var err error
+		if params.Email != "" {
+			_, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+		} else if params.Phone != "" {
+			_, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
+		}
+
+		if err != nil && models.IsNotFoundError(err) {
+			return false
+		}
+	}
+	return true
 }
