@@ -282,6 +282,11 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	} else {
 		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), r, rurl)
 	}
+
+	if err := a.setCookieTokens(config, token, false, w); err != nil {
+		return internalServerError("Failed to set JWT cookie. %s", err)
+	}
+
 	http.Redirect(w, r, rurl, http.StatusFound)
 	return nil
 }
