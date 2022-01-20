@@ -184,7 +184,7 @@ type Configuration struct {
 	Security          SecurityConfiguration    `json:"security"`
 	Cookie            struct {
 		Key      string `json:"key"`
-		Domain		 string `json:"domain"`
+		Domain   string `json:"domain"`
 		Duration int    `json:"duration"`
 	} `json:"cookies"`
 }
@@ -310,7 +310,7 @@ func (config *Configuration) ApplyDefaults() {
 	}
 
 	if config.Cookie.Domain == "" {
-		config.Cookie.Domain = "/"
+		config.Cookie.Domain = ""
 	}
 
 	if config.Cookie.Duration == 0 {
