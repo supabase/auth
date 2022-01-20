@@ -26,7 +26,9 @@ type SmsParams struct {
 
 // Otp returns the MagicLink or SmsOtp handler based on the request body params
 func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
-	params := &OtpParams{}
+	params := &OtpParams{
+		CreateUser: true,
+	}
 	body, err := ioutil.ReadAll(r.Body)
 	jsonDecoder := json.NewDecoder(bytes.NewReader(body))
 	if err = jsonDecoder.Decode(params); err != nil {
