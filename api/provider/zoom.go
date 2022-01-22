@@ -29,7 +29,7 @@ type zoomUser struct {
 }
 
 // NewZoomProvider creates a Zoom account provider.
-func NewZoomProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewZoomProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
