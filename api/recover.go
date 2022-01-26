@@ -32,12 +32,6 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 
 	aud := a.requestAud(ctx, r)
 	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return notFoundError(err.Error())
-		}
-		return internalServerError("Database error finding user").WithInternalError(err)
-	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
