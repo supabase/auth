@@ -193,7 +193,7 @@ The default group to assign all new users to.
 
 ### External Authentication Providers
 
-We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `linkedin`, `notion`, `spotify`, `slack`, `twitch`, `linkedin` and `twitter` for external authentication.
+We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `linkedin`, `notion`, `spotify`, `slack`, `twitch` and `twitter` for external authentication.
 
 Use the names as the keys underneath `external` to configure each separately.
 
