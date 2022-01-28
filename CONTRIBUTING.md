@@ -1,6 +1,7 @@
 # CONTRIBUTING
 
 We would love to have contributions from each and every one of you in the community be it big or small and you are the ones who motivate us to do better than what we do today.
+Docs aren't perfect and so we're here to help. If you're stuck on setup for more than thirty minutes please feel free to reach out on the `#gotrue` channel on [the Supabase discord](https://discord.gg/tNy8sVEf)
 
 ## Code Of Conduct
 
@@ -40,6 +41,10 @@ brew install docker
 Or, if you prefer, download [Docker Desktop](https://www.docker.com/get-started).
 
 - Install [Soda CLI](https://gobuffalo.io/en/docs/db/toolbox)
+
+If you are on macOS Catalina you may [run into issues installing Soda with Brew](https://github.com/gobuffalo/homebrew-tap/issues/5). Do check your `GOPATH` and run
+
+`go build -o /bin/soda github.com/gobuffalo/pop/soda` to resolve.
 
 ```
 go install github.com/gobuffalo/pop/soda@latest
@@ -467,7 +472,7 @@ We actively welcome your pull requests.
 - Are the existing tests passing?
 - Have you written some tests for your PR?
 
-## Guidelines for Implementing Additional oAuth Providers
+## Guidelines for Implementing Additional OAuth Providers
 
 Please ensure that an end-to-end test is done for the OAuth provider implemented.
 
@@ -479,7 +484,7 @@ An end-to-end test includes:
 - The callback is handled properly
 - Gotrue redirects to the `SITE_URL` or one of the URI's specified in the `URI_ALLOW_LIST` with the access_token, provider_token, expiry and refresh_token as query fragments
 
-### Writing tests for the new oAuth provider implemented
+### Writing tests for the new OAuth provider implemented
 
 Since implementing an additional OAuth provider consists of making api calls to an external api, we set up a mock server to attempt to mock the responses expected from the OAuth provider.
 

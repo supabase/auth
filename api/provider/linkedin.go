@@ -64,7 +64,6 @@ func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 		return nil, err
 	}
 
-	// authHost := chooseHost(ext.URL, defaultLinkedinAuthBase)
 	apiPath := chooseHost(ext.URL, defaultLinkedinAPIBase)
 
 	oauthScopes := []string{
@@ -120,6 +119,7 @@ func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 	emails := []Email{}
 
 	if e.Elements[0].HandleTilde.EmailAddress != "" {
+		// linkedin only returns the primary email which is verified for the r_emailaddress scope.
 		emails = append(emails, Email{
 			Email:    e.Elements[0].HandleTilde.EmailAddress,
 			Primary:  true,
@@ -129,11 +129,12 @@ func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 
 	return &UserProvidedData{
 		Metadata: &Claims{
-			Issuer:  g.APIPath,
-			Subject: u.ID,
-			Name:    strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
-			Picture: u.AvatarURL.DisplayImage.Elements[0].Identifiers[0].Identifier,
-			Email:   e.Elements[0].HandleTilde.EmailAddress,
+			Issuer:        g.APIPath,
+			Subject:       u.ID,
+			Name:          strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
+			Picture:       u.AvatarURL.DisplayImage.Elements[0].Identifiers[0].Identifier,
+			Email:         e.Elements[0].HandleTilde.EmailAddress,
+			EmailVerified: true,
 
 			// To be deprecated
 			AvatarURL:  u.AvatarURL.DisplayImage.Elements[0].Identifiers[0].Identifier,

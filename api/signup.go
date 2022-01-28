@@ -28,7 +28,6 @@ type SignupParams struct {
 func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
-	cookie := r.Header.Get(useCookieHeader)
 
 	if config.DisableSignup {
 		return forbiddenError("Signups not allowed for this instance")
@@ -204,10 +203,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 
-			if cookie != "" && config.Cookie.Duration > 0 {
-				if terr = a.setCookieToken(config, token.Token, cookie == useSessionCookie, w); terr != nil {
-					return internalServerError("Failed to set JWT cookie. %s", terr)
-				}
+			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
 			return nil
 		})
