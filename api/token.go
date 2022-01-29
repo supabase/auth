@@ -544,6 +544,7 @@ func (a *API) setCookieToken(config *conf.Configuration, name string, tokenStrin
 		Secure:   true,
 		HttpOnly: true,
 		Path:     "/",
+		Domain:   config.Cookie.Domain,
 	}
 	if !session {
 		cookie.Expires = time.Now().Add(exp)
@@ -572,5 +573,6 @@ func (a *API) clearCookieToken(config *conf.Configuration, name string, w http.R
 		Secure:   true,
 		HttpOnly: true,
 		Path:     "/",
+		Domain:   config.Cookie.Domain,
 	})
 }

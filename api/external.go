@@ -412,6 +412,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewTwitterProvider(config.External.Twitter, scopes)
 	case "saml":
 		return provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
+	case "zoom":
+		return provider.NewZoomProvider(config.External.Zoom)
 	default:
 		return nil, fmt.Errorf("Provider %s could not be found", name)
 	}
