@@ -268,6 +268,10 @@ func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referr
 	switch actionType {
 	case "magiclink":
 		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=magiclink"+redirectParam)
+	case "email_change":
+		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.EmailChangeTokenNew+"&type=email_change"+redirectParam)
+	case "email_change_current":
+		url, err =  getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.EmailChangeTokenCurrent+"&type=email_change"+redirectParam)
 	case "recovery":
 		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=recovery"+redirectParam)
 	case "invite":

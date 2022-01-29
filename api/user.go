@@ -14,6 +14,7 @@ type UserUpdateParams struct {
 	Email    string                 `json:"email"`
 	Password *string                `json:"password"`
 	Data     map[string]interface{} `json:"data"`
+	Options  map[string]interface{} `json:"options"`
 	AppData  map[string]interface{} `json:"app_metadata,omitempty"`
 	Phone    string                 `json:"phone"`
 }
@@ -119,15 +120,16 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)
+			sendConfirmationEmails := params.Options["sendConfirmationEmails"] != false
 			if config.Mailer.SecureEmailChangeEnabled {
-				if terr = a.sendSecureEmailChange(tx, user, mailer, params.Email, referrer); terr != nil {
+				if terr = a.sendSecureEmailChange(tx, user, mailer, params.Email,sendConfirmationEmails, referrer); terr != nil {
 					return internalServerError("Error sending change email").WithInternalError(terr)
 				}
 			} else {
-				if terr = a.sendEmailChange(tx, user, mailer, params.Email, referrer); terr != nil {
+				if terr = a.sendEmailChange(tx, user, mailer, params.Email, sendConfirmationEmails, referrer); terr != nil {
 					return internalServerError("Error sending change email").WithInternalError(terr)
 				}
-			}
+			}		
 		}
 
 		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, nil); terr != nil {

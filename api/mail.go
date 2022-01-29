@@ -65,6 +65,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var url string
+	var url_email_change_current string
 	referrer := a.getRedirectURLOrReferrer(r, params.RedirectTo)
 	now := time.Now()
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -77,6 +78,21 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			user.RecoveryToken = crypto.SecureToken()
 			user.RecoverySentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
+		case "email_change":
+			// TODO: add this to the audit log
+			// if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
+			// 	return terr
+			// }
+			if(len(user.EmailChangeTokenNew) == 0){
+				return badRequestError("email change is not enabled by user")
+			}
+			if config.Mailer.SecureEmailChangeEnabled {
+				mailer.GetEmailActionLink(user, "email_change_current", referrer)
+				if(len(user.EmailChangeTokenCurrent) == 0){
+					return badRequestError("secure email change is not enabled by user")
+				}
+				url_email_change_current, terr = mailer.GetEmailActionLink(user, "email_change_current", referrer)
+			}
 		case "invite":
 			if user != nil {
 				if user.IsConfirmed() {
@@ -162,6 +178,9 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("User serialization error").WithInternalError(err)
 	}
 	resp["action_link"] = url
+	if config.Mailer.SecureEmailChangeEnabled {
+		resp["action_link_email_change_current"] = url_email_change_current
+	}
 
 	return sendJSON(w, http.StatusOK, resp)
 }
@@ -230,13 +249,15 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 }
 
 // sendSecureEmailChange sends out an email change token each to the old and new emails.
-func (a *API) sendSecureEmailChange(tx *storage.Connection, u *models.User, mailer mailer.Mailer, email string, referrerURL string) error {
+func (a *API) sendSecureEmailChange(tx *storage.Connection, u *models.User, mailer mailer.Mailer, email string, sendConfirmationEmails bool, referrerURL string) error {
 	u.EmailChangeTokenCurrent, u.EmailChangeTokenNew = crypto.SecureToken(), crypto.SecureToken()
 	u.EmailChange = email
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
-	if err := mailer.EmailChangeMail(u, referrerURL); err != nil {
-		return err
+	if (sendConfirmationEmails) {
+		if err := mailer.EmailChangeMail(u, referrerURL); err != nil {
+			return err
+		}
 	}
 
 	u.EmailChangeSentAt = &now
@@ -251,13 +272,15 @@ func (a *API) sendSecureEmailChange(tx *storage.Connection, u *models.User, mail
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(tx *storage.Connection, u *models.User, mailer mailer.Mailer, email string, referrerURL string) error {
+func (a *API) sendEmailChange(tx *storage.Connection, u *models.User, mailer mailer.Mailer, email string, sendConfirmationEmails bool, referrerURL string) error {
 	u.EmailChangeTokenNew = crypto.SecureToken()
 	u.EmailChange = email
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
-	if err := mailer.EmailChangeMail(u, referrerURL); err != nil {
-		return err
+	if (sendConfirmationEmails) {
+		if err := mailer.EmailChangeMail(u, referrerURL); err != nil {
+			return err
+		}
 	}
 
 	u.EmailChangeSentAt = &now
