@@ -79,15 +79,10 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			user.RecoverySentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
 		case "email_change":
-			// TODO: add this to the audit log
-			// if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
-			// 	return terr
-			// }
 			if(len(user.EmailChangeTokenNew) == 0){
 				return badRequestError("email change is not enabled by user")
 			}
 			if config.Mailer.SecureEmailChangeEnabled {
-				mailer.GetEmailActionLink(user, "email_change_current", referrer)
 				if(len(user.EmailChangeTokenCurrent) == 0){
 					return badRequestError("secure email change is not enabled by user")
 				}

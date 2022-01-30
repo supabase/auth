@@ -551,7 +551,7 @@ headers:
 
 body:
 {
-  "type": "signup" or "magiclink" or "recovery" or "invite",
+  "type": "signup" or "magiclink" or "email_change" or "recovery" or "invite",
   "email": "email@example.com",
   "password": "secret", // only if type = signup
   "data": {
@@ -565,8 +565,9 @@ body:
 Returns
 
 ```js
-{
-  "action_link": "http://localhost:9999/verify?token=TOKEN&type=TYPE&redirect_to=REDIRECT_URL",
+{ 
+  "action_link": "http://localhost:9999/verify?token=TOKEN&type=TYPE&redirect_to=REDIRECT_URL", // if type = email_change, this link should be sent to new email 
+  "action_link_email_change_current": "http://localhost:9999/verify?token=TOKEN&type=TYPE&redirect_to=REDIRECT_URL", // only if type = email_change and GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED=true, this link should be sent to current email 
   ...
 }
 ```
@@ -886,7 +887,10 @@ method can be used to set custom user data. Changing the email will result in a 
     "key": "value",
     "number": 10,
     "admin": false
-  }
+  },
+  "options": { // use only if don't want to that links are sent by gotrue and want to use generate_link with type = email_change
+        "sendConfirmationEmails": false // default is true
+    } 
 }
 ```
 
