@@ -42,11 +42,8 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		referrer := a.getReferrer(r)
 		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer)
 	})
-	if err != nil {
-		if errors.Is(err, MaxFrequencyLimitError) {
-			return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
-		}
-		return internalServerError("Error recovering user").WithInternalError(err)
+	if errors.Is(err, MaxFrequencyLimitError) {
+		return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
 	}
 
 	return sendJSON(w, http.StatusOK, &map[string]string{})
