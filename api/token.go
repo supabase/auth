@@ -346,11 +346,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	var verifier *oidc.IDTokenVerifier
 	var err error
-	if params.ClientID == "" || params.Issuer == "" {
+	if params.Provider != "" {
 		verifier, err = params.getVerifier(ctx)
-	}
-	if params.Provider == "" {
+	} else if params.ClientID != "" && params.Issuer != "" {
 		verifier, err = params.getVerifierFromClientIDandIssuer(ctx)
+	} else {
+		return err
 	}
 	if err != nil {
 		return err
