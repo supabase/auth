@@ -354,12 +354,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return badRequestError("%v", err)
 	}
 	if err != nil {
-		return badRequestError("%v", err)
+		return err
 	}
 
 	idToken, err := verifier.Verify(ctx, params.IdToken)
 	if err != nil {
-		return err
+		return badRequestError("%v", err)
 	}
 
 	claims := make(map[string]interface{})
