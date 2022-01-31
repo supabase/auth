@@ -889,10 +889,7 @@ method can be used to set custom user data. Changing the email will result in a 
     "key": "value",
     "number": 10,
     "admin": false
-  },
-  "options": { // use only if don't want to that links are sent by gotrue and want to use generate_link with type = email_change
-        "sendConfirmationEmails": false // default is true
-    } 
+  }
 }
 ```
 
@@ -907,7 +904,37 @@ Returns:
   "updated_at": "2016-05-15T19:53:12.368652374-07:00"
 }
 ```
+### **PUT /user/email**
 
+Update a user email(Requires authentication). Apart from changing email/password, Changing the email will result in a magiclink being sent out.
+If developer wanted to generate own links should set `shouldSendEmail=false` in query, then should generate links with POST /admin/generate_link endpoint
+default value `shouldSendEmail=true`
+
+query params:
+```json
+{
+  "shouldSendEmail": "false"
+}
+```
+Body
+```json
+{
+  "email": "new-email@example.com"
+}
+```
+
+Returns:
+
+```json
+{
+  "id": "11111111-2222-3333-4444-5555555555555",
+  "email": "email@example.com",
+  "email_change_sent_at": "2016-05-15T20:49:40.882805774-07:00",
+  "new_email": "new_email@example.com",
+  "created_at": "2016-05-15T19:53:12.368652374-07:00",
+  "updated_at": "2016-05-15T19:53:12.368652374-07:00"
+}
+```
 ### **POST /logout**
 
 Logout a user (Requires authentication).

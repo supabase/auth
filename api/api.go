@@ -145,6 +145,9 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Use(api.requireAuthentication)
 			r.Get("/", api.UserGet)
 			r.With(sharedLimiter).Put("/", api.UserUpdate)
+			r.Route("/email", func(r *router) {
+				r.With(sharedLimiter).Put("/", api.UserUpdate)
+			})
 		})
 
 		r.Route("/admin", func(r *router) {

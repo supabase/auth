@@ -14,9 +14,9 @@ type UserUpdateParams struct {
 	Email    string                 `json:"email"`
 	Password *string                `json:"password"`
 	Data     map[string]interface{} `json:"data"`
-	Options  map[string]interface{} `json:"options"`
 	AppData  map[string]interface{} `json:"app_metadata,omitempty"`
 	Phone    string                 `json:"phone"`
+	ShouldSendEmail string          `json:"shouldSendEmail"`
 }
 
 // UserGet returns a user
@@ -55,6 +55,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	instanceID := getInstanceID(ctx)
 
 	params := &UserUpdateParams{}
+	params.ShouldSendEmail = r.FormValue("shouldSendEmail")
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
 	if err != nil {
@@ -80,30 +81,39 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if params.Password != nil {
-			if len(*params.Password) < config.PasswordMinLength {
-				return invalidPasswordLengthError(config)
-			}
+		p := r.URL.Path
+		var shouldSendEmail bool
+		switch {
+			case p == "/user":	
+				if params.Password != nil {
+					if len(*params.Password) < config.PasswordMinLength {
+						return invalidPasswordLengthError(config)
+					}
 
-			if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
-				return internalServerError("Error during password storage").WithInternalError(terr)
-			}
-		}
+					if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
+						return internalServerError("Error during password storage").WithInternalError(terr)
+					}
+				}
 
-		if params.Data != nil {
-			if terr = user.UpdateUserMetaData(tx, params.Data); terr != nil {
-				return internalServerError("Error updating user").WithInternalError(terr)
-			}
-		}
+				if params.Data != nil {
+					if terr = user.UpdateUserMetaData(tx, params.Data); terr != nil {
+						return internalServerError("Error updating user").WithInternalError(terr)
+					}
+				}
 
-		if params.AppData != nil {
-			if !a.isAdmin(ctx, user, config.JWT.Aud) {
-				return unauthorizedError("Updating app_metadata requires admin privileges")
-			}
+				if params.AppData != nil {
+					if !a.isAdmin(ctx, user, config.JWT.Aud) {
+						return unauthorizedError("Updating app_metadata requires admin privileges")
+					}
 
-			if terr = user.UpdateAppMetaData(tx, params.AppData); terr != nil {
-				return internalServerError("Error updating user").WithInternalError(terr)
-			}
+					if terr = user.UpdateAppMetaData(tx, params.AppData); terr != nil {
+						return internalServerError("Error updating user").WithInternalError(terr)
+					}
+				}
+				shouldSendEmail = true
+			case p == "/user/email":	
+				shouldSendEmail = params.ShouldSendEmail != "false"
+
 		}
 
 		if params.Email != "" && params.Email != user.GetEmail() {
@@ -120,13 +130,12 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)
-			sendConfirmationEmails := params.Options["sendConfirmationEmails"] != false
 			if config.Mailer.SecureEmailChangeEnabled {
-				if terr = a.sendSecureEmailChange(tx, user, mailer, params.Email,sendConfirmationEmails, referrer); terr != nil {
+				if terr = a.sendSecureEmailChange(tx, user, mailer, params.Email,shouldSendEmail, referrer); terr != nil {
 					return internalServerError("Error sending change email").WithInternalError(terr)
 				}
 			} else {
-				if terr = a.sendEmailChange(tx, user, mailer, params.Email, sendConfirmationEmails, referrer); terr != nil {
+				if terr = a.sendEmailChange(tx, user, mailer, params.Email, shouldSendEmail, referrer); terr != nil {
 					return internalServerError("Error sending change email").WithInternalError(terr)
 				}
 			}		

@@ -79,11 +79,11 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			user.RecoverySentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
 		case "email_change":
-			if(len(user.EmailChangeTokenNew) == 0){
+			if len(user.EmailChangeTokenNew) == 0 {
 				return badRequestError("email change is not enabled by user")
 			}
 			if config.Mailer.SecureEmailChangeEnabled {
-				if(len(user.EmailChangeTokenCurrent) == 0){
+				if len(user.EmailChangeTokenCurrent) == 0 {
 					return badRequestError("secure email change is not enabled by user")
 				}
 				url_email_change_current, terr = mailer.GetEmailActionLink(user, "email_change_current", referrer)
@@ -244,12 +244,12 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 }
 
 // sendSecureEmailChange sends out an email change token each to the old and new emails.
-func (a *API) sendSecureEmailChange(tx *storage.Connection, u *models.User, mailer mailer.Mailer, email string, sendConfirmationEmails bool, referrerURL string) error {
+func (a *API) sendSecureEmailChange(tx *storage.Connection, u *models.User, mailer mailer.Mailer, email string, shouldSendEmail bool, referrerURL string) error {
 	u.EmailChangeTokenCurrent, u.EmailChangeTokenNew = crypto.SecureToken(), crypto.SecureToken()
 	u.EmailChange = email
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
-	if (sendConfirmationEmails) {
+	if shouldSendEmail {
 		if err := mailer.EmailChangeMail(u, referrerURL); err != nil {
 			return err
 		}
@@ -267,12 +267,12 @@ func (a *API) sendSecureEmailChange(tx *storage.Connection, u *models.User, mail
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(tx *storage.Connection, u *models.User, mailer mailer.Mailer, email string, sendConfirmationEmails bool, referrerURL string) error {
+func (a *API) sendEmailChange(tx *storage.Connection, u *models.User, mailer mailer.Mailer, email string, shouldSendEmail bool, referrerURL string) error {
 	u.EmailChangeTokenNew = crypto.SecureToken()
 	u.EmailChange = email
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
-	if (sendConfirmationEmails) {
+	if shouldSendEmail {
 		if err := mailer.EmailChangeMail(u, referrerURL); err != nil {
 			return err
 		}
