@@ -21,6 +21,7 @@ type ProviderSettings struct {
 	Email     bool `json:"email"`
 	Phone     bool `json:"phone"`
 	SAML      bool `json:"saml"`
+	Zoom      bool `json:"zoom"`
 }
 
 type ProviderLabels struct {
@@ -59,6 +60,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Email:     config.External.Email.Enabled,
 			Phone:     config.External.Phone.Enabled,
 			SAML:      config.External.Saml.Enabled,
+			Zoom:      config.External.Zoom.Enabled,
 		},
 		ExternalLabels: ProviderLabels{
 			SAML: config.External.Saml.Name,

@@ -414,6 +414,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewWorkOSProvider(config.External.WorkOS, scopes)
 	case "saml":
 		return provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
+	case "zoom":
+		return provider.NewZoomProvider(config.External.Zoom)
 	default:
 		return nil, fmt.Errorf("Provider %s could not be found", name)
 	}
