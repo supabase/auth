@@ -291,7 +291,7 @@ And you should get a new user:
 
 ### List/Find Users
 
-To create a new user, make a request to `GET /admin/users`.
+To list all users, make a request to `GET /admin/users`.
 
 #### Request
 
