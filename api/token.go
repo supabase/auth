@@ -351,7 +351,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	} else if params.ClientID != "" && params.Issuer != "" {
 		verifier, err = params.getVerifierFromClientIDandIssuer(ctx)
 	} else {
-		return err
+		return badRequestError("%v", err)
 	}
 	if err != nil {
 		return err
