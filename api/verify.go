@@ -12,6 +12,7 @@ import (
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
+	"github.com/x-way/crawlerdetect"
 )
 
 var (
@@ -52,6 +53,11 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 	switch r.Method {
 	// GET only supports signup type
 	case "GET":
+		// detect bots and crawlers to prevent email
+		// clients "link previewing" and expiring the token
+		if crawlerdetect.IsCrawler(r.Header.Get("User-Agent")) {
+			return unprocessableEntityError("Verify has detected a bot and will reject to prevent the token expiring")
+		}
 		params.Token = r.FormValue("token")
 		params.Password = ""
 		params.Type = r.FormValue("type")
