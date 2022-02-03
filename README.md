@@ -505,6 +505,7 @@ Returns the publicly available settings for this gotrue instance.
     "github": true,
     "gitlab": true,
     "google": true,
+    "keycloak": true,
     "linkedin": true,
     "notion": true,
     "slack": true,
@@ -918,7 +919,7 @@ Get access_token from external oauth provider
 query params:
 
 ```
-provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | linkedin | notion | slack | spotify | twitch | twitter
+provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | keycloak | linkedin | notion | slack | spotify | twitch | twitter
 scopes=<optional additional scopes depending on the provider (email and name are requested by default)>
 ```
 
