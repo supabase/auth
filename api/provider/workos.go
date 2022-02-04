@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	defaultWorkOSAPIBase = "https://api.workos.com"
+	defaultWorkOSAPIBase = "api.workos.com"
 )
 
 type workosProvider struct {
@@ -34,7 +34,6 @@ func NewWorkOSProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
-
 	apiPath := chooseHost(ext.URL, defaultWorkOSAPIBase)
 
 	oauthScopes := []string{}
