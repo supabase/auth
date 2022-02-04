@@ -98,6 +98,7 @@ type ProviderConfiguration struct {
 	Email       EmailProviderConfiguration `json:"email"`
 	Phone       PhoneProviderConfiguration `json:"phone"`
 	Saml        SamlProviderConfiguration  `json:"saml"`
+	Zoom        OAuthProviderConfiguration `json:"zoom"`
 	IosBundleId string                     `json:"ios_bundle_id" split_words:"true"`
 	RedirectURL string                     `json:"redirect_url"`
 }
@@ -185,6 +186,7 @@ type Configuration struct {
 	Security          SecurityConfiguration    `json:"security"`
 	Cookie            struct {
 		Key      string `json:"key"`
+		Domain   string `json:"domain"`
 		Duration int    `json:"duration"`
 	} `json:"cookies"`
 }
@@ -306,7 +308,11 @@ func (config *Configuration) ApplyDefaults() {
 	}
 
 	if config.Cookie.Key == "" {
-		config.Cookie.Key = "nf_jwt"
+		config.Cookie.Key = "sb"
+	}
+
+	if config.Cookie.Domain == "" {
+		config.Cookie.Domain = ""
 	}
 
 	if config.Cookie.Duration == 0 {
@@ -389,9 +395,9 @@ func (t *TextlocalProviderConfiguration) Validate() error {
 	if t.Sender == "" {
 		return errors.New("Missing Textlocal sender")
 	}
-  return nil
+	return nil
 }
-  
+
 func (t *VonageProviderConfiguration) Validate() error {
 	if t.ApiKey == "" {
 		return errors.New("Missing Vonage API key")
