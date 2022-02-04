@@ -394,6 +394,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewGithubProvider(config.External.Github, scopes)
 	case "gitlab":
 		return provider.NewGitlabProvider(config.External.Gitlab, scopes)
+	case "sgid":
+		return provider.NewSgidProvider(config.External.Sgid, scopes)
 	case "google":
 		return provider.NewGoogleProvider(config.External.Google, scopes)
 	case "linkedin":

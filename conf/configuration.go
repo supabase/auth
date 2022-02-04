@@ -86,6 +86,7 @@ type ProviderConfiguration struct {
 	Discord     OAuthProviderConfiguration `json:"discord"`
 	Facebook    OAuthProviderConfiguration `json:"facebook"`
 	Github      OAuthProviderConfiguration `json:"github"`
+	Sgid        OAuthProviderConfiguration `json:"sgid"`
 	Gitlab      OAuthProviderConfiguration `json:"gitlab"`
 	Google      OAuthProviderConfiguration `json:"google"`
 	Notion      OAuthProviderConfiguration `json:"notion"`
