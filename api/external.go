@@ -243,7 +243,9 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 					return nil
 				}
 
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
+				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
+					"provider": providerType,
+				}); terr != nil {
 					return terr
 				}
 				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
@@ -255,7 +257,9 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 					return internalServerError("Error updating user").WithInternalError(terr)
 				}
 			} else {
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
+				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, map[string]interface{}{
+					"provider": providerType,
+				}); terr != nil {
 					return terr
 				}
 				if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
@@ -341,7 +345,9 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 		return nil, internalServerError("Database error updating user").WithInternalError(err)
 	}
 
-	if err := models.NewAuditLogEntry(tx, instanceID, user, models.InviteAcceptedAction, nil); err != nil {
+	if err := models.NewAuditLogEntry(tx, instanceID, user, models.InviteAcceptedAction, map[string]interface{}{
+		"provider": providerType,
+	}); err != nil {
 		return nil, err
 	}
 	if err := triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); err != nil {
