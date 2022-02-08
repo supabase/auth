@@ -38,6 +38,7 @@ type VerifyParams struct {
 	Type       string `json:"type"`
 	Token      string `json:"token"`
 	Password   string `json:"password"`
+	Email      string `json:"email"`
 	Phone      string `json:"phone"`
 	RedirectTo string `json:"redirect_to"`
 }
@@ -78,13 +79,27 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
+		aud := a.requestAud(ctx, r)
+		user, terr = params.VerifyUser(ctx, tx, aud)
+		if terr != nil {
+			var herr *HTTPError
+			if errors.As(terr, &herr) {
+				if errors.Is(herr.InternalError, redirectWithQueryError) {
+					rurl := a.prepErrorRedirectURL(herr, r, params.RedirectTo)
+					http.Redirect(w, r, rurl, http.StatusSeeOther)
+					return nil
+				}
+			}
+			return terr
+		}
+
 		switch params.Type {
 		case signupVerification, inviteVerification:
-			user, terr = a.signupVerify(ctx, tx, params)
+			user, terr = a.signupVerify(ctx, tx, user)
 		case recoveryVerification, magicLinkVerification:
-			user, terr = a.recoverVerify(ctx, tx, params)
+			user, terr = a.recoverVerify(ctx, tx, user)
 		case emailChangeVerification:
-			user, terr = a.emailChangeVerify(ctx, tx, params)
+			user, terr = a.emailChangeVerify(ctx, tx, params, user)
 			if user == nil && terr == nil {
 				// when double confirmation is required
 				rurl := a.prepRedirectURL("Confirmation link accepted. Please proceed to confirm link sent to the other email", params.RedirectTo)
@@ -99,21 +114,12 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 			if isValid := a.validateE164Format(params.Phone); !isValid {
 				return unprocessableEntityError("Invalid phone number format")
 			}
-			aud := a.requestAud(ctx, r)
-			user, terr = a.smsVerify(ctx, tx, params, aud)
+			user, terr = a.smsVerify(ctx, tx, params, user)
 		default:
 			return unprocessableEntityError("Verify requires a verification type")
 		}
 
 		if terr != nil {
-			var e *HTTPError
-			if errors.As(terr, &e) {
-				if errors.Is(e.InternalError, redirectWithQueryError) {
-					rurl := a.prepErrorRedirectURL(e, r, params.RedirectTo)
-					http.Redirect(w, r, rurl, http.StatusSeeOther)
-					return nil
-				}
-			}
 			return terr
 		}
 
@@ -152,28 +158,11 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (a *API) signupVerify(ctx context.Context, conn *storage.Connection, params *VerifyParams) (*models.User, error) {
+func (a *API) signupVerify(ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
 
-	user, err := models.FindUserByConfirmationToken(conn, params.Token)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return nil, notFoundError(err.Error()).WithInternalError(redirectWithQueryError)
-		}
-		return nil, internalServerError("Database error finding user").WithInternalError(err)
-	}
-
-	if user.IsBanned() {
-		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
-	}
-
-	nextDay := user.ConfirmationSentAt.Add(24 * time.Hour)
-	if user.ConfirmationSentAt != nil && time.Now().After(nextDay) {
-		return nil, expiredTokenError("Confirmation token expired").WithInternalError(redirectWithQueryError)
-	}
-
-	err = conn.Transaction(func(tx *storage.Connection) error {
+	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if user.EncryptedPassword == "" {
 			if user.InvitedAt != nil {
@@ -208,27 +197,11 @@ func (a *API) signupVerify(ctx context.Context, conn *storage.Connection, params
 	return user, nil
 }
 
-func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, params *VerifyParams) (*models.User, error) {
+func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
-	user, err := models.FindUserByRecoveryToken(conn, params.Token)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return nil, notFoundError(err.Error()).WithInternalError(redirectWithQueryError)
-		}
-		return nil, internalServerError("Database error finding user").WithInternalError(err)
-	}
 
-	if user.IsBanned() {
-		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
-	}
-
-	nextDay := user.RecoverySentAt.Add(24 * time.Hour)
-	if user.RecoverySentAt != nil && time.Now().After(nextDay) {
-		return nil, expiredTokenError("Recovery token expired").WithInternalError(redirectWithQueryError)
-	}
-
-	err = conn.Transaction(func(tx *storage.Connection) error {
+	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = user.Recover(tx); terr != nil {
 			return terr
@@ -254,30 +227,11 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, param
 	return user, nil
 }
 
-func (a *API) smsVerify(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+func (a *API) smsVerify(ctx context.Context, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
-	user, err := models.FindUserByPhoneAndAudience(conn, instanceID, params.Phone, aud)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return nil, notFoundError(err.Error()).WithInternalError(redirectWithQueryError)
-		}
-		return nil, internalServerError("Database error finding user").WithInternalError(err)
-	}
 
-	if user.IsBanned() {
-		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
-	}
-
-	now := time.Now()
-	expiresAt := user.ConfirmationSentAt.Add(time.Second * time.Duration(config.Sms.OtpExp))
-
-	// check if token has expired or is invalid
-	if isOtpValid := now.Before(expiresAt) && params.Token == user.ConfirmationToken; !isOtpValid {
-		return nil, expiredTokenError("Otp has expired or is invalid").WithInternalError(redirectWithQueryError)
-	}
-
-	err = conn.Transaction(func(tx *storage.Connection) error {
+	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
 			return terr
@@ -318,56 +272,31 @@ func (a *API) prepRedirectURL(message string, rurl string) string {
 	return rurl + "#" + q.Encode()
 }
 
-func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, params *VerifyParams) (*models.User, error) {
+func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
-	user, err := models.FindUserByEmailChangeToken(conn, params.Token)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return nil, notFoundError(err.Error()).WithInternalError(redirectWithQueryError)
-		}
-		return nil, internalServerError("Database error finding user").WithInternalError(err)
-	}
 
-	if user.IsBanned() {
-		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
-	}
-
-	nextDay := user.EmailChangeSentAt.Add(24 * time.Hour)
-	if user.EmailChangeSentAt != nil && time.Now().After(nextDay) {
-		err = a.db.Transaction(func(tx *storage.Connection) error {
-			user.EmailChangeConfirmStatus = zeroConfirmation
-			return tx.UpdateOnly(user, "email_change_confirm_status")
+	if config.Mailer.SecureEmailChangeEnabled && user.EmailChangeConfirmStatus == zeroConfirmation {
+		err := a.db.Transaction(func(tx *storage.Connection) error {
+			user.EmailChangeConfirmStatus = singleConfirmation
+			if params.Token == user.EmailChangeTokenCurrent {
+				user.EmailChangeTokenCurrent = ""
+			} else if params.Token == user.EmailChangeTokenNew {
+				user.EmailChangeTokenNew = ""
+			}
+			if terr := tx.UpdateOnly(user, "email_change_confirm_status", "email_change_token_current", "email_change_token_new"); terr != nil {
+				return terr
+			}
+			return nil
 		})
 		if err != nil {
 			return nil, err
 		}
-		return nil, expiredTokenError("Email change token expired").WithInternalError(redirectWithQueryError)
-	}
-
-	if config.Mailer.SecureEmailChangeEnabled {
-		if user.EmailChangeConfirmStatus == zeroConfirmation {
-			err = a.db.Transaction(func(tx *storage.Connection) error {
-				user.EmailChangeConfirmStatus = singleConfirmation
-				if params.Token == user.EmailChangeTokenCurrent {
-					user.EmailChangeTokenCurrent = ""
-				} else if params.Token == user.EmailChangeTokenNew {
-					user.EmailChangeTokenNew = ""
-				}
-				if terr := tx.UpdateOnly(user, "email_change_confirm_status", "email_change_token_current", "email_change_token_new"); terr != nil {
-					return terr
-				}
-				return nil
-			})
-			if err != nil {
-				return nil, err
-			}
-			return nil, nil
-		}
+		return nil, nil
 	}
 
 	// one email is confirmed at this point
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err := a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 
 		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, nil); terr != nil {
@@ -389,4 +318,65 @@ func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, p
 	}
 
 	return user, nil
+}
+
+// VerifyUser verifies the token associated to the user based on the verify type
+func (v *VerifyParams) VerifyUser(ctx context.Context, conn *storage.Connection, aud string) (*models.User, error) {
+	instanceID := getInstanceID(ctx)
+	config := getConfig(ctx)
+
+	var user *models.User
+	var err error
+	if v.Email != "" {
+		user, err = models.FindUserByEmailAndAudience(conn, instanceID, v.Email, aud)
+	} else if v.Phone != "" {
+		user, err = models.FindUserByPhoneAndAudience(conn, instanceID, v.Phone, aud)
+	} else {
+		switch v.Type {
+		case signupVerification, inviteVerification:
+			user, err = models.FindUserByConfirmationToken(conn, v.Token)
+		case recoveryVerification, magicLinkVerification:
+			user, err = models.FindUserByRecoveryToken(conn, v.Token)
+		case emailChangeVerification:
+			user, err = models.FindUserByEmailChangeToken(conn, v.Token)
+		}
+	}
+
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return nil, notFoundError(err.Error()).WithInternalError(redirectWithQueryError)
+		}
+		return nil, internalServerError("Database error finding user").WithInternalError(err)
+	}
+
+	if user.IsBanned() {
+		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
+	}
+
+	var isValid bool
+	switch v.Type {
+	case signupVerification, inviteVerification:
+		isValid = isOtpValid(v.Token, user.ConfirmationToken, user.ConfirmationSentAt.Add(24*time.Hour))
+	case recoveryVerification, magicLinkVerification:
+		isValid = isOtpValid(v.Token, user.RecoveryToken, user.RecoverySentAt.Add(24*time.Hour))
+	case emailChangeVerification:
+		expiresAt := user.EmailChangeSentAt.Add(24 * time.Hour)
+		isValid = isOtpValid(v.Token, user.EmailChangeTokenCurrent, expiresAt) || isOtpValid(v.Token, user.EmailChangeTokenNew, expiresAt)
+		if !isValid {
+			user.EmailChangeConfirmStatus = zeroConfirmation
+			err = conn.UpdateOnly(user, "email_change_confirm_status")
+		}
+	case smsVerification:
+		isValid = isOtpValid(v.Token, user.ConfirmationToken, user.ConfirmationSentAt.Add(time.Second*time.Duration(config.Sms.OtpExp)))
+	}
+
+	if !isValid || err != nil {
+		return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(redirectWithQueryError)
+	}
+	return user, nil
+}
+
+// isOtpValid checks the actual otp sent against the expected otp and ensures that it's within the valid window
+func isOtpValid(actual, expected string, expiresAt time.Time) bool {
+	return time.Now().Before(expiresAt) && (actual == expected)
 }

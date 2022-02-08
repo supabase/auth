@@ -123,7 +123,7 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 
 	url, err := w.Result().Location()
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), "error_code=410&error_description=Confirmation+token+expired", url.Fragment)
+	assert.Equal(ts.T(), "error_code=410&error_description=Token+has+expired+or+is+invalid", url.Fragment)
 }
 
 func (ts *VerifyTestSuite) TestInvalidSmsOtp() {
@@ -141,7 +141,7 @@ func (ts *VerifyTestSuite) TestInvalidSmsOtp() {
 
 	expectedResponse := expected{
 		code:      http.StatusSeeOther,
-		fragments: "error_code=410&error_description=Otp+has+expired+or+is+invalid",
+		fragments: "error_code=410&error_description=Token+has+expired+or+is+invalid",
 	}
 
 	cases := []struct {
