@@ -328,6 +328,7 @@ func (v *VerifyParams) VerifyUser(ctx context.Context, conn *storage.Connection,
 	var user *models.User
 	var err error
 	if v.Email != "" {
+		// email_change should use old email for otp verification
 		user, err = models.FindUserByEmailAndAudience(conn, instanceID, v.Email, aud)
 	} else if v.Phone != "" {
 		user, err = models.FindUserByPhoneAndAudience(conn, instanceID, v.Phone, aud)
@@ -363,6 +364,7 @@ func (v *VerifyParams) VerifyUser(ctx context.Context, conn *storage.Connection,
 		expiresAt := user.EmailChangeSentAt.Add(24 * time.Hour)
 		isValid = isOtpValid(v.Token, user.EmailChangeTokenCurrent, expiresAt) || isOtpValid(v.Token, user.EmailChangeTokenNew, expiresAt)
 		if !isValid {
+			// reset email confirmation status
 			user.EmailChangeConfirmStatus = zeroConfirmation
 			err = conn.UpdateOnly(user, "email_change_confirm_status")
 		}
