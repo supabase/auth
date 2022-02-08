@@ -64,7 +64,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		}
 		params.RedirectTo = a.getRedirectURLOrReferrer(r, params.RedirectTo)
 	default:
-		unprocessableEntityError("Sorry, only GET and POST methods are supported.")
+		unprocessableEntityError("Only GET and POST methods are supported.")
 	}
 
 	if params.Token == "" {
@@ -355,13 +355,15 @@ func (v *VerifyParams) VerifyUser(ctx context.Context, conn *storage.Connection,
 	}
 
 	var isValid bool
+	mailerOtpExpiresAt := time.Second * time.Duration(config.Mailer.OtpExp)
+	smsOtpExpiresAt := time.Second * time.Duration(config.Sms.OtpExp)
 	switch v.Type {
 	case signupVerification, inviteVerification:
-		isValid = isOtpValid(v.Token, user.ConfirmationToken, user.ConfirmationSentAt.Add(24*time.Hour))
+		isValid = isOtpValid(v.Token, user.ConfirmationToken, user.ConfirmationSentAt.Add(mailerOtpExpiresAt))
 	case recoveryVerification, magicLinkVerification:
-		isValid = isOtpValid(v.Token, user.RecoveryToken, user.RecoverySentAt.Add(24*time.Hour))
+		isValid = isOtpValid(v.Token, user.RecoveryToken, user.RecoverySentAt.Add(mailerOtpExpiresAt))
 	case emailChangeVerification:
-		expiresAt := user.EmailChangeSentAt.Add(24 * time.Hour)
+		expiresAt := user.EmailChangeSentAt.Add(mailerOtpExpiresAt)
 		isValid = isOtpValid(v.Token, user.EmailChangeTokenCurrent, expiresAt) || isOtpValid(v.Token, user.EmailChangeTokenNew, expiresAt)
 		if !isValid {
 			// reset email confirmation status
@@ -369,7 +371,7 @@ func (v *VerifyParams) VerifyUser(ctx context.Context, conn *storage.Connection,
 			err = conn.UpdateOnly(user, "email_change_confirm_status")
 		}
 	case smsVerification:
-		isValid = isOtpValid(v.Token, user.ConfirmationToken, user.ConfirmationSentAt.Add(time.Second*time.Duration(config.Sms.OtpExp)))
+		isValid = isOtpValid(v.Token, user.ConfirmationToken, user.ConfirmationSentAt.Add(smsOtpExpiresAt))
 	}
 
 	if !isValid || err != nil {

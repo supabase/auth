@@ -118,6 +118,7 @@ type MailerConfiguration struct {
 	Templates                EmailContentConfiguration `json:"templates"`
 	URLPaths                 EmailContentConfiguration `json:"url_paths"`
 	SecureEmailChangeEnabled bool                      `json:"secure_email_change_enabled" split_words:"true" default:"true"`
+	OtpExp                   uint                      `json:"otp_exp" split_words:"true"`
 }
 
 type PhoneProviderConfiguration struct {
@@ -275,14 +276,21 @@ func (config *Configuration) ApplyDefaults() {
 	if config.Mailer.URLPaths.Invite == "" {
 		config.Mailer.URLPaths.Invite = "/"
 	}
+
 	if config.Mailer.URLPaths.Confirmation == "" {
 		config.Mailer.URLPaths.Confirmation = "/"
 	}
+
 	if config.Mailer.URLPaths.Recovery == "" {
 		config.Mailer.URLPaths.Recovery = "/"
 	}
+
 	if config.Mailer.URLPaths.EmailChange == "" {
 		config.Mailer.URLPaths.EmailChange = "/"
+	}
+
+	if config.Mailer.OtpExp == 0 {
+		config.Mailer.OtpExp = 86400 // 1 day
 	}
 
 	if config.SMTP.MaxFrequency == 0 {
