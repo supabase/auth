@@ -22,6 +22,7 @@ type slackUser struct {
 	Email     string `json:"email"`
 	Name      string `json:"name"`
 	AvatarURL string `json:"picture"`
+	TeamID    string `json:"https://slack.com/team_id"`
 }
 
 // NewSlackProvider creates a Slack account provider.
@@ -80,6 +81,9 @@ func (g slackProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 			Picture:       u.AvatarURL,
 			Email:         u.Email,
 			EmailVerified: true, // Slack dosen't provide data on if email is verified.
+			CustomClaims: map[string]interface{}{
+				"https://slack.com/team_id": u.TeamID,
+			},
 
 			// To be deprecated
 			AvatarURL:  u.AvatarURL,
