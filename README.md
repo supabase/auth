@@ -305,6 +305,10 @@ Sets the name of the sender. Defaults to the `SMTP_ADMIN_EMAIL` if not used.
 
 If you do not require email confirmation, you may set this to `true`. Defaults to `false`.
 
+`MAILER_OTP_EXP` - `number`
+
+Controls the duration an email link or otp is valid for.
+
 `MAILER_URLPATHS_INVITE` - `string`
 
 URL path to use in the user invite email. Defaults to `/`.
