@@ -16,7 +16,7 @@ type UserUpdateParams struct {
 	Data     map[string]interface{} `json:"data"`
 	AppData  map[string]interface{} `json:"app_metadata,omitempty"`
 	Phone    string                 `json:"phone"`
-	ShouldSendEmail string          `json:"shouldSendEmail"`
+	ShouldSendEmail bool            `json:"shouldSendEmail"`
 }
 
 // UserGet returns a user
@@ -55,7 +55,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	instanceID := getInstanceID(ctx)
 
 	params := &UserUpdateParams{}
-	params.ShouldSendEmail = r.FormValue("shouldSendEmail")
+	params.ShouldSendEmail = r.FormValue("shouldSendEmail") != "false"
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
 	if err != nil {
@@ -112,7 +112,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				}
 				shouldSendEmail = true
 			case p == "/user/email":	
-				shouldSendEmail = params.ShouldSendEmail != "false"
+				shouldSendEmail = params.ShouldSendEmail
 
 		}
 

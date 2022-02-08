@@ -256,7 +256,7 @@ func (m TemplateMailer) Send(user *models.User, subject, body string, data map[s
 }
 
 // GetEmailActionLink returns a magiclink, recovery or invite link based on the actionType passed.
-func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referrerURL string) (string, error) {
+func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referrerURL string) ([]string, error) {
 	globalConfig, err := conf.LoadGlobal(configFile)
 
 	redirectParam := ""
@@ -264,26 +264,32 @@ func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referr
 		redirectParam = "&redirect_to=" + referrerURL
 	}
 
-	var url string
+	var url = []string{"",""}
 	switch actionType {
 	case "magiclink":
-		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=magiclink"+redirectParam)
+		url[0], err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=magiclink"+redirectParam)
 	case "email_change":
-		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.EmailChangeTokenNew+"&type=email_change"+redirectParam)
+		if m.Config.Mailer.SecureEmailChangeEnabled {
+			url[0], err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.EmailChange, "token="+user.EmailChangeTokenNew+"&type=email_change"+redirectParam)
+			url[1], err =  getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.EmailChange, "token="+user.EmailChangeTokenCurrent+"&type=email_change"+redirectParam)
+			return url, err
+		} else {
+			url[0], err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.EmailChange, "token="+user.EmailChangeTokenNew+"&type=email_change"+redirectParam)
+		}
 	case "email_change_current":
-		url, err =  getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.EmailChangeTokenCurrent+"&type=email_change"+redirectParam)
+		url[0], err =  getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.EmailChange, "token="+user.EmailChangeTokenCurrent+"&type=email_change"+redirectParam)
 	case "recovery":
-		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=recovery"+redirectParam)
+		url[0], err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=recovery"+redirectParam)
 	case "invite":
-		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Invite, "token="+user.ConfirmationToken+"&type=invite"+redirectParam)
+		url[0], err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Invite, "token="+user.ConfirmationToken+"&type=invite"+redirectParam)
 	case "signup":
-		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Confirmation, "token="+user.ConfirmationToken+"&type=signup"+redirectParam)
+		url[0], err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Confirmation, "token="+user.ConfirmationToken+"&type=signup"+redirectParam)
 	default:
-		return "", fmt.Errorf("Invalid email action link type: %s", actionType)
+		return url, fmt.Errorf("Invalid email action link type: %s", actionType)
 	}
 
 	if err != nil {
-		return "", err
+		return url, err
 	}
 
 	return url, nil

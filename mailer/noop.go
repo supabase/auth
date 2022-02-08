@@ -33,6 +33,6 @@ func (m noopMailer) Send(user *models.User, subject, body string, data map[strin
 	return nil
 }
 
-func (m noopMailer) GetEmailActionLink(user *models.User, actionType, referrerURL string) (string, error) {
-	return "", nil
+func (m noopMailer) GetEmailActionLink(user *models.User, actionType, referrerURL string) ([]string, error) {
+	return []string{""}, nil
 }

@@ -64,8 +64,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	var url string
-	var url_email_change_current string
+	var url []string
 	referrer := a.getRedirectURLOrReferrer(r, params.RedirectTo)
 	now := time.Now()
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -86,7 +85,6 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 				if len(user.EmailChangeTokenCurrent) == 0 {
 					return badRequestError("secure email change is not enabled by user")
 				}
-				url_email_change_current, terr = mailer.GetEmailActionLink(user, "email_change_current", referrer)
 			}
 		case "invite":
 			if user != nil {
@@ -172,9 +170,9 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	if err = json.Unmarshal(u, &resp); err != nil {
 		return internalServerError("User serialization error").WithInternalError(err)
 	}
-	resp["action_link"] = url
+	resp["action_link"] = url[0]
 	if config.Mailer.SecureEmailChangeEnabled {
-		resp["action_link_email_change_current"] = url_email_change_current
+		resp["action_link_email_change_current"] = url[1]
 	}
 
 	return sendJSON(w, http.StatusOK, resp)
