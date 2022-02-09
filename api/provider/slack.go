@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/netlify/gotrue/conf"
@@ -68,7 +67,7 @@ func (g slackProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/openid.connect.userInfo", &u); err != nil {
 		return nil, err
 	}
-	fmt.Printf("%+v\n", u)
+
 	if u.Email == "" {
 		return nil, errors.New("Unable to find email with Slack provider")
 	}
