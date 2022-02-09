@@ -80,7 +80,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		aud := a.requestAud(ctx, r)
-		user, terr = params.VerifyUser(ctx, tx, aud)
+		user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
 		if terr != nil {
 			var herr *HTTPError
 			if errors.As(terr, &herr) {
@@ -107,14 +107,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 				return nil
 			}
 		case smsVerification:
-			if params.Phone == "" {
-				return unprocessableEntityError("Sms Verification requires a phone number")
-			}
-			params.Phone = a.formatPhoneNumber(params.Phone)
-			if isValid := a.validateE164Format(params.Phone); !isValid {
-				return unprocessableEntityError("Invalid phone number format")
-			}
-			user, terr = a.smsVerify(ctx, tx, params, user)
+			user, terr = a.smsVerify(ctx, tx, user)
 		default:
 			return unprocessableEntityError("Verify requires a verification type")
 		}
@@ -227,7 +220,7 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user 
 	return user, nil
 }
 
-func (a *API) smsVerify(ctx context.Context, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
+func (a *API) smsVerify(ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
 
@@ -320,27 +313,36 @@ func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, p
 	return user, nil
 }
 
-// VerifyUser verifies the token associated to the user based on the verify type
-func (v *VerifyParams) VerifyUser(ctx context.Context, conn *storage.Connection, aud string) (*models.User, error) {
+// verifyUserAndToken verifies the token associated to the user based on the verify type
+func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := getConfig(ctx)
 
 	var user *models.User
 	var err error
-	if v.Email != "" {
-		// email_change should use old email for otp verification
-		user, err = models.FindUserByEmailAndAudience(conn, instanceID, v.Email, aud)
-	} else if v.Phone != "" {
-		user, err = models.FindUserByPhoneAndAudience(conn, instanceID, v.Phone, aud)
-	} else {
-		switch v.Type {
+	if isUrlVerification(params) {
+		switch params.Type {
 		case signupVerification, inviteVerification:
-			user, err = models.FindUserByConfirmationToken(conn, v.Token)
+			user, err = models.FindUserByConfirmationToken(conn, params.Token)
 		case recoveryVerification, magicLinkVerification:
-			user, err = models.FindUserByRecoveryToken(conn, v.Token)
+			user, err = models.FindUserByRecoveryToken(conn, params.Token)
 		case emailChangeVerification:
-			user, err = models.FindUserByEmailChangeToken(conn, v.Token)
+			user, err = models.FindUserByEmailChangeToken(conn, params.Token)
 		}
+	} else if params.Type == smsVerification {
+		if params.Phone == "" {
+			return nil, unprocessableEntityError("Sms Verification requires a phone number")
+		}
+		params.Phone = a.formatPhoneNumber(params.Phone)
+		if ok := a.validateE164Format(params.Phone); !ok {
+			return nil, unprocessableEntityError("Invalid phone number format")
+		}
+		user, err = models.FindUserByPhoneAndAudience(conn, instanceID, params.Phone, aud)
+	} else if params.Email != "" {
+		if err := a.validateEmail(ctx, params.Email); err != nil {
+			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
+		}
+		user, err = models.FindUserByEmailAndAudience(conn, instanceID, params.Email, aud)
 	}
 
 	if err != nil {
@@ -357,21 +359,21 @@ func (v *VerifyParams) VerifyUser(ctx context.Context, conn *storage.Connection,
 	var isValid bool
 	mailerOtpExpiresAt := time.Second * time.Duration(config.Mailer.OtpExp)
 	smsOtpExpiresAt := time.Second * time.Duration(config.Sms.OtpExp)
-	switch v.Type {
+	switch params.Type {
 	case signupVerification, inviteVerification:
-		isValid = isOtpValid(v.Token, user.ConfirmationToken, user.ConfirmationSentAt.Add(mailerOtpExpiresAt))
+		isValid = isOtpValid(params.Token, user.ConfirmationToken, user.ConfirmationSentAt.Add(mailerOtpExpiresAt))
 	case recoveryVerification, magicLinkVerification:
-		isValid = isOtpValid(v.Token, user.RecoveryToken, user.RecoverySentAt.Add(mailerOtpExpiresAt))
+		isValid = isOtpValid(params.Token, user.RecoveryToken, user.RecoverySentAt.Add(mailerOtpExpiresAt))
 	case emailChangeVerification:
 		expiresAt := user.EmailChangeSentAt.Add(mailerOtpExpiresAt)
-		isValid = isOtpValid(v.Token, user.EmailChangeTokenCurrent, expiresAt) || isOtpValid(v.Token, user.EmailChangeTokenNew, expiresAt)
+		isValid = isOtpValid(params.Token, user.EmailChangeTokenCurrent, expiresAt) || isOtpValid(params.Token, user.EmailChangeTokenNew, expiresAt)
 		if !isValid {
 			// reset email confirmation status
 			user.EmailChangeConfirmStatus = zeroConfirmation
 			err = conn.UpdateOnly(user, "email_change_confirm_status")
 		}
 	case smsVerification:
-		isValid = isOtpValid(v.Token, user.ConfirmationToken, user.ConfirmationSentAt.Add(smsOtpExpiresAt))
+		isValid = isOtpValid(params.Token, user.ConfirmationToken, user.ConfirmationSentAt.Add(smsOtpExpiresAt))
 	}
 
 	if !isValid || err != nil {
@@ -383,4 +385,8 @@ func (v *VerifyParams) VerifyUser(ctx context.Context, conn *storage.Connection,
 // isOtpValid checks the actual otp sent against the expected otp and ensures that it's within the valid window
 func isOtpValid(actual, expected string, expiresAt time.Time) bool {
 	return time.Now().Before(expiresAt) && (actual == expected)
+}
+
+func isUrlVerification(params *VerifyParams) bool {
+	return params.Type != smsVerification && params.Email == ""
 }
