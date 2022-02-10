@@ -50,7 +50,7 @@ func (ts *VerifyTestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }
 
-func (ts *VerifyTestSuite) TestVerify_PasswordRecovery() {
+func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.RecoverySentAt = &time.Time{}
@@ -96,7 +96,7 @@ func (ts *VerifyTestSuite) TestVerify_PasswordRecovery() {
 	assert.True(ts.T(), u.IsConfirmed())
 }
 
-func (ts *VerifyTestSuite) TestVerify_SecureEmailChange() {
+func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.EmailChangeSentAt = &time.Time{}
@@ -195,7 +195,7 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	assert.Equal(ts.T(), "error_code=410&error_description=Token+has+expired+or+is+invalid", url.Fragment)
 }
 
-func (ts *VerifyTestSuite) TestInvalidSmsOtp() {
+func (ts *VerifyTestSuite) TestInvalidOtp() {
 	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "12345678", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.ConfirmationToken = "123456"
@@ -220,7 +220,7 @@ func (ts *VerifyTestSuite) TestInvalidSmsOtp() {
 		expected
 	}{
 		{
-			desc:     "Expired OTP",
+			desc:     "Expired Sms OTP",
 			sentTime: time.Now().Add(-48 * time.Hour),
 			body: map[string]interface{}{
 				"type":  smsVerification,
@@ -230,12 +230,22 @@ func (ts *VerifyTestSuite) TestInvalidSmsOtp() {
 			expected: expectedResponse,
 		},
 		{
-			desc:     "Incorrect OTP",
+			desc:     "Invalid Sms OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":  smsVerification,
-				"token": "incorrect_otp",
+				"token": "invalid_otp",
 				"phone": u.GetPhone(),
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Invalid Email OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  signupVerification,
+				"token": "invalid_otp",
+				"email": u.GetEmail(),
 			},
 			expected: expectedResponse,
 		},
