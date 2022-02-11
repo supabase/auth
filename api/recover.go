@@ -32,6 +32,12 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 
 	aud := a.requestAud(ctx, r)
 	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return notFoundError(err.Error())
+		}
+		return internalServerError("If an account exists, you will receive an email with instructions on how to reset your password.").WithInternalError(err)
+	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
@@ -42,8 +48,11 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		referrer := a.getReferrer(r)
 		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer)
 	})
-	if errors.Is(err, MaxFrequencyLimitError) {
-		return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
+	if err != nil {
+		if errors.Is(err, MaxFrequencyLimitError) {
+			return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
+		}
+		return internalServerError("If an account exists, you will receive an email with instructions on how to reset your password.").WithInternalError(err)
 	}
 
 	return sendJSON(w, http.StatusOK, &map[string]string{})
