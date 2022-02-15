@@ -120,7 +120,10 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
 
-		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
+		r.With(sharedLimiter).With(api.verifyCaptcha).Route("/otp", func(r *router) {
+			r.Post("/", api.Otp)
+			r.With(api.requireAdminCredentials).Post("/phone", api.GetPhoneOtp)
+		})
 
 		r.With(api.limitHandler(
 			// Allow requests at a rate of 30 per 5 minutes.

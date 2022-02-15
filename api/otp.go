@@ -24,6 +24,11 @@ type SmsParams struct {
 	Phone string `json:"phone"`
 }
 
+// OtpResponse contains the response for sms otp
+type OtpResponse struct {
+	Otp string `json:"otp"`
+}
+
 // Otp returns the MagicLink or SmsOtp handler based on the request body params
 func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	params := &OtpParams{
@@ -107,6 +112,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone); err != nil {
 			return badRequestError("Error sending sms otp: %v", err)
 		}
+
 		return nil
 	})
 
@@ -134,4 +140,85 @@ func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) bool {
 		}
 	}
 	return true
+}
+
+// GetPhoneOtp save and return the OTP code
+func (a *API) GetPhoneOtp(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	config := a.getConfig(ctx)
+
+	if !config.External.Phone.Enabled {
+		return badRequestError("Unsupported phone provider")
+	}
+
+	otpResponse := &OtpResponse{}
+	instanceID := getInstanceID(ctx)
+	params := &OtpParams{
+		CreateUser: true,
+	}
+	body, err := ioutil.ReadAll(r.Body)
+	jsonDecoder := json.NewDecoder(bytes.NewReader(body))
+	if err = jsonDecoder.Decode(params); err != nil {
+		return badRequestError("Could not read verification params: %v", err)
+	}
+
+	if params.Email != "" {
+		return badRequestError("Only phone number should be provided")
+	}
+
+	r.Body = ioutil.NopCloser(strings.NewReader(string(body)))
+
+	if !a.shouldCreateUser(r, params) {
+		return badRequestError("Signups not allowed for otp")
+	}
+
+	params.Phone = a.formatPhoneNumber(params.Phone)
+
+	if isValid := a.validateE164Format(params.Phone); !isValid {
+		return badRequestError("Invalid format: Phone number should follow the E.164 format")
+	}
+
+	aud := a.requestAud(ctx, r)
+
+	user, uerr := models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
+	if uerr != nil {
+		// if user does not exists, sign up the user
+		if models.IsNotFoundError(uerr) {
+			password, err := password.Generate(64, 10, 0, false, true)
+			if err != nil {
+				internalServerError("error creating user").WithInternalError(err)
+			}
+			newBodyContent := `{"phone":"` + params.Phone + `","password":"` + password + `"}`
+			r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
+			r.ContentLength = int64(len(newBodyContent))
+
+			fakeResponse := &responseStub{}
+
+			if err := a.Signup(fakeResponse, r); err != nil {
+				return err
+			}
+			return sendJSON(w, http.StatusOK, make(map[string]string))
+		}
+		return internalServerError("Database error finding user").WithInternalError(uerr)
+	}
+
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		if err := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); err != nil {
+			return err
+		}
+
+		otp, err := a.savePhoneConfirmation(ctx, tx, user, params.Phone)
+		if err != nil {
+			return badRequestError("Error saving sms otp: %v", err)
+		}
+		otpResponse.Otp = otp
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return sendJSON(w, http.StatusOK, otpResponse)
 }

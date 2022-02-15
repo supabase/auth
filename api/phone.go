@@ -65,3 +65,22 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 
 	return errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at"), "Database error updating user for confirmation")
 }
+
+func (a *API) savePhoneConfirmation(ctx context.Context, tx *storage.Connection, user *models.User, phone string) (string, error) {
+	config := a.getConfig(ctx)
+
+	if user.ConfirmationSentAt != nil && !user.ConfirmationSentAt.Add(config.Sms.MaxFrequency).Before(time.Now()) {
+		return "", MaxFrequencyLimitError
+	}
+
+	otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
+	if err != nil {
+		return "", internalServerError("error generating otp").WithInternalError(err)
+	}
+	user.ConfirmationToken = otp
+
+	now := time.Now()
+	user.ConfirmationSentAt = &now
+
+	return otp, errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at"), "Database error saving user for confirmation")
+}
