@@ -82,6 +82,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 	xffmw, _ := xff.Default()
 	logger := newStructuredLogger(logrus.StandardLogger())
+	config := getConfig(ctx)
 
 	r := newRouter()
 	r.UseBypass(xffmw.Handler)
@@ -198,6 +199,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	}
 
 	corsHandler := cors.New(cors.Options{
+		AllowedOrigins:   config.AllowedOrigins,
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
 		AllowedHeaders:   []string{"X-Client-Info", "Accept", "Authorization", "Content-Type", audHeaderName, useCookieHeader},
 		AllowCredentials: true,

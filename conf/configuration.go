@@ -4,6 +4,8 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -175,6 +177,7 @@ type SecurityConfiguration struct {
 type Configuration struct {
 	SiteURL           string                   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList      []string                 `json:"uri_allow_list" split_words:"true"`
+	AllowedOrigins    []string                 `json:"allowed_origins"`
 	PasswordMinLength int                      `json:"password_min_length" default:"6"`
 	JWT               JWTConfiguration         `json:"jwt"`
 	SMTP              SMTPConfiguration        `json:"smtp"`
@@ -328,6 +331,31 @@ func (config *Configuration) ApplyDefaults() {
 
 	if config.URIAllowList == nil {
 		config.URIAllowList = []string{}
+	}
+
+	if config.AllowedOrigins == nil {
+		urls := append(config.URIAllowList, config.SiteURL)
+		m := make(map[string]bool)
+		for _, u := range urls {
+			if url, err := url.Parse(u); err == nil {
+				var urlname string
+				if url.Port() == "" {
+					urlname = fmt.Sprintf("%v://%v", url.Scheme, url.Hostname())
+				} else {
+					// for localhost
+					urlname = fmt.Sprintf("%v://%v:%v", url.Scheme, url.Hostname(), url.Port())
+				}
+				if _, ok := m[urlname]; !ok && len(url.Hostname()) != 0 {
+					m[urlname] = true
+				}
+			}
+		}
+		for urlString := range m {
+			config.AllowedOrigins = append(config.AllowedOrigins, urlString)
+		}
+		if len(config.AllowedOrigins) == 0 {
+			config.AllowedOrigins = []string{"*"}
+		}
 	}
 }
 
