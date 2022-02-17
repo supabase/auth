@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
+	"github.com/sethvargo/go-password/password"
 )
 
 type adminUserParams struct {
@@ -22,6 +25,7 @@ type adminUserParams struct {
 	PhoneConfirm bool                   `json:"phone_confirm"`
 	UserMetaData map[string]interface{} `json:"user_metadata"`
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
+	BanDuration  string                 `json:"ban_duration"`
 }
 
 func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context, error) {
@@ -155,6 +159,22 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
+		if params.BanDuration != "" {
+			if params.BanDuration == "none" {
+				user.BannedUntil = nil
+			} else {
+				duration, terr := time.ParseDuration(params.BanDuration)
+				if terr != nil {
+					return badRequestError("Invalid format for ban_duration: %v", terr)
+				}
+				t := time.Now().Add(duration)
+				user.BannedUntil = &t
+			}
+			if terr := user.UpdateBannedUntil(tx); terr != nil {
+				return terr
+			}
+		}
+
 		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserModifiedAction, map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
@@ -167,6 +187,9 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 	if err != nil {
 		if errors.Is(err, invalidPasswordLengthError(config)) {
+			return err
+		}
+		if strings.Contains(err.Error(), "Invalid format for ban_duration") {
 			return err
 		}
 		return internalServerError("Error updating user").WithInternalError(err)
@@ -219,6 +242,14 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	if params.Password == nil || *params.Password == "" {
+		password, err := password.Generate(64, 10, 0, false, true)
+		if err != nil {
+			return internalServerError("Error generating password").WithInternalError(err)
+		}
+		params.Password = &password
+	}
+
 	user, err := models.NewUser(instanceID, params.Email, *params.Password, aud, params.UserMetaData)
 	if err != nil {
 		return internalServerError("Error creating user").WithInternalError(err)
@@ -231,6 +262,15 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 	user.AppMetaData["provider"] = "email"
 	user.AppMetaData["providers"] = []string{"email"}
+
+	if params.BanDuration != "" {
+		duration, terr := time.ParseDuration(params.BanDuration)
+		if terr != nil {
+			return badRequestError("Invalid format for ban_duration: %v", terr)
+		}
+		t := time.Now().Add(duration)
+		user.BannedUntil = &t
+	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserSignedUpAction, map[string]interface{}{
@@ -269,6 +309,9 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
+		if strings.Contains(err.Error(), "Invalid format for ban_duration") {
+			return err
+		}
 		return internalServerError("Database error creating new user").WithInternalError(err)
 	}
 

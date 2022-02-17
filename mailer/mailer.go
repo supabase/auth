@@ -26,6 +26,7 @@ type Mailer interface {
 // NewMailer returns a new gotrue mailer
 func NewMailer(instanceConfig *conf.Configuration) Mailer {
 	if instanceConfig.SMTP.Host == "" {
+		logrus.Infof("Noop mailer being used for %v", instanceConfig.SiteURL)
 		return &noopMailer{}
 	}
 
