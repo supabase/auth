@@ -267,7 +267,8 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 		user.Phone = storage.NullString(params.Phone)
 	case "eth":
 		user, err = models.NewUser(instanceID, "", "", params.Aud, params.Data)
-		user.EthAddress = storage.NullString(params.EthAddress)
+		// TODO(HarryET): Migrate to the new EthAddress method
+		//user.EthAddress = storage.NullString(params.EthAddress)
 	default:
 		// handles external provider case
 		user, err = models.NewUser(instanceID, params.Email, params.Password, params.Aud, params.Data)

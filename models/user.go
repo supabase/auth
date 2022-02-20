@@ -31,9 +31,6 @@ type User struct {
 	Phone            storage.NullString `json:"phone" db:"phone"`
 	PhoneConfirmedAt *time.Time         `json:"phone_confirmed_at,omitempty" db:"phone_confirmed_at"`
 
-	// TODO (HarryET): Rename & Rework, waiting for comments
-	EthAddress storage.NullString `json:"eth_address" db:"eth_address"`
-
 	ConfirmationToken  string     `json:"-" db:"confirmation_token"`
 	ConfirmationSentAt *time.Time `json:"confirmation_sent_at,omitempty" db:"confirmation_sent_at"`
 
@@ -186,11 +183,6 @@ func (u *User) GetPhone() string {
 	return string(u.Phone)
 }
 
-// GetEthAddress returns the user's ethereum address as a string
-func (u *User) GetEthAddress() string {
-	return string(u.EthAddress)
-}
-
 // UpdateUserMetaData sets all user data from a map of updates,
 // ensuring that it doesn't override attributes that are not
 // in the provided map.
@@ -246,12 +238,6 @@ func (u *User) SetEmail(tx *storage.Connection, email string) error {
 func (u *User) SetPhone(tx *storage.Connection, phone string) error {
 	u.Phone = storage.NullString(phone)
 	return tx.UpdateOnly(u, "phone")
-}
-
-// SetEthAddress sets the user's ethereum address
-func (u *User) SetEthAddress(tx *storage.Connection, eth_address string) error {
-	u.EthAddress = storage.NullString(eth_address)
-	return tx.UpdateOnly(u, "eth_address")
 }
 
 // hashPassword generates a hashed password from a plaintext string

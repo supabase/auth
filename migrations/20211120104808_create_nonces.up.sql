@@ -1,4 +1,4 @@
-CREATE TABLE auth.nonces (
+CREATE TABLE IF NOT EXISTS auth.nonces (
 	instance_id uuid NULL,
 	id uuid NOT NULL,
 	
@@ -8,9 +8,9 @@ CREATE TABLE auth.nonces (
 	eth_address text NOT NULL,
 	chain_id integer NOT NULL,
 
-	created_at timestamptz NULL,
+	created_at timestamptz NULL DEFAULT now(),
 	expires_at timestamptz NULL,
 	CONSTRAINT nonces_pkey PRIMARY KEY (id)
 );
-CREATE INDEX nonces_instance_id_idx ON auth.nonces USING btree (instance_id);
+CREATE INDEX IF NOT EXISTS nonces_instance_id_idx ON auth.nonces USING btree (instance_id);
 comment on table auth.nonces is 'Auth: Stored generated nonces used for validating Web3 login requests.';
