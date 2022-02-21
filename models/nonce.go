@@ -17,10 +17,13 @@ type Nonce struct {
 	InstanceID uuid.UUID `json:"-" db:"instance_id"`
 	ID         uuid.UUID `json:"id" db:"id"`
 
-	HashedIp   string `json:"-" db:"hashed_ip"`
-	ChainId    int    `json:"chain_id" db:"chain_id"`
-	Url        string `json:"url" db:"uri"`
-	EthAddress string `json:"eth_address" db:"eth_address"`
+	HashedIp string `json:"-" db:"hashed_ip"`
+
+	Url string `json:"url" db:"uri"`
+
+	ChainId        int    `json:"chain_id" db:"chain_id"`
+	Address        string `json:"eth_address" db:"eth_address"`
+	Cryptocurrency string `json:"cryptocurrency" db:"cryptocurrency"`
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
@@ -31,26 +34,27 @@ func (Nonce) TableName() string {
 	return tableName
 }
 
-func NewNonce(instanceID uuid.UUID, chainId int, url string, walletAddress string, ip string) (*Nonce, error) {
+func NewNonce(instanceID uuid.UUID, chainId int, url, walletAddress, cryptocurrency, ip string) (*Nonce, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
 	}
 
-	hashedIp, err := hashIp(ip)
+	hashedIp, err := HashIp(ip)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error hashing IP")
 	}
 
 	nonce := &Nonce{
-		InstanceID: instanceID,
-		ID:         id,
-		HashedIp:   hashedIp,
-		ChainId:    chainId,
-		EthAddress: walletAddress,
-		Url:        url,
-		CreatedAt:  time.Now().UTC(),
-		ExpiresAt:  time.Now().UTC().Add(time.Minute * 2),
+		InstanceID:     instanceID,
+		ID:             id,
+		HashedIp:       hashedIp,
+		Cryptocurrency: cryptocurrency,
+		ChainId:        chainId,
+		Address:        walletAddress,
+		Url:            url,
+		CreatedAt:      time.Now().UTC(),
+		ExpiresAt:      time.Now().UTC().Add(time.Minute * 2),
 	}
 
 	return nonce, nil
@@ -75,8 +79,7 @@ func (n *Nonce) Consume(tx *storage.Connection) error {
 	return tx.Destroy(n)
 }
 
-// TODO (HarryET): Look at if this is secure enough or even needed
-func hashIp(ip string) (string, error) {
+func HashIp(ip string) (string, error) {
 	pw, err := bcrypt.GenerateFromPassword([]byte(ip), bcrypt.DefaultCost)
 	if err != nil {
 		return "", err
@@ -84,8 +87,6 @@ func hashIp(ip string) (string, error) {
 	return string(pw), nil
 }
 
-// TODO (HarryET): Look at if this is secure enough or even needed
-// Verify nonce was issued to ip
 func (n *Nonce) VerifyIp(ip string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(n.HashedIp), []byte(ip))
 	return err == nil
@@ -105,7 +106,7 @@ Version: 1
 Nonce: %v
 Issued At: %v
 Expiration Time: %v
-Chain ID: %v`, uri.Hostname(), n.EthAddress, uri.String(), n.CreatedAt.UnixNano()/int64(time.Millisecond), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
+Chain ID: %v`, uri.Hostname(), n.Address, uri.String(), n.CreatedAt.UnixNano()/int64(time.Millisecond), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
 }
 
 func (n *Nonce) BuildWithStatement(statement string) (string, error) {
@@ -124,12 +125,12 @@ Version: 1
 Nonce: %v
 Issued At: %v
 Expiration Time: %v
-Chain ID: %v`, uri.Hostname(), n.EthAddress, statement, uri.String(), n.CreatedAt.UnixNano()/int64(time.Millisecond), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
+Chain ID: %v`, uri.Hostname(), n.Address, statement, uri.String(), n.CreatedAt.UnixNano()/int64(time.Millisecond), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
 }
 
-func GetNonce(tx *storage.Connection, raw_nonce string) (*Nonce, error) {
+func GetNonceById(tx *storage.Connection, id uuid.UUID) (*Nonce, error) {
 	nonce := Nonce{}
-	if err := tx.Where("nonce = ?", raw_nonce).First(&nonce); err != nil {
+	if err := tx.Where("id = ?", id).First(&nonce); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, NonceNotFoundError{}
 		}
@@ -138,9 +139,9 @@ func GetNonce(tx *storage.Connection, raw_nonce string) (*Nonce, error) {
 	return &nonce, nil
 }
 
-func GetNonceById(tx *storage.Connection, id uuid.UUID) (*Nonce, error) {
+func GetNonceByWalletAddressAndIp(tx *storage.Connection, walletAddress, hashedIp string) (*Nonce, error) {
 	nonce := Nonce{}
-	if err := tx.Where("id = ?", id).First(&nonce); err != nil {
+	if err := tx.Where("address = ?, hashed_ip = ?", walletAddress, hashedIp).First(&nonce); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, NonceNotFoundError{}
 		}

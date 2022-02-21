@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
+	siwe "github.com/spruceid/siwe-go"
 )
 
 type NonceParams struct {
@@ -47,8 +50,24 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 
 	// TODO (HarryET): Fetch nonce with same IP & wallet address that is not expired so that less nonces are created
 
+	// Get Statement
+	statement := config.External.Eth.Message
+
+	messageOptions := siwe.InitMessageOptions(map[string]interface{}{
+		"statement":      statement,
+		"issuedAt":       time.Now().UTC(),
+		"nonce":          siwe.GenerateNonce(),
+		"chainId":        params.ChainId,
+		"expirationTime": time.Now().UTC().Add(time.Minute * 5),
+	})
+	uri, err := url.Parse(params.Url)
+	if err != nil {
+		// TODO (HarryET): Handle or return error
+	}
+	message := siwe.InitMessage(uri.Hostname(), params.WalletAddress, uri.String(), "1", *messageOptions)
+
 	// Create new nonce
-	nonce, err := models.NewNonce(instanceID, params.ChainId, params.Url, params.WalletAddress, clientIP)
+	nonce, err := models.NewNonce(instanceID, params.ChainId, params.Url, params.WalletAddress, "eip155", clientIP)
 	if err != nil || nonce == nil {
 		return internalServerError("Failed to generate nonce")
 	}
@@ -69,29 +88,10 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// The nonce string that was built
-	var builtNonce string
-
-	// Get Statement
-	statement := config.External.Eth.Message
-
-	// Check if statement was set
-	if statement != "" {
-		// Build the nonce string - with a statement - that is compliant with EIP-4361
-		builtNonce, err = nonce.BuildWithStatement(statement)
-	} else {
-		// Build the nonce string that is compliant with EIP-4361
-		builtNonce, err = nonce.Build()
-	}
-
-	if err != nil {
-		return internalServerError("Failed to build nonce")
-	}
-
 	// Return the nonce's id and the build string
 	return sendJSON(w, http.StatusCreated, &NonceResponse{
 		Id:    nonce.ID.String(),
-		Nonce: builtNonce,
+		Nonce: message.PrepareMessage(),
 	})
 }
 

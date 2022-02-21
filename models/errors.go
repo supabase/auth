@@ -65,3 +65,9 @@ type NonceNotFoundError struct{}
 func (e NonceNotFoundError) Error() string {
 	return "Nonce not found"
 }
+
+type CryptoAddressNotFoundError struct{}
+
+func (e CryptoAddressNotFoundError) Error() string {
+	return "Crypto Address not found"
+}

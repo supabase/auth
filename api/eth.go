@@ -107,7 +107,7 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 
 	// Check if the address from params is the same as the recovered address
 	if walletAddress != recoveredWalletAddress {
-		return badRequestError("Invalid Signature: Wallet address not the same as suplied address")
+		return badRequestError("Invalid Signature: Wallet address not the same as supplied address")
 	}
 
 	// Default Signin/Signup logic from `./signup.go`
