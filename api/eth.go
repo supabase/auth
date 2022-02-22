@@ -4,24 +4,19 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"strings"
-
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
+	"io/ioutil"
+	"net/http"
 )
 
 // EthParams contains the request body params for the eth endpoint, all values hex encoded
 type EthParams struct {
-	WalletAddress string `json:"wallet_address"`
-	NonceId       string `json:"nonce_id"`
-	Signature     string `json:"signature"`
+	NonceId   string `json:"nonce_id"`
+	Signature string `json:"signature"`
 }
 
 func hashMessageWithKeccak256(data []byte) []byte {
@@ -54,59 +49,11 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Failed to find nonce: %v", err)
 	}
 
-	// TODO (HarryET): Validate nonce expiry time
-
-	// Get the client's IP
-	clientIP := strings.Split(r.RemoteAddr, ":")[0]
-
-	// Validate the client's IP is the same as the one that created the nonce
-	if !nonce.VerifyIp(clientIP) {
-		return badRequestError("IP not the same as the IP this nonce was issued too")
-	}
-
-	// Convert the wallet address from params to an address struct
-	walletAddress := common.HexToAddress(params.WalletAddress)
-
-	// Decode the signature
-	sig, err := hexutil.Decode(params.Signature)
-	if err != nil {
-		return badRequestError("Invalid Signature: Failed to decode, not valid hex")
-	}
-
-	// Check the nonce is correctly formatted
-	// https://github.com/ethereum/go-ethereum/blob/55599ee95d4151a2502465e0afc7c47bd1acba77/internal/ethapi/api.go#L442
-	if sig[64] != 27 && sig[64] != 28 {
-		return badRequestError("Invalid Signature: Invalid formatting")
-	}
-	sig[64] -= 27
-
-	// The nonce string that was built
-	var nonceString string
-
-	// Get Statement
-	statement := config.External.Eth.Message
-
-	// Check if statement was set
-	if statement != "" {
-		// Build the nonce string - with a statement - that is compliant with EIP-4361
-		nonceString, err = nonce.BuildWithStatement(statement)
-	} else {
-		// Build the nonce string that is compliant with EIP-4361
-		nonceString, err = nonce.Build()
-	}
-	msg := []byte(nonceString)
-
-	// Use the signature and hashed nonce string to extract the public key
-	pubKey, err := crypto.SigToPub(hashMessageWithKeccak256(msg), sig)
-	if err != nil {
-		return badRequestError("Invalid Signature: Failed to extract public key")
-	}
-
-	// Convert the public key to an address
-	recoveredWalletAddress := crypto.PubkeyToAddress(*pubKey)
+	nonceMessage := nonce.ToMessage(a.config)
+	valid, err := nonceMessage.ValidateMessage(params.Signature)
 
 	// Check if the address from params is the same as the recovered address
-	if walletAddress != recoveredWalletAddress {
+	if !valid {
 		return badRequestError("Invalid Signature: Wallet address not the same as supplied address")
 	}
 

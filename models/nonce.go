@@ -3,6 +3,8 @@ package models
 import (
 	"database/sql"
 	"fmt"
+	"github.com/netlify/gotrue/conf"
+	"github.com/spruceid/siwe-go"
 	"net/url"
 	"time"
 
@@ -10,16 +12,14 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type Nonce struct {
 	InstanceID uuid.UUID `json:"-" db:"instance_id"`
 	ID         uuid.UUID `json:"id" db:"id"`
 
-	HashedIp string `json:"-" db:"hashed_ip"`
-
-	Url string `json:"url" db:"uri"`
+	Url      string `json:"url" db:"uri"`
+	Hostname string `json:"hostname" db:"hostname"`
 
 	ChainId        int    `json:"chain_id" db:"chain_id"`
 	Address        string `json:"eth_address" db:"eth_address"`
@@ -34,25 +34,20 @@ func (Nonce) TableName() string {
 	return tableName
 }
 
-func NewNonce(instanceID uuid.UUID, chainId int, url, walletAddress, cryptocurrency, ip string) (*Nonce, error) {
+func NewNonce(instanceID uuid.UUID, chainId int, url, hostname, walletAddress, cryptocurrency string) (*Nonce, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
 	}
 
-	hashedIp, err := HashIp(ip)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error hashing IP")
-	}
-
 	nonce := &Nonce{
 		InstanceID:     instanceID,
 		ID:             id,
-		HashedIp:       hashedIp,
 		Cryptocurrency: cryptocurrency,
 		ChainId:        chainId,
 		Address:        walletAddress,
 		Url:            url,
+		Hostname:       hostname,
 		CreatedAt:      time.Now().UTC(),
 		ExpiresAt:      time.Now().UTC().Add(time.Minute * 2),
 	}
@@ -79,17 +74,10 @@ func (n *Nonce) Consume(tx *storage.Connection) error {
 	return tx.Destroy(n)
 }
 
-func HashIp(ip string) (string, error) {
-	pw, err := bcrypt.GenerateFromPassword([]byte(ip), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-	return string(pw), nil
-}
-
-func (n *Nonce) VerifyIp(ip string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(n.HashedIp), []byte(ip))
-	return err == nil
+func (n *Nonce) Refresh(tx *storage.Connection) error {
+	n.CreatedAt = time.Now().UTC()
+	n.ExpiresAt = time.Now().UTC().Add(time.Minute * 2)
+	return tx.UpdateOnly(n, "created_at", "expires_at")
 }
 
 func (n *Nonce) Build() (string, error) {
@@ -128,6 +116,19 @@ Expiration Time: %v
 Chain ID: %v`, uri.Hostname(), n.Address, statement, uri.String(), n.CreatedAt.UnixNano()/int64(time.Millisecond), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
 }
 
+func (n *Nonce) ToMessage(config *conf.GlobalConfiguration) *siwe.Message {
+	messageOptions := siwe.InitMessageOptions(map[string]interface{}{
+		"statement":      config.External.Eth.Message,
+		"issuedAt":       time.Now().UTC(),
+		"nonce":          siwe.GenerateNonce(),
+		"chainId":        n.ChainId,
+		"expirationTime": time.Now().UTC().Add(time.Minute * 2),
+		"resources":      []string{fmt.Sprintf("%s/nonces/%s", config.API.ExternalURL, n.ID)},
+	})
+	message := siwe.InitMessage(n.Hostname, n.Address, n.Url, "1", *messageOptions)
+	return message
+}
+
 func GetNonceById(tx *storage.Connection, id uuid.UUID) (*Nonce, error) {
 	nonce := Nonce{}
 	if err := tx.Where("id = ?", id).First(&nonce); err != nil {
@@ -139,9 +140,9 @@ func GetNonceById(tx *storage.Connection, id uuid.UUID) (*Nonce, error) {
 	return &nonce, nil
 }
 
-func GetNonceByWalletAddressAndIp(tx *storage.Connection, walletAddress, hashedIp string) (*Nonce, error) {
+func GetNonceByWalletAddress(tx *storage.Connection, walletAddress string) (*Nonce, error) {
 	nonce := Nonce{}
-	if err := tx.Where("address = ?, hashed_ip = ?", walletAddress, hashedIp).First(&nonce); err != nil {
+	if err := tx.Where("address = ?", walletAddress).First(&nonce); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, NonceNotFoundError{}
 		}
