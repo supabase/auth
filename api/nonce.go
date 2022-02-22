@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/models"
@@ -43,7 +42,7 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	nonce, err := models.GetNonceByWalletAddress(a.db, params.WalletAddress)
-	if !errors.Is(err, models.NonceNotFoundError{}) {
+	if !models.IsNotFoundError(err) {
 		err = nonce.Refresh(a.db)
 		if err != nil {
 			return internalServerError("failed to refresh nonce")

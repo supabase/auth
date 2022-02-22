@@ -134,6 +134,7 @@ func (n *Nonce) GetCaipAddress() string {
 	return fmt.Sprintf("%s:%s:%s", n.Cryptocurrency, strconv.Itoa(n.ChainId), n.Address)
 }
 
+// TODO (HarryET): Fix queries!
 func GetNonceById(tx *storage.Connection, id uuid.UUID) (*Nonce, error) {
 	nonce := Nonce{}
 	if err := tx.Where("id = ?", id).First(&nonce); err != nil {
@@ -148,6 +149,8 @@ func GetNonceById(tx *storage.Connection, id uuid.UUID) (*Nonce, error) {
 func GetNonceByWalletAddress(tx *storage.Connection, walletAddress string) (*Nonce, error) {
 	nonce := Nonce{}
 	if err := tx.Where("address = ?", walletAddress).First(&nonce); err != nil {
+		//println(errors.Cause(err).Error())
+		//panic(err)
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, NonceNotFoundError{}
 		}

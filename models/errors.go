@@ -15,6 +15,10 @@ func IsNotFoundError(err error) bool {
 		return true
 	case IdentityNotFoundError:
 		return true
+	case NonceNotFoundError:
+		return true
+	case CryptoAddressNotFoundError:
+		return true
 	}
 	return false
 }
