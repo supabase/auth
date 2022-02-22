@@ -7,7 +7,7 @@ require (
 	github.com/btcsuite/btcd v0.22.0-beta // indirect
 	github.com/coreos/go-oidc/v3 v3.0.0
 	github.com/didip/tollbooth/v5 v5.1.1
-	github.com/ethereum/go-ethereum v1.10.16
+	github.com/ethereum/go-ethereum v1.10.16 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/go-sql-driver/mysql v1.6.0
@@ -26,8 +26,6 @@ require (
 	github.com/lestrrat-go/jwx v0.9.0
 	github.com/mattermost/xml-roundtrip-validator v0.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.11 // indirect
-	github.com/lib/pq v1.9.0 // indirect
-	github.com/microcosm-cc/bluemonday v1.0.16 // indirect
 	github.com/mrjones/oauth v0.0.0-20190623134757-126b35219450
 	github.com/netlify/mailme v1.1.1
 	github.com/opentracing/opentracing-go v1.1.0
@@ -40,7 +38,7 @@ require (
 	github.com/sethvargo/go-password v0.2.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.2.1
-	github.com/spruceid/siwe-go v0.0.0-20220216183003-b0ffdd128178 // indirect
+	github.com/spruceid/siwe-go v0.0.0-20220216183003-b0ffdd128178
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/crypto v0.0.0-20220214200702-86341886e292
 	golang.org/x/net v0.0.0-20211118161319-6a13c67c3ce4 // indirect

@@ -114,7 +114,7 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if useCookie != "" && config.Cookie.Duration > 0 {
-			if terr = a.setCookieToken(config, token.Token, useCookie == useSessionCookie, w); terr != nil {
+			if terr = a.setCookieTokens(config, token, useCookie == useSessionCookie, w); terr != nil {
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
 		}
