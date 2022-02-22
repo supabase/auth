@@ -29,7 +29,6 @@ type SignupParams struct {
 func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
-	cookie := r.Header.Get(useCookieHeader)
 
 	if config.DisableSignup {
 		return forbiddenError("Signups not allowed for this instance")
@@ -67,7 +66,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	switch params.Provider {
 	case "email":
 		if !config.External.Email.Enabled {
-			return badRequestError("Email logins are disabled")
+			return badRequestError("Email signups are disabled")
 		}
 		if err := a.validateEmail(ctx, params.Email); err != nil {
 			return err
@@ -75,7 +74,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		user, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, params.Aud)
 	case "phone":
 		if !config.External.Phone.Enabled {
-			return badRequestError("Unsupported phone provider")
+			return badRequestError("Phone signups are disabled")
 		}
 		params.Phone = a.formatPhoneNumber(params.Phone)
 		if isValid := a.validateE164Format(params.Phone); !isValid {
@@ -105,11 +104,18 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
+			identity, terr := a.createNewIdentity(tx, user, params.Provider, map[string]interface{}{"sub": user.ID.String()})
+			if terr != nil {
+				return terr
+			}
+			user.Identities = []models.Identity{*identity}
 		}
 
 		if params.Provider == "email" && !user.IsConfirmed() {
 			if config.Mailer.Autoconfirm {
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
+				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
+					"provider": params.Provider,
+				}); terr != nil {
 					return terr
 				}
 				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
@@ -121,7 +127,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			} else {
 				mailer := a.Mailer(ctx)
 				referrer := a.getReferrer(r)
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserConfirmationRequestedAction, nil); terr != nil {
+				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserConfirmationRequestedAction, map[string]interface{}{
+					"provider": params.Provider,
+				}); terr != nil {
 					return terr
 				}
 				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
@@ -135,7 +143,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			}
 		} else if params.Provider == "phone" && !user.IsPhoneConfirmed() {
 			if config.Sms.Autoconfirm {
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
+				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
+					"provider": params.Provider,
+				}); terr != nil {
 					return terr
 				}
 				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
@@ -145,7 +155,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					return internalServerError("Database error updating user").WithInternalError(terr)
 				}
 			} else {
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserConfirmationRequestedAction, nil); terr != nil {
+				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserConfirmationRequestedAction, map[string]interface{}{
+					"provider": params.Provider,
+				}); terr != nil {
 					return terr
 				}
 				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone); terr != nil {
@@ -163,7 +175,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		}
 		if errors.Is(err, UserExistsError) {
 			err = a.db.Transaction(func(tx *storage.Connection) error {
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRepeatedSignUpAction, nil); terr != nil {
+				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRepeatedSignUpAction, map[string]interface{}{
+					"provider": params.Provider,
+				}); terr != nil {
 					return terr
 				}
 				return nil
@@ -188,7 +202,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		var token *AccessTokenResponse
 		err = a.db.Transaction(func(tx *storage.Connection) error {
 			var terr error
-			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
+			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, map[string]interface{}{
+				"provider": params.Provider,
+			}); terr != nil {
 				return terr
 			}
 			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
@@ -200,10 +216,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 
-			if cookie != "" && config.Cookie.Duration > 0 {
-				if terr = a.setCookieToken(config, token.Token, cookie == useSessionCookie, w); terr != nil {
-					return internalServerError("Failed to set JWT cookie. %s", terr)
-				}
+			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
 			return nil
 		})
@@ -291,13 +305,14 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 	}
 
 	err = conn.Transaction(func(tx *storage.Connection) error {
-		if terr := tx.Create(user); terr != nil {
+		var terr error
+		if terr = tx.Create(user); terr != nil {
 			return internalServerError("Database error saving new user").WithInternalError(terr)
 		}
-		if terr := user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
+		if terr = user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
 			return internalServerError("Database error updating user").WithInternalError(terr)
 		}
-		if terr := triggerEventHooks(ctx, tx, ValidateEvent, user, instanceID, config); terr != nil {
+		if terr = triggerEventHooks(ctx, tx, ValidateEvent, user, instanceID, config); terr != nil {
 			return terr
 		}
 		return nil

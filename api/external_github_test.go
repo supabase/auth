@@ -5,8 +5,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"time"
 
 	jwt "github.com/golang-jwt/jwt"
+	"github.com/netlify/gotrue/models"
+	"github.com/stretchr/testify/require"
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalGithub() {
@@ -183,4 +186,41 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalGitHubErrorWhenEmailDoesntMa
 	u := performAuthorization(ts, "github", code, "invite_token")
 
 	assertAuthorizationFailure(ts, u, "Invited email does not match emails from external provider", "invalid_request", "")
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenVerifiedFalse() {
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"email":"github@example.com", "primary": true, "verified": false}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "github", code, "")
+
+	v, err := url.ParseQuery(u.Fragment)
+	ts.Require().NoError(err)
+	ts.Equal("unauthorized_client", v.Get("error"))
+	ts.Equal("401", v.Get("error_code"))
+	ts.Equal("Unverified email with github", v.Get("error_description"))
+	assertAuthorizationFailure(ts, u, "", "", "")
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenUserBanned() {
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	emails := `[{"email":"github@example.com", "primary": true, "verified": true}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	u := performAuthorization(ts, "github", code, "")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "github@example.com", "GitHub Test", "123", "http://example.com/avatar")
+
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "github@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	t := time.Now().Add(24 * time.Hour)
+	user.BannedUntil = &t
+	require.NoError(ts.T(), ts.API.db.UpdateOnly(user, "banned_until"))
+
+	u = performAuthorization(ts, "github", code, "")
+	assertAuthorizationFailure(ts, u, "User is unauthorized", "unauthorized_client", "")
 }

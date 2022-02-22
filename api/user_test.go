@@ -12,7 +12,6 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -52,27 +51,53 @@ func (ts *UserTestSuite) TestUser_UpdatePassword() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	// Request body
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"password": "newpass",
-	}))
+	var cases = []struct {
+		desc            string
+		update          map[string]interface{}
+		expectedCode    int
+		isAuthenticated bool
+	}{
+		{
+			"Valid password length",
+			map[string]interface{}{
+				"password": "newpass",
+			},
+			http.StatusOK,
+			true,
+		},
+		{
+			"Invalid password length",
+			map[string]interface{}{
+				"password": "",
+			},
+			http.StatusUnprocessableEntity,
+			false,
+		},
+	}
 
-	// Setup request
-	req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.update))
 
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	require.NoError(ts.T(), err)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+			req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+			req.Header.Set("Content-Type", "application/json")
 
-	// Setup response recorder
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), w.Code, http.StatusOK)
+			token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+			require.NoError(ts.T(), err)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
+			// Setup response recorder
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), w.Code, c.expectedCode)
 
-	assert.True(ts.T(), u.Authenticate("newpass"))
+			// Request body
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+
+			passwordUpdate, _ := c.update["password"].(string)
+			require.Equal(ts.T(), c.isAuthenticated, u.Authenticate(passwordUpdate))
+		})
+	}
 }

@@ -10,11 +10,13 @@ user data.
 
 Create a `.env` file to store your own custom env vars. See [`example.env`](example.env)
 
-```sh
-./hack/postgresd.sh
-make build
-./gotrue
+1. Start the local postgres database in a postgres container: `./hack/postgresd.sh` 
+2. Build the gotrue binary: `make build` . You should see an output like this:
 ```
+go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`"
+GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`" -o gotrue-arm64
+```
+3. Execute the gotrue binary: `./gotrue` (if you're on x86) `./gotrue-arm64` (if you're on arm)
 
 ## Configuration
 
@@ -191,7 +193,7 @@ The default group to assign all new users to.
 
 ### External Authentication Providers
 
-We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `spotify`, `slack`, `twitch` and `twitter` for external authentication.
+We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `linkedin`, `notion`, `spotify`, `slack`, `twitch` and `twitter` for external authentication.
 
 Use the names as the keys underneath `external` to configure each separately.
 
@@ -302,6 +304,10 @@ Sets the name of the sender. Defaults to the `SMTP_ADMIN_EMAIL` if not used.
 `MAILER_AUTOCONFIRM` - `bool`
 
 If you do not require email confirmation, you may set this to `true`. Defaults to `false`.
+
+`MAILER_OTP_EXP` - `number`
+
+Controls the duration an email link or otp is valid for.
 
 `MAILER_URLPATHS_INVITE` - `string`
 
@@ -456,7 +462,7 @@ Controls the number of digits of the sms otp sent.
 
 `SMS_PROVIDER` - `string`
 
-Available options are: `twilio` and `messagebird`
+Available options are: `twilio`, `messagebird`, `textlocal`, and `vonage`
 
 Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/requests-to-twilio#credentials):
 
@@ -503,6 +509,8 @@ Returns the publicly available settings for this gotrue instance.
     "github": true,
     "gitlab": true,
     "google": true,
+    "linkedin": true,
+    "notion": true,
     "slack": true,
     "spotify": true,
     "twitch": true,
@@ -510,6 +518,30 @@ Returns the publicly available settings for this gotrue instance.
   },
   "disable_signup": false,
   "autoconfirm": false
+}
+```
+
+### **POST, PUT /admin/users/<user_id>**
+
+Creates (POST) or Updates (PUT) the user based on the `user_id` specified. The `ban_duration` field accepts the following time units: "ns", "us", "ms", "s", "m", "h". See [`time.ParseDuration`](https://pkg.go.dev/time#ParseDuration) for more details on the format used.
+
+```js
+headers:
+{
+  "Authorization": "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO" // admin role required
+}
+
+body:
+{
+  "role": "test-user",
+  "email": "email@example.com",
+  "phone": "12345678",
+  "password": "secret", // only if type = signup
+  "email_confirm": true,
+  "phone_confirm": true,
+  "user_metadata": {},
+  "app_metadata": {},
+  "ban_duration": "24h" or "none" // to unban a user
 }
 ```
 
@@ -711,9 +743,12 @@ or show an account confirmed/welcome message in the case of `signup`, or direct 
 
 One-Time-Password. Will deliver a magiclink or sms otp to the user depending on whether the request body contains an "email" or "phone" key.
 
+If `"create_user": true`, user will not be automatically signed up if the user doesn't exist.
+
 ```js
 {
   "phone": "12345678" // follows the E.164 format
+  "create_user": true
 }
 
 OR
@@ -721,6 +756,7 @@ OR
 // exactly the same as /magiclink
 {
   "email": "email@example.com"
+  "create_user": true
 }
 ```
 
@@ -886,7 +922,7 @@ Get access_token from external oauth provider
 query params:
 
 ```
-provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | slack | spotify | twitch | twitter
+provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | linkedin | notion | slack | spotify | twitch | twitter
 scopes=<optional additional scopes depending on the provider (email and name are requested by default)>
 ```
 

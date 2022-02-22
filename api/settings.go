@@ -10,7 +10,9 @@ type ProviderSettings struct {
 	GitHub    bool `json:"github"`
 	GitLab    bool `json:"gitlab"`
 	Google    bool `json:"google"`
+	Linkedin  bool `json:"linkedin"`
 	Facebook  bool `json:"facebook"`
+	Notion    bool `json:"notion"`
 	Spotify   bool `json:"spotify"`
 	Slack     bool `json:"slack"`
 	Twitch    bool `json:"twitch"`
@@ -19,6 +21,7 @@ type ProviderSettings struct {
 	Email     bool `json:"email"`
 	Phone     bool `json:"phone"`
 	SAML      bool `json:"saml"`
+	Zoom      bool `json:"zoom"`
 }
 
 type ProviderLabels struct {
@@ -46,7 +49,9 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			GitHub:    config.External.Github.Enabled,
 			GitLab:    config.External.Gitlab.Enabled,
 			Google:    config.External.Google.Enabled,
+			Linkedin:  config.External.Linkedin.Enabled,
 			Facebook:  config.External.Facebook.Enabled,
+			Notion:    config.External.Notion.Enabled,
 			Spotify:   config.External.Spotify.Enabled,
 			Slack:     config.External.Slack.Enabled,
 			Twitch:    config.External.Twitch.Enabled,
@@ -55,6 +60,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Email:     config.External.Email.Enabled,
 			Phone:     config.External.Phone.Enabled,
 			SAML:      config.External.Saml.Enabled,
+			Zoom:      config.External.Zoom.Enabled,
 		},
 		ExternalLabels: ProviderLabels{
 			SAML: config.External.Saml.Name,

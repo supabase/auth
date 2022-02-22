@@ -1,6 +1,6 @@
 .PHONY: all build deps image lint migrate test vet
 CHECK_FILES?=$$(go list ./... | grep -v /vendor/)
-FLAGS?=-ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`"
+FLAGS?=-ldflags "-X github.com/netlify/gotrue/cmd.Version=`git describe --tags`"
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {sub("\\\\n",sprintf("\n%22c"," "), $$2);printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -12,8 +12,8 @@ build: ## Build the binary.
 	GOOS=linux GOARCH=arm64 go build $(FLAGS) -o gotrue-arm64
 
 deps: ## Install dependencies.
-	@go get -u github.com/gobuffalo/pop/v5/soda
-	@go get -u golang.org/x/lint/golint
+	@go install github.com/gobuffalo/pop/soda@latest	
+	@go install golang.org/x/lint/golint@latest
 	@go mod download
 
 image: ## Build the Docker image.

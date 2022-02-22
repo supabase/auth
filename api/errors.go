@@ -60,6 +60,10 @@ func (e *OAuthError) Cause() error {
 	return e
 }
 
+func invalidPasswordLengthError(config *conf.Configuration) *HTTPError {
+	return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", config.PasswordMinLength))
+}
+
 func invalidSignupError(config *conf.Configuration) *HTTPError {
 	var msg string
 	if config.External.Email.Enabled && config.External.Phone.Enabled {
@@ -131,6 +135,10 @@ func (e *HTTPError) Error() string {
 	return fmt.Sprintf("%d: %s", e.Code, e.Message)
 }
 
+func (e *HTTPError) Is(target error) bool {
+	return e.Error() == target.Error()
+}
+
 // Cause returns the root cause error
 func (e *HTTPError) Cause() error {
 	if e.InternalError != nil {
@@ -171,6 +179,18 @@ func (e *OTPError) Error() string {
 		return e.InternalMessage
 	}
 	return fmt.Sprintf("%s: %s", e.Err, e.Description)
+}
+
+// WithInternalError adds internal error information to the error
+func (e *OTPError) WithInternalError(err error) *OTPError {
+	e.InternalError = err
+	return e
+}
+
+// WithInternalMessage adds internal message information to the error
+func (e *OTPError) WithInternalMessage(fmtString string, args ...interface{}) *OTPError {
+	e.InternalMessage = fmt.Sprintf(fmtString, args...)
+	return e
 }
 
 // Cause returns the root cause error
@@ -232,6 +252,11 @@ func handleError(err error, w http.ResponseWriter, r *http.Request) {
 			handleError(jsonErr, w, r)
 		}
 	case *OAuthError:
+		log.WithError(e.Cause()).Info(e.Error())
+		if jsonErr := sendJSON(w, http.StatusBadRequest, e); jsonErr != nil {
+			handleError(jsonErr, w, r)
+		}
+	case *OTPError:
 		log.WithError(e.Cause()).Info(e.Error())
 		if jsonErr := sendJSON(w, http.StatusBadRequest, e); jsonErr != nil {
 			handleError(jsonErr, w, r)

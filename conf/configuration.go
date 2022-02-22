@@ -17,6 +17,7 @@ type OAuthProviderConfiguration struct {
 	Secret      string `json:"secret"`
 	RedirectURI string `json:"redirect_uri" split_words:"true"`
 	URL         string `json:"url"`
+	ApiURL      string `json:"api_url"`
 	Enabled     bool   `json:"enabled"`
 }
 
@@ -93,6 +94,8 @@ type ProviderConfiguration struct {
 	Github      OAuthProviderConfiguration `json:"github"`
 	Gitlab      OAuthProviderConfiguration `json:"gitlab"`
 	Google      OAuthProviderConfiguration `json:"google"`
+	Notion      OAuthProviderConfiguration `json:"notion"`
+	Linkedin    OAuthProviderConfiguration `json:"linkedin"`
 	Spotify     OAuthProviderConfiguration `json:"spotify"`
 	Slack       OAuthProviderConfiguration `json:"slack"`
 	Twitter     OAuthProviderConfiguration `json:"twitter"`
@@ -101,6 +104,7 @@ type ProviderConfiguration struct {
 	Phone       PhoneProviderConfiguration `json:"phone"`
 	Eth         EthProviderConfiguration   `json:"eth"`
 	Saml        SamlProviderConfiguration  `json:"saml"`
+	Zoom        OAuthProviderConfiguration `json:"zoom"`
 	IosBundleId string                     `json:"ios_bundle_id" split_words:"true"`
 	RedirectURL string                     `json:"redirect_url"`
 }
@@ -121,6 +125,7 @@ type MailerConfiguration struct {
 	Templates                EmailContentConfiguration `json:"templates"`
 	URLPaths                 EmailContentConfiguration `json:"url_paths"`
 	SecureEmailChangeEnabled bool                      `json:"secure_email_change_enabled" split_words:"true" default:"true"`
+	OtpExp                   uint                      `json:"otp_exp" split_words:"true"`
 }
 
 type PhoneProviderConfiguration struct {
@@ -136,6 +141,8 @@ type SmsProviderConfiguration struct {
 	Template     string                           `json:"template"`
 	Twilio       TwilioProviderConfiguration      `json:"twilio"`
 	Messagebird  MessagebirdProviderConfiguration `json:"messagebird"`
+	Textlocal    TextlocalProviderConfiguration   `json:"textlocal"`
+	Vonage       VonageProviderConfiguration      `json:"vonage"`
 }
 
 type TwilioProviderConfiguration struct {
@@ -149,6 +156,17 @@ type MessagebirdProviderConfiguration struct {
 	Originator string `json:"originator" split_words:"true"`
 }
 
+type TextlocalProviderConfiguration struct {
+	ApiKey string `json:"api_key" split_words:"true"`
+	Sender string `json:"sender" split_words:"true"`
+}
+
+type VonageProviderConfiguration struct {
+	ApiKey    string `json:"api_key" split_words:"true"`
+	ApiSecret string `json:"api_secret" split_words:"true"`
+	From      string `json:"from" split_words:"true"`
+}
+
 type CaptchaConfiguration struct {
 	Enabled  bool   `json:"enabled" default:"false"`
 	Provider string `json:"provider" default:"hcaptcha"`
@@ -156,7 +174,8 @@ type CaptchaConfiguration struct {
 }
 
 type SecurityConfiguration struct {
-	Captcha CaptchaConfiguration `json:"captcha"`
+	Captcha                     CaptchaConfiguration `json:"captcha"`
+	RefreshTokenRotationEnabled bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
 }
 
 type Web3Configuration struct {
@@ -178,6 +197,7 @@ type Configuration struct {
 	Security          SecurityConfiguration    `json:"security"`
 	Cookie            struct {
 		Key      string `json:"key"`
+		Domain   string `json:"domain"`
 		Duration int    `json:"duration"`
 	} `json:"cookies"`
 }
@@ -267,14 +287,21 @@ func (config *Configuration) ApplyDefaults() {
 	if config.Mailer.URLPaths.Invite == "" {
 		config.Mailer.URLPaths.Invite = "/"
 	}
+
 	if config.Mailer.URLPaths.Confirmation == "" {
 		config.Mailer.URLPaths.Confirmation = "/"
 	}
+
 	if config.Mailer.URLPaths.Recovery == "" {
 		config.Mailer.URLPaths.Recovery = "/"
 	}
+
 	if config.Mailer.URLPaths.EmailChange == "" {
 		config.Mailer.URLPaths.EmailChange = "/"
+	}
+
+	if config.Mailer.OtpExp == 0 {
+		config.Mailer.OtpExp = 86400 // 1 day
 	}
 
 	if config.SMTP.MaxFrequency == 0 {
@@ -299,7 +326,11 @@ func (config *Configuration) ApplyDefaults() {
 	}
 
 	if config.Cookie.Key == "" {
-		config.Cookie.Key = "nf_jwt"
+		config.Cookie.Key = "sb"
+	}
+
+	if config.Cookie.Domain == "" {
+		config.Cookie.Domain = ""
 	}
 
 	if config.Cookie.Duration == 0 {
@@ -371,6 +402,29 @@ func (t *MessagebirdProviderConfiguration) Validate() error {
 	}
 	if t.Originator == "" {
 		return errors.New("Missing Messagebird originator")
+	}
+	return nil
+}
+
+func (t *TextlocalProviderConfiguration) Validate() error {
+	if t.ApiKey == "" {
+		return errors.New("Missing Textlocal API key")
+	}
+	if t.Sender == "" {
+		return errors.New("Missing Textlocal sender")
+	}
+	return nil
+}
+
+func (t *VonageProviderConfiguration) Validate() error {
+	if t.ApiKey == "" {
+		return errors.New("Missing Vonage API key")
+	}
+	if t.ApiSecret == "" {
+		return errors.New("Missing Vonage API secret")
+	}
+	if t.From == "" {
+		return errors.New("Missing Vonage 'from' parameter")
 	}
 	return nil
 }
