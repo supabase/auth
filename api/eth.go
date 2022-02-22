@@ -3,8 +3,6 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
@@ -17,11 +15,6 @@ import (
 type EthParams struct {
 	NonceId   string `json:"nonce_id"`
 	Signature string `json:"signature"`
-}
-
-func hashMessageWithKeccak256(data []byte) []byte {
-	msg := fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(data), data)
-	return crypto.Keccak256([]byte(msg))
 }
 
 func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
@@ -53,7 +46,7 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 	valid, err := nonceMessage.ValidateMessage(params.Signature)
 
 	// Check if the address from params is the same as the recovered address
-	if !valid {
+	if !valid || err != nil {
 		return badRequestError("Invalid Signature: Wallet address not the same as supplied address")
 	}
 
@@ -61,7 +54,7 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 	didUserExist := true
 
 	aud := a.requestAud(ctx, r)
-	user, uerr := models.FindUserByEthAddressAndAudience(a.db, instanceID, params.WalletAddress, aud)
+	user, uerr := models.FindUserByCryptoAddressAndAudience(a.db, instanceID, nonce.GetCaipAddress(), aud)
 
 	if err != nil && !models.IsNotFoundError(err) {
 		return internalServerError("Database error finding user").WithInternalError(err)
@@ -70,9 +63,9 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 	if models.IsNotFoundError(uerr) {
 		uerr = a.db.Transaction(func(tx *storage.Connection) error {
 			user, uerr = a.signupNewUser(ctx, tx, &SignupParams{
-				EthAddress: params.WalletAddress,
-				Provider:   "eth",
-				Aud:        aud,
+				CryptoAddress: nonce.GetCaipAddress(),
+				Provider:      "crypto",
+				Aud:           aud,
 			})
 			didUserExist = false
 

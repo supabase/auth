@@ -16,13 +16,13 @@ import (
 
 // SignupParams are the parameters the Signup endpoint accepts
 type SignupParams struct {
-	Email      string                 `json:"email"`
-	Phone      string                 `json:"phone"`
-	EthAddress string                 `json:"-"`
-	Password   string                 `json:"password"`
-	Data       map[string]interface{} `json:"data"`
-	Provider   string                 `json:"-"`
-	Aud        string                 `json:"-"`
+	Email         string                 `json:"email"`
+	Phone         string                 `json:"phone"`
+	CryptoAddress string                 `json:"-"`
+	Password      string                 `json:"password"`
+	Data          map[string]interface{} `json:"data"`
+	Provider      string                 `json:"-"`
+	Aud           string                 `json:"-"`
 }
 
 // Signup is the endpoint for registering a new user
@@ -265,10 +265,9 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 	case "phone":
 		user, err = models.NewUser(instanceID, "", params.Password, params.Aud, params.Data)
 		user.Phone = storage.NullString(params.Phone)
-	case "eth":
+	case "crypto":
 		user, err = models.NewUser(instanceID, "", "", params.Aud, params.Data)
-		// TODO(HarryET): Migrate to the new EthAddress method
-		//user.EthAddress = storage.NullString(params.EthAddress)
+		_, err = models.NewCryptoAddress(instanceID, user.ID, params.CryptoAddress)
 	default:
 		// handles external provider case
 		user, err = models.NewUser(instanceID, params.Email, params.Password, params.Aud, params.Data)

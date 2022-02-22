@@ -120,8 +120,8 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
 
-		r.With(api.verifyCaptcha).Post("/eth", api.Eth)
 		// TODO (HarryET): Create a nonce rate limiter
+		r.With(api.verifyCaptcha).Post("/eth", api.Eth)
 		r.With(api.verifyCaptcha).Route("/nonce", func(r *router) {
 			r.Post("/", api.Nonce)
 			r.Get("/{nonce_id}", api.NonceById)

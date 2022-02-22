@@ -6,6 +6,7 @@ import (
 	"github.com/netlify/gotrue/conf"
 	"github.com/spruceid/siwe-go"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
@@ -127,6 +128,10 @@ func (n *Nonce) ToMessage(config *conf.GlobalConfiguration) *siwe.Message {
 	})
 	message := siwe.InitMessage(n.Hostname, n.Address, n.Url, "1", *messageOptions)
 	return message
+}
+
+func (n *Nonce) GetCaipAddress() string {
+	return fmt.Sprintf("%s:%s:%s", n.Cryptocurrency, strconv.Itoa(n.ChainId), n.Address)
 }
 
 func GetNonceById(tx *storage.Connection, id uuid.UUID) (*Nonce, error) {

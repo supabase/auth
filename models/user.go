@@ -362,9 +362,14 @@ func FindUserByPhoneAndAudience(tx *storage.Connection, instanceID uuid.UUID, ph
 	return findUser(tx, "instance_id = ? and phone = ? and aud = ?", instanceID, phone, aud)
 }
 
-// FindUserByEthAddressAndAudience find a user by their ETH wallet address and audience.
-func FindUserByEthAddressAndAudience(tx *storage.Connection, instanceID uuid.UUID, eth_address, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and eth_address = ? and aud = ?", instanceID, eth_address, aud)
+// FindUserByCryptoAddressAndAudience find a user by their wallet address and audience.
+func FindUserByCryptoAddressAndAudience(tx *storage.Connection, instanceID uuid.UUID, cryptoAddress, aud string) (*User, error) {
+	address, err := GetCryptoAddressByCaip(tx, cryptoAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	return findUser(tx, "instance_id = ? and id = ? and aud = ?", instanceID, address.AccountId, aud)
 }
 
 // FindUserByID finds a user matching the provided ID.
