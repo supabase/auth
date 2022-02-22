@@ -16,7 +16,6 @@ jobs:
       status: ${{ steps.pre-release.outputs.release != steps.post-release.outputs.release }}
 
     runs-on: ubuntu-18.04
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v2
 
