@@ -17,6 +17,7 @@ type OAuthProviderConfiguration struct {
 	Secret      string `json:"secret"`
 	RedirectURI string `json:"redirect_uri" split_words:"true"`
 	URL         string `json:"url"`
+	ApiURL      string `json:"api_url"`
 	Enabled     bool   `json:"enabled"`
 }
 

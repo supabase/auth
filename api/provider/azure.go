@@ -38,7 +38,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	}
 
 	authHost := chooseHost(ext.URL, defaultAzureAuthBase)
-	apiPath := chooseHost("", defaultAzureAPIBase)
+	apiPath := chooseHost(ext.ApiURL, defaultAzureAPIBase)
 
 	oauthScopes := []string{"openid"}
 

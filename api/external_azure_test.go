@@ -60,6 +60,7 @@ func AzureTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int
 	}))
 
 	ts.Config.External.Azure.URL = server.URL
+	ts.Config.External.Azure.ApiURL = server.URL
 
 	return server
 }
