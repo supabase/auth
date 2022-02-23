@@ -41,7 +41,7 @@ func (ts *ExternalTestSuite) TestSignupExternalAzure() {
 func AzureTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int, code string, user string) *httptest.Server {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/common/oauth2/v2.0/token":
+		case "/oauth2/v2.0/token":
 			*tokenCount++
 			ts.Equal(code, r.FormValue("code"))
 			ts.Equal("authorization_code", r.FormValue("grant_type"))
@@ -60,6 +60,7 @@ func AzureTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int
 	}))
 
 	ts.Config.External.Azure.URL = server.URL
+	ts.Config.External.Azure.ApiURL = server.URL
 
 	return server
 }
