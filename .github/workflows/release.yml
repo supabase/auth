@@ -1,9 +1,10 @@
 name: Build and Release on Push to Master
 
 on:
-  push:
-    branches:
-      - master
+  workflow_run:
+    workflows: [Test]
+    types: [completed]
+    branches: [master]
 
 jobs:
   release:
@@ -52,10 +53,12 @@ jobs:
     if: success() && needs.release.outputs.status == 'true'
     steps:
       - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-go@v2
         with:
-          go-version: "^1.14.4" # The Go version to download (if necessary) and use.
+          go-version: "^1.17.0" # The Go version to download (if necessary) and use.
 
       - run: make deps
 
