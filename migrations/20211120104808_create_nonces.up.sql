@@ -1,17 +1,17 @@
 CREATE TABLE IF NOT EXISTS auth.nonces
 (
-    instance_id    uuid        NULL,
-    id             uuid        NOT NULL,
+    instance_id uuid        NULL,
+    id          uuid        NOT NULL,
 
-    uri            text        NOT NULL,
-    hostname       text        NOT NULL,
+    uri         text        NOT NULL,
+    hostname    text        NOT NULL,
 
-    cryptocurrency varchar     NOT NULL,
-    address        text        NOT NULL,
-    chain_id       integer     NOT NULL,
+    namespace   varchar     NOT NULL,
+    address     text        NOT NULL,
+    chain_id    varchar     NOT NULL,
 
-    created_at     timestamptz NULL DEFAULT now(),
-    expires_at     timestamptz NULL,
+    created_at  timestamptz NULL DEFAULT now(),
+    expires_at  timestamptz NULL,
     CONSTRAINT nonces_pkey PRIMARY KEY (id)
 );
 CREATE INDEX IF NOT EXISTS nonces_instance_id_idx ON auth.nonces USING btree (instance_id);

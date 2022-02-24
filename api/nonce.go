@@ -10,11 +10,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 type NonceParams struct {
 	WalletAddress string `json:"wallet_address"` // Hex Encoded
-	ChainId       int    `json:"chain_id"`
+	ChainId       string `json:"chain_id"`
 	Url           string `json:"url"`
 }
 
@@ -42,9 +43,11 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	nonce, err := models.GetNonceByWalletAddress(a.db, params.WalletAddress)
-	if !models.IsNotFoundError(err) {
-		err = nonce.Refresh(a.db)
-		if err != nil {
+	if nonce != nil {
+		// TODO(HarryET): not updating created_at
+		nonce.CreatedAt = time.Now().UTC()
+		nonce.ExpiresAt = time.Now().UTC().Add(time.Minute * 2)
+		if err = a.db.UpdateOnly(nonce, "created_at", "expires_at"); err != nil {
 			return internalServerError("failed to refresh nonce")
 		}
 		message := nonce.ToMessage(a.config)

@@ -6,7 +6,6 @@ import (
 	"github.com/netlify/gotrue/conf"
 	"github.com/spruceid/siwe-go"
 	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
@@ -22,9 +21,9 @@ type Nonce struct {
 	Url      string `json:"url" db:"uri"`
 	Hostname string `json:"hostname" db:"hostname"`
 
-	ChainId        int    `json:"chain_id" db:"chain_id"`
-	Address        string `json:"eth_address" db:"eth_address"`
-	Cryptocurrency string `json:"cryptocurrency" db:"cryptocurrency"`
+	ChainId   string `json:"chain_id" db:"chain_id"`
+	Address   string `json:"address" db:"address"`
+	Namespace string `json:"namespace" db:"namespace"`
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
@@ -35,22 +34,22 @@ func (Nonce) TableName() string {
 	return tableName
 }
 
-func NewNonce(instanceID uuid.UUID, chainId int, url, hostname, walletAddress, cryptocurrency string) (*Nonce, error) {
+func NewNonce(instanceID uuid.UUID, chainId, url, hostname, walletAddress, namespace string) (*Nonce, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
 	}
 
 	nonce := &Nonce{
-		InstanceID:     instanceID,
-		ID:             id,
-		Cryptocurrency: cryptocurrency,
-		ChainId:        chainId,
-		Address:        walletAddress,
-		Url:            url,
-		Hostname:       hostname,
-		CreatedAt:      time.Now().UTC(),
-		ExpiresAt:      time.Now().UTC().Add(time.Minute * 2),
+		InstanceID: instanceID,
+		ID:         id,
+		Namespace:  namespace,
+		ChainId:    chainId,
+		Address:    walletAddress,
+		Url:        url,
+		Hostname:   hostname,
+		CreatedAt:  time.Now().UTC(),
+		ExpiresAt:  time.Now().UTC().Add(time.Minute * 2),
 	}
 
 	return nonce, nil
@@ -73,12 +72,6 @@ func (n *Nonce) BeforeSave(tx *pop.Connection) error {
 
 func (n *Nonce) Consume(tx *storage.Connection) error {
 	return tx.Destroy(n)
-}
-
-func (n *Nonce) Refresh(tx *storage.Connection) error {
-	n.CreatedAt = time.Now().UTC()
-	n.ExpiresAt = time.Now().UTC().Add(time.Minute * 2)
-	return tx.UpdateOnly(n, "created_at", "expires_at")
 }
 
 func (n *Nonce) Build() (string, error) {
@@ -131,7 +124,7 @@ func (n *Nonce) ToMessage(config *conf.GlobalConfiguration) *siwe.Message {
 }
 
 func (n *Nonce) GetCaipAddress() string {
-	return fmt.Sprintf("%s:%s:%s", n.Cryptocurrency, strconv.Itoa(n.ChainId), n.Address)
+	return fmt.Sprintf("%s:%s:%s", n.Namespace, n.ChainId, n.Address)
 }
 
 // TODO (HarryET): Fix queries!
@@ -149,8 +142,6 @@ func GetNonceById(tx *storage.Connection, id uuid.UUID) (*Nonce, error) {
 func GetNonceByWalletAddress(tx *storage.Connection, walletAddress string) (*Nonce, error) {
 	nonce := Nonce{}
 	if err := tx.Where("address = ?", walletAddress).First(&nonce); err != nil {
-		//println(errors.Cause(err).Error())
-		//panic(err)
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, NonceNotFoundError{}
 		}
