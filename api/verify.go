@@ -82,14 +82,6 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		aud := a.requestAud(ctx, r)
 		user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
 		if terr != nil {
-			var herr *HTTPError
-			if errors.As(terr, &herr) {
-				if errors.Is(herr.InternalError, redirectWithQueryError) {
-					rurl := a.prepErrorRedirectURL(herr, r, params.RedirectTo)
-					http.Redirect(w, r, rurl, http.StatusSeeOther)
-					return nil
-				}
-			}
 			return terr
 		}
 
@@ -126,8 +118,20 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
+
 	if err != nil {
-		return err
+		if r.Method == http.MethodPost {
+			// do not redirect POST requests
+			return err
+		}
+		var herr *HTTPError
+		if errors.As(err, &herr) {
+			if errors.Is(herr.InternalError, redirectWithQueryError) {
+				rurl := a.prepErrorRedirectURL(herr, r, params.RedirectTo)
+				http.Redirect(w, r, rurl, http.StatusSeeOther)
+				return nil
+			}
+		}
 	}
 
 	// GET requests should return to the app site after confirmation
