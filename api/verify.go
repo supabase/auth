@@ -200,7 +200,7 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user 
 			return terr
 		}
 		if !user.IsConfirmed() {
-			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
+			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
 				return terr
 			}
 
