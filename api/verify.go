@@ -214,6 +214,13 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user 
 			if terr = user.Confirm(tx); terr != nil {
 				return terr
 			}
+		} else {
+			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
+				return terr
+			}
+			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+				return terr
+			}
 		}
 		return nil
 	})
