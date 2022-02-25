@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	"github.com/netlify/gotrue/conf"
@@ -14,7 +15,8 @@ const (
 
 type workosProvider struct {
 	*oauth2.Config
-	APIPath string
+	APIPath         string
+	AuthCodeOptions []oauth2.AuthCodeOption
 }
 
 type workosUser struct {
@@ -30,16 +32,27 @@ type workosUser struct {
 }
 
 // NewWorkOSProvider creates a WorkOS account provider.
-func NewWorkOSProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewWorkOSProvider(ext conf.OAuthProviderConfiguration, query *url.Values) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
 	apiPath := chooseHost(ext.URL, defaultWorkOSAPIBase)
 
-	oauthScopes := []string{}
+	// Attach custom query parameters to the WorkOS authorization URL.
+	// See https://workos.com/docs/reference/sso/authorize/get.
+	authCodeOptions := make([]oauth2.AuthCodeOption, 0)
+	if query != nil {
+		if connection := query.Get("connection"); connection != "" {
+			authCodeOptions = append(authCodeOptions, oauth2.SetAuthURLParam("connection", connection))
+		} else if organization := query.Get("organization"); organization != "" {
+			authCodeOptions = append(authCodeOptions, oauth2.SetAuthURLParam("organization", organization))
+		} else if provider := query.Get("provider"); provider != "" {
+			authCodeOptions = append(authCodeOptions, oauth2.SetAuthURLParam("provider", provider))
+		}
 
-	if scopes != "" {
-		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
+		if login_hint := query.Get("login_hint"); login_hint != "" {
+			authCodeOptions = append(authCodeOptions, oauth2.SetAuthURLParam("login_hint", login_hint))
+		}
 	}
 
 	return &workosProvider{
@@ -50,11 +63,16 @@ func NewWorkOSProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 				AuthURL:  apiPath + "/sso/authorize",
 				TokenURL: apiPath + "/sso/token",
 			},
-			Scopes:      oauthScopes,
 			RedirectURL: ext.RedirectURI,
 		},
-		APIPath: apiPath,
+		APIPath:         apiPath,
+		AuthCodeOptions: authCodeOptions,
 	}, nil
+}
+
+func (g workosProvider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption) string {
+	opts := append(args, g.AuthCodeOptions...)
+	return g.Config.AuthCodeURL(state, opts...)
 }
 
 func (g workosProvider) GetOAuthToken(code string) (*oauth2.Token, error) {

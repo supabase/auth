@@ -418,7 +418,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string, query *u
 	case "twitter":
 		return provider.NewTwitterProvider(config.External.Twitter, scopes)
 	case "workos":
-		return provider.NewWorkOSProvider(config.External.WorkOS, scopes)
+		return provider.NewWorkOSProvider(config.External.WorkOS, query)
 	case "saml":
 		return provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
 	case "zoom":
