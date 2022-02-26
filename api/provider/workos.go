@@ -44,13 +44,13 @@ func NewWorkOSProvider(ext conf.OAuthProviderConfiguration, query *url.Values) (
 
 	// Attach custom query parameters to the WorkOS authorization URL.
 	// See https://workos.com/docs/reference/sso/authorize/get.
-	authCodeOptions := make([]oauth2.AuthCodeOption, 0)
+	var authCodeOptions []oauth2.AuthCodeOption
 	if query != nil {
 		if connection := query.Get("connection"); connection != "" {
 			authCodeOptions = append(authCodeOptions, oauth2.SetAuthURLParam("connection", connection))
 		} else if organization := query.Get("organization"); organization != "" {
 			authCodeOptions = append(authCodeOptions, oauth2.SetAuthURLParam("organization", organization))
-		} else if provider := query.Get("provider"); provider != "" {
+		} else if provider := query.Get("workos_provider"); provider != "" {
 			authCodeOptions = append(authCodeOptions, oauth2.SetAuthURLParam("provider", provider))
 		}
 
