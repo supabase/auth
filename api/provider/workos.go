@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"strings"
 
@@ -93,7 +94,11 @@ func (g workosProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	var u workosUser
 	err := mapstructure.Decode(tok.Extra("profile"), &u)
 	if err != nil {
-		return &UserProvidedData{}, err
+		return nil, err
+	}
+
+	if u.Email == "" {
+		return nil, errors.New("Unable to find email with WorkOS provider")
 	}
 
 	return &UserProvidedData{
