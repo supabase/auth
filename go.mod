@@ -24,6 +24,8 @@ require (
 	github.com/gorilla/securecookie v1.1.1
 	github.com/gorilla/sessions v1.1.1
 	github.com/imdario/mergo v0.0.0-20160216103600-3e95a51e0639
+	github.com/jackc/pgconn v1.8.0 // indirect
+	github.com/jackc/pgerrcode v0.0.0-20201024163028-a0d42d470451 // indirect
 	github.com/jackc/pgproto3/v2 v2.0.7 // indirect
 	github.com/jmoiron/sqlx v1.3.1 // indirect
 	github.com/joho/godotenv v1.3.0
