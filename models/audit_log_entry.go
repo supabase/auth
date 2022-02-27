@@ -6,8 +6,11 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type AuditAction string
@@ -99,30 +102,31 @@ func NewAuditLogEntry(db, tx *storage.Connection, instanceID uuid.UUID, actor *U
 	err = tx.Create(&l)
 
 	// Record errors adding audit log entries in a separate rejection entry.
-	// TODO: detect error causes and only record explicit rejections.
-	if err != nil {
-		// Create a new transaction since the last transaction would have rolled back
-		// with the error.
-		new_tx_err := db.Transaction(func(tx *storage.Connection) error {
-			entry := AuditLogEntry{
-				InstanceID: l.InstanceID,
-				ID:         l.ID,
-				Payload: JSONMap{
-					"timestamp":      time.Now().UTC().Format(time.RFC3339),
-					"actor_id":       actor.ID,
-					"actor_username": username,
-					"action":         AuditLogEntryRejectedAction,
-					"log_type":       actionLogTypeMap[action],
-					"original_entry": l,
-				},
-			}
-			fmt.Printf("%+v\n", err)
-			fmt.Printf("%+v\n", err.Error())
+	var pgErr *pgconn.PgError
+	if err != nil && errors.As(err, &pgErr) {
+		// Only record explicit exceptions.
+		if pgErr.Code == pgerrcode.RaiseException {
+			// Create a new transaction since the last transaction would have rolled back
+			// with the error.
+			txErr := db.Transaction(func(tx *storage.Connection) error {
+				entry := AuditLogEntry{
+					InstanceID: l.InstanceID,
+					ID:         l.ID,
+					Payload: JSONMap{
+						"timestamp":      time.Now().UTC().Format(time.RFC3339),
+						"actor_id":       actor.ID,
+						"actor_username": username,
+						"action":         AuditLogEntryRejectedAction,
+						"log_type":       actionLogTypeMap[action],
+						"original_entry": l,
+					},
+				}
 
-			return tx.Create(&entry)
-		})
-		if new_tx_err != nil {
-			fmt.Printf("Failed to add audit log rejection entry: %+v\n", new_tx_err)
+				return tx.Create(&entry)
+			})
+			if txErr != nil {
+				logrus.Warnf("failed to add audit log rejection entry: %s", txErr)
+			}
 		}
 	}
 
