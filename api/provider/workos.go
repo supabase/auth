@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/netlify/gotrue/conf"
 	"golang.org/x/oauth2"
 )
@@ -19,16 +20,18 @@ type workosProvider struct {
 	AuthCodeOptions []oauth2.AuthCodeOption
 }
 
+// See https://workos.com/docs/reference/sso/profile.
 type workosUser struct {
-	ID             string                 `json:"id"`
-	ConnectionId   string                 `json:"connection_id"`
-	ConnectionType string                 `json:"connection_type"`
-	Email          string                 `json:"email"`
-	FirstName      string                 `json:"first_name"`
-	LastName       string                 `json:"last_name"`
-	Object         string                 `json:"object"`
-	IdpId          string                 `json:"idp_id"`
-	RawAttributes  map[string]interface{} `json:"raw_attributes"`
+	ID             string                 `mapstructure:"id"`
+	ConnectionID   string                 `mapstructure:"connection_id"`
+	OrganizationID string                 `mapstructure:"organization_id"`
+	ConnectionType string                 `mapstructure:"connection_type"`
+	Email          string                 `mapstructure:"email"`
+	FirstName      string                 `mapstructure:"first_name"`
+	LastName       string                 `mapstructure:"last_name"`
+	Object         string                 `mapstructure:"object"`
+	IdpID          string                 `mapstructure:"idp_id"`
+	RawAttributes  map[string]interface{} `mapstructure:"raw_attributes"`
 }
 
 // NewWorkOSProvider creates a WorkOS account provider.
@@ -80,22 +83,35 @@ func (g workosProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 }
 
 func (g workosProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	u := tok.Extra("profile").(workosUser)
+	if tok.AccessToken == "" {
+		return &UserProvidedData{}, nil
+	}
+
+	// WorkOS API returns the user's profile data along with the OAuth2 token, so
+	// we can just convert from `map[string]interface{}` to `workosUser` without
+	// an additional network request.
+	var u workosUser
+	err := mapstructure.Decode(tok.Extra("profile"), &u)
+	if err != nil {
+		return &UserProvidedData{}, err
+	}
 
 	return &UserProvidedData{
 		Metadata: &Claims{
-			Issuer:  g.APIPath,
-			Subject: u.ID,
-			Name:    u.FirstName,
-			Email:   u.Email,
+			Issuer:        g.APIPath,
+			Subject:       u.ID,
+			Name:          strings.TrimSpace(u.FirstName + " " + u.LastName),
+			Email:         u.Email,
+			EmailVerified: true,
 
 			// To be deprecated
 			FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
 			ProviderId: u.ID,
 		},
 		Emails: []Email{{
-			Email:   u.Email,
-			Primary: true,
+			Email:    u.Email,
+			Verified: true,
+			Primary:  true,
 		}},
 	}, nil
 }
