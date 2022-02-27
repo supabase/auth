@@ -26,6 +26,7 @@ const (
 	UserRepeatedSignUpAction        AuditAction = "user_repeated_signup"
 	TokenRevokedAction              AuditAction = "token_revoked"
 	TokenRefreshedAction            AuditAction = "token_refreshed"
+	AuditLogEntryRejectedAction     AuditAction = "audit_log_entry_rejected"
 
 	account auditLogType = "account"
 	team    auditLogType = "team"
@@ -63,7 +64,7 @@ func (AuditLogEntry) TableName() string {
 	return tableName
 }
 
-func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User, action AuditAction, traits map[string]interface{}) error {
+func NewAuditLogEntry(db, tx *storage.Connection, instanceID uuid.UUID, actor *User, action AuditAction, traits map[string]interface{}) error {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return errors.Wrap(err, "Error generating unique id")
@@ -95,7 +96,37 @@ func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User,
 		l.Payload["traits"] = traits
 	}
 
-	return errors.Wrap(tx.Create(&l), "Database error creating audit log entry")
+	err = tx.Create(&l)
+
+	// Record errors adding audit log entries in a separate rejection entry.
+	// TODO: detect error causes and only record explicit rejections.
+	if err != nil {
+		// Create a new transaction since the last transaction would have rolled back
+		// with the error.
+		new_tx_err := db.Transaction(func(tx *storage.Connection) error {
+			entry := AuditLogEntry{
+				InstanceID: l.InstanceID,
+				ID:         l.ID,
+				Payload: JSONMap{
+					"timestamp":      time.Now().UTC().Format(time.RFC3339),
+					"actor_id":       actor.ID,
+					"actor_username": username,
+					"action":         AuditLogEntryRejectedAction,
+					"log_type":       actionLogTypeMap[action],
+					"original_entry": l,
+				},
+			}
+			fmt.Printf("%+v\n", err)
+			fmt.Printf("%+v\n", err.Error())
+
+			return tx.Create(&entry)
+		})
+		if new_tx_err != nil {
+			fmt.Printf("Failed to add audit log rejection entry: %+v\n", new_tx_err)
+		}
+	}
+
+	return errors.Wrap(err, "Database error creating audit log entry")
 }
 
 func FindAuditLogEntries(tx *storage.Connection, instanceID uuid.UUID, filterColumns []string, filterValue string, pageParams *Pagination) ([]*AuditLogEntry, error) {

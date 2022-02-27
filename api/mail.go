@@ -71,7 +71,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		switch params.Type {
 		case "magiclink", "recovery":
-			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
+			if terr = models.NewAuditLogEntry(a.db, tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
 				return terr
 			}
 			user.RecoveryToken = crypto.SecureToken()
@@ -94,7 +94,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			}
-			if terr = models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserInvitedAction, map[string]interface{}{
+			if terr = models.NewAuditLogEntry(a.db, tx, instanceID, adminUser, models.UserInvitedAction, map[string]interface{}{
 				"user_id":    user.ID,
 				"user_email": user.Email,
 			}); terr != nil {

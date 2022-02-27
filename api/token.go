@@ -55,7 +55,7 @@ type IdTokenGrantParams struct {
 	Nonce    string `json:"nonce"`
 	Provider string `json:"provider"`
 	ClientID string `json:"client_id"`
-	Issuer string `json:"issuer"`
+	Issuer   string `json:"issuer"`
 }
 
 const useCookieHeader = "x-use-cookie"
@@ -81,7 +81,7 @@ func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVeri
 		if url == "" {
 			url = "https://login.microsoftonline.com/common"
 		}
-		provider, err = oidc.NewProvider(ctx, url + "/v2.0")
+		provider, err = oidc.NewProvider(ctx, url+"/v2.0")
 	case "facebook":
 		oAuthProvider = config.External.Facebook
 		oAuthProviderClientId = oAuthProvider.ClientID
@@ -205,7 +205,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, map[string]interface{}{
+		if terr = models.NewAuditLogEntry(a.db, tx, instanceID, user, models.LoginAction, map[string]interface{}{
 			"provider": provider,
 		}); terr != nil {
 			return terr
@@ -299,11 +299,11 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.TokenRefreshedAction, nil); terr != nil {
+		if terr = models.NewAuditLogEntry(a.db, tx, instanceID, user, models.TokenRefreshedAction, nil); terr != nil {
 			return terr
 		}
 
-		newToken, terr = models.GrantRefreshTokenSwap(tx, user, token)
+		newToken, terr = models.GrantRefreshTokenSwap(a.db, tx, user, token)
 		if terr != nil {
 			return internalServerError(terr.Error())
 		}
@@ -348,8 +348,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	if params.IdToken == "" || params.Nonce == "" {
 		return oauthError("invalid request", "id_token and nonce required")
 	}
-	
-	if params.Provider == "" && ( params.ClientID == "" || params.Issuer == "" ) {
+
+	if params.Provider == "" && (params.ClientID == "" || params.Issuer == "") {
 		return oauthError("invalid request", "provider or client_id and issuer required")
 	}
 
@@ -460,7 +460,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				return unauthorizedError("Error unverified email")
 			}
 
-			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
+			if terr := models.NewAuditLogEntry(a.db, tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr
@@ -474,7 +474,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				return internalServerError("Error updating user").WithInternalError(terr)
 			}
 		} else {
-			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, map[string]interface{}{
+			if terr := models.NewAuditLogEntry(a.db, tx, instanceID, user, models.LoginAction, map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr

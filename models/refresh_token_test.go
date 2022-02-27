@@ -3,10 +3,10 @@ package models
 import (
 	"testing"
 
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
-	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -49,7 +49,7 @@ func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwap() {
 	r, err := GrantAuthenticatedUser(ts.db, u)
 	require.NoError(ts.T(), err)
 
-	s, err := GrantRefreshTokenSwap(ts.db, u, r)
+	s, err := GrantRefreshTokenSwap(ts.db, ts.db, u, r)
 	require.NoError(ts.T(), err)
 
 	_, nr, err := FindUserWithRefreshToken(ts.db, r.Token)

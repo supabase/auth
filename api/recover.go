@@ -41,7 +41,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
+		if terr := models.NewAuditLogEntry(a.db, tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
 			return terr
 		}
 

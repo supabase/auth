@@ -130,7 +130,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, nil); terr != nil {
+		if terr = models.NewAuditLogEntry(a.db, tx, instanceID, user, models.UserModifiedAction, nil); terr != nil {
 			return internalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 

@@ -100,7 +100,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err := a.db.Transaction(func(tx *storage.Connection) error {
-		if err := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); err != nil {
+		if err := models.NewAuditLogEntry(a.db, tx, instanceID, user, models.UserRecoveryRequestedAction, nil); err != nil {
 			return err
 		}
 
