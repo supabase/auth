@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 
 	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/utilities"
 	"github.com/pkg/errors"
 )
 
@@ -248,6 +249,15 @@ func handleError(err error, w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.WithError(e.Cause()).Info(e.Error())
 		}
+
+		// Provide better error messages for certain user-triggered Postgres errors.
+		if pgErr := utilities.NewPostgresError(e.InternalError); pgErr != nil {
+			if jsonErr := sendJSON(w, pgErr.HttpStatusCode, pgErr); jsonErr != nil {
+				handleError(jsonErr, w, r)
+			}
+			return
+		}
+
 		if jsonErr := sendJSON(w, e.Code, e); jsonErr != nil {
 			handleError(jsonErr, w, r)
 		}
