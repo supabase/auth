@@ -25,6 +25,7 @@ type zoomUser struct {
 	LastName      string `json:"last_name"`
 	Email         string `json:"email"`
 	EmailVerified int    `json:"verified"`
+	LoginType     string `json:"login_type"`
 	AvatarURL     string `json:"pic_url"`
 }
 
@@ -65,9 +66,14 @@ func (g zoomProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*User
 		return nil, errors.New("Unable to find email with Zoom provider")
 	}
 
-	verified := false
-	if u.EmailVerified == 1 {
-		verified = true
+	verified := true
+
+	// A login_type of "100" refers to email-based logins, not oauth.
+	// A user is verified (type 1) only if they received an email when their profile was created and confirmed the link.
+	// A zoom user will only be sent an email confirmation link if they signed up using their zoom work email and not oauth.
+	// See: https://devforum.zoom.us/t/how-to-determine-if-a-zoom-user-actually-owns-their-email-address/44430
+	if u.LoginType == "100" && u.EmailVerified == 0 {
+		verified = false
 	}
 
 	return &UserProvidedData{
