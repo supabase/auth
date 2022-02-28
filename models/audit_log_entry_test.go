@@ -8,6 +8,7 @@ import (
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
+	"github.com/netlify/gotrue/utilities"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -64,7 +65,10 @@ func (ts *AuditLogEntryTestSuite) TestInsertAuditLogEntryWithRejection() {
 		create function auth.reject_audit_log_entries() returns trigger as $$
 			begin
 				if (new.payload->>'action') != 'audit_log_entry_rejected' then
-					raise exception 'Rejected audit log entry insertion';
+					raise sqlstate 'PT403' using
+						message = 'Custom error message',
+						detail = 'Custom detail',
+						hint = 'Custom hint';
 				end if;
 				return NEW;
 			end;
@@ -90,17 +94,29 @@ func (ts *AuditLogEntryTestSuite) TestInsertAuditLogEntryWithRejection() {
 	assert.Equal(ts.T(), u.ID.String(), entry.Payload["actor_id"])
 	assert.Equal(ts.T(), string(AuditLogEntryRejectedAction), entry.Payload["action"])
 
-	// Audit log rejection entry should contain original entry information.
 	var originalEntry AuditLogEntry
 	bytes, err := json.Marshal(entry.Payload["original_entry"])
 	require.NoError(ts.T(), err)
 	err = json.Unmarshal(bytes, &originalEntry)
 	require.NoError(ts.T(), err)
 
+	// Audit log rejection entry should contain original entry information.
 	assert.Equal(ts.T(), uuid.Nil, originalEntry.InstanceID)
 	assert.Equal(ts.T(), "test@example.com", originalEntry.Payload["actor_username"])
 	assert.Equal(ts.T(), u.ID.String(), originalEntry.Payload["actor_id"])
 	assert.Equal(ts.T(), string(UserSignedUpAction), originalEntry.Payload["action"])
+
+	var errorInfo utilities.PostgresError
+	bytes, err = json.Marshal(entry.Payload["error"])
+	require.NoError(ts.T(), err)
+	err = json.Unmarshal(bytes, &errorInfo)
+	require.NoError(ts.T(), err)
+
+	// Audit log rejection entry should contain error information.
+	assert.Equal(ts.T(), "PT403", errorInfo.Code)
+	assert.Equal(ts.T(), "Custom error message", errorInfo.Message)
+	assert.Equal(ts.T(), "Custom detail", errorInfo.Detail)
+	assert.Equal(ts.T(), "Custom hint", errorInfo.Hint)
 
 	// Clear the custom trigger and function.
 	err = ts.db.RawQuery(`

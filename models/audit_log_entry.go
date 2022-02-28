@@ -6,9 +6,8 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgerrcode"
 	"github.com/netlify/gotrue/storage"
+	"github.com/netlify/gotrue/utilities"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -102,31 +101,28 @@ func NewAuditLogEntry(db, tx *storage.Connection, instanceID uuid.UUID, actor *U
 	err = tx.Create(&l)
 
 	// Record errors adding audit log entries in a separate rejection entry.
-	var pgErr *pgconn.PgError
-	if err != nil && errors.As(err, &pgErr) {
-		// Only record explicit exceptions.
-		if pgErr.Code == pgerrcode.RaiseException {
-			// Create a new transaction since the last transaction would have rolled back
-			// with the error.
-			txErr := db.Transaction(func(tx *storage.Connection) error {
-				entry := AuditLogEntry{
-					InstanceID: l.InstanceID,
-					ID:         l.ID,
-					Payload: JSONMap{
-						"timestamp":      time.Now().UTC().Format(time.RFC3339),
-						"actor_id":       actor.ID,
-						"actor_username": username,
-						"action":         AuditLogEntryRejectedAction,
-						"log_type":       actionLogTypeMap[action],
-						"original_entry": l,
-					},
-				}
-
-				return tx.Create(&entry)
-			})
-			if txErr != nil {
-				logrus.Warnf("failed to add audit log rejection entry: %s", txErr)
+	if pgErr := utilities.NewPostgresError(err); pgErr != nil {
+		// Create a new transaction since the last transaction would have rolled back
+		// with the error.
+		txErr := db.Transaction(func(tx *storage.Connection) error {
+			entry := AuditLogEntry{
+				InstanceID: l.InstanceID,
+				ID:         l.ID,
+				Payload: JSONMap{
+					"timestamp":      time.Now().UTC().Format(time.RFC3339),
+					"actor_id":       actor.ID,
+					"actor_username": username,
+					"action":         AuditLogEntryRejectedAction,
+					"log_type":       actionLogTypeMap[action],
+					"original_entry": l,
+					"error":          pgErr,
+				},
 			}
+
+			return tx.Create(&entry)
+		})
+		if txErr != nil {
+			logrus.Warnf("failed to add audit log rejection entry: %s", txErr)
 		}
 	}
 
