@@ -84,6 +84,10 @@ func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVeri
 		oAuthProvider = config.External.Google
 		oAuthProviderClientId = oAuthProvider.ClientID
 		provider, err = oidc.NewProvider(ctx, "https://accounts.google.com")
+	case "keycloak":
+		oAuthProvider = config.External.Keycloak
+		oAuthProviderClientId = oAuthProvider.ClientID
+		provider, err = oidc.NewProvider(ctx, oAuthProvider.URL)
 	default:
 		return nil, fmt.Errorf("Provider %s doesn't support the id_token grant flow", p.Provider)
 	}
