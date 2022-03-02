@@ -26,6 +26,7 @@ type Nonce struct {
 	Namespace string `json:"namespace" db:"namespace"`
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
 }
 
@@ -49,6 +50,7 @@ func NewNonce(instanceID uuid.UUID, chainId, url, hostname, walletAddress, names
 		Url:        url,
 		Hostname:   hostname,
 		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
 		ExpiresAt:  time.Now().UTC().Add(time.Minute * 2),
 	}
 
@@ -113,11 +115,10 @@ Chain ID: %v`, uri.Hostname(), n.Address, statement, uri.String(), n.CreatedAt.U
 func (n *Nonce) ToMessage(config *conf.GlobalConfiguration) *siwe.Message {
 	messageOptions := siwe.InitMessageOptions(map[string]interface{}{
 		"statement":      config.External.Eth.Message,
-		"issuedAt":       time.Now().UTC(),
+		"issuedAt":       n.UpdatedAt,
 		"nonce":          siwe.GenerateNonce(),
 		"chainId":        n.ChainId,
-		"expirationTime": time.Now().UTC().Add(time.Minute * 2),
-		"resources":      []string{fmt.Sprintf("%s/nonces/%s", config.API.ExternalURL, n.ID)},
+		"expirationTime": n.ExpiresAt,
 	})
 	message := siwe.InitMessage(n.Hostname, n.Address, n.Url, "1", *messageOptions)
 	return message

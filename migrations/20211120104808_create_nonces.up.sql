@@ -10,8 +10,9 @@ CREATE TABLE IF NOT EXISTS auth.nonces
     address     text        NOT NULL,
     chain_id    varchar     NOT NULL,
 
-    created_at  timestamptz NULL DEFAULT now(),
-    expires_at  timestamptz NULL,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    updated_at  timestamptz NOT NULL DEFAULT now(),
+    expires_at  timestamptz NOT NULL,
     CONSTRAINT nonces_pkey PRIMARY KEY (id)
 );
 CREATE INDEX IF NOT EXISTS nonces_instance_id_idx ON auth.nonces USING btree (instance_id);

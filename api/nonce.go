@@ -44,10 +44,9 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 
 	nonce, err := models.GetNonceByWalletAddress(a.db, params.WalletAddress)
 	if nonce != nil {
-		// TODO(HarryET): not updating created_at
-		nonce.CreatedAt = time.Now().UTC()
+		nonce.UpdatedAt = time.Now().UTC()
 		nonce.ExpiresAt = time.Now().UTC().Add(time.Minute * 2)
-		if err = a.db.UpdateOnly(nonce, "created_at", "expires_at"); err != nil {
+		if err = a.db.UpdateOnly(nonce, "updated_at", "expires_at"); err != nil {
 			return internalServerError("failed to refresh nonce")
 		}
 		message := nonce.ToMessage(a.config)

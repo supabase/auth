@@ -43,11 +43,11 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	nonceMessage := nonce.ToMessage(a.config)
-	valid, err := nonceMessage.ValidateMessage(params.Signature)
+	_, err = nonceMessage.Verify(params.Signature)
 
 	// Check if the address from params is the same as the recovered address
-	if !valid || err != nil {
-		return badRequestError("Invalid Signature: Wallet address not the same as supplied address")
+	if err != nil {
+		return badRequestError(err.Error())
 	}
 
 	// Default Signin/Signup logic from `./signup.go`
