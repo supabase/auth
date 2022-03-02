@@ -120,8 +120,6 @@ func WorkosTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *in
 
 func (ts *ExternalTestSuite) TestSignupExternalWorkosAuthorizationCode() {
 	ts.Config.DisableSignup = false
-	// Enable autoconfirm since emails from WorkOS are not verified.
-	ts.Config.Mailer.Autoconfirm = true
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -161,8 +159,6 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkosDisableSignupErrorWhenEmpty
 
 func (ts *ExternalTestSuite) TestSignupExternalWorkosDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
-	// Enable autoconfirm since emails from WorkOS are not verified.
-	ts.Config.Mailer.Autoconfirm = true
 
 	ts.createUser("test_prof_workos", "workos@example.com", "John Doe", "http://example.com/avatar", "")
 
