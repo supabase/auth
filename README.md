@@ -62,7 +62,7 @@ Header on which to rate limit the `/token` endpoint.
 
 Rate limit the number of emails sent per hr on the following endpoints: `/signup`, `/invite`, `/magiclink`, `/recover`, `/otp`, & `/user`.
 
-`PASSWORD_MIN_LENGTH` - `int`
+`GOTRUE_PASSWORD_MIN_LENGTH` - `int`
 
 Minimum password length, defaults to 6.
 

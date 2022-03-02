@@ -13,12 +13,15 @@ import (
 	"github.com/kelseyhightower/envconfig"
 )
 
+const defaultMinPasswordLength int = 6
+
 // OAuthProviderConfiguration holds all config related to external account providers.
 type OAuthProviderConfiguration struct {
 	ClientID    string `json:"client_id" split_words:"true"`
 	Secret      string `json:"secret"`
 	RedirectURI string `json:"redirect_uri" split_words:"true"`
 	URL         string `json:"url"`
+	ApiURL      string `json:"api_url"`
 	Enabled     bool   `json:"enabled"`
 }
 
@@ -178,7 +181,7 @@ type Configuration struct {
 	SiteURL           string                   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList      []string                 `json:"uri_allow_list" split_words:"true"`
 	AllowedOrigins    []string                 `json:"allowed_origins"`
-	PasswordMinLength int                      `json:"password_min_length" default:"6"`
+	PasswordMinLength int                      `json:"password_min_length" split_words:"true"`
 	JWT               JWTConfiguration         `json:"jwt"`
 	SMTP              SMTPConfiguration        `json:"smtp"`
 	Mailer            MailerConfiguration      `json:"mailer"`
@@ -356,6 +359,10 @@ func (config *Configuration) ApplyDefaults() {
 		if len(config.AllowedOrigins) == 0 {
 			config.AllowedOrigins = []string{"*"}
 		}
+	}
+
+	if config.PasswordMinLength < defaultMinPasswordLength {
+		config.PasswordMinLength = defaultMinPasswordLength
 	}
 }
 
