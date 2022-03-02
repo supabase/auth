@@ -40,20 +40,24 @@ func NewKeycloakProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 	if ext.URL == "" {
 		return nil, errors.New("Unable to find URL for the Keycloak provider")
 	}
-	host := chooseHost(ext.URL, "")
+
+	extURLlen := len(ext.URL)
+	if ext.URL[extURLlen-1] == '/' {
+		ext.URL = ext.URL[:extURLlen-1]
+	}
 
 	return &keycloakProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
-				AuthURL:  host + "/protocol/openid-connect/auth",
-				TokenURL: host + "/protocol/openid-connect/token",
+				AuthURL:  ext.URL + "/protocol/openid-connect/auth",
+				TokenURL: ext.URL + "/protocol/openid-connect/token",
 			},
 			RedirectURL: ext.RedirectURI,
 			Scopes:      oauthScopes,
 		},
-		Host: host,
+		Host: ext.URL,
 	}, nil
 }
 
