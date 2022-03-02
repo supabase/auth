@@ -103,18 +103,20 @@ func (g workosProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 
 	return &UserProvidedData{
 		Metadata: &Claims{
-			Issuer:  g.APIPath,
-			Subject: u.ID,
-			Name:    strings.TrimSpace(u.FirstName + " " + u.LastName),
-			Email:   u.Email,
+			Issuer:        g.APIPath,
+			Subject:       u.ID,
+			Name:          strings.TrimSpace(u.FirstName + " " + u.LastName),
+			Email:         u.Email,
+			EmailVerified: true,
 
 			// To be deprecated
 			FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
 			ProviderId: u.ID,
 		},
 		Emails: []Email{{
-			Email:   u.Email,
-			Primary: true,
+			Email:    u.Email,
+			Verified: true,
+			Primary:  true,
 		}},
 	}, nil
 }
