@@ -132,9 +132,10 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, referrerURL string) 
 		},
 	}
 
-	if m.Config.Mailer.SecureEmailChangeEnabled {
+	currentEmail := user.GetEmail()
+	if m.Config.Mailer.SecureEmailChangeEnabled && currentEmail != "" {
 		emails = append(emails, Email{
-			Address:  user.GetEmail(),
+			Address:  currentEmail,
 			Token:    user.EmailChangeTokenCurrent,
 			Subject:  string(withDefault(m.Config.Mailer.Subjects.Confirmation, "Confirm Email Address")),
 			Template: m.Config.Mailer.Templates.EmailChange,
