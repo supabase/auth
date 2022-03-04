@@ -47,7 +47,80 @@ func (ts *UserTestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }
 
-func (ts *UserTestSuite) TestUser_UpdatePassword() {
+func (ts *UserTestSuite) TestUserUpdateEmail() {
+	cases := []struct {
+		desc                       string
+		userData                   map[string]string
+		isSecureEmailChangeEnabled bool
+		expectedCode               int
+	}{
+		{
+			"User doesn't have an existing email",
+			map[string]string{
+				"email": "",
+				"phone": "123456789",
+			},
+			false,
+			http.StatusOK,
+		},
+		{
+			"User doesn't have an existing email and double email confirmation required",
+			map[string]string{
+				"email": "",
+				"phone": "234567890",
+			},
+			true,
+			http.StatusOK,
+		},
+		{
+			"User has an existing email",
+			map[string]string{
+				"email": "foo@example.com",
+				"phone": "",
+			},
+			false,
+			http.StatusOK,
+		},
+		{
+			"User has an existing email and double email confirmation required",
+			map[string]string{
+				"email": "bar@example.com",
+				"phone": "",
+			},
+			true,
+			http.StatusOK,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			u, err := models.NewUser(ts.instanceID, "", "", ts.Config.JWT.Aud, nil)
+			require.NoError(ts.T(), err, "Error creating test user model")
+			require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user")
+			require.NoError(ts.T(), u.SetEmail(ts.API.db, c.userData["email"]), "Error setting user email")
+			require.NoError(ts.T(), u.SetPhone(ts.API.db, c.userData["phone"]), "Error setting user phone")
+
+			token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+			require.NoError(ts.T(), err, "Error generating access token")
+
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"email": "new@example.com",
+			}))
+			req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+			w := httptest.NewRecorder()
+			ts.Config.Mailer.SecureEmailChangeEnabled = c.isSecureEmailChangeEnabled
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), c.expectedCode, w.Code)
+		})
+	}
+
+}
+
+func (ts *UserTestSuite) TestUserUpdatePassword() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
