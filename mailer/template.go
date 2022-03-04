@@ -6,14 +6,17 @@ import (
 	"github.com/badoux/checkmail"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
-	"github.com/netlify/mailme"
 )
+
+type MailClient interface {
+	Mail(string, string, string, string, map[string]interface{}) error
+}
 
 // TemplateMailer will send mail and use templates from the site for easy mail styling
 type TemplateMailer struct {
 	SiteURL string
 	Config  *conf.Configuration
-	Mailer  *mailme.Mailer
+	Mailer  MailClient
 }
 
 var configFile = ""
