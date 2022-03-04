@@ -108,6 +108,10 @@ func (g workosProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 			Name:          strings.TrimSpace(u.FirstName + " " + u.LastName),
 			Email:         u.Email,
 			EmailVerified: true,
+			CustomClaims: map[string]interface{}{
+				"connection_id":   u.ConnectionID,
+				"organization_id": u.OrganizationID,
+			},
 
 			// To be deprecated
 			FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
