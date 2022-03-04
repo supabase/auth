@@ -47,6 +47,20 @@ func (ts *UserTestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }
 
+func (ts *UserTestSuite) TestUserGet() {
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err, "Error finding user")
+	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	require.NoError(ts.T(), err, "Error generating access token")
+
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/user", nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
 func (ts *UserTestSuite) TestUserUpdateEmail() {
 	cases := []struct {
 		desc                       string
