@@ -31,6 +31,7 @@ func Dial(config *conf.GlobalConfiguration) (*Connection, error) {
 	db, err := pop.NewConnection(&pop.ConnectionDetails{
 		Dialect: config.DB.Driver,
 		URL:     config.DB.URL,
+		Pool:    config.DB.MaxPoolSize,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "opening database connection")
