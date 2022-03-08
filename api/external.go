@@ -173,12 +173,14 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 							return forbiddenError("Signups not allowed for this instance")
 						}
 
-						// prefer primary email for new signups
-						emailData = userData.Emails[0]
-						for _, e := range userData.Emails {
-							if e.Primary {
-								emailData = e
-								break
+						if len(userData.Emails) != 0 {
+							emailData = userData.Emails[0]
+							for _, e := range userData.Emails {
+								if e.Primary {
+									// prefer primary email for new signups
+									emailData = e
+									break
+								}
 							}
 						}
 
@@ -508,6 +510,10 @@ func (a *API) getUserByVerifiedEmail(tx *storage.Connection, config *conf.Config
 	var user *models.User
 	var emailData provider.Email
 	var err error
+
+	if len(emails) == 0 {
+		return nil, emailData, models.UserNotFoundError{}
+	}
 
 	for _, e := range emails {
 		if e.Verified || config.Mailer.Autoconfirm {

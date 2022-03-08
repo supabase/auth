@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -90,8 +89,9 @@ func (t TwitterProvider) FetchUserData(ctx context.Context, tok *oauth.AccessTok
 	}
 	err = json.NewDecoder(bytes.NewReader(bits)).Decode(&u)
 
-	if u.Email == "" {
-		return nil, errors.New("Unable to find email with Twitter provider")
+	var emails []Email
+	if u.Email != "" {
+		emails = append(emails, Email{Email: u.Email, Verified: true, Primary: true})
 	}
 
 	data := &UserProvidedData{
@@ -110,11 +110,7 @@ func (t TwitterProvider) FetchUserData(ctx context.Context, tok *oauth.AccessTok
 			AvatarURL:   u.AvatarURL,
 			ProviderId:  u.ID,
 		},
-		Emails: []Email{{
-			Email:    u.Email,
-			Verified: true,
-			Primary:  true,
-		}},
+		Emails: emails,
 	}
 
 	return data, nil
