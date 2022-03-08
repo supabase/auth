@@ -115,7 +115,7 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 		assert.Len(u, 10)
 		// assert.Equal(t, user.ID, u["id"]) TODO
 		assert.Equal("authenticated", u["aud"])
-		assert.Equal("authenticated", u["role"])
+		assert.Equal("superadmin", u["role"])
 		assert.Equal("test@example.com", u["email"])
 
 		appmeta, ok := u["app_metadata"].(map[string]interface{})

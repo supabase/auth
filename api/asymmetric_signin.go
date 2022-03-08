@@ -65,6 +65,7 @@ func (a *API) GetChallengeToken(w http.ResponseWriter, r *http.Request) error {
 				Provider: "AsymmetricKey",
 				Aud:      aud,
 			})
+
 			if terr != nil {
 				return terr
 			}

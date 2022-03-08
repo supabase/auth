@@ -120,6 +120,121 @@ func (ts *SignupTestSuite) TestWrongKeyFormatGetChallengeToken() {
 	require.Equal(ts.T(), []byte(`{"code":422,"msg":"Key verification failed: Provided key cannot be ETH address"}`), msg)
 }
 
+func (ts *SignupTestSuite) TestFirstSignInSuperAdmin() {
+	//FirstUser is SuperAdmin config on true
+	ts.Config.FirstUserSuperAdmin = true
+
+	// Request body
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"key":       "0x6BE46d7D863666546b77951D5dfffcF075F36E68",
+		"algorithm": "ETH",
+	}))
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodPost, "/sign_challenge", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Setup response recorder
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	jsonData := GetChallengeTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&jsonData))
+	require.NotEmpty(ts.T(), jsonData)
+
+	user, key, err := models.FindUserWithAsymmetrickey(ts.API.db, "0x6BE46d7D863666546b77951D5dfffcF075F36E68")
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), user)
+	require.NotEmpty(ts.T(), key)
+	assert.Equal(ts.T(), key.ChallengeToken.String(), jsonData.ChallengeToken)
+	assert.Equal(ts.T(), user.Role, "superadmin")
+	assert.Equal(ts.T(), user.IsSuperAdmin, true)
+}
+
+func (ts *SignupTestSuite) TestFirstSignInConfigFalse() {
+	//FirstUser is SuperAdmin config on false
+	ts.Config.FirstUserSuperAdmin = false
+
+	// Request body
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"key":       "0x6BE46d7D863666546b77951D5dfffcF075F36E68",
+		"algorithm": "ETH",
+	}))
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodPost, "/sign_challenge", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Setup response recorder
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	jsonData := GetChallengeTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&jsonData))
+	require.NotEmpty(ts.T(), jsonData)
+
+	user, key, err := models.FindUserWithAsymmetrickey(ts.API.db, "0x6BE46d7D863666546b77951D5dfffcF075F36E68")
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), user)
+	require.NotEmpty(ts.T(), key)
+	assert.Equal(ts.T(), key.ChallengeToken.String(), jsonData.ChallengeToken)
+	assert.Equal(ts.T(), user.Role, "authenticated")
+	assert.Equal(ts.T(), user.IsSuperAdmin, false)
+}
+
+func (ts *SignupTestSuite) TestNotFirstSignIn() {
+	//FirstUser is SuperAdmin config on true
+	ts.Config.FirstUserSuperAdmin = true
+
+	// Request body
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"key":       "0x6BE46d7D863666546b77951D5dfffcF075F36E68",
+		"algorithm": "ETH",
+	}))
+
+	var buffer2 bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer2).Encode(map[string]interface{}{
+		"key":       "0x6BE46d7D863666546677951D5dfffcF075F36E68",
+		"algorithm": "ETH",
+	}))
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodPost, "/sign_challenge", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Setup response recorder
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	req = httptest.NewRequest(http.MethodPost, "/sign_challenge", &buffer2)
+	req.Header.Set("Content-Type", "application/json")
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	jsonData := GetChallengeTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&jsonData))
+	require.NotEmpty(ts.T(), jsonData)
+
+	user, key, err := models.FindUserWithAsymmetrickey(ts.API.db, "0x6BE46d7D863666546677951D5dfffcF075F36E68")
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), user)
+	require.NotEmpty(ts.T(), key)
+	assert.Equal(ts.T(), user.Role, "authenticated")
+	assert.Equal(ts.T(), user.IsSuperAdmin, false)
+}
+
 type AsymmetricSignInTestSuite struct {
 	suite.Suite
 	API    *API

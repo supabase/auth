@@ -172,6 +172,16 @@ func (u *User) SetRole(tx *storage.Connection, roleName string) error {
 	return tx.UpdateOnly(u, "role")
 }
 
+//SetSuperAdmin sets the user as SuperAdmin
+func (u *User) SetSuperAdmin(tx *storage.Connection) error {
+	u.IsSuperAdmin = true
+	err := u.SetRole(tx, "superadmin")
+	if err != nil {
+		return err
+	}
+	return tx.UpdateOnly(u, "is_super_admin")
+}
+
 // HasRole returns true when the users role is set to roleName
 func (u *User) HasRole(roleName string) bool {
 	return u.Role == roleName
@@ -345,6 +355,18 @@ func findUser(tx *storage.Connection, query string, args ...interface{}) (*User,
 	}
 
 	return obj, nil
+}
+
+func AnyUser(tx *storage.Connection) (bool, error) {
+	obj := &User{}
+	err := tx.Eager().Q().First(obj)
+	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // FindUserByConfirmationToken finds users with the matching confirmation token.

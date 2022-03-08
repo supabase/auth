@@ -181,18 +181,19 @@ type SecurityConfiguration struct {
 
 // Configuration holds all the per-instance configuration.
 type Configuration struct {
-	SiteURL           string                   `json:"site_url" split_words:"true" required:"true"`
-	URIAllowList      []string                 `json:"uri_allow_list" split_words:"true"`
-	PasswordMinLength int                      `json:"password_min_length" split_words:"true"`
-	JWT               JWTConfiguration         `json:"jwt"`
-	SMTP              SMTPConfiguration        `json:"smtp"`
-	Mailer            MailerConfiguration      `json:"mailer"`
-	External          ProviderConfiguration    `json:"external"`
-	Sms               SmsProviderConfiguration `json:"sms"`
-	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
-	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
-	Security          SecurityConfiguration    `json:"security"`
-	Cookie            struct {
+	SiteURL             string                   `json:"site_url" split_words:"true" required:"true"`
+	URIAllowList        []string                 `json:"uri_allow_list" split_words:"true"`
+	PasswordMinLength   int                      `json:"password_min_length" split_words:"true"`
+	JWT                 JWTConfiguration         `json:"jwt"`
+	SMTP                SMTPConfiguration        `json:"smtp"`
+	Mailer              MailerConfiguration      `json:"mailer"`
+	External            ProviderConfiguration    `json:"external"`
+	Sms                 SmsProviderConfiguration `json:"sms"`
+	DisableSignup       bool                     `json:"disable_signup" split_words:"true"`
+	FirstUserSuperAdmin bool                     `json:"first_user_super_admin" split_words:"true"`
+	Webhook             WebhookConfig            `json:"webhook" split_words:"true"`
+	Security            SecurityConfiguration    `json:"security"`
+	Cookie              struct {
 		Key      string `json:"key"`
 		Domain   string `json:"domain"`
 		Duration int    `json:"duration"`

@@ -301,12 +301,27 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 
 	err = conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
+		userExist, terr := models.AnyUser(tx)
+
+		if terr != nil {
+			return terr
+		}
+
 		if terr = tx.Create(user); terr != nil {
 			return internalServerError("Database error saving new user").WithInternalError(terr)
 		}
-		if terr = user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
-			return internalServerError("Database error updating user").WithInternalError(terr)
+
+		if config.FirstUserSuperAdmin && !userExist {
+			terr = user.SetSuperAdmin(tx)
+			if terr != nil {
+				return terr
+			}
+		} else {
+			if terr = user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
+				return internalServerError("Database error updating user").WithInternalError(terr)
+			}
 		}
+
 		if terr = triggerEventHooks(ctx, tx, ValidateEvent, user, instanceID, config); terr != nil {
 			return terr
 		}
