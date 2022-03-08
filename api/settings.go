@@ -16,6 +16,7 @@ type ProviderSettings struct {
 	Notion    bool `json:"notion"`
 	Spotify   bool `json:"spotify"`
 	Slack     bool `json:"slack"`
+	WorkOS    bool `json:"workos"`
 	Twitch    bool `json:"twitch"`
 	Twitter   bool `json:"twitter"`
 	Email     bool `json:"email"`
@@ -57,6 +58,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Slack:     config.External.Slack.Enabled,
 			Twitch:    config.External.Twitch.Enabled,
 			Twitter:   config.External.Twitter.Enabled,
+			WorkOS:    config.External.WorkOS.Enabled,
 			Email:     config.External.Email.Enabled,
 			Phone:     config.External.Phone.Enabled,
 			SAML:      config.External.Saml.Enabled,

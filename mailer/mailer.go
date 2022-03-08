@@ -25,18 +25,15 @@ type Mailer interface {
 
 // NewMailer returns a new gotrue mailer
 func NewMailer(instanceConfig *conf.Configuration) Mailer {
-	if instanceConfig.SMTP.Host == "" {
-		logrus.Infof("Noop mailer being used for %v", instanceConfig.SiteURL)
-		return &noopMailer{}
-	}
-
 	mail := gomail.NewMessage()
 	from := mail.FormatAddress(instanceConfig.SMTP.AdminEmail, instanceConfig.SMTP.SenderName)
 
-	return &TemplateMailer{
-		SiteURL: instanceConfig.SiteURL,
-		Config:  instanceConfig,
-		Mailer: &mailme.Mailer{
+	var mailClient MailClient
+	if instanceConfig.SMTP.Host == "" {
+		logrus.Infof("Noop mail client being used for %v", instanceConfig.SiteURL)
+		mailClient = &noopMailClient{}
+	} else {
+		mailClient = &mailme.Mailer{
 			Host:    instanceConfig.SMTP.Host,
 			Port:    instanceConfig.SMTP.Port,
 			User:    instanceConfig.SMTP.User,
@@ -44,7 +41,13 @@ func NewMailer(instanceConfig *conf.Configuration) Mailer {
 			From:    from,
 			BaseURL: instanceConfig.SiteURL,
 			Logger:  logrus.New(),
-		},
+		}
+	}
+
+	return &TemplateMailer{
+		SiteURL: instanceConfig.SiteURL,
+		Config:  instanceConfig,
+		Mailer:  mailClient,
 	}
 }
 

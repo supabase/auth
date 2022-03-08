@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 
@@ -81,6 +82,10 @@ func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 
 	if err != nil {
 		return nil, err
+	}
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("a %v error occurred with retrieving user from notion", resp.StatusCode)
 	}
 
 	body, _ := ioutil.ReadAll(resp.Body)

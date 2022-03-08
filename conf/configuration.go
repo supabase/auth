@@ -11,12 +11,15 @@ import (
 	"github.com/kelseyhightower/envconfig"
 )
 
+const defaultMinPasswordLength int = 6
+
 // OAuthProviderConfiguration holds all config related to external account providers.
 type OAuthProviderConfiguration struct {
 	ClientID    string `json:"client_id" split_words:"true"`
 	Secret      string `json:"secret"`
 	RedirectURI string `json:"redirect_uri" split_words:"true"`
 	URL         string `json:"url"`
+	ApiURL      string `json:"api_url" split_words:"true"`
 	Enabled     bool   `json:"enabled"`
 }
 
@@ -35,8 +38,11 @@ type SamlProviderConfiguration struct {
 
 // DBConfiguration holds all the database related configuration.
 type DBConfiguration struct {
-	Driver         string `json:"driver" required:"true"`
-	URL            string `json:"url" envconfig:"DATABASE_URL" required:"true"`
+	Driver string `json:"driver" required:"true"`
+	URL    string `json:"url" envconfig:"DATABASE_URL" required:"true"`
+
+	// MaxPoolSize defaults to 0 (unlimited).
+	MaxPoolSize    int    `json:"max_pool_size" split_words:"true"`
 	MigrationsPath string `json:"migrations_path" split_words:"true" default:"./migrations"`
 }
 
@@ -95,6 +101,7 @@ type ProviderConfiguration struct {
 	Slack       OAuthProviderConfiguration `json:"slack"`
 	Twitter     OAuthProviderConfiguration `json:"twitter"`
 	Twitch      OAuthProviderConfiguration `json:"twitch"`
+	WorkOS      OAuthProviderConfiguration `json:"workos"`
 	Email       EmailProviderConfiguration `json:"email"`
 	Phone       PhoneProviderConfiguration `json:"phone"`
 	Saml        SamlProviderConfiguration  `json:"saml"`
@@ -119,6 +126,7 @@ type MailerConfiguration struct {
 	Templates                EmailContentConfiguration `json:"templates"`
 	URLPaths                 EmailContentConfiguration `json:"url_paths"`
 	SecureEmailChangeEnabled bool                      `json:"secure_email_change_enabled" split_words:"true" default:"true"`
+	OtpExp                   uint                      `json:"otp_exp" split_words:"true"`
 }
 
 type PhoneProviderConfiguration struct {
@@ -175,7 +183,7 @@ type SecurityConfiguration struct {
 type Configuration struct {
 	SiteURL           string                   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList      []string                 `json:"uri_allow_list" split_words:"true"`
-	PasswordMinLength int                      `json:"password_min_length" default:"6"`
+	PasswordMinLength int                      `json:"password_min_length" split_words:"true"`
 	JWT               JWTConfiguration         `json:"jwt"`
 	SMTP              SMTPConfiguration        `json:"smtp"`
 	Mailer            MailerConfiguration      `json:"mailer"`
@@ -276,14 +284,21 @@ func (config *Configuration) ApplyDefaults() {
 	if config.Mailer.URLPaths.Invite == "" {
 		config.Mailer.URLPaths.Invite = "/"
 	}
+
 	if config.Mailer.URLPaths.Confirmation == "" {
 		config.Mailer.URLPaths.Confirmation = "/"
 	}
+
 	if config.Mailer.URLPaths.Recovery == "" {
 		config.Mailer.URLPaths.Recovery = "/"
 	}
+
 	if config.Mailer.URLPaths.EmailChange == "" {
 		config.Mailer.URLPaths.EmailChange = "/"
+	}
+
+	if config.Mailer.OtpExp == 0 {
+		config.Mailer.OtpExp = 86400 // 1 day
 	}
 
 	if config.SMTP.MaxFrequency == 0 {
@@ -321,6 +336,10 @@ func (config *Configuration) ApplyDefaults() {
 
 	if config.URIAllowList == nil {
 		config.URIAllowList = []string{}
+	}
+
+	if config.PasswordMinLength < defaultMinPasswordLength {
+		config.PasswordMinLength = defaultMinPasswordLength
 	}
 }
 

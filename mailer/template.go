@@ -6,14 +6,17 @@ import (
 	"github.com/badoux/checkmail"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
-	"github.com/netlify/mailme"
 )
+
+type MailClient interface {
+	Mail(string, string, string, string, map[string]interface{}) error
+}
 
 // TemplateMailer will send mail and use templates from the site for easy mail styling
 type TemplateMailer struct {
 	SiteURL string
 	Config  *conf.Configuration
-	Mailer  *mailme.Mailer
+	Mailer  MailClient
 }
 
 var configFile = ""
@@ -21,27 +24,33 @@ var configFile = ""
 const defaultInviteMail = `<h2>You have been invited</h2>
 
 <p>You have been invited to create a user on {{ .SiteURL }}. Follow this link to accept the invite:</p>
-<p><a href="{{ .ConfirmationURL }}">Accept the invite</a></p>`
+<p><a href="{{ .ConfirmationURL }}">Accept the invite</a></p>
+<p>Alternatively, enter the code: {{ .Token }}</p>`
 
 const defaultConfirmationMail = `<h2>Confirm your email</h2>
 
 <p>Follow this link to confirm your email:</p>
-<p><a href="{{ .ConfirmationURL }}">Confirm your email address</a></p>`
+<p><a href="{{ .ConfirmationURL }}">Confirm your email address</a></p>
+<p>Alternatively, enter the code: {{ .Token }}</p>
+`
 
 const defaultRecoveryMail = `<h2>Reset password</h2>
 
 <p>Follow this link to reset the password for your user:</p>
-<p><a href="{{ .ConfirmationURL }}">Reset password</a></p>`
+<p><a href="{{ .ConfirmationURL }}">Reset password</a></p>
+<p>Alternatively, enter the code: {{ .Token }}</p>`
 
 const defaultMagicLinkMail = `<h2>Magic Link</h2>
 
 <p>Follow this link to login:</p>
-<p><a href="{{ .ConfirmationURL }}">Log In</a></p>`
+<p><a href="{{ .ConfirmationURL }}">Log In</a></p>
+<p>Alternatively, enter the code: {{ .Token }}</p>`
 
 const defaultEmailChangeMail = `<h2>Confirm email address change</h2>
 
 <p>Follow this link to confirm the update of your email address from {{ .Email }} to {{ .NewEmail }}:</p>
-<p><a href="{{ .ConfirmationURL }}">Change email address</a></p>`
+<p><a href="{{ .ConfirmationURL }}">Change email address</a></p>
+<p>Alternatively, enter the code: {{ .Token }}</p>`
 
 // ValidateEmail returns nil if the email is valid,
 // otherwise an error indicating the reason it is invalid
@@ -126,9 +135,10 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, referrerURL string) 
 		},
 	}
 
-	if m.Config.Mailer.SecureEmailChangeEnabled {
+	currentEmail := user.GetEmail()
+	if m.Config.Mailer.SecureEmailChangeEnabled && currentEmail != "" {
 		emails = append(emails, Email{
-			Address:  user.GetEmail(),
+			Address:  currentEmail,
 			Token:    user.EmailChangeTokenCurrent,
 			Subject:  string(withDefault(m.Config.Mailer.Subjects.Confirmation, "Confirm Email Address")),
 			Template: m.Config.Mailer.Templates.EmailChange,

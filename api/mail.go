@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/mailer"
 	"github.com/netlify/gotrue/models"
@@ -229,9 +230,12 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 	return errors.Wrap(tx.UpdateOnly(u, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
 }
 
-// sendSecureEmailChange sends out an email change token each to the old and new emails.
-func (a *API) sendSecureEmailChange(tx *storage.Connection, u *models.User, mailer mailer.Mailer, email string, referrerURL string) error {
-	u.EmailChangeTokenCurrent, u.EmailChangeTokenNew = crypto.SecureToken(), crypto.SecureToken()
+// sendEmailChange sends out an email change token to the new email.
+func (a *API) sendEmailChange(tx *storage.Connection, config *conf.Configuration, u *models.User, mailer mailer.Mailer, email string, referrerURL string) error {
+	u.EmailChangeTokenNew = crypto.SecureToken()
+	if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
+		u.EmailChangeTokenCurrent = crypto.SecureToken()
+	}
 	u.EmailChange = email
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
@@ -243,26 +247,6 @@ func (a *API) sendSecureEmailChange(tx *storage.Connection, u *models.User, mail
 	return errors.Wrap(tx.UpdateOnly(
 		u,
 		"email_change_token_current",
-		"email_change_token_new",
-		"email_change",
-		"email_change_sent_at",
-		"email_change_confirm_status",
-	), "Database error updating user for email change")
-}
-
-// sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(tx *storage.Connection, u *models.User, mailer mailer.Mailer, email string, referrerURL string) error {
-	u.EmailChangeTokenNew = crypto.SecureToken()
-	u.EmailChange = email
-	u.EmailChangeConfirmStatus = zeroConfirmation
-	now := time.Now()
-	if err := mailer.EmailChangeMail(u, referrerURL); err != nil {
-		return err
-	}
-
-	u.EmailChangeSentAt = &now
-	return errors.Wrap(tx.UpdateOnly(
-		u,
 		"email_change_token_new",
 		"email_change",
 		"email_change_sent_at",

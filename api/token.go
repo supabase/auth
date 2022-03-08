@@ -54,6 +54,8 @@ type IdTokenGrantParams struct {
 	IdToken  string `json:"id_token"`
 	Nonce    string `json:"nonce"`
 	Provider string `json:"provider"`
+	ClientID string `json:"client_id"`
+	Issuer   string `json:"issuer"`
 }
 
 const useCookieHeader = "x-use-cookie"
@@ -75,7 +77,11 @@ func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVeri
 	case "azure":
 		oAuthProvider = config.External.Azure
 		oAuthProviderClientId = oAuthProvider.ClientID
-		provider, err = oidc.NewProvider(ctx, "https://login.microsoftonline.com/common/v2.0")
+		url := oAuthProvider.URL
+		if url == "" {
+			url = "https://login.microsoftonline.com/common"
+		}
+		provider, err = oidc.NewProvider(ctx, url+"/v2.0")
 	case "facebook":
 		oAuthProvider = config.External.Facebook
 		oAuthProviderClientId = oAuthProvider.ClientID
@@ -101,6 +107,16 @@ func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVeri
 	}
 
 	return provider.Verifier(&oidc.Config{ClientID: oAuthProviderClientId}), nil
+}
+
+func (p *IdTokenGrantParams) getVerifierFromClientIDandIssuer(ctx context.Context) (*oidc.IDTokenVerifier, error) {
+	var provider *oidc.Provider
+	var err error
+	provider, err = oidc.NewProvider(ctx, p.Issuer)
+	if err != nil {
+		return nil, fmt.Errorf("Issuer %s doesn't support the id_token grant flow", p.Issuer)
+	}
+	return provider.Verifier(&oidc.Config{ClientID: p.ClientID}), nil
 }
 
 func getEmailVerified(v interface{}) bool {
@@ -154,13 +170,16 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return unprocessableEntityError("Only an email address or phone number should be provided on login.")
 	}
 	var user *models.User
+	var provider string
 	var err error
 	if params.Email != "" {
+		provider = "email"
 		if !config.External.Email.Enabled {
 			return badRequestError("Email logins are disabled")
 		}
 		user, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
 	} else if params.Phone != "" {
+		provider = "phone"
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone logins are disabled")
 		}
@@ -190,7 +209,9 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
+		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, map[string]interface{}{
+			"provider": provider,
+		}); terr != nil {
 			return terr
 		}
 		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
@@ -211,7 +232,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return err
 	}
 	metering.RecordLogin("password", user.ID, instanceID)
-	token.User = user
 	return sendJSON(w, http.StatusOK, token)
 }
 
@@ -328,11 +348,23 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return badRequestError("Could not read id token grant params: %v", err)
 	}
 
-	if params.IdToken == "" || params.Nonce == "" || params.Provider == "" {
-		return oauthError("invalid request", "id_token, nonce and provider required")
+	if params.IdToken == "" || params.Nonce == "" {
+		return oauthError("invalid request", "id_token and nonce required")
 	}
 
-	verifier, err := params.getVerifier(ctx)
+	if params.Provider == "" && (params.ClientID == "" || params.Issuer == "") {
+		return oauthError("invalid request", "provider or client_id and issuer required")
+	}
+
+	var verifier *oidc.IDTokenVerifier
+	var err error
+	if params.Provider != "" {
+		verifier, err = params.getVerifier(ctx)
+	} else if params.ClientID != "" && params.Issuer != "" {
+		verifier, err = params.getVerifierFromClientIDandIssuer(ctx)
+	} else {
+		return badRequestError("%v", err)
+	}
 	if err != nil {
 		return err
 	}
@@ -431,7 +463,9 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				return unauthorizedError("Error unverified email")
 			}
 
-			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
+			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
+				"provider": params.Provider,
+			}); terr != nil {
 				return terr
 			}
 
@@ -443,7 +477,9 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				return internalServerError("Error updating user").WithInternalError(terr)
 			}
 		} else {
-			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
+			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, map[string]interface{}{
+				"provider": params.Provider,
+			}); terr != nil {
 				return terr
 			}
 			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
@@ -467,13 +503,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	metering.RecordLogin("id_token", user.ID, instanceID)
-	return sendJSON(w, http.StatusOK, &AccessTokenResponse{
-		Token:        token.Token,
-		TokenType:    token.TokenType,
-		ExpiresIn:    token.ExpiresIn,
-		RefreshToken: token.RefreshToken,
-		User:         user,
-	})
+	return sendJSON(w, http.StatusOK, token)
 }
 
 func generateAccessToken(user *models.User, expiresIn time.Duration, secret string) (string, error) {
@@ -525,6 +555,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		TokenType:    "bearer",
 		ExpiresIn:    config.JWT.Exp,
 		RefreshToken: refreshToken.Token,
+		User:         user,
 	}, nil
 }
 
