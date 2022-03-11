@@ -113,7 +113,7 @@ func makeRequest(ctx context.Context, tok *oauth2.Token, g *oauth2.Config, url s
 	defer res.Body.Close()
 	res.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 
-	if res.StatusCode < http.StatusOK && res.StatusCode >= http.StatusMultipleChoices {
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
 		return httpError(res.StatusCode, string(bodyBytes))
 	}
 

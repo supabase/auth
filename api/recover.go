@@ -32,11 +32,12 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 
 	aud := a.requestAud(ctx, r)
 	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+	recoverErrorMessage := "If a user exists, you will receive an email with instructions on how to reset your password."
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return notFoundError(err.Error())
 		}
-		return internalServerError("Database error finding user").WithInternalError(err)
+		return internalServerError(recoverErrorMessage).WithInternalError(err)
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -52,7 +53,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		if errors.Is(err, MaxFrequencyLimitError) {
 			return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
 		}
-		return internalServerError("Error recovering user").WithInternalError(err)
+		return internalServerError(recoverErrorMessage).WithInternalError(err)
 	}
 
 	return sendJSON(w, http.StatusOK, &map[string]string{})

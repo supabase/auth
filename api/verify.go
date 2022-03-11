@@ -82,14 +82,6 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		aud := a.requestAud(ctx, r)
 		user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
 		if terr != nil {
-			var herr *HTTPError
-			if errors.As(terr, &herr) {
-				if errors.Is(herr.InternalError, redirectWithQueryError) {
-					rurl := a.prepErrorRedirectURL(herr, r, params.RedirectTo)
-					http.Redirect(w, r, rurl, http.StatusSeeOther)
-					return nil
-				}
-			}
 			return terr
 		}
 
@@ -126,8 +118,20 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
+
 	if err != nil {
-		return err
+		if r.Method == http.MethodPost {
+			// do not redirect POST requests
+			return err
+		}
+		var herr *HTTPError
+		if errors.As(err, &herr) {
+			if errors.Is(herr.InternalError, redirectWithQueryError) {
+				rurl := a.prepErrorRedirectURL(herr, r, params.RedirectTo)
+				http.Redirect(w, r, rurl, http.StatusSeeOther)
+				return nil
+			}
+		}
 	}
 
 	// GET requests should return to the app site after confirmation
@@ -200,7 +204,7 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user 
 			return terr
 		}
 		if !user.IsConfirmed() {
-			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
+			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
 				return terr
 			}
 
@@ -208,6 +212,13 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user 
 				return terr
 			}
 			if terr = user.Confirm(tx); terr != nil {
+				return terr
+			}
+		} else {
+			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
+				return terr
+			}
+			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
 				return terr
 			}
 		}
@@ -269,7 +280,7 @@ func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, p
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
 
-	if config.Mailer.SecureEmailChangeEnabled && user.EmailChangeConfirmStatus == zeroConfirmation {
+	if config.Mailer.SecureEmailChangeEnabled && user.EmailChangeConfirmStatus == zeroConfirmation && user.GetEmail() != "" {
 		err := a.db.Transaction(func(tx *storage.Connection) error {
 			user.EmailChangeConfirmStatus = singleConfirmation
 			if params.Token == user.EmailChangeTokenCurrent {

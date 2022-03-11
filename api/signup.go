@@ -225,7 +225,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		metering.RecordLogin("password", user.ID, instanceID)
-		token.User = user
 		return sendJSON(w, http.StatusOK, token)
 	}
 

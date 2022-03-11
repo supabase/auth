@@ -55,7 +55,7 @@ type IdTokenGrantParams struct {
 	Nonce    string `json:"nonce"`
 	Provider string `json:"provider"`
 	ClientID string `json:"client_id"`
-	Issuer string `json:"issuer"`
+	Issuer   string `json:"issuer"`
 }
 
 const useCookieHeader = "x-use-cookie"
@@ -81,7 +81,7 @@ func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVeri
 		if url == "" {
 			url = "https://login.microsoftonline.com/common"
 		}
-		provider, err = oidc.NewProvider(ctx, url + "/v2.0")
+		provider, err = oidc.NewProvider(ctx, url+"/v2.0")
 	case "facebook":
 		oAuthProvider = config.External.Facebook
 		oAuthProviderClientId = oAuthProvider.ClientID
@@ -90,6 +90,10 @@ func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVeri
 		oAuthProvider = config.External.Google
 		oAuthProviderClientId = oAuthProvider.ClientID
 		provider, err = oidc.NewProvider(ctx, "https://accounts.google.com")
+	case "keycloak":
+		oAuthProvider = config.External.Keycloak
+		oAuthProviderClientId = oAuthProvider.ClientID
+		provider, err = oidc.NewProvider(ctx, oAuthProvider.URL)
 	default:
 		return nil, fmt.Errorf("Provider %s doesn't support the id_token grant flow", p.Provider)
 	}
@@ -228,7 +232,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return err
 	}
 	metering.RecordLogin("password", user.ID, instanceID)
-	token.User = user
 	return sendJSON(w, http.StatusOK, token)
 }
 
@@ -348,8 +351,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	if params.IdToken == "" || params.Nonce == "" {
 		return oauthError("invalid request", "id_token and nonce required")
 	}
-	
-	if params.Provider == "" && ( params.ClientID == "" || params.Issuer == "" ) {
+
+	if params.Provider == "" && (params.ClientID == "" || params.Issuer == "") {
 		return oauthError("invalid request", "provider or client_id and issuer required")
 	}
 
@@ -500,13 +503,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	metering.RecordLogin("id_token", user.ID, instanceID)
-	return sendJSON(w, http.StatusOK, &AccessTokenResponse{
-		Token:        token.Token,
-		TokenType:    token.TokenType,
-		ExpiresIn:    token.ExpiresIn,
-		RefreshToken: token.RefreshToken,
-		User:         user,
-	})
+	return sendJSON(w, http.StatusOK, token)
 }
 
 func generateAccessToken(user *models.User, expiresIn time.Duration, secret string) (string, error) {
@@ -558,6 +555,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		TokenType:    "bearer",
 		ExpiresIn:    config.JWT.Exp,
 		RefreshToken: refreshToken.Token,
+		User:         user,
 	}, nil
 }
 

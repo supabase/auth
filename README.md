@@ -62,7 +62,7 @@ Header on which to rate limit the `/token` endpoint.
 
 Rate limit the number of emails sent per hr on the following endpoints: `/signup`, `/invite`, `/magiclink`, `/recover`, `/otp`, & `/user`.
 
-`PASSWORD_MIN_LENGTH` - `int`
+`GOTRUE_PASSWORD_MIN_LENGTH` - `int`
 
 Minimum password length, defaults to 6.
 
@@ -103,6 +103,10 @@ Chooses what dialect of database you want. Must be `mysql`.
 `DATABASE_URL` (no prefix) / `DB_DATABASE_URL` - `string` **required**
 
 Connection string for the database.
+
+`GOTRUE_DB_MAX_POOL_SIZE` - `int`
+
+Sets the maximum number of open connections to the database. Defaults to 0 which is equivalent to an "unlimited" number of connections.
 
 `DB_NAMESPACE` - `string`
 
@@ -193,7 +197,7 @@ The default group to assign all new users to.
 
 ### External Authentication Providers
 
-We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `linkedin`, `notion`, `spotify`, `slack`, `twitch` and `twitter` for external authentication.
+We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin`, `notion`, `spotify`, `slack`, `twitch`, `twitter` and `workos` for external authentication.
 
 Use the names as the keys underneath `external` to configure each separately.
 
@@ -224,7 +228,7 @@ The URI a OAuth2 provider will redirect to with the `code` and `state` values.
 
 `EXTERNAL_X_URL` - `string`
 
-The base URL used for constructing the URLs to request authorization and access tokens. Used by `gitlab` only. Defaults to `https://gitlab.com`.
+The base URL used for constructing the URLs to request authorization and access tokens. Used by `gitlab` and `keycloak`. For `gitlab` it defaults to `https://gitlab.com`. For `keycloak` you need to set this to your instance, for example: `https://keycloak.example.com/auth/realms/myrealm`
 
 #### Apple OAuth
 
@@ -509,12 +513,14 @@ Returns the publicly available settings for this gotrue instance.
     "github": true,
     "gitlab": true,
     "google": true,
+    "keycloak": true,
     "linkedin": true,
     "notion": true,
     "slack": true,
     "spotify": true,
     "twitch": true,
-    "twitter": true
+    "twitter": true,
+    "workos": true,
   },
   "disable_signup": false,
   "autoconfirm": false
@@ -922,7 +928,8 @@ Get access_token from external oauth provider
 query params:
 
 ```
-provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | linkedin | notion | slack | spotify | twitch | twitter
+provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | keycloak | linkedin | notion | slack | spotify | twitch | twitter | workos
+
 scopes=<optional additional scopes depending on the provider (email and name are requested by default)>
 ```
 

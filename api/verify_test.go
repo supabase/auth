@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -173,16 +174,9 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	u.ConfirmationSentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
-	// Request body
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"type":  signupVerification,
-		"token": u.ConfirmationToken,
-	}))
-
 	// Setup request
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", signupVerification, u.ConfirmationToken)
+	req := httptest.NewRequest(http.MethodGet, reqURL, nil)
 
 	// Setup response recorder
 	w := httptest.NewRecorder()
@@ -203,21 +197,21 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 	u.ConfirmationSentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
-	type expected struct {
-		code      int
-		fragments string
+	type ResponseBody struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
 	}
 
-	expectedResponse := expected{
-		code:      http.StatusSeeOther,
-		fragments: "error_code=410&error_description=Token+has+expired+or+is+invalid",
+	expectedResponse := ResponseBody{
+		Code: http.StatusGone,
+		Msg:  "Token has expired or is invalid",
 	}
 
 	cases := []struct {
 		desc     string
 		sentTime time.Time
 		body     map[string]interface{}
-		expected
+		expected ResponseBody
 	}{
 		{
 			desc:     "Expired Sms OTP",
@@ -268,11 +262,15 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 			// Setup response recorder
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			assert.Equal(ts.T(), c.expected.code, w.Code)
 
-			url, err := w.Result().Location()
+			b, err := ioutil.ReadAll(w.Body)
 			require.NoError(ts.T(), err)
-			assert.Equal(ts.T(), c.expected.fragments, url.Fragment)
+			var resp ResponseBody
+			err = json.Unmarshal(b, &resp)
+			require.NoError(ts.T(), err)
+			assert.Equal(ts.T(), c.expected.Code, resp.Code)
+			assert.Equal(ts.T(), c.expected.Msg, resp.Msg)
+
 		})
 	}
 }
@@ -285,16 +283,9 @@ func (ts *VerifyTestSuite) TestExpiredRecoveryToken() {
 	u.RecoverySentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
-	// Request body
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"type":  recoveryVerification,
-		"token": u.RecoveryToken,
-	}))
-
 	// Setup request
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", "signup", u.RecoveryToken)
+	req := httptest.NewRequest(http.MethodGet, reqURL, nil)
 
 	// Setup response recorder
 	w := httptest.NewRecorder()
@@ -528,11 +519,11 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
+			assert.Equal(ts.T(), http.StatusUnauthorized, w.Code)
 
-			url, err := w.Result().Location()
+			b, err := ioutil.ReadAll(w.Body)
 			require.NoError(ts.T(), err)
-			assert.Equal(ts.T(), "error=unauthorized_client&error_code=401&error_description=Error+confirming+user", url.Fragment)
+			assert.Equal(ts.T(), "{\"code\":401,\"msg\":\"Error confirming user\"}", string(b))
 		})
 	}
 }
