@@ -3,8 +3,6 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/go-chi/chi"
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"io/ioutil"
@@ -87,38 +85,6 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 
 	// Return the nonce's id and the build string
 	return sendJSON(w, http.StatusCreated, &NonceResponse{
-		Id:    nonce.ID.String(),
-		Nonce: message.PrepareMessage(),
-	})
-}
-
-func (a *API) NonceById(w http.ResponseWriter, r *http.Request) error {
-	// Get nonce's id from the URL param and check if it is a UUID
-	nonceId, err := uuid.FromString(chi.URLParam(r, "nonce_id"))
-	if err != nil {
-		// Throw a 400 - bad request - error if the nonce's id is not a UUID
-		return badRequestError("nonce_id must be an UUID")
-	}
-
-	// Get the nonce by its ID
-	nonce, err := models.GetNonceById(a.db, nonceId)
-	if err != nil {
-		// Check if the error is a not found error
-		if models.IsNotFoundError(err) {
-			return badRequestError("Invalid nonce_id")
-		}
-		return internalServerError("Failed to find nonce")
-	}
-
-	// The nonce string that was built
-	message := nonce.ToMessage(a.config)
-
-	if err != nil {
-		return internalServerError("Failed to build nonce")
-	}
-
-	// Return the nonce's id and the build string
-	return sendJSON(w, http.StatusOK, &NonceResponse{
 		Id:    nonce.ID.String(),
 		Nonce: message.PrepareMessage(),
 	})
