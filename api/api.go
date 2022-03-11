@@ -122,14 +122,12 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		// TODO (HarryET): Create a nonce rate limiter
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/eth", api.Eth)
-		r.With(api.verifyCaptcha).Route("/nonce", func(r *router) {
-			r.With(api.limitHandler(
-				// Allow requests at a rate of 30 per 5 minutes.
-				tollbooth.NewLimiter(30.0/(60*5), &limiter.ExpirableOptions{
-					DefaultExpirationTTL: time.Hour,
-				}).SetBurst(30),
-			)).Post("/", api.Nonce)
-		})
+		r.With(api.limitHandler(
+			// Allow requests at a rate of 30 per 5 minutes.
+			tollbooth.NewLimiter(30.0/(60*5), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(30),
+		)).With(api.verifyCaptcha).Post("/nonce", api.Nonce)
 
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
 
