@@ -272,6 +272,7 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 	config := a.getConfig(ctx)
 
 	var user *models.User
+	var cryptoAddress *models.CryptoAddress
 	var err error
 	switch params.Provider {
 	case "email":
@@ -281,7 +282,7 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 		user.Phone = storage.NullString(params.Phone)
 	case "crypto":
 		user, err = models.NewUser(instanceID, "", "", params.Aud, params.Data)
-		_, err = models.NewCryptoAddress(instanceID, user.ID, params.CryptoAddress)
+		cryptoAddress, err = models.NewCryptoAddress(instanceID, user.ID, params.CryptoAddress)
 	default:
 		// handles external provider case
 		user, err = models.NewUser(instanceID, params.Email, params.Password, params.Aud, params.Data)
@@ -308,6 +309,11 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 		var terr error
 		if terr = tx.Create(user); terr != nil {
 			return internalServerError("Database error saving new user").WithInternalError(terr)
+		}
+		if params.Provider == "crypto" && cryptoAddress != nil {
+			if terr = tx.Create(cryptoAddress); terr != nil {
+				return internalServerError("Database error saving new crypto address").WithInternalError(terr)
+			}
 		}
 		if terr = user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
 			return internalServerError("Database error updating user").WithInternalError(terr)
