@@ -24,6 +24,7 @@ type Nonce struct {
 	ChainId   string `json:"chain_id" db:"chain_id"`
 	Address   string `json:"address" db:"address"`
 	Namespace string `json:"namespace" db:"namespace"`
+	Nonce     string `json:"nonce" db:"nonce"`
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
@@ -47,6 +48,7 @@ func NewNonce(instanceID uuid.UUID, chainId, url, hostname, walletAddress, names
 		Namespace:  namespace,
 		ChainId:    chainId,
 		Address:    walletAddress,
+		Nonce:      siwe.GenerateNonce(),
 		Url:        url,
 		Hostname:   hostname,
 		CreatedAt:  time.Now().UTC(),
@@ -113,14 +115,14 @@ Chain ID: %v`, uri.Hostname(), n.Address, statement, uri.String(), n.CreatedAt.U
 }
 
 func (n *Nonce) ToMessage(config *conf.GlobalConfiguration) *siwe.Message {
-	messageOptions := siwe.InitMessageOptions(map[string]interface{}{
+	message, _ := siwe.InitMessage(n.Hostname, n.Address, n.Url, "1", map[string]interface{}{
 		"statement":      config.External.Eth.Message,
 		"issuedAt":       n.UpdatedAt,
-		"nonce":          siwe.GenerateNonce(),
+		"nonce":          n.Nonce,
 		"chainId":        n.ChainId,
 		"expirationTime": n.ExpiresAt,
 	})
-	message := siwe.InitMessage(n.Hostname, n.Address, n.Url, "1", *messageOptions)
+	// TODO (HarryET): Handle Errors better!
 	return message
 }
 

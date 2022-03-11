@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS auth.nonces
 
     namespace   varchar     NOT NULL,
     address     text        NOT NULL,
+    nonce       varchar     NOT NULL,
     chain_id    varchar     NOT NULL,
 
     created_at  timestamptz NOT NULL DEFAULT now(),
