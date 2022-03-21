@@ -1,3 +1,3 @@
--- set idle_in_transaction_session_timeout to 5min
+-- set idle_in_transaction_session_timeout to 1min
 
-ALTER ROLE supabase_auth_admin SET idle_in_transaction_session_timeout TO 300000;
+ALTER ROLE current_user SET idle_in_transaction_session_timeout TO 60000;
