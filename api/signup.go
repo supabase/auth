@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -159,7 +160,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone); terr != nil {
+				smsProvider, err := sms_provider.GetSmsProvider(*config)
+				if err != nil {
+					return err
+				}
+				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider); terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
 			}
