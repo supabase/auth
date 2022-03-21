@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -35,11 +36,12 @@ type TwitterProvider struct {
 }
 
 type twitterUser struct {
-	UserName  string `json:"screen_name"`
-	Name      string `json:"name"`
-	AvatarURL string `json:"profile_image_url_https"`
-	Email     string `json:"email"`
-	ID        string `json:"id_str"`
+	UserName               string `json:"screen_name"`
+	Name                   string `json:"name"`
+	AvatarURL              string `json:"profile_image_url_https"`
+	Email                  string `json:"email"`
+	ID                     string `json:"id_str"`
+	NeedsPhoneVerification bool   `json:"needs_phone_verification"`
 }
 
 // NewTwitterProvider creates a Twitter account provider.
@@ -94,6 +96,14 @@ func (t TwitterProvider) FetchUserData(ctx context.Context, tok *oauth.AccessTok
 		emails = append(emails, Email{Email: u.Email, Verified: true, Primary: true})
 	}
 
+	var emailVerified bool
+	if len(emails) <= 0 {
+		emailVerified = false
+		if u.NeedsPhoneVerification {
+			return nil, errors.New("Unable to find a verified email or phone number with Twitter provider")
+		}
+	}
+
 	data := &UserProvidedData{
 		Metadata: &Claims{
 			Issuer:            t.UserInfoURL,
@@ -102,7 +112,10 @@ func (t TwitterProvider) FetchUserData(ctx context.Context, tok *oauth.AccessTok
 			Picture:           u.AvatarURL,
 			PreferredUsername: u.UserName,
 			Email:             u.Email,
-			EmailVerified:     true,
+			EmailVerified:     emailVerified,
+			CustomClaims: map[string]interface{}{
+				"needs_phone_verification": u.NeedsPhoneVerification,
+			},
 
 			// To be deprecated
 			UserNameKey: u.UserName,

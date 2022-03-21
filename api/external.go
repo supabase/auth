@@ -173,7 +173,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 							return forbiddenError("Signups not allowed for this instance")
 						}
 
-						if len(userData.Emails) != 0 {
+						if len(userData.Emails) > 0 {
 							emailData = userData.Emails[0]
 							for _, e := range userData.Emails {
 								if e.Primary {
@@ -236,11 +236,13 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				if !emailData.Verified && !config.Mailer.Autoconfirm {
 					mailer := a.Mailer(ctx)
 					referrer := a.getReferrer(r)
-					if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
-						if errors.Is(terr, MaxFrequencyLimitError) {
-							return tooManyRequestsError("For security purposes, you can only request this once every minute")
+					if emailData.Email != "" {
+						if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
+							if errors.Is(terr, MaxFrequencyLimitError) {
+								return tooManyRequestsError("For security purposes, you can only request this once every minute")
+							}
+							return internalServerError("Error sending confirmation mail").WithInternalError(terr)
 						}
-						return internalServerError("Error sending confirmation mail").WithInternalError(terr)
 					}
 					// email must be verified to issue a token
 					return nil
