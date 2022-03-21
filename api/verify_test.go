@@ -193,8 +193,10 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "12345678", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.ConfirmationToken = "123456"
+	u.PhoneChangeToken = "123456"
 	sentTime := time.Now().Add(-48 * time.Hour)
 	u.ConfirmationSentAt = &sentTime
+	u.PhoneChangeSentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
 	type ResponseBody struct {
@@ -228,6 +230,16 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":  smsVerification,
+				"token": "invalid_otp",
+				"phone": u.GetPhone(),
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Invalid Phone Change OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  phoneChangeVerification,
 				"token": "invalid_otp",
 				"phone": u.GetPhone(),
 			},
@@ -588,6 +600,16 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 				code: http.StatusSeeOther,
 			},
 		},
+		{
+			desc:     "Valid Phone Change OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  phoneChangeVerification,
+				"token": "123456",
+				"phone": "12345678",
+			},
+			expected: expectedResponse,
+		},
 	}
 
 	for _, c := range cases {
@@ -596,9 +618,11 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			u.ConfirmationSentAt = &c.sentTime
 			u.RecoverySentAt = &c.sentTime
 			u.EmailChangeSentAt = &c.sentTime
-			u.ConfirmationToken, _ = c.body["token"].(string)
-			u.RecoveryToken, _ = c.body["token"].(string)
-			u.EmailChangeTokenCurrent, _ = c.body["token"].(string)
+			u.PhoneChangeSentAt = &c.sentTime
+			u.ConfirmationToken = c.body["token"].(string)
+			u.RecoveryToken = c.body["token"].(string)
+			u.EmailChangeTokenCurrent = c.body["token"].(string)
+			u.PhoneChangeToken = c.body["token"].(string)
 			require.NoError(ts.T(), ts.API.db.Update(u))
 
 			var buffer bytes.Buffer

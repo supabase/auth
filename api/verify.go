@@ -26,6 +26,7 @@ const (
 	magicLinkVerification   = "magiclink"
 	emailChangeVerification = "email_change"
 	smsVerification         = "sms"
+	phoneChangeVerification = "phone_change"
 )
 
 const (
@@ -98,8 +99,8 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 				http.Redirect(w, r, rurl, http.StatusSeeOther)
 				return nil
 			}
-		case smsVerification:
-			user, terr = a.smsVerify(ctx, tx, user)
+		case smsVerification, phoneChangeVerification:
+			user, terr = a.smsVerify(ctx, tx, user, params.Type)
 		default:
 			return unprocessableEntityError("Verify requires a verification type")
 		}
@@ -231,7 +232,7 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user 
 	return user, nil
 }
 
-func (a *API) smsVerify(ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
+func (a *API) smsVerify(ctx context.Context, conn *storage.Connection, user *models.User, otpType string) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
 
@@ -245,8 +246,14 @@ func (a *API) smsVerify(ctx context.Context, conn *storage.Connection, user *mod
 			return terr
 		}
 
-		if terr = user.ConfirmPhone(tx); terr != nil {
-			return internalServerError("Error confirming user").WithInternalError(terr)
+		if otpType == smsVerification {
+			if terr = user.ConfirmPhone(tx); terr != nil {
+				return internalServerError("Error confirming user").WithInternalError(terr)
+			}
+		} else if otpType == phoneChangeVerification {
+			if terr = user.ConfirmPhoneChange(tx); terr != nil {
+				return internalServerError("Error confirming user").WithInternalError(terr)
+			}
 		}
 		return nil
 	})
@@ -340,7 +347,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		case emailChangeVerification:
 			user, err = models.FindUserByEmailChangeToken(conn, params.Token)
 		}
-	} else if params.Type == smsVerification {
+	} else if params.Type == smsVerification || params.Type == phoneChangeVerification {
 		if params.Phone == "" {
 			return nil, unprocessableEntityError("Sms Verification requires a phone number")
 		}
@@ -383,6 +390,8 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			user.EmailChangeConfirmStatus = zeroConfirmation
 			err = conn.UpdateOnly(user, "email_change_confirm_status")
 		}
+	case phoneChangeVerification:
+		isValid = isOtpValid(params.Token, user.PhoneChangeToken, user.PhoneChangeSentAt.Add(smsOtpExpiresAt))
 	case smsVerification:
 		isValid = isOtpValid(params.Token, user.ConfirmationToken, user.ConfirmationSentAt.Add(smsOtpExpiresAt))
 	}
@@ -399,5 +408,6 @@ func isOtpValid(actual, expected string, expiresAt time.Time) bool {
 }
 
 func isUrlVerification(params *VerifyParams) bool {
-	return params.Type != smsVerification && params.Email == ""
+	isPhoneVerification := params.Type == smsVerification || params.Type == phoneChangeVerification
+	return !isPhoneVerification && params.Email == ""
 }
