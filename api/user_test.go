@@ -43,6 +43,7 @@ func (ts *UserTestSuite) SetupTest() {
 
 	// Create user
 	u, err := models.NewUser(ts.instanceID, "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	u.Phone = "123456789"
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }
@@ -72,7 +73,7 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 			"User doesn't have an existing email",
 			map[string]string{
 				"email": "",
-				"phone": "123456789",
+				"phone": "",
 			},
 			false,
 			http.StatusOK,
@@ -110,9 +111,9 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 		ts.Run(c.desc, func() {
 			u, err := models.NewUser(ts.instanceID, "", "", ts.Config.JWT.Aud, nil)
 			require.NoError(ts.T(), err, "Error creating test user model")
-			require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user")
 			require.NoError(ts.T(), u.SetEmail(ts.API.db, c.userData["email"]), "Error setting user email")
 			require.NoError(ts.T(), u.SetPhone(ts.API.db, c.userData["phone"]), "Error setting user phone")
+			require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user")
 
 			token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err, "Error generating access token")
@@ -127,6 +128,53 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 
 			w := httptest.NewRecorder()
 			ts.Config.Mailer.SecureEmailChangeEnabled = c.isSecureEmailChangeEnabled
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), c.expectedCode, w.Code)
+		})
+	}
+
+}
+func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	cases := []struct {
+		desc         string
+		userData     map[string]string
+		expectedCode int
+	}{
+		{
+			"New phone number is the same as current phone number",
+			map[string]string{
+				"phone": "123456789",
+			},
+			http.StatusUnprocessableEntity,
+		},
+		{
+			"New phone number is different from current phone number",
+			map[string]string{
+				"phone": "234567890",
+			},
+			http.StatusOK,
+		},
+	}
+
+	ts.Config.Sms.Autoconfirm = true
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+			require.NoError(ts.T(), err, "Error generating access token")
+
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"phone": c.userData["phone"],
+			}))
+			req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), c.expectedCode, w.Code)
 		})
