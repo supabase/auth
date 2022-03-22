@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
@@ -103,8 +104,11 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		if err := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); err != nil {
 			return err
 		}
-
-		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone); err != nil {
+		smsProvider, err := sms_provider.GetSmsProvider(*config)
+		if err != nil {
+			return err
+		}
+		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider); err != nil {
 			return badRequestError("Error sending sms otp: %v", err)
 		}
 		return nil

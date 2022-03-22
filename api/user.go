@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 )
@@ -121,6 +122,30 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			referrer := a.getReferrer(r)
 			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer); terr != nil {
 				return internalServerError("Error sending change email").WithInternalError(terr)
+			}
+		}
+
+		if params.Phone != "" {
+			params.Phone = a.formatPhoneNumber(params.Phone)
+			if isValid := a.validateE164Format(params.Phone); !isValid {
+				return unprocessableEntityError("Invalid phone number format")
+			}
+			var exists bool
+			if exists, terr = models.IsDuplicatedPhone(tx, instanceID, params.Phone, user.Aud); terr != nil {
+				return internalServerError("Database error checking phone").WithInternalError(terr)
+			} else if exists {
+				return unprocessableEntityError(DuplicatePhoneMsg)
+			}
+			if config.Sms.Autoconfirm {
+				return user.UpdatePhone(tx, params.Phone)
+			} else {
+				smsProvider, terr := sms_provider.GetSmsProvider(*config)
+				if terr != nil {
+					return terr
+				}
+				if terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeOtp, smsProvider); terr != nil {
+					return internalServerError("Error sending phone change otp").WithInternalError(terr)
+				}
 			}
 		}
 
