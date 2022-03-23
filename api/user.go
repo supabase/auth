@@ -85,8 +85,10 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				return invalidPasswordLengthError(config)
 			}
 
-			if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
-				return internalServerError("Error during password storage").WithInternalError(terr)
+			if !config.Security.UpdatePasswordRequireReauthentication {
+				if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
+					return internalServerError("Error during password storage").WithInternalError(terr)
+				}
 			}
 		}
 
