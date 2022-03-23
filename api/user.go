@@ -2,7 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/sms_provider"
@@ -89,6 +92,11 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
 					return internalServerError("Error during password storage").WithInternalError(terr)
 				}
+			} else {
+				recoverPasswordBodyContent := fmt.Sprintf(`{"email": "%v", "new_password": "%v"}`, user.GetEmail(), *params.Password)
+				r.Body = ioutil.NopCloser(strings.NewReader(recoverPasswordBodyContent))
+				r.ContentLength = int64(len(recoverPasswordBodyContent))
+				return a.Recover(w, r)
 			}
 		}
 
