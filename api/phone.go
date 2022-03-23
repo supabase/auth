@@ -78,7 +78,11 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	}
 
 	now := time.Now()
-	sentAt = &now
+	if otpType == phoneConfirmationOtp {
+		user.ConfirmationSentAt = &now
+	} else if otpType == phoneChangeOtp {
+		user.PhoneChangeSentAt = &now
+	}
 
 	return errors.Wrap(tx.UpdateOnly(user, tokenDbField, sentAtDbField), "Database error updating user for confirmation")
 }

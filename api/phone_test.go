@@ -25,7 +25,7 @@ type TestSmsProvider struct {
 	mock.Mock
 }
 
-func (t TestSmsProvider) SendSms(phone string, message string) error {
+func (t *TestSmsProvider) SendSms(phone string, message string) error {
 	return nil
 }
 
@@ -92,8 +92,20 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			err = ts.API.sendPhoneConfirmation(ctx, ts.API.db, u, "123456789", c.otpType, TestSmsProvider{})
+			err = ts.API.sendPhoneConfirmation(ctx, ts.API.db, u, "123456789", c.otpType, &TestSmsProvider{})
 			require.Equal(ts.T(), c.expected, err)
+			u, err = models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "123456789", ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+
+			switch c.otpType {
+			case phoneConfirmationOtp:
+				require.NotEmpty(ts.T(), u.ConfirmationToken)
+				require.NotEmpty(ts.T(), u.ConfirmationSentAt)
+			case phoneChangeOtp:
+				require.NotEmpty(ts.T(), u.PhoneChangeToken)
+				require.NotEmpty(ts.T(), u.PhoneChangeSentAt)
+			default:
+			}
 		})
 	}
 }
