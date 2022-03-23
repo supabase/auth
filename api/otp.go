@@ -92,6 +92,17 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 
 			fakeResponse := &responseStub{}
 
+			if config.Sms.Autoconfirm {
+				// signups are autoconfirmed, send otp after signup
+				if err := a.Signup(fakeResponse, r); err != nil {
+					return err
+				}
+				newBodyContent := `{"phone":"` + params.Phone + `"}`
+				r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
+				r.ContentLength = int64(len(newBodyContent))
+				return a.SmsOtp(w, r)
+			}
+
 			if err := a.Signup(fakeResponse, r); err != nil {
 				return err
 			}
