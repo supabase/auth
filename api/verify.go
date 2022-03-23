@@ -288,7 +288,7 @@ func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, p
 	config := a.getConfig(ctx)
 
 	if config.Mailer.SecureEmailChangeEnabled && user.EmailChangeConfirmStatus == zeroConfirmation && user.GetEmail() != "" {
-		err := a.db.Transaction(func(tx *storage.Connection) error {
+		err := conn.Transaction(func(tx *storage.Connection) error {
 			user.EmailChangeConfirmStatus = singleConfirmation
 			if params.Token == user.EmailChangeTokenCurrent {
 				user.EmailChangeTokenCurrent = ""
@@ -307,7 +307,7 @@ func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, p
 	}
 
 	// one email is confirmed at this point
-	err := a.db.Transaction(func(tx *storage.Connection) error {
+	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 
 		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, nil); terr != nil {
