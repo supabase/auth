@@ -240,6 +240,9 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
+	now := time.Now()
+	u.EmailConfirmedAt = &now
+	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
 	ts.Config.Security.UpdatePasswordRequireReauthentication = true
 
@@ -264,7 +267,6 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	require.NoError(ts.T(), err)
 
 	require.False(ts.T(), u.Authenticate("newpass"))
-	require.NotEmpty(ts.T(), u.EncryptedPasswordNew)
-	require.NotEmpty(ts.T(), u.RecoveryToken)
-	require.NotEmpty(ts.T(), u.RecoverySentAt)
+	require.NotEmpty(ts.T(), u.ReauthenticationToken)
+	require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
 }

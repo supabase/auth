@@ -2,10 +2,8 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"net/http"
-	"strings"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/sms_provider"
@@ -17,6 +15,7 @@ import (
 type UserUpdateParams struct {
 	Email    string                 `json:"email"`
 	Password *string                `json:"password"`
+	Secret   string                 `json:"secret"`
 	Data     map[string]interface{} `json:"data"`
 	AppData  map[string]interface{} `json:"app_metadata,omitempty"`
 	Phone    string                 `json:"phone"`
@@ -92,19 +91,28 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
 					return internalServerError("Error during password storage").WithInternalError(terr)
 				}
-			} else if user.GetEmail() != "" {
-				// prefer email as reauthentication mechanism
-				recoverPasswordBodyContent := fmt.Sprintf(`{"email": "%v", "new_password": "%v"}`, user.GetEmail(), *params.Password)
-				r.Body = ioutil.NopCloser(strings.NewReader(recoverPasswordBodyContent))
-				r.ContentLength = int64(len(recoverPasswordBodyContent))
-				return a.Recover(w, r)
-			} else if user.GetPhone() != "" {
-				recoverPasswordBodyContent := fmt.Sprintf(`{"phone": "%v", "new_password": "%v"}`, user.GetPhone(), *params.Password)
-				r.Body = ioutil.NopCloser(strings.NewReader(recoverPasswordBodyContent))
-				r.ContentLength = int64(len(recoverPasswordBodyContent))
-				return a.Recover(w, r)
+			} else if params.Secret == "" {
+				if terr := a.Reauthenticate(ctx, tx, user); terr != nil {
+					return internalServerError("Error during reauthentication").WithInternalError(terr)
+				}
 			} else {
-				return badRequestError("Please add an email or phone number first before updating your password.")
+				var isValid bool
+				if user.GetEmail() != "" {
+					mailerOtpExpiresAt := time.Second * time.Duration(config.Mailer.OtpExp)
+					isValid = isOtpValid(params.Secret, user.ReauthenticationToken, user.ReauthenticationSentAt.Add(mailerOtpExpiresAt))
+				} else if user.GetPhone() != "" {
+					smsOtpExpiresAt := time.Second * time.Duration(config.Sms.OtpExp)
+					isValid = isOtpValid(params.Secret, user.ReauthenticationToken, user.ReauthenticationSentAt.Add(smsOtpExpiresAt))
+				}
+				if !isValid {
+					return badRequestError("Invalid secret")
+				}
+				if terr = user.ConfirmReauthentication(tx); terr != nil {
+					return internalServerError("Error during reauthentication").WithInternalError(terr)
+				}
+				if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
+					return internalServerError("Error during password storage").WithInternalError(terr)
+				}
 			}
 		}
 

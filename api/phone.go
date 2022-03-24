@@ -18,7 +18,8 @@ const e164Format = `^[1-9]\d{1,14}$`
 const defaultSmsMessage = "Your code is %v"
 
 const (
-	phoneConfirmationOtp = "confirmation"
+	phoneConfirmationOtp     = "confirmation"
+	phoneReauthenticationOtp = "reauthentication"
 )
 
 func (a *API) validatePhone(phone string) (string, error) {
@@ -58,10 +59,10 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		token = &user.ConfirmationToken
 		sentAt = user.ConfirmationSentAt
 		tokenDbField, sentAtDbField = "confirmation_token", "confirmation_sent_at"
-	case recoveryVerification:
-		token = &user.RecoveryToken
-		sentAt = user.RecoverySentAt
-		tokenDbField, sentAtDbField = "recovery_token", "recovery_sent_at"
+	case phoneReauthenticationOtp:
+		token = &user.ReauthenticationToken
+		sentAt = user.ReauthenticationSentAt
+		tokenDbField, sentAtDbField = "reauthentication_token", "reauthentication_sent_at"
 	default:
 		return internalServerError("invalid otp type")
 	}
@@ -96,8 +97,8 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		user.ConfirmationSentAt = &now
 	case phoneChangeVerification:
 		user.PhoneChangeSentAt = &now
-	case recoveryVerification:
-		user.RecoverySentAt = &now
+	case phoneReauthenticationOtp:
+		user.ReauthenticationSentAt = &now
 	}
 
 	return errors.Wrap(tx.UpdateOnly(user, tokenDbField, sentAtDbField), "Database error updating user for confirmation")

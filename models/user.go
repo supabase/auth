@@ -21,13 +21,12 @@ type User struct {
 	InstanceID uuid.UUID `json:"-" db:"instance_id"`
 	ID         uuid.UUID `json:"id" db:"id"`
 
-	Aud                  string             `json:"aud" db:"aud"`
-	Role                 string             `json:"role" db:"role"`
-	Email                storage.NullString `json:"email" db:"email"`
-	EncryptedPassword    string             `json:"-" db:"encrypted_password"`
-	EncryptedPasswordNew string             `json:"-" db:"encrypted_password_new"`
-	EmailConfirmedAt     *time.Time         `json:"email_confirmed_at,omitempty" db:"email_confirmed_at"`
-	InvitedAt            *time.Time         `json:"invited_at,omitempty" db:"invited_at"`
+	Aud               string             `json:"aud" db:"aud"`
+	Role              string             `json:"role" db:"role"`
+	Email             storage.NullString `json:"email" db:"email"`
+	EncryptedPassword string             `json:"-" db:"encrypted_password"`
+	EmailConfirmedAt  *time.Time         `json:"email_confirmed_at,omitempty" db:"email_confirmed_at"`
+	InvitedAt         *time.Time         `json:"invited_at,omitempty" db:"invited_at"`
 
 	Phone            storage.NullString `json:"phone" db:"phone"`
 	PhoneConfirmedAt *time.Time         `json:"phone_confirmed_at,omitempty" db:"phone_confirmed_at"`
@@ -50,6 +49,9 @@ type User struct {
 	PhoneChangeToken  string     `json:"-" db:"phone_change_token"`
 	PhoneChange       string     `json:"new_phone,omitempty" db:"phone_change"`
 	PhoneChangeSentAt *time.Time `json:"phone_change_sent_at,omitempty" db:"phone_change_sent_at"`
+
+	ReauthenticationToken  string     `json:"-" db:"reauthentication_token"`
+	ReauthenticationSentAt *time.Time `json:"reauthentication_sent_at,omitempty" db:"reauthentication_sent_at"`
 
 	LastSignInAt *time.Time `json:"last_sign_in_at,omitempty" db:"last_sign_in_at"`
 
@@ -145,6 +147,9 @@ func (u *User) BeforeSave(tx *pop.Connection) error {
 	}
 	if u.PhoneChangeSentAt != nil && u.PhoneChangeSentAt.IsZero() {
 		u.PhoneChangeSentAt = nil
+	}
+	if u.ReauthenticationSentAt != nil && u.ReauthenticationSentAt.IsZero() {
+		u.ReauthenticationSentAt = nil
 	}
 	if u.LastSignInAt != nil && u.LastSignInAt.IsZero() {
 		u.LastSignInAt = nil
@@ -264,16 +269,6 @@ func (u *User) UpdatePassword(tx *storage.Connection, password string) error {
 	return tx.UpdateOnly(u, "encrypted_password")
 }
 
-// UpdateNewPassword updates the user's encrypted_password_new field.
-func (u *User) UpdateNewPassword(tx *storage.Connection, password string) error {
-	pw, err := hashPassword(password)
-	if err != nil {
-		return err
-	}
-	u.EncryptedPasswordNew = pw
-	return tx.UpdateOnly(u, "encrypted_password_new")
-}
-
 // UpdatePhone updates the user's phone
 func (u *User) UpdatePhone(tx *storage.Connection, phone string) error {
 	u.Phone = storage.NullString(phone)
@@ -284,6 +279,12 @@ func (u *User) UpdatePhone(tx *storage.Connection, phone string) error {
 func (u *User) Authenticate(password string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(u.EncryptedPassword), []byte(password))
 	return err == nil
+}
+
+// ConfirmReauthentication resets the reauthentication token
+func (u *User) ConfirmReauthentication(tx *storage.Connection) error {
+	u.ReauthenticationToken = ""
+	return tx.UpdateOnly(u, "reauthentication_token")
 }
 
 // Confirm resets the confimation token and sets the confirm timestamp
@@ -338,13 +339,6 @@ func (u *User) ConfirmPhoneChange(tx *storage.Connection) error {
 func (u *User) Recover(tx *storage.Connection) error {
 	u.RecoveryToken = ""
 	return tx.UpdateOnly(u, "recovery_token")
-}
-
-// UpdatePasswordWithNewPassword replaces the hashed password with the hashed new password
-func (u *User) UpdatePasswordWithNewPassword(tx *storage.Connection) error {
-	u.EncryptedPassword = u.EncryptedPasswordNew
-	u.EncryptedPasswordNew = ""
-	return tx.UpdateOnly(u, "encrypted_password", "encrypted_password_new")
 }
 
 // CountOtherUsers counts how many other users exist besides the one provided
