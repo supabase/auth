@@ -12,9 +12,8 @@ import (
 
 // RecoverParams holds the parameters for a password recovery request
 type RecoverParams struct {
-	Email       string  `json:"email"`
-	NewPassword *string `json:"new_password"`
-	Phone       string  `json:"phone"`
+	Email string `json:"email"`
+	Phone string `json:"phone"`
 }
 
 // Recover sends a recovery email
@@ -31,10 +30,6 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 
 	if params.Email == "" && params.Phone == "" {
 		return unprocessableEntityError("Password recovery requires an email or a phone number")
-	}
-
-	if params.NewPassword != nil && len(*params.NewPassword) < config.PasswordMinLength {
-		return invalidPasswordLengthError(config)
 	}
 
 	var user *models.User
@@ -64,12 +59,6 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
 			return terr
 		}
-		if params.NewPassword != nil {
-			if terr := user.UpdateNewPassword(tx, *params.NewPassword); terr != nil {
-				return internalServerError(recoverErrorMessage).WithInternalError(terr)
-			}
-		}
-
 		if params.Email != "" {
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)

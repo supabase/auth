@@ -204,11 +204,6 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user 
 		if terr = user.Recover(tx); terr != nil {
 			return terr
 		}
-		if user.EncryptedPasswordNew != "" {
-			if terr = user.UpdatePasswordWithNewPassword(tx); terr != nil {
-				return terr
-			}
-		}
 		if !user.IsConfirmed() {
 			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
 				return terr
