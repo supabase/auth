@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/sms_provider"
@@ -94,19 +93,8 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			} else if params.Nonce == "" {
 				return unauthorizedError("Password update requires reauthentication.")
 			} else {
-				var isValid bool
-				if user.GetEmail() != "" {
-					mailerOtpExpiresAt := time.Second * time.Duration(config.Mailer.OtpExp)
-					isValid = isOtpValid(params.Nonce, user.ReauthenticationToken, user.ReauthenticationSentAt.Add(mailerOtpExpiresAt))
-				} else if user.GetPhone() != "" {
-					smsOtpExpiresAt := time.Second * time.Duration(config.Sms.OtpExp)
-					isValid = isOtpValid(params.Nonce, user.ReauthenticationToken, user.ReauthenticationSentAt.Add(smsOtpExpiresAt))
-				}
-				if !isValid {
-					return badRequestError("Invalid nonce")
-				}
-				if terr = user.ConfirmReauthentication(tx); terr != nil {
-					return internalServerError("Error during reauthentication").WithInternalError(terr)
+				if terr = a.verifyReauthentication(params.Nonce, tx, config, user); terr != nil {
+					return terr
 				}
 				if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
 					return internalServerError("Error during password storage").WithInternalError(terr)

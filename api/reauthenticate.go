@@ -3,14 +3,16 @@ package api
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/sms_provider"
+	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 )
 
-// Recover sends a reauthentication otp to either the user's email or phone
+// Reauthenticate sends a reauthentication otp to either the user's email or phone
 func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
@@ -69,4 +71,25 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, make(map[string]string))
+}
+
+// verifyReauthentication checks if the nonce provided is valid
+func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.Configuration, user *models.User) error {
+	var isValid bool
+	if user.GetEmail() != "" {
+		mailerOtpExpiresAt := time.Second * time.Duration(config.Mailer.OtpExp)
+		isValid = isOtpValid(nonce, user.ReauthenticationToken, user.ReauthenticationSentAt.Add(mailerOtpExpiresAt))
+	} else if user.GetPhone() != "" {
+		smsOtpExpiresAt := time.Second * time.Duration(config.Sms.OtpExp)
+		isValid = isOtpValid(nonce, user.ReauthenticationToken, user.ReauthenticationSentAt.Add(smsOtpExpiresAt))
+	} else {
+		return unprocessableEntityError("Reauthentication requires an email or a phone number")
+	}
+	if !isValid {
+		return badRequestError("Nonce has expired or is invalid")
+	}
+	if err := user.ConfirmReauthentication(tx); err != nil {
+		return internalServerError("Error during reauthentication").WithInternalError(err)
+	}
+	return nil
 }
