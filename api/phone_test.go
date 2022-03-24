@@ -80,7 +80,12 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 		},
 		{
 			"send phone_change otp",
-			phoneChangeOtp,
+			phoneChangeVerification,
+			nil,
+		},
+		{
+			"send recovery otp",
+			recoveryVerification,
 			nil,
 		},
 		{
@@ -101,9 +106,12 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 			case phoneConfirmationOtp:
 				require.NotEmpty(ts.T(), u.ConfirmationToken)
 				require.NotEmpty(ts.T(), u.ConfirmationSentAt)
-			case phoneChangeOtp:
+			case phoneChangeVerification:
 				require.NotEmpty(ts.T(), u.PhoneChangeToken)
 				require.NotEmpty(ts.T(), u.PhoneChangeSentAt)
+			case recoveryVerification:
+				require.NotEmpty(ts.T(), u.RecoveryToken)
+				require.NotEmpty(ts.T(), u.RecoverySentAt)
 			default:
 			}
 		})
