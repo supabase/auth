@@ -68,5 +68,5 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Reauthentication failed.").WithInternalError(err)
 	}
 
-	return nil
+	return sendJSON(w, http.StatusOK, make(map[string]string))
 }
