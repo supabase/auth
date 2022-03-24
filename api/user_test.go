@@ -246,19 +246,32 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 
 	ts.Config.Security.UpdatePasswordRequireReauthentication = true
 
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"password": "newpass",
-	}))
-
-	req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
-	req.Header.Set("Content-Type", "application/json")
-
 	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/reauthenticate", nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
 	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), w.Code, http.StatusOK)
+
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), u.ReauthenticationToken)
+	require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"password": "newpass",
+		"nonce":    u.ReauthenticationToken,
+	}))
+
+	req = httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	w = httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), w.Code, http.StatusOK)
 
@@ -266,7 +279,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	require.False(ts.T(), u.Authenticate("newpass"))
-	require.NotEmpty(ts.T(), u.ReauthenticationToken)
+	require.True(ts.T(), u.Authenticate("newpass"))
+	require.Empty(ts.T(), u.ReauthenticationToken)
 	require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
 }
