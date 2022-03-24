@@ -55,7 +55,7 @@ func NewMessagebirdProvider(config conf.MessagebirdProviderConfiguration) (SmsPr
 }
 
 // Send an SMS containing the OTP with Messagebird's API
-func (t MessagebirdProvider) SendSms(phone string, message string) error {
+func (t *MessagebirdProvider) SendSms(phone string, message string) error {
 	body := url.Values{
 		"originator": {t.Config.Originator},
 		"body":       {message},

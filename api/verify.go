@@ -356,9 +356,9 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		if params.Phone == "" {
 			return nil, unprocessableEntityError("Sms Verification requires a phone number")
 		}
-		params.Phone = a.formatPhoneNumber(params.Phone)
-		if ok := a.validateE164Format(params.Phone); !ok {
-			return nil, unprocessableEntityError("Invalid phone number format")
+		params.Phone, err = a.validatePhone(params.Phone)
+		if err != nil {
+			return nil, err
 		}
 		user, err = models.FindUserByPhoneAndAudience(conn, instanceID, params.Phone, aud)
 	} else if params.Email != "" {
