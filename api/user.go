@@ -15,7 +15,7 @@ import (
 type UserUpdateParams struct {
 	Email    string                 `json:"email"`
 	Password *string                `json:"password"`
-	Secret   string                 `json:"secret"`
+	Nonce    string                 `json:"nonce"`
 	Data     map[string]interface{} `json:"data"`
 	AppData  map[string]interface{} `json:"app_metadata,omitempty"`
 	Phone    string                 `json:"phone"`
@@ -91,19 +91,19 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
 					return internalServerError("Error during password storage").WithInternalError(terr)
 				}
-			} else if params.Secret == "" {
+			} else if params.Nonce == "" {
 				return unauthorizedError("Password update requires reauthentication.")
 			} else {
 				var isValid bool
 				if user.GetEmail() != "" {
 					mailerOtpExpiresAt := time.Second * time.Duration(config.Mailer.OtpExp)
-					isValid = isOtpValid(params.Secret, user.ReauthenticationToken, user.ReauthenticationSentAt.Add(mailerOtpExpiresAt))
+					isValid = isOtpValid(params.Nonce, user.ReauthenticationToken, user.ReauthenticationSentAt.Add(mailerOtpExpiresAt))
 				} else if user.GetPhone() != "" {
 					smsOtpExpiresAt := time.Second * time.Duration(config.Sms.OtpExp)
-					isValid = isOtpValid(params.Secret, user.ReauthenticationToken, user.ReauthenticationSentAt.Add(smsOtpExpiresAt))
+					isValid = isOtpValid(params.Nonce, user.ReauthenticationToken, user.ReauthenticationSentAt.Add(smsOtpExpiresAt))
 				}
 				if !isValid {
-					return badRequestError("Invalid secret")
+					return badRequestError("Invalid nonce")
 				}
 				if terr = user.ConfirmReauthentication(tx); terr != nil {
 					return internalServerError("Error during reauthentication").WithInternalError(terr)
