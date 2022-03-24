@@ -76,9 +76,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone signups are disabled")
 		}
-		params.Phone = a.formatPhoneNumber(params.Phone)
-		if isValid := a.validateE164Format(params.Phone); !isValid {
-			return unprocessableEntityError("Invalid phone number format")
+		params.Phone, err = a.validatePhone(params.Phone)
+		if err != nil {
+			return err
 		}
 		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, params.Aud)
 	default:

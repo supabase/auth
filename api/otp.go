@@ -70,10 +70,10 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read sms otp params: %v", err)
 	}
 
-	params.Phone = a.formatPhoneNumber(params.Phone)
-
-	if isValid := a.validateE164Format(params.Phone); !isValid {
-		return badRequestError("Invalid format: Phone number should follow the E.164 format")
+	var err error
+	params.Phone, err = a.validatePhone(params.Phone)
+	if err != nil {
+		return err
 	}
 
 	aud := a.requestAud(ctx, r)
@@ -100,7 +100,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding user").WithInternalError(uerr)
 	}
 
-	err := a.db.Transaction(func(tx *storage.Connection) error {
+	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if err := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); err != nil {
 			return err
 		}
