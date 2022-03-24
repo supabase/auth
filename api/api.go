@@ -141,6 +141,11 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		r.With(api.requireAuthentication).Post("/logout", api.Logout)
 
+		r.Route("/reauthenticate", func(r *router) {
+			r.Use(api.requireAuthentication)
+			r.Get("/", api.Reauthenticate)
+		})
+
 		r.Route("/user", func(r *router) {
 			r.Use(api.requireAuthentication)
 			r.Get("/", api.UserGet)

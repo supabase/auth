@@ -92,9 +92,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 					return internalServerError("Error during password storage").WithInternalError(terr)
 				}
 			} else if params.Secret == "" {
-				if terr := a.Reauthenticate(ctx, tx, user); terr != nil {
-					return internalServerError("Error during reauthentication").WithInternalError(terr)
-				}
+				return unauthorizedError("Password update requires reauthentication.")
 			} else {
 				var isValid bool
 				if user.GetEmail() != "" {
