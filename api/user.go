@@ -92,11 +92,19 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
 					return internalServerError("Error during password storage").WithInternalError(terr)
 				}
-			} else {
+			} else if user.GetEmail() != "" {
+				// prefer email as reauthentication mechanism
 				recoverPasswordBodyContent := fmt.Sprintf(`{"email": "%v", "new_password": "%v"}`, user.GetEmail(), *params.Password)
 				r.Body = ioutil.NopCloser(strings.NewReader(recoverPasswordBodyContent))
 				r.ContentLength = int64(len(recoverPasswordBodyContent))
 				return a.Recover(w, r)
+			} else if user.GetPhone() != "" {
+				recoverPasswordBodyContent := fmt.Sprintf(`{"phone": "%v", "new_password": "%v"}`, user.GetPhone(), *params.Password)
+				r.Body = ioutil.NopCloser(strings.NewReader(recoverPasswordBodyContent))
+				r.ContentLength = int64(len(recoverPasswordBodyContent))
+				return a.Recover(w, r)
+			} else {
+				return badRequestError("Please add an email or phone number first before updating your password.")
 			}
 		}
 
@@ -153,7 +161,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return terr
 				}
-				if terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeOtp, smsProvider); terr != nil {
+				if terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeVerification, smsProvider); terr != nil {
 					return internalServerError("Error sending phone change otp").WithInternalError(terr)
 				}
 			}
