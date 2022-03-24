@@ -126,9 +126,9 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Phone != "" {
-			params.Phone = a.formatPhoneNumber(params.Phone)
-			if isValid := a.validateE164Format(params.Phone); !isValid {
-				return unprocessableEntityError("Invalid phone number format")
+			params.Phone, err = a.validatePhone(params.Phone)
+			if err != nil {
+				return err
 			}
 			var exists bool
 			if exists, terr = models.IsDuplicatedPhone(tx, instanceID, params.Phone, user.Aud); terr != nil {
