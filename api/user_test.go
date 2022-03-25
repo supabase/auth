@@ -186,34 +186,35 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	var cases = []struct {
-		desc            string
-		update          map[string]interface{}
-		expectedCode    int
+	type expected struct {
+		code            int
 		isAuthenticated bool
+	}
+
+	var cases = []struct {
+		desc                    string
+		newPassword             string
+		requireReauthentication bool
+		expected                expected
 	}{
 		{
 			"Valid password length",
-			map[string]interface{}{
-				"password": "newpass",
-			},
-			http.StatusOK,
-			true,
+			"newpassword",
+			false,
+			expected{code: http.StatusOK, isAuthenticated: true},
 		},
 		{
 			"Invalid password length",
-			map[string]interface{}{
-				"password": "",
-			},
-			http.StatusUnprocessableEntity,
+			"",
 			false,
+			expected{code: http.StatusUnprocessableEntity, isAuthenticated: false},
 		},
 	}
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			var buffer bytes.Buffer
-			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.update))
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"password": c.newPassword}))
 
 			req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
 			req.Header.Set("Content-Type", "application/json")
@@ -225,29 +226,31 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			// Setup response recorder
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			require.Equal(ts.T(), w.Code, c.expectedCode)
+			require.Equal(ts.T(), w.Code, c.expected.code)
 
 			// Request body
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
-			passwordUpdate, _ := c.update["password"].(string)
-			require.Equal(ts.T(), c.isAuthenticated, u.Authenticate(passwordUpdate))
+			require.Equal(ts.T(), c.expected.isAuthenticated, u.Authenticate(c.newPassword))
 		})
 	}
 }
 
 func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
+	ts.Config.Security.UpdatePasswordRequireReauthentication = true
+
+	// create a confirmed user
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	now := time.Now()
 	u.EmailConfirmedAt = &now
 	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
-	ts.Config.Security.UpdatePasswordRequireReauthentication = true
-
 	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
+
+	// request for reauthentication nonce
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/reauthenticate", nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
@@ -260,6 +263,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	require.NotEmpty(ts.T(), u.ReauthenticationToken)
 	require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
 
+	// update password with reauthentication token
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"password": "newpass",
