@@ -34,7 +34,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	email, phone := user.GetEmail(), user.GetPhone()
 
 	if email == "" && phone == "" {
-		return unprocessableEntityError("Reauthentication requires an email or a phone number")
+		return unprocessableEntityError("Reauthentication requires the user to have an email or a phone number")
 	}
 
 	if email != "" {
@@ -75,6 +75,9 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 
 // verifyReauthentication checks if the nonce provided is valid
 func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.Configuration, user *models.User) error {
+	if user.ReauthenticationToken == "" || user.ReauthenticationSentAt == nil {
+		return unauthorizedError("Requires reauthentication")
+	}
 	var isValid bool
 	if user.GetEmail() != "" {
 		mailerOtpExpiresAt := time.Second * time.Duration(config.Mailer.OtpExp)

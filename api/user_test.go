@@ -194,27 +194,45 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 	var cases = []struct {
 		desc                    string
 		newPassword             string
+		nonce                   string
 		requireReauthentication bool
 		expected                expected
 	}{
 		{
 			"Valid password length",
 			"newpassword",
+			"",
 			false,
 			expected{code: http.StatusOK, isAuthenticated: true},
 		},
 		{
 			"Invalid password length",
 			"",
+			"",
 			false,
 			expected{code: http.StatusUnprocessableEntity, isAuthenticated: false},
+		},
+		{
+			"No reauthentication provided",
+			"newpassword123",
+			"",
+			true,
+			expected{code: http.StatusUnauthorized, isAuthenticated: false},
+		},
+		{
+			"Invalid nonce",
+			"newpassword123",
+			"123456",
+			true,
+			expected{code: http.StatusUnauthorized, isAuthenticated: false},
 		},
 	}
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
+			ts.Config.Security.UpdatePasswordRequireReauthentication = c.requireReauthentication
 			var buffer bytes.Buffer
-			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"password": c.newPassword}))
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"password": c.newPassword, "nonce": c.nonce}))
 
 			req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
 			req.Header.Set("Content-Type", "application/json")
