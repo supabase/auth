@@ -212,6 +212,22 @@ func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, maile
 	return errors.Wrap(tx.UpdateOnly(u, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
 }
 
+func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration) error {
+	if u.ReauthenticationSentAt != nil && !u.ReauthenticationSentAt.Add(maxFrequency).Before(time.Now()) {
+		return MaxFrequencyLimitError
+	}
+
+	oldToken := u.ReauthenticationToken
+	u.ReauthenticationToken = crypto.SecureToken()
+	now := time.Now()
+	if err := mailer.ReauthenticateMail(u); err != nil {
+		u.ReauthenticationToken = oldToken
+		return errors.Wrap(err, "Error sending reauthentication email")
+	}
+	u.ReauthenticationSentAt = &now
+	return errors.Wrap(tx.UpdateOnly(u, "reauthentication_token", "reauthentication_sent_at"), "Database error updating user for reauthentication")
+}
+
 func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string) error {
 	// since Magic Link is just a recovery with a different template and behaviour
 	// around new users we will reuse the recovery db timer to prevent potential abuse

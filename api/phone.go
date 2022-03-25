@@ -18,8 +18,8 @@ const e164Format = `^[1-9]\d{1,14}$`
 const defaultSmsMessage = "Your code is %v"
 
 const (
-	phoneChangeOtp       = "phone_change"
-	phoneConfirmationOtp = "confirmation"
+	phoneConfirmationOtp     = "confirmation"
+	phoneReauthenticationOtp = "reauthentication"
 )
 
 func (a *API) validatePhone(phone string) (string, error) {
@@ -50,15 +50,20 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	var sentAt *time.Time
 	var tokenDbField, sentAtDbField string
 
-	if otpType == phoneConfirmationOtp {
-		token = &user.ConfirmationToken
-		sentAt = user.ConfirmationSentAt
-		tokenDbField, sentAtDbField = "confirmation_token", "confirmation_sent_at"
-	} else if otpType == phoneChangeOtp {
+	switch otpType {
+	case phoneChangeVerification:
 		token = &user.PhoneChangeToken
 		sentAt = user.PhoneChangeSentAt
 		tokenDbField, sentAtDbField = "phone_change_token", "phone_change_sent_at"
-	} else {
+	case phoneConfirmationOtp:
+		token = &user.ConfirmationToken
+		sentAt = user.ConfirmationSentAt
+		tokenDbField, sentAtDbField = "confirmation_token", "confirmation_sent_at"
+	case phoneReauthenticationOtp:
+		token = &user.ReauthenticationToken
+		sentAt = user.ReauthenticationSentAt
+		tokenDbField, sentAtDbField = "reauthentication_token", "reauthentication_sent_at"
+	default:
 		return internalServerError("invalid otp type")
 	}
 
@@ -86,10 +91,14 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	}
 
 	now := time.Now()
-	if otpType == phoneConfirmationOtp {
+
+	switch otpType {
+	case phoneConfirmationOtp:
 		user.ConfirmationSentAt = &now
-	} else if otpType == phoneChangeOtp {
+	case phoneChangeVerification:
 		user.PhoneChangeSentAt = &now
+	case phoneReauthenticationOtp:
+		user.ReauthenticationSentAt = &now
 	}
 
 	return errors.Wrap(tx.UpdateOnly(user, tokenDbField, sentAtDbField), "Database error updating user for confirmation")

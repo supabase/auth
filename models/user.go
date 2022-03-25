@@ -50,6 +50,9 @@ type User struct {
 	PhoneChange       string     `json:"new_phone,omitempty" db:"phone_change"`
 	PhoneChangeSentAt *time.Time `json:"phone_change_sent_at,omitempty" db:"phone_change_sent_at"`
 
+	ReauthenticationToken  string     `json:"-" db:"reauthentication_token"`
+	ReauthenticationSentAt *time.Time `json:"reauthentication_sent_at,omitempty" db:"reauthentication_sent_at"`
+
 	LastSignInAt *time.Time `json:"last_sign_in_at,omitempty" db:"last_sign_in_at"`
 
 	AppMetaData  JSONMap `json:"app_metadata" db:"raw_app_meta_data"`
@@ -144,6 +147,9 @@ func (u *User) BeforeSave(tx *pop.Connection) error {
 	}
 	if u.PhoneChangeSentAt != nil && u.PhoneChangeSentAt.IsZero() {
 		u.PhoneChangeSentAt = nil
+	}
+	if u.ReauthenticationSentAt != nil && u.ReauthenticationSentAt.IsZero() {
+		u.ReauthenticationSentAt = nil
 	}
 	if u.LastSignInAt != nil && u.LastSignInAt.IsZero() {
 		u.LastSignInAt = nil
@@ -273,6 +279,12 @@ func (u *User) UpdatePhone(tx *storage.Connection, phone string) error {
 func (u *User) Authenticate(password string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(u.EncryptedPassword), []byte(password))
 	return err == nil
+}
+
+// ConfirmReauthentication resets the reauthentication token
+func (u *User) ConfirmReauthentication(tx *storage.Connection) error {
+	u.ReauthenticationToken = ""
+	return tx.UpdateOnly(u, "reauthentication_token")
 }
 
 // Confirm resets the confimation token and sets the confirm timestamp

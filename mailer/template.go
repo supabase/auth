@@ -52,6 +52,10 @@ const defaultEmailChangeMail = `<h2>Confirm email address change</h2>
 <p><a href="{{ .ConfirmationURL }}">Change email address</a></p>
 <p>Alternatively, enter the code: {{ .Token }}</p>`
 
+const defaultReauthenticateMail = `<h2>Confirm reauthentication</h2>
+
+<p>Enter the code: {{ .Token }}</p>`
+
 // ValidateEmail returns nil if the email is valid,
 // otherwise an error indicating the reason it is invalid
 func (m TemplateMailer) ValidateEmail(email string) error {
@@ -114,6 +118,24 @@ func (m *TemplateMailer) ConfirmationMail(user *models.User, referrerURL string)
 		string(withDefault(m.Config.Mailer.Subjects.Confirmation, "Confirm Your Email")),
 		m.Config.Mailer.Templates.Confirmation,
 		defaultConfirmationMail,
+		data,
+	)
+}
+
+// ReauthenticateMail sends a reauthentication mail to an authenticated user
+func (m *TemplateMailer) ReauthenticateMail(user *models.User) error {
+	data := map[string]interface{}{
+		"SiteURL": m.Config.SiteURL,
+		"Email":   user.Email,
+		"Token":   user.ReauthenticationToken,
+		"Data":    user.UserMetaData,
+	}
+
+	return m.Mailer.Mail(
+		user.GetEmail(),
+		string(withDefault(m.Config.Mailer.Subjects.Reauthentication, "Confirm reauthentication")),
+		m.Config.Mailer.Templates.Reauthentication,
+		defaultReauthenticateMail,
 		data,
 	)
 }

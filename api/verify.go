@@ -338,7 +338,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 
 	var user *models.User
 	var err error
-	if isUrlVerification(params) {
+	if isUrlLinkVerification(params) {
 		switch params.Type {
 		case signupVerification, inviteVerification:
 			user, err = models.FindUserByConfirmationToken(conn, params.Token)
@@ -347,7 +347,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		case emailChangeVerification:
 			user, err = models.FindUserByEmailChangeToken(conn, params.Token)
 		}
-	} else if params.Type == smsVerification || params.Type == phoneChangeVerification {
+	} else if isPhoneOtpVerification(params) {
 		if params.Phone == "" {
 			return nil, unprocessableEntityError("Sms Verification requires a phone number")
 		}
@@ -356,11 +356,13 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			return nil, err
 		}
 		user, err = models.FindUserByPhoneAndAudience(conn, instanceID, params.Phone, aud)
-	} else if params.Email != "" {
+	} else if isEmailOtpVerification(params) {
 		if err := a.validateEmail(ctx, params.Email); err != nil {
 			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}
 		user, err = models.FindUserByEmailAndAudience(conn, instanceID, params.Email, aud)
+	} else {
+		return nil, badRequestError("Only an email address or phone number should be provided on verify, not both.")
 	}
 
 	if err != nil {
@@ -407,7 +409,17 @@ func isOtpValid(actual, expected string, expiresAt time.Time) bool {
 	return time.Now().Before(expiresAt) && (actual == expected)
 }
 
-func isUrlVerification(params *VerifyParams) bool {
-	isPhoneVerification := params.Type == smsVerification || params.Type == phoneChangeVerification
-	return !isPhoneVerification && params.Email == ""
+// isUrlLinkVerification checks if the verification came from clicking an email link which wouldn't contain the email field in the params
+func isUrlLinkVerification(params *VerifyParams) bool {
+	return params.Phone == "" && params.Email == ""
+}
+
+// isPhoneOtpVerification checks if the verification came from a phone otp
+func isPhoneOtpVerification(params *VerifyParams) bool {
+	return params.Phone != "" && params.Email == ""
+}
+
+// isEmailOtpVerification checks if the verification came from an email otp
+func isEmailOtpVerification(params *VerifyParams) bool {
+	return params.Phone == "" && params.Email != ""
 }

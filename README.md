@@ -494,6 +494,12 @@ for now the only option supported is: `hcaptcha`
 
 Retrieve from hcaptcha account
 
+### Reauthentication
+
+`SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` - `bool`
+
+Enforce reauthentication on password update.
+
 ## Endpoints
 
 GoTrue exposes the following endpoints:
@@ -911,6 +917,25 @@ Returns:
   "email_change_sent_at": "2016-05-15T20:49:40.882805774-07:00",
   "created_at": "2016-05-15T19:53:12.368652374-07:00",
   "updated_at": "2016-05-15T19:53:12.368652374-07:00"
+}
+```
+
+If `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` is enabled, the user will need to reauthenticate first. 
+
+```json
+{
+  "password": "new-password",
+  "nonce": "123456",
+}
+```
+
+### **GET /reauthenticate**
+
+Sends a nonce to the user's email (preferred) or phone. This endpoint requires the user to be logged in / authenticated first. The user needs to have either an email or phone number for the nonce to be sent successfully.
+
+```json
+headers: {
+  "Authorization" : "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO"
 }
 ```
 
