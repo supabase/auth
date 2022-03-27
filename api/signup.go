@@ -160,9 +160,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				smsProvider, err := sms_provider.GetSmsProvider(*config)
-				if err != nil {
-					return err
+				smsProvider, terr := sms_provider.GetSmsProvider(*config)
+				if terr != nil {
+					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
 				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider); terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)

@@ -55,9 +55,9 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 			mailer := a.Mailer(ctx)
 			return a.sendReauthenticationOtp(tx, user, mailer, config.SMTP.MaxFrequency)
 		} else if phone != "" {
-			smsProvider, err := sms_provider.GetSmsProvider(*config)
-			if err != nil {
-				return err
+			smsProvider, terr := sms_provider.GetSmsProvider(*config)
+			if terr != nil {
+				return badRequestError("Error sending sms: %v", terr)
 			}
 			return a.sendPhoneConfirmation(ctx, tx, user, phone, recoveryVerification, smsProvider)
 		}
