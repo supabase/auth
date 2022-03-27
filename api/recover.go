@@ -64,9 +64,9 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 			referrer := a.getReferrer(r)
 			return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer)
 		} else if params.Phone != "" {
-			smsProvider, err := sms_provider.GetSmsProvider(*config)
-			if err != nil {
-				return err
+			smsProvider, terr := sms_provider.GetSmsProvider(*config)
+			if terr != nil {
+				return badRequestError("Error sending sms: %v", terr)
 			}
 			return a.sendPhoneConfirmation(ctx, tx, user, params.Phone, recoveryVerification, smsProvider)
 		}

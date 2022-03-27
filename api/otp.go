@@ -115,9 +115,9 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		if err := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); err != nil {
 			return err
 		}
-		smsProvider, err := sms_provider.GetSmsProvider(*config)
-		if err != nil {
-			return err
+		smsProvider, terr := sms_provider.GetSmsProvider(*config)
+		if terr != nil {
+			return badRequestError("Error sending sms: %v", terr)
 		}
 		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider); err != nil {
 			return badRequestError("Error sending sms otp: %v", err)
