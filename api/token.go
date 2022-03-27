@@ -348,8 +348,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return badRequestError("Could not read id token grant params: %v", err)
 	}
 
-	if params.IdToken == "" || params.Nonce == "" {
-		return oauthError("invalid request", "id_token and nonce required")
+	if params.IdToken == "" {
+		return oauthError("invalid request", "id_token required")
 	}
 
 	if params.Provider == "" && (params.ClientID == "" || params.Issuer == "") {
@@ -379,11 +379,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return err
 	}
 
-	// verify nonce to mitigate replay attacks
 	hashedNonce, ok := claims["nonce"]
-	if !ok {
-		return oauthError("invalid request", "missing nonce in id_token")
+	if (!ok && params.Nonce != "") || (ok && params.Nonce == "") {
+		return oauthError("invalid request", "Passed nonce and nonce in id_token should either both exist or not.")
 	}
+
+	// verify nonce to mitigate replay attacks
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
 	if hash != hashedNonce.(string) {
 		return oauthError("invalid nonce", "").WithInternalMessage("Possible abuse attempt: %v", r)
