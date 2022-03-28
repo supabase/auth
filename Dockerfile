@@ -15,7 +15,7 @@ RUN make deps
 COPY . /go/src/github.com/netlify/gotrue
 RUN make build
 
-ARG KAIGARA_VERSION=0.1.29
+ARG KAIGARA_VERSION=0.1.34
 RUN curl -Lo ./kaigara  https://github.com/openware/kaigara/releases/download/${KAIGARA_VERSION}/kaigara \
   && chmod +x ./kaigara
 
