@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 )
@@ -13,7 +12,6 @@ import (
 // RecoverParams holds the parameters for a password recovery request
 type RecoverParams struct {
 	Email string `json:"email"`
-	Phone string `json:"phone"`
 }
 
 // Recover sends a recovery email
@@ -28,25 +26,17 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
-	if params.Email == "" && params.Phone == "" {
-		return unprocessableEntityError("Password recovery requires an email or a phone number")
+	if params.Email == "" {
+		return unprocessableEntityError("Password recovery requires an email")
 	}
 
 	var user *models.User
 	aud := a.requestAud(ctx, r)
 	recoverErrorMessage := "If a user exists, you will receive an email with instructions on how to reset your password."
-	if params.Email != "" {
-		if err := a.validateEmail(ctx, params.Email); err != nil {
-			return err
-		}
-		user, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
-	} else if params.Phone != "" {
-		params.Phone, err = a.validatePhone(params.Phone)
-		if err != nil {
-			return err
-		}
-		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
+	if err := a.validateEmail(ctx, params.Email); err != nil {
+		return err
 	}
+	user, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -59,18 +49,9 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
 			return terr
 		}
-		if params.Email != "" {
-			mailer := a.Mailer(ctx)
-			referrer := a.getReferrer(r)
-			return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer)
-		} else if params.Phone != "" {
-			smsProvider, terr := sms_provider.GetSmsProvider(*config)
-			if terr != nil {
-				return badRequestError("Error sending sms: %v", terr)
-			}
-			return a.sendPhoneConfirmation(ctx, tx, user, params.Phone, recoveryVerification, smsProvider)
-		}
-		return nil
+		mailer := a.Mailer(ctx)
+		referrer := a.getReferrer(r)
+		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {
