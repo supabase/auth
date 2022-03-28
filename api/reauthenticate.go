@@ -69,7 +69,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		if errors.Is(err, MaxFrequencyLimitError) {
 			return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
 		}
-		return internalServerError("Reauthentication failed.").WithInternalError(err)
+		return err
 	}
 
 	return sendJSON(w, http.StatusOK, make(map[string]string))
