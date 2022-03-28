@@ -125,7 +125,7 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 	}
 }
 
-func (ts *PhoneTestSuite) TestMissingTwilioProviderConfig() {
+func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "123456789", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	now := time.Now()
@@ -196,26 +196,31 @@ func (ts *PhoneTestSuite) TestMissingTwilioProviderConfig() {
 		},
 	}
 
+	smsProviders := []string{"twilio", "messagebird", "textlocal", "vonage"}
 	ts.Config.External.Phone.Enabled = true
+	ts.Config.Sms.Twilio.AccountSid = ""
+	ts.Config.Sms.Messagebird.AccessKey = ""
+	ts.Config.Sms.Textlocal.ApiKey = ""
+	ts.Config.Sms.Vonage.ApiKey = ""
 	for _, c := range cases {
-		ts.Run(c.desc, func() {
-			ts.Config.Sms.Provider = "twilio"
-			ts.Config.Sms.Twilio.AccountSid = ""
-			ts.Config.Sms.Twilio.MessageServiceSid = ""
+		for _, provider := range smsProviders {
+			ts.Config.Sms.Provider = provider
+			desc := fmt.Sprintf("[%v] %v", provider, c.desc)
+			ts.Run(desc, func() {
+				var buffer bytes.Buffer
+				require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
 
-			var buffer bytes.Buffer
-			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+				req := httptest.NewRequest(c.method, "http://localhost"+c.endpoint, &buffer)
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
-			req := httptest.NewRequest(c.method, "http://localhost"+c.endpoint, &buffer)
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+				w := httptest.NewRecorder()
+				ts.API.handler.ServeHTTP(w, req)
+				require.Equal(ts.T(), c.expected["code"], w.Code)
 
-			w := httptest.NewRecorder()
-			ts.API.handler.ServeHTTP(w, req)
-			require.Equal(ts.T(), c.expected["code"], w.Code)
-
-			body := w.Body.String()
-			require.True(ts.T(), strings.Contains(body, c.expected["message"].(string)))
-		})
+				body := w.Body.String()
+				require.True(ts.T(), strings.Contains(body, c.expected["message"].(string)))
+			})
+		}
 	}
 }
