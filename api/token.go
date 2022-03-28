@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	jwt "github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
@@ -384,10 +384,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return oauthError("invalid request", "Passed nonce and nonce in id_token should either both exist or not.")
 	}
 
-	// verify nonce to mitigate replay attacks
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
-	if hash != hashedNonce.(string) {
-		return oauthError("invalid nonce", "").WithInternalMessage("Possible abuse attempt: %v", r)
+	if ok && params.Nonce != "" {
+		// verify nonce to mitigate replay attacks
+		hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
+		if hash != hashedNonce.(string) {
+			return oauthError("invalid nonce", "").WithInternalMessage("Possible abuse attempt: %v", r)
+		}
 	}
 
 	sub, ok := claims["sub"].(string)
