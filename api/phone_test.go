@@ -171,6 +171,19 @@ func (ts *PhoneTestSuite) TestMissingTwilioProviderConfig() {
 			},
 		},
 		{
+			"Phone change",
+			"/user",
+			http.MethodPut,
+			token,
+			map[string]string{
+				"phone": "111111111",
+			},
+			map[string]interface{}{
+				"code":    http.StatusBadRequest,
+				"message": "Error sending sms:",
+			},
+		},
+		{
 			"Reauthenticate",
 			"/reauthenticate",
 			http.MethodGet,
