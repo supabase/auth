@@ -1,0 +1,25 @@
+---
+type: docker
+kind: pipeline
+name: "Main"
+
+steps:
+  - name: Docker build Git SHA
+    image: plugins/docker:20
+    pull: if-not-exists
+    environment:
+      DOCKER_BUILDKIT: 1
+    settings:
+      username:
+        from_secret: quay_username
+      password:
+        from_secret: quay_password
+      repo: quay.io/openware/gotrue
+      registry: quay.io
+      purge: false
+    when:
+      event:
+        - push
+      branch:
+        - stable/ow
+        - feature/asymmetric-auth
