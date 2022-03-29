@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 )
 
@@ -57,6 +58,11 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 	uri, err := url.Parse(params.Url)
 	if err != nil {
 		return badRequestError("Invalid url")
+	}
+
+	_, err = strconv.ParseInt(params.ChainId, 16, 64)
+	if err == nil {
+		return badRequestError("Invalid Chain ID: Must be a valid integer")
 	}
 
 	// Create new nonce
