@@ -224,7 +224,7 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			"newpassword123",
 			"123456",
 			true,
-			expected{code: http.StatusUnauthorized, isAuthenticated: false},
+			expected{code: http.StatusBadRequest, isAuthenticated: false},
 		},
 	}
 
@@ -244,7 +244,7 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			// Setup response recorder
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			require.Equal(ts.T(), w.Code, c.expected.code)
+			require.Equal(ts.T(), c.expected.code, w.Code)
 
 			// Request body
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)

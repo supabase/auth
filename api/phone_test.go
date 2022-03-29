@@ -1,8 +1,15 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
@@ -115,5 +122,105 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 			default:
 			}
 		})
+	}
+}
+
+func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
+	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "123456789", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	now := time.Now()
+	u.PhoneConfirmedAt = &now
+	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
+
+	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	require.NoError(ts.T(), err)
+
+	cases := []struct {
+		desc     string
+		endpoint string
+		method   string
+		header   string
+		body     map[string]string
+		expected map[string]interface{}
+	}{
+		{
+			"Signup",
+			"/signup",
+			http.MethodPost,
+			"",
+			map[string]string{
+				"phone":    "1234567890",
+				"password": "testpassword",
+			},
+			map[string]interface{}{
+				"code":    http.StatusBadRequest,
+				"message": "Error sending confirmation sms:",
+			},
+		},
+		{
+			"Sms OTP",
+			"/otp",
+			http.MethodPost,
+			"",
+			map[string]string{
+				"phone": "123456789",
+			},
+			map[string]interface{}{
+				"code":    http.StatusBadRequest,
+				"message": "Error sending sms:",
+			},
+		},
+		{
+			"Phone change",
+			"/user",
+			http.MethodPut,
+			token,
+			map[string]string{
+				"phone": "111111111",
+			},
+			map[string]interface{}{
+				"code":    http.StatusBadRequest,
+				"message": "Error sending sms:",
+			},
+		},
+		{
+			"Reauthenticate",
+			"/reauthenticate",
+			http.MethodGet,
+			"",
+			nil,
+			map[string]interface{}{
+				"code":    http.StatusBadRequest,
+				"message": "Error sending sms:",
+			},
+		},
+	}
+
+	smsProviders := []string{"twilio", "messagebird", "textlocal", "vonage"}
+	ts.Config.External.Phone.Enabled = true
+	ts.Config.Sms.Twilio.AccountSid = ""
+	ts.Config.Sms.Messagebird.AccessKey = ""
+	ts.Config.Sms.Textlocal.ApiKey = ""
+	ts.Config.Sms.Vonage.ApiKey = ""
+	for _, c := range cases {
+		for _, provider := range smsProviders {
+			ts.Config.Sms.Provider = provider
+			desc := fmt.Sprintf("[%v] %v", provider, c.desc)
+			ts.Run(desc, func() {
+				var buffer bytes.Buffer
+				require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+
+				req := httptest.NewRequest(c.method, "http://localhost"+c.endpoint, &buffer)
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+				w := httptest.NewRecorder()
+				ts.API.handler.ServeHTTP(w, req)
+				require.Equal(ts.T(), c.expected["code"], w.Code)
+
+				body := w.Body.String()
+				require.True(ts.T(), strings.Contains(body, c.expected["message"].(string)))
+			})
+		}
 	}
 }

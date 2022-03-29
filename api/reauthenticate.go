@@ -12,6 +12,8 @@ import (
 	"github.com/netlify/gotrue/storage"
 )
 
+const InvalidNonceMessage = "Nonce has expired or is invalid"
+
 // Reauthenticate sends a reauthentication otp to either the user's email or phone
 func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -59,7 +61,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return badRequestError("Error sending sms: %v", terr)
 			}
-			return a.sendPhoneConfirmation(ctx, tx, user, phone, recoveryVerification, smsProvider)
+			return a.sendPhoneConfirmation(ctx, tx, user, phone, phoneReauthenticationOtp, smsProvider)
 		}
 		return nil
 	})
@@ -67,7 +69,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		if errors.Is(err, MaxFrequencyLimitError) {
 			return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
 		}
-		return internalServerError("Reauthentication failed.").WithInternalError(err)
+		return err
 	}
 
 	return sendJSON(w, http.StatusOK, make(map[string]string))
@@ -76,7 +78,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 // verifyReauthentication checks if the nonce provided is valid
 func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.Configuration, user *models.User) error {
 	if user.ReauthenticationToken == "" || user.ReauthenticationSentAt == nil {
-		return unauthorizedError("Requires reauthentication")
+		return badRequestError(InvalidNonceMessage)
 	}
 	var isValid bool
 	if user.GetEmail() != "" {
@@ -89,7 +91,7 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 		return unprocessableEntityError("Reauthentication requires an email or a phone number")
 	}
 	if !isValid {
-		return badRequestError("Nonce has expired or is invalid")
+		return badRequestError(InvalidNonceMessage)
 	}
 	if err := user.ConfirmReauthentication(tx); err != nil {
 		return internalServerError("Error during reauthentication").WithInternalError(err)
