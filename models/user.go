@@ -444,9 +444,9 @@ func FindUsersInAudience(tx *storage.Connection, instanceID uuid.UUID, aud strin
 	return users, err
 }
 
-// FindUserWithPhoneAndPhoneChangeToken finds a user with the matching phone and phone change token
-func FindUserWithPhoneAndPhoneChangeToken(tx *storage.Connection, phone, token string) (*User, error) {
-	return findUser(tx, "phone = ? and phone_change_token = ?", phone, token)
+// FindUserWithPhoneChange finds a user with the matching phone_change
+func FindUserWithPhoneChange(tx *storage.Connection, phoneChange string) (*User, error) {
+	return findUser(tx, "phone_change = ?", phoneChange)
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and audience.

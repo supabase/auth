@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/sms_provider"
@@ -80,11 +79,9 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 	}
 	var isValid bool
 	if user.GetEmail() != "" {
-		mailerOtpExpiresAt := time.Second * time.Duration(config.Mailer.OtpExp)
-		isValid = isOtpValid(nonce, user.ReauthenticationToken, user.ReauthenticationSentAt.Add(mailerOtpExpiresAt))
+		isValid = isOtpValid(nonce, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
 	} else if user.GetPhone() != "" {
-		smsOtpExpiresAt := time.Second * time.Duration(config.Sms.OtpExp)
-		isValid = isOtpValid(nonce, user.ReauthenticationToken, user.ReauthenticationSentAt.Add(smsOtpExpiresAt))
+		isValid = isOtpValid(nonce, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
 	} else {
 		return unprocessableEntityError("Reauthentication requires an email or a phone number")
 	}
