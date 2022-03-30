@@ -153,7 +153,7 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, referrerURL string) 
 			Address:  user.EmailChange,
 			Token:    user.EmailChangeTokenNew,
 			Subject:  string(withDefault(m.Config.Mailer.Subjects.EmailChange, "Confirm Email Change")),
-			Template: m.Config.Mailer.Templates.Confirmation,
+			Template: m.Config.Mailer.Templates.EmailChange,
 		},
 	}
 
