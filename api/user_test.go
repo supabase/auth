@@ -148,7 +148,7 @@ func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 			map[string]string{
 				"phone": "123456789",
 			},
-			http.StatusUnprocessableEntity,
+			http.StatusOK,
 		},
 		{
 			"New phone number is different from current phone number",
