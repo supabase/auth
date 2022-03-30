@@ -34,6 +34,9 @@ const (
 	singleConfirmation
 )
 
+// Only applicable when SECURE_EMAIL_CHANGE_ENABLED
+const singleConfirmationAccepted = "Confirmation link accepted. Please proceed to confirm link sent to the other email"
+
 // VerifyParams are the parameters the Verify endpoint accepts
 type VerifyParams struct {
 	Type       string `json:"type"`
@@ -95,7 +98,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 			user, terr = a.emailChangeVerify(ctx, tx, params, user)
 			if user == nil && terr == nil {
 				// when double confirmation is required
-				rurl := a.prepRedirectURL("Confirmation link accepted. Please proceed to confirm link sent to the other email", params.RedirectTo)
+				rurl := a.prepRedirectURL(singleConfirmationAccepted, params.RedirectTo)
 				http.Redirect(w, r, rurl, http.StatusSeeOther)
 				return nil
 			}
@@ -150,6 +153,12 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		}
 		http.Redirect(w, r, rurl, http.StatusSeeOther)
 	case "POST":
+		if token == nil && params.Type == emailChangeVerification {
+			return sendJSON(w, http.StatusOK, map[string]string{
+				"msg":  singleConfirmationAccepted,
+				"code": strconv.Itoa(http.StatusOK),
+			})
+		}
 		return sendJSON(w, http.StatusOK, token)
 	}
 
@@ -355,12 +364,22 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		if err != nil {
 			return nil, err
 		}
-		user, err = models.FindUserByPhoneAndAudience(conn, instanceID, params.Phone, aud)
+		switch params.Type {
+		case phoneChangeVerification:
+			user, err = models.FindUserByPhoneChangeAndAudience(conn, instanceID, params.Phone, aud)
+		case smsVerification:
+			user, err = models.FindUserByPhoneAndAudience(conn, instanceID, params.Phone, aud)
+		}
 	} else if isEmailOtpVerification(params) {
 		if err := a.validateEmail(ctx, params.Email); err != nil {
 			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}
-		user, err = models.FindUserByEmailAndAudience(conn, instanceID, params.Email, aud)
+		switch params.Type {
+		case emailChangeVerification:
+			user, err = models.FindUserForEmailChange(conn, instanceID, params.Email, params.Token, aud, config.Mailer.SecureEmailChangeEnabled)
+		default:
+			user, err = models.FindUserByEmailAndAudience(conn, instanceID, params.Email, aud)
+		}
 	} else {
 		return nil, badRequestError("Only an email address or phone number should be provided on verify, not both.")
 	}
@@ -377,25 +396,22 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	}
 
 	var isValid bool
-	mailerOtpExpiresAt := time.Second * time.Duration(config.Mailer.OtpExp)
-	smsOtpExpiresAt := time.Second * time.Duration(config.Sms.OtpExp)
 	switch params.Type {
 	case signupVerification, inviteVerification:
-		isValid = isOtpValid(params.Token, user.ConfirmationToken, user.ConfirmationSentAt.Add(mailerOtpExpiresAt))
+		isValid = isOtpValid(params.Token, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
 	case recoveryVerification, magicLinkVerification:
-		isValid = isOtpValid(params.Token, user.RecoveryToken, user.RecoverySentAt.Add(mailerOtpExpiresAt))
+		isValid = isOtpValid(params.Token, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
 	case emailChangeVerification:
-		expiresAt := user.EmailChangeSentAt.Add(mailerOtpExpiresAt)
-		isValid = isOtpValid(params.Token, user.EmailChangeTokenCurrent, expiresAt) || isOtpValid(params.Token, user.EmailChangeTokenNew, expiresAt)
+		isValid = isOtpValid(params.Token, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) || isOtpValid(params.Token, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
 		if !isValid {
 			// reset email confirmation status
 			user.EmailChangeConfirmStatus = zeroConfirmation
 			err = conn.UpdateOnly(user, "email_change_confirm_status")
 		}
 	case phoneChangeVerification:
-		isValid = isOtpValid(params.Token, user.PhoneChangeToken, user.PhoneChangeSentAt.Add(smsOtpExpiresAt))
+		isValid = isOtpValid(params.Token, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
 	case smsVerification:
-		isValid = isOtpValid(params.Token, user.ConfirmationToken, user.ConfirmationSentAt.Add(smsOtpExpiresAt))
+		isValid = isOtpValid(params.Token, user.ConfirmationToken, user.ConfirmationSentAt, config.Sms.OtpExp)
 	}
 
 	if !isValid || err != nil {
@@ -405,7 +421,11 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 }
 
 // isOtpValid checks the actual otp sent against the expected otp and ensures that it's within the valid window
-func isOtpValid(actual, expected string, expiresAt time.Time) bool {
+func isOtpValid(actual, expected string, sentAt *time.Time, otpExp uint) bool {
+	if expected == "" || sentAt == nil {
+		return false
+	}
+	expiresAt := sentAt.Add(time.Second * time.Duration(otpExp))
 	return time.Now().Before(expiresAt) && (actual == expected)
 }
 

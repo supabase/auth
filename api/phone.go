@@ -48,21 +48,22 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 
 	var token *string
 	var sentAt *time.Time
-	var tokenDbField, sentAtDbField string
 
+	includeFields := []string{}
 	switch otpType {
 	case phoneChangeVerification:
 		token = &user.PhoneChangeToken
 		sentAt = user.PhoneChangeSentAt
-		tokenDbField, sentAtDbField = "phone_change_token", "phone_change_sent_at"
+		user.PhoneChange = phone
+		includeFields = append(includeFields, "phone_change", "phone_change_token", "phone_change_sent_at")
 	case phoneConfirmationOtp:
 		token = &user.ConfirmationToken
 		sentAt = user.ConfirmationSentAt
-		tokenDbField, sentAtDbField = "confirmation_token", "confirmation_sent_at"
+		includeFields = append(includeFields, "confirmation_token", "confirmation_sent_at")
 	case phoneReauthenticationOtp:
 		token = &user.ReauthenticationToken
 		sentAt = user.ReauthenticationSentAt
-		tokenDbField, sentAtDbField = "reauthentication_token", "reauthentication_sent_at"
+		includeFields = append(includeFields, "reauthentication_token", "reauthentication_sent_at")
 	default:
 		return internalServerError("invalid otp type")
 	}
@@ -101,5 +102,5 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		user.ReauthenticationSentAt = &now
 	}
 
-	return errors.Wrap(tx.UpdateOnly(user, tokenDbField, sentAtDbField), "Database error updating user for confirmation")
+	return errors.Wrap(tx.UpdateOnly(user, includeFields...), "Database error updating user for confirmation")
 }

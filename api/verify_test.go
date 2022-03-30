@@ -192,10 +192,11 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 func (ts *VerifyTestSuite) TestInvalidOtp() {
 	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "12345678", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	u.ConfirmationToken = "123456"
-	u.PhoneChangeToken = "123456"
 	sentTime := time.Now().Add(-48 * time.Hour)
+	u.ConfirmationToken = "123456"
 	u.ConfirmationSentAt = &sentTime
+	u.PhoneChange = "22222222"
+	u.PhoneChangeToken = "123456"
 	u.PhoneChangeSentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
@@ -241,7 +242,7 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 			body: map[string]interface{}{
 				"type":  phoneChangeVerification,
 				"token": "invalid_otp",
-				"phone": u.GetPhone(),
+				"phone": u.PhoneChange,
 			},
 			expected: expectedResponse,
 		},
@@ -544,6 +545,9 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
+	u.PhoneChange = "1234567890"
+	require.NoError(ts.T(), ts.API.db.Update(u))
+
 	type expected struct {
 		code int
 	}
@@ -606,7 +610,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			body: map[string]interface{}{
 				"type":  phoneChangeVerification,
 				"token": "123456",
-				"phone": "12345678",
+				"phone": u.PhoneChange,
 			},
 			expected: expectedResponse,
 		},
