@@ -138,6 +138,11 @@ func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
+	existingUser, err := models.NewUser(ts.instanceID, "", "", ts.Config.JWT.Aud, nil)
+	existingUser.Phone = "22222222"
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(existingUser))
+
 	cases := []struct {
 		desc         string
 		userData     map[string]string
@@ -149,6 +154,13 @@ func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 				"phone": "123456789",
 			},
 			http.StatusOK,
+		},
+		{
+			"New phone number exists already",
+			map[string]string{
+				"phone": "22222222",
+			},
+			http.StatusUnprocessableEntity,
 		},
 		{
 			"New phone number is different from current phone number",
