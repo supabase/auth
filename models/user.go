@@ -444,9 +444,39 @@ func FindUsersInAudience(tx *storage.Connection, instanceID uuid.UUID, aud strin
 	return users, err
 }
 
-// FindUserWithPhoneChange finds a user with the matching phone_change
-func FindUserWithPhoneChange(tx *storage.Connection, phoneChange string) (*User, error) {
-	return findUser(tx, "phone_change = ?", phoneChange)
+// FindUserByEmailChangeCurrentAndAudience finds a user with the matching email change and audience.
+func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string) (*User, error) {
+	return findUser(
+		tx,
+		"instance_id = ? and LOWER(email) = ? and email_change_token_current = ? and aud = ?",
+		instanceID, strings.ToLower(email), token, aud,
+	)
+}
+
+// FindUserByEmailChangeNewAndAudience finds a user with the matching email change and audience.
+func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string) (*User, error) {
+	return findUser(
+		tx,
+		"instance_id = ? and LOWER(email_change) = ? and email_change_token_new = ? and aud = ?",
+		instanceID, strings.ToLower(email), token, aud,
+	)
+}
+
+// FindUserForEmailChange finds a user requesting for an email change
+func FindUserForEmailChange(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string, secureEmailChangeEnabled bool) (*User, error) {
+	if secureEmailChangeEnabled {
+		if user, err := FindUserByEmailChangeCurrentAndAudience(tx, instanceID, email, token, aud); err == nil {
+			return user, err
+		} else if !IsNotFoundError(err) {
+			return nil, err
+		}
+	}
+	return FindUserByEmailChangeNewAndAudience(tx, instanceID, email, token, aud)
+}
+
+// FindUserByPhoneChangeAndAudience finds a user with the matching phone change and audience.
+func FindUserByPhoneChangeAndAudience(tx *storage.Connection, instanceID uuid.UUID, phone, aud string) (*User, error) {
+	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ?", instanceID, phone, aud)
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and audience.

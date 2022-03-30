@@ -34,6 +34,9 @@ const (
 	singleConfirmation
 )
 
+// Only applicable when SECURE_EMAIL_CHANGE_ENABLED
+const singleConfirmationAccepted = "Confirmation link accepted. Please proceed to confirm link sent to the other email"
+
 // VerifyParams are the parameters the Verify endpoint accepts
 type VerifyParams struct {
 	Type       string `json:"type"`
@@ -95,7 +98,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 			user, terr = a.emailChangeVerify(ctx, tx, params, user)
 			if user == nil && terr == nil {
 				// when double confirmation is required
-				rurl := a.prepRedirectURL("Confirmation link accepted. Please proceed to confirm link sent to the other email", params.RedirectTo)
+				rurl := a.prepRedirectURL(singleConfirmationAccepted, params.RedirectTo)
 				http.Redirect(w, r, rurl, http.StatusSeeOther)
 				return nil
 			}
@@ -150,6 +153,12 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		}
 		http.Redirect(w, r, rurl, http.StatusSeeOther)
 	case "POST":
+		if token == nil && params.Type == emailChangeVerification {
+			return sendJSON(w, http.StatusOK, map[string]string{
+				"msg":  singleConfirmationAccepted,
+				"code": strconv.Itoa(http.StatusOK),
+			})
+		}
 		return sendJSON(w, http.StatusOK, token)
 	}
 
@@ -357,7 +366,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		}
 		switch params.Type {
 		case phoneChangeVerification:
-			user, err = models.FindUserWithPhoneChange(conn, params.Phone)
+			user, err = models.FindUserByPhoneChangeAndAudience(conn, instanceID, params.Phone, aud)
 		case smsVerification:
 			user, err = models.FindUserByPhoneAndAudience(conn, instanceID, params.Phone, aud)
 		}
@@ -365,7 +374,12 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		if err := a.validateEmail(ctx, params.Email); err != nil {
 			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}
-		user, err = models.FindUserByEmailAndAudience(conn, instanceID, params.Email, aud)
+		switch params.Type {
+		case emailChangeVerification:
+			user, err = models.FindUserForEmailChange(conn, instanceID, params.Email, params.Token, aud, config.Mailer.SecureEmailChangeEnabled)
+		default:
+			user, err = models.FindUserByEmailAndAudience(conn, instanceID, params.Email, aud)
+		}
 	} else {
 		return nil, badRequestError("Only an email address or phone number should be provided on verify, not both.")
 	}
