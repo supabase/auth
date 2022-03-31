@@ -61,10 +61,18 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		params.Password = ""
 		params.Type = r.FormValue("type")
 		params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
+		if params.Type == smsVerification || params.Type == phoneChangeVerification {
+			rurl := a.prepErrorRedirectURL(badRequestError("GET /verify does not support sms or phone_change as verification types"), r, params.RedirectTo)
+			http.Redirect(w, r, rurl, http.StatusSeeOther)
+			return nil
+		}
 	case "POST":
 		jsonDecoder := json.NewDecoder(r.Body)
 		if err := jsonDecoder.Decode(params); err != nil {
 			return badRequestError("Could not read verification params: %v", err)
+		}
+		if params.Email == "" && params.Phone == "" {
+			return badRequestError("POST /verify requires either an email or phone")
 		}
 		params.RedirectTo = a.getRedirectURLOrReferrer(r, params.RedirectTo)
 	default:
@@ -355,6 +363,8 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			user, err = models.FindUserByRecoveryToken(conn, params.Token)
 		case emailChangeVerification:
 			user, err = models.FindUserByEmailChangeToken(conn, params.Token)
+		default:
+			return nil, badRequestError("Invalid email verification type")
 		}
 	} else if isPhoneOtpVerification(params) {
 		if params.Phone == "" {
@@ -369,6 +379,8 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			user, err = models.FindUserByPhoneChangeAndAudience(conn, instanceID, params.Phone, aud)
 		case smsVerification:
 			user, err = models.FindUserByPhoneAndAudience(conn, instanceID, params.Phone, aud)
+		default:
+			return nil, badRequestError("Invalid sms verification type")
 		}
 	} else if isEmailOtpVerification(params) {
 		if err := a.validateEmail(ctx, params.Email); err != nil {
