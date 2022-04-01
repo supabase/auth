@@ -74,6 +74,8 @@ type GlobalConfiguration struct {
 	SMTP               SMTPConfiguration
 	RateLimitHeader    string  `split_words:"true"`
 	RateLimitEmailSent float64 `split_words:"true" default:"30"`
+	RateLimitVerify    float64 `split_words:"true" default:"30"`
+	RateLimitToken     float64 `split_words:"true" default:"30"`
 }
 
 // EmailContentConfiguration holds the configuration for emails, both subjects and template URLs.

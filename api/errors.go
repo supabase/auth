@@ -101,7 +101,7 @@ func acceptedTokenError(fmtString string, args ...interface{}) *HTTPError {
 }
 
 func expiredTokenError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusGone, fmtString, args...)
+	return httpError(http.StatusUnauthorized, fmtString, args...)
 }
 
 func unauthorizedError(fmtString string, args ...interface{}) *HTTPError {

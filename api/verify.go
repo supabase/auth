@@ -41,7 +41,6 @@ const singleConfirmationAccepted = "Confirmation link accepted. Please proceed t
 type VerifyParams struct {
 	Type       string `json:"type"`
 	Token      string `json:"token"`
-	Password   string `json:"password"`
 	Email      string `json:"email"`
 	Phone      string `json:"phone"`
 	RedirectTo string `json:"redirect_to"`
@@ -49,30 +48,114 @@ type VerifyParams struct {
 
 // Verify exchanges a confirmation or recovery token to a refresh token
 func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
+	switch r.Method {
+	case http.MethodGet:
+		return a.verifyGet(w, r)
+	case http.MethodPost:
+		return a.verifyPost(w, r)
+	default:
+		return unprocessableEntityError("Only GET and POST methods are supported.")
+	}
+}
+
+func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
-
 	params := &VerifyParams{}
+	params.Token = r.FormValue("token")
+	params.Type = r.FormValue("type")
+	params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
 
-	switch r.Method {
-	// GET only supports signup type
-	case "GET":
-		params.Token = r.FormValue("token")
-		params.Password = ""
-		params.Type = r.FormValue("type")
-		params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
-	case "POST":
-		jsonDecoder := json.NewDecoder(r.Body)
-		if err := jsonDecoder.Decode(params); err != nil {
-			return badRequestError("Could not read verification params: %v", err)
+	var (
+		user  *models.User
+		err   error
+		token *AccessTokenResponse
+	)
+
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		if params.Token == "" {
+			return badRequestError("Verify requires a token")
 		}
-		params.RedirectTo = a.getRedirectURLOrReferrer(r, params.RedirectTo)
-	default:
-		unprocessableEntityError("Only GET and POST methods are supported.")
+		if params.Type == "" {
+			return badRequestError("Verify requires a verification type")
+		}
+		aud := a.requestAud(ctx, r)
+		user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
+		if terr != nil {
+			return terr
+		}
+
+		switch params.Type {
+		case signupVerification, inviteVerification:
+			user, terr = a.signupVerify(ctx, tx, user)
+		case recoveryVerification, magicLinkVerification:
+			user, terr = a.recoverVerify(ctx, tx, user)
+		case emailChangeVerification:
+			user, terr = a.emailChangeVerify(ctx, tx, params, user)
+			if user == nil && terr == nil {
+				// when double confirmation is required
+				rurl := a.prepRedirectURL(singleConfirmationAccepted, params.RedirectTo)
+				http.Redirect(w, r, rurl, http.StatusSeeOther)
+				return nil
+			}
+		default:
+			return unprocessableEntityError("Unsupported verification type")
+		}
+
+		if terr != nil {
+			return terr
+		}
+
+		token, terr = a.issueRefreshToken(ctx, tx, user)
+		if terr != nil {
+			return terr
+		}
+
+		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+			return internalServerError("Failed to set JWT cookie. %s", terr)
+		}
+		return nil
+	})
+
+	if err != nil {
+		var herr *HTTPError
+		if errors.As(err, &herr) {
+			rurl := a.prepErrorRedirectURL(herr, r, params.RedirectTo)
+			http.Redirect(w, r, rurl, http.StatusSeeOther)
+			return nil
+		}
+	}
+
+	rurl := params.RedirectTo
+	if token != nil {
+		q := url.Values{}
+		q.Set("access_token", token.Token)
+		q.Set("token_type", token.TokenType)
+		q.Set("expires_in", strconv.Itoa(token.ExpiresIn))
+		q.Set("refresh_token", token.RefreshToken)
+		q.Set("type", params.Type)
+		rurl += "#" + q.Encode()
+	}
+	http.Redirect(w, r, rurl, http.StatusSeeOther)
+	return nil
+}
+
+func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	config := a.getConfig(ctx)
+	params := &VerifyParams{}
+	jsonDecoder := json.NewDecoder(r.Body)
+	if err := jsonDecoder.Decode(params); err != nil {
+		return badRequestError("Could not read verification params: %v", err)
 	}
 
 	if params.Token == "" {
-		return unprocessableEntityError("Verify requires a token")
+		return badRequestError("Verify requires a token")
+	}
+
+	if params.Type == "" {
+		return badRequestError("Verify requires a verification type")
 	}
 
 	var (
@@ -97,15 +180,15 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		case emailChangeVerification:
 			user, terr = a.emailChangeVerify(ctx, tx, params, user)
 			if user == nil && terr == nil {
-				// when double confirmation is required
-				rurl := a.prepRedirectURL(singleConfirmationAccepted, params.RedirectTo)
-				http.Redirect(w, r, rurl, http.StatusSeeOther)
-				return nil
+				return sendJSON(w, http.StatusOK, map[string]string{
+					"msg":  singleConfirmationAccepted,
+					"code": strconv.Itoa(http.StatusOK),
+				})
 			}
 		case smsVerification, phoneChangeVerification:
 			user, terr = a.smsVerify(ctx, tx, user, params.Type)
 		default:
-			return unprocessableEntityError("Verify requires a verification type")
+			return unprocessableEntityError("Unsupported verification type")
 		}
 
 		if terr != nil {
@@ -124,45 +207,9 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
-		if r.Method == http.MethodPost {
-			// do not redirect POST requests
-			return err
-		}
-		var herr *HTTPError
-		if errors.As(err, &herr) {
-			if errors.Is(herr.InternalError, redirectWithQueryError) {
-				rurl := a.prepErrorRedirectURL(herr, r, params.RedirectTo)
-				http.Redirect(w, r, rurl, http.StatusSeeOther)
-				return nil
-			}
-		}
+		return err
 	}
-
-	// GET requests should return to the app site after confirmation
-	switch r.Method {
-	case "GET":
-		rurl := params.RedirectTo
-		if token != nil {
-			q := url.Values{}
-			q.Set("access_token", token.Token)
-			q.Set("token_type", token.TokenType)
-			q.Set("expires_in", strconv.Itoa(token.ExpiresIn))
-			q.Set("refresh_token", token.RefreshToken)
-			q.Set("type", params.Type)
-			rurl += "#" + q.Encode()
-		}
-		http.Redirect(w, r, rurl, http.StatusSeeOther)
-	case "POST":
-		if token == nil && params.Type == emailChangeVerification {
-			return sendJSON(w, http.StatusOK, map[string]string{
-				"msg":  singleConfirmationAccepted,
-				"code": strconv.Itoa(http.StatusOK),
-			})
-		}
-		return sendJSON(w, http.StatusOK, token)
-	}
-
-	return nil
+	return sendJSON(w, http.StatusOK, token)
 }
 
 func (a *API) signupVerify(ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
@@ -355,6 +402,8 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			user, err = models.FindUserByRecoveryToken(conn, params.Token)
 		case emailChangeVerification:
 			user, err = models.FindUserByEmailChangeToken(conn, params.Token)
+		default:
+			return nil, badRequestError("Invalid email verification type")
 		}
 	} else if isPhoneOtpVerification(params) {
 		if params.Phone == "" {
@@ -369,6 +418,8 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			user, err = models.FindUserByPhoneChangeAndAudience(conn, instanceID, params.Phone, aud)
 		case smsVerification:
 			user, err = models.FindUserByPhoneAndAudience(conn, instanceID, params.Phone, aud)
+		default:
+			return nil, badRequestError("Invalid sms verification type")
 		}
 	} else if isEmailOtpVerification(params) {
 		if err := a.validateEmail(ctx, params.Email); err != nil {
@@ -403,11 +454,6 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		isValid = isOtpValid(params.Token, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
 	case emailChangeVerification:
 		isValid = isOtpValid(params.Token, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) || isOtpValid(params.Token, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
-		if !isValid {
-			// reset email confirmation status
-			user.EmailChangeConfirmStatus = zeroConfirmation
-			err = conn.UpdateOnly(user, "email_change_confirm_status")
-		}
 	case phoneChangeVerification:
 		isValid = isOtpValid(params.Token, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
 	case smsVerification:

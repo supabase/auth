@@ -141,7 +141,11 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 
 	w = httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
+
+	data := make(map[string]interface{})
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.Equal(ts.T(), singleConfirmationAccepted, data["msg"])
 
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
@@ -158,12 +162,18 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 
 	w = httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusOK, w.Code)
+	data = make(map[string]interface{})
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.NotNil(ts.T(), data["access_token"])
+	require.NotNil(ts.T(), data["expires_in"])
+	require.NotNil(ts.T(), data["refresh_token"])
+	require.NotNil(ts.T(), data["user"])
 
 	// user's email should've been updated to new@example.com
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "new@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), zeroConfirmation, u.EmailChangeConfirmStatus)
+	require.Equal(ts.T(), zeroConfirmation, u.EmailChangeConfirmStatus)
 }
 
 func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
@@ -184,9 +194,15 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
 
-	url, err := w.Result().Location()
+	rurl, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(ts.T(), err, "redirect url parse failed")
+
+	f, err := url.ParseQuery(rurl.Fragment)
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), "error_code=410&error_description=Token+has+expired+or+is+invalid", url.Fragment)
+	fmt.Println(f)
+	assert.Equal(ts.T(), "401", f.Get("error_code"))
+	assert.Equal(ts.T(), "Token has expired or is invalid", f.Get("error_description"))
+	assert.Equal(ts.T(), "unauthorized_client", f.Get("error"))
 }
 
 func (ts *VerifyTestSuite) TestInvalidOtp() {
@@ -206,7 +222,7 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 	}
 
 	expectedResponse := ResponseBody{
-		Code: http.StatusGone,
+		Code: http.StatusUnauthorized,
 		Msg:  "Token has expired or is invalid",
 	}
 
@@ -492,14 +508,6 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 			},
 		},
 		{
-			"Verify banned phone user on sms",
-			&VerifyParams{
-				Type:  "sms",
-				Token: u.ConfirmationToken,
-				Phone: u.GetPhone(),
-			},
-		},
-		{
 			"Verify banned user on recover",
 			&VerifyParams{
 				Type:  "recovery",
@@ -527,16 +535,20 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.payload))
 
-			req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+			requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", c.payload.Type, c.payload.Token)
+			req := httptest.NewRequest(http.MethodGet, requestUrl, &buffer)
 			req.Header.Set("Content-Type", "application/json")
 
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			assert.Equal(ts.T(), http.StatusUnauthorized, w.Code)
+			assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
 
-			b, err := ioutil.ReadAll(w.Body)
+			rurl, err := url.Parse(w.Header().Get("Location"))
+			require.NoError(ts.T(), err, "redirect url parse failed")
+
+			f, err := url.ParseQuery(rurl.Fragment)
 			require.NoError(ts.T(), err)
-			assert.Equal(ts.T(), "{\"code\":401,\"msg\":\"Error confirming user\"}", string(b))
+			assert.Equal(ts.T(), "401", f.Get("error_code"))
 		})
 	}
 }
@@ -600,9 +612,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 				"token": "123456",
 				"email": u.GetEmail(),
 			},
-			expected: expected{
-				code: http.StatusSeeOther,
-			},
+			expected: expectedResponse,
 		},
 		{
 			desc:     "Valid Phone Change OTP",
