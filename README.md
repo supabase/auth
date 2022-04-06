@@ -490,7 +490,8 @@ Whether captcha middleware is enabled
 
 for now the only option supported is: `hcaptcha`
 
-`SECURITY_CAPTCHA_SECRET` - `string`
+- `SECURITY_CAPTCHA_SECRET` - `string`
+- `SECURITY_CAPTCHA_TIMEOUT` - `string`
 
 Retrieve from hcaptcha account
 

@@ -40,7 +40,6 @@ const (
 var Client *http.Client
 
 func init() {
-	// TODO (darora): make timeout configurable
 	Client = &http.Client{Timeout: 10 * time.Second}
 }
 
