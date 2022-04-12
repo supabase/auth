@@ -362,6 +362,20 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			requestredirectURL:  "http://sub.test.dev:3000/#/",
 			expectedredirectURL: "http://test.dev:3000/#/",
 		},
+		{
+			desc:                "exact mobile deep link redirect url in allow list",
+			siteURL:             "http://test.dev:3000/#/",
+			uriAllowList:        []string{"twitter://timeline"},
+			requestredirectURL:  "twitter://timeline",
+			expectedredirectURL: "twitter://timeline",
+		},
+		{
+			desc:                "wildcard mobile deep link redirect url in allow list",
+			siteURL:             "http://test.dev:3000/#/",
+			uriAllowList:        []string{"com.mobile.*"},
+			requestredirectURL:  "com.mobile.app",
+			expectedredirectURL: "http://test.dev:3000/#/",
+		},
 	}
 
 	for _, tC := range testCases {

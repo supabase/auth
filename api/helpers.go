@@ -8,14 +8,15 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"strings"
 
+	"github.com/gobwas/glob"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/gobwas/glob"
 )
 
 func addRequestID(globalConfig *conf.GlobalConfiguration) middlewareHandler {
@@ -126,9 +127,14 @@ func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
 
 	// For case when user came from mobile app or other permitted resource - redirect back
 	for _, uri := range config.URIAllowList {
-		g := glob.MustCompile(uri)
+		// Only allow wildcard matching if url scheme is http(s)
+		if strings.HasPrefix(uri, "http") || strings.HasPrefix(uri, "https") {
+			g := glob.MustCompile(uri)
 
-		if g.Match(redirectURL) {
+			if g.Match(redirectURL) {
+				return true
+			}
+		} else if redirectURL == uri {
 			return true
 		}
 	}
