@@ -174,7 +174,7 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 		return MaxFrequencyLimitError
 	}
 	oldToken := u.ConfirmationToken
-	u.ConfirmationToken, err = generateUniqueEmailOtp(tx, "confirmation_token")
+	u.ConfirmationToken, err = generateUniqueEmailOtp(tx, confirmationToken)
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, referrerURL string) error {
 	var err error
 	oldToken := u.ConfirmationToken
-	u.ConfirmationToken, err = generateUniqueEmailOtp(tx, "confirmation_token")
+	u.ConfirmationToken, err = generateUniqueEmailOtp(tx, confirmationToken)
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, maile
 	}
 
 	oldToken := u.RecoveryToken
-	u.RecoveryToken, err = generateUniqueEmailOtp(tx, "recovery_token")
+	u.RecoveryToken, err = generateUniqueEmailOtp(tx, recoveryToken)
 	if err != nil {
 		return err
 	}
@@ -231,7 +231,7 @@ func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, ma
 	}
 
 	oldToken := u.ReauthenticationToken
-	u.ReauthenticationToken, err = generateUniqueEmailOtp(tx, "reauthentication_token")
+	u.ReauthenticationToken, err = generateUniqueEmailOtp(tx, reauthenticationToken)
 	if err != nil {
 		return err
 	}
@@ -252,7 +252,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 		return MaxFrequencyLimitError
 	}
 	oldToken := u.RecoveryToken
-	u.RecoveryToken, err = generateUniqueEmailOtp(tx, "recovery_token")
+	u.RecoveryToken, err = generateUniqueEmailOtp(tx, recoveryToken)
 	if err != nil {
 		return err
 	}
@@ -268,12 +268,12 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 // sendEmailChange sends out an email change token to the new email.
 func (a *API) sendEmailChange(tx *storage.Connection, config *conf.Configuration, u *models.User, mailer mailer.Mailer, email string, referrerURL string) error {
 	var err error
-	u.EmailChangeTokenNew, err = generateUniqueEmailOtp(tx, "email_change_token_new")
+	u.EmailChangeTokenNew, err = generateUniqueEmailOtp(tx, emailChangeTokenNew)
 	if err != nil {
 		return err
 	}
 	if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
-		u.EmailChangeTokenCurrent, err = generateUniqueEmailOtp(tx, "email_change_token_current")
+		u.EmailChangeTokenCurrent, err = generateUniqueEmailOtp(tx, emailChangeTokenCurrent)
 		if err != nil {
 			return err
 		}
@@ -308,7 +308,7 @@ func (a *API) validateEmail(ctx context.Context, email string) error {
 }
 
 // generateUniqueEmailOtp returns a unique otp
-func generateUniqueEmailOtp(tx *storage.Connection, tokenType string) (string, error) {
+func generateUniqueEmailOtp(tx *storage.Connection, tokenType tokenType) (string, error) {
 	maxRetries := 5
 	otpLength := 10
 	var otp string
@@ -318,7 +318,7 @@ func generateUniqueEmailOtp(tx *storage.Connection, tokenType string) (string, e
 		if err != nil {
 			return "", err
 		}
-		_, err = models.FindUserByTokenAndTokenType(tx, otp, tokenType)
+		_, err = models.FindUserByTokenAndTokenType(tx, otp, string(tokenType))
 		if err != nil {
 			if models.IsNotFoundError(err) {
 				return otp, nil
