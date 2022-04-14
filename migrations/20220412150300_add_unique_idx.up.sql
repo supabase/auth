@@ -4,5 +4,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS confirmation_token_idx ON auth.users USING btr
 CREATE UNIQUE INDEX IF NOT EXISTS recovery_token_idx ON auth.users USING btree (recovery_token) WHERE recovery_token != '';
 CREATE UNIQUE INDEX IF NOT EXISTS email_change_token_current_idx ON auth.users USING btree (email_change_token_current) WHERE email_change_token_current != '';
 CREATE UNIQUE INDEX IF NOT EXISTS email_change_token_new_idx ON auth.users USING btree (email_change_token_new) WHERE email_change_token_new != '';
-CREATE UNIQUE INDEX IF NOT EXISTS phone_change_token_idx ON auth.users USING btree (phone_change_token) WHERE phone_change_token != '';
 CREATE UNIQUE INDEX IF NOT EXISTS reauthentication_token_idx ON auth.users USING btree (reauthentication_token) WHERE reauthentication_token != '';
