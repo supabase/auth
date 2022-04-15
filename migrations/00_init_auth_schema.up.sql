@@ -1,3 +1,4 @@
+-- +migrate Up
 -- auth.users definition
 
 CREATE TABLE IF NOT EXISTS auth.users (
@@ -77,6 +78,7 @@ CREATE TABLE IF NOT EXISTS auth.schema_migrations (
 );
 comment on table auth.schema_migrations is 'Auth: Manages updates to the auth system.';
 		
+-- +migrate StatementBegin
 -- Gets the User ID from the request cookie
 create or replace function auth.uid() returns uuid as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
@@ -86,3 +88,4 @@ $$ language sql stable;
 create or replace function auth.role() returns text as $$
   select nullif(current_setting('request.jwt.claim.role', true), '')::text;
 $$ language sql stable;
+-- +migrate StatementEnd

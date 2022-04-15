@@ -1,5 +1,7 @@
+-- +migrate Up
 -- alter user schema
 
+-- +migrate StatementBegin
 ALTER TABLE auth.users 
 ADD COLUMN IF NOT EXISTS phone VARCHAR(15) NULL UNIQUE DEFAULT NULL,
 ADD COLUMN IF NOT EXISTS phone_confirmed_at timestamptz NULL DEFAULT NULL,
@@ -16,4 +18,4 @@ BEGIN
       ALTER TABLE "auth"."users" RENAME COLUMN "confirmed_at" TO "email_confirmed_at";
   END IF;
 END $$;
-
+-- +migrate StatementEnd

@@ -1,3 +1,4 @@
+-- +migrate Up
 -- adds identities table 
 
 CREATE TABLE IF NOT EXISTS auth.identities (

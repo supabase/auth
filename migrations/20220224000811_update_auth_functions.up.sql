@@ -1,3 +1,4 @@
+-- +migrate Up
 -- update auth functions
 
 create or replace function auth.uid() 

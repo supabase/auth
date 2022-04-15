@@ -1,3 +1,4 @@
+-- +migrate Up
 -- adds parent column
 
 ALTER TABLE auth.refresh_tokens

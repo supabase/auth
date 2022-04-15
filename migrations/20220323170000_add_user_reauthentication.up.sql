@@ -1,3 +1,4 @@
+-- +migrate Up
 -- adds reauthentication_token and reauthentication_sent_at 
 
 ALTER TABLE auth.users

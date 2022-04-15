@@ -1,3 +1,4 @@
+-- +migrate Up
 -- adds banned_until column
 
 ALTER TABLE auth.users

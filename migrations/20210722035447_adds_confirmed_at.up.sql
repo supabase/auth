@@ -1,3 +1,4 @@
+-- +migrate Up
 -- adds confirmed at
 
 ALTER TABLE auth.users
