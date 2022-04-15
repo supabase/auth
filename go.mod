@@ -30,6 +30,7 @@ require (
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/lestrrat-go/jwx v0.9.0
 	github.com/lib/pq v1.9.0 // indirect
+	github.com/lopezator/migrator v0.3.0 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.16 // indirect
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/mrjones/oauth v0.0.0-20190623134757-126b35219450
@@ -55,4 +56,4 @@ require (
 	gopkg.in/yaml.v1 v1.0.0-20140924161607-9f9df34309c0 // indirect
 )
 
-go 1.13
+go 1.16
