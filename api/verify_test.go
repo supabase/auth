@@ -412,6 +412,7 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			ts.Config.SiteURL = tC.siteURL
 			redirectURL := tC.requestredirectURL
 			ts.Config.URIAllowList = tC.uriAllowList
+			ts.Config.ApplyDefaults()
 
 			// set verify token to user as it actual do in magic link method
 			u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)

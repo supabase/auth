@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/gobwas/glob"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
@@ -126,11 +125,9 @@ func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
 	}
 
 	// For case when user came from mobile app or other permitted resource - redirect back
-	for _, uri := range config.URIAllowList {
+	for uri, g := range config.URIAllowListMap {
 		// Only allow wildcard matching if url scheme is http(s)
 		if strings.HasPrefix(uri, "http") || strings.HasPrefix(uri, "https") {
-			g := glob.MustCompile(uri, '.', '/')
-
 			if g.Match(redirectURL) {
 				return true
 			}
