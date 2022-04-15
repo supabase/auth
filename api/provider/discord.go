@@ -95,7 +95,7 @@ func (g discordProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 		Metadata: &Claims{
 			Issuer:        g.APIPath,
 			Subject:       u.ID,
-			Name:          u.Name,
+			Name:          fmt.Sprintf("%v#%v", u.Name, u.Discriminator),
 			Picture:       avatarURL,
 			Email:         u.Email,
 			EmailVerified: u.Verified,

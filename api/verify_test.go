@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -50,7 +51,7 @@ func (ts *VerifyTestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }
 
-func (ts *VerifyTestSuite) TestVerify_PasswordRecovery() {
+func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.RecoverySentAt = &time.Time{}
@@ -96,6 +97,85 @@ func (ts *VerifyTestSuite) TestVerify_PasswordRecovery() {
 	assert.True(ts.T(), u.IsConfirmed())
 }
 
+func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	u.EmailChangeSentAt = &time.Time{}
+	require.NoError(ts.T(), ts.API.db.Update(u))
+
+	// Request body
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": "new@example.com",
+	}))
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Generate access token for request
+	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	require.NoError(ts.T(), err)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	// Setup response recorder
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	assert.WithinDuration(ts.T(), time.Now(), *u.EmailChangeSentAt, 1*time.Second)
+	assert.False(ts.T(), u.IsConfirmed())
+
+	// Verify new email
+	var vbuffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&vbuffer).Encode(map[string]interface{}{
+		"type":  "email_change",
+		"token": u.EmailChangeTokenNew,
+	}))
+
+	req = httptest.NewRequest(http.MethodPost, "http://localhost/verify", &vbuffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	data := make(map[string]interface{})
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.Equal(ts.T(), singleConfirmationAccepted, data["msg"])
+
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), singleConfirmation, u.EmailChangeConfirmStatus)
+
+	// Verify old email
+	require.NoError(ts.T(), json.NewEncoder(&vbuffer).Encode(map[string]interface{}{
+		"type":  "email_change",
+		"token": u.EmailChangeTokenCurrent,
+	}))
+
+	req = httptest.NewRequest(http.MethodPost, "http://localhost/verify", &vbuffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	data = make(map[string]interface{})
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.NotNil(ts.T(), data["access_token"])
+	require.NotNil(ts.T(), data["expires_in"])
+	require.NotNil(ts.T(), data["refresh_token"])
+	require.NotNil(ts.T(), data["user"])
+
+	// user's email should've been updated to new@example.com
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "new@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), zeroConfirmation, u.EmailChangeConfirmStatus)
+}
+
 func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
@@ -104,54 +184,56 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	u.ConfirmationSentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
-	// Request body
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"type":  signupVerification,
-		"token": u.ConfirmationToken,
-	}))
-
 	// Setup request
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", signupVerification, u.ConfirmationToken)
+	req := httptest.NewRequest(http.MethodGet, reqURL, nil)
 
 	// Setup response recorder
 	w := httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusFound, w.Code)
+	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
 
-	url, err := w.Result().Location()
+	rurl, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(ts.T(), err, "redirect url parse failed")
+
+	f, err := url.ParseQuery(rurl.Fragment)
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), "error_code=410&error_description=Confirmation+token+expired", url.Fragment)
+	fmt.Println(f)
+	assert.Equal(ts.T(), "401", f.Get("error_code"))
+	assert.Equal(ts.T(), "Token has expired or is invalid", f.Get("error_description"))
+	assert.Equal(ts.T(), "unauthorized_client", f.Get("error"))
 }
 
-func (ts *VerifyTestSuite) TestInvalidSmsOtp() {
+func (ts *VerifyTestSuite) TestInvalidOtp() {
 	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "12345678", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	u.ConfirmationToken = "123456"
 	sentTime := time.Now().Add(-48 * time.Hour)
+	u.ConfirmationToken = "123456"
 	u.ConfirmationSentAt = &sentTime
+	u.PhoneChange = "22222222"
+	u.PhoneChangeToken = "123456"
+	u.PhoneChangeSentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
-	type expected struct {
-		code      int
-		fragments string
+	type ResponseBody struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
 	}
 
-	expectedResponse := expected{
-		code:      http.StatusFound,
-		fragments: "error_code=410&error_description=Otp+has+expired+or+is+invalid",
+	expectedResponse := ResponseBody{
+		Code: http.StatusUnauthorized,
+		Msg:  "Token has expired or is invalid",
 	}
 
 	cases := []struct {
 		desc     string
 		sentTime time.Time
 		body     map[string]interface{}
-		expected
+		expected ResponseBody
 	}{
 		{
-			desc:     "Expired OTP",
+			desc:     "Expired Sms OTP",
 			sentTime: time.Now().Add(-48 * time.Hour),
 			body: map[string]interface{}{
 				"type":  smsVerification,
@@ -161,12 +243,32 @@ func (ts *VerifyTestSuite) TestInvalidSmsOtp() {
 			expected: expectedResponse,
 		},
 		{
-			desc:     "Incorrect OTP",
+			desc:     "Invalid Sms OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":  smsVerification,
-				"token": "incorrect_otp",
+				"token": "invalid_otp",
 				"phone": u.GetPhone(),
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Invalid Phone Change OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  phoneChangeVerification,
+				"token": "invalid_otp",
+				"phone": u.PhoneChange,
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Invalid Email OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  signupVerification,
+				"token": "invalid_otp",
+				"email": u.GetEmail(),
 			},
 			expected: expectedResponse,
 		},
@@ -189,11 +291,15 @@ func (ts *VerifyTestSuite) TestInvalidSmsOtp() {
 			// Setup response recorder
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			assert.Equal(ts.T(), c.expected.code, w.Code)
 
-			url, err := w.Result().Location()
+			b, err := ioutil.ReadAll(w.Body)
 			require.NoError(ts.T(), err)
-			assert.Equal(ts.T(), c.expected.fragments, url.Fragment)
+			var resp ResponseBody
+			err = json.Unmarshal(b, &resp)
+			require.NoError(ts.T(), err)
+			assert.Equal(ts.T(), c.expected.Code, resp.Code)
+			assert.Equal(ts.T(), c.expected.Msg, resp.Msg)
+
 		})
 	}
 }
@@ -206,23 +312,16 @@ func (ts *VerifyTestSuite) TestExpiredRecoveryToken() {
 	u.RecoverySentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
-	// Request body
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"type":  recoveryVerification,
-		"token": u.RecoveryToken,
-	}))
-
 	// Setup request
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", "signup", u.RecoveryToken)
+	req := httptest.NewRequest(http.MethodGet, reqURL, nil)
 
 	// Setup response recorder
 	w := httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(w, req)
 
-	assert.Equal(ts.T(), http.StatusFound, w.Code, w.Body.String())
+	assert.Equal(ts.T(), http.StatusSeeOther, w.Code, w.Body.String())
 }
 
 func (ts *VerifyTestSuite) TestVerifyPermitedCustomUri() {
@@ -434,6 +533,187 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 			assert.True(ts.T(), u.IsConfirmed())
+		})
+	}
+}
+
+func (ts *VerifyTestSuite) TestVerifyBannedUser() {
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	u.ConfirmationToken = "confirmation_token"
+	u.RecoveryToken = "recovery_token"
+	u.EmailChangeTokenCurrent = "current_email_change_token"
+	u.EmailChangeTokenNew = "new_email_change_token"
+	t := time.Now()
+	u.ConfirmationSentAt = &t
+	u.RecoverySentAt = &t
+	u.EmailChangeSentAt = &t
+
+	t = time.Now().Add(24 * time.Hour)
+	u.BannedUntil = &t
+	require.NoError(ts.T(), ts.API.db.Update(u))
+
+	cases := []struct {
+		desc    string
+		payload *VerifyParams
+	}{
+		{
+			"Verify banned user on signup",
+			&VerifyParams{
+				Type:  "signup",
+				Token: u.ConfirmationToken,
+			},
+		},
+		{
+			"Verify banned user on invite",
+			&VerifyParams{
+				Type:  "invite",
+				Token: u.ConfirmationToken,
+			},
+		},
+		{
+			"Verify banned user on recover",
+			&VerifyParams{
+				Type:  "recovery",
+				Token: u.RecoveryToken,
+			},
+		},
+		{
+			"Verify banned user on magiclink",
+			&VerifyParams{
+				Type:  "magiclink",
+				Token: u.RecoveryToken,
+			},
+		},
+		{
+			"Verify banned user on email change",
+			&VerifyParams{
+				Type:  "email_change",
+				Token: u.EmailChangeTokenCurrent,
+			},
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.payload))
+
+			requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", c.payload.Type, c.payload.Token)
+			req := httptest.NewRequest(http.MethodGet, requestUrl, &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
+
+			rurl, err := url.Parse(w.Header().Get("Location"))
+			require.NoError(ts.T(), err, "redirect url parse failed")
+
+			f, err := url.ParseQuery(rurl.Fragment)
+			require.NoError(ts.T(), err)
+			assert.Equal(ts.T(), "401", f.Get("error_code"))
+		})
+	}
+}
+
+func (ts *VerifyTestSuite) TestVerifyValidOtp() {
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	u.PhoneChange = "1234567890"
+	require.NoError(ts.T(), ts.API.db.Update(u))
+
+	type expected struct {
+		code int
+	}
+
+	expectedResponse := expected{
+		code: http.StatusOK,
+	}
+
+	cases := []struct {
+		desc     string
+		sentTime time.Time
+		body     map[string]interface{}
+		expected
+	}{
+		{
+			desc:     "Valid SMS OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  smsVerification,
+				"token": "123456",
+				"phone": "12345678",
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Valid Confirmation OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  signupVerification,
+				"token": "123456",
+				"email": u.GetEmail(),
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Valid Recovery OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  recoveryVerification,
+				"token": "123456",
+				"email": u.GetEmail(),
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Valid Email Change OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  emailChangeVerification,
+				"token": "123456",
+				"email": u.GetEmail(),
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Valid Phone Change OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  phoneChangeVerification,
+				"token": "123456",
+				"phone": u.PhoneChange,
+			},
+			expected: expectedResponse,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			// create user
+			u.ConfirmationSentAt = &c.sentTime
+			u.RecoverySentAt = &c.sentTime
+			u.EmailChangeSentAt = &c.sentTime
+			u.PhoneChangeSentAt = &c.sentTime
+			u.ConfirmationToken = c.body["token"].(string)
+			u.RecoveryToken = c.body["token"].(string)
+			u.EmailChangeTokenCurrent = c.body["token"].(string)
+			u.PhoneChangeToken = c.body["token"].(string)
+			require.NoError(ts.T(), ts.API.db.Update(u))
+
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+
+			// Setup request
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			// Setup response recorder
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), c.expected.code, w.Code)
 		})
 	}
 }

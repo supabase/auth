@@ -123,15 +123,15 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
 
 		r.With(api.limitHandler(
-			// Allow requests at a rate of 30 per 5 minutes.
-			tollbooth.NewLimiter(30.0/(60*5), &limiter.ExpirableOptions{
+			// Allow requests at the specified rate per 5 minutes.
+			tollbooth.NewLimiter(api.config.RateLimitToken/(60*5), &limiter.ExpirableOptions{
 				DefaultExpirationTTL: time.Hour,
 			}).SetBurst(30),
 		)).Post("/token", api.Token)
 
 		r.With(api.limitHandler(
-			// Allow requests at a rate of 30 per 5 minutes.
-			tollbooth.NewLimiter(30.0/(60*5), &limiter.ExpirableOptions{
+			// Allow requests at the specified rate per 5 minutes.
+			tollbooth.NewLimiter(api.config.RateLimitVerify/(60*5), &limiter.ExpirableOptions{
 				DefaultExpirationTTL: time.Hour,
 			}).SetBurst(30),
 		)).Route("/verify", func(r *router) {
@@ -140,6 +140,11 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		})
 
 		r.With(api.requireAuthentication).Post("/logout", api.Logout)
+
+		r.Route("/reauthenticate", func(r *router) {
+			r.Use(api.requireAuthentication)
+			r.Get("/", api.Reauthenticate)
+		})
 
 		r.Route("/user", func(r *router) {
 			r.Use(api.requireAuthentication)

@@ -62,7 +62,7 @@ Header on which to rate limit the `/token` endpoint.
 
 Rate limit the number of emails sent per hr on the following endpoints: `/signup`, `/invite`, `/magiclink`, `/recover`, `/otp`, & `/user`.
 
-`PASSWORD_MIN_LENGTH` - `int`
+`GOTRUE_PASSWORD_MIN_LENGTH` - `int`
 
 Minimum password length, defaults to 6.
 
@@ -103,6 +103,10 @@ Chooses what dialect of database you want. Must be `mysql`.
 `DATABASE_URL` (no prefix) / `DB_DATABASE_URL` - `string` **required**
 
 Connection string for the database.
+
+`GOTRUE_DB_MAX_POOL_SIZE` - `int`
+
+Sets the maximum number of open connections to the database. Defaults to 0 which is equivalent to an "unlimited" number of connections.
 
 `DB_NAMESPACE` - `string`
 
@@ -193,7 +197,7 @@ The default group to assign all new users to.
 
 ### External Authentication Providers
 
-We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `spotify`, `slack`, `twitch`, `linkedin` and `twitter` for external authentication.
+We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin`, `notion`, `spotify`, `slack`, `twitch`, `twitter` and `workos` for external authentication.
 
 Use the names as the keys underneath `external` to configure each separately.
 
@@ -224,7 +228,7 @@ The URI a OAuth2 provider will redirect to with the `code` and `state` values.
 
 `EXTERNAL_X_URL` - `string`
 
-The base URL used for constructing the URLs to request authorization and access tokens. Used by `gitlab` only. Defaults to `https://gitlab.com`.
+The base URL used for constructing the URLs to request authorization and access tokens. Used by `gitlab` and `keycloak`. For `gitlab` it defaults to `https://gitlab.com`. For `keycloak` you need to set this to your instance, for example: `https://keycloak.example.com/auth/realms/myrealm`
 
 #### Apple OAuth
 
@@ -304,6 +308,10 @@ Sets the name of the sender. Defaults to the `SMTP_ADMIN_EMAIL` if not used.
 `MAILER_AUTOCONFIRM` - `bool`
 
 If you do not require email confirmation, you may set this to `true`. Defaults to `false`.
+
+`MAILER_OTP_EXP` - `number`
+
+Controls the duration an email link or otp is valid for.
 
 `MAILER_URLPATHS_INVITE` - `string`
 
@@ -458,7 +466,7 @@ Controls the number of digits of the sms otp sent.
 
 `SMS_PROVIDER` - `string`
 
-Available options are: `twilio` and `messagebird`
+Available options are: `twilio`, `messagebird`, `textlocal`, and `vonage`
 
 Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/requests-to-twilio#credentials):
 
@@ -486,6 +494,12 @@ for now the only option supported is: `hcaptcha`
 
 Retrieve from hcaptcha account
 
+### Reauthentication
+
+`SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` - `bool`
+
+Enforce reauthentication on password update.
+
 ## Endpoints
 
 GoTrue exposes the following endpoints:
@@ -505,13 +519,41 @@ Returns the publicly available settings for this gotrue instance.
     "github": true,
     "gitlab": true,
     "google": true,
+    "keycloak": true,
+    "linkedin": true,
+    "notion": true,
     "slack": true,
     "spotify": true,
     "twitch": true,
-    "twitter": true
+    "twitter": true,
+    "workos": true,
   },
   "disable_signup": false,
   "autoconfirm": false
+}
+```
+
+### **POST, PUT /admin/users/<user_id>**
+
+Creates (POST) or Updates (PUT) the user based on the `user_id` specified. The `ban_duration` field accepts the following time units: "ns", "us", "ms", "s", "m", "h". See [`time.ParseDuration`](https://pkg.go.dev/time#ParseDuration) for more details on the format used.
+
+```js
+headers:
+{
+  "Authorization": "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO" // admin role required
+}
+
+body:
+{
+  "role": "test-user",
+  "email": "email@example.com",
+  "phone": "12345678",
+  "password": "secret", // only if type = signup
+  "email_confirm": true,
+  "phone_confirm": true,
+  "user_metadata": {},
+  "app_metadata": {},
+  "ban_duration": "24h" or "none" // to unban a user
 }
 ```
 
@@ -713,9 +755,12 @@ or show an account confirmed/welcome message in the case of `signup`, or direct 
 
 One-Time-Password. Will deliver a magiclink or sms otp to the user depending on whether the request body contains an "email" or "phone" key.
 
+If `"create_user": true`, user will not be automatically signed up if the user doesn't exist.
+
 ```js
 {
   "phone": "12345678" // follows the E.164 format
+  "create_user": true
 }
 
 OR
@@ -723,6 +768,7 @@ OR
 // exactly the same as /magiclink
 {
   "email": "email@example.com"
+  "create_user": true
 }
 ```
 
@@ -874,6 +920,25 @@ Returns:
 }
 ```
 
+If `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` is enabled, the user will need to reauthenticate first. 
+
+```json
+{
+  "password": "new-password",
+  "nonce": "123456",
+}
+```
+
+### **GET /reauthenticate**
+
+Sends a nonce to the user's email (preferred) or phone. This endpoint requires the user to be logged in / authenticated first. The user needs to have either an email or phone number for the nonce to be sent successfully.
+
+```json
+headers: {
+  "Authorization" : "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO"
+}
+```
+
 ### **POST /logout**
 
 Logout a user (Requires authentication).
@@ -888,7 +953,8 @@ Get access_token from external oauth provider
 query params:
 
 ```
-provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | slack | spotify | twitch | twitter
+provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | keycloak | linkedin | notion | slack | spotify | twitch | twitter | workos
+
 scopes=<optional additional scopes depending on the provider (email and name are requested by default)>
 ```
 

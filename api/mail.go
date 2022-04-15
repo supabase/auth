@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/mailer"
 	"github.com/netlify/gotrue/models"
@@ -211,6 +212,22 @@ func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, maile
 	return errors.Wrap(tx.UpdateOnly(u, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
 }
 
+func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration) error {
+	if u.ReauthenticationSentAt != nil && !u.ReauthenticationSentAt.Add(maxFrequency).Before(time.Now()) {
+		return MaxFrequencyLimitError
+	}
+
+	oldToken := u.ReauthenticationToken
+	u.ReauthenticationToken = crypto.SecureToken()
+	now := time.Now()
+	if err := mailer.ReauthenticateMail(u); err != nil {
+		u.ReauthenticationToken = oldToken
+		return errors.Wrap(err, "Error sending reauthentication email")
+	}
+	u.ReauthenticationSentAt = &now
+	return errors.Wrap(tx.UpdateOnly(u, "reauthentication_token", "reauthentication_sent_at"), "Database error updating user for reauthentication")
+}
+
 func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string) error {
 	// since Magic Link is just a recovery with a different template and behaviour
 	// around new users we will reuse the recovery db timer to prevent potential abuse
@@ -229,9 +246,12 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 	return errors.Wrap(tx.UpdateOnly(u, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
 }
 
-// sendSecureEmailChange sends out an email change token each to the old and new emails.
-func (a *API) sendSecureEmailChange(tx *storage.Connection, u *models.User, mailer mailer.Mailer, email string, referrerURL string) error {
-	u.EmailChangeTokenCurrent, u.EmailChangeTokenNew = crypto.SecureToken(), crypto.SecureToken()
+// sendEmailChange sends out an email change token to the new email.
+func (a *API) sendEmailChange(tx *storage.Connection, config *conf.Configuration, u *models.User, mailer mailer.Mailer, email string, referrerURL string) error {
+	u.EmailChangeTokenNew = crypto.SecureToken()
+	if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
+		u.EmailChangeTokenCurrent = crypto.SecureToken()
+	}
 	u.EmailChange = email
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
@@ -243,26 +263,6 @@ func (a *API) sendSecureEmailChange(tx *storage.Connection, u *models.User, mail
 	return errors.Wrap(tx.UpdateOnly(
 		u,
 		"email_change_token_current",
-		"email_change_token_new",
-		"email_change",
-		"email_change_sent_at",
-		"email_change_confirm_status",
-	), "Database error updating user for email change")
-}
-
-// sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(tx *storage.Connection, u *models.User, mailer mailer.Mailer, email string, referrerURL string) error {
-	u.EmailChangeTokenNew = crypto.SecureToken()
-	u.EmailChange = email
-	u.EmailChangeConfirmStatus = zeroConfirmation
-	now := time.Now()
-	if err := mailer.EmailChangeMail(u, referrerURL); err != nil {
-		return err
-	}
-
-	u.EmailChangeSentAt = &now
-	return errors.Wrap(tx.UpdateOnly(
-		u,
 		"email_change_token_new",
 		"email_change",
 		"email_change_sent_at",

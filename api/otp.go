@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
@@ -14,8 +15,9 @@ import (
 
 // OtpParams contains the request body params for the otp endpoint
 type OtpParams struct {
-	Email string `json:"email"`
-	Phone string `json:"phone"`
+	Email      string `json:"email"`
+	Phone      string `json:"phone"`
+	CreateUser bool   `json:"create_user"`
 }
 
 // SmsParams contains the request body params for sms otp
@@ -25,7 +27,9 @@ type SmsParams struct {
 
 // Otp returns the MagicLink or SmsOtp handler based on the request body params
 func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
-	params := &OtpParams{}
+	params := &OtpParams{
+		CreateUser: true,
+	}
 	body, err := ioutil.ReadAll(r.Body)
 	jsonDecoder := json.NewDecoder(bytes.NewReader(body))
 	if err = jsonDecoder.Decode(params); err != nil {
@@ -36,6 +40,11 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	r.Body = ioutil.NopCloser(strings.NewReader(string(body)))
+
+	if !a.shouldCreateUser(r, params) {
+		return badRequestError("Signups not allowed for otp")
+	}
+
 	if params.Email != "" {
 		return a.MagicLink(w, r)
 	} else if params.Phone != "" {
@@ -61,10 +70,10 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read sms otp params: %v", err)
 	}
 
-	params.Phone = a.formatPhoneNumber(params.Phone)
-
-	if isValid := a.validateE164Format(params.Phone); !isValid {
-		return badRequestError("Invalid format: Phone number should follow the E.164 format")
+	var err error
+	params.Phone, err = a.validatePhone(params.Phone)
+	if err != nil {
+		return err
 	}
 
 	aud := a.requestAud(ctx, r)
@@ -83,6 +92,17 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 
 			fakeResponse := &responseStub{}
 
+			if config.Sms.Autoconfirm {
+				// signups are autoconfirmed, send otp after signup
+				if err := a.Signup(fakeResponse, r); err != nil {
+					return err
+				}
+				newBodyContent := `{"phone":"` + params.Phone + `"}`
+				r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
+				r.ContentLength = int64(len(newBodyContent))
+				return a.SmsOtp(w, r)
+			}
+
 			if err := a.Signup(fakeResponse, r); err != nil {
 				return err
 			}
@@ -91,12 +111,15 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding user").WithInternalError(uerr)
 	}
 
-	err := a.db.Transaction(func(tx *storage.Connection) error {
+	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if err := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); err != nil {
 			return err
 		}
-
-		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone); err != nil {
+		smsProvider, terr := sms_provider.GetSmsProvider(*config)
+		if terr != nil {
+			return badRequestError("Error sending sms: %v", terr)
+		}
+		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider); err != nil {
 			return badRequestError("Error sending sms otp: %v", err)
 		}
 		return nil
@@ -107,4 +130,23 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, make(map[string]string))
+}
+
+func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) bool {
+	if !params.CreateUser {
+		ctx := r.Context()
+		instanceID := getInstanceID(ctx)
+		aud := a.requestAud(ctx, r)
+		var err error
+		if params.Email != "" {
+			_, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+		} else if params.Phone != "" {
+			_, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
+		}
+
+		if err != nil && models.IsNotFoundError(err) {
+			return false
+		}
+	}
+	return true
 }

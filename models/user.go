@@ -50,6 +50,9 @@ type User struct {
 	PhoneChange       string     `json:"new_phone,omitempty" db:"phone_change"`
 	PhoneChangeSentAt *time.Time `json:"phone_change_sent_at,omitempty" db:"phone_change_sent_at"`
 
+	ReauthenticationToken  string     `json:"-" db:"reauthentication_token"`
+	ReauthenticationSentAt *time.Time `json:"reauthentication_sent_at,omitempty" db:"reauthentication_sent_at"`
+
 	LastSignInAt *time.Time `json:"last_sign_in_at,omitempty" db:"last_sign_in_at"`
 
 	AppMetaData  JSONMap `json:"app_metadata" db:"raw_app_meta_data"`
@@ -58,8 +61,9 @@ type User struct {
 	IsSuperAdmin bool       `json:"-" db:"is_super_admin"`
 	Identities   []Identity `json:"identities" has_many:"identities"`
 
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
+	BannedUntil *time.Time `json:"banned_until,omitempty" db:"banned_until"`
 }
 
 // NewUser initializes a new user from an email, password and user data.
@@ -144,8 +148,14 @@ func (u *User) BeforeSave(tx *pop.Connection) error {
 	if u.PhoneChangeSentAt != nil && u.PhoneChangeSentAt.IsZero() {
 		u.PhoneChangeSentAt = nil
 	}
+	if u.ReauthenticationSentAt != nil && u.ReauthenticationSentAt.IsZero() {
+		u.ReauthenticationSentAt = nil
+	}
 	if u.LastSignInAt != nil && u.LastSignInAt.IsZero() {
 		u.LastSignInAt = nil
+	}
+	if u.BannedUntil != nil && u.BannedUntil.IsZero() {
+		u.BannedUntil = nil
 	}
 	return nil
 }
@@ -269,6 +279,12 @@ func (u *User) UpdatePhone(tx *storage.Connection, phone string) error {
 func (u *User) Authenticate(password string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(u.EncryptedPassword), []byte(password))
 	return err == nil
+}
+
+// ConfirmReauthentication resets the reauthentication token
+func (u *User) ConfirmReauthentication(tx *storage.Connection) error {
+	u.ReauthenticationToken = ""
+	return tx.UpdateOnly(u, "reauthentication_token")
 }
 
 // Confirm resets the confimation token and sets the confirm timestamp
@@ -428,9 +444,39 @@ func FindUsersInAudience(tx *storage.Connection, instanceID uuid.UUID, aud strin
 	return users, err
 }
 
-// FindUserWithPhoneAndPhoneChangeToken finds a user with the matching phone and phone change token
-func FindUserWithPhoneAndPhoneChangeToken(tx *storage.Connection, phone, token string) (*User, error) {
-	return findUser(tx, "phone = ? and phone_change_token = ?", phone, token)
+// FindUserByEmailChangeCurrentAndAudience finds a user with the matching email change and audience.
+func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string) (*User, error) {
+	return findUser(
+		tx,
+		"instance_id = ? and LOWER(email) = ? and email_change_token_current = ? and aud = ?",
+		instanceID, strings.ToLower(email), token, aud,
+	)
+}
+
+// FindUserByEmailChangeNewAndAudience finds a user with the matching email change and audience.
+func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string) (*User, error) {
+	return findUser(
+		tx,
+		"instance_id = ? and LOWER(email_change) = ? and email_change_token_new = ? and aud = ?",
+		instanceID, strings.ToLower(email), token, aud,
+	)
+}
+
+// FindUserForEmailChange finds a user requesting for an email change
+func FindUserForEmailChange(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string, secureEmailChangeEnabled bool) (*User, error) {
+	if secureEmailChangeEnabled {
+		if user, err := FindUserByEmailChangeCurrentAndAudience(tx, instanceID, email, token, aud); err == nil {
+			return user, err
+		} else if !IsNotFoundError(err) {
+			return nil, err
+		}
+	}
+	return FindUserByEmailChangeNewAndAudience(tx, instanceID, email, token, aud)
+}
+
+// FindUserByPhoneChangeAndAudience finds a user with the matching phone change and audience.
+func FindUserByPhoneChangeAndAudience(tx *storage.Connection, instanceID uuid.UUID, phone, aud string) (*User, error) {
+	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ?", instanceID, phone, aud)
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and audience.
@@ -455,4 +501,17 @@ func IsDuplicatedPhone(tx *storage.Connection, instanceID uuid.UUID, phone, aud 
 		return false, err
 	}
 	return true, nil
+}
+
+// IsBanned checks if a user is banned or not
+func (u *User) IsBanned() bool {
+	if u.BannedUntil == nil {
+		return false
+	}
+	return time.Now().Before(*u.BannedUntil)
+}
+
+func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
+	return tx.UpdateOnly(u, "banned_until")
+
 }

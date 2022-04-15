@@ -1,8 +1,11 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io/ioutil"
+	"net/http"
 
 	"golang.org/x/oauth2"
 )
@@ -105,6 +108,14 @@ func makeRequest(ctx context.Context, tok *oauth2.Token, g *oauth2.Config, url s
 		return err
 	}
 	defer res.Body.Close()
+
+	bodyBytes, _ := ioutil.ReadAll(res.Body)
+	defer res.Body.Close()
+	res.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		return httpError(res.StatusCode, string(bodyBytes))
+	}
 
 	if err := json.NewDecoder(res.Body).Decode(dst); err != nil {
 		return err

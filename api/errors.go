@@ -14,6 +14,7 @@ import (
 // Common error messages during signup flow
 var (
 	DuplicateEmailMsg       = "A user with this email address has already been registered"
+	DuplicatePhoneMsg       = "A user with this phone number has already been registered"
 	UserExistsError   error = errors.New("User already exists")
 )
 
@@ -100,7 +101,7 @@ func acceptedTokenError(fmtString string, args ...interface{}) *HTTPError {
 }
 
 func expiredTokenError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusGone, fmtString, args...)
+	return httpError(http.StatusUnauthorized, fmtString, args...)
 }
 
 func unauthorizedError(fmtString string, args ...interface{}) *HTTPError {
@@ -181,6 +182,18 @@ func (e *OTPError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Err, e.Description)
 }
 
+// WithInternalError adds internal error information to the error
+func (e *OTPError) WithInternalError(err error) *OTPError {
+	e.InternalError = err
+	return e
+}
+
+// WithInternalMessage adds internal message information to the error
+func (e *OTPError) WithInternalMessage(fmtString string, args ...interface{}) *OTPError {
+	e.InternalMessage = fmt.Sprintf(fmtString, args...)
+	return e
+}
+
 // Cause returns the root cause error
 func (e *OTPError) Cause() error {
 	if e.InternalError != nil {
@@ -240,6 +253,11 @@ func handleError(err error, w http.ResponseWriter, r *http.Request) {
 			handleError(jsonErr, w, r)
 		}
 	case *OAuthError:
+		log.WithError(e.Cause()).Info(e.Error())
+		if jsonErr := sendJSON(w, http.StatusBadRequest, e); jsonErr != nil {
+			handleError(jsonErr, w, r)
+		}
+	case *OTPError:
 		log.WithError(e.Cause()).Info(e.Error())
 		if jsonErr := sendJSON(w, http.StatusBadRequest, e); jsonErr != nil {
 			handleError(jsonErr, w, r)

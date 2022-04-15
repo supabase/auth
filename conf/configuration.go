@@ -12,12 +12,15 @@ import (
 	"github.com/kelseyhightower/envconfig"
 )
 
+const defaultMinPasswordLength int = 6
+
 // OAuthProviderConfiguration holds all config related to external account providers.
 type OAuthProviderConfiguration struct {
 	ClientID    string `json:"client_id" split_words:"true"`
 	Secret      string `json:"secret"`
 	RedirectURI string `json:"redirect_uri" split_words:"true"`
 	URL         string `json:"url"`
+	ApiURL      string `json:"api_url" split_words:"true"`
 	Enabled     bool   `json:"enabled"`
 }
 
@@ -36,8 +39,11 @@ type SamlProviderConfiguration struct {
 
 // DBConfiguration holds all the database related configuration.
 type DBConfiguration struct {
-	Driver         string `json:"driver" required:"true"`
-	URL            string `json:"url" envconfig:"DATABASE_URL" required:"true"`
+	Driver string `json:"driver" required:"true"`
+	URL    string `json:"url" envconfig:"DATABASE_URL" required:"true"`
+
+	// MaxPoolSize defaults to 0 (unlimited).
+	MaxPoolSize    int    `json:"max_pool_size" split_words:"true"`
 	MigrationsPath string `json:"migrations_path" split_words:"true" default:"./migrations"`
 }
 
@@ -69,15 +75,18 @@ type GlobalConfiguration struct {
 	SMTP               SMTPConfiguration
 	RateLimitHeader    string  `split_words:"true"`
 	RateLimitEmailSent float64 `split_words:"true" default:"30"`
+	RateLimitVerify    float64 `split_words:"true" default:"30"`
+	RateLimitToken     float64 `split_words:"true" default:"30"`
 }
 
 // EmailContentConfiguration holds the configuration for emails, both subjects and template URLs.
 type EmailContentConfiguration struct {
-	Invite       string `json:"invite"`
-	Confirmation string `json:"confirmation"`
-	Recovery     string `json:"recovery"`
-	EmailChange  string `json:"email_change" split_words:"true"`
-	MagicLink    string `json:"magic_link" split_words:"true"`
+	Invite           string `json:"invite"`
+	Confirmation     string `json:"confirmation"`
+	Recovery         string `json:"recovery"`
+	EmailChange      string `json:"email_change" split_words:"true"`
+	MagicLink        string `json:"magic_link" split_words:"true"`
+	Reauthentication string `json:"reauthentication"`
 }
 
 type ProviderConfiguration struct {
@@ -89,14 +98,18 @@ type ProviderConfiguration struct {
 	Github      OAuthProviderConfiguration `json:"github"`
 	Gitlab      OAuthProviderConfiguration `json:"gitlab"`
 	Google      OAuthProviderConfiguration `json:"google"`
+	Notion      OAuthProviderConfiguration `json:"notion"`
+	Keycloak    OAuthProviderConfiguration `json:"keycloak"`
 	Linkedin    OAuthProviderConfiguration `json:"linkedin"`
 	Spotify     OAuthProviderConfiguration `json:"spotify"`
 	Slack       OAuthProviderConfiguration `json:"slack"`
 	Twitter     OAuthProviderConfiguration `json:"twitter"`
 	Twitch      OAuthProviderConfiguration `json:"twitch"`
+	WorkOS      OAuthProviderConfiguration `json:"workos"`
 	Email       EmailProviderConfiguration `json:"email"`
 	Phone       PhoneProviderConfiguration `json:"phone"`
 	Saml        SamlProviderConfiguration  `json:"saml"`
+	Zoom        OAuthProviderConfiguration `json:"zoom"`
 	IosBundleId string                     `json:"ios_bundle_id" split_words:"true"`
 	RedirectURL string                     `json:"redirect_url"`
 }
@@ -117,6 +130,7 @@ type MailerConfiguration struct {
 	Templates                EmailContentConfiguration `json:"templates"`
 	URLPaths                 EmailContentConfiguration `json:"url_paths"`
 	SecureEmailChangeEnabled bool                      `json:"secure_email_change_enabled" split_words:"true" default:"true"`
+	OtpExp                   uint                      `json:"otp_exp" split_words:"true"`
 }
 
 type PhoneProviderConfiguration struct {
@@ -132,6 +146,8 @@ type SmsProviderConfiguration struct {
 	Template     string                           `json:"template"`
 	Twilio       TwilioProviderConfiguration      `json:"twilio"`
 	Messagebird  MessagebirdProviderConfiguration `json:"messagebird"`
+	Textlocal    TextlocalProviderConfiguration   `json:"textlocal"`
+	Vonage       VonageProviderConfiguration      `json:"vonage"`
 }
 
 type TwilioProviderConfiguration struct {
@@ -145,6 +161,17 @@ type MessagebirdProviderConfiguration struct {
 	Originator string `json:"originator" split_words:"true"`
 }
 
+type TextlocalProviderConfiguration struct {
+	ApiKey string `json:"api_key" split_words:"true"`
+	Sender string `json:"sender" split_words:"true"`
+}
+
+type VonageProviderConfiguration struct {
+	ApiKey    string `json:"api_key" split_words:"true"`
+	ApiSecret string `json:"api_secret" split_words:"true"`
+	From      string `json:"from" split_words:"true"`
+}
+
 type CaptchaConfiguration struct {
 	Enabled  bool   `json:"enabled" default:"false"`
 	Provider string `json:"provider" default:"hcaptcha"`
@@ -152,8 +179,9 @@ type CaptchaConfiguration struct {
 }
 
 type SecurityConfiguration struct {
-	Captcha                     CaptchaConfiguration `json:"captcha"`
-	RefreshTokenRotationEnabled bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
+	Captcha                               CaptchaConfiguration `json:"captcha"`
+	RefreshTokenRotationEnabled           bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
+	UpdatePasswordRequireReauthentication bool                 `json:"update_password_require_reauthentication" split_words:"true"`
 }
 
 // Configuration holds all the per-instance configuration.
@@ -161,7 +189,7 @@ type Configuration struct {
 	SiteURL           string   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList      []string `json:"uri_allow_list" split_words:"true"`
 	URIAllowListMap   map[string]glob.Glob
-	PasswordMinLength int                      `json:"password_min_length" default:"6"`
+	PasswordMinLength int                      `json:"password_min_length" split_words:"true"`
 	JWT               JWTConfiguration         `json:"jwt"`
 	SMTP              SMTPConfiguration        `json:"smtp"`
 	Mailer            MailerConfiguration      `json:"mailer"`
@@ -172,6 +200,7 @@ type Configuration struct {
 	Security          SecurityConfiguration    `json:"security"`
 	Cookie            struct {
 		Key      string `json:"key"`
+		Domain   string `json:"domain"`
 		Duration int    `json:"duration"`
 	} `json:"cookies"`
 }
@@ -261,14 +290,21 @@ func (config *Configuration) ApplyDefaults() {
 	if config.Mailer.URLPaths.Invite == "" {
 		config.Mailer.URLPaths.Invite = "/"
 	}
+
 	if config.Mailer.URLPaths.Confirmation == "" {
 		config.Mailer.URLPaths.Confirmation = "/"
 	}
+
 	if config.Mailer.URLPaths.Recovery == "" {
 		config.Mailer.URLPaths.Recovery = "/"
 	}
+
 	if config.Mailer.URLPaths.EmailChange == "" {
 		config.Mailer.URLPaths.EmailChange = "/"
+	}
+
+	if config.Mailer.OtpExp == 0 {
+		config.Mailer.OtpExp = 86400 // 1 day
 	}
 
 	if config.SMTP.MaxFrequency == 0 {
@@ -293,7 +329,11 @@ func (config *Configuration) ApplyDefaults() {
 	}
 
 	if config.Cookie.Key == "" {
-		config.Cookie.Key = "nf_jwt"
+		config.Cookie.Key = "sb"
+	}
+
+	if config.Cookie.Domain == "" {
+		config.Cookie.Domain = ""
 	}
 
 	if config.Cookie.Duration == 0 {
@@ -309,6 +349,9 @@ func (config *Configuration) ApplyDefaults() {
 			g := glob.MustCompile(uri, '.', '/')
 			config.URIAllowListMap[uri] = g
 		}
+	}
+	if config.PasswordMinLength < defaultMinPasswordLength {
+		config.PasswordMinLength = defaultMinPasswordLength
 	}
 }
 
@@ -372,6 +415,29 @@ func (t *MessagebirdProviderConfiguration) Validate() error {
 	}
 	if t.Originator == "" {
 		return errors.New("Missing Messagebird originator")
+	}
+	return nil
+}
+
+func (t *TextlocalProviderConfiguration) Validate() error {
+	if t.ApiKey == "" {
+		return errors.New("Missing Textlocal API key")
+	}
+	if t.Sender == "" {
+		return errors.New("Missing Textlocal sender")
+	}
+	return nil
+}
+
+func (t *VonageProviderConfiguration) Validate() error {
+	if t.ApiKey == "" {
+		return errors.New("Missing Vonage API key")
+	}
+	if t.ApiSecret == "" {
+		return errors.New("Missing Vonage API secret")
+	}
+	if t.From == "" {
+		return errors.New("Missing Vonage 'from' parameter")
 	}
 	return nil
 }

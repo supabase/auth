@@ -22,6 +22,7 @@ const (
 	UserDeletedAction               AuditAction = "user_deleted"
 	UserModifiedAction              AuditAction = "user_modified"
 	UserRecoveryRequestedAction     AuditAction = "user_recovery_requested"
+	UserReauthenticateAction        AuditAction = "user_reauthenticate_requested"
 	UserConfirmationRequestedAction AuditAction = "user_confirmation_requested"
 	UserRepeatedSignUpAction        AuditAction = "user_repeated_signup"
 	TokenRevokedAction              AuditAction = "token_revoked"
