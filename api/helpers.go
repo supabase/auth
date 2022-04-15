@@ -129,7 +129,7 @@ func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
 	for _, uri := range config.URIAllowList {
 		// Only allow wildcard matching if url scheme is http(s)
 		if strings.HasPrefix(uri, "http") || strings.HasPrefix(uri, "https") {
-			g := glob.MustCompile(uri)
+			g := glob.MustCompile(uri, '.', '/')
 
 			if g.Match(redirectURL) {
 				return true

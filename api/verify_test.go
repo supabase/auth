@@ -376,6 +376,34 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			requestredirectURL:  "com.mobile.app",
 			expectedredirectURL: "http://test.dev:3000/#/",
 		},
+		{
+			desc:                "redirect respects . separator",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"http://*.*.dev:3000"},
+			requestredirectURL:  "http://foo.bar.dev:3000",
+			expectedredirectURL: "http://foo.bar.dev:3000",
+		},
+		{
+			desc:                "redirect does not respect . separator",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"http://*.dev:3000"},
+			requestredirectURL:  "http://foo.bar.dev:3000",
+			expectedredirectURL: "http://localhost:3000",
+		},
+		{
+			desc:                "redirect respects / separator in url subdirectory",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"http://test.dev:3000/*/*"},
+			requestredirectURL:  "http://test.dev:3000/bar/foo",
+			expectedredirectURL: "http://test.dev:3000/bar/foo",
+		},
+		{
+			desc:                "redirect does not respect / separator in url subdirectory",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"http://test.dev:3000/*"},
+			requestredirectURL:  "http://test.dev:3000/bar/foo",
+			expectedredirectURL: "http://localhost:3000",
+		},
 	}
 
 	for _, tC := range testCases {
