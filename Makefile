@@ -12,7 +12,7 @@ build: ## Build the binary.
 	GOOS=linux GOARCH=arm64 go build $(FLAGS) -o gotrue-arm64
 
 deps: ## Install dependencies.
-	@go install github.com/gobuffalo/pop/soda@latest	
+	@go install github.com/gobuffalo/pop/soda@latest
 	@go install golang.org/x/lint/golint@latest
 	@go mod download
 
@@ -33,3 +33,23 @@ test: ## Run tests.
 
 vet: # Vet the code
 	go vet $(CHECK_FILES)
+
+
+# Run the development containers
+dev:
+	docker-compose -f docker-compose-dev.yml up
+
+# Run the tests using the development containers
+docker-test:
+	docker-compose -f docker-compose-dev.yml up -d postgres
+	docker-compose -f docker-compose-dev.yml run gotrue sh -c "./hack/migrate.sh postgres"
+	docker-compose -f docker-compose-dev.yml run gotrue sh -c "make test"
+	docker-compose -f docker-compose-dev.yml down -v
+
+# Remove the development containers and volumes
+docker-build:
+	docker-compose -f docker-compose-dev.yml build --no-cache
+
+# Remove the development containers and volumes
+docker-clean:
+	docker-compose -f docker-compose-dev.yml rm -fsv
