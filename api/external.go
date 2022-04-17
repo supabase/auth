@@ -411,6 +411,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string, query *u
 		return provider.NewFacebookProvider(config.External.Facebook, scopes)
 	case "notion":
 		return provider.NewNotionProvider(config.External.Notion)
+	case "snapchat":
+		return provider.NewSnapchatProvider(config.External.Snapchat, scopes)
 	case "spotify":
 		return provider.NewSpotifyProvider(config.External.Spotify, scopes)
 	case "slack":

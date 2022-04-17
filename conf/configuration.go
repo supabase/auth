@@ -100,6 +100,7 @@ type ProviderConfiguration struct {
 	Notion      OAuthProviderConfiguration `json:"notion"`
 	Keycloak    OAuthProviderConfiguration `json:"keycloak"`
 	Linkedin    OAuthProviderConfiguration `json:"linkedin"`
+	Snapchat    OAuthProviderConfiguration `json:"snapchat"`
 	Spotify     OAuthProviderConfiguration `json:"spotify"`
 	Slack       OAuthProviderConfiguration `json:"slack"`
 	Twitter     OAuthProviderConfiguration `json:"twitter"`

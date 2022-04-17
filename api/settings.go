@@ -14,6 +14,7 @@ type ProviderSettings struct {
 	Linkedin  bool `json:"linkedin"`
 	Facebook  bool `json:"facebook"`
 	Notion    bool `json:"notion"`
+	Snapchat  bool `json:"snapchat"`
 	Spotify   bool `json:"spotify"`
 	Slack     bool `json:"slack"`
 	WorkOS    bool `json:"workos"`
@@ -54,6 +55,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Linkedin:  config.External.Linkedin.Enabled,
 			Facebook:  config.External.Facebook.Enabled,
 			Notion:    config.External.Notion.Enabled,
+			Snapchat:  config.External.Snapchat.Enabled,
 			Spotify:   config.External.Spotify.Enabled,
 			Slack:     config.External.Slack.Enabled,
 			Twitch:    config.External.Twitch.Enabled,
