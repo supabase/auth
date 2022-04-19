@@ -1,6 +1,7 @@
 .PHONY: all build deps image lint migrate test vet
 CHECK_FILES?=$$(go list ./... | grep -v /vendor/)
 FLAGS?=-ldflags "-X github.com/netlify/gotrue/cmd.Version=`git describe --tags`"
+DEV_DOCKER_COMPOSE:=docker-compose-dev.yml
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {sub("\\\\n",sprintf("\n%22c"," "), $$2);printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -16,7 +17,7 @@ deps: ## Install dependencies.
 	@go install golang.org/x/lint/golint@latest
 	@go mod download
 
-image: ## Build the Docker image.
+image: ## Build the production Docker image.
 	docker build .
 
 lint: ## Lint the code.
@@ -34,22 +35,24 @@ test: ## Run tests.
 vet: # Vet the code
 	go vet $(CHECK_FILES)
 
+dev: ## Run the development containers
+	# Start postgres first and apply migrations
+	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
+	docker-compose -f $(DEV_DOCKER_COMPOSE) run gotrue sh -c "make migrate_dev"
+	# Actually start the containers for dev
+	docker-compose -f $(DEV_DOCKER_COMPOSE) up
 
-# Run the development containers
-dev:
-	docker-compose -f docker-compose-dev.yml up
+docker-test: ## Run the tests using the development containers
+	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
+	docker-compose -f $(DEV_DOCKER_COMPOSE) run gotrue sh -c "make migrate_test"
+	docker-compose -f $(DEV_DOCKER_COMPOSE) run gotrue sh -c "make test"
+	docker-compose -f $(DEV_DOCKER_COMPOSE) down -v
 
-# Run the tests using the development containers
-docker-test:
-	docker-compose -f docker-compose-dev.yml up -d postgres
-	docker-compose -f docker-compose-dev.yml run gotrue sh -c "./hack/migrate.sh postgres"
-	docker-compose -f docker-compose-dev.yml run gotrue sh -c "make test"
-	docker-compose -f docker-compose-dev.yml down -v
+docker-build: ## Force a full rebuild of the development containers
+	docker-compose -f $(DEV_DOCKER_COMPOSE) build --no-cache
+	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
+	docker-compose -f $(DEV_DOCKER_COMPOSE) run gotrue sh -c "make migrate_dev"
+	docker-compose -f $(DEV_DOCKER_COMPOSE) down
 
-# Remove the development containers and volumes
-docker-build:
-	docker-compose -f docker-compose-dev.yml build --no-cache
-
-# Remove the development containers and volumes
-docker-clean:
-	docker-compose -f docker-compose-dev.yml rm -fsv
+docker-clean: ## Remove the development containers and volumes
+	docker-compose -f $(DEV_DOCKER_COMPOSE) rm -fsv
