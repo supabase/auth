@@ -2,8 +2,11 @@ package cmd
 
 import (
 	"database/sql"
+	"fmt"
+	"io/ioutil"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/netlify/gotrue/conf"
@@ -43,17 +46,96 @@ func migrate(cmd *cobra.Command, args []string) {
 		Dir: "migrations/",
 	}
 
-	migrations, err := source.FindMigrations()
-	if err != nil {
-		logrus.Fatalf("Failed to find migrations: %v", err.Error())
-	}
-
 	db, err := sql.Open("pgx", globalConfig.DB.URL)
 	if err != nil {
 		logrus.Fatalf("Failed to connect to the database: %v", err.Error())
 	}
 
+	tx, err := db.Begin()
+	if err != nil {
+		logrus.Fatalln(err)
+	}
+	// create migrations table for sql-migrate
+	_, err = tx.Exec(`create table if not exists migrations (
+		id text, 
+		applied_at timestamptz, 
+		primary key (id)
+	)`)
+	if err != nil {
+		tx.Rollback()
+		logrus.Fatalln(err)
+	}
+
+	// check if schema_migrations table exists
+	res, err := tx.Query("select exists(select from pg_tables where schemaname = 'auth' and tablename = 'schema_migrations')")
+	if err != nil {
+		tx.Rollback()
+		logrus.Fatalln(err)
+	}
+	defer res.Close()
+	var exists bool
+	for res.Next() {
+		if err := res.Scan(&exists); err != nil {
+			tx.Rollback()
+			logrus.Fatalln(err)
+		}
+	}
+
+	migrationFiles, err := ioutil.ReadDir("./migrations/")
+	if err != nil {
+		tx.Rollback()
+		logrus.Fatalln(err)
+	}
+
+	if exists {
+		// get versions from schema_migrations
+		res, err = tx.Query("select version from schema_migrations")
+		if err != nil {
+			tx.Rollback()
+			logrus.Fatalln(err)
+		}
+		defer res.Close()
+		for res.Next() {
+			var version string
+			if err := res.Scan(&version); err != nil {
+				tx.Rollback()
+				logrus.Fatal(err)
+			}
+
+			for _, file := range migrationFiles {
+				filename := file.Name()
+				if strings.HasPrefix(filename, version) {
+					// insert into migrations table
+					logrus.Infof("Adding %v to migrations table...", filename)
+					insertRes, err := tx.Exec(fmt.Sprintf(`
+						insert into migrations(id, applied_at) 
+						values ('%v', NOW())
+						on conflict do nothing
+					`, filename))
+					if err != nil {
+						tx.Rollback()
+						logrus.Fatal(err)
+					}
+					if rows, err := insertRes.RowsAffected(); err != nil {
+						tx.Rollback()
+						logrus.Fatal(err)
+					} else if rows == 1 {
+						logrus.Infof("Added %v", filename)
+					}
+				}
+			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		logrus.Fatalln(err)
+	}
+
 	sqlmigrate.SetTable("migrations")
+	migrations, err := source.FindMigrations()
+	if err != nil {
+		logrus.Fatalf("Failed to find migrations: %v", err.Error())
+	}
+
 	n, err := sqlmigrate.Exec(db, globalConfig.DB.Driver, source, sqlmigrate.Up)
 	if err != nil {
 		logrus.Fatalf("Failed to run migrations: %v", err.Error())
