@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"database/sql"
-	"fmt"
 	"io/ioutil"
 	"net/url"
 	"os"
@@ -50,84 +49,67 @@ func migrate(cmd *cobra.Command, args []string) {
 	if err != nil {
 		logrus.Fatalf("Failed to connect to the database: %v", err.Error())
 	}
+	defer db.Close()
 
-	tx, err := db.Begin()
-	if err != nil {
-		logrus.Fatalln(err)
-	}
 	// create migrations table for sql-migrate
-	_, err = tx.Exec(`create table if not exists migrations (
+	_, err = db.Exec(`create table if not exists migrations (
 		id text, 
 		applied_at timestamptz, 
 		primary key (id)
 	)`)
 	if err != nil {
-		tx.Rollback()
 		logrus.Fatalln(err)
 	}
 
 	// check if schema_migrations table exists
-	res, err := tx.Query("select exists(select from pg_tables where schemaname = 'auth' and tablename = 'schema_migrations')")
+	res, err := db.Query("select exists(select from pg_tables where schemaname = 'auth' and tablename = 'schema_migrations')")
 	if err != nil {
-		tx.Rollback()
 		logrus.Fatalln(err)
 	}
 	defer res.Close()
 	var exists bool
 	for res.Next() {
 		if err := res.Scan(&exists); err != nil {
-			tx.Rollback()
 			logrus.Fatalln(err)
 		}
 	}
 
 	migrationFiles, err := ioutil.ReadDir("./migrations/")
 	if err != nil {
-		tx.Rollback()
 		logrus.Fatalln(err)
 	}
 
 	if exists {
 		// get versions from schema_migrations
-		res, err = tx.Query("select version from schema_migrations")
+		res, err = db.Query("select version from schema_migrations")
 		if err != nil {
-			tx.Rollback()
 			logrus.Fatalln(err)
 		}
 		defer res.Close()
 		for res.Next() {
 			var version string
 			if err := res.Scan(&version); err != nil {
-				tx.Rollback()
 				logrus.Fatal(err)
 			}
+			stmt, err := db.Prepare("insert into migrations(id, applied_at) values($1, NOW()) on conflict do nothing")
+			if err != nil {
+				logrus.Fatalln(err)
+			}
+			defer stmt.Close()
 
 			for _, file := range migrationFiles {
 				filename := file.Name()
 				if strings.HasPrefix(filename, version) {
 					// insert into migrations table
 					logrus.Infof("Adding %v to migrations table...", filename)
-					insertRes, err := tx.Exec(fmt.Sprintf(`
-						insert into migrations(id, applied_at) 
-						values ('%v', NOW())
-						on conflict do nothing
-					`, filename))
-					if err != nil {
-						tx.Rollback()
-						logrus.Fatal(err)
-					}
-					if rows, err := insertRes.RowsAffected(); err != nil {
-						tx.Rollback()
-						logrus.Fatal(err)
-					} else if rows == 1 {
+					if _, err := stmt.Exec(filename); err != nil {
+						logrus.Fatalln(err)
+					} else {
 						logrus.Infof("Added %v", filename)
 					}
 				}
 			}
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		logrus.Fatalln(err)
 	}
 
 	sqlmigrate.SetTable("migrations")
