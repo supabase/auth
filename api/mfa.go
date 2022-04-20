@@ -14,5 +14,4 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, make(map[string]string))
-
 }
