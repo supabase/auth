@@ -166,6 +166,14 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 					r.Delete("/", api.adminUserDelete)
 				})
 			})
+			r.Route("/mfa", func(r *router) {
+				r.Route("/{user_id}", func(r *router) {
+					r.Use(api.loadUser)
+					r.Put("/", api.adminUserUpdate)
+					r.Put("/", api.adminUserUpdate)
+
+				})
+			})
 
 			r.Post("/generate_link", api.GenerateLink)
 		})
@@ -177,6 +185,18 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			})
 
 			r.Get("/metadata", api.SAMLMetadata)
+		})
+		r.Route("/mfa", func(r *router) {
+			r.Route("/verify", func(r *router) {
+				r.Get("/", api.adminUserGet)
+			})
+			r.Route("/challenge", func(r *router) {
+				r.Use(api.loadUser)
+				r.Get("/", api.adminUserGet)
+			})
+			r.Route("/enroll", func(r *router) {
+				r.Get("/", api.adminUserGet)
+			})
 		})
 	})
 
