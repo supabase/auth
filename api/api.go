@@ -188,14 +188,14 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		})
 		r.Route("/mfa", func(r *router) {
 			r.Route("/verify", func(r *router) {
-				r.Get("/", api.adminUserGet)
+				r.Get("/", api.VerifyFactor)
 			})
 			r.Route("/challenge", func(r *router) {
 				r.Use(api.loadUser)
-				r.Get("/", api.adminUserGet)
+				r.Get("/", api.ChallengeFactor)
 			})
 			r.Route("/enroll", func(r *router) {
-				r.Get("/", api.adminUserGet)
+				r.Get("/", api.EnrollFactor)
 			})
 		})
 	})
