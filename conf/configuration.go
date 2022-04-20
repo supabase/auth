@@ -175,6 +175,7 @@ type CaptchaConfiguration struct {
 	Enabled  bool   `json:"enabled" default:"false"`
 	Provider string `json:"provider" default:"hcaptcha"`
 	Secret   string `json:"provider_secret"`
+	Timeout  int    `json:"timeout" default:"10"`
 }
 
 type SecurityConfiguration struct {

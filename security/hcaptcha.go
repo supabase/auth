@@ -2,6 +2,7 @@ package security
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -40,7 +41,7 @@ const (
 var Client *http.Client
 
 func init() {
-	Client = &http.Client{Timeout: 10 * time.Second}
+	Client = &http.Client{Timeout: context.Background() * time.Second}
 }
 
 func VerifyRequest(r *http.Request, secretKey string) (VerificationResult, error) {

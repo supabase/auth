@@ -30,7 +30,7 @@ func (a *API) validatePhone(phone string) (string, error) {
 	return phone, nil
 }
 
-// validateE165Format checks if phone number follows the E.164 format
+// validateE164Format checks if phone number follows the E.164 format
 func (a *API) validateE164Format(phone string) bool {
 	// match should never fail as long as regexp is valid
 	matched, _ := regexp.Match(e164Format, []byte(phone))
