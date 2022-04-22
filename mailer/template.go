@@ -2,6 +2,7 @@ package mailer
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/badoux/checkmail"
 	"github.com/netlify/gotrue/conf"
@@ -79,7 +80,7 @@ func (m *TemplateMailer) InviteMail(user *models.User, referrerURL string) error
 		"SiteURL":         m.Config.SiteURL,
 		"ConfirmationURL": url,
 		"Email":           user.Email,
-		"Token":           user.ConfirmationToken,
+		"Token":           formatEmailOtp(user.ConfirmationToken),
 		"Data":            user.UserMetaData,
 	}
 
@@ -109,7 +110,7 @@ func (m *TemplateMailer) ConfirmationMail(user *models.User, referrerURL string)
 		"SiteURL":         m.Config.SiteURL,
 		"ConfirmationURL": url,
 		"Email":           user.Email,
-		"Token":           user.ConfirmationToken,
+		"Token":           formatEmailOtp(user.ConfirmationToken),
 		"Data":            user.UserMetaData,
 	}
 
@@ -127,7 +128,7 @@ func (m *TemplateMailer) ReauthenticateMail(user *models.User) error {
 	data := map[string]interface{}{
 		"SiteURL": m.Config.SiteURL,
 		"Email":   user.Email,
-		"Token":   user.ReauthenticationToken,
+		"Token":   formatEmailOtp(user.ReauthenticationToken),
 		"Data":    user.UserMetaData,
 	}
 
@@ -151,7 +152,7 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, referrerURL string) 
 	emails := []Email{
 		{
 			Address:  user.EmailChange,
-			Token:    user.EmailChangeTokenNew,
+			Token:    formatEmailOtp(user.EmailChangeTokenNew),
 			Subject:  string(withDefault(m.Config.Mailer.Subjects.EmailChange, "Confirm Email Change")),
 			Template: m.Config.Mailer.Templates.EmailChange,
 		},
@@ -161,7 +162,7 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, referrerURL string) 
 	if m.Config.Mailer.SecureEmailChangeEnabled && currentEmail != "" {
 		emails = append(emails, Email{
 			Address:  currentEmail,
-			Token:    user.EmailChangeTokenCurrent,
+			Token:    formatEmailOtp(user.EmailChangeTokenCurrent),
 			Subject:  string(withDefault(m.Config.Mailer.Subjects.Confirmation, "Confirm Email Address")),
 			Template: m.Config.Mailer.Templates.EmailChange,
 		})
@@ -233,7 +234,7 @@ func (m *TemplateMailer) RecoveryMail(user *models.User, referrerURL string) err
 		"SiteURL":         m.Config.SiteURL,
 		"ConfirmationURL": url,
 		"Email":           user.Email,
-		"Token":           user.RecoveryToken,
+		"Token":           formatEmailOtp(user.RecoveryToken),
 		"Data":            user.UserMetaData,
 	}
 
@@ -263,7 +264,7 @@ func (m *TemplateMailer) MagicLinkMail(user *models.User, referrerURL string) er
 		"SiteURL":         m.Config.SiteURL,
 		"ConfirmationURL": url,
 		"Email":           user.Email,
-		"Token":           user.RecoveryToken,
+		"Token":           formatEmailOtp(user.RecoveryToken),
 		"Data":            user.UserMetaData,
 	}
 
@@ -315,4 +316,18 @@ func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referr
 	}
 
 	return url, nil
+}
+
+// formatEmailOtp separates the otp into chunks of 5 with "-" as the separator
+func formatEmailOtp(otp string) string {
+	chunkSize := 5
+	var chunks []string
+	for i := 0; i < len(otp); i += chunkSize {
+		if i+chunkSize >= len(otp) {
+			chunks = append(chunks, otp[i:])
+		} else {
+			chunks = append(chunks, otp[i:i+chunkSize])
+		}
+	}
+	return strings.Join(chunks, "-")
 }

@@ -310,7 +310,7 @@ func (a *API) validateEmail(ctx context.Context, email string) error {
 // generateUniqueEmailOtp returns a unique otp
 func generateUniqueEmailOtp(tx *storage.Connection, tokenType tokenType) (string, error) {
 	maxRetries := 5
-	otpLength := 10
+	otpLength := 20
 	var otp string
 	var err error
 	for i := 0; i < maxRetries; i++ {

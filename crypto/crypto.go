@@ -48,6 +48,6 @@ func GenerateOtpFromCharset(length int, charset string) (string, error) {
 
 // GenerateEmailOtp generates a random n-length alphanumeric otp
 func GenerateEmailOtp(length int) (string, error) {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	const charset = "abcdefghijklmnopqrstuvwxyz"
 	return GenerateOtpFromCharset(length, charset)
 }

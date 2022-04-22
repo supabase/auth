@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/netlify/gotrue/models"
@@ -32,6 +33,10 @@ const (
 const (
 	zeroConfirmation int = iota
 	singleConfirmation
+)
+
+const (
+	v1OtpLength = 22
 )
 
 // Only applicable when SECURE_EMAIL_CHANGE_ENABLED
@@ -76,6 +81,10 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		if params.Token == "" {
 			return badRequestError("Verify requires a token")
+		}
+		if len(params.Token) > v1OtpLength {
+			// token follows the v2 format and includes "-"
+			params.Token = strings.ReplaceAll(params.Token, "-", "")
 		}
 		if params.Type == "" {
 			return badRequestError("Verify requires a verification type")
@@ -152,6 +161,10 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 
 	if params.Token == "" {
 		return badRequestError("Verify requires a token")
+	}
+	if len(params.Token) > v1OtpLength {
+		// token follows the v2 format and includes "-"
+		params.Token = strings.ReplaceAll(params.Token, "-", "")
 	}
 
 	if params.Type == "" {
