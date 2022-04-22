@@ -36,6 +36,7 @@ const (
 )
 
 const (
+	// v1 uses crypto.SecureToken()
 	v1OtpLength = 22
 )
 
