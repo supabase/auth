@@ -3,6 +3,7 @@ package cmd
 import (
 	"database/sql"
 	"io/ioutil"
+	"log"
 	"net/url"
 	"os"
 	"strings"
@@ -62,16 +63,12 @@ func migrate(cmd *cobra.Command, args []string) {
 	}
 
 	// check if schema_migrations table exists
-	res, err := db.Query("select exists(select from pg_tables where schemaname = 'auth' and tablename = 'schema_migrations')")
+	var exists bool
+	err = db.QueryRow(
+		"select exists(select from pg_tables where schemaname = 'auth' and tablename = 'schema_migrations')",
+	).Scan(&exists)
 	if err != nil {
 		logrus.Fatalln(err)
-	}
-	defer res.Close()
-	var exists bool
-	for res.Next() {
-		if err := res.Scan(&exists); err != nil {
-			logrus.Fatalln(err)
-		}
 	}
 
 	migrationFiles, err := ioutil.ReadDir("./migrations/")
@@ -81,7 +78,7 @@ func migrate(cmd *cobra.Command, args []string) {
 
 	if exists {
 		// get versions from schema_migrations
-		res, err = db.Query("select version from schema_migrations")
+		res, err := db.Query("select version from schema_migrations")
 		if err != nil {
 			logrus.Fatalln(err)
 		}
@@ -109,6 +106,9 @@ func migrate(cmd *cobra.Command, args []string) {
 					}
 				}
 			}
+		}
+		if err = res.Err(); err != nil {
+			log.Fatalln(err)
 		}
 	}
 
