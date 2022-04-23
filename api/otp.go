@@ -31,6 +31,9 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 		CreateUser: true,
 	}
 	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
 	jsonDecoder := json.NewDecoder(bytes.NewReader(body))
 	if err = jsonDecoder.Decode(params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
@@ -41,8 +44,10 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 
 	r.Body = ioutil.NopCloser(strings.NewReader(string(body)))
 
-	if !a.shouldCreateUser(r, params) {
+	if ok, err := a.shouldCreateUser(r, params); !ok {
 		return badRequestError("Signups not allowed for otp")
+	} else if err != nil {
+		return err
 	}
 
 	if params.Email != "" {
@@ -132,21 +137,28 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, make(map[string]string))
 }
 
-func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) bool {
+func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) (bool, error) {
 	if !params.CreateUser {
 		ctx := r.Context()
 		instanceID := getInstanceID(ctx)
 		aud := a.requestAud(ctx, r)
 		var err error
 		if params.Email != "" {
+			if err := a.validateEmail(ctx, params.Email); err != nil {
+				return false, err
+			}
 			_, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
 		} else if params.Phone != "" {
+			params.Phone, err = a.validatePhone(params.Phone)
+			if err != nil {
+				return false, err
+			}
 			_, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
 		}
 
 		if err != nil && models.IsNotFoundError(err) {
-			return false
+			return false, nil
 		}
 	}
-	return true
+	return true, nil
 }

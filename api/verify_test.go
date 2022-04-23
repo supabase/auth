@@ -440,6 +440,69 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			requestredirectURL:  "http://localhost:3000/docs",
 			expectedredirectURL: "https://someapp-something.codemagic.app/#/",
 		},
+		{
+			desc:                "same wildcard site url and redirect url in allow list",
+			siteURL:             "http://sub.test.dev:3000/#/",
+			uriAllowList:        []string{"http://*.test.dev:3000"},
+			requestredirectURL:  "http://sub.test.dev:3000/#/",
+			expectedredirectURL: "http://sub.test.dev:3000/#/",
+		},
+		{
+			desc:                "different wildcard site url and redirect url in allow list",
+			siteURL:             "http://sub.test.dev/#/",
+			uriAllowList:        []string{"http://*.other.dev:3000"},
+			requestredirectURL:  "http://sub.other.dev:3000",
+			expectedredirectURL: "http://sub.other.dev:3000",
+		},
+		{
+			desc:                "different wildcard site url and redirect url not in allow list",
+			siteURL:             "http://test.dev:3000/#/",
+			uriAllowList:        []string{"http://*.allowed.dev:3000"},
+			requestredirectURL:  "http://sub.test.dev:3000/#/",
+			expectedredirectURL: "http://test.dev:3000/#/",
+		},
+		{
+			desc:                "exact mobile deep link redirect url in allow list",
+			siteURL:             "http://test.dev:3000/#/",
+			uriAllowList:        []string{"twitter://timeline"},
+			requestredirectURL:  "twitter://timeline",
+			expectedredirectURL: "twitter://timeline",
+		},
+		{
+			desc:                "wildcard mobile deep link redirect url in allow list",
+			siteURL:             "http://test.dev:3000/#/",
+			uriAllowList:        []string{"com.mobile.*"},
+			requestredirectURL:  "com.mobile.app",
+			expectedredirectURL: "http://test.dev:3000/#/",
+		},
+		{
+			desc:                "redirect respects . separator",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"http://*.*.dev:3000"},
+			requestredirectURL:  "http://foo.bar.dev:3000",
+			expectedredirectURL: "http://foo.bar.dev:3000",
+		},
+		{
+			desc:                "redirect does not respect . separator",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"http://*.dev:3000"},
+			requestredirectURL:  "http://foo.bar.dev:3000",
+			expectedredirectURL: "http://localhost:3000",
+		},
+		{
+			desc:                "redirect respects / separator in url subdirectory",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"http://test.dev:3000/*/*"},
+			requestredirectURL:  "http://test.dev:3000/bar/foo",
+			expectedredirectURL: "http://test.dev:3000/bar/foo",
+		},
+		{
+			desc:                "redirect does not respect / separator in url subdirectory",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"http://test.dev:3000/*"},
+			requestredirectURL:  "http://test.dev:3000/bar/foo",
+			expectedredirectURL: "http://localhost:3000",
+		},
 	}
 
 	for _, tC := range testCases {
@@ -448,6 +511,7 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			ts.Config.SiteURL = tC.siteURL
 			redirectURL := tC.requestredirectURL
 			ts.Config.URIAllowList = tC.uriAllowList
+			ts.Config.ApplyDefaults()
 
 			// set verify token to user as it actual do in magic link method
 			u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)

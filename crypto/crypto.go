@@ -8,7 +8,6 @@ import (
 	"math"
 	"math/big"
 	"strconv"
-	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -19,11 +18,7 @@ func SecureToken() string {
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
 		panic(err.Error()) // rand should never fail
 	}
-	return removePadding(base64.URLEncoding.EncodeToString(b))
-}
-
-func removePadding(token string) string {
-	return strings.TrimRight(token, "=")
+	return base64.RawURLEncoding.EncodeToString(b)
 }
 
 // GenerateOtp generates a random n digit otp
@@ -53,6 +48,6 @@ func GenerateOtpFromCharset(length int, charset string) (string, error) {
 
 // GenerateEmailOtp generates a random n-length alphanumeric otp
 func GenerateEmailOtp(length int) (string, error) {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	const charset = "abcdefghijklmnopqrstuvwxyz"
 	return GenerateOtpFromCharset(length, charset)
 }
