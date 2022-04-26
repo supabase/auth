@@ -1,3 +1,55 @@
+-- Supabase super admin
+CREATE user supabase_admin;
+ALTER user  supabase_admin with superuser createdb createrole replication bypassrls;
+
+-- auth schema creation
+CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_admin;
+
+-- Set up realtime
+CREATE SCHEMA IF NOT EXISTS realtime;
+-- CREATE publication supabase_realtime; -- defaults to empty publication
+CREATE publication supabase_realtime;
+
+-- Extension namespacing
+CREATE schema IF NOT EXISTS extensions;
+CREATE extension IF NOT EXISTS "uuid-ossp"      with schema extensions;
+CREATE extension IF NOT EXISTS pgcrypto         with schema extensions;
+CREATE extension IF NOT EXISTS pgjwt            with schema extensions;
+
+-- Set up auth roles for the developer
+CREATE role anon                nologin noinherit;
+CREATE role authenticated       nologin noinherit; -- "logged in" user: web_user, app_user, etc
+CREATE role service_role        nologin noinherit bypassrls; -- allow developers to CREATE JWT's that bypass their policies
+
+CREATE user authenticator noinherit;
+grant anon              to authenticator;
+grant authenticated     to authenticator;
+grant service_role      to authenticator;
+grant supabase_admin    to authenticator;
+
+grant usage                     on schema public to postgres, anon, authenticated, service_role;
+ALTER DEFAULT privileges in schema public grant all on tables to postgres, anon, authenticated, service_role;
+ALTER DEFAULT privileges in schema public grant all on functions to postgres, anon, authenticated, service_role;
+ALTER DEFAULT privileges in schema public grant all on sequences to postgres, anon, authenticated, service_role;
+
+-- Allow Extensions to be used in the API
+grant usage                     on schema extensions to postgres, anon, authenticated, service_role;
+
+-- Set up namespacing
+ALTER user supabase_admin SET search_path TO public, extensions; -- don't include the "auth" schema
+
+-- These are required so that the users receive grants whenever "supabase_admin" creates tables/function
+ALTER DEFAULT privileges for user supabase_admin in schema public grant all
+    on sequences to postgres, anon, authenticated, service_role;
+ALTER DEFAULT privileges for user supabase_admin in schema public grant all
+    on tables to postgres, anon, authenticated, service_role;
+ALTER DEFAULT privileges for user supabase_admin in schema public grant all
+    on functions to postgres, anon, authenticated, service_role;
+
+-- Set short statement/query timeouts for API roles
+ALTER role anon set statement_timeout = '3s';
+ALTER role authenticated set statement_timeout = '8s';
+
 -- auth.users definition
 
 CREATE TABLE IF NOT EXISTS auth.users (
