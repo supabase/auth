@@ -1,13 +1,5 @@
--- Supabase super admin
-DO $$
-BEGIN
-CREATE USER supabase_admin;
-EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
-END
-$$;
-
 -- auth schema creation
-CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_admin;
+CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_auth_admin;
 
 -- Set up realtime
 CREATE SCHEMA IF NOT EXISTS realtime;
@@ -57,7 +49,7 @@ $$;
 grant anon              to authenticator;
 grant authenticated     to authenticator;
 grant service_role      to authenticator;
-grant supabase_admin    to authenticator;
+grant supabase_auth_admin    to authenticator;
 
 grant usage                     on schema public to postgres, anon, authenticated, service_role;
 ALTER DEFAULT privileges in schema public grant all on tables to postgres, anon, authenticated, service_role;
@@ -68,14 +60,14 @@ ALTER DEFAULT privileges in schema public grant all on sequences to postgres, an
 grant usage                     on schema extensions to postgres, anon, authenticated, service_role;
 
 -- Set up namespacing
-ALTER user supabase_admin SET search_path TO public, extensions; -- don't include the "auth" schema
+ALTER user supabase_auth_admin SET search_path TO public, extensions; -- don't include the "auth" schema
 
--- These are required so that the users receive grants whenever "supabase_admin" creates tables/function
-ALTER DEFAULT privileges for user supabase_admin in schema public grant all
+-- These are required so that the users receive grants whenever "supabase_auth_admin" creates tables/function
+ALTER DEFAULT privileges for user supabase_auth_admin in schema public grant all
     on sequences to postgres, anon, authenticated, service_role;
-ALTER DEFAULT privileges for user supabase_admin in schema public grant all
+ALTER DEFAULT privileges for user supabase_auth_admin in schema public grant all
     on tables to postgres, anon, authenticated, service_role;
-ALTER DEFAULT privileges for user supabase_admin in schema public grant all
+ALTER DEFAULT privileges for user supabase_auth_admin in schema public grant all
     on functions to postgres, anon, authenticated, service_role;
 
 -- Set short statement/query timeouts for API roles
