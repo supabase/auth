@@ -15,7 +15,7 @@ $$;
 CREATE schema IF NOT EXISTS extensions;
 CREATE extension IF NOT EXISTS "uuid-ossp"      with schema extensions;
 CREATE extension IF NOT EXISTS pgcrypto         with schema extensions;
-CREATE extension IF NOT EXISTS pgjwt            with schema extensions;
+-- CREATE extension IF NOT EXISTS pgjwt            with schema extensions;
 
 -- Set up auth roles for the developer
 -- create role anon
