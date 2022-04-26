@@ -5,7 +5,6 @@ CREATE USER supabase_admin;
 EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
 END
 $$;
-ALTER user supabase_admin with superuser createdb createrole replication bypassrls;
 
 -- auth schema creation
 CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_admin;
