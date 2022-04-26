@@ -1,6 +1,11 @@
 -- Supabase super admin
-CREATE user supabase_admin;
-ALTER user  supabase_admin with superuser createdb createrole replication bypassrls;
+DO $$
+BEGIN
+CREATE USER supabase_admin;
+EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
+END
+$$;
+ALTER user supabase_admin with superuser createdb createrole replication bypassrls;
 
 -- auth schema creation
 CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_admin;
@@ -8,7 +13,12 @@ CREATE SCHEMA IF NOT EXISTS auth AUTHORIZATION supabase_admin;
 -- Set up realtime
 CREATE SCHEMA IF NOT EXISTS realtime;
 -- CREATE publication supabase_realtime; -- defaults to empty publication
+DO $$
+BEGIN
 CREATE publication supabase_realtime;
+EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
+END
+$$;
 
 -- Extension namespacing
 CREATE schema IF NOT EXISTS extensions;
@@ -17,11 +27,18 @@ CREATE extension IF NOT EXISTS pgcrypto         with schema extensions;
 CREATE extension IF NOT EXISTS pgjwt            with schema extensions;
 
 -- Set up auth roles for the developer
-CREATE role anon                nologin noinherit;
-CREATE role authenticated       nologin noinherit; -- "logged in" user: web_user, app_user, etc
-CREATE role service_role        nologin noinherit bypassrls; -- allow developers to CREATE JWT's that bypass their policies
-
-CREATE user authenticator noinherit;
+DO $$
+BEGIN
+CREATE ROLE anon 			nologin noinherit;
+EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
+CREATE ROLE authenticated 	nologin noinherit;
+EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
+CREATE ROLE service_role 	nologin noinherit bypassrls;
+EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
+CREATE user authenticator 	noinherit;
+EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
+END
+$$;
 grant anon              to authenticator;
 grant authenticated     to authenticator;
 grant service_role      to authenticator;
