@@ -27,14 +27,30 @@ CREATE extension IF NOT EXISTS pgcrypto         with schema extensions;
 CREATE extension IF NOT EXISTS pgjwt            with schema extensions;
 
 -- Set up auth roles for the developer
+-- create role anon
 DO $$
 BEGIN
 CREATE ROLE anon 			nologin noinherit;
 EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
+END
+$$;
+-- create role authenticated
+DO $$
+BEGIN
 CREATE ROLE authenticated 	nologin noinherit;
 EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
+END
+$$;
+-- create role service_role
+DO $$
+BEGIN
 CREATE ROLE service_role 	nologin noinherit bypassrls;
 EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
+END
+$$;
+-- create user authenticator
+DO $$
+BEGIN
 CREATE user authenticator 	noinherit;
 EXCEPTION WHEN duplicate_object THEN RAISE NOTICE '%, skipping', SQLERRM USING ERRCODE = SQLSTATE;
 END
