@@ -59,6 +59,10 @@ func (g orcidProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 func (g orcidProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	orcID := fmt.Sprintf("%v", tok.Extra("orcid"))
 
+	if orcID == "" {
+		return nil, fmt.Errorf("Failed to extract orcID from OAuth2")
+	}
+
 	// API for reading public user information
 	// Docs: https://github.com/ORCID/orcid-model/tree/master/src/main/resources/record_3.0
 	apiURL := defaultOrcidPublicApi + "/v3.0/" + orcID + "/record"
