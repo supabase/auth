@@ -43,7 +43,7 @@ func NewVonageProvider(config conf.VonageProviderConfiguration) (SmsProvider, er
 }
 
 // Send an SMS containing the OTP with Vonage's API
-func (t VonageProvider) SendSms(phone string, message string) error {
+func (t *VonageProvider) SendSms(phone string, message string) error {
 	body := url.Values{
 		"from":       {t.Config.From},
 		"to":         {phone},

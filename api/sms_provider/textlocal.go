@@ -44,7 +44,7 @@ func NewTextlocalProvider(config conf.TextlocalProviderConfiguration) (SmsProvid
 }
 
 // Send an SMS containing the OTP with Textlocal's API
-func (t TextlocalProvider) SendSms(phone string, message string) error {
+func (t *TextlocalProvider) SendSms(phone string, message string) error {
 	body := url.Values{
 		"sender":  {t.Config.Sender},
 		"apikey":  {t.Config.ApiKey},
@@ -70,7 +70,7 @@ func (t TextlocalProvider) SendSms(phone string, message string) error {
 	if derr != nil {
 		return derr
 	}
-	
+
 	if len(resp.Errors) == 0 {
 		return errors.New("Textlocal error: Internal Error")
 	}

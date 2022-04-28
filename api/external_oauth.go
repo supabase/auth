@@ -141,7 +141,7 @@ func (a *API) oAuth1Callback(ctx context.Context, r *http.Request, providerType 
 
 // OAuthProvider returns the corresponding oauth provider as an OAuthProvider interface
 func (a *API) OAuthProvider(ctx context.Context, name string) (provider.OAuthProvider, error) {
-	providerCandidate, err := a.Provider(ctx, name, "")
+	providerCandidate, err := a.Provider(ctx, name, "", nil)
 	if err != nil {
 		return nil, err
 	}

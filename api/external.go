@@ -38,15 +38,16 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	ctx := r.Context()
 	config := a.getConfig(ctx)
 
-	providerType := r.URL.Query().Get("provider")
-	scopes := r.URL.Query().Get("scopes")
+	query := r.URL.Query()
+	providerType := query.Get("provider")
+	scopes := query.Get("scopes")
 
-	p, err := a.Provider(ctx, providerType, scopes)
+	p, err := a.Provider(ctx, providerType, scopes, &query)
 	if err != nil {
 		return badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
 	}
 
-	inviteToken := r.URL.Query().Get("invite_token")
+	inviteToken := query.Get("invite_token")
 	if inviteToken != "" {
 		_, userErr := models.FindUserByConfirmationToken(a.db, inviteToken)
 		if userErr != nil {
@@ -57,7 +58,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		}
 	}
 
-	redirectURL := a.getRedirectURLOrReferrer(r, r.URL.Query().Get("redirect_to"))
+	redirectURL := a.getRedirectURLOrReferrer(r, query.Get("redirect_to"))
 	log := getLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
@@ -383,7 +384,7 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 }
 
 // Provider returns a Provider interface for the given name.
-func (a *API) Provider(ctx context.Context, name string, scopes string) (provider.Provider, error) {
+func (a *API) Provider(ctx context.Context, name string, scopes string, query *url.Values) (provider.Provider, error) {
 	config := a.getConfig(ctx)
 	name = strings.ToLower(name)
 
@@ -402,6 +403,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewGitlabProvider(config.External.Gitlab, scopes)
 	case "google":
 		return provider.NewGoogleProvider(config.External.Google, scopes)
+	case "keycloak":
+		return provider.NewKeycloakProvider(config.External.Keycloak, scopes)
 	case "linkedin":
 		return provider.NewLinkedinProvider(config.External.Linkedin, scopes)
 	case "facebook":
@@ -416,6 +419,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewTwitchProvider(config.External.Twitch, scopes)
 	case "twitter":
 		return provider.NewTwitterProvider(config.External.Twitter, scopes)
+	case "workos":
+		return provider.NewWorkOSProvider(config.External.WorkOS, query)
 	case "saml":
 		return provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
 	case "zoom":

@@ -14,6 +14,7 @@ import (
 // Common error messages during signup flow
 var (
 	DuplicateEmailMsg       = "A user with this email address has already been registered"
+	DuplicatePhoneMsg       = "A user with this phone number has already been registered"
 	UserExistsError   error = errors.New("User already exists")
 )
 
@@ -100,7 +101,7 @@ func acceptedTokenError(fmtString string, args ...interface{}) *HTTPError {
 }
 
 func expiredTokenError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusGone, fmtString, args...)
+	return httpError(http.StatusUnauthorized, fmtString, args...)
 }
 
 func unauthorizedError(fmtString string, args ...interface{}) *HTTPError {

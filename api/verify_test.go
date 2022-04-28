@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -140,7 +141,11 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 
 	w = httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
+
+	data := make(map[string]interface{})
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.Equal(ts.T(), singleConfirmationAccepted, data["msg"])
 
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
@@ -157,12 +162,18 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 
 	w = httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusOK, w.Code)
+	data = make(map[string]interface{})
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.NotNil(ts.T(), data["access_token"])
+	require.NotNil(ts.T(), data["expires_in"])
+	require.NotNil(ts.T(), data["refresh_token"])
+	require.NotNil(ts.T(), data["user"])
 
 	// user's email should've been updated to new@example.com
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "new@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), zeroConfirmation, u.EmailChangeConfirmStatus)
+	require.Equal(ts.T(), zeroConfirmation, u.EmailChangeConfirmStatus)
 }
 
 func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
@@ -173,16 +184,9 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	u.ConfirmationSentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
-	// Request body
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"type":  signupVerification,
-		"token": u.ConfirmationToken,
-	}))
-
 	// Setup request
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", signupVerification, u.ConfirmationToken)
+	req := httptest.NewRequest(http.MethodGet, reqURL, nil)
 
 	// Setup response recorder
 	w := httptest.NewRecorder()
@@ -190,34 +194,43 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
 
-	url, err := w.Result().Location()
+	rurl, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(ts.T(), err, "redirect url parse failed")
+
+	f, err := url.ParseQuery(rurl.Fragment)
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), "error_code=410&error_description=Token+has+expired+or+is+invalid", url.Fragment)
+	fmt.Println(f)
+	assert.Equal(ts.T(), "401", f.Get("error_code"))
+	assert.Equal(ts.T(), "Token has expired or is invalid", f.Get("error_description"))
+	assert.Equal(ts.T(), "unauthorized_client", f.Get("error"))
 }
 
 func (ts *VerifyTestSuite) TestInvalidOtp() {
 	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "12345678", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	u.ConfirmationToken = "123456"
 	sentTime := time.Now().Add(-48 * time.Hour)
+	u.ConfirmationToken = "123456"
 	u.ConfirmationSentAt = &sentTime
+	u.PhoneChange = "22222222"
+	u.PhoneChangeToken = "123456"
+	u.PhoneChangeSentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
-	type expected struct {
-		code      int
-		fragments string
+	type ResponseBody struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
 	}
 
-	expectedResponse := expected{
-		code:      http.StatusSeeOther,
-		fragments: "error_code=410&error_description=Token+has+expired+or+is+invalid",
+	expectedResponse := ResponseBody{
+		Code: http.StatusUnauthorized,
+		Msg:  "Token has expired or is invalid",
 	}
 
 	cases := []struct {
 		desc     string
 		sentTime time.Time
 		body     map[string]interface{}
-		expected
+		expected ResponseBody
 	}{
 		{
 			desc:     "Expired Sms OTP",
@@ -236,6 +249,16 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 				"type":  smsVerification,
 				"token": "invalid_otp",
 				"phone": u.GetPhone(),
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Invalid Phone Change OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  phoneChangeVerification,
+				"token": "invalid_otp",
+				"phone": u.PhoneChange,
 			},
 			expected: expectedResponse,
 		},
@@ -268,11 +291,15 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 			// Setup response recorder
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			assert.Equal(ts.T(), c.expected.code, w.Code)
 
-			url, err := w.Result().Location()
+			b, err := ioutil.ReadAll(w.Body)
 			require.NoError(ts.T(), err)
-			assert.Equal(ts.T(), c.expected.fragments, url.Fragment)
+			var resp ResponseBody
+			err = json.Unmarshal(b, &resp)
+			require.NoError(ts.T(), err)
+			assert.Equal(ts.T(), c.expected.Code, resp.Code)
+			assert.Equal(ts.T(), c.expected.Msg, resp.Msg)
+
 		})
 	}
 }
@@ -285,16 +312,9 @@ func (ts *VerifyTestSuite) TestExpiredRecoveryToken() {
 	u.RecoverySentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
-	// Request body
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"type":  recoveryVerification,
-		"token": u.RecoveryToken,
-	}))
-
 	// Setup request
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", "signup", u.RecoveryToken)
+	req := httptest.NewRequest(http.MethodGet, reqURL, nil)
 
 	// Setup response recorder
 	w := httptest.NewRecorder()
@@ -420,6 +440,69 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			requestredirectURL:  "http://localhost:3000/docs",
 			expectedredirectURL: "https://someapp-something.codemagic.app/#/",
 		},
+		{
+			desc:                "same wildcard site url and redirect url in allow list",
+			siteURL:             "http://sub.test.dev:3000/#/",
+			uriAllowList:        []string{"http://*.test.dev:3000"},
+			requestredirectURL:  "http://sub.test.dev:3000/#/",
+			expectedredirectURL: "http://sub.test.dev:3000/#/",
+		},
+		{
+			desc:                "different wildcard site url and redirect url in allow list",
+			siteURL:             "http://sub.test.dev/#/",
+			uriAllowList:        []string{"http://*.other.dev:3000"},
+			requestredirectURL:  "http://sub.other.dev:3000",
+			expectedredirectURL: "http://sub.other.dev:3000",
+		},
+		{
+			desc:                "different wildcard site url and redirect url not in allow list",
+			siteURL:             "http://test.dev:3000/#/",
+			uriAllowList:        []string{"http://*.allowed.dev:3000"},
+			requestredirectURL:  "http://sub.test.dev:3000/#/",
+			expectedredirectURL: "http://test.dev:3000/#/",
+		},
+		{
+			desc:                "exact mobile deep link redirect url in allow list",
+			siteURL:             "http://test.dev:3000/#/",
+			uriAllowList:        []string{"twitter://timeline"},
+			requestredirectURL:  "twitter://timeline",
+			expectedredirectURL: "twitter://timeline",
+		},
+		{
+			desc:                "wildcard mobile deep link redirect url in allow list",
+			siteURL:             "http://test.dev:3000/#/",
+			uriAllowList:        []string{"com.mobile.*"},
+			requestredirectURL:  "com.mobile.app",
+			expectedredirectURL: "http://test.dev:3000/#/",
+		},
+		{
+			desc:                "redirect respects . separator",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"http://*.*.dev:3000"},
+			requestredirectURL:  "http://foo.bar.dev:3000",
+			expectedredirectURL: "http://foo.bar.dev:3000",
+		},
+		{
+			desc:                "redirect does not respect . separator",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"http://*.dev:3000"},
+			requestredirectURL:  "http://foo.bar.dev:3000",
+			expectedredirectURL: "http://localhost:3000",
+		},
+		{
+			desc:                "redirect respects / separator in url subdirectory",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"http://test.dev:3000/*/*"},
+			requestredirectURL:  "http://test.dev:3000/bar/foo",
+			expectedredirectURL: "http://test.dev:3000/bar/foo",
+		},
+		{
+			desc:                "redirect does not respect / separator in url subdirectory",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"http://test.dev:3000/*"},
+			requestredirectURL:  "http://test.dev:3000/bar/foo",
+			expectedredirectURL: "http://localhost:3000",
+		},
 	}
 
 	for _, tC := range testCases {
@@ -428,6 +511,7 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			ts.Config.SiteURL = tC.siteURL
 			redirectURL := tC.requestredirectURL
 			ts.Config.URIAllowList = tC.uriAllowList
+			ts.Config.ApplyDefaults()
 
 			// set verify token to user as it actual do in magic link method
 			u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
@@ -488,14 +572,6 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 			},
 		},
 		{
-			"Verify banned phone user on sms",
-			&VerifyParams{
-				Type:  "sms",
-				Token: u.ConfirmationToken,
-				Phone: u.GetPhone(),
-			},
-		},
-		{
 			"Verify banned user on recover",
 			&VerifyParams{
 				Type:  "recovery",
@@ -523,16 +599,20 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.payload))
 
-			req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+			requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", c.payload.Type, c.payload.Token)
+			req := httptest.NewRequest(http.MethodGet, requestUrl, &buffer)
 			req.Header.Set("Content-Type", "application/json")
 
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
 			assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
 
-			url, err := w.Result().Location()
+			rurl, err := url.Parse(w.Header().Get("Location"))
+			require.NoError(ts.T(), err, "redirect url parse failed")
+
+			f, err := url.ParseQuery(rurl.Fragment)
 			require.NoError(ts.T(), err)
-			assert.Equal(ts.T(), "error=unauthorized_client&error_code=401&error_description=Error+confirming+user", url.Fragment)
+			assert.Equal(ts.T(), "401", f.Get("error_code"))
 		})
 	}
 }
@@ -540,6 +620,9 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
+
+	u.PhoneChange = "1234567890"
+	require.NoError(ts.T(), ts.API.db.Update(u))
 
 	type expected struct {
 		code int
@@ -593,9 +676,17 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 				"token": "123456",
 				"email": u.GetEmail(),
 			},
-			expected: expected{
-				code: http.StatusSeeOther,
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Valid Phone Change OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  phoneChangeVerification,
+				"token": "123456",
+				"phone": u.PhoneChange,
 			},
+			expected: expectedResponse,
 		},
 	}
 
@@ -605,9 +696,11 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			u.ConfirmationSentAt = &c.sentTime
 			u.RecoverySentAt = &c.sentTime
 			u.EmailChangeSentAt = &c.sentTime
-			u.ConfirmationToken, _ = c.body["token"].(string)
-			u.RecoveryToken, _ = c.body["token"].(string)
-			u.EmailChangeTokenCurrent, _ = c.body["token"].(string)
+			u.PhoneChangeSentAt = &c.sentTime
+			u.ConfirmationToken = c.body["token"].(string)
+			u.RecoveryToken = c.body["token"].(string)
+			u.EmailChangeTokenCurrent = c.body["token"].(string)
+			u.PhoneChangeToken = c.body["token"].(string)
 			require.NoError(ts.T(), ts.API.db.Update(u))
 
 			var buffer bytes.Buffer
