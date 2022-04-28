@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/netlify/gotrue/conf"
@@ -56,9 +57,11 @@ func (g orcidProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 }
 
 func (g orcidProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
+	orcID := fmt.Sprintf("%v", tok.Extra("orcid"))
+
 	// API for reading public user information
 	// Docs: https://github.com/ORCID/orcid-model/tree/master/src/main/resources/record_3.0
-	apiURL := defaultOrcidPublicApi + "/v3.0/" + g.Config.ClientID + "/record"
+	apiURL := defaultOrcidPublicApi + "/v3.0/" + orcID + "/record"
 
 	apiResponse := struct {
 		Emails struct {
@@ -80,7 +83,6 @@ func (g orcidProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 			LastName struct {
 				Value string `json:"value"`
 			} `json:"family-name"`
-			OrcID string `json:"path"`
 		} `json:"name"`
 	}{}
 	if err := makeRequest(ctx, tok, g.Config, apiURL, &apiResponse); err != nil {
@@ -106,7 +108,7 @@ func (g orcidProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 		})
 	}
 	u := orcidUser{
-		ID:                  apiResponse.Name.OrcID,
+		ID:                  orcID,
 		FirstName:           apiResponse.Name.FirstName.Value,
 		LastName:            apiResponse.Name.LastName.Value,
 		LocationCountryCode: strings.Join(countryCodes, ","),
