@@ -38,6 +38,7 @@ func TestSettings_DefaultProviders(t *testing.T) {
 	require.True(t, p.Google)
 	require.True(t, p.Keycloak)
 	require.True(t, p.Linkedin)
+	require.True(t, p.Orcid)
 	require.True(t, p.GitHub)
 	require.True(t, p.GitLab)
 	require.True(t, p.SAML)
