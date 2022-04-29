@@ -8,11 +8,6 @@ import (
 	jwt "github.com/golang-jwt/jwt"
 )
 
-const (
-	orcidUser           string = `{"data":[{"id":"twitchTestId","login":"Orcid user","display_name":"Orcid user","type":"","broadcaster_type":"","description":"","profile_image_url":"https://s.gravatar.com/avatar/23463b99b62a72f26ed677cc556c44e8","offline_image_url":"","email":"twitch@example.com"}]}`
-	orcidUserWrongEmail string = `{"data":[{"id":"twitchTestId","login":"Orcid user","display_name":"Orcid user","type":"","broadcaster_type":"","description":"","profile_image_url":"https://s.gravatar.com/avatar/23463b99b62a72f26ed677cc556c44e8","offline_image_url":"","email":"other@example.com"}]}`
-)
-
 func (ts *ExternalTestSuite) TestSignupExternalOrcid() {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=orcid", nil)
 	w := httptest.NewRecorder()
@@ -25,7 +20,6 @@ func (ts *ExternalTestSuite) TestSignupExternalOrcid() {
 	ts.Equal(ts.Config.External.Orcid.ClientID, q.Get("client_id"))
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("/authenticate", q.Get("scope"))
-	ts.NotEqual("", q.Get("orcid"))
 
 	claims := ExternalProviderClaims{}
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
