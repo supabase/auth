@@ -22,7 +22,7 @@ type discordProvider struct {
 
 type discordUser struct {
 	Avatar        string `json:"avatar"`
-	Discriminator string `json:"discriminator,string"`
+	Discriminator string `json:"discriminator"`
 	Email         string `json:"email"`
 	ID            string `json:"id"`
 	Name          string `json:"username"`
