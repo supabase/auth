@@ -22,6 +22,7 @@ type ProviderSettings struct {
 	Email     bool `json:"email"`
 	Phone     bool `json:"phone"`
 	SAML      bool `json:"saml"`
+	Yandex    bool `json:"yandex"`
 	Zoom      bool `json:"zoom"`
 }
 
@@ -61,6 +62,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			WorkOS:    config.External.WorkOS.Enabled,
 			Email:     config.External.Email.Enabled,
 			Phone:     config.External.Phone.Enabled,
+			Yandex:    config.External.Yandex.Enabled,
 			SAML:      config.External.Saml.Enabled,
 			Zoom:      config.External.Zoom.Enabled,
 		},
