@@ -150,56 +150,69 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenGrantFailure() {
 	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
 }
 
-func (ts *TokenTestSuite) TestTokenRefreshReuseDetection() {
+func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
 	u, err := models.NewUser(ts.instanceID, "foo@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	t := time.Now()
 	u.EmailConfirmedAt = &t
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving foo user")
-
-	ts.Config.Security.RefreshTokenRotationEnabled = true
-	ts.Config.Security.RefreshTokenReuseInterval = 0
 	oldRefreshToken, err := models.GrantAuthenticatedUser(ts.API.db, u)
 	require.NoError(ts.T(), err)
-	_, err = models.GrantRefreshTokenSwap(ts.API.db, u, oldRefreshToken)
+	newRefreshToken, err := models.GrantRefreshTokenSwap(ts.API.db, u, oldRefreshToken)
 	require.NoError(ts.T(), err)
 
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"refresh_token": oldRefreshToken.Token,
-	}))
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+	cases := []struct {
+		desc                        string
+		refreshTokenRotationEnabled bool
+		reuseInterval               int
+		refreshToken                string
+		expectedCode                int
+		expectedBody                map[string]interface{}
+	}{
+		{
+			"Reuse detection enabled, 30s reuse interval",
+			true,
+			30,
+			oldRefreshToken.Token,
+			http.StatusOK,
+			map[string]interface{}{
+				"refresh_token": newRefreshToken.Token,
+			},
+		},
+		{
+			"Reuse detection enabled, no reuse interval",
+			true,
+			0,
+			oldRefreshToken.Token,
+			http.StatusBadRequest,
+			map[string]interface{}{
+				"error":             "invalid_grant",
+				"error_description": "Invalid Refresh Token",
+			},
+		},
+	}
 
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
-}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			ts.Config.Security.RefreshTokenRotationEnabled = c.refreshTokenRotationEnabled
+			ts.Config.Security.RefreshTokenReuseInterval = c.reuseInterval
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"refresh_token": c.refreshToken,
+			}))
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), c.expectedCode, w.Code)
 
-func (ts *TokenTestSuite) TestTokenRefreshReuseInterval() {
-	u, err := models.NewUser(ts.instanceID, "foo@example.com", "password", ts.Config.JWT.Aud, nil)
-	require.NoError(ts.T(), err, "Error creating test user model")
-	t := time.Now()
-	u.EmailConfirmedAt = &t
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving foo user")
-
-	ts.Config.Security.RefreshTokenRotationEnabled = true
-	ts.Config.Security.RefreshTokenReuseInterval = 30
-	oldRefreshToken, err := models.GrantAuthenticatedUser(ts.API.db, u)
-	require.NoError(ts.T(), err)
-	_, err = models.GrantRefreshTokenSwap(ts.API.db, u, oldRefreshToken)
-	require.NoError(ts.T(), err)
-
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"refresh_token": oldRefreshToken.Token,
-	}))
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
-	req.Header.Set("Content-Type", "application/json")
-
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusOK, w.Code)
+			data := make(map[string]interface{})
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			for k, v := range c.expectedBody {
+				require.Equal(ts.T(), v, data[k])
+			}
+		})
+	}
 }
 
 func (ts *TokenTestSuite) createBannedUser() *models.User {
