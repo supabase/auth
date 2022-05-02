@@ -176,6 +176,32 @@ func (ts *TokenTestSuite) TestTokenRefreshReuseDetection() {
 	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
 }
 
+func (ts *TokenTestSuite) TestTokenRefreshReuseInterval() {
+	u, err := models.NewUser(ts.instanceID, "foo@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	t := time.Now()
+	u.EmailConfirmedAt = &t
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving foo user")
+
+	ts.Config.Security.RefreshTokenRotationEnabled = true
+	ts.Config.Security.RefreshTokenReuseInterval = 30
+	oldRefreshToken, err := models.GrantAuthenticatedUser(ts.API.db, u)
+	require.NoError(ts.T(), err)
+	_, err = models.GrantRefreshTokenSwap(ts.API.db, u, oldRefreshToken)
+	require.NoError(ts.T(), err)
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"refresh_token": oldRefreshToken.Token,
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
 func (ts *TokenTestSuite) createBannedUser() *models.User {
 	u, err := models.NewUser(ts.instanceID, "banned@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
