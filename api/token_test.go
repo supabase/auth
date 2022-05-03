@@ -156,9 +156,11 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
 	t := time.Now()
 	u.EmailConfirmedAt = &t
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving foo user")
-	oldRefreshToken, err := models.GrantAuthenticatedUser(ts.API.db, u)
+	first, err := models.GrantAuthenticatedUser(ts.API.db, u)
 	require.NoError(ts.T(), err)
-	newRefreshToken, err := models.GrantRefreshTokenSwap(ts.API.db, u, oldRefreshToken)
+	second, err := models.GrantRefreshTokenSwap(ts.API.db, u, first)
+	require.NoError(ts.T(), err)
+	third, err := models.GrantRefreshTokenSwap(ts.API.db, u, second)
 	require.NoError(ts.T(), err)
 
 	cases := []struct {
@@ -170,20 +172,42 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
 		expectedBody                map[string]interface{}
 	}{
 		{
-			"Reuse detection enabled, 30s reuse interval",
+			"Valid refresh within reuse interval",
 			true,
 			30,
-			oldRefreshToken.Token,
+			second.Token,
 			http.StatusOK,
 			map[string]interface{}{
-				"refresh_token": newRefreshToken.Token,
+				"refresh_token": third.Token,
 			},
 		},
 		{
-			"Reuse detection enabled, no reuse interval",
+			"Invalid refresh, first token is not the previous revoked token",
 			true,
 			0,
-			oldRefreshToken.Token,
+			first.Token,
+			http.StatusBadRequest,
+			map[string]interface{}{
+				"error":             "invalid_grant",
+				"error_description": "Invalid Refresh Token",
+			},
+		},
+		{
+			"Invalid refresh, revoked third token",
+			true,
+			0,
+			second.Token,
+			http.StatusBadRequest,
+			map[string]interface{}{
+				"error":             "invalid_grant",
+				"error_description": "Invalid Refresh Token",
+			},
+		},
+		{
+			"Invalid refresh, third token revoked by previous case",
+			true,
+			30,
+			third.Token,
 			http.StatusBadRequest,
 			map[string]interface{}{
 				"error":             "invalid_grant",
