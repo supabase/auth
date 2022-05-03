@@ -85,7 +85,7 @@ func GetCurrentValidToken(tx *storage.Connection, token *RefreshToken) (*Refresh
 	`, token.Token).First(refreshToken)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, errors.Wrap(err, "no valid refresh token found")
+			return nil, RefreshTokenNotFoundError{}
 		}
 		return nil, err
 	}

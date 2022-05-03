@@ -290,28 +290,30 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 	var newToken *models.RefreshToken
 	if token.Revoked {
+		a.clearCookieTokens(config, w)
 		err = a.db.Transaction(func(tx *storage.Connection) error {
 			validToken, terr := models.GetCurrentValidToken(tx, token)
 			if terr != nil {
+				if errors.Is(terr, models.RefreshTokenNotFoundError{}) {
+					// revoked token has no descendants
+					return nil
+				}
 				return terr
 			}
 			// check if token is the last previous revoked token
 			if validToken.Parent == storage.NullString(token.Token) {
 				refreshTokenReuseWindow := token.UpdatedAt.Add(time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
 				if time.Now().Before(refreshTokenReuseWindow) {
-					// if token is the last revoked token and is within the reuse interval
-					// just return the current valid refresh token
 					newToken = validToken
 				}
 			}
 			return nil
 		})
 		if err != nil {
-			return internalServerError(err.Error())
+			return internalServerError("Error validating reuse interval").WithInternalError(err)
 		}
 
 		if newToken == nil {
-			a.clearCookieTokens(config, w)
 			if config.Security.RefreshTokenRotationEnabled {
 				// Revoke all tokens in token family
 				err = a.db.Transaction(func(tx *storage.Connection) error {
