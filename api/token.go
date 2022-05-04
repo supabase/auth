@@ -273,21 +273,6 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return oauthError("invalid_grant", "Invalid Refresh Token")
 	}
 
-	if !(config.External.Email.Enabled && config.External.Phone.Enabled) {
-		providers, err := models.FindProvidersByUser(a.db, user)
-		if err != nil {
-			return internalServerError(err.Error())
-		}
-		for _, provider := range providers {
-			if provider == "email" && !config.External.Email.Enabled {
-				return badRequestError("Email logins are disabled")
-			}
-			if provider == "phone" && !config.External.Phone.Enabled {
-				return badRequestError("Phone logins are disabled")
-			}
-		}
-	}
-
 	var newToken *models.RefreshToken
 	if token.Revoked {
 		a.clearCookieTokens(config, w)
