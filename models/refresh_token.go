@@ -72,17 +72,10 @@ func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
 	return nil
 }
 
-// GetCurrentValidToken finds the most recent unrevoked token descending from the token provided.
-func GetCurrentValidToken(tx *storage.Connection, token *RefreshToken) (*RefreshToken, error) {
-	tablename := (&pop.Model{Value: RefreshToken{}}).TableName()
+// GetValidChildToken returns the child token of the token provided if the child is not revoked.
+func GetValidChildToken(tx *storage.Connection, token *RefreshToken) (*RefreshToken, error) {
 	refreshToken := &RefreshToken{}
-	err := tx.RawQuery(`with recursive token_family as (
-		select id, user_id, token, revoked, parent from `+tablename+` where parent = ?
-		union
-		select r.id, r.user_id, r.token, r.revoked, r.parent from `+tablename+` r inner join token_family t on t.token = r.parent
-	)
-	select * from token_family where id = (select max(id) from token_family)
-	`, token.Token).First(refreshToken)
+	err := tx.Q().Where("parent = ? and revoked = false", token.Token).First(refreshToken)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, RefreshTokenNotFoundError{}

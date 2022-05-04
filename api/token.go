@@ -292,7 +292,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	if token.Revoked {
 		a.clearCookieTokens(config, w)
 		err = a.db.Transaction(func(tx *storage.Connection) error {
-			validToken, terr := models.GetCurrentValidToken(tx, token)
+			validToken, terr := models.GetValidChildToken(tx, token)
 			if terr != nil {
 				if errors.Is(terr, models.RefreshTokenNotFoundError{}) {
 					// revoked token has no descendants
