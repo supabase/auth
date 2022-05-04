@@ -57,7 +57,7 @@ func (ts *TokenTestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating refresh token")
 }
 
-func (ts *TokenTestSuite) TestRateLimitToken() {
+func (ts *TokenTestSuite) TestRateLimitTokenRefresh() {
 	var buffer bytes.Buffer
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/token", &buffer)
 	req.Header.Set("Content-Type", "application/json")
