@@ -7,19 +7,30 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile.dev
-    # Not sure why ports aren't working. Using host as a hack
-    # ports:
-    #   - "9999:9999"
-    network_mode: "host"
+    ports:
+      - "9999:9999"
     environment:
-      - GOTRUE_DB_MIGRATIONS_PATH=/go/src/github.com/netlify/gotrue/migrations
-    volumes:
-      - ./:/go/src/github.com/netlify/gotrue
-    command: CompileDaemon --build="make build" --directory=/go/src/github.com/netlify/gotrue --recursive=true -pattern=(.+\.go|.+\.env) -exclude=gotrue -exclude=gotrue-arm64 --command=/go/src/github.com/netlify/gotrue/gotrue
+      # Update the docker environment accordingly based on example.env
+      GOTRUE_SITE_URL: ${SITE_URL}
+      GOTRUE_JWT_SECRET: ${JWT_SECRET}
+      GOTRUE_DB_MIGRATIONS_PATH: /go/src/github.com/netlify/gotrue/migrations
+      GOTRUE_DB_DRIVER: postgres
+      DATABASE_URL: postgres://supabase_auth_admin:root@postgres:5432/postgres
+      GOTRUE_API_HOST: 0.0.0.0
+      PORT: 9999
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_SMS_AUTOCONFIRM: "true"
+      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_REAUTHENTICATION: /auth/v1/verify
+    command: ./gotrue
   postgres:
     image: postgres:13
     container_name: postgres
-    network_mode: "host"
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ${PWD}/hack/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql

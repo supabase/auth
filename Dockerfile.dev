@@ -9,14 +9,11 @@ WORKDIR /go/src/github.com/netlify/gotrue
 
 # Pulling dependencies
 COPY ./Makefile ./go.* ./
-
-# Production dependencies
 RUN make deps
 
-# Development dependences
-RUN go get -u github.com/Thatooine/go-test-html-report
-RUN go get github.com/githubnemo/CompileDaemon
-RUN go install github.com/githubnemo/CompileDaemon
+# Building stuff
+COPY . /go/src/github.com/netlify/gotrue
+RUN make build
 
 RUN adduser -D -u 1000 netlify
 USER netlify

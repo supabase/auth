@@ -1,3 +1,4 @@
 /hack/
 /vendor/
 /www/
+.env
