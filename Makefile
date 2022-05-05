@@ -36,11 +36,14 @@ vet: # Vet the code
 	go vet $(CHECK_FILES)
 
 dev: ## Run the development containers
-	# Start postgres first and apply migrations
+	# Start postgres then gotrue
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
-	docker-compose -f $(DEV_DOCKER_COMPOSE) run gotrue sh -c "make migrate_dev"
-	# Actually start the containers for dev
-	docker-compose -f $(DEV_DOCKER_COMPOSE) up
+	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d gotrue
+	docker-compose -f $(DEV_DOCKER_COMPOSE) logs -f
+
+down: ## Shutdown the development containers
+	# Start postgres first and apply migrations
+	docker-compose -f $(DEV_DOCKER_COMPOSE) down
 
 docker-test: ## Run the tests using the development containers
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
