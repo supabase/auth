@@ -273,41 +273,50 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return oauthError("invalid_grant", "Invalid Refresh Token")
 	}
 
-	if !(config.External.Email.Enabled && config.External.Phone.Enabled) {
-		providers, err := models.FindProvidersByUser(a.db, user)
-		if err != nil {
-			return internalServerError(err.Error())
-		}
-		for _, provider := range providers {
-			if provider == "email" && !config.External.Email.Enabled {
-				return badRequestError("Email logins are disabled")
-			}
-			if provider == "phone" && !config.External.Phone.Enabled {
-				return badRequestError("Phone logins are disabled")
-			}
-		}
-	}
-
+	var newToken *models.RefreshToken
 	if token.Revoked {
 		a.clearCookieTokens(config, w)
-		if config.Security.RefreshTokenRotationEnabled {
-			// Revoke all tokens in token family
-			err = a.db.Transaction(func(tx *storage.Connection) error {
-				var terr error
-				if terr = models.RevokeTokenFamily(tx, token); terr != nil {
-					return terr
+		err = a.db.Transaction(func(tx *storage.Connection) error {
+			validToken, terr := models.GetValidChildToken(tx, token)
+			if terr != nil {
+				if errors.Is(terr, models.RefreshTokenNotFoundError{}) {
+					// revoked token has no descendants
+					return nil
 				}
-				return nil
-			})
-			if err != nil {
-				return internalServerError(err.Error())
+				return terr
 			}
+			// check if token is the last previous revoked token
+			if validToken.Parent == storage.NullString(token.Token) {
+				refreshTokenReuseWindow := token.UpdatedAt.Add(time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
+				if time.Now().Before(refreshTokenReuseWindow) {
+					newToken = validToken
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return internalServerError("Error validating reuse interval").WithInternalError(err)
 		}
-		return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", r)
+
+		if newToken == nil {
+			if config.Security.RefreshTokenRotationEnabled {
+				// Revoke all tokens in token family
+				err = a.db.Transaction(func(tx *storage.Connection) error {
+					var terr error
+					if terr = models.RevokeTokenFamily(tx, token); terr != nil {
+						return terr
+					}
+					return nil
+				})
+				if err != nil {
+					return internalServerError(err.Error())
+				}
+			}
+			return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", r)
+		}
 	}
 
 	var tokenString string
-	var newToken *models.RefreshToken
 	var newTokenResponse *AccessTokenResponse
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -316,9 +325,11 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return terr
 		}
 
-		newToken, terr = models.GrantRefreshTokenSwap(tx, user, token)
-		if terr != nil {
-			return internalServerError(terr.Error())
+		if newToken == nil {
+			newToken, terr = models.GrantRefreshTokenSwap(tx, user, token)
+			if terr != nil {
+				return internalServerError(terr.Error())
+			}
 		}
 
 		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)

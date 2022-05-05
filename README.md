@@ -66,6 +66,15 @@ Rate limit the number of emails sent per hr on the following endpoints: `/signup
 
 Minimum password length, defaults to 6.
 
+`GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` - `bool`
+
+If refresh token rotation is enabled, gotrue will automatically detect malicious attempts to reuse a revoked refresh token. When a malicious attempt is detected, gotrue immediately revokes all tokens that descended from the offending token.
+
+`GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL` - `string`
+
+This setting is only applicable if `GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` is enabled. The reuse interval for a refresh token allows for exchanging the refresh token multiple times during the interval to support concurrency or offline issues. During the reuse interval, gotrue will not consider using a revoked token as a malicious attempt and will simply return the child refresh token. 
+
+Only the previous revoked token can be reused. Using an old refresh token way before the current valid refresh token will trigger the reuse detection. 
 ### API
 
 ```properties
