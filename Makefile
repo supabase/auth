@@ -17,9 +17,6 @@ deps: ## Install dependencies.
 	@go install golang.org/x/lint/golint@latest
 	@go mod download
 
-image: ## Build the production Docker image.
-	docker build .
-
 lint: ## Lint the code.
 	golint $(CHECK_FILES)
 
