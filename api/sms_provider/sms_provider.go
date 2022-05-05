@@ -2,9 +2,12 @@ package sms_provider
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/netlify/gotrue/conf"
 )
+
+const defaultTimeout = time.Second * 10
 
 type SmsProvider interface {
 	SendSms(phone, message string) error

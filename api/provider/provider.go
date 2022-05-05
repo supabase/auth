@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"golang.org/x/oauth2"
 )
+
+const defaultTimeout = time.Second * 10
 
 type Claims struct {
 	// Reserved claims
@@ -103,6 +106,7 @@ func chooseHost(base, defaultHost string) string {
 
 func makeRequest(ctx context.Context, tok *oauth2.Token, g *oauth2.Config, url string, dst interface{}) error {
 	client := g.Client(ctx, tok)
+	client.Timeout = defaultTimeout
 	res, err := client.Get(url)
 	if err != nil {
 		return err
