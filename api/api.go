@@ -124,7 +124,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		r.With(api.limitHandler(
 			// Allow requests at the specified rate per 5 minutes.
-			tollbooth.NewLimiter(api.config.RateLimitToken/(60*5), &limiter.ExpirableOptions{
+			tollbooth.NewLimiter(api.config.RateLimitTokenRefresh/(60*5), &limiter.ExpirableOptions{
 				DefaultExpirationTTL: time.Hour,
 			}).SetBurst(30),
 		)).Post("/token", api.Token)
