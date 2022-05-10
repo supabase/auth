@@ -5,13 +5,26 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"golang.org/x/oauth2"
 )
 
-const defaultTimeout = time.Second * 10
+var defaultTimeout time.Duration = time.Second * 10
+
+func init() {
+	timeoutStr := os.Getenv("GOTRUE_INTERNAL_HTTP_TIMEOUT")
+	if timeoutStr != "" {
+		if timeout, err := time.ParseDuration(timeoutStr); err != nil {
+			log.Fatalf("error loading GOTRUE_INTERNAL_HTTP_TIMEOUT: %v", err.Error())
+		} else if timeout != 0 {
+			defaultTimeout = timeout
+		}
+	}
+}
 
 type Claims struct {
 	// Reserved claims
