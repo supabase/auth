@@ -16,7 +16,15 @@ Create a `.env` file to store your own custom env vars. See [`example.env`](exam
 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`"
 GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`" -o gotrue-arm64
 ```
-3. Execute the gotrue binary: `./gotrue` (if you're on x86) `./gotrue-arm64` (if you're on arm)
+3. Execute the gotrue binary: `./gotrue`
+
+### If you have docker installed...
+Create a `.env.docker` file to store your own custom env vars. See [`example.docker.env`](example.docker.env)
+
+1. `make build`
+2. `make dev`
+3. `docker ps` should show 2 docker containers (`gotrue_postgresql` and `gotrue_gotrue`)
+4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that gotrue is running. 
 
 ## Configuration
 

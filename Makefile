@@ -17,9 +17,6 @@ deps: ## Install dependencies.
 	@go install golang.org/x/lint/golint@latest
 	@go mod download
 
-image: ## Build the production Docker image.
-	docker build .
-
 lint: ## Lint the code.
 	golint $(CHECK_FILES)
 
@@ -36,11 +33,11 @@ vet: # Vet the code
 	go vet $(CHECK_FILES)
 
 dev: ## Run the development containers
-	# Start postgres first and apply migrations
-	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
-	docker-compose -f $(DEV_DOCKER_COMPOSE) run gotrue sh -c "make migrate_dev"
-	# Actually start the containers for dev
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up
+
+down: ## Shutdown the development containers
+	# Start postgres first and apply migrations
+	docker-compose -f $(DEV_DOCKER_COMPOSE) down
 
 docker-test: ## Run the tests using the development containers
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres

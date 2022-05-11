@@ -7,19 +7,18 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile.dev
-    # Not sure why ports aren't working. Using host as a hack
-    # ports:
-    #   - "9999:9999"
-    network_mode: "host"
+    ports:
+      - '9999:9999'
     environment:
       - GOTRUE_DB_MIGRATIONS_PATH=/go/src/github.com/netlify/gotrue/migrations
     volumes:
       - ./:/go/src/github.com/netlify/gotrue
-    command: CompileDaemon --build="make build" --directory=/go/src/github.com/netlify/gotrue --recursive=true -pattern=(.+\.go|.+\.env) -exclude=gotrue -exclude=gotrue-arm64 --command=/go/src/github.com/netlify/gotrue/gotrue
+    command: CompileDaemon --build="make build" --directory=/go/src/github.com/netlify/gotrue --recursive=true -pattern=(.+\.go|.+\.env) -exclude=gotrue -exclude=gotrue-arm64 -exclude=.env --command="/go/src/github.com/netlify/gotrue/gotrue -c=.env.docker"
   postgres:
     image: postgres:13
     container_name: postgres
-    network_mode: "host"
+    ports:
+      - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ${PWD}/hack/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql

@@ -209,7 +209,7 @@ type Configuration struct {
 func loadEnvironment(filename string) error {
 	var err error
 	if filename != "" {
-		err = godotenv.Load(filename)
+		err = godotenv.Overload(filename)
 	} else {
 		err = godotenv.Load()
 		// handle if .env file does not exist, this is OK

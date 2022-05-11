@@ -14,9 +14,5 @@ COPY ./Makefile ./go.* ./
 RUN make deps
 
 # Development dependences
-RUN go get -u github.com/Thatooine/go-test-html-report
 RUN go get github.com/githubnemo/CompileDaemon
 RUN go install github.com/githubnemo/CompileDaemon
-
-RUN adduser -D -u 1000 netlify
-USER netlify
