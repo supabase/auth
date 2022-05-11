@@ -73,6 +73,10 @@ func getExcludedColumns(model interface{}, includeColumns ...string) ([]string, 
 
 	xcols := make([]string, len(cols.Cols))
 	for n := range cols.Cols {
+		// gobuffalo updates the updated_at column automatically
+		if n == "updated_at" {
+			continue
+		}
 		xcols = append(xcols, n)
 	}
 	return xcols, nil
