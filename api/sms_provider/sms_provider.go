@@ -2,9 +2,25 @@ package sms_provider
 
 import (
 	"fmt"
+	"log"
+	"os"
+	"time"
 
 	"github.com/netlify/gotrue/conf"
 )
+
+var defaultTimeout time.Duration = time.Second * 10
+
+func init() {
+	timeoutStr := os.Getenv("GOTRUE_INTERNAL_HTTP_TIMEOUT")
+	if timeoutStr != "" {
+		if timeout, err := time.ParseDuration(timeoutStr); err != nil {
+			log.Fatalf("error loading GOTRUE_INTERNAL_HTTP_TIMEOUT: %v", err.Error())
+		} else if timeout != 0 {
+			defaultTimeout = timeout
+		}
+	}
+}
 
 type SmsProvider interface {
 	SendSms(phone, message string) error

@@ -52,7 +52,7 @@ func (t *TextlocalProvider) SendSms(phone string, message string) error {
 		"numbers": {phone},
 	}
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: defaultTimeout}
 	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
 	if err != nil {
 		return err

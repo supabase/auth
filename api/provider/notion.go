@@ -77,7 +77,7 @@ func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	req.Header.Set("Notion-Version", notionApiVersion)
 	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: defaultTimeout}
 	resp, err := client.Do(req)
 
 	if err != nil {
