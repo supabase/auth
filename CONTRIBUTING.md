@@ -13,7 +13,7 @@ GoTrue has a development container setup that makes it easy to get started contr
 
 If you would like to run GoTrue locally or learn more about what these containers are doing for you, continue reading the [Setup and Tooling](#setup-and-tooling) section below. Otherwise, you can skip ahead to the [How To Verify that GoTrue is Available](#how-to-verify-that-gotrue-is-available) section to learn about working with and developing GoTrue.
 
-Before using the containers, you will need to make sure an `.env` file exists by making a copy of `example.env` and configuring it for your needs. A required change for the containers is that the `DATABASE_URL` be changed to `postgres://supabase_auth_admin:root@localhost:5432/postgres` where the address of the Postgres container is changed to `localhost`.
+Before using the containers, you will need to make sure an `.env.docker` file exists by making a copy of `example.docker.env` and configuring it for your needs. The set of env vars in `example.docker.env` only contain the necessary env vars for gotrue to start in a docker environment. For the full list of env vars, please refer to `example.env` and copy over the necessary ones into your `.env.docker` file.
 
 The following are some basic commands. A full and up to date list of commands can be found in the project's `Makefile` or by running `make help`.
 
