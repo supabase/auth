@@ -53,7 +53,6 @@ func NewBoxyHQSAMLProvider(ext conf.OAuthProviderConfiguration, scopes string) (
 			RedirectURL: ext.RedirectURI,
 		},
 		APIPath: apiPath,
-		// AuthCodeOptions: authCodeOptions,
 	}, nil
 }
 
