@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"os"
+	"log"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -41,7 +43,17 @@ const (
 var Client *http.Client
 
 func init() {
-	Client = &http.Client{Timeout: context.Background() * time.Second}
+var defaultTimeout time.Duration = time.Second * 10
+	timeoutStr := os.Getenv("GOTRUE_SECURITY_CAPTCHA_TIMEOUT")
+	if timeoutStr != "" {
+		if timeout, err := time.ParseDuration(timeoutStr); err != nil {
+			log.Fatalf("error loading GOTRUE_SECURITY_CAPTCHA_TIMEOUT: %v", err.Error())
+		} else if timeout != 0 {
+			defaultTimeout = timeout
+		}
+	}
+
+	Client = &http.Client{Timeout: defaultTimeout}
 }
 
 func VerifyRequest(r *http.Request, secretKey string) (VerificationResult, error) {
