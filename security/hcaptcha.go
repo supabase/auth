@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
-	"os"
-	"log"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -43,7 +43,7 @@ const (
 var Client *http.Client
 
 func init() {
-var defaultTimeout time.Duration = time.Second * 10
+	var defaultTimeout time.Duration = time.Second * 10
 	timeoutStr := os.Getenv("GOTRUE_SECURITY_CAPTCHA_TIMEOUT")
 	if timeoutStr != "" {
 		if timeout, err := time.ParseDuration(timeoutStr); err != nil {
