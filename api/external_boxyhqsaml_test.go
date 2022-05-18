@@ -15,7 +15,7 @@ const (
 	boxyhqsamlUserNoEmail    string = `{"id":"test_prof_boxyhqsaml","first_name":"John","last_name":"Doe","connection_id":"test_conn_1","organization_id":"test_org_1","connection_type":"test","idp_id":"test_idp_1","object": "profile","raw_attributes": {}}`
 )
 
-func (ts *ExternalTestSuite) TestSignupExternalBoxyhqSamlWithScope() {
+func (ts *ExternalTestSuite) TestSignupExternalBoxyhqSaml() {
 	scopes := url.Values{}
 	scopes.Add("tenant", "acme.com")
 	scopes.Add("product", "crm")
@@ -46,18 +46,19 @@ func (ts *ExternalTestSuite) TestSignupExternalBoxyhqSamlWithScope() {
 func BoxyHQSAMLTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int, code string, user string) *httptest.Server {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/sso/token":
-			// WorkOS returns the user data along with the token.
+		case "/api/oauth/token":
 			*tokenCount++
-			*userCount++
 			ts.Equal(code, r.FormValue("code"))
 			ts.Equal("authorization_code", r.FormValue("grant_type"))
 			ts.Equal(ts.Config.External.BoxyHQSAML.RedirectURI, r.FormValue("redirect_uri"))
 
 			w.Header().Add("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"access_token":"boxyhqsaml_token","expires_in":100000,"profile":%s}`, user)
+			fmt.Fprint(w, `{"access_token":"boxyhqsaml_token","expires_in":300}`)
+		case "/api/oauth/userinfo":
+			*userCount++
+			w.Header().Add("Content-Type", "application/json")
+			fmt.Fprint(w, user)
 		default:
-			fmt.Printf("%s", r.URL.Path)
 			w.WriteHeader(500)
 			ts.Fail("unknown boxyhqsaml oauth call %s", r.URL.Path)
 		}
@@ -66,4 +67,105 @@ func BoxyHQSAMLTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount
 	ts.Config.External.BoxyHQSAML.URL = server.URL
 
 	return server
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalBoxyHQSAML_AuthorizationCode() {
+	ts.Config.DisableSignup = false
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	server := BoxyHQSAMLTestSignupSetup(ts, &tokenCount, &userCount, code, boxyhqsamlUser)
+	defer server.Close()
+
+	u := performAuthorization(ts, "boxyhqsaml", code, "")
+
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "boxyhqsaml@example.com", "BoxyHQSAML Test", "boxyhqsamlTestId", "")
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalBoxyHQSAMLDisableSignupErrorWhenNoUser() {
+	ts.Config.DisableSignup = true
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	server := BoxyHQSAMLTestSignupSetup(ts, &tokenCount, &userCount, code, boxyhqsamlUser)
+	defer server.Close()
+
+	u := performAuthorization(ts, "boxyhqsaml", code, "")
+
+	assertAuthorizationFailure(ts, u, "Signups not allowed for this instance", "access_denied", "boxyhqsaml@example.com")
+}
+func (ts *ExternalTestSuite) TestSignupExternalBoxyHQSAMLDisableSignupErrorWhenEmptyEmail() {
+	ts.Config.DisableSignup = true
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	server := BoxyHQSAMLTestSignupSetup(ts, &tokenCount, &userCount, code, boxyhqsamlUserNoEmail)
+	defer server.Close()
+
+	u := performAuthorization(ts, "boxyhqsaml", code, "")
+
+	assertAuthorizationFailure(ts, u, "Error getting user email from external provider", "server_error", "boxyhqsaml@example.com")
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalBoxyHQSAMLDisableSignupSuccessWithPrimaryEmail() {
+	ts.Config.DisableSignup = true
+
+	ts.createUser("boxyhqsamlTestId", "boxyhqsaml@example.com", "BoxyHQSAML Test", "http://example.com/avatar", "")
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	server := BoxyHQSAMLTestSignupSetup(ts, &tokenCount, &userCount, code, boxyhqsamlUser)
+	defer server.Close()
+
+	u := performAuthorization(ts, "boxyhqsaml", code, "")
+
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "boxyhqsaml@example.com", "BoxyHQSAML Test", "boxyhqsamlTestId", "http://example.com/avatar")
+}
+
+func (ts *ExternalTestSuite) TestInviteTokenExternalBoxyHQSAMLSuccessWhenMatchingToken() {
+	// name and avatar should be populated from BoxyHQSAML API
+	ts.createUser("boxyhqsamlTestId", "boxyhqsaml@example.com", "", "", "invite_token")
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	server := BoxyHQSAMLTestSignupSetup(ts, &tokenCount, &userCount, code, boxyhqsamlUser)
+	defer server.Close()
+
+	u := performAuthorization(ts, "boxyhqsaml", code, "invite_token")
+
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "boxyhqsaml@example.com", "BoxyHQSAML Test", "boxyhqsamlTestId", "http://example.com/avatar")
+}
+
+func (ts *ExternalTestSuite) TestInviteTokenExternalBoxyHQSAMLErrorWhenNoMatchingToken() {
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	server := BoxyHQSAMLTestSignupSetup(ts, &tokenCount, &userCount, code, boxyhqsamlUser)
+	defer server.Close()
+
+	w := performAuthorizationRequest(ts, "boxyhqsaml", "invite_token")
+	ts.Require().Equal(http.StatusNotFound, w.Code)
+}
+
+func (ts *ExternalTestSuite) TestInviteTokenExternalBoxyHQSAMLErrorWhenWrongToken() {
+	ts.createUser("boxyhqsamlTestId", "boxyhqsaml@example.com", "", "", "invite_token")
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	server := BoxyHQSAMLTestSignupSetup(ts, &tokenCount, &userCount, code, boxyhqsamlUser)
+	defer server.Close()
+
+	w := performAuthorizationRequest(ts, "boxyhqsaml", "wrong_token")
+	ts.Require().Equal(http.StatusNotFound, w.Code)
+}
+
+func (ts *ExternalTestSuite) TestInviteTokenExternalBoxyHQSAMLErrorWhenEmailDoesntMatch() {
+	ts.createUser("boxyhqsamlTestId", "boxyhqsaml@example.com", "", "", "invite_token")
+
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	server := BoxyHQSAMLTestSignupSetup(ts, &tokenCount, &userCount, code, boxyhqsamlUserWrongEmail)
+	defer server.Close()
+
+	u := performAuthorization(ts, "boxyhqsaml", code, "invite_token")
+
+	assertAuthorizationFailure(ts, u, "Invited email does not match emails from external provider", "invalid_request", "")
 }
