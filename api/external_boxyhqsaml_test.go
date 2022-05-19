@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -10,9 +11,9 @@ import (
 )
 
 const (
-	boxyhqsamlUser           string = `{"id":"boxyhqsamlTestId","first_name":"John","last_name":"Doe","email":"boxyhqsaml@example.com","connection_id":"test_conn_1","organization_id":"test_org_1","connection_type":"test","idp_id":"test_idp_1","object": "profile","raw_attributes": {}}`
-	boxyhqsamlUserWrongEmail string = `{"id":"boxyhqsamlTestId","first_name":"John","last_name":"Doe","email":"other@example.com","connection_id":"test_conn_1","organization_id":"test_org_1","connection_type":"test","idp_id":"test_idp_1","object": "profile","raw_attributes": {}}`
-	boxyhqsamlUserNoEmail    string = `{"id":"boxyhqsamlTestId","first_name":"John","last_name":"Doe","connection_id":"test_conn_1","organization_id":"test_org_1","connection_type":"test","idp_id":"test_idp_1","object": "profile","raw_attributes": {}}`
+	boxyhqsamlUser           string = `{"id":"boxyhqsamlTestId","firstName":"BoxyHQSAML","lastName":"Test","email":"boxyhqsaml@example.com","connection_id":"test_conn_1","organization_id":"test_org_1","connection_type":"test","idp_id":"test_idp_1","raw": {}}`
+	boxyhqsamlUserWrongEmail string = `{"id":"boxyhqsamlTestId","firstName":"BoxyHQSAML","lastName":"Test","email":"other@example.com","connection_id":"test_conn_1","organization_id":"test_org_1","connection_type":"test","idp_id":"test_idp_1","raw": {}}`
+	boxyhqsamlUserNoEmail    string = `{"id":"boxyhqsamlTestId","firstName":"BoxyHQSAML","lastName":"Test","connection_id":"test_conn_1","organization_id":"test_org_1","connection_type":"test","idp_id":"test_idp_1","object": "profile","raw_attributes": {}}`
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalBoxyhqSaml() {
@@ -109,7 +110,7 @@ func (ts *ExternalTestSuite) TestSignupExternalBoxyHQSAMLDisableSignupErrorWhenE
 func (ts *ExternalTestSuite) TestSignupExternalBoxyHQSAMLDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("boxyhqsamlTestId", "boxyhqsaml@example.com", "BoxyHQSAML Test", "", "")
+	ts.createUser("boxyhqsamlTestId", "boxyhqsaml@example.com", "BoxyHQSAML Test", "http://example.com/avatar", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -118,12 +119,12 @@ func (ts *ExternalTestSuite) TestSignupExternalBoxyHQSAMLDisableSignupSuccessWit
 
 	u := performAuthorization(ts, "boxyhqsaml", code, "")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "boxyhqsaml@example.com", "BoxyHQSAML Test", "boxyhqsamlTestId", "")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "boxyhqsaml@example.com", "BoxyHQSAML Test", "boxyhqsamlTestId", "http://example.com/avatar")
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalBoxyHQSAMLSuccessWhenMatchingToken() {
 	// name and avatar should be populated from BoxyHQSAML API
-	ts.createUser("boxyhqsamlTestId", "boxyhqsaml@example.com", "BoxyHQSAML Test", "", "invite_token")
+	ts.createUser("boxyhqsamlTestId", "boxyhqsaml@example.com", "BoxyHQSAML Test", "http://example.com/avatar", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -131,8 +132,8 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalBoxyHQSAMLSuccessWhenMatchin
 	defer server.Close()
 
 	u := performAuthorization(ts, "boxyhqsaml", code, "invite_token")
-
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "boxyhqsaml@example.com", "BoxyHQSAML Test", "boxyhqsamlTestId", "")
+	log.Println(u)
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "boxyhqsaml@example.com", "BoxyHQSAML Test", "boxyhqsamlTestId", "http://example.com/avatar")
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalBoxyHQSAMLErrorWhenNoMatchingToken() {
@@ -146,7 +147,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalBoxyHQSAMLErrorWhenNoMatchin
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalBoxyHQSAMLErrorWhenWrongToken() {
-	ts.createUser("boxyhqsamlTestId", "boxyhqsaml@example.com", "", "", "invite_token")
+	ts.createUser("boxyhqsamlTestId", "boxyhqsaml@example.com", "BoxyHQSAML Test", "http://example.com/avatar", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
