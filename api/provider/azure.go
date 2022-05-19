@@ -31,6 +31,14 @@ type azureEmail struct {
 	Verified bool   `json:"is_confirmed"`
 }
 
+type azureGroupResponse struct {
+	Value []azureGroup `json:"value"`
+}
+
+type azureGroup struct {
+	DisplayName string `json:"displayName"`
+}
+
 // NewAzureProvider creates a Azure account provider.
 func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
@@ -75,6 +83,14 @@ func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 		return nil, errors.New("Unable to find email with Azure provider")
 	}
 
+	var groupsResponse azureGroupResponse
+	var groups []string
+	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/v1.0/me/memberOf", &groupsResponse); err == nil {
+		for _, group := range groupsResponse.Value {
+			groups = append(groups, group.DisplayName)
+		}
+	}
+
 	return &UserProvidedData{
 		Metadata: &Claims{
 			Issuer:        g.APIPath,
@@ -82,6 +98,7 @@ func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 			Name:          u.Name,
 			Email:         u.Email,
 			EmailVerified: true,
+			Groups:		   groups,
 
 			// To be deprecated
 			FullName:   u.Name,

@@ -35,24 +35,25 @@ type Claims struct {
 	Exp     float64 `json:"exp,omitempty"`
 
 	// Default profile claims
-	Name              string `json:"name,omitempty"`
-	FamilyName        string `json:"family_name,omitempty"`
-	GivenName         string `json:"given_name,omitempty"`
-	MiddleName        string `json:"middle_name,omitempty"`
-	NickName          string `json:"nickname,omitempty"`
-	PreferredUsername string `json:"preferred_username,omitempty"`
-	Profile           string `json:"profile,omitempty"`
-	Picture           string `json:"picture,omitempty"`
-	Website           string `json:"website,omitempty"`
-	Gender            string `json:"gender,omitempty"`
-	Birthdate         string `json:"birthdate,omitempty"`
-	ZoneInfo          string `json:"zoneinfo,omitempty"`
-	Locale            string `json:"locale,omitempty"`
-	UpdatedAt         string `json:"updated_at,omitempty"`
-	Email             string `json:"email,omitempty"`
-	EmailVerified     bool   `json:"email_verified,omitempty"`
-	Phone             string `json:"phone,omitempty"`
-	PhoneVerified     bool   `json:"phone_verified,omitempty"`
+	Name              string   `json:"name,omitempty"`
+	FamilyName        string   `json:"family_name,omitempty"`
+	GivenName         string   `json:"given_name,omitempty"`
+	MiddleName        string   `json:"middle_name,omitempty"`
+	NickName          string   `json:"nickname,omitempty"`
+	PreferredUsername string   `json:"preferred_username,omitempty"`
+	Profile           string   `json:"profile,omitempty"`
+	Picture           string   `json:"picture,omitempty"`
+	Website           string   `json:"website,omitempty"`
+	Gender            string   `json:"gender,omitempty"`
+	Birthdate         string   `json:"birthdate,omitempty"`
+	ZoneInfo          string   `json:"zoneinfo,omitempty"`
+	Locale            string   `json:"locale,omitempty"`
+	UpdatedAt         string   `json:"updated_at,omitempty"`
+	Email             string   `json:"email,omitempty"`
+	EmailVerified     bool     `json:"email_verified,omitempty"`
+	Phone             string   `json:"phone,omitempty"`
+	PhoneVerified     bool     `json:"phone_verified,omitempty"`
+	Groups			  []string `json:"groups,omitempty"`
 
 	// Custom profile claims that are provider specific
 	CustomClaims map[string]interface{} `json:"custom_claims,omitempty"`
