@@ -53,7 +53,7 @@ type Claims struct {
 	EmailVerified     bool     `json:"email_verified,omitempty"`
 	Phone             string   `json:"phone,omitempty"`
 	PhoneVerified     bool     `json:"phone_verified,omitempty"`
-	Groups			  []string `json:"groups,omitempty"`
+	Groups            []string `json:"groups,omitempty"`
 
 	// Custom profile claims that are provider specific
 	CustomClaims map[string]interface{} `json:"custom_claims,omitempty"`
