@@ -39,7 +39,7 @@ type azureGroup struct {
 	DisplayName string `json:"displayName"`
 }
 
-// NewAzureProvider creates a Azure account provider.
+// NewAzureProvider creates a Azure account provider
 func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
