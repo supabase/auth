@@ -98,7 +98,9 @@ func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 			Name:          u.Name,
 			Email:         u.Email,
 			EmailVerified: true,
-			Groups:		   groups,
+			CustomClaims:  map[string]interface{}{ 
+				"Groups": groups,
+			},
 
 			// To be deprecated
 			FullName:   u.Name,
