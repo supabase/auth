@@ -8,6 +8,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type AuditAction string
@@ -96,7 +97,12 @@ func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User,
 		l.Payload["traits"] = traits
 	}
 
-	return errors.Wrap(tx.Create(&l), "Database error creating audit log entry")
+	if err := tx.Create(&l); err != nil {
+		return errors.Wrap(err, "Database error creating audit log entry")
+	}
+
+	logrus.Infof("{\"actor_id\": %v, \"action\": %v, \"timestamp\": %v, \"log_type\": %v}", actor.ID, action, l.Payload["timestamp"], actionLogTypeMap[action])
+	return nil
 }
 
 func FindAuditLogEntries(tx *storage.Connection, instanceID uuid.UUID, filterColumns []string, filterValue string, pageParams *Pagination) ([]*AuditLogEntry, error) {
