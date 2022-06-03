@@ -2,14 +2,17 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
@@ -26,6 +29,10 @@ type adminUserParams struct {
 	UserMetaData map[string]interface{} `json:"user_metadata"`
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	BanDuration  string                 `json:"ban_duration"`
+}
+
+type adminUserDeleteParams struct {
+	IsSoftDelete string `json:"is_soft_delete"`
 }
 
 func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context, error) {
@@ -325,7 +332,12 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	instanceID := getInstanceID(ctx)
 	adminUser := getAdminUser(ctx)
 
-	err := a.db.Transaction(func(tx *storage.Connection) error {
+	var err error
+	params := &adminUserDeleteParams{}
+	q := r.URL.Query()
+	params.IsSoftDelete = q.Get("is_soft_delete")
+
+	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserDeletedAction, map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
@@ -334,9 +346,61 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 			return internalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 
-		if terr := tx.Destroy(user); terr != nil {
-			return internalServerError("Database error deleting user").WithInternalError(terr)
+		if params.IsSoftDelete == "true" {
+			if strings.HasPrefix(user.GetEmail(), "DELETE") || strings.HasPrefix(user.GetPhone(), "DELETE") {
+				// user has been soft deleted already
+				return nil
+			}
+			softDeleteId := crypto.SecureToken()
+			user.Email = storage.NullString(fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(user.GetEmail()))))
+			user.Phone = storage.NullString(fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(user.GetPhone()))))
+			user.EmailChange = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(user.EmailChange)))
+			user.PhoneChange = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(user.PhoneChange)))
+			userMetaDataUpdates := map[string]interface{}{}
+			for k, v := range user.UserMetaData {
+				switch t := v.(type) {
+				case string:
+					userMetaDataUpdates[k] = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(t)))
+				case []byte:
+					userMetaDataUpdates[k] = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256(t))
+				}
+			}
+			if terr := tx.UpdateOnly(user, "email", "phone", "email_change", "phone_change"); terr != nil {
+				return internalServerError("Error soft deleting user").WithInternalError(terr)
+			}
+			if terr := user.UpdateUserMetaData(tx, userMetaDataUpdates); terr != nil {
+				return internalServerError("Error soft deleting user meta data").WithInternalError(terr)
+			}
+
+			identities, terr := models.FindIdentitiesByUser(tx, user)
+			if terr != nil {
+				return internalServerError("Error retrieving identities").WithInternalError(terr)
+			}
+
+			for _, identity := range identities {
+				identity.ProviderId = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(identity.ProviderId)))
+				if terr := tx.UpdateOnly(identity, "provider_id"); terr != nil {
+					return internalServerError("Error soft deleting identity id").WithInternalError(terr)
+				}
+				identityDataUpdates := map[string]interface{}{}
+				for k, v := range identity.IdentityData {
+					switch t := v.(type) {
+					case string:
+						identityDataUpdates[k] = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(t)))
+					case []byte:
+						identityDataUpdates[k] = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256(t))
+					}
+				}
+				if terr := identity.UpdateIdentityData(tx, identityDataUpdates); terr != nil {
+					return internalServerError("Error soft deleting identity data").WithInternalError(terr)
+				}
+			}
+		} else {
+			if terr := tx.Destroy(user); terr != nil {
+				return internalServerError("Database error deleting user").WithInternalError(terr)
+			}
 		}
+
 		return nil
 	})
 	if err != nil {

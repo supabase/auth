@@ -10,7 +10,8 @@ import (
 )
 
 type Identity struct {
-	ID           string     `json:"id" db:"id"`
+	ID           int        `json:"id" db:"id"`
+	ProviderId   string     `json:"provider_id" db:"provider_id"`
 	UserID       uuid.UUID  `json:"user_id" db:"user_id"`
 	IdentityData JSONMap    `json:"identity_data,omitempty" db:"identity_data"`
 	Provider     string     `json:"provider" db:"provider"`
@@ -26,14 +27,14 @@ func (Identity) TableName() string {
 
 // NewIdentity returns an identity associated to the user's id.
 func NewIdentity(user *User, provider string, identityData map[string]interface{}) (*Identity, error) {
-	id, ok := identityData["sub"]
+	providerId, ok := identityData["sub"]
 	if !ok {
 		return nil, errors.New("Error missing provider id")
 	}
 	now := time.Now()
 
 	identity := &Identity{
-		ID:           id.(string),
+		ProviderId:   providerId.(string),
 		UserID:       user.ID,
 		IdentityData: identityData,
 		Provider:     provider,
@@ -46,7 +47,7 @@ func NewIdentity(user *User, provider string, identityData map[string]interface{
 // FindIdentityById searches for an identity with the matching provider_id and provider given.
 func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider string) (*Identity, error) {
 	identity := &Identity{}
-	if err := tx.Q().Where("id = ? AND provider = ?", providerId, provider).First(identity); err != nil {
+	if err := tx.Q().Where("provider_id = ? AND provider = ?", providerId, provider).First(identity); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, IdentityNotFoundError{}
 		}
@@ -81,4 +82,22 @@ func FindProvidersByUser(tx *storage.Connection, user *User) ([]string, error) {
 		providers = append(providers, identity.Provider)
 	}
 	return providers, nil
+}
+
+// UpdateIdentityData sets all identity_data from a map of updates,
+// ensuring that it doesn't override attributes that are not
+// in the provided map.
+func (i *Identity) UpdateIdentityData(tx *storage.Connection, updates map[string]interface{}) error {
+	if i.IdentityData == nil {
+		i.IdentityData = updates
+	} else {
+		for key, value := range updates {
+			if value != nil {
+				i.IdentityData[key] = value
+			} else {
+				delete(i.IdentityData, key)
+			}
+		}
+	}
+	return tx.UpdateOnly(i, "identity_data")
 }

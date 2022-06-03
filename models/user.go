@@ -200,7 +200,7 @@ func (u *User) GetPhone() string {
 func (u *User) UpdateUserMetaData(tx *storage.Connection, updates map[string]interface{}) error {
 	if u.UserMetaData == nil {
 		u.UserMetaData = updates
-	} else if updates != nil {
+	} else {
 		for key, value := range updates {
 			if value != nil {
 				u.UserMetaData[key] = value
@@ -216,7 +216,7 @@ func (u *User) UpdateUserMetaData(tx *storage.Connection, updates map[string]int
 func (u *User) UpdateAppMetaData(tx *storage.Connection, updates map[string]interface{}) error {
 	if u.AppMetaData == nil {
 		u.AppMetaData = updates
-	} else if updates != nil {
+	} else {
 		for key, value := range updates {
 			if value != nil {
 				u.AppMetaData[key] = value
