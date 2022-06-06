@@ -3,6 +3,7 @@ package utilities
 import (
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgerrcode"
@@ -41,23 +42,27 @@ func isPubliclyAccessiblePostgresError(code string) bool {
 		return false
 	}
 
-	if code == pgerrcode.RaiseException {
-		return true
-	}
-
+	// default response
 	return getHttpStatusCodeFromPostgresErrorCode(code) != 0
 }
 
 // getHttpStatusCodeFromPostgresErrorCode maps a Postgres error code to a HTTP
-// status code.
+// status code. Returns 0 if the code doesn't map to a given postgres error code.
 func getHttpStatusCodeFromPostgresErrorCode(code string) int {
-	if code == pgerrcode.RaiseException {
+	if code == pgerrcode.RaiseException ||
+		code == pgerrcode.IntegrityConstraintViolation ||
+		code == pgerrcode.RestrictViolation ||
+		code == pgerrcode.NotNullViolation ||
+		code == pgerrcode.ForeignKeyViolation ||
+		code == pgerrcode.UniqueViolation ||
+		code == pgerrcode.CheckViolation ||
+		code == pgerrcode.ExclusionViolation {
 		return 500
 	}
 
 	// Use custom HTTP status code if Postgres error was triggered with `PTXXX`
 	// code. This is consistent with PostgREST's behaviour as well.
-	if code[0:2] == "PT" {
+	if strings.HasPrefix(code, "PT") {
 		if httpStatusCode, err := strconv.ParseInt(code[2:], 10, 0); err == nil {
 			return int(httpStatusCode)
 		}
