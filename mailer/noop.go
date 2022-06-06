@@ -1,8 +1,13 @@
 package mailer
 
-import "github.com/netlify/gotrue/models"
+import (
+	"errors"
+
+	"github.com/netlify/gotrue/models"
+)
 
 type noopMailer struct {
+	Mailer MailClient
 }
 
 func (m noopMailer) ValidateEmail(email string) error {
@@ -35,4 +40,13 @@ func (m noopMailer) Send(user *models.User, subject, body string, data map[strin
 
 func (m noopMailer) GetEmailActionLink(user *models.User, actionType, referrerURL string) (string, error) {
 	return "", nil
+}
+
+type noopMailClient struct{}
+
+func (m *noopMailClient) Mail(to, subjectTemplate, templateURL, defaultTemplate string, templateData map[string]interface{}) error {
+	if to == "" {
+		return errors.New("to field cannot be empty")
+	}
+	return nil
 }

@@ -120,7 +120,11 @@ func assertAuthorizationSuccess(ts *ExternalTestSuite, u *url.URL, tokenCount in
 	ts.Require().NoError(err)
 	ts.Equal(providerId, user.UserMetaData["provider_id"])
 	ts.Equal(name, user.UserMetaData["full_name"])
-	ts.Equal(avatar, user.UserMetaData["avatar_url"])
+	if avatar == "" {
+		ts.Equal(nil, user.UserMetaData["avatar_url"])
+	} else {
+		ts.Equal(avatar, user.UserMetaData["avatar_url"])
+	}
 }
 
 func assertAuthorizationFailure(ts *ExternalTestSuite, u *url.URL, errorDescription string, errorType string, email string) {

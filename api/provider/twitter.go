@@ -81,7 +81,7 @@ func (t TwitterProvider) FetchUserData(ctx context.Context, tok *oauth.AccessTok
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode < http.StatusOK && resp.StatusCode >= http.StatusMultipleChoices {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return &UserProvidedData{}, fmt.Errorf("a %v error occurred with retrieving user from twitter", resp.StatusCode)
 	}
 	bits, err := ioutil.ReadAll(resp.Body)

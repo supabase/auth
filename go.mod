@@ -19,6 +19,7 @@ require (
 	github.com/gobuffalo/plush/v4 v4.1.0 // indirect
 	github.com/gobuffalo/pop/v5 v5.3.3
 	github.com/gobuffalo/validate/v3 v3.3.0 // indirect
+	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gofrs/uuid v4.0.0+incompatible
 	github.com/golang-jwt/jwt v3.2.1+incompatible
 	github.com/gorilla/securecookie v1.1.1
@@ -33,6 +34,7 @@ require (
 	github.com/lestrrat-go/jwx v0.9.0
 	github.com/lib/pq v1.9.0 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.16 // indirect
+	github.com/mitchellh/mapstructure v1.1.2
 	github.com/mrjones/oauth v0.0.0-20190623134757-126b35219450
 	github.com/netlify/mailme v1.1.1
 	github.com/opentracing/opentracing-go v1.1.0
@@ -53,7 +55,7 @@ require (
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1 // indirect
 	gopkg.in/DataDog/dd-trace-go.v1 v1.12.1
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
-	gopkg.in/yaml.v1 v1.0.0-20140924161607-9f9df34309c0 // indirect
+	gopkg.in/yaml.v3 v3.0.0 // indirect
 )
 
 go 1.13

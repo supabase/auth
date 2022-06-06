@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -75,9 +76,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone signups are disabled")
 		}
-		params.Phone = a.formatPhoneNumber(params.Phone)
-		if isValid := a.validateE164Format(params.Phone); !isValid {
-			return unprocessableEntityError("Invalid phone number format")
+		params.Phone, err = a.validatePhone(params.Phone)
+		if err != nil {
+			return err
 		}
 		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, params.Aud)
 	default:
@@ -159,7 +160,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone); terr != nil {
+				smsProvider, terr := sms_provider.GetSmsProvider(*config)
+				if terr != nil {
+					return badRequestError("Error sending confirmation sms: %v", terr)
+				}
+				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider); terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
 			}
@@ -224,7 +229,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		metering.RecordLogin("password", user.ID, instanceID)
-		token.User = user
 		return sendJSON(w, http.StatusOK, token)
 	}
 

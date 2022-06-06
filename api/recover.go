@@ -30,9 +30,14 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		return unprocessableEntityError("Password recovery requires an email")
 	}
 
+	var user *models.User
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
 	recoverErrorMessage := "If a user exists, you will receive an email with instructions on how to reset your password."
+	if err := a.validateEmail(ctx, params.Email); err != nil {
+		return err
+	}
+	user, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return notFoundError(err.Error())
@@ -44,7 +49,6 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
 			return terr
 		}
-
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
 		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer)

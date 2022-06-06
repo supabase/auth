@@ -231,9 +231,9 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Phone != "" {
-		params.Phone = a.formatPhoneNumber(params.Phone)
-		if isValid := a.validateE164Format(params.Phone); !isValid {
-			return unprocessableEntityError("Invalid phone format")
+		params.Phone, err = a.validatePhone(params.Phone)
+		if err != nil {
+			return err
 		}
 		if exists, err := models.IsDuplicatedPhone(a.db, instanceID, params.Phone, aud); err != nil {
 			return internalServerError("Database error checking phone").WithInternalError(err)
