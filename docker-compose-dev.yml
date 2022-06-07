@@ -13,7 +13,7 @@ services:
       - GOTRUE_DB_MIGRATIONS_PATH=/go/src/github.com/netlify/gotrue/migrations
     volumes:
       - ./:/go/src/github.com/netlify/gotrue
-    command: CompileDaemon --build="make build" --directory=/go/src/github.com/netlify/gotrue --recursive=true -pattern=(.+\.go|.+\.env) -exclude=gotrue -exclude=gotrue-arm64 -exclude=.env --command="/go/src/github.com/netlify/gotrue/gotrue -c=.env.docker"
+    command: CompileDaemon --build="make build" --directory=/go/src/github.com/netlify/gotrue --recursive=true -pattern="(.+\.go|.+\.env)" -exclude=gotrue -exclude=gotrue-arm64 -exclude=.env --command="/go/src/github.com/netlify/gotrue/gotrue -c=.env.docker"
   postgres:
     image: postgres:13
     container_name: postgres

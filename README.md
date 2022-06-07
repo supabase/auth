@@ -43,7 +43,9 @@ The base URL your site is located at. Currently used in combination with other s
 
 `URI_ALLOW_LIST` - `string`
 
-A comma separated list of URIs (e.g. "https://supabase.io/welcome,io.supabase.gotruedemo://logincallback") which are permitted as valid `redirect_to` destinations, in addition to SITE_URL. Defaults to []. Supports wildcard matching trough globbing. e.g. add `*.mydomain.com/welcome` -> `x.mydomain.com/welcome` and `y.mydomain.com/welcome` would be accepted.
+A comma separated list of URIs (e.g. `"https://foo.example.com,https://*.foo.example.com,https://bar.example.com"`) which are permitted as valid `redirect_to` destinations. Defaults to []. Supports wildcard matching through globbing. e.g. `https://*.foo.example.com` will allow `https://a.foo.example.com` and `https://b.foo.example.com` to be accepted. Globbing is also supported on subdomains. e.g. `https://foo.example.com/*` will allow `https://foo.example.com/page1` and `https://foo.example.com/page2` to be accepted.
+
+For more common glob patterns, check out the [following link](https://pkg.go.dev/github.com/gobwas/glob#Compile).
 
 `OPERATOR_TOKEN` - `string` _Multi-instance mode only_
 
@@ -507,7 +509,8 @@ Whether captcha middleware is enabled
 
 for now the only option supported is: `hcaptcha`
 
-`SECURITY_CAPTCHA_SECRET` - `string`
+- `SECURITY_CAPTCHA_SECRET` - `string`
+- `SECURITY_CAPTCHA_TIMEOUT` - `string`
 
 Retrieve from hcaptcha account
 
