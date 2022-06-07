@@ -8,12 +8,14 @@ import (
 	"runtime/debug"
 
 	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/utilities"
 	"github.com/pkg/errors"
 )
 
 // Common error messages during signup flow
 var (
 	DuplicateEmailMsg       = "A user with this email address has already been registered"
+	DuplicatePhoneMsg       = "A user with this phone number has already been registered"
 	UserExistsError   error = errors.New("User already exists")
 )
 
@@ -100,7 +102,7 @@ func acceptedTokenError(fmtString string, args ...interface{}) *HTTPError {
 }
 
 func expiredTokenError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusGone, fmtString, args...)
+	return httpError(http.StatusUnauthorized, fmtString, args...)
 }
 
 func unauthorizedError(fmtString string, args ...interface{}) *HTTPError {
@@ -248,6 +250,15 @@ func handleError(err error, w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.WithError(e.Cause()).Info(e.Error())
 		}
+
+		// Provide better error messages for certain user-triggered Postgres errors.
+		if pgErr := utilities.NewPostgresError(e.InternalError); pgErr != nil {
+			if jsonErr := sendJSON(w, pgErr.HttpStatusCode, pgErr); jsonErr != nil {
+				handleError(jsonErr, w, r)
+			}
+			return
+		}
+
 		if jsonErr := sendJSON(w, e.Code, e); jsonErr != nil {
 			handleError(jsonErr, w, r)
 		}

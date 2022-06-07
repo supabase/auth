@@ -1,0 +1,31 @@
+version: "3.9"
+services:
+  gotrue:
+    container_name: gotrue
+    depends_on:
+      - postgres
+    build:
+      context: ./
+      dockerfile: Dockerfile.dev
+    ports:
+      - '9999:9999'
+    environment:
+      - GOTRUE_DB_MIGRATIONS_PATH=/go/src/github.com/netlify/gotrue/migrations
+    volumes:
+      - ./:/go/src/github.com/netlify/gotrue
+    command: CompileDaemon --build="make build" --directory=/go/src/github.com/netlify/gotrue --recursive=true -pattern="(.+\.go|.+\.env)" -exclude=gotrue -exclude=gotrue-arm64 -exclude=.env --command="/go/src/github.com/netlify/gotrue/gotrue -c=.env.docker"
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ${PWD}/hack/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=root
+      - POSTGRES_DB=postgres
+
+volumes:
+  postgres_data:

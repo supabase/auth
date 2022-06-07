@@ -32,7 +32,6 @@ const (
 // AppleProvider stores the custom config for apple provider
 type AppleProvider struct {
 	*oauth2.Config
-	httpClient  *http.Client
 	UserInfoURL string
 }
 

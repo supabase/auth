@@ -16,6 +16,7 @@ import (
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
+	"github.com/netlify/gotrue/utilities"
 	"github.com/sirupsen/logrus"
 )
 
@@ -38,15 +39,16 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	ctx := r.Context()
 	config := a.getConfig(ctx)
 
-	providerType := r.URL.Query().Get("provider")
-	scopes := r.URL.Query().Get("scopes")
+	query := r.URL.Query()
+	providerType := query.Get("provider")
+	scopes := query.Get("scopes")
 
-	p, err := a.Provider(ctx, providerType, scopes)
+	p, err := a.Provider(ctx, providerType, scopes, &query)
 	if err != nil {
 		return badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
 	}
 
-	inviteToken := r.URL.Query().Get("invite_token")
+	inviteToken := query.Get("invite_token")
 	if inviteToken != "" {
 		_, userErr := models.FindUserByConfirmationToken(a.db, inviteToken)
 		if userErr != nil {
@@ -57,7 +59,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		}
 	}
 
-	redirectURL := a.getRedirectURLOrReferrer(r, r.URL.Query().Get("redirect_to"))
+	redirectURL := a.getRedirectURLOrReferrer(r, query.Get("redirect_to"))
 	log := getLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
@@ -243,7 +245,9 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 					return nil
 				}
 
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
+				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
+					"provider": providerType,
+				}); terr != nil {
 					return terr
 				}
 				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
@@ -255,7 +259,9 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 					return internalServerError("Error updating user").WithInternalError(terr)
 				}
 			} else {
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
+				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, map[string]interface{}{
+					"provider": providerType,
+				}); terr != nil {
 					return terr
 				}
 				if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
@@ -341,7 +347,9 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 		return nil, internalServerError("Database error updating user").WithInternalError(err)
 	}
 
-	if err := models.NewAuditLogEntry(tx, instanceID, user, models.InviteAcceptedAction, nil); err != nil {
+	if err := models.NewAuditLogEntry(tx, instanceID, user, models.InviteAcceptedAction, map[string]interface{}{
+		"provider": providerType,
+	}); err != nil {
 		return nil, err
 	}
 	if err := triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); err != nil {
@@ -377,7 +385,7 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 }
 
 // Provider returns a Provider interface for the given name.
-func (a *API) Provider(ctx context.Context, name string, scopes string) (provider.Provider, error) {
+func (a *API) Provider(ctx context.Context, name string, scopes string, query *url.Values) (provider.Provider, error) {
 	config := a.getConfig(ctx)
 	name = strings.ToLower(name)
 
@@ -396,6 +404,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewGitlabProvider(config.External.Gitlab, scopes)
 	case "google":
 		return provider.NewGoogleProvider(config.External.Google, scopes)
+	case "keycloak":
+		return provider.NewKeycloakProvider(config.External.Keycloak, scopes)
 	case "linkedin":
 		return provider.NewLinkedinProvider(config.External.Linkedin, scopes)
 	case "facebook":
@@ -410,8 +420,12 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewTwitchProvider(config.External.Twitch, scopes)
 	case "twitter":
 		return provider.NewTwitterProvider(config.External.Twitter, scopes)
+	case "workos":
+		return provider.NewWorkOSProvider(config.External.WorkOS, query)
 	case "saml":
 		return provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
+	case "zoom":
+		return provider.NewZoomProvider(config.External.Zoom)
 	default:
 		return nil, fmt.Errorf("Provider %s could not be found", name)
 	}
@@ -452,8 +466,18 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger) *url
 	case ErrorCause:
 		return getErrorQueryString(e.Cause(), errorID, log)
 	default:
-		q.Set("error", "server_error")
-		q.Set("error_description", err.Error())
+		error_type, error_description := "server_error", err.Error()
+
+		// Provide better error messages for certain user-triggered Postgres errors.
+		if pgErr := utilities.NewPostgresError(e); pgErr != nil {
+			error_description = pgErr.Message
+			if oauthErrorType, ok := oauthErrorMap[pgErr.HttpStatusCode]; ok {
+				error_type = oauthErrorType
+			}
+		}
+
+		q.Set("error", error_type)
+		q.Set("error_description", error_description)
 	}
 	return &q
 }
