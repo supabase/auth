@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	defaultAzureAuthBase = "login.microsoftonline.com"
+	defaultAzureAuthBase = "login.microsoftonline.com/common"
 	defaultAzureAPIBase  = "graph.microsoft.com"
 )
 
@@ -38,7 +38,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	}
 
 	authHost := chooseHost(ext.URL, defaultAzureAuthBase)
-	apiPath := chooseHost(ext.URL, defaultAzureAPIBase)
+	apiPath := chooseHost(ext.ApiURL, defaultAzureAPIBase)
 
 	oauthScopes := []string{"openid"}
 
@@ -51,8 +51,8 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 			ClientID:     ext.ClientID,
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
-				AuthURL:  authHost + "/common/oauth2/v2.0/authorize",
-				TokenURL: authHost + "/common/oauth2/v2.0/token",
+				AuthURL:  authHost + "/oauth2/v2.0/authorize",
+				TokenURL: authHost + "/oauth2/v2.0/token",
 			},
 			RedirectURL: ext.RedirectURI,
 			Scopes:      oauthScopes,

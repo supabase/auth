@@ -234,6 +234,7 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 	if secret == "" {
 		return nil, internalServerError("server misconfigured")
 	}
+
 	verificationResult, err := security.VerifyRequest(req, secret)
 	if err != nil {
 		logrus.WithField("err", err).Infof("failed to validate result")

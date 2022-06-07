@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
@@ -91,11 +92,15 @@ func (t twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	req.Header.Set("Client-Id", t.Config.ClientID)
 	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: defaultTimeout}
 	resp, err := client.Do(req)
 
 	if err != nil {
 		return nil, err
+	}
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("a %v error occurred with retrieving user from twitch", resp.StatusCode)
 	}
 
 	body, _ := ioutil.ReadAll(resp.Body)

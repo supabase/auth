@@ -1,4 +1,4 @@
-FROM golang:1.16-alpine as build
+FROM golang:1.17-alpine as build
 ENV GO111MODULE=on
 ENV CGO_ENABLED=0
 ENV GOOS=linux
@@ -15,7 +15,7 @@ RUN make deps
 COPY . /go/src/github.com/netlify/gotrue
 RUN make build
 
-FROM alpine:3.7
+FROM alpine:3.15
 RUN adduser -D -u 1000 netlify
 
 RUN apk add --no-cache ca-certificates

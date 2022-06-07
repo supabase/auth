@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	discordUser           string = `{"id":"discordTestId","avatar":"abc","email":"discord@example.com","username":"Discord Test","verified":true}}`
+	discordUser           string = `{"id":"discordTestId","avatar":"abc","email":"discord@example.com","username":"Discord Test","verified":true,"discriminator":"0001"}}`
 	discordUserWrongEmail string = `{"id":"discordTestId","avatar":"abc","email":"other@example.com","username":"Discord Test","verified":true}}`
 	discordUserNoEmail    string = `{"id":"discordTestId","avatar":"abc","username":"Discord Test","verified":true}}`
 )

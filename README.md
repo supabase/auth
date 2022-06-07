@@ -16,7 +16,15 @@ Create a `.env` file to store your own custom env vars. See [`example.env`](exam
 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`"
 GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`" -o gotrue-arm64
 ```
-3. Execute the gotrue binary: `./gotrue` (if you're on x86) `./gotrue-arm64` (if you're on arm)
+3. Execute the gotrue binary: `./gotrue`
+
+### If you have docker installed...
+Create a `.env.docker` file to store your own custom env vars. See [`example.docker.env`](example.docker.env)
+
+1. `make build`
+2. `make dev`
+3. `docker ps` should show 2 docker containers (`gotrue_postgresql` and `gotrue_gotrue`)
+4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that gotrue is running. 
 
 ## Configuration
 
@@ -35,7 +43,9 @@ The base URL your site is located at. Currently used in combination with other s
 
 `URI_ALLOW_LIST` - `string`
 
-A comma separated list of URIs (e.g. "https://supabase.io/welcome,io.supabase.gotruedemo://logincallback") which are permitted as valid `redirect_to` destinations, in addition to SITE_URL. Defaults to [].
+A comma separated list of URIs (e.g. `"https://foo.example.com,https://*.foo.example.com,https://bar.example.com"`) which are permitted as valid `redirect_to` destinations. Defaults to []. Supports wildcard matching through globbing. e.g. `https://*.foo.example.com` will allow `https://a.foo.example.com` and `https://b.foo.example.com` to be accepted. Globbing is also supported on subdomains. e.g. `https://foo.example.com/*` will allow `https://foo.example.com/page1` and `https://foo.example.com/page2` to be accepted.
+
+For more common glob patterns, check out the [following link](https://pkg.go.dev/github.com/gobwas/glob#Compile).
 
 `OPERATOR_TOKEN` - `string` _Multi-instance mode only_
 
@@ -62,10 +72,19 @@ Header on which to rate limit the `/token` endpoint.
 
 Rate limit the number of emails sent per hr on the following endpoints: `/signup`, `/invite`, `/magiclink`, `/recover`, `/otp`, & `/user`.
 
-`PASSWORD_MIN_LENGTH` - `int`
+`GOTRUE_PASSWORD_MIN_LENGTH` - `int`
 
 Minimum password length, defaults to 6.
 
+`GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` - `bool`
+
+If refresh token rotation is enabled, gotrue will automatically detect malicious attempts to reuse a revoked refresh token. When a malicious attempt is detected, gotrue immediately revokes all tokens that descended from the offending token.
+
+`GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL` - `string`
+
+This setting is only applicable if `GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` is enabled. The reuse interval for a refresh token allows for exchanging the refresh token multiple times during the interval to support concurrency or offline issues. During the reuse interval, gotrue will not consider using a revoked token as a malicious attempt and will simply return the child refresh token. 
+
+Only the previous revoked token can be reused. Using an old refresh token way before the current valid refresh token will trigger the reuse detection. 
 ### API
 
 ```properties
@@ -103,6 +122,10 @@ Chooses what dialect of database you want. Must be `mysql`.
 `DATABASE_URL` (no prefix) / `DB_DATABASE_URL` - `string` **required**
 
 Connection string for the database.
+
+`GOTRUE_DB_MAX_POOL_SIZE` - `int`
+
+Sets the maximum number of open connections to the database. Defaults to 0 which is equivalent to an "unlimited" number of connections.
 
 `DB_NAMESPACE` - `string`
 
@@ -193,7 +216,7 @@ The default group to assign all new users to.
 
 ### External Authentication Providers
 
-We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `linkedin`, `notion`, `spotify`, `slack`, `twitch` and `twitter` for external authentication.
+We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin`, `notion`, `spotify`, `slack`, `twitch`, `twitter` and `workos` for external authentication.
 
 Use the names as the keys underneath `external` to configure each separately.
 
@@ -224,7 +247,7 @@ The URI a OAuth2 provider will redirect to with the `code` and `state` values.
 
 `EXTERNAL_X_URL` - `string`
 
-The base URL used for constructing the URLs to request authorization and access tokens. Used by `gitlab` only. Defaults to `https://gitlab.com`.
+The base URL used for constructing the URLs to request authorization and access tokens. Used by `gitlab` and `keycloak`. For `gitlab` it defaults to `https://gitlab.com`. For `keycloak` you need to set this to your instance, for example: `https://keycloak.example.com/auth/realms/myrealm`
 
 #### Apple OAuth
 
@@ -304,6 +327,10 @@ Sets the name of the sender. Defaults to the `SMTP_ADMIN_EMAIL` if not used.
 `MAILER_AUTOCONFIRM` - `bool`
 
 If you do not require email confirmation, you may set this to `true`. Defaults to `false`.
+
+`MAILER_OTP_EXP` - `number`
+
+Controls the duration an email link or otp is valid for.
 
 `MAILER_URLPATHS_INVITE` - `string`
 
@@ -482,9 +509,16 @@ Whether captcha middleware is enabled
 
 for now the only option supported is: `hcaptcha`
 
-`SECURITY_CAPTCHA_SECRET` - `string`
+- `SECURITY_CAPTCHA_SECRET` - `string`
+- `SECURITY_CAPTCHA_TIMEOUT` - `string`
 
 Retrieve from hcaptcha account
+
+### Reauthentication
+
+`SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` - `bool`
+
+Enforce reauthentication on password update.
 
 ## Endpoints
 
@@ -505,12 +539,14 @@ Returns the publicly available settings for this gotrue instance.
     "github": true,
     "gitlab": true,
     "google": true,
+    "keycloak": true,
     "linkedin": true,
     "notion": true,
     "slack": true,
     "spotify": true,
     "twitch": true,
-    "twitter": true
+    "twitter": true,
+    "workos": true,
   },
   "disable_signup": false,
   "autoconfirm": false
@@ -904,6 +940,25 @@ Returns:
 }
 ```
 
+If `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` is enabled, the user will need to reauthenticate first. 
+
+```json
+{
+  "password": "new-password",
+  "nonce": "123456",
+}
+```
+
+### **GET /reauthenticate**
+
+Sends a nonce to the user's email (preferred) or phone. This endpoint requires the user to be logged in / authenticated first. The user needs to have either an email or phone number for the nonce to be sent successfully.
+
+```json
+headers: {
+  "Authorization" : "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO"
+}
+```
+
 ### **POST /logout**
 
 Logout a user (Requires authentication).
@@ -918,7 +973,8 @@ Get access_token from external oauth provider
 query params:
 
 ```
-provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | linkedin | notion | slack | spotify | twitch | twitter
+provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | keycloak | linkedin | notion | slack | spotify | twitch | twitter | workos
+
 scopes=<optional additional scopes depending on the provider (email and name are requested by default)>
 ```
 
