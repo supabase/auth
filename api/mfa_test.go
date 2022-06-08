@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -63,11 +64,18 @@ func (ts *MFATestSuite) TestMFAUnenrollDevice() {
 
 func (ts *MFATestSuite) TestMFABackupCodeGeneration() {
 	// Setup request and pass in user
+	const EXPECTED_NUM_OF_BACKUP_CODES = 8
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/mfa/generate_backup_codes", nil)
 	// req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 	ts.API.handler.ServeHTTP(w, req)
+
+	data := make(map[string]interface{})
+
 	require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+	//assert.Equal(ts.T(), EXPECTED_NUM_BACKUP_CODES, len(data[""]))
 	// Make a call to the generate backup codes function
 	// eight backup codes should be generated
 	// The timestamp should be correct
@@ -78,7 +86,8 @@ func (ts *MFATestSuite) TestMFAListDevices() {
 	// Generate four devices
 	// List four devices and expect that the corresponding primary keys match when calling
 	// listDevices
-	require.Equal(ts.T(), "hello", "hello", "Backup code generation not implemented")
+	// w := httptest.NewRecorder()
+	// req := httptest.NewRequest(http.MethodGet, "/mfa/list_devices", nil)
 }
 
 func (ts *MFATestSuite) TestMFACreateChallenge() {
