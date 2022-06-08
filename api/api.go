@@ -175,7 +175,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 				r.Route("/{user_id}", func(r *router) {
 					r.Use(api.loadUser)
 					r.Put("/", api.adminUserUpdate)
-					r.Put("/", api.adminUserUpdate)
+					r.Get("/generate_backup_codes", api.adminUserUpdate)
 
 				})
 			})
@@ -192,6 +192,8 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Get("/metadata", api.SAMLMetadata)
 		})
 		r.Route("/mfa", func(r *router) {
+			r.Get("/generate_backup_codes", api.GenerateBackupCodes)
+
 			r.Route("/verify", func(r *router) {
 				r.Get("/", api.VerifyFactor)
 			})
