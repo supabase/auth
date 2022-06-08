@@ -44,3 +44,7 @@ CREATE TABLE IF NOT EXISTS auth.mfa_backup_codes(
 );
 
 comment on table auth.mfa_backup_codes is 'Auth: stores backup codes for Multi Factor Authentication';
+
+-- Add MFA toggle on Users table
+ALTER TABLE auth.users
+ADD COLUMN IF NOT EXISTS mfa_enabled NULL;
