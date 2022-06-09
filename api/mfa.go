@@ -4,6 +4,9 @@ import (
 	"github.com/netlify/gotrue/crypto"
 	"net/http"
 	"time"
+	// "github.com/netlify/gotrue/models"
+	// "github.com/netlify/gotrue/storage"
+
 )
 
 // BackupCodesResponse repreesnts a successful Backup code generation response
@@ -51,13 +54,25 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) GenerateBackupCodes(w http.ResponseWriter, r *http.Request) error {
+	//ctx := r.Context()
+	//instanceID := getInstanceID(ctx)
+	//config := getConfig(ctx)
 	backupCodes := []string{}
 	for i := 0; i < NUM_BACKUP_CODES; i++ {
 		backupCodes = append(backupCodes, crypto.SecureToken())
 	}
 
 	timeCreated := time.Now().Format(time.RFC3339)
-	// TODO(Joel): Add relevant IP header, admin, etc logging here
+
+	// err := conn.Transaction(func(tx *storage.Connection) error {
+	// 	// TODO(Joel): Add relevant IP header, admin, etc logging here
+	// 	if terr := models.NewAuditLogEntry(tx, instanceID, user, models.GenerateBackupCodesAction, nil); terr != nil {
+	// 		return terr
+	// 	}
+	// 	// Write to DB
+	// 	return
+	// })
+
 	return sendJSON(w, http.StatusOK, &BackupCodesResponse{
 		BackupCodes: backupCodes,
 		TimeCreated: timeCreated,

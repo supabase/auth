@@ -192,7 +192,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Get("/metadata", api.SAMLMetadata)
 		})
 		r.Route("/mfa", func(r *router) {
-			r.Use(api.loadUser)
+			// r.Use(api.loadUser)
 			r.Get("/generate_backup_codes", api.GenerateBackupCodes)
 			r.Get("/verify", api.VerifyFactor)
 			r.Get("/challenge", api.ChallengeFactor)

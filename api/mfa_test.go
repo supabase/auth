@@ -73,12 +73,16 @@ func (ts *MFATestSuite) TestMFABackupCodeGeneration() {
 	data := make(map[string]interface{})
 
 	require.Equal(ts.T(), http.StatusOK, w.Code)
-	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 
-	//assert.Equal(ts.T(), EXPECTED_NUM_BACKUP_CODES, len(data[""]))
-	// Make a call to the generate backup codes function
-	// eight backup codes should be generated
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	backupCodes := data["BackupCodes"].([]interface{})
+
+	numCodes :=len(backupCodes)
+	require.Equal(ts.T(), EXPECTED_NUM_OF_BACKUP_CODES, numCodes)
 	// The timestamp should be correct
+
+	// query from db to ensure unused
+	// eight backup codes should be generated
 	// All eight backup codes should be unique and unused
 }
 
