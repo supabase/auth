@@ -65,6 +65,7 @@ type User struct {
 	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
 	BannedUntil *time.Time `json:"banned_until,omitempty" db:"banned_until"`
+	MFAEnabled bool `json:"-" db:"mfa_enabled"`
 }
 
 // NewUser initializes a new user from an email, password and user data.

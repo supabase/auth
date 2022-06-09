@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -37,6 +38,7 @@ func TestMFA(t *testing.T) {
 
 func (ts *MFATestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
+
 }
 
 func (ts *MFATestSuite) TestMFAEnable() {
@@ -63,10 +65,20 @@ func (ts *MFATestSuite) TestMFAUnenrollDevice() {
 }
 
 func (ts *MFATestSuite) TestMFABackupCodeGeneration() {
-	// Setup request and pass in user
 	const EXPECTED_NUM_OF_BACKUP_CODES = 8
+
+	u, err := models.NewUser(ts.instanceID, "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	u.MFAEnabled = true
+
+	err = ts.API.db.Create(u)
+	require.NoError(ts.T(), err)
+
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test1@example.com", ts.Config.JWT.Aud)
+	ts.Require().NoError(err)
+
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/mfa/generate_backup_codes", nil)
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/mfa/%s/generate_backup_codes", user.ID), nil)
 	// req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 	ts.API.handler.ServeHTTP(w, req)
 
