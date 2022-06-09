@@ -192,18 +192,15 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Get("/metadata", api.SAMLMetadata)
 		})
 		r.Route("/mfa", func(r *router) {
+			r.Use(api.loadUser)
 			r.Get("/generate_backup_codes", api.GenerateBackupCodes)
+			r.Get("/verify", api.VerifyFactor)
+			r.Get("/challenge", api.ChallengeFactor)
+			r.Get("/enroll", api.EnrollFactor)
+			r.Put("/enable", api.EnableMFA)
+			r.Put("/disable", api.DisableMFA)
 
-			r.Route("/verify", func(r *router) {
-				r.Get("/", api.VerifyFactor)
-			})
-			r.Route("/challenge", func(r *router) {
-				r.Use(api.loadUser)
-				r.Get("/", api.ChallengeFactor)
-			})
-			r.Route("/enroll", func(r *router) {
-				r.Get("/", api.EnrollFactor)
-			})
+
 		})
 	})
 

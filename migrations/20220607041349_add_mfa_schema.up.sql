@@ -47,4 +47,4 @@ comment on table auth.mfa_backup_codes is 'Auth: stores backup codes for Multi F
 
 -- Add MFA toggle on Users table
 ALTER TABLE auth.users
-ADD COLUMN IF NOT EXISTS mfa_enabled NULL;
+ADD COLUMN IF NOT EXISTS mfa_enabled boolean NULL;
