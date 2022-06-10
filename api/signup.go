@@ -278,13 +278,12 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 	var err error
 	switch params.Provider {
 	case "email":
-		user, err = models.NewUser(instanceID, params.Email, params.Password, params.Aud, params.Data)
+		user, err = models.NewUser(instanceID, "", params.Email, params.Password, params.Aud, params.Data)
 	case "phone":
-		user, err = models.NewUser(instanceID, "", params.Password, params.Aud, params.Data)
-		user.Phone = storage.NullString(params.Phone)
+		user, err = models.NewUser(instanceID, params.Phone, "", params.Password, params.Aud, params.Data)
 	default:
 		// handles external provider case
-		user, err = models.NewUser(instanceID, params.Email, params.Password, params.Aud, params.Data)
+		user, err = models.NewUser(instanceID, "", params.Email, params.Password, params.Aud, params.Data)
 	}
 
 	if err != nil {

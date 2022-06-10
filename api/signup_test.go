@@ -233,7 +233,7 @@ func (ts *SignupTestSuite) TestSignupTwice() {
 }
 
 func (ts *SignupTestSuite) TestVerifySignup() {
-	user, err := models.NewUser(ts.instanceID, "test@example.com", "testing", ts.Config.JWT.Aud, nil)
+	user, err := models.NewUser(ts.instanceID, "123456789", "test@example.com", "testing", ts.Config.JWT.Aud, nil)
 	user.ConfirmationToken = "asdf3"
 	now := time.Now()
 	user.ConfirmationSentAt = &now

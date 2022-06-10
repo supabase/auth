@@ -61,7 +61,7 @@ func (ts *IdentityTestSuite) TestFindUserIdentities() {
 }
 
 func (ts *IdentityTestSuite) createUserWithEmail(email string) *User {
-	user, err := NewUser(uuid.Nil, email, "secret", "test", nil)
+	user, err := NewUser(uuid.Nil, "", email, "secret", "test", nil)
 	require.NoError(ts.T(), err)
 
 	err = ts.db.Create(user)
@@ -71,7 +71,7 @@ func (ts *IdentityTestSuite) createUserWithEmail(email string) *User {
 }
 
 func (ts *IdentityTestSuite) createUserWithIdentity(email string) *User {
-	user, err := NewUser(uuid.Nil, email, "secret", "test", nil)
+	user, err := NewUser(uuid.Nil, "", email, "secret", "test", nil)
 	require.NoError(ts.T(), err)
 
 	err = ts.db.Create(user)
