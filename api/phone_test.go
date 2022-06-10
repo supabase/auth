@@ -54,8 +54,7 @@ func (ts *PhoneTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
 	// Create user
-	u, err := models.NewUser(ts.instanceID, "", "password", ts.Config.JWT.Aud, nil)
-	u.Phone = "123456789"
+	u, err := models.NewUser(ts.instanceID, "123456789", "", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }

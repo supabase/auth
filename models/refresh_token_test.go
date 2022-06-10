@@ -3,10 +3,10 @@ package models
 import (
 	"testing"
 
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
-	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -79,7 +79,7 @@ func (ts *RefreshTokenTestSuite) createUser() *User {
 }
 
 func (ts *RefreshTokenTestSuite) createUserWithEmail(email string) *User {
-	user, err := NewUser(uuid.Nil, email, "secret", "test", nil)
+	user, err := NewUser(uuid.Nil, "", email, "secret", "test", nil)
 	require.NoError(ts.T(), err)
 
 	err = ts.db.Create(user)
