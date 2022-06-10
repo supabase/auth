@@ -7,16 +7,16 @@ CREATE TYPE factor_type AS ENUM('phone', 'webauthn', 'email');
 
 CREATE TABLE IF NOT EXISTS auth.mfa_factors(
        id VARCHAR(256) NOT NULL,
+       user_id uuid NOT NULL,
        factor_simple_name VARCHAR(256) NULL,
        factor_type factor_type NOT NULL,
        enabled BOOLEAN NOT NULL,
        created_at timestamptz NOT NULL,
        updated_at timestamptz NULL,
-       totp_email VARCHAR(256) NULL,
-       totp_phone VARCHAR(256) NULL,
        webauthn_public_key_bytes VARCHAR(256) NULL,
        webauthn_credential_id VARCHAR(256) NULL,
-       CONSTRAINT mfa_factors_pkey PRIMARY KEY(id)
+       CONSTRAINT mfa_factors_pkey PRIMARY KEY(id),
+       CONSTRAINT mfa_factors FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
 
 comment on table auth.mfa_factors is 'Auth: stores Multi Factor Authentication factor data';
