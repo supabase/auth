@@ -85,7 +85,7 @@ func NewUser(instanceID uuid.UUID, phone, email, password, aud string, userData 
 		ID:                id,
 		Aud:               aud,
 		Email:             storage.NullString(strings.ToLower(email)),
-		Phone:             storage.NullString(strings.ToLower(phone)),
+		Phone:             storage.NullString(phone),
 		UserMetaData:      userData,
 		EncryptedPassword: pw,
 	}
