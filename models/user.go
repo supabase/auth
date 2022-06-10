@@ -65,7 +65,7 @@ type User struct {
 	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
 	BannedUntil *time.Time `json:"banned_until,omitempty" db:"banned_until"`
-	MFAEnabled bool `json:"-" db:"mfa_enabled"`
+	MFAEnabled  bool       `json:"-" db:"mfa_enabled"`
 }
 
 // NewUser initializes a new user from an email, password and user data.
@@ -522,4 +522,13 @@ func (u *User) IsBanned() bool {
 func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
 	return tx.UpdateOnly(u, "banned_until")
 
+}
+func (u *User) EnableMFA(tx *storage.Connection) error {
+	u.MFAEnabled = true
+	return tx.UpdateOnly(u, "mfa_enabled")
+}
+
+func (u *User) DisableMFA(tx *storage.Connection) error {
+	u.MFAEnabled = false
+	return tx.UpdateOnly(u, "mfa_enabled")
 }

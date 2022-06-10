@@ -26,11 +26,45 @@ type DisableMFAResponse struct {
 const NUM_BACKUP_CODES = 8
 
 func (a *API) EnableMFA(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := getUser(ctx)
+	// instanceID := getInstanceID(ctx)
+	err := a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := user.EnableMFA(tx); terr != nil {
+			return internalServerError("Error enabling MFA").WithInternalError(terr)
+		}
+
+		// TODO(Joel): Add relevant IP header, admin, etc logging here
+		// if terr := models.NewAuditLogEntry(tx, instanceID, user, models.GenerateBackupCodesAction, nil); terr != nil {
+		// 	return terr
+		// }
+		return nil
+	})
+	if err != nil {
+		return err
+	}
 	return sendJSON(w, http.StatusOK, make(map[string]string))
 
 }
 
 func (a *API) DisableMFA(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := getUser(ctx)
+	// instanceID := getInstanceID(ctx)
+	err := a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := user.DisableMFA(tx); terr != nil {
+			return internalServerError("Error Disabling MFA").WithInternalError(terr)
+		}
+
+		// TODO(Joel): Add relevant IP header, admin, etc logging here
+		// if terr := models.NewAuditLogEntry(tx, instanceID, user, models.GenerateBackupCodesAction, nil); terr != nil {
+		// 	return terr
+		// }
+		return nil
+	})
+	if err != nil {
+		return err
+	}
 	return sendJSON(w, http.StatusOK, &DisableMFAResponse{
 		Success: true,
 		Error:   "",
