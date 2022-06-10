@@ -83,7 +83,6 @@ func adminCreateUser(globalConfig *conf.GlobalConfiguration, config *conf.Config
 		logrus.Fatalf("Error checking user email: %+v", err)
 	}
 
-	// TODO(Joel): Update the command
 	user, err := models.NewUser(iid, "", args[0], args[1], aud, nil)
 	if err != nil {
 		logrus.Fatalf("Error creating new user: %+v", err)
