@@ -1,8 +1,8 @@
 package api
 
 import (
-	"fmt"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -77,8 +77,8 @@ func (ts *MFATestSuite) TestMFABackupCodeGeneration() {
 	ts.Require().NoError(err)
 
 	w := httptest.NewRecorder()
-
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/mfa/%s/generate_backup_codes", user.ID), nil)
+
 	// req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 	ts.API.handler.ServeHTTP(w, req)
 
@@ -89,13 +89,10 @@ func (ts *MFATestSuite) TestMFABackupCodeGeneration() {
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 	backupCodes := data["BackupCodes"].([]interface{})
 
-	numCodes :=len(backupCodes)
+	numCodes := len(backupCodes)
 	require.Equal(ts.T(), EXPECTED_NUM_OF_BACKUP_CODES, numCodes)
 	// The timestamp should be correct
-
 	// query from db to ensure unused
-	// eight backup codes should be generated
-	// All eight backup codes should be unique and unused
 }
 
 func (ts *MFATestSuite) TestMFAListDevices() {

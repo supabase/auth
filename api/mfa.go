@@ -2,11 +2,10 @@ package api
 
 import (
 	"github.com/netlify/gotrue/crypto"
+	"github.com/netlify/gotrue/models"
+	"github.com/netlify/gotrue/storage"
 	"net/http"
 	"time"
-	// "github.com/netlify/gotrue/models"
-	// "github.com/netlify/gotrue/storage"
-
 )
 
 // BackupCodesResponse repreesnts a successful Backup code generation response
@@ -16,12 +15,11 @@ type BackupCodesResponse struct {
 }
 
 type EnableMFAResponse struct {
-
 }
 
 type DisableMFAResponse struct {
 	Success bool
-	Error string
+	Error   string
 }
 
 const NUM_BACKUP_CODES = 8
@@ -34,7 +32,7 @@ func (a *API) EnableMFA(w http.ResponseWriter, r *http.Request) error {
 func (a *API) DisableMFA(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, &DisableMFAResponse{
 		Success: true,
-		Error: "",
+		Error:   "",
 	})
 
 }
@@ -54,27 +52,42 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) GenerateBackupCodes(w http.ResponseWriter, r *http.Request) error {
-	//ctx := r.Context()
-	//instanceID := getInstanceID(ctx)
-	//config := getConfig(ctx)
-	backupCodes := []string{}
+	ctx := r.Context()
+	user := getUser(ctx)
+	instanceID := getInstanceID(ctx)
+	// if !user.MFAEnabled {
+	// 	return "MFA not enabled"
+	// }
+	now := time.Now()
+	backupCodeModels := []*models.BackupCode{}
+	var terr error
+	var backupCode string
+	var backupCodes []string
+	var backupCodeModel *models.BackupCode
+
 	for i := 0; i < NUM_BACKUP_CODES; i++ {
-		backupCodes = append(backupCodes, crypto.SecureToken())
+		backupCode = crypto.SecureToken()
+		backupCodeModel, terr = models.NewBackupCode(user, backupCode, &now)
+		if terr != nil {
+			return internalServerError("Error creating backup code").WithInternalError(terr)
+		}
+		backupCodes = append(backupCodes, backupCode)
+		backupCodeModels = append(backupCodeModels, backupCodeModel)
 	}
+	terr = a.db.Transaction(func(tx *storage.Connection) error {
+		if terr = tx.Create(backupCodeModels); terr != nil {
+			return terr
+		}
 
-	timeCreated := time.Now().Format(time.RFC3339)
-
-	// err := conn.Transaction(func(tx *storage.Connection) error {
-	// 	// TODO(Joel): Add relevant IP header, admin, etc logging here
-	// 	if terr := models.NewAuditLogEntry(tx, instanceID, user, models.GenerateBackupCodesAction, nil); terr != nil {
-	// 		return terr
-	// 	}
-	// 	// Write to DB
-	// 	return
-	// })
+		// TODO(Joel): Add relevant IP header, admin, etc logging here
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.GenerateBackupCodesAction, nil); terr != nil {
+			return terr
+		}
+		return terr
+	})
 
 	return sendJSON(w, http.StatusOK, &BackupCodesResponse{
 		BackupCodes: backupCodes,
-		TimeCreated: timeCreated,
+		TimeCreated: now.String(),
 	})
 }
