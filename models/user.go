@@ -68,8 +68,7 @@ type User struct {
 }
 
 // NewUser initializes a new user from an email, password and user data.
-// TODO: Refactor NewUser to take in phone as an arg
-func NewUser(instanceID uuid.UUID, email, password, aud string, userData map[string]interface{}) (*User, error) {
+func NewUser(instanceID uuid.UUID, phone, email, password, aud string, userData map[string]interface{}) (*User, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -86,6 +85,7 @@ func NewUser(instanceID uuid.UUID, email, password, aud string, userData map[str
 		ID:                id,
 		Aud:               aud,
 		Email:             storage.NullString(strings.ToLower(email)),
+		Phone:             storage.NullString(phone),
 		UserMetaData:      userData,
 		EncryptedPassword: pw,
 	}

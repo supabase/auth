@@ -25,7 +25,7 @@ func TestSignupHookSendInstanceID(t *testing.T) {
 	require.NoError(t, err)
 
 	iid := uuid.Must(uuid.NewV4())
-	user, err := models.NewUser(iid, "test@truth.com", "thisisapassword", "", nil)
+	user, err := models.NewUser(iid, "81234567", "test@truth.com", "thisisapassword", "", nil)
 	require.NoError(t, err)
 
 	var callCount int
@@ -68,7 +68,7 @@ func TestSignupHookFromClaims(t *testing.T) {
 	require.NoError(t, err)
 
 	iid := uuid.Must(uuid.NewV4())
-	user, err := models.NewUser(iid, "test@truth.com", "thisisapassword", "", nil)
+	user, err := models.NewUser(iid, "", "test@truth.com", "thisisapassword", "", nil)
 	require.NoError(t, err)
 
 	var callCount int

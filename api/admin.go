@@ -250,12 +250,9 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		params.Password = &password
 	}
 
-	user, err := models.NewUser(instanceID, params.Email, *params.Password, aud, params.UserMetaData)
+	user, err := models.NewUser(instanceID, params.Phone, params.Email, *params.Password, aud, params.UserMetaData)
 	if err != nil {
 		return internalServerError("Error creating user").WithInternalError(err)
-	}
-	if params.Phone != "" {
-		user.Phone = storage.NullString(params.Phone)
 	}
 	if user.AppMetaData == nil {
 		user.AppMetaData = make(map[string]interface{})
