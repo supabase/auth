@@ -67,7 +67,7 @@ func (ts *MFATestSuite) TestMFAUnenrollDevice() {
 func (ts *MFATestSuite) TestMFABackupCodeGeneration() {
 	const EXPECTED_NUM_OF_BACKUP_CODES = 8
 
-	u, err := models.NewUser(ts.instanceID, "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser(ts.instanceID, "", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
 	u.MFAEnabled = true
 
 	err = ts.API.db.Create(u)

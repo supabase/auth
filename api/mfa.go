@@ -4,6 +4,7 @@ import (
 	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
+	"github.com/pkg/errors"
 	"net/http"
 	"time"
 )
@@ -55,9 +56,10 @@ func (a *API) GenerateBackupCodes(w http.ResponseWriter, r *http.Request) error 
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
-	// if !user.MFAEnabled {
-	// 	return "MFA not enabled"
-	// }
+	// TODO: Convert this into a formal error
+	if !user.MFAEnabled {
+		return errors.New("MFA not enabled")
+	}
 	now := time.Now()
 	backupCodeModels := []*models.BackupCode{}
 	var terr error
