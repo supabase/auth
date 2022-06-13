@@ -85,11 +85,17 @@ func GetValidChildToken(tx *storage.Connection, token *RefreshToken) (*RefreshTo
 	return refreshToken, nil
 }
 
-// Logout deletes all refresh tokens for a user.
+// Logout deletes all refresh tokens for a given user.
 func Logout(tx *storage.Connection, instanceID uuid.UUID, id uuid.UUID) error {
 	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: RefreshToken{}}).TableName()+" WHERE instance_id = ? AND user_id = ?", instanceID, id).Exec()
 }
 
+// RevokeRefreshTokensByUser revokes all refresh tokens for a given user.
+func RevokeRefreshTokensByUser(tx *storage.Connection, instanceID uuid.UUID, userID uuid.UUID) error {
+	return tx.RawQuery("update "+(&pop.Model{Value: RefreshToken{}}).TableName()+" set revoked = true where user_id = ? and instance_id = ?;", userID, instanceID).Exec()
+}
+
+// createRefreshToken creates a cryptographically random refresh token in the refresh_tokens table
 func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshToken) (*RefreshToken, error) {
 	token := &RefreshToken{
 		InstanceID: user.InstanceID,

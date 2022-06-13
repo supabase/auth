@@ -347,25 +347,30 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.IsSoftDelete == "true" {
-			if strings.HasPrefix(user.GetEmail(), "DELETE") || strings.HasPrefix(user.GetPhone(), "DELETE") {
+			if user.DeletedAt != nil {
 				// user has been soft deleted already
 				return nil
 			}
-			softDeleteId := crypto.SecureToken()
-			user.Email = storage.NullString(fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(user.GetEmail()))))
-			user.Phone = storage.NullString(fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(user.GetPhone()))))
-			user.EmailChange = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(user.EmailChange)))
-			user.PhoneChange = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(user.PhoneChange)))
+			softDeleteId, terr := crypto.GenerateNanoId(5)
+			if terr != nil {
+				return terr
+			}
+			user.Email = storage.NullString(fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(user.GetEmail()))))
+			user.Phone = storage.NullString(fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(user.GetPhone()))))
+			user.EmailChange = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(user.EmailChange)))
+			user.PhoneChange = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(user.PhoneChange)))
+			now := time.Now()
+			user.DeletedAt = &now
 			userMetaDataUpdates := map[string]interface{}{}
 			for k, v := range user.UserMetaData {
 				switch t := v.(type) {
 				case string:
-					userMetaDataUpdates[k] = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(t)))
+					userMetaDataUpdates[k] = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(t)))
 				case []byte:
-					userMetaDataUpdates[k] = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256(t))
+					userMetaDataUpdates[k] = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256(t))
 				}
 			}
-			if terr := tx.UpdateOnly(user, "email", "phone", "email_change", "phone_change"); terr != nil {
+			if terr := tx.UpdateOnly(user, "email", "phone", "email_change", "phone_change", "deleted_at"); terr != nil {
 				return internalServerError("Error soft deleting user").WithInternalError(terr)
 			}
 			if terr := user.UpdateUserMetaData(tx, userMetaDataUpdates); terr != nil {
@@ -378,7 +383,7 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 			}
 
 			for _, identity := range identities {
-				identity.ProviderId = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(identity.ProviderId)))
+				identity.ProviderId = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(identity.ProviderId)))
 				if terr := tx.UpdateOnly(identity, "provider_id"); terr != nil {
 					return internalServerError("Error soft deleting identity id").WithInternalError(terr)
 				}
@@ -386,14 +391,18 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 				for k, v := range identity.IdentityData {
 					switch t := v.(type) {
 					case string:
-						identityDataUpdates[k] = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256([]byte(t)))
+						identityDataUpdates[k] = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(t)))
 					case []byte:
-						identityDataUpdates[k] = fmt.Sprintf("DELETE-%x-%x", softDeleteId, sha256.Sum256(t))
+						identityDataUpdates[k] = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256(t))
 					}
 				}
 				if terr := identity.UpdateIdentityData(tx, identityDataUpdates); terr != nil {
 					return internalServerError("Error soft deleting identity data").WithInternalError(terr)
 				}
+			}
+
+			if terr = models.RevokeRefreshTokensByUser(tx, instanceID, user.ID); terr != nil {
+				return internalServerError("Error soft deleting refresh tokens").WithInternalError(terr)
 			}
 		} else {
 			if terr := tx.Destroy(user); terr != nil {

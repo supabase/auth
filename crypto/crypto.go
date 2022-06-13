@@ -33,8 +33,8 @@ func GenerateOtp(digits int) (string, error) {
 	return otp, nil
 }
 
-// GenerateOtpFromCharset generates a random n-length otp from a charset
-func GenerateOtpFromCharset(length int, charset string) (string, error) {
+// generateOtpFromCharset generates a random n-length otp from a charset
+func generateOtpFromCharset(length int, charset string) (string, error) {
 	b := make([]byte, length)
 	for i := range b {
 		val, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
@@ -46,8 +46,14 @@ func GenerateOtpFromCharset(length int, charset string) (string, error) {
 	return string(b), nil
 }
 
-// GenerateEmailOtp generates a random n-length alphanumeric otp
+// GenerateEmailOtp generates a random n-length alphabetical otp
 func GenerateEmailOtp(length int) (string, error) {
 	const charset = "abcdefghijklmnopqrstuvwxyz"
-	return GenerateOtpFromCharset(length, charset)
+	return generateOtpFromCharset(length, charset)
+}
+
+// GenerateNanoId generates a random n-length alphanumeric otp
+func GenerateNanoId(length int) (string, error) {
+	const charset = "0123456789abcdefghijklmnopqrstuvwxyz"
+	return generateOtpFromCharset(length, charset)
 }
