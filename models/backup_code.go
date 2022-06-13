@@ -56,10 +56,7 @@ func InvalidateBackupCode() {
 
 }
 
-// Change the factor simple name
-func SetFactorSimpleName() {
 
-}
 
 // Consume a valid backup code
 func UseBackupCode() {
