@@ -30,13 +30,14 @@ CREATE TABLE IF NOT EXISTS auth.mfa_challenges(
 );
 comment on table auth.mfa_challenges is 'Auth: stores data of Multi Factor Authentication Requests';
 
--- auth.mfa_backup_codes definition
+
+-- auth.mfa_backup_codes_ definition
 CREATE TABLE IF NOT EXISTS auth.mfa_backup_codes(
        user_id uuid NOT NULL,
-       created_at timestamptz NOT NULL,
        backup_code VARCHAR(32) NOT NULL,
        valid BOOLEAN NOT NULL,
-       time_used timestamptz NOT NULL,
+       created_at timestamptz NOT NULL,
+       used_at timestamptz NOT NULL,
        CONSTRAINT mfa_backup_codes_pkey PRIMARY KEY(user_id, backup_code),
        CONSTRAINT mfa_backup_codes FOREIGN KEY(user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
