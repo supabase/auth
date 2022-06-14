@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS auth.mfa_factors(
        factor_type factor_type NOT NULL,
        enabled BOOLEAN NOT NULL,
        created_at timestamptz NOT NULL,
-       updated_at timestamptz NULL,
+       updated_at timestamptz NOT NULL,
        secret_key VARCHAR(256) NOT NULL,
        CONSTRAINT mfa_factors_pkey PRIMARY KEY(id),
        CONSTRAINT mfa_factors FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
