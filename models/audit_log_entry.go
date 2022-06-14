@@ -101,7 +101,7 @@ func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User,
 		return errors.Wrap(err, "Database error creating audit log entry")
 	}
 
-	logrus.Infof("{\"actor_id\": %v, \"action\": %v, \"timestamp\": %v, \"log_type\": %v}", actor.ID, action, l.Payload["timestamp"], actionLogTypeMap[action])
+	logrus.Infof("{\"actor_id\": %v, \"action\": %v, \"timestamp\": %v, \"log_type\": %v, \"ip_address\": %v}", actor.ID, action, l.Payload["timestamp"], actionLogTypeMap[action], ipAddress)
 	return nil
 }
 
