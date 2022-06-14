@@ -246,7 +246,7 @@ func (a *API) signupVerify(ctx context.Context, conn *storage.Connection, user *
 			}
 		}
 
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
+		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", nil); terr != nil {
 			return terr
 		}
 
@@ -275,7 +275,7 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user 
 			return terr
 		}
 		if !user.IsConfirmed() {
-			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
+			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", nil); terr != nil {
 				return terr
 			}
 
@@ -286,7 +286,7 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user 
 				return terr
 			}
 		} else {
-			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
+			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", nil); terr != nil {
 				return terr
 			}
 			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
@@ -308,7 +308,7 @@ func (a *API) smsVerify(ctx context.Context, conn *storage.Connection, user *mod
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); terr != nil {
+		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", nil); terr != nil {
 			return terr
 		}
 
@@ -380,7 +380,7 @@ func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, p
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, nil); terr != nil {
+		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, "", nil); terr != nil {
 			return terr
 		}
 
