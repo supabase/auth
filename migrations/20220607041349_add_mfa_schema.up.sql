@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS auth.mfa_challenges(
 comment on table auth.mfa_challenges is 'Auth: stores data of Multi Factor Authentication Requests';
 
 
--- auth.mfa_backup_codes_ definition
+-- auth.mfa_backup_codes definition
 CREATE TABLE IF NOT EXISTS auth.mfa_backup_codes(
        user_id uuid NOT NULL,
        backup_code VARCHAR(32) NOT NULL,
@@ -45,4 +45,4 @@ comment on table auth.mfa_backup_codes is 'Auth: stores backup codes for Multi F
 
 -- Add MFA toggle on Users table
 ALTER TABLE auth.users
-ADD COLUMN IF NOT EXISTS mfa_enabled boolean NOT NULL;
+ADD COLUMN IF NOT EXISTS mfa_enabled boolean NOT NULL DEFAULT FALSE;
