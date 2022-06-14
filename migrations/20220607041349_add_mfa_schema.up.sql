@@ -30,7 +30,6 @@ CREATE TABLE IF NOT EXISTS auth.mfa_challenges(
 );
 comment on table auth.mfa_challenges is 'Auth: stores data of Multi Factor Authentication Requests';
 
-
 -- auth.mfa_backup_codes definition
 CREATE TABLE IF NOT EXISTS auth.mfa_backup_codes(
        user_id uuid NOT NULL,
