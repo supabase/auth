@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 
@@ -53,9 +54,16 @@ func migrate(cmd *cobra.Command, args []string) {
 		}
 	}
 
+	u, err := url.Parse(globalConfig.DB.URL)
+	processedUrl := globalConfig.DB.URL
+	if len(u.Query()) != 0 {
+		processedUrl = fmt.Sprintf("%s&application_name=gotrue_migrations", processedUrl)
+	} else {
+		processedUrl = fmt.Sprintf("%s?application_name=gotrue_migrations", processedUrl)
+	}
 	deets := &pop.ConnectionDetails{
 		Dialect: globalConfig.DB.Driver,
-		URL:     globalConfig.DB.URL,
+		URL:     processedUrl,
 	}
 	deets.Options = map[string]string{
 		"migration_table_name": "schema_migrations",
