@@ -1,6 +1,6 @@
 -- See: https://stackoverflow.com/questions/7624919/check-if-a-user-defined-type-already-exists-in-postgresql/48382296#48382296
 DO $$ BEGIN
-    CREATE TYPE factor_type AS ENUM('phone', 'webauthn', 'email');
+    CREATE TYPE factor_type AS ENUM('phone', 'webauthn');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
