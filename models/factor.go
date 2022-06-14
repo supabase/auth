@@ -15,7 +15,7 @@ type Factor struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 	Enabled bool `json:"enabled" db:"enabled"`
 	FactorSimpleName string `json:"factor_simple_name" db:"factor_simple_name"`
-	SecretKey string `json:'-' db:'-'`
+	SecretKey string `json:'secret_key' db:'secret_key'`
 	// TODO(Joel): Convert this to an enum
 	FactorType string `json:"factor_type" db:"factor_type"`
 }
@@ -26,14 +26,16 @@ func (Factor) TableName() string {
 }
 
 
-func NewFactor(user *User, factorSimpleName, id string)(*Factor, error) {
+func NewFactor(user *User, factorSimpleName, id,factorType, secretKey string)(*Factor, error) {
 	// TODO: Pass in secret and hash it using bcrypt or equiv
 	factor := &Factor {
 		ID: id,
 		UserID: user.ID,
-		CreatedAt: time.Now(),
 		Enabled: true,
 		FactorSimpleName: factorSimpleName,
+		SecretKey: secretKey,
+		FactorType: factorType,
+
 	}
 	return factor, nil
 }

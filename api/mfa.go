@@ -2,6 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/pquerna/otp/totp"
+	"bytes"
+	"encoding/base64"
+	"fmt"
 	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -22,19 +26,23 @@ type BackupCodesResponse struct {
 
 type EnableMFAResponse struct {
 	Success bool
-	Error string
 }
 
 type DisableMFAResponse struct {
 	Success bool
-	Error   string
+}
+
+type TOTPObject struct {
+	QRCode string
+	Secret string
+	URI string
 }
 
 type EnrollFactorResponse struct {
-	Id string
+	ID string
 	CreatedAt string
-	UpdatedAt string
 	Type string
+	TOTP TOTPObject
 	// TOTP field once we include package
 
 }
@@ -49,11 +57,6 @@ func (a *API) EnableMFA(w http.ResponseWriter, r *http.Request) error {
 		if terr := user.EnableMFA(tx); terr != nil {
 			return internalServerError("Error enabling MFA").WithInternalError(terr)
 		}
-
-		// TODO(Joel): Add relevant IP header, admin, etc logging here
-		// if terr := models.NewAuditLogEntry(tx, instanceID, user, models.GenerateBackupCodesAction, nil); terr != nil {
-		// 	return terr
-		// }
 		return nil
 	})
 	if err != nil {
@@ -61,7 +64,6 @@ func (a *API) EnableMFA(w http.ResponseWriter, r *http.Request) error {
 	}
 	return sendJSON(w, http.StatusOK, &EnableMFAResponse {
 		Success: true,
-		Error: "",
 	})
 
 }
@@ -69,16 +71,11 @@ func (a *API) EnableMFA(w http.ResponseWriter, r *http.Request) error {
 func (a *API) DisableMFA(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
-	// instanceID := getInstanceID(ctx)
 	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := user.DisableMFA(tx); terr != nil {
 			return internalServerError("Error Disabling MFA").WithInternalError(terr)
 		}
 
-		// TODO(Joel): Add relevant IP header, admin, etc logging here
-		// if terr := models.NewAuditLogEntry(tx, instanceID, user, models.GenerateBackupCodesAction, nil); terr != nil {
-		// 	return terr
-		// }
 		return nil
 	})
 	if err != nil {
@@ -86,7 +83,6 @@ func (a *API) DisableMFA(w http.ResponseWriter, r *http.Request) error {
 	}
 	return sendJSON(w, http.StatusOK, &DisableMFAResponse{
 		Success: true,
-		Error:   "",
 	})
 
 }
@@ -103,10 +99,9 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	const MAX_FACTOR_LENGTH = 256
 	const MAX_FACTOR_NAME_LENGTH = 256
+	//const IMAGE_SIDE_LENGTH = 300
 	ctx := r.Context()
 	user := getUser(ctx)
-	// instanceID := getInstanceID(ctx)
-	// // TODO: Convert this into a formal error
 	if !user.MFAEnabled {
 		return MFANotEnabledError
 	}
@@ -119,19 +114,28 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read EnrollFactor params: %v", err)
 	}
 
-	if params.FactorID == "" || len(params.FactorID) > MAX_FACTOR_LENGTH {
-		return unprocessableEntityError("FactorID needs to have between 0 and 256 characters")
-	}
-
-	if len(params.FactorSimpleName) > MAX_FACTOR_NAME_LENGTH {
-		return unprocessableEntityError("FactorName needs to have between 0 and 256 characters")
-	}
-	// TODO: convert to enum
 	if (params.FactorType != "totp") && (params.FactorType != "webauthn") {
 		return unprocessableEntityError("FactorType needs to be either 'totp' or 'webauthn'")
 	}
 
-	factor, terr := models.NewFactor(user, params.FactorSimpleName, params.FactorID)
+
+	// TODO: Figure out way to extract string allow user to pass in timeout and issuer?
+	key, err := totp.Generate(totp.GenerateOpts{
+                Issuer:      "test@gmail.com",
+                AccountName: "test@gmail.com",
+    })
+	if err != nil {
+		return internalServerError("Error generating QR Code secret key").WithInternalError(err)
+    }
+	var buf bytes.Buffer
+    //img, err := key.Image(IMAGE_SIDE_LENGTH, IMAGE_SIDE_LENGTH)
+	if err != nil {
+		return internalServerError("Error generating QR Code image").WithInternalError(err)
+    }
+	qrAsString:= base64.StdEncoding.EncodeToString(buf.Bytes())
+
+	// TODO: Generate factor ID
+	factor, terr := models.NewFactor(user, params.FactorSimpleName, params.FactorID, params.FactorType, key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}
@@ -141,15 +145,17 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		// TODO(Joel): Add relevant IP header, admin, etc logging here, Add relevant action log
-		// if terr := models.NewAuditLogEntry(tx, instanceID, user, models.GenerateBackupCodesAction, nil); terr != nil {
-		// 	return terr
-		// }
 		return terr
 	})
 	// Formulate appropriate response to give here
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
-
+		ID: factor.ID,
+		Type: factor.FactorType,
+		TOTP: TOTPObject{
+			QRCode: fmt.Sprintf("data:img/png;base64,%v", qrAsString),
+			Secret: factor.SecretKey,
+			URI: key.URL(),
+		},
 	})
 }
 
@@ -189,7 +195,6 @@ func (a *API) GenerateBackupCodes(w http.ResponseWriter, r *http.Request) error 
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
-	// TODO: Convert this into a formal error
 	if !user.MFAEnabled {
 		return  MFANotEnabledError
 	}

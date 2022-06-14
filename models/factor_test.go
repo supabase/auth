@@ -39,7 +39,7 @@ func (ts *FactorTestSuite) TestToggleFactorEnabled() {
 	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
 	require.NoError(ts.T(), err)
 
-	f, err := NewFactor(u, "A1B2C3", "testfactor-id")
+	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "some-secret", "")
 	require.NoError(ts.T(), err)
 
 	require.NoError(ts.T(), f.Disable(ts.db))
