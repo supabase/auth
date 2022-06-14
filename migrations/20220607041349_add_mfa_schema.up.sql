@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS auth.mfa_factors(
        CONSTRAINT mfa_factors_pkey PRIMARY KEY(id),
        CONSTRAINT mfa_factors FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
-comment on table auth.mfa_factors is 'Auth: stores Multi Factor Authentication factor data';
+comment on table auth.mfa_factors is 'Auth: stores metadata about factors';
 
 -- auth.mfa_challenges definition
 CREATE TABLE IF NOT EXISTS auth.mfa_challenges(
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS auth.mfa_challenges(
        CONSTRAINT mfa_challenges_pkey PRIMARY KEY (id),
        CONSTRAINT mfa_challenges_auth_factor_id_fkey FOREIGN KEY (factor_id) REFERENCES auth.mfa_factors(id) ON DELETE CASCADE
 );
-comment on table auth.mfa_challenges is 'Auth: stores data of Multi Factor Authentication Requests';
+comment on table auth.mfa_challenges is 'Auth: stores metadata about challenge requests made';
 
 -- auth.mfa_backup_codes definition
 CREATE TABLE IF NOT EXISTS auth.mfa_backup_codes(
