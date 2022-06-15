@@ -42,7 +42,7 @@ func GrantRefreshTokenSwap(tx *storage.Connection, user *User, token *RefreshTok
 	var newToken *RefreshToken
 	err := tx.Transaction(func(rtx *storage.Connection) error {
 		var terr error
-		if terr = NewAuditLogEntry(tx, user.InstanceID, user, TokenRevokedAction, nil); terr != nil {
+		if terr = NewAuditLogEntry(tx, user.InstanceID, user, TokenRevokedAction, "", nil); terr != nil {
 			return errors.Wrap(terr, "error creating audit log entry")
 		}
 
