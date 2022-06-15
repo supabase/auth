@@ -113,7 +113,7 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 
 		u, ok := data["user"].(map[string]interface{})
 		require.True(ok)
-		assert.Len(u, NUM_USER_FIELDS)
+		assert.Len(u, numUserFields)
 		// assert.Equal(t, user.ID, u["id"]) TODO
 		assert.Equal("authenticated", u["aud"])
 		assert.Equal("authenticated", u["role"])
