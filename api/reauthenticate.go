@@ -49,7 +49,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserReauthenticateAction, nil); terr != nil {
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserReauthenticateAction, "", nil); terr != nil {
 			return terr
 		}
 		if email != "" {
