@@ -30,17 +30,18 @@ CREATE TABLE IF NOT EXISTS auth.mfa_challenges(
 );
 comment on table auth.mfa_challenges is 'Auth: stores metadata about challenge requests made';
 
--- auth.mfa_backup_codes definition
-CREATE TABLE IF NOT EXISTS auth.mfa_backup_codes(
+-- auth.mfa_recovery_codes definition
+CREATE TABLE IF NOT EXISTS auth.mfa_recovery_codes(
+       id serial PRIMARY KEY,
        user_id uuid NOT NULL,
-       backup_code VARCHAR(32) NOT NULL,
+       recovery_code VARCHAR(32) NOT NULL,
        valid BOOLEAN NOT NULL,
        created_at timestamptz NOT NULL,
        used_at timestamptz NOT NULL,
-       CONSTRAINT mfa_backup_codes_pkey PRIMARY KEY(user_id, backup_code),
-       CONSTRAINT mfa_backup_codes FOREIGN KEY(user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+       CONSTRAINT mfa_recovery_codes_user_id_recovery_code_key UNIQUE(user_id, recovery_code),
+       CONSTRAINT mfa_recovery_codes FOREIGN KEY(user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
-comment on table auth.mfa_backup_codes is 'Auth: stores backup codes for Multi Factor Authentication';
+comment on table auth.mfa_recovery_codes is 'Auth: stores recovery codes for Multi Factor Authentication';
 
 -- Add MFA toggle on Users table
 ALTER TABLE auth.users
