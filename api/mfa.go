@@ -18,11 +18,11 @@ func (a *API) EnableMFA(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, map[string]interface{}{
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, r.RemoteAddr, map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
-		}, r.RemoteAddr); terr != nil {
+		}); terr != nil {
 			return terr
 		}
 		return nil
@@ -46,11 +46,11 @@ func (a *API) DisableMFA(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, map[string]interface{}{
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, r.RemoteAddr, map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
-		}, r.RemoteAddr); terr != nil {
+		}); terr != nil {
 			return terr
 		}
 
