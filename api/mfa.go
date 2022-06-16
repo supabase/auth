@@ -218,19 +218,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
-	const CHALLENGE_PREFIX = "challenge"
-	if params.FactorID != "" && params.FactorSimpleName != "" {
-		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
-	}
-	if params.FactorID != "" {
-
-		// Handle finding  logic here
-	} else if params.FactorSimpleName != "" {
-		// Handle finding logic here
-	}
-
-	// Filter between finding by EITHER factor simple name OR  by ID. Error if both are not present
-	// Insert corresponding FindBy Clauses  (e.g. models.FindBySimpleNameAndUser and models.FindByUserAndId)
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
@@ -243,6 +230,19 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	err := jsonDecoder.Decode(params)
 	if err != nil {
 		return badRequestError("Could not read EnrollFactor params: %v", err)
+	}
+
+	const CHALLENGE_PREFIX = "challenge"
+	if params.FactorID != "" && params.FactorSimpleName != "" {
+		return unprocessableEntityError("Only a FactorID or FactorSimpleName should be provided on signup.")
+	}
+	if params.FactorID != "" {
+		// models.FindByFactorIDAndUser
+
+		// Handle finding  logic here
+	} else if params.FactorSimpleName != "" {
+		// Handle finding logic here
+		// models.FindBySimpleNameAndUser
 	}
 
 	challenge, terr := models.NewChallenge(factor)
@@ -264,8 +264,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 		return nil
 	})
-	// Notes: If you make 5 consecutive Challenges all 5 will be valid  until expiry
-	// Should we have an easy way to cancel a challenge?
 
 	// Create these details
 	return sendJSON(w, http.StatusOK, *ChallengeFactorResponse{
