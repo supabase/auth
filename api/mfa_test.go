@@ -38,6 +38,8 @@ func TestMFA(t *testing.T) {
 
 func (ts *MFATestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
+
+	// Create user
 	u, err := models.NewUser(ts.instanceID, "123456789", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
@@ -45,9 +47,6 @@ func (ts *MFATestSuite) SetupTest() {
 
 func (ts *MFATestSuite) TestMFAEnable() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), u.EnableMFA(ts.API.db))
-	require.NoError(ts.T(), u.DisableMFA(ts.API.db))
-
 	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
 

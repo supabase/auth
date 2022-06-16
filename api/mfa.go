@@ -10,9 +10,6 @@ func (a *API) EnableMFA(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
-	if user.MFAEnabled {
-		return MFANotEnabled
-	}
 	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := user.EnableMFA(tx); terr != nil {
 			return terr
@@ -38,9 +35,6 @@ func (a *API) DisableMFA(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
-	if !user.MFAEnabled {
-		return MFANotDisabled
-	}
 	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := user.DisableMFA(tx); terr != nil {
 			return terr
