@@ -190,6 +190,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 				r.Put("/enable_mfa", api.EnableMFA)
 				r.Get("/generate_recovery_codes", api.GenerateRecoveryCodes)
 				r.Post("/enroll_factor", api.EnrollFactor)
+				r.Post("/challenge_factor", api.ChallengeFactor)
 			})
 		})
 	})

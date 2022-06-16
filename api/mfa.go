@@ -33,6 +33,19 @@ type EnrollFactorResponse struct {
 	TOTP      TOTPObject
 }
 
+type ChallengeFactorParams struct {
+	FactorID         string
+	FactorSimpleName string
+}
+
+type ChallengeFactorResponse struct {
+	ChallengeID string
+	CreatedAt   string
+	UpdatedAt   string
+	ExpiredAt   string
+	FactorID    string
+}
+
 // RecoveryCodesResponse repreesnts a successful Backup code generation response
 type RecoveryCodesResponse struct {
 	RecoveryCodes []string
@@ -201,5 +214,65 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 			Secret: factor.SecretKey,
 			URI:    key.URL(),
 		},
+	})
+}
+
+func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
+	const CHALLENGE_PREFIX = "challenge"
+	if params.FactorID != "" && params.FactorSimpleName != "" {
+		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
+	}
+	if params.FactorID != "" {
+
+		// Handle finding  logic here
+	} else if params.FactorSimpleName != "" {
+		// Handle finding logic here
+	}
+
+	// Filter between finding by EITHER factor simple name OR  by ID. Error if both are not present
+	// Insert corresponding FindBy Clauses  (e.g. models.FindBySimpleNameAndUser and models.FindByUserAndId)
+	ctx := r.Context()
+	user := getUser(ctx)
+	instanceID := getInstanceID(ctx)
+	if !user.MFAEnabled {
+		return MFANotEnabledError
+	}
+
+	params := &ChallengeFactorParams{}
+	jsonDecoder := json.NewDecoder(r.Body)
+	err := jsonDecoder.Decode(params)
+	if err != nil {
+		return badRequestError("Could not read EnrollFactor params: %v", err)
+	}
+
+	challenge, terr := models.NewChallenge(factor)
+	if terr != nil {
+		return internalServerError("Database error creating challenge").WithInternalError(err)
+	}
+
+	terr = a.db.Transaction(func(tx *storage.Connection) error {
+		if terr = tx.Create(challenge); terr != nil {
+			return terr
+		}
+		// TODO: store data about what was challenged perhaps
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
+			"factor_id":          params.FactorID,
+			"factor_simple_name": params.FactorSimpleName,
+		}); terr != nil {
+			return terr
+		}
+
+		return nil
+	})
+	// Notes: If you make 5 consecutive Challenges all 5 will be valid  until expiry
+	// Should we have an easy way to cancel a challenge?
+
+	// Create these details
+	return sendJSON(w, http.StatusOK, *ChallengeFactorResponse{
+		// ID:
+		// CreatedAt:
+		// UpdatedAt:
+		// ExpiresAt:
+		// 	FactorID: factor.ID
 	})
 }
