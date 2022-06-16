@@ -16,9 +16,8 @@ import (
 
 type MFATestSuite struct {
 	suite.Suite
-	API    *API
-	Config *conf.Configuration
-
+	API        *API
+	Config     *conf.Configuration
 	instanceID uuid.UUID
 }
 
@@ -52,7 +51,6 @@ func (ts *MFATestSuite) TestMFAEnable() {
 
 	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("http://localhost/mfa/%s/enable_mfa", u.ID), nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), w.Code, http.StatusOK)
@@ -60,19 +58,16 @@ func (ts *MFATestSuite) TestMFAEnable() {
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	require.True(ts.T(), u.MFAEnabled)
-
 }
 
 func (ts *MFATestSuite) TestMFADisable() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), u.EnableMFA(ts.API.db))
-
 	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
 
 	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("http://localhost/mfa/%s/disable_mfa", u.ID), nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), w.Code, http.StatusOK)
