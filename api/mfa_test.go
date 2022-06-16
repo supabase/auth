@@ -74,7 +74,6 @@ func (ts *MFATestSuite) TestMFADisable() {
 
 	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("http://localhost/mfa/%s/disable_mfa", u.ID), nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), w.Code, http.StatusOK)
@@ -88,11 +87,10 @@ func (ts *MFATestSuite) TestMFARecoveryCodeGeneration() {
 	const EXPECTED_NUM_OF_RECOVERY_CODES = 8
 
 	u, err := models.NewUser(ts.instanceID, "", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
-	u.MFAEnabled = true
+	u.EnableMFA()
 
 	err = ts.API.db.Create(u)
 	require.NoError(ts.T(), err)
-
 	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
 
@@ -102,16 +100,13 @@ func (ts *MFATestSuite) TestMFARecoveryCodeGeneration() {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/mfa/%s/generate_recovery_codes", user.ID), nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-
 	ts.API.handler.ServeHTTP(w, req)
 
 	data := make(map[string]interface{})
-
 	require.Equal(ts.T(), http.StatusOK, w.Code)
-
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-	backupCodes := data["RecoveryCodes"].([]interface{})
 
-	numCodes := len(backupCodes)
+	recoveryCodes := data["RecoveryCodes"].([]interface{})
+	numCodes := len(recoveryCodes)
 	require.Equal(ts.T(), EXPECTED_NUM_OF_RECOVERY_CODES, numCodes)
 }

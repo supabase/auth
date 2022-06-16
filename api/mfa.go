@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// RecoveryCodesResponse repreesnts a successful Backup code generation response
+// RecoveryCodesResponse repreesnts a successful recovery code generation response
 type RecoveryCodesResponse struct {
 	RecoveryCodes []string
 }
@@ -91,7 +91,7 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 		recoveryCode = crypto.SecureToken(RECOVERY_CODE_LENGTH)
 		recoveryCodeModel, terr = models.NewRecoveryCode(user, recoveryCode, &now)
 		if terr != nil {
-			return internalServerError("Error creating backup code").WithInternalError(terr)
+			return internalServerError("Error creating recovery code").WithInternalError(terr)
 		}
 		recoveryCodes = append(recoveryCodes, recoveryCode)
 		recoveryCodeModels = append(recoveryCodeModels, recoveryCodeModel)

@@ -39,8 +39,8 @@ func NewRecoveryCode(user *User, recoveryCode string, now *time.Time) (*Recovery
 	return code, nil
 }
 
-// FindRecoveryCodes returns all valid recovery codes associated to a user
-func FindRecoveryCodesByUser(tx *storage.Connection, user *User) ([]*RecoveryCode, error) {
+// FindValidRecoveryCodes returns all valid recovery codes associated to a user
+func FindValidRecoveryCodesByUser(tx *storage.Connection, user *User) ([]*RecoveryCode, error) {
 	recoveryCodes := []*RecoveryCode{}
 	if err := tx.Q().Where("user_id = ? AND valid = ?", user.ID, true).All(&recoveryCodes); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
