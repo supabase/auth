@@ -218,6 +218,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
+	const challengeExpiryDuration = 300
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
@@ -232,17 +233,16 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read EnrollFactor params: %v", err)
 	}
 
-	const CHALLENGE_PREFIX = "challenge"
 	if params.FactorID != "" && params.FactorSimpleName != "" {
 		return unprocessableEntityError("Only a FactorID or FactorSimpleName should be provided on signup.")
 	}
+	/// var factor
 	if params.FactorID != "" {
-		// models.FindByFactorIDAndUser
+		// factor = models.FindByFactorID()
 
-		// Handle finding  logic here
 	} else if params.FactorSimpleName != "" {
-		// Handle finding logic here
-		// models.FindBySimpleNameAndUser
+		// factor = models.FindFactorBySimpleName()
+		// If errors
 	}
 
 	challenge, terr := models.NewChallenge(factor)
@@ -254,7 +254,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = tx.Create(challenge); terr != nil {
 			return terr
 		}
-		// TODO: store data about what was challenged perhaps
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":          params.FactorID,
 			"factor_simple_name": params.FactorSimpleName,
@@ -267,10 +266,10 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 	// Create these details
 	return sendJSON(w, http.StatusOK, *ChallengeFactorResponse{
-		// ID:
-		// CreatedAt:
-		// UpdatedAt:
-		// ExpiresAt:
+		// ID: challenge.ID
+		// CreatedAt: challenge.CreatedAt
+		// Error handle the manipulation below
+		// ExpiresAt: time.Parse(challenge.CreatedAt).Add(time.Second * challengeExpiryDuration)
 		// 	FactorID: factor.ID
 	})
 }

@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"fmt"
@@ -15,9 +15,11 @@ func (Challenge) TableName() string {
 	tableName := "mfa_challenges"
 }
 
+const CHALLENGE_PREFIX = "challenge"
+
 func NewChallenge(factor *Factor) (*Challenge, error) {
 	challenge := &Challenge{
-		ID:       id,
+		ID:       fmt.Sprintf("%s_%s", CHALLENGE_PREFIX, crypto.SecureToken()),
 		FactorID: factor.ID,
 	}
 }
