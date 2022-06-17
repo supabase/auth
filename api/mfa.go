@@ -39,11 +39,11 @@ type ChallengeFactorParams struct {
 }
 
 type ChallengeFactorResponse struct {
-	ChallengeID string
-	CreatedAt   string
-	UpdatedAt   string
-	ExpiredAt   string
-	FactorID    string
+	ID        string
+	CreatedAt string
+	UpdatedAt string
+	ExpiresAt string
+	FactorID  string
 }
 
 // RecoveryCodesResponse repreesnts a successful Backup code generation response
@@ -153,6 +153,7 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	const FACTOR_PREFIX = "factor"
 	const IMAGE_SIDE_LENGTH = 300
+	var factor *models.Factor
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
@@ -225,10 +226,12 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	if !user.MFAEnabled {
 		return MFANotEnabledError
 	}
+	var factor *models.Factor
+	var err error
 
 	params := &ChallengeFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
-	err := jsonDecoder.Decode(params)
+	err = jsonDecoder.Decode(params)
 	if err != nil {
 		return badRequestError("Could not read EnrollFactor params: %v", err)
 	}
@@ -240,10 +243,9 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if factorID != "" {
-		factor, err := models.FindByFactorID(factorID)
-
+		factor, err = models.FindFactorByFactorID(a.db, factorID)
 	} else if params.FactorSimpleName != "" {
-		factor, err := models.FindFactorBySimpleName(factorSimpleName)
+		factor, err = models.FindFactorBySimpleName(a.db, factorSimpleName)
 	}
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -252,7 +254,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding factor").WithInternalError(err)
 	}
 
-	challenge, terr := models.NewChallenge(factor)
+	challenge, terr := models.NewChallenge(factor.ID)
 	if terr != nil {
 		return internalServerError("Database error creating challenge").WithInternalError(err)
 	}
@@ -270,16 +272,16 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 		return nil
 	})
-	creationTime := challenge.CreatedAt
+	creationTime := challenge.CreatedAt.String()
 	expiryTimeAsTimestamp, err := time.Parse(time.RFC3339, creationTime)
 	if err != nil {
 		return internalServerError("Error parsing database timestamp").WithInternalError(err)
 	}
 
-	return sendJSON(w, http.StatusOK, *ChallengeFactorResponse{
+	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
 		CreatedAt: creationTime,
-		ExpiresAt: expiryTimeAsTimestamp.Add(time.Second * CHALLENGE_EXPIRY_DURATION),
+		ExpiresAt: expiryTimeAsTimestamp.Add(time.Second * CHALLENGE_EXPIRY_DURATION).String(),
 		FactorID:  factor.ID,
 	})
 }

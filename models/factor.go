@@ -38,7 +38,7 @@ func NewFactor(user *User, factorSimpleName, id, factorType, secretKey string) (
 }
 
 // FindFactorsByUser returns all factors belonging to a user
-func FindFactorsByUser(tx *storage.Connection, user *User) (*Factor, error) {
+func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	factors := []*Factor{}
 	if err := tx.Q().Where("user_id = ?", user.ID, true).All(&factors); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
@@ -49,7 +49,7 @@ func FindFactorsByUser(tx *storage.Connection, user *User) (*Factor, error) {
 	return factors, nil
 }
 
-func (f *Factor) FindFactorByFactorID(tx *storage.Connection, factorID string) (*Factor, error) {
+func FindFactorByFactorID(tx *storage.Connection, factorID string) (*Factor, error) {
 	factor, err := findFactor(tx, "id = ?", factorID)
 	if err != nil {
 		return nil, FactorNotFoundError{}
@@ -57,7 +57,7 @@ func (f *Factor) FindFactorByFactorID(tx *storage.Connection, factorID string) (
 	return factor, nil
 }
 
-func (f *Factor) FindFactorBySimpleName(tx *storage.Connection, simpleName string) ([]*Factor, error) {
+func FindFactorBySimpleName(tx *storage.Connection, simpleName string) (*Factor, error) {
 	factor, err := findFactor(tx, "factor_simple_name = ?", simpleName)
 	if err != nil {
 		return nil, FactorNotFoundError{}
