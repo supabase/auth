@@ -38,7 +38,7 @@ func NewFactor(user *User, factorSimpleName, id, factorType, secretKey string) (
 }
 
 // FindFactorsByUser returns all factors belonging to a user
-func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
+func FindFactorsByUser(tx *storage.Connection, user *User) (*Factor, error) {
 	factors := []*Factor{}
 	if err := tx.Q().Where("user_id = ?", user.ID, true).All(&factors); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
@@ -47,6 +47,22 @@ func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 		return nil, errors.Wrap(err, "Error finding mfa factors")
 	}
 	return factors, nil
+}
+
+func (f *Factor) FindFactorByFactorID(tx *storage.Connection, factorID string) (*Factor, error) {
+	factor, err := findFactor(tx, "id = ?", factorID)
+	if err != nil {
+		return nil, FactorNotFoundError{}
+	}
+	return factor, nil
+}
+
+func (f *Factor) FindFactorBySimpleName(tx *storage.Connection, simpleName string) ([]*Factor, error) {
+	factor, err := findFactor(tx, "factor_simple_name = ?", simpleName)
+	if err != nil {
+		return nil, FactorNotFoundError{}
+	}
+	return factor, nil
 }
 
 // Change the factor simple name
@@ -63,4 +79,16 @@ func (f *Factor) Disable(tx *storage.Connection) error {
 func (f *Factor) Enable(tx *storage.Connection) error {
 	f.Enabled = true
 	return tx.UpdateOnly(f, "enabled")
+}
+
+func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Factor, error) {
+	obj := &Factor{}
+	if err := tx.Eager().Q().Where(query, args...).First(obj); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, FactorNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding factor")
+	}
+
+	return obj, nil
 }

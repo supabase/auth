@@ -218,7 +218,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
-	const challengeExpiryDuration = 300
+	const CHALLENGE_EXPIRY_DURATION = 300
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
@@ -232,17 +232,24 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return badRequestError("Could not read EnrollFactor params: %v", err)
 	}
+	factorID := params.FactorID
+	factorSimpleName := params.FactorSimpleName
 
-	if params.FactorID != "" && params.FactorSimpleName != "" {
+	if factorID != "" && factorSimpleName != "" {
 		return unprocessableEntityError("Only a FactorID or FactorSimpleName should be provided on signup.")
 	}
-	/// var factor
-	if params.FactorID != "" {
-		// factor = models.FindByFactorID()
+
+	if factorID != "" {
+		factor, err := models.FindByFactorID(factorID)
 
 	} else if params.FactorSimpleName != "" {
-		// factor = models.FindFactorBySimpleName()
-		// If errors
+		factor, err := models.FindFactorBySimpleName(factorSimpleName)
+	}
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return notFoundError(err.Error())
+		}
+		return internalServerError("Database error finding factor").WithInternalError(err)
 	}
 
 	challenge, terr := models.NewChallenge(factor)
@@ -263,13 +270,16 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 		return nil
 	})
+	creationTime := challenge.CreatedAt
+	expiryTimeAsTimestamp, err := time.Parse(time.RFC3339, creationTime)
+	if err != nil {
+		return internalServerError("Error parsing database timestamp").WithInternalError(err)
+	}
 
-	// Create these details
 	return sendJSON(w, http.StatusOK, *ChallengeFactorResponse{
-		// ID: challenge.ID
-		// CreatedAt: challenge.CreatedAt
-		// Error handle the manipulation below
-		// ExpiresAt: time.Parse(challenge.CreatedAt).Add(time.Second * challengeExpiryDuration)
-		// 	FactorID: factor.ID
+		ID:        challenge.ID,
+		CreatedAt: creationTime,
+		ExpiresAt: expiryTimeAsTimestamp.Add(time.Second * CHALLENGE_EXPIRY_DURATION),
+		FactorID:  factor.ID,
 	})
 }
