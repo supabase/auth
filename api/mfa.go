@@ -38,6 +38,11 @@ type ChallengeFactorParams struct {
 	FactorSimpleName string
 }
 
+type VerifyParams struct {
+	ChallengeID string
+	Code string
+}
+
 type ChallengeFactorResponse struct {
 	ID        string
 	CreatedAt string
@@ -45,6 +50,14 @@ type ChallengeFactorResponse struct {
 	ExpiresAt string
 	FactorID  string
 }
+
+type VerfifyResponse struct {
+	Nonce string
+	ChallengeID stryying
+	MFAType string
+	Success string
+}
+
 
 // RecoveryCodesResponse repreesnts a successful Backup code generation response
 type RecoveryCodesResponse struct {
@@ -284,4 +297,31 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		ExpiresAt: expiryTimeAsTimestamp.Add(time.Second * CHALLENGE_EXPIRY_DURATION).String(),
 		FactorID:  factor.ID,
 	})
+}
+
+func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
+	// What about the webauthn case?
+	// TOTP -> call function to check code as
+	// var success
+	// Find the secret by factor and unhash it
+	// FindFactorByChallengeID(challenge_id) -> Get the secret
+	//
+	// valid := totp.Validate(passcode, key.Secret())
+	// Transaction to fetch the secret
+	// Audit log that we are erading from DB
+
+	// if valid {
+	// 	success = True
+	//  // Continue on with life
+	// } else {
+	//  return InvalidPasscodError
+	// }
+
+	// Takes in: Challenge ID, Code
+	// Return
+	// challenge ID -> Should have a verified field
+	// Set a verified field
+	// mfaType
+	// success
+
 }
