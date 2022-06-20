@@ -22,7 +22,8 @@ type OtpParams struct {
 
 // SmsParams contains the request body params for sms otp
 type SmsParams struct {
-	Phone string `json:"phone"`
+	Phone string                 `json:"phone"`
+	Data  map[string]interface{} `json:"data"`
 }
 
 // Otp returns the MagicLink or SmsOtp handler based on the request body params
@@ -74,8 +75,15 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	if err := jsonDecoder.Decode(params); err != nil {
 		return badRequestError("Could not read sms otp params: %v", err)
 	}
+	if params.Data == nil {
+		params.Data = make(map[string]interface{})
+	}
 
-	var err error
+	metadata, err := json.Marshal(params.Data)
+	if err != nil {
+		return badRequestError("Could not parse metadata: %v", err)
+	}
+
 	params.Phone, err = a.validatePhone(params.Phone)
 	if err != nil {
 		return err
@@ -91,7 +99,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				internalServerError("error creating user").WithInternalError(err)
 			}
-			newBodyContent := `{"phone":"` + params.Phone + `","password":"` + password + `"}`
+			newBodyContent := `{"phone":"` + params.Phone + `","password":"` + password + `",data":"` + string(metadata) + `"}`
 			r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
 			r.ContentLength = int64(len(newBodyContent))
 
