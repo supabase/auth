@@ -10,24 +10,29 @@ import (
 )
 
 type Challenge struct {
-	ID        string     `json:"challenge_id" db:"id"`
-	FactorID  string     `json:"factor_id" db:"factor_id"`
-	CreatedAt *time.Time `json:"created_at" db:"created_at"`
+	ID        string    `json:"challenge_id" db:"id"`
+	FactorID  string    `json:"factor_id" db:"factor_id"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+}
+
+func (Challenge) TableName() string {
+	tableName := "mfa_challenges"
+	return tableName
 }
 
 const CHALLENGE_PREFIX = "challenge"
 
-func NewChallenge(factorID string) (*Challenge, error) {
+func NewChallenge(factor *Factor) (*Challenge, error) {
 	challenge := &Challenge{
 		ID:       fmt.Sprintf("%s_%s", CHALLENGE_PREFIX, crypto.SecureToken()),
-		FactorID: factorID,
+		FactorID: factor.ID,
 	}
 	return challenge, nil
 }
 
 func FindChallengesByFactorID(tx *storage.Connection, factorID string) ([]*Challenge, error) {
 	challenges := []*Challenge{}
-	if err := tx.Q().Where("factor_id = ?", factorID, true).All(&challenges); err != nil {
+	if err := tx.Q().Where("factor_id = ?", factorID).All(&challenges); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return challenges, nil
 		}

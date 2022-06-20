@@ -38,7 +38,7 @@ func (ts *FactorTestSuite) TestToggleFactorEnabled() {
 	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
 	require.NoError(ts.T(), err)
 
-	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "some-secret", "")
+	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "phone", "some-secret")
 	require.NoError(ts.T(), err)
 
 	require.NoError(ts.T(), f.Disable(ts.db))
@@ -50,4 +50,36 @@ func (ts *FactorTestSuite) TestToggleFactorEnabled() {
 	require.NoError(ts.T(), f.Enable(ts.db))
 	require.Equal(ts.T(), true, f.Enabled)
 
+}
+
+func (ts *FactorTestSuite) TestFindFactorBySimpleName() {
+	f := ts.createFactor()
+
+	n, err := FindFactorBySimpleName(ts.db, f.SimpleName)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), f.ID, n.ID)
+}
+
+func (ts *FactorTestSuite) TestFindFactorByFactorID() {
+	f := ts.createFactor()
+
+	n, err := FindFactorByFactorID(ts.db, f.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), f.ID, n.ID)
+}
+
+func (ts *FactorTestSuite) createFactor() *Factor {
+	user, err := NewUser(uuid.Nil, "", "agenericemail@gmail.com", "secret", "test", nil)
+	require.NoError(ts.T(), err)
+
+	err = ts.db.Create(user)
+	require.NoError(ts.T(), err)
+
+	factor, err := NewFactor(user, "asimplename", "factor-which-shall-not-be-named", "phone", "topsecret")
+	require.NoError(ts.T(), err)
+
+	err = ts.db.Create(factor)
+	require.NoError(ts.T(), err)
+
+	return factor
 }

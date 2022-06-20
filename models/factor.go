@@ -9,14 +9,14 @@ import (
 )
 
 type Factor struct {
-	UserID           uuid.UUID `json`
-	ID               string    `json:"id" db:"id"`
-	CreatedAt        time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
-	Enabled          bool      `json:"enabled" db:"enabled"`
-	FactorSimpleName string    `json:"factor_simple_name" db:"factor_simple_name"`
-	SecretKey        string    `json:'-' db:'secret_key'`
-	FactorType       string    `json:"factor_type" db:"factor_type"`
+	UserID     uuid.UUID `json:"user_id" db:"user_id"`
+	ID         string    `json:"id" db:"id"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
+	Enabled    bool      `json:"enabled" db:"enabled"`
+	SimpleName string    `json:"simple_name" db:"simple_name"`
+	SecretKey  string    `json:"secret_key" db:"secret_key"`
+	FactorType string    `json:"factor_type" db:"factor_type"`
 }
 
 func (Factor) TableName() string {
@@ -24,15 +24,15 @@ func (Factor) TableName() string {
 	return tableName
 }
 
-func NewFactor(user *User, factorSimpleName, id, factorType, secretKey string) (*Factor, error) {
+func NewFactor(user *User, simpleName, id, factorType, secretKey string) (*Factor, error) {
 	// TODO: Pass in secret and hash it using bcrypt or equiv
 	factor := &Factor{
-		ID:               id,
-		UserID:           user.ID,
-		Enabled:          true,
-		FactorSimpleName: factorSimpleName,
-		SecretKey:        secretKey,
-		FactorType:       factorType,
+		ID:         id,
+		UserID:     user.ID,
+		Enabled:    true,
+		SimpleName: simpleName,
+		SecretKey:  secretKey,
+		FactorType: factorType,
 	}
 	return factor, nil
 }
@@ -58,7 +58,7 @@ func FindFactorByFactorID(tx *storage.Connection, factorID string) (*Factor, err
 }
 
 func FindFactorBySimpleName(tx *storage.Connection, simpleName string) (*Factor, error) {
-	factor, err := findFactor(tx, "factor_simple_name = ?", simpleName)
+	factor, err := findFactor(tx, "simple_name = ?", simpleName)
 	if err != nil {
 		return nil, FactorNotFoundError{}
 	}
@@ -68,7 +68,7 @@ func FindFactorBySimpleName(tx *storage.Connection, simpleName string) (*Factor,
 // Change the factor simple name
 func (f *Factor) UpdateFactorSimpleName(tx *storage.Connection) error {
 	f.UpdatedAt = time.Now()
-	return tx.UpdateOnly(f, "factor_simple_name", "updated_at")
+	return tx.UpdateOnly(f, "simple_name", "updated_at")
 }
 
 func (f *Factor) Disable(tx *storage.Connection) error {

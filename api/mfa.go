@@ -15,9 +15,9 @@ import (
 )
 
 type EnrollFactorParams struct {
-	FactorSimpleName string `json:"factor_simple_name"`
-	FactorType       string `json:"factor_type"`
-	Issuer           string `json:"issuer"`
+	SimpleName string `json:"factor_simple_name"`
+	FactorType string `json:"factor_type"`
+	Issuer     string `json:"issuer"`
 }
 
 type TOTPObject struct {
@@ -191,7 +191,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	factorID := fmt.Sprintf("%s_%s", FACTOR_PREFIX, crypto.SecureToken())
 
-	factor, terr := models.NewFactor(user, params.FactorSimpleName, factorID, params.FactorType, key.Secret())
+	factor, terr := models.NewFactor(user, params.SimpleName, factorID, params.FactorType, key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}
@@ -254,7 +254,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding factor").WithInternalError(err)
 	}
 
-	challenge, terr := models.NewChallenge(factor.ID)
+	challenge, terr := models.NewChallenge(factor)
 	if terr != nil {
 		return internalServerError("Database error creating challenge").WithInternalError(err)
 	}
