@@ -65,6 +65,17 @@ func FindFactorBySimpleName(tx *storage.Connection, simpleName string) (*Factor,
 	return factor, nil
 }
 
+func FindFactorByChallengeID(tx *storage.Connection, factorID string) (*Factor, error) {
+	factor := &Factor{}
+	if err := tx.Q().Join("mfa_challenges", "mfa_factors.ID = mfa_challenges.factor_id").Where("id = ?", factorID).First(factor); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, FactorNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding factor")
+	}
+	return factor, nil
+}
+
 // Change the factor simple name
 func (f *Factor) UpdateFactorSimpleName(tx *storage.Connection) error {
 	f.UpdatedAt = time.Now()

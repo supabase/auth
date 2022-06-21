@@ -38,9 +38,9 @@ type ChallengeFactorParams struct {
 	FactorSimpleName string
 }
 
-type VerifyParams struct {
-	ChallengeID string
-	Code string
+type VerifyFactorParams struct {
+	ChallengeID string `json:"challenge_id"`
+	Code        string `json:"code"`
 }
 
 type ChallengeFactorResponse struct {
@@ -51,13 +51,11 @@ type ChallengeFactorResponse struct {
 	FactorID  string
 }
 
-type VerfifyResponse struct {
-	Nonce string
-	ChallengeID stryying
-	MFAType string
-	Success string
+type VerifyFactorResponse struct {
+	ChallengeID string
+	MFAType     string
+	Success     string
 }
-
 
 // RecoveryCodesResponse repreesnts a successful Backup code generation response
 type RecoveryCodesResponse struct {
@@ -300,28 +298,49 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
-	// What about the webauthn case?
-	// TOTP -> call function to check code as
-	// var success
-	// Find the secret by factor and unhash it
-	// FindFactorByChallengeID(challenge_id) -> Get the secret
+	// TODO: Joel We need to attach a rate limiter to this so it doesn't get fuzzed
+	var err error
+	ctx := r.Context()
+	user := getUser(ctx)
+	instanceID := getInstanceID(ctx)
+	if !user.MFAEnabled {
+		return MFANotEnabledError
+	}
+	params := &VerifyFactorParams{}
+	jsonDecoder := json.NewDecoder(r.Body)
+	err = jsonDecoder.Decode(params)
+	if err != nil {
+		return badRequestError("Could not read VerifyFactor params: %v", err)
+	}
+
+	factor, err := models.FindFactorByChallengeID(a.db, params.ChallengeID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return notFoundError(err.Error())
+		}
+		return internalServerError("Database error finding factor").WithInternalError(err)
+	}
+	// No unhashing it
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+
+		if err = models.NewAuditLogEntry(tx, instanceID, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
+			"factor_id":    factor.ID,
+			"challenge_id": params.ChallengeID,
+		}); err != nil {
+			return err
+		}
+		return nil
+	})
 	//
-	// valid := totp.Validate(passcode, key.Secret())
-	// Transaction to fetch the secret
-	// Audit log that we are erading from DB
+	valid := totp.Validate(params.Code, factor.SecretKey)
+	if valid != true {
+		return unauthorizedError("Invalid code entered")
+	}
 
-	// if valid {
-	// 	success = True
-	//  // Continue on with life
-	// } else {
-	//  return InvalidPasscodError
-	// }
-
-	// Takes in: Challenge ID, Code
-	// Return
-	// challenge ID -> Should have a verified field
-	// Set a verified field
-	// mfaType
-	// success
+	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
+		ChallengeID: params.ChallengeID,
+		MFAType:     factor.FactorType,
+		Success:     fmt.Sprintf("%v", valid),
+	})
 
 }
