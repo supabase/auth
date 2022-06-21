@@ -15,7 +15,7 @@ import (
 )
 
 type EnrollFactorParams struct {
-	SimpleName string `json:"factor_simple_name"`
+	SimpleName string `json:"simple_name"`
 	FactorType string `json:"factor_type"`
 	Issuer     string `json:"issuer"`
 }
@@ -34,16 +34,17 @@ type EnrollFactorResponse struct {
 }
 
 type ChallengeFactorParams struct {
-	FactorID         string
-	FactorSimpleName string
+	FactorID         string `json:"factor_id"`
+	FactorSimpleName string `json:"factor_simple_name"`
 }
 
 type ChallengeFactorResponse struct {
-	ID        string
-	CreatedAt string
-	UpdatedAt string
-	ExpiresAt string
-	FactorID  string
+	ID               string
+	CreatedAt        string
+	UpdatedAt        string
+	ExpiresAt        string
+	FactorID         string
+	FactorSimpleName string
 }
 
 // RecoveryCodesResponse repreesnts a successful Backup code generation response
@@ -116,7 +117,7 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
-		return MFANotEnabledError
+		forbiddenError(MFANotEnabledMsg)
 	}
 	now := time.Now()
 	recoveryCodeModels := []*models.RecoveryCode{}
@@ -153,12 +154,11 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	const FACTOR_PREFIX = "factor"
 	const IMAGE_SIDE_LENGTH = 300
-	var factor *models.Factor
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
-		return MFANotEnabledError
+		return forbiddenError(MFANotEnabledMsg)
 	}
 
 	params := &EnrollFactorParams{}
@@ -224,7 +224,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
-		return MFANotEnabledError
+		return forbiddenError(MFANotEnabledMsg)
 	}
 	var factor *models.Factor
 	var err error
@@ -244,8 +244,10 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 	if factorID != "" {
 		factor, err = models.FindFactorByFactorID(a.db, factorID)
-	} else if params.FactorSimpleName != "" {
+	} else if factorSimpleName != "" {
 		factor, err = models.FindFactorBySimpleName(a.db, factorSimpleName)
+	} else {
+		return unprocessableEntityError("Either FactorID or FactorSimpleName should be provided on signup.")
 	}
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -272,16 +274,16 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 		return nil
 	})
-	creationTime := challenge.CreatedAt.String()
-	expiryTimeAsTimestamp, err := time.Parse(time.RFC3339, creationTime)
+	creationTime := challenge.CreatedAt
 	if err != nil {
 		return internalServerError("Error parsing database timestamp").WithInternalError(err)
 	}
 
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
-		ID:        challenge.ID,
-		CreatedAt: creationTime,
-		ExpiresAt: expiryTimeAsTimestamp.Add(time.Second * CHALLENGE_EXPIRY_DURATION).String(),
-		FactorID:  factor.ID,
+		ID:               challenge.ID,
+		CreatedAt:        creationTime.String(),
+		ExpiresAt:        creationTime.Add(time.Second * CHALLENGE_EXPIRY_DURATION).String(),
+		FactorID:         factor.ID,
+		FactorSimpleName: factor.SimpleName,
 	})
 }
