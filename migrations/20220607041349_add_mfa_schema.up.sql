@@ -9,7 +9,7 @@ END $$;
 CREATE TABLE IF NOT EXISTS auth.mfa_factors(
        id VARCHAR(256) NOT NULL,
        user_id uuid NOT NULL,
-       factor_simple_name VARCHAR(256) NULL,
+       simple_name VARCHAR(256) NULL,
        factor_type factor_type NOT NULL,
        enabled BOOLEAN NOT NULL,
        created_at timestamptz NOT NULL,

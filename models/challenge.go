@@ -10,12 +10,17 @@ import (
 )
 
 type Challenge struct {
-	ID        string     `json:"challenge_id" db:"id"`
-	FactorID  string     `json:"factor_id" db:"factor_id"`
-	CreatedAt *time.Time `json:"created_at" db:"created_at"`
+	ID        string    `json:"challenge_id" db:"id"`
+	FactorID  string    `json:"factor_id" db:"factor_id"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
 
 const CHALLENGE_PREFIX = "challenge"
+
+func (Challenge) TableName() string {
+	tableName := "mfa_challenges"
+	return tableName
+}
 
 func NewChallenge(factorID string) (*Challenge, error) {
 	challenge := &Challenge{

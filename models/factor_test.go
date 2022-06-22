@@ -29,18 +29,25 @@ func TestFactor(t *testing.T) {
 
 	suite.Run(t, ts)
 }
+func (ts *FactorTestSuite) TestFindFactorByChallengeID() {
+	factor := ts.createFactor()
+	challenge, err := NewChallenge(factor.ID)
+	require.NoError(ts.T(), err)
+
+	err = ts.db.Create(challenge)
+	require.NoError(ts.T(), err)
+
+	n, err := FindFactorByChallengeID(ts.db, challenge.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), factor.ID, n.ID)
+}
 
 func (ts *FactorTestSuite) SetupTest() {
 	TruncateAll(ts.db)
 }
 
 func (ts *FactorTestSuite) TestToggleFactorEnabled() {
-	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
-	require.NoError(ts.T(), err)
-
-	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "some-secret", "")
-	require.NoError(ts.T(), err)
-
+	f := ts.createFactor()
 	require.NoError(ts.T(), f.Disable(ts.db))
 	require.Equal(ts.T(), false, f.Enabled)
 
@@ -50,4 +57,20 @@ func (ts *FactorTestSuite) TestToggleFactorEnabled() {
 	require.NoError(ts.T(), f.Enable(ts.db))
 	require.Equal(ts.T(), true, f.Enabled)
 
+}
+
+func (ts *FactorTestSuite) createFactor() *Factor {
+	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
+	require.NoError(ts.T(), err)
+
+	err = ts.db.Create(u)
+	require.NoError(ts.T(), err)
+
+	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "phone", "supersecretkey")
+	require.NoError(ts.T(), err)
+
+	err = ts.db.Create(f)
+	require.NoError(ts.T(), err)
+
+	return f
 }

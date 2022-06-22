@@ -9,13 +9,13 @@ import (
 )
 
 type Factor struct {
-	UserID           uuid.UUID `json`
+	UserID           uuid.UUID `json:"-" db:"user_id"`
 	ID               string    `json:"id" db:"id"`
 	CreatedAt        time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
 	Enabled          bool      `json:"enabled" db:"enabled"`
-	FactorSimpleName string    `json:"factor_simple_name" db:"factor_simple_name"`
-	SecretKey        string    `json:'-' db:'secret_key'`
+	FactorSimpleName string    `json:"simple_name" db:"simple_name"`
+	SecretKey        string    `json:"-" db:"secret_key"`
 	FactorType       string    `json:"factor_type" db:"factor_type"`
 }
 
@@ -65,9 +65,9 @@ func FindFactorBySimpleName(tx *storage.Connection, simpleName string) (*Factor,
 	return factor, nil
 }
 
-func FindFactorByChallengeID(tx *storage.Connection, factorID string) (*Factor, error) {
+func FindFactorByChallengeID(tx *storage.Connection, challengeID string) (*Factor, error) {
 	factor := &Factor{}
-	if err := tx.Q().Join("mfa_challenges", "mfa_factors.ID = mfa_challenges.factor_id").Where("id = ?", factorID).First(factor); err != nil {
+	if err := tx.Q().Join("mfa_challenges", "mfa_factors.ID = mfa_challenges.factor_id").Where("mfa_challenges.id= ?", challengeID).First(factor); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, FactorNotFoundError{}
 		}
