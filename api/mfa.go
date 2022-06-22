@@ -10,7 +10,7 @@ import (
 
 // RecoveryCodesResponse repreesnts a successful recovery code generation response
 type RecoveryCodesResponse struct {
-	RecoveryCodes []string
+	RecoveryCodes []string `json:"recovery_codes"`
 }
 
 func (a *API) EnableMFA(w http.ResponseWriter, r *http.Request) error {
@@ -62,7 +62,6 @@ func (a *API) DisableMFA(w http.ResponseWriter, r *http.Request) error {
 func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) error {
 	const NUM_RECOVERY_CODES = 8
 	const RECOVERY_CODE_LENGTH = 8
-
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
@@ -75,7 +74,6 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 	var recoveryCode string
 	var recoveryCodes []string
 	var recoveryCodeModel *models.RecoveryCode
-
 	for i := 0; i < NUM_RECOVERY_CODES; i++ {
 		recoveryCode = crypto.SecureToken(RECOVERY_CODE_LENGTH)
 		recoveryCodeModel, terr = models.NewRecoveryCode(user, recoveryCode, &now)
@@ -95,7 +93,6 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 		}
 		return nil
 	})
-
 	return sendJSON(w, http.StatusOK, &RecoveryCodesResponse{
 		RecoveryCodes: recoveryCodes,
 	})
