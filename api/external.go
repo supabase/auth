@@ -231,6 +231,16 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				return unauthorizedError("User is unauthorized")
 			}
 
+			// an account with a previously unconfirmed email + password
+			// combination or phone may exist. so now that there is an
+			// OAuth identity bound to this user, and since they have not
+			// confirmed their email or phone, they are unaware that a
+			// potentially malicious door exists into their account; thus
+			// the password and phone needs to be removed.
+			if terr = user.RemoveUnconfirmedIdentities(tx); terr != nil {
+				return internalServerError("Error updating user").WithInternalError(terr)
+			}
+
 			if !user.IsConfirmed() {
 				if !emailData.Verified && !config.Mailer.Autoconfirm {
 					mailer := a.Mailer(ctx)

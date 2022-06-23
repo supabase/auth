@@ -194,3 +194,59 @@ func (ts *UserTestSuite) createUserWithEmail(email string) *User {
 
 	return user
 }
+
+func (ts *UserTestSuite) TestRemoveUnconfirmedIdentities() {
+	uid, err := uuid.NewV4()
+	require.NoError(ts.T(), err)
+
+	user, err := NewUser(uid, "+29382983298", "someone@example.com", "abcdefgh", "test", nil)
+	require.NoError(ts.T(), err)
+
+	user.AppMetaData = map[string]interface{}{
+		"provider":  "email",
+		"providers": []string{"email", "phone", "twitter"},
+	}
+
+	require.NoError(ts.T(), ts.db.Create(user))
+
+	idEmail, err := NewIdentity(user, "email", map[string]interface{}{
+		"sub": "someone@example.com",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(idEmail))
+
+	user.Identities = append(user.Identities, *idEmail)
+
+	idPhone, err := NewIdentity(user, "phone", map[string]interface{}{
+		"sub": "+29382983298",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(idPhone))
+
+	user.Identities = append(user.Identities, *idPhone)
+
+	idTwitter, err := NewIdentity(user, "twitter", map[string]interface{}{
+		"sub": "test_twitter_user_id",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(idTwitter))
+
+	user.Identities = append(user.Identities, *idTwitter)
+
+	// reload the user
+	require.NoError(ts.T(), ts.db.Load(user))
+
+	require.False(ts.T(), user.IsConfirmed(), "user's email must not be confirmed")
+
+	require.NoError(ts.T(), user.RemoveUnconfirmedIdentities(ts.db))
+
+	require.Empty(ts.T(), user.EncryptedPassword, "password still remains in user")
+
+	require.Len(ts.T(), user.Identities, 2, "only two identity must be remaining")
+	require.Equal(ts.T(), idPhone.ID, user.Identities[0].ID, "remaining identity is not the expected one")
+	require.Equal(ts.T(), idTwitter.ID, user.Identities[1].ID, "remaining identity is not the expected one")
+
+	require.NotNil(ts.T(), user.AppMetaData)
+	require.Equal(ts.T(), user.AppMetaData["provider"], "phone")
+	require.Equal(ts.T(), user.AppMetaData["providers"], []string{"phone", "twitter"})
+}
