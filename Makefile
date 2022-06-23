@@ -53,3 +53,6 @@ docker-build: ## Force a full rebuild of the development containers
 
 docker-clean: ## Remove the development containers and volumes
 	docker-compose -f $(DEV_DOCKER_COMPOSE) rm -fsv
+
+format:
+	go fmt ./...
