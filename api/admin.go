@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"fmt"
 
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
@@ -300,7 +301,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		} else {
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)
-			if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
+			if terr := sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
 					now := time.Now()
 					left := user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency).Sub(now) / time.Second
