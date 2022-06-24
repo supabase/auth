@@ -131,6 +131,7 @@ type MailerConfiguration struct {
 	URLPaths                 EmailContentConfiguration `json:"url_paths"`
 	SecureEmailChangeEnabled bool                      `json:"secure_email_change_enabled" split_words:"true" default:"true"`
 	OtpExp                   uint                      `json:"otp_exp" split_words:"true"`
+	OtpLength                int                       `json:"otp_length" split_words:"true"`
 }
 
 type PhoneProviderConfiguration struct {
@@ -306,6 +307,11 @@ func (config *Configuration) ApplyDefaults() {
 
 	if config.Mailer.OtpExp == 0 {
 		config.Mailer.OtpExp = 86400 // 1 day
+	}
+
+	if config.Mailer.OtpLength == 0 || config.Mailer.OtpLength < 6 || config.Mailer.OtpLength > 10 {
+		// 6-digit otp by default
+		config.Mailer.OtpLength = 6
 	}
 
 	if config.SMTP.MaxFrequency == 0 {
