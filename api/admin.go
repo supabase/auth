@@ -297,6 +297,17 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			if terr := user.Confirm(tx); terr != nil {
 				return terr
 			}
+		} else {
+			mailer := a.Mailer(ctx)
+			referrer := a.getReferrer(r)
+			if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
+				if errors.Is(terr, MaxFrequencyLimitError) {
+					now := time.Now()
+					left := user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency).Sub(now) / time.Second
+					return tooManyRequestsError(fmt.Sprintf("For security purposes, you can only request this after %d seconds.", left))
+				}
+				return internalServerError("Error sending confirmation mail").WithInternalError(terr)
+			}
 		}
 
 		if params.PhoneConfirm {
