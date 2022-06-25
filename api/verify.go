@@ -422,7 +422,7 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, expiredTokenError("email link is invalid or has expired").WithInternalError(redirectWithQueryError)
+			return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(redirectWithQueryError)
 		}
 		return nil, internalServerError("Database error finding user from email link").WithInternalError(err)
 	}
@@ -442,7 +442,7 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 	}
 
 	if isExpired {
-		return nil, expiredTokenError("email link is invalid or has expired").WithInternalError(redirectWithQueryError)
+		return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(redirectWithQueryError)
 	}
 	return user, nil
 }
@@ -513,7 +513,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		isValid = isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
 	case emailChangeVerification:
 		// TODO(km): remove when old token format is deprecated
-		if len(user.EmailChangeTokenCurrent) < 32 || len(user.EmailChangeTokenNew) < 32 {
+		if len(user.EmailChangeTokenCurrent) < 32 && len(user.EmailChangeTokenNew) < 32 {
 			tokenHash = params.Token
 		}
 		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
