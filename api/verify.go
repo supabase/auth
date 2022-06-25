@@ -481,7 +481,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			user, err = models.FindUserByEmailAndAudience(conn, instanceID, params.Email, aud)
 		}
 	} else {
-		return nil, badRequestError("Only an email address or phone number should be provided on verify, not both.")
+		return nil, badRequestError("Only an email address or phone number should be provided on verify")
 	}
 
 	if err != nil {
