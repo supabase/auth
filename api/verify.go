@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"crypto/md5"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -91,7 +93,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			return badRequestError("Verify requires a verification type")
 		}
 		aud := a.requestAud(ctx, r)
-		user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
+		user, terr = a.verifyEmailLink(ctx, tx, params, aud)
 		if terr != nil {
 			return terr
 		}
@@ -401,6 +403,50 @@ func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, p
 	return user, nil
 }
 
+func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+	config := getConfig(ctx)
+
+	var user *models.User
+	var err error
+
+	switch params.Type {
+	case signupVerification, inviteVerification:
+		user, err = models.FindUserByConfirmationToken(conn, params.Token)
+	case recoveryVerification, magicLinkVerification:
+		user, err = models.FindUserByRecoveryToken(conn, params.Token)
+	case emailChangeVerification:
+		user, err = models.FindUserByEmailChangeToken(conn, params.Token)
+	default:
+		return nil, badRequestError("Invalid email verification type")
+	}
+
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return nil, expiredTokenError("email link is invalid or has expired").WithInternalError(redirectWithQueryError)
+		}
+		return nil, internalServerError("Database error finding user from email link").WithInternalError(err)
+	}
+
+	if user.IsBanned() {
+		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
+	}
+
+	var isExpired bool
+	switch params.Type {
+	case signupVerification, inviteVerification:
+		isExpired = isOtpExpired(user.ConfirmationSentAt, config.Mailer.OtpExp)
+	case recoveryVerification, magicLinkVerification:
+		isExpired = isOtpExpired(user.RecoverySentAt, config.Mailer.OtpExp)
+	case emailChangeVerification:
+		isExpired = isOtpExpired(user.EmailChangeSentAt, config.Mailer.OtpExp)
+	}
+
+	if isExpired {
+		return nil, expiredTokenError("email link is invalid or has expired").WithInternalError(redirectWithQueryError)
+	}
+	return user, nil
+}
+
 // verifyUserAndToken verifies the token associated to the user based on the verify type
 func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
@@ -408,25 +454,13 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 
 	var user *models.User
 	var err error
-	if isUrlLinkVerification(params) {
-		switch params.Type {
-		case signupVerification, inviteVerification:
-			user, err = models.FindUserByConfirmationToken(conn, params.Token)
-		case recoveryVerification, magicLinkVerification:
-			user, err = models.FindUserByRecoveryToken(conn, params.Token)
-		case emailChangeVerification:
-			user, err = models.FindUserByEmailChangeToken(conn, params.Token)
-		default:
-			return nil, badRequestError("Invalid email verification type")
-		}
-	} else if isPhoneOtpVerification(params) {
-		if params.Phone == "" {
-			return nil, unprocessableEntityError("Sms Verification requires a phone number")
-		}
+	var tokenHash string
+	if isPhoneOtpVerification(params) {
 		params.Phone, err = a.validatePhone(params.Phone)
 		if err != nil {
 			return nil, err
 		}
+		tokenHash = fmt.Sprintf("%x", md5.Sum([]byte(string(params.Phone)+params.Token)))
 		switch params.Type {
 		case phoneChangeVerification:
 			user, err = models.FindUserByPhoneChangeAndAudience(conn, instanceID, params.Phone, aud)
@@ -439,9 +473,10 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		if err := a.validateEmail(ctx, params.Email); err != nil {
 			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}
+		tokenHash = fmt.Sprintf("%x", md5.Sum([]byte(string(params.Email)+params.Token)))
 		switch params.Type {
 		case emailChangeVerification:
-			user, err = models.FindUserForEmailChange(conn, instanceID, params.Email, params.Token, aud, config.Mailer.SecureEmailChangeEnabled)
+			user, err = models.FindUserForEmailChange(conn, instanceID, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
 		default:
 			user, err = models.FindUserByEmailAndAudience(conn, instanceID, params.Email, aud)
 		}
@@ -463,15 +498,38 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	var isValid bool
 	switch params.Type {
 	case signupVerification, inviteVerification:
-		isValid = isOtpValid(params.Token, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
+		// TODO(km): remove when old token format is deprecated
+		// the new token format is represented by a MD5 hash which is 32 characters (128 bits) long
+		// anything shorter than 32 characters can safely be assumed to be using the old token format
+		if len(user.ConfirmationToken) < 32 {
+			tokenHash = params.Token
+		}
+		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
 	case recoveryVerification, magicLinkVerification:
-		isValid = isOtpValid(params.Token, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
+		// TODO(km): remove when old token format is deprecated
+		if len(user.RecoveryToken) < 32 {
+			tokenHash = params.Token
+		}
+		isValid = isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
 	case emailChangeVerification:
-		isValid = isOtpValid(params.Token, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) || isOtpValid(params.Token, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
+		// TODO(km): remove when old token format is deprecated
+		if len(user.EmailChangeTokenCurrent) < 32 || len(user.EmailChangeTokenNew) < 32 {
+			tokenHash = params.Token
+		}
+		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
+			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
 	case phoneChangeVerification:
-		isValid = isOtpValid(params.Token, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
+		// TODO(km): remove when old token format is deprecated
+		if len(user.PhoneChangeToken) < 32 {
+			tokenHash = params.Token
+		}
+		isValid = isOtpValid(tokenHash, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
 	case smsVerification:
-		isValid = isOtpValid(params.Token, user.ConfirmationToken, user.ConfirmationSentAt, config.Sms.OtpExp)
+		// TODO(km): remove when old token format is deprecated
+		if len(user.ConfirmationToken) < 32 {
+			tokenHash = params.Token
+		}
+		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Sms.OtpExp)
 	}
 
 	if !isValid || err != nil {
@@ -485,13 +543,11 @@ func isOtpValid(actual, expected string, sentAt *time.Time, otpExp uint) bool {
 	if expected == "" || sentAt == nil {
 		return false
 	}
-	expiresAt := sentAt.Add(time.Second * time.Duration(otpExp))
-	return time.Now().Before(expiresAt) && (actual == expected)
+	return !isOtpExpired(sentAt, otpExp) && (actual == expected)
 }
 
-// isUrlLinkVerification checks if the verification came from clicking an email link which wouldn't contain the email field in the params
-func isUrlLinkVerification(params *VerifyParams) bool {
-	return params.Phone == "" && params.Email == ""
+func isOtpExpired(sentAt *time.Time, otpExp uint) bool {
+	return time.Now().After(sentAt.Add(time.Second * time.Duration(otpExp)))
 }
 
 // isPhoneOtpVerification checks if the verification came from a phone otp
