@@ -51,7 +51,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		}
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
-		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer)
+		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {

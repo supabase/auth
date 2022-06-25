@@ -1,7 +1,9 @@
 package api
 
 import (
+	"crypto/md5"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/gofrs/uuid"
@@ -54,7 +56,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		}
 		if email != "" {
 			mailer := a.Mailer(ctx)
-			return a.sendReauthenticationOtp(tx, user, mailer, config.SMTP.MaxFrequency)
+			return a.sendReauthenticationOtp(tx, user, mailer, config.SMTP.MaxFrequency, config.Mailer.OtpLength)
 		} else if phone != "" {
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)
 			if terr != nil {
@@ -81,9 +83,11 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 	}
 	var isValid bool
 	if user.GetEmail() != "" {
-		isValid = isOtpValid(nonce, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
+		tokenHash := fmt.Sprintf("%x", md5.Sum([]byte(user.GetEmail()+nonce)))
+		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
 	} else if user.GetPhone() != "" {
-		isValid = isOtpValid(nonce, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
+		tokenHash := fmt.Sprintf("%x", md5.Sum([]byte(user.GetPhone()+nonce)))
+		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
 	} else {
 		return unprocessableEntityError("Reauthentication requires an email or a phone number")
 	}
