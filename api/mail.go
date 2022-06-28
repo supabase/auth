@@ -69,6 +69,10 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	var url string
 	referrer := a.getRedirectURLOrReferrer(r, params.RedirectTo)
 	now := time.Now()
+	otp, err := crypto.GenerateOtp(config.Mailer.OtpLength)
+	if err != nil {
+		return err
+	}
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
@@ -76,7 +80,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
 				return terr
 			}
-			user.RecoveryToken = crypto.SecureToken()
+			user.RecoveryToken = fmt.Sprintf("%x", md5.Sum([]byte(string(user.Email)+otp)))
 			user.RecoverySentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
 		case "invite":
@@ -102,7 +106,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			}); terr != nil {
 				return terr
 			}
-			user.ConfirmationToken = crypto.SecureToken()
+			user.ConfirmationToken = fmt.Sprintf("%x", md5.Sum([]byte(string(user.Email)+otp)))
 			user.ConfirmationSentAt = &now
 			user.InvitedAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at", "invited_at"), "Database error updating user for invite")
@@ -133,7 +137,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			}
-			user.ConfirmationToken = crypto.SecureToken()
+			user.ConfirmationToken = fmt.Sprintf("%x", md5.Sum([]byte(string(user.Email)+otp)))
 			user.ConfirmationSentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at"), "Database error updating user for confirmation")
 		default:
