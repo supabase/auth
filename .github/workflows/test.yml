@@ -33,6 +33,8 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - name: Checkout code
         uses: actions/checkout@v2
+      - name: Formatting checks
+        run: if [ ! -z $(gofmt -l .) ]; then echo 'Make sure to run "gofmt -s -w ." before commit!' && exit 1; fi
       - name: Init Database
         run: psql -f hack/init_postgres.sql postgresql://postgres:root@localhost:5432/postgres
       - name: Run migrations

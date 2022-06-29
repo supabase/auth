@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 
@@ -50,6 +51,9 @@ type User struct {
 	PhoneChange       string     `json:"new_phone,omitempty" db:"phone_change"`
 	PhoneChangeSentAt *time.Time `json:"phone_change_sent_at,omitempty" db:"phone_change_sent_at"`
 
+	ReauthenticationToken  string     `json:"-" db:"reauthentication_token"`
+	ReauthenticationSentAt *time.Time `json:"reauthentication_sent_at,omitempty" db:"reauthentication_sent_at"`
+
 	LastSignInAt *time.Time `json:"last_sign_in_at,omitempty" db:"last_sign_in_at"`
 
 	AppMetaData  JSONMap `json:"app_metadata" db:"raw_app_meta_data"`
@@ -64,8 +68,7 @@ type User struct {
 }
 
 // NewUser initializes a new user from an email, password and user data.
-// TODO: Refactor NewUser to take in phone as an arg
-func NewUser(instanceID uuid.UUID, email, password, aud string, userData map[string]interface{}) (*User, error) {
+func NewUser(instanceID uuid.UUID, phone, email, password, aud string, userData map[string]interface{}) (*User, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -82,6 +85,7 @@ func NewUser(instanceID uuid.UUID, email, password, aud string, userData map[str
 		ID:                id,
 		Aud:               aud,
 		Email:             storage.NullString(strings.ToLower(email)),
+		Phone:             storage.NullString(phone),
 		UserMetaData:      userData,
 		EncryptedPassword: pw,
 	}
@@ -144,6 +148,9 @@ func (u *User) BeforeSave(tx *pop.Connection) error {
 	}
 	if u.PhoneChangeSentAt != nil && u.PhoneChangeSentAt.IsZero() {
 		u.PhoneChangeSentAt = nil
+	}
+	if u.ReauthenticationSentAt != nil && u.ReauthenticationSentAt.IsZero() {
+		u.ReauthenticationSentAt = nil
 	}
 	if u.LastSignInAt != nil && u.LastSignInAt.IsZero() {
 		u.LastSignInAt = nil
@@ -275,6 +282,12 @@ func (u *User) Authenticate(password string) bool {
 	return err == nil
 }
 
+// ConfirmReauthentication resets the reauthentication token
+func (u *User) ConfirmReauthentication(tx *storage.Connection) error {
+	u.ReauthenticationToken = ""
+	return tx.UpdateOnly(u, "reauthentication_token")
+}
+
 // Confirm resets the confimation token and sets the confirm timestamp
 func (u *User) Confirm(tx *storage.Connection) error {
 	u.ConfirmationToken = ""
@@ -396,6 +409,12 @@ func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, er
 	return findUser(tx, "email_change_token_current = ? or email_change_token_new = ?", token, token)
 }
 
+// FindUserByTokenAndTokenType finds a user with the matching token and token type.
+func FindUserByTokenAndTokenType(tx *storage.Connection, token string, tokenType string) (*User, error) {
+	query := fmt.Sprintf("%v = ?", tokenType)
+	return findUser(tx, query, token)
+}
+
 // FindUserWithRefreshToken finds a user from the provided refresh token.
 func FindUserWithRefreshToken(tx *storage.Connection, token string) (*User, *RefreshToken, error) {
 	refreshToken := &RefreshToken{}
@@ -442,9 +461,39 @@ func FindUsersInAudience(tx *storage.Connection, instanceID uuid.UUID, aud strin
 	return users, err
 }
 
-// FindUserWithPhoneAndPhoneChangeToken finds a user with the matching phone and phone change token
-func FindUserWithPhoneAndPhoneChangeToken(tx *storage.Connection, phone, token string) (*User, error) {
-	return findUser(tx, "phone = ? and phone_change_token = ?", phone, token)
+// FindUserByEmailChangeCurrentAndAudience finds a user with the matching email change and audience.
+func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string) (*User, error) {
+	return findUser(
+		tx,
+		"instance_id = ? and LOWER(email) = ? and email_change_token_current = ? and aud = ?",
+		instanceID, strings.ToLower(email), token, aud,
+	)
+}
+
+// FindUserByEmailChangeNewAndAudience finds a user with the matching email change and audience.
+func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string) (*User, error) {
+	return findUser(
+		tx,
+		"instance_id = ? and LOWER(email_change) = ? and email_change_token_new = ? and aud = ?",
+		instanceID, strings.ToLower(email), token, aud,
+	)
+}
+
+// FindUserForEmailChange finds a user requesting for an email change
+func FindUserForEmailChange(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string, secureEmailChangeEnabled bool) (*User, error) {
+	if secureEmailChangeEnabled {
+		if user, err := FindUserByEmailChangeCurrentAndAudience(tx, instanceID, email, token, aud); err == nil {
+			return user, err
+		} else if !IsNotFoundError(err) {
+			return nil, err
+		}
+	}
+	return FindUserByEmailChangeNewAndAudience(tx, instanceID, email, token, aud)
+}
+
+// FindUserByPhoneChangeAndAudience finds a user with the matching phone change and audience.
+func FindUserByPhoneChangeAndAudience(tx *storage.Connection, instanceID uuid.UUID, phone, aud string) (*User, error) {
+	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ?", instanceID, phone, aud)
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and audience.

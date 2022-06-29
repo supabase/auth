@@ -16,7 +16,15 @@ Create a `.env` file to store your own custom env vars. See [`example.env`](exam
 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`"
 GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`" -o gotrue-arm64
 ```
-3. Execute the gotrue binary: `./gotrue` (if you're on x86) `./gotrue-arm64` (if you're on arm)
+3. Execute the gotrue binary: `./gotrue`
+
+### If you have docker installed...
+Create a `.env.docker` file to store your own custom env vars. See [`example.docker.env`](example.docker.env)
+
+1. `make build`
+2. `make dev`
+3. `docker ps` should show 2 docker containers (`gotrue_postgresql` and `gotrue_gotrue`)
+4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that gotrue is running. 
 
 ## Configuration
 
@@ -35,7 +43,9 @@ The base URL your site is located at. Currently used in combination with other s
 
 `URI_ALLOW_LIST` - `string`
 
-A comma separated list of URIs (e.g. "https://supabase.io/welcome,io.supabase.gotruedemo://logincallback") which are permitted as valid `redirect_to` destinations, in addition to SITE_URL. Defaults to [].
+A comma separated list of URIs (e.g. `"https://foo.example.com,https://*.foo.example.com,https://bar.example.com"`) which are permitted as valid `redirect_to` destinations. Defaults to []. Supports wildcard matching through globbing. e.g. `https://*.foo.example.com` will allow `https://a.foo.example.com` and `https://b.foo.example.com` to be accepted. Globbing is also supported on subdomains. e.g. `https://foo.example.com/*` will allow `https://foo.example.com/page1` and `https://foo.example.com/page2` to be accepted.
+
+For more common glob patterns, check out the [following link](https://pkg.go.dev/github.com/gobwas/glob#Compile).
 
 `OPERATOR_TOKEN` - `string` _Multi-instance mode only_
 
@@ -66,6 +76,15 @@ Rate limit the number of emails sent per hr on the following endpoints: `/signup
 
 Minimum password length, defaults to 6.
 
+`GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` - `bool`
+
+If refresh token rotation is enabled, gotrue will automatically detect malicious attempts to reuse a revoked refresh token. When a malicious attempt is detected, gotrue immediately revokes all tokens that descended from the offending token.
+
+`GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL` - `string`
+
+This setting is only applicable if `GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` is enabled. The reuse interval for a refresh token allows for exchanging the refresh token multiple times during the interval to support concurrency or offline issues. During the reuse interval, gotrue will not consider using a revoked token as a malicious attempt and will simply return the child refresh token. 
+
+Only the previous revoked token can be reused. Using an old refresh token way before the current valid refresh token will trigger the reuse detection. 
 ### API
 
 ```properties
@@ -114,8 +133,7 @@ Adds a prefix to all table names.
 
 **Migrations Note**
 
-Migrations are not applied automatically, so you will need to run them after
-you've built gotrue.
+Migrations are applied automatically when you run `./gotrue`. However, you also have the option to rerun the migrations via the following methods:
 
 - If built locally: `./gotrue migrate`
 - Using Docker: `docker run --rm gotrue gotrue migrate`
@@ -490,9 +508,16 @@ Whether captcha middleware is enabled
 
 for now the only option supported is: `hcaptcha`
 
-`SECURITY_CAPTCHA_SECRET` - `string`
+- `SECURITY_CAPTCHA_SECRET` - `string`
+- `SECURITY_CAPTCHA_TIMEOUT` - `string`
 
 Retrieve from hcaptcha account
+
+### Reauthentication
+
+`SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` - `bool`
+
+Enforce reauthentication on password update.
 
 ## Endpoints
 
@@ -911,6 +936,25 @@ Returns:
   "email_change_sent_at": "2016-05-15T20:49:40.882805774-07:00",
   "created_at": "2016-05-15T19:53:12.368652374-07:00",
   "updated_at": "2016-05-15T19:53:12.368652374-07:00"
+}
+```
+
+If `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` is enabled, the user will need to reauthenticate first. 
+
+```json
+{
+  "password": "new-password",
+  "nonce": "123456",
+}
+```
+
+### **GET /reauthenticate**
+
+Sends a nonce to the user's email (preferred) or phone. This endpoint requires the user to be logged in / authenticated first. The user needs to have either an email or phone number for the nonce to be sent successfully.
+
+```json
+headers: {
+  "Authorization" : "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO"
 }
 ```
 

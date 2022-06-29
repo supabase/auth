@@ -19,6 +19,7 @@ type Mailer interface {
 	RecoveryMail(user *models.User, referrerURL string) error
 	MagicLinkMail(user *models.User, referrerURL string) error
 	EmailChangeMail(user *models.User, referrerURL string) error
+	ReauthenticateMail(user *models.User) error
 	ValidateEmail(email string) error
 	GetEmailActionLink(user *models.User, actionType, referrerURL string) (string, error)
 }

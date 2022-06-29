@@ -39,7 +39,7 @@ func TestUser(t *testing.T) {
 }
 
 func (ts *UserTestSuite) TestUpdateAppMetadata() {
-	u, err := NewUser(uuid.Nil, "", "", "", nil)
+	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), u.UpdateAppMetaData(ts.db, make(map[string]interface{})))
 
@@ -58,7 +58,7 @@ func (ts *UserTestSuite) TestUpdateAppMetadata() {
 }
 
 func (ts *UserTestSuite) TestUpdateUserMetadata() {
-	u, err := NewUser(uuid.Nil, "", "", "", nil)
+	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), u.UpdateUserMetaData(ts.db, make(map[string]interface{})))
 
@@ -113,7 +113,7 @@ func (ts *UserTestSuite) TestFindUsersInAudience() {
 
 	sp := &SortParams{
 		Fields: []SortField{
-			SortField{Name: "created_at", Dir: Descending},
+			{Name: "created_at", Dir: Descending},
 		},
 	}
 	n, err = FindUsersInAudience(ts.db, u.InstanceID, u.Aud, nil, sp, "")
@@ -186,7 +186,7 @@ func (ts *UserTestSuite) createUser() *User {
 }
 
 func (ts *UserTestSuite) createUserWithEmail(email string) *User {
-	user, err := NewUser(uuid.Nil, email, "secret", "test", nil)
+	user, err := NewUser(uuid.Nil, "", email, "secret", "test", nil)
 	require.NoError(ts.T(), err)
 
 	err = ts.db.Create(user)

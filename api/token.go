@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	jwt "github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
@@ -57,6 +57,16 @@ type IdTokenGrantParams struct {
 	ClientID string `json:"client_id"`
 	Issuer   string `json:"issuer"`
 }
+
+type tokenType string
+
+const (
+	confirmationToken       tokenType = "confirmation_token"
+	recoveryToken           tokenType = "recovery_token"
+	emailChangeTokenNew     tokenType = "email_change_token_new"
+	emailChangeTokenCurrent tokenType = "email_change_token_current"
+	reauthenticationToken   tokenType = "reauthentication_token"
+)
 
 const useCookieHeader = "x-use-cookie"
 const useSessionCookie = "session"
@@ -209,7 +219,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, map[string]interface{}{
+		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
 			"provider": provider,
 		}); terr != nil {
 			return terr
@@ -263,52 +273,63 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return oauthError("invalid_grant", "Invalid Refresh Token")
 	}
 
-	if !(config.External.Email.Enabled && config.External.Phone.Enabled) {
-		providers, err := models.FindProvidersByUser(a.db, user)
-		if err != nil {
-			return internalServerError(err.Error())
-		}
-		for _, provider := range providers {
-			if provider == "email" && !config.External.Email.Enabled {
-				return badRequestError("Email logins are disabled")
-			}
-			if provider == "phone" && !config.External.Phone.Enabled {
-				return badRequestError("Phone logins are disabled")
-			}
-		}
-	}
-
+	var newToken *models.RefreshToken
 	if token.Revoked {
 		a.clearCookieTokens(config, w)
-		if config.Security.RefreshTokenRotationEnabled {
-			// Revoke all tokens in token family
-			err = a.db.Transaction(func(tx *storage.Connection) error {
-				var terr error
-				if terr = models.RevokeTokenFamily(tx, token); terr != nil {
-					return terr
+		err = a.db.Transaction(func(tx *storage.Connection) error {
+			validToken, terr := models.GetValidChildToken(tx, token)
+			if terr != nil {
+				if errors.Is(terr, models.RefreshTokenNotFoundError{}) {
+					// revoked token has no descendants
+					return nil
 				}
-				return nil
-			})
-			if err != nil {
-				return internalServerError(err.Error())
+				return terr
 			}
+			// check if token is the last previous revoked token
+			if validToken.Parent == storage.NullString(token.Token) {
+				refreshTokenReuseWindow := token.UpdatedAt.Add(time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
+				if time.Now().Before(refreshTokenReuseWindow) {
+					newToken = validToken
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return internalServerError("Error validating reuse interval").WithInternalError(err)
 		}
-		return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", r)
+
+		if newToken == nil {
+			if config.Security.RefreshTokenRotationEnabled {
+				// Revoke all tokens in token family
+				err = a.db.Transaction(func(tx *storage.Connection) error {
+					var terr error
+					if terr = models.RevokeTokenFamily(tx, token); terr != nil {
+						return terr
+					}
+					return nil
+				})
+				if err != nil {
+					return internalServerError(err.Error())
+				}
+			}
+			return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", r)
+		}
 	}
 
 	var tokenString string
-	var newToken *models.RefreshToken
 	var newTokenResponse *AccessTokenResponse
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.TokenRefreshedAction, nil); terr != nil {
+		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.TokenRefreshedAction, "", nil); terr != nil {
 			return terr
 		}
 
-		newToken, terr = models.GrantRefreshTokenSwap(tx, user, token)
-		if terr != nil {
-			return internalServerError(terr.Error())
+		if newToken == nil {
+			newToken, terr = models.GrantRefreshTokenSwap(tx, user, token)
+			if terr != nil {
+				return internalServerError(terr.Error())
+			}
 		}
 
 		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
@@ -348,8 +369,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return badRequestError("Could not read id token grant params: %v", err)
 	}
 
-	if params.IdToken == "" || params.Nonce == "" {
-		return oauthError("invalid request", "id_token and nonce required")
+	if params.IdToken == "" {
+		return oauthError("invalid request", "id_token required")
 	}
 
 	if params.Provider == "" && (params.ClientID == "" || params.Issuer == "") {
@@ -379,14 +400,17 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return err
 	}
 
-	// verify nonce to mitigate replay attacks
 	hashedNonce, ok := claims["nonce"]
-	if !ok {
-		return oauthError("invalid request", "missing nonce in id_token")
+	if (!ok && params.Nonce != "") || (ok && params.Nonce == "") {
+		return oauthError("invalid request", "Passed nonce and nonce in id_token should either both exist or not.")
 	}
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
-	if hash != hashedNonce.(string) {
-		return oauthError("invalid nonce", "").WithInternalMessage("Possible abuse attempt: %v", r)
+
+	if ok && params.Nonce != "" {
+		// verify nonce to mitigate replay attacks
+		hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
+		if hash != hashedNonce.(string) {
+			return oauthError("invalid nonce", "").WithInternalMessage("Possible abuse attempt: %v", r)
+		}
 	}
 
 	sub, ok := claims["sub"].(string)
@@ -463,7 +487,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				return unauthorizedError("Error unverified email")
 			}
 
-			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
+			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr
@@ -477,7 +501,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				return internalServerError("Error updating user").WithInternalError(terr)
 			}
 		} else {
-			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, map[string]interface{}{
+			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr

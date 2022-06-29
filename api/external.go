@@ -16,6 +16,7 @@ import (
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
+	"github.com/netlify/gotrue/utilities"
 	"github.com/sirupsen/logrus"
 )
 
@@ -244,7 +245,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 					return nil
 				}
 
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
+				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": providerType,
 				}); terr != nil {
 					return terr
@@ -258,7 +259,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 					return internalServerError("Error updating user").WithInternalError(terr)
 				}
 			} else {
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, map[string]interface{}{
+				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
 					"provider": providerType,
 				}); terr != nil {
 					return terr
@@ -346,7 +347,7 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 		return nil, internalServerError("Database error updating user").WithInternalError(err)
 	}
 
-	if err := models.NewAuditLogEntry(tx, instanceID, user, models.InviteAcceptedAction, map[string]interface{}{
+	if err := models.NewAuditLogEntry(tx, instanceID, user, models.InviteAcceptedAction, "", map[string]interface{}{
 		"provider": providerType,
 	}); err != nil {
 		return nil, err
@@ -465,8 +466,18 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger) *url
 	case ErrorCause:
 		return getErrorQueryString(e.Cause(), errorID, log)
 	default:
-		q.Set("error", "server_error")
-		q.Set("error_description", err.Error())
+		error_type, error_description := "server_error", err.Error()
+
+		// Provide better error messages for certain user-triggered Postgres errors.
+		if pgErr := utilities.NewPostgresError(e); pgErr != nil {
+			error_description = pgErr.Message
+			if oauthErrorType, ok := oauthErrorMap[pgErr.HttpStatusCode]; ok {
+				error_type = oauthErrorType
+			}
+		}
+
+		q.Set("error", error_type)
+		q.Set("error_description", error_description)
 	}
 	return &q
 }

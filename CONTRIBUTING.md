@@ -7,6 +7,48 @@ Docs aren't perfect and so we're here to help. If you're stuck on setup for more
 
 Please help us keep all our projects open and inclusive. Kindly follow our [Code of Conduct](<(CODE_OF_CONDUCT.md)>) to keep the ecosystem healthy and friendly for all.
 
+## Quick Start
+
+GoTrue has a development container setup that makes it easy to get started contributing. This setup only requires that [Docker](https://www.docker.com/get-started) is setup on your system. The development container setup includes a PostgreSQL container with migrations already applied and a container running GoTrue that will perform a hot reload when changes to the source code are detected.
+
+If you would like to run GoTrue locally or learn more about what these containers are doing for you, continue reading the [Setup and Tooling](#setup-and-tooling) section below. Otherwise, you can skip ahead to the [How To Verify that GoTrue is Available](#how-to-verify-that-gotrue-is-available) section to learn about working with and developing GoTrue.
+
+Before using the containers, you will need to make sure an `.env.docker` file exists by making a copy of `example.docker.env` and configuring it for your needs. The set of env vars in `example.docker.env` only contain the necessary env vars for gotrue to start in a docker environment. For the full list of env vars, please refer to `example.env` and copy over the necessary ones into your `.env.docker` file.
+
+The following are some basic commands. A full and up to date list of commands can be found in the project's `Makefile` or by running `make help`.
+
+### Starting the containers
+
+Start the containers as described above in an attached state with log output.
+
+``` bash
+make dev
+```
+
+### Running tests in the containers
+
+Start the containers with a fresh database and run the project's tests.
+
+``` bash
+make docker-test
+```
+
+### Removing the containers
+
+Remove both containers and their volumes. This removes any data associated with the containers.
+
+``` bash
+make docker-clean
+```
+
+### Rebuild the containers
+
+Fully rebuild the containers without using any cached layers.
+
+``` bash
+make docker-build
+```
+
 ## Setup and Tooling
 
 GoTrue -- as the name implies -- is a user registration and authentication API developed in [Go](https://go.dev).

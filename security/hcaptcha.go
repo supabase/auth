@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -20,7 +22,7 @@ type GotrueRequest struct {
 }
 
 type GotrueSecurity struct {
-	Token string `json:"hcaptcha_token"`
+	Token string `json:"captcha_token"`
 }
 
 type VerificationResponse struct {
@@ -40,11 +42,24 @@ const (
 var Client *http.Client
 
 func init() {
-	// TODO (darora): make timeout configurable
-	Client = &http.Client{Timeout: 10 * time.Second}
+	var defaultTimeout time.Duration = time.Second * 10
+	timeoutStr := os.Getenv("GOTRUE_SECURITY_CAPTCHA_TIMEOUT")
+	if timeoutStr != "" {
+		if timeout, err := time.ParseDuration(timeoutStr); err != nil {
+			log.Fatalf("error loading GOTRUE_SECURITY_CAPTCHA_TIMEOUT: %v", err.Error())
+		} else if timeout != 0 {
+			defaultTimeout = timeout
+		}
+	}
+
+	Client = &http.Client{Timeout: defaultTimeout}
 }
 
 func VerifyRequest(r *http.Request, secretKey string) (VerificationResult, error) {
+	if r.FormValue("grant_type") == "refresh_token" {
+		// captcha shouldn't be enabled on requests to refresh the token
+		return SuccessfullyVerified, nil
+	}
 	res := GotrueRequest{}
 	bodyBytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
