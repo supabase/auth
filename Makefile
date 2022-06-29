@@ -55,4 +55,4 @@ docker-clean: ## Remove the development containers and volumes
 	docker-compose -f $(DEV_DOCKER_COMPOSE) rm -fsv
 
 format:
-	go fmt -s -w .
+	gofmt -s -w .
