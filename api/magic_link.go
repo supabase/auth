@@ -15,7 +15,7 @@ import (
 // MagicLinkParams holds the parameters for a magic link request
 type MagicLinkParams struct {
 	Email string                 `json:"email"`
-	Data  map[string]interface{} `json:"data"`
+	Metadata  map[string]interface{} `json:"metadata"`
 }
 
 // MagicLink sends a recovery email
@@ -35,10 +35,10 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
-	if params.Data == nil {
-		params.Data = make(map[string]interface{})
+	if params.Metadata == nil {
+		params.Metadata = make(map[string]interface{})
 	}
-	metadata, err := json.Marshal(params.Data)
+	metadata, err := json.Marshal(params.Metadata)
 	if err != nil {
 		return badRequestError("Could not parse metadata: %v", err)
 	}
