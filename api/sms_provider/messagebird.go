@@ -54,8 +54,64 @@ func NewMessagebirdProvider(config conf.MessagebirdProviderConfiguration) (SmsPr
 	}, nil
 }
 
+func (t *MessagebirdProvider) SendMessage(phone string, message string, messageType string) error {
+	switch messageType {
+	case "sms":
+		return t.SendSms(phone, message)
+	case "whatsapp":
+		return t.SendWhatsappMessage(phone, message)
+	default:
+		return nil
+	}
+}
+
 // Send an SMS containing the OTP with Messagebird's API
 func (t *MessagebirdProvider) SendSms(phone string, message string) error {
+	body := url.Values{
+		"originator": {t.Config.Originator},
+		"body":       {message},
+		"recipients": {phone},
+		"type":       {"sms"},
+		"datacoding": {"unicode"},
+	}
+
+	client := &http.Client{Timeout: defaultTimeout}
+	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
+	if err != nil {
+		return err
+	}
+	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	r.Header.Add("Authorization", "AccessKey "+t.Config.AccessKey)
+	res, err := client.Do(r)
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusUnprocessableEntity {
+		resp := &MessagebirdErrResponse{}
+		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
+			return err
+		}
+		return resp
+	}
+	defer res.Body.Close()
+
+	// validate sms status
+	resp := &MessagebirdResponse{}
+	derr := json.NewDecoder(res.Body).Decode(resp)
+	if derr != nil {
+		return derr
+	}
+
+	if resp.Recipients.TotalSentCount == 0 {
+		return fmt.Errorf("Messagebird error: total sent count is 0")
+	}
+
+	return nil
+}
+
+// Send an SMS containing the OTP with Messagebird's API
+func (t *MessagebirdProvider) SendWhatsappMessage(phone string, message string) error {
 	body := url.Values{
 		"originator": {t.Config.Originator},
 		"body":       {message},

@@ -53,12 +53,66 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 	}, nil
 }
 
+func (t *TwilioProvider) SendMessage(phone string, message string, messageType string) error {
+	switch messageType {
+	case "sms":
+		return t.SendSms(phone, message)
+	case "whatsapp":
+		return t.SendWhatsappMessage(phone, message)
+	default:
+		return nil
+	}
+}
+
 // Send an SMS containing the OTP with Twilio's API
 func (t *TwilioProvider) SendSms(phone string, message string) error {
 	body := url.Values{
 		"To":      {"+" + phone}, // twilio api requires "+" extension to be included
 		"Channel": {"sms"},
 		"From":    {t.Config.MessageServiceSid},
+		"Body":    {message},
+	}
+
+	client := &http.Client{Timeout: defaultTimeout}
+	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
+	if err != nil {
+		return err
+	}
+	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	r.SetBasicAuth(t.Config.AccountSid, t.Config.AuthToken)
+	res, err := client.Do(r)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode/100 != 2 {
+		resp := &twilioErrResponse{}
+		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
+			return err
+		}
+		return resp
+	}
+	defer res.Body.Close()
+
+	// validate sms status
+	resp := &SmsStatus{}
+	derr := json.NewDecoder(res.Body).Decode(resp)
+	if derr != nil {
+		return derr
+	}
+
+	if resp.Status == "failed" || resp.Status == "undelivered" {
+		return fmt.Errorf("Twilio error: %v %v", resp.ErrorMessage, resp.ErrorCode)
+	}
+
+	return nil
+}
+
+// Send a Whatsapp message containing the OTP with Twilio's API
+func (t *TwilioProvider) SendWhatsappMessage(phone string, message string) error {
+	body := url.Values{
+		"To":      {"whatsapp:" + "+" + phone}, // twilio api requires "+" extension to be included
+		"Channel": {"whatsapp"},
+		"From":    {"whatsapp:" + t.Config.MessageServiceSid},
 		"Body":    {message},
 	}
 

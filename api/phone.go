@@ -86,7 +86,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		message = strings.Replace(config.Sms.Template, "{{ .Code }}", *token, -1)
 	}
 
-	if serr := smsProvider.SendSms(phone, message); serr != nil {
+	if serr := smsProvider.SendMessage(phone, message, "sms"); serr != nil {
 		*token = oldToken
 		return serr
 	}

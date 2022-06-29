@@ -23,7 +23,7 @@ func init() {
 }
 
 type SmsProvider interface {
-	SendSms(phone, message string) error
+	SendMessage(phone, message, messageType string) error
 }
 
 func GetSmsProvider(config conf.Configuration) (SmsProvider, error) {

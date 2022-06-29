@@ -32,7 +32,7 @@ type TestSmsProvider struct {
 	mock.Mock
 }
 
-func (t *TestSmsProvider) SendSms(phone string, message string) error {
+func (t *TestSmsProvider) SendMessage(phone string, message string, messageType string) error {
 	return nil
 }
 
