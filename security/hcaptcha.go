@@ -22,7 +22,7 @@ type GotrueRequest struct {
 }
 
 type GotrueSecurity struct {
-	Token string `json:"hcaptcha_token"`
+	Token string `json:"captcha_token"`
 }
 
 type VerificationResponse struct {
