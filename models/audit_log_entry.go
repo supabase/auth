@@ -54,9 +54,9 @@ var actionLogTypeMap = map[AuditAction]auditLogType{
 type AuditLogEntry struct {
 	InstanceID uuid.UUID `json:"-" db:"instance_id"`
 	ID         uuid.UUID `json:"id" db:"id"`
-	Payload JSONMap `json:"payload" db:"payload"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	IPAddress string `json:"ip_address" db:"ip_address"`
+	Payload    JSONMap   `json:"payload" db:"payload"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
+	IPAddress  string    `json:"ip_address" db:"ip_address"`
 }
 
 func (AuditLogEntry) TableName() string {
