@@ -14,7 +14,8 @@ import (
 
 // MagicLinkParams holds the parameters for a magic link request
 type MagicLinkParams struct {
-	Email string `json:"email"`
+	Email string                 `json:"email"`
+	Data  map[string]interface{} `json:"data"`
 }
 
 // MagicLink sends a recovery email
@@ -34,6 +35,14 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
+	if params.Data == nil {
+		params.Data = make(map[string]interface{})
+	}
+	metadata, err := json.Marshal(params.Data)
+	if err != nil {
+		return badRequestError("Could not parse metadata: %v", err)
+	}
+
 	if params.Email == "" {
 		return unprocessableEntityError("Password recovery requires an email")
 	}
@@ -50,7 +59,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				internalServerError("error creating user").WithInternalError(err)
 			}
-			newBodyContent := `{"email":"` + params.Email + `","password":"` + password + `"}`
+			newBodyContent := `{"email":"` + params.Email + `","password":"` + password + `",data":"` + string(metadata) + `"}`
 			r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
 			r.ContentLength = int64(len(newBodyContent))
 
