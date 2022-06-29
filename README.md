@@ -133,8 +133,7 @@ Adds a prefix to all table names.
 
 **Migrations Note**
 
-Migrations are not applied automatically, so you will need to run them after
-you've built gotrue.
+Migrations are applied automatically when you run `./gotrue`. However, you also have the option to rerun the migrations via the following methods:
 
 - If built locally: `./gotrue migrate`
 - Using Docker: `docker run --rm gotrue gotrue migrate`

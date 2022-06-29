@@ -73,7 +73,7 @@ func (t *TwilioProvider) SendSms(phone string, message string) error {
 	if err != nil {
 		return err
 	}
-	if res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusForbidden {
+	if res.StatusCode/100 != 2 {
 		resp := &twilioErrResponse{}
 		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
 			return err
