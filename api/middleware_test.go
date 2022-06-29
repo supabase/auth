@@ -48,7 +48,7 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 		"email":    "test@example.com",
 		"password": "secret",
 		"gotrue_meta_security": map[string]interface{}{
-			"hcaptcha_token": HCaptchaResponse,
+			"captcha_token": HCaptchaResponse,
 		},
 	}))
 
@@ -75,7 +75,7 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 		"email":    "test@example.com",
 		"password": "secret",
 		"gotrue_meta_security": map[string]interface{}{
-			"hcaptcha_token": HCaptchaResponse,
+			"captcha_token": HCaptchaResponse,
 		},
 	}))
 
@@ -129,7 +129,7 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 				"email":    "test@example.com",
 				"password": "secret",
 				"gotrue_meta_security": map[string]interface{}{
-					"hcaptcha_token": HCaptchaResponse,
+					"captcha_token": HCaptchaResponse,
 				},
 			}))
 			req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)

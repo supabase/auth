@@ -22,7 +22,7 @@ type GotrueRequest struct {
 }
 
 type GotrueSecurity struct {
-	Token string `json:"hcaptcha_token"`
+	Token string `json:"captcha_token"`
 }
 
 type VerificationResponse struct {
@@ -56,6 +56,10 @@ func init() {
 }
 
 func VerifyRequest(r *http.Request, secretKey string) (VerificationResult, error) {
+	if r.FormValue("grant_type") == "refresh_token" {
+		// captcha shouldn't be enabled on requests to refresh the token
+		return SuccessfullyVerified, nil
+	}
 	res := GotrueRequest{}
 	bodyBytes, err := ioutil.ReadAll(r.Body)
 	if err != nil {
