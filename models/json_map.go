@@ -23,6 +23,8 @@ func (j JSONMap) Scan(src interface{}) error {
 		source = []byte(v)
 	case []byte:
 		source = v
+	case nil:
+		source = []byte("")
 	default:
 		return errors.New("Invalid data type for JSONMap")
 	}

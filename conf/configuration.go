@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/gobwas/glob"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 )
@@ -70,24 +71,27 @@ type GlobalConfiguration struct {
 		RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
 		ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
 	}
-	DB                 DBConfiguration
-	External           ProviderConfiguration
-	Logging            LoggingConfig `envconfig:"LOG"`
-	OperatorToken      string        `split_words:"true" required:"false"`
-	MultiInstanceMode  bool
-	Tracing            TracingConfig
-	SMTP               SMTPConfiguration
-	RateLimitHeader    string  `split_words:"true"`
-	RateLimitEmailSent float64 `split_words:"true" default:"30"`
+	DB                    DBConfiguration
+	External              ProviderConfiguration
+	Logging               LoggingConfig `envconfig:"LOG"`
+	OperatorToken         string        `split_words:"true" required:"false"`
+	MultiInstanceMode     bool
+	Tracing               TracingConfig
+	SMTP                  SMTPConfiguration
+	RateLimitHeader       string  `split_words:"true"`
+	RateLimitEmailSent    float64 `split_words:"true" default:"30"`
+	RateLimitVerify       float64 `split_words:"true" default:"30"`
+	RateLimitTokenRefresh float64 `split_words:"true" default:"30"`
 }
 
 // EmailContentConfiguration holds the configuration for emails, both subjects and template URLs.
 type EmailContentConfiguration struct {
-	Invite       string `json:"invite"`
-	Confirmation string `json:"confirmation"`
-	Recovery     string `json:"recovery"`
-	EmailChange  string `json:"email_change" split_words:"true"`
-	MagicLink    string `json:"magic_link" split_words:"true"`
+	Invite           string `json:"invite"`
+	Confirmation     string `json:"confirmation"`
+	Recovery         string `json:"recovery"`
+	EmailChange      string `json:"email_change" split_words:"true"`
+	MagicLink        string `json:"magic_link" split_words:"true"`
+	Reauthentication string `json:"reauthentication"`
 }
 
 type ProviderConfiguration struct {
@@ -181,8 +185,10 @@ type CaptchaConfiguration struct {
 }
 
 type SecurityConfiguration struct {
-	Captcha                     CaptchaConfiguration `json:"captcha"`
-	RefreshTokenRotationEnabled bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
+	Captcha                               CaptchaConfiguration `json:"captcha"`
+	RefreshTokenRotationEnabled           bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
+	RefreshTokenReuseInterval             int                  `json:"refresh_token_reuse_interval" split_words:"true"`
+	UpdatePasswordRequireReauthentication bool                 `json:"update_password_require_reauthentication" split_words:"true"`
 }
 
 type Web3Configuration struct {
@@ -191,8 +197,9 @@ type Web3Configuration struct {
 
 // Configuration holds all the per-instance configuration.
 type Configuration struct {
-	SiteURL           string                   `json:"site_url" split_words:"true" required:"true"`
-	URIAllowList      []string                 `json:"uri_allow_list" split_words:"true"`
+	SiteURL           string   `json:"site_url" split_words:"true" required:"true"`
+	URIAllowList      []string `json:"uri_allow_list" split_words:"true"`
+	URIAllowListMap   map[string]glob.Glob
 	PasswordMinLength int                      `json:"password_min_length" split_words:"true"`
 	JWT               JWTConfiguration         `json:"jwt"`
 	SMTP              SMTPConfiguration        `json:"smtp"`
@@ -212,7 +219,7 @@ type Configuration struct {
 func loadEnvironment(filename string) error {
 	var err error
 	if filename != "" {
-		err = godotenv.Load(filename)
+		err = godotenv.Overload(filename)
 	} else {
 		err = godotenv.Load()
 		// handle if .env file does not exist, this is OK
@@ -347,7 +354,13 @@ func (config *Configuration) ApplyDefaults() {
 	if config.URIAllowList == nil {
 		config.URIAllowList = []string{}
 	}
-
+	if config.URIAllowList != nil {
+		config.URIAllowListMap = make(map[string]glob.Glob)
+		for _, uri := range config.URIAllowList {
+			g := glob.MustCompile(uri, '.', '/')
+			config.URIAllowListMap[uri] = g
+		}
+	}
 	if config.PasswordMinLength < defaultMinPasswordLength {
 		config.PasswordMinLength = defaultMinPasswordLength
 	}

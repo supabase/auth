@@ -8,16 +8,15 @@ import (
 )
 
 var filterColumnMap = map[string][]string{
-	"author": []string{"actor_username", "actor_name"},
-	"action": []string{"action"},
-	"type":   []string{"log_type"},
+	"author": {"actor_username", "actor_name"},
+	"action": {"action"},
+	"type":   {"log_type"},
 }
 
 func (a *API) adminAuditLog(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	instanceID := getInstanceID(ctx)
 	// aud := a.requestAud(ctx, r)
-
 	pageParams, err := paginate(r)
 	if err != nil {
 		return badRequestError("Bad Pagination Parameters: %v", err)
