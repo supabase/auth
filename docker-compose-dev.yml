@@ -9,6 +9,7 @@ services:
       dockerfile: Dockerfile.dev
     ports:
       - '9999:9999'
+      - '9100:9100'
     environment:
       - GOTRUE_DB_MIGRATIONS_PATH=/go/src/github.com/netlify/gotrue/migrations
     volumes:

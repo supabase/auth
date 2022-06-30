@@ -4,10 +4,12 @@ import (
 	"os"
 	"sync"
 
+	"github.com/bombsimon/logrusr/v3"
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gobuffalo/pop/v5/logging"
 	"github.com/netlify/gotrue/conf"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
 )
 
 const (
@@ -54,6 +56,8 @@ func ConfigureLogging(config *conf.LoggingConfig) error {
 		logrus.WithFields(f)
 
 		setPopLogger(config.SQL)
+
+		otel.SetLogger(logrusr.New(logrus.StandardLogger().WithField("component", "otel")))
 	})
 
 	return err
