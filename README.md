@@ -155,10 +155,9 @@ If you wish logs to be written to a file, set `log_file` to a valid file path.
 
 ### Opentracing
 
-Currently, only the Datadog tracer is supported.
-
 ```properties
 GOTRUE_TRACING_ENABLED=true
+GOTRUE_TRACING_EXPORTER=datadog
 GOTRUE_TRACING_HOST=127.0.0.1
 GOTRUE_TRACING_PORT=8126
 GOTRUE_TRACING_TAGS="tag1:value1,tag2:value2"
@@ -168,6 +167,10 @@ GOTRUE_SERVICE_NAME="gotrue"
 `TRACING_ENABLED` - `bool`
 
 Whether tracing is enabled or not. Defaults to `false`.
+
+`TRACING_EXPORTER` - `string`
+
+The selected exporter, must be one of: `datadog`, `prometheus`, `otlpgrpc` (Open Telemetry GRPC Collector)
 
 `TRACING_HOST` - `bool`
 
@@ -184,6 +187,10 @@ A comma separated list of key:value pairs. These key value pairs will be added a
 `SERVICE_NAME` - `string`
 
 The name to use for the service.
+
+`PROMETHEUS_ADDRESS` - `string`
+
+Optional override for the listen address for prometheus, defaults to "127.0.0.1:2222"
 
 ### JSON Web Tokens (JWT)
 

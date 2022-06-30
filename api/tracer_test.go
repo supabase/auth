@@ -1,17 +1,21 @@
 package api
 
 import (
+	"context"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
-	"github.com/opentracing/opentracing-go"
-	"github.com/opentracing/opentracing-go/mocktracer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 type TracerTestSuite struct {
@@ -36,9 +40,24 @@ func TestTracer(t *testing.T) {
 	suite.Run(t, ts)
 }
 
+func getAttribute(attributes []attribute.KeyValue, key attribute.Key) *attribute.Value {
+	for _, value := range attributes {
+		if value.Key == key {
+			return &value.Value
+		}
+	}
+
+	return nil
+}
+
 func (ts *TracerTestSuite) TestTracer_Spans() {
-	mt := mocktracer.New()
-	opentracing.SetGlobalTracer(mt)
+	exporter := tracetest.NewInMemoryExporter()
+	bsp := sdktrace.NewBatchSpanProcessor(exporter)
+	traceProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithSpanProcessor(bsp),
+	)
+	otel.SetTracerProvider(traceProvider)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/something1", nil)
@@ -46,18 +65,25 @@ func (ts *TracerTestSuite) TestTracer_Spans() {
 	req = httptest.NewRequest(http.MethodGet, "http://localhost/something2", nil)
 	ts.API.handler.ServeHTTP(w, req)
 
-	spans := mt.FinishedSpans()
-	if assert.Equal(ts.T(), 2, len(spans)) {
-		assert.Equal(ts.T(), "POST", spans[0].Tag("http.method"))
-		assert.Equal(ts.T(), "/something1", spans[0].Tag("http.url"))
-		assert.Equal(ts.T(), "POST /something1", spans[0].Tag("resource.name"))
-		assert.Equal(ts.T(), "404", spans[0].Tag("http.status_code"))
-		assert.NotEmpty(ts.T(), spans[0].Tag("http.request_id"))
+	var spans []sdktrace.ReadOnlySpan
+	err := exporter.ExportSpans(context.Background(), spans)
+	isNilError := assert.Equal(ts.T(), nil, err)
 
-		assert.Equal(ts.T(), "GET", spans[1].Tag("http.method"))
-		assert.Equal(ts.T(), "/something2", spans[1].Tag("http.url"))
-		assert.Equal(ts.T(), "GET /something2", spans[1].Tag("resource.name"))
-		assert.Equal(ts.T(), "404", spans[1].Tag("http.status_code"))
-		assert.NotEmpty(ts.T(), spans[1].Tag("http.request_id"))
+	if isNilError && assert.Equal(ts.T(), 2, len(spans)) {
+		attributes1 := spans[0].Attributes()
+		method1 := getAttribute(attributes1, semconv.HTTPMethodKey)
+		assert.Equal(ts.T(), "POST", method1.AsString())
+		url1 := getAttribute(attributes1, semconv.HTTPURLKey)
+		assert.Equal(ts.T(), "/something1", url1.AsString())
+		statusCode1 := getAttribute(attributes1, semconv.HTTPStatusCodeKey)
+		assert.Equal(ts.T(), "404", statusCode1.AsString())
+
+		attributes2 := spans[0].Attributes()
+		method2 := getAttribute(attributes2, semconv.HTTPMethodKey)
+		assert.Equal(ts.T(), "GET", method2.AsString())
+		url2 := getAttribute(attributes2, semconv.HTTPURLKey)
+		assert.Equal(ts.T(), "/something2", url2.AsString())
+		statusCode2 := getAttribute(attributes2, semconv.HTTPStatusCodeKey)
+		assert.Equal(ts.T(), "404", statusCode2.AsString())
 	}
 }

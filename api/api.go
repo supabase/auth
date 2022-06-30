@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"go.opentelemetry.io/otel"
+	otelcontroller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,6 +22,8 @@ import (
 	"github.com/rs/cors"
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
+	otelglobal "go.opentelemetry.io/otel/metric/global"
 )
 
 const (
@@ -45,13 +49,46 @@ func (a *API) ListenAndServe(hostAndPort string) {
 		Handler: a.handler,
 	}
 
+	// Datadog requires some extra deferrals!
+	if a.config.Tracing.Enabled && a.config.Tracing.OtlpMetricExporter != nil {
+		defer a.config.Tracing.ContextCancel() // Defer GRPC Context Cancel
+		d := a.config.Tracing.OtlpMetricExporter
+		baseContext := context.Background()
+		defer func() {
+			ctx, cancel := context.WithTimeout(baseContext, time.Second)
+			defer cancel()
+			if err := d.Shutdown(ctx); err != nil {
+				otel.Handle(err)
+			}
+		}()
+		pusher := otelglobal.MeterProvider().(*otelcontroller.Controller)
+		if err := pusher.Start(baseContext); err != nil {
+			log.Fatalf("could not start metric controller: %v", err)
+		}
+		defer func() {
+			ctx, cancel := context.WithTimeout(baseContext, time.Second)
+			defer cancel()
+			// pushes any last exports to the receiver
+			if err := pusher.Stop(ctx); err != nil {
+				otel.Handle(err)
+			}
+		}()
+	}
+	if a.config.Tracing.Enabled && a.config.Tracing.TracingShutdown != nil {
+		defer func() {
+			if err := a.config.Tracing.TracingShutdown(context.Background()); err != nil {
+				log.Fatal("failed to shutdown TracerProvider: %w", err)
+			}
+		}()
+	}
+
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
 		waitForTermination(log, done)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		server.Shutdown(ctx)
+		_ = server.Shutdown(ctx)
 	}()
 
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
@@ -87,7 +124,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	r.UseBypass(xffmw.Handler)
 	r.Use(addRequestID(globalConfig))
 	r.Use(recoverer)
-	r.UseBypass(tracer)
+	r.UseBypass(otelmux.Middleware(globalConfig.Tracing.ServiceName))
 
 	r.Get("/health", api.HealthCheck)
 
