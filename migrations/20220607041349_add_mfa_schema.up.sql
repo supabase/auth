@@ -1,7 +1,7 @@
 -- See: https://stackoverflow.com/questions/7624919/check-if-a-user-defined-type-already-exists-in-postgresql/48382296#48382296
 DO $$ BEGIN
     CREATE TYPE factor_type AS ENUM('totp', 'webauthn');
-    CREATE TYPE factor_status AS ENUM('disabled', 'unverified', 'verified')
+    CREATE TYPE factor_status AS ENUM('disabled', 'unverified', 'verified');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
