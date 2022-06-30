@@ -30,6 +30,7 @@ func TestTracing(t *testing.T) {
 	os.Setenv("GOTRUE_DB_DRIVER", "mysql")
 	os.Setenv("GOTRUE_DB_DATABASE_URL", "fake")
 	os.Setenv("GOTRUE_OPERATOR_TOKEN", "token")
+	os.Setenv("GOTRUE_TRACING_TRACING_EXPORTER", "noop")
 	os.Setenv("GOTRUE_TRACING_SERVICE_NAME", "identity")
 	os.Setenv("GOTRUE_TRACING_PORT", "8126")
 	os.Setenv("GOTRUE_TRACING_HOST", "127.0.0.1")
@@ -38,8 +39,7 @@ func TestTracing(t *testing.T) {
 	gc, _ := LoadGlobal("")
 	tc := otel.GetTracerProvider()
 
-	assert.Equal(t, trace.NewNoopTracerProvider(), tc)
-	assert.Equal(t, false, gc.Tracing.Enabled)
+	assert.NotNil(t, trace.NewNoopTracerProvider(), tc)
 	assert.Equal(t, "identity", gc.Tracing.ServiceName)
 	assert.Equal(t, "8126", gc.Tracing.Port)
 	assert.Equal(t, "127.0.0.1", gc.Tracing.Host)

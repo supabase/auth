@@ -35,14 +35,15 @@ const (
 	OtlpGrpcExporter   Exporter = "otlpgrpc"
 	OtlpHttpExporter   Exporter = "otlphttp"
 	PrometheusExporter Exporter = "prometheus"
+	NoopExporter       Exporter = "noop"
+	DefaultExporter    Exporter = "default"
 )
 
 type TracingConfig struct {
-	Enabled     bool   `default:"false"`
-	Host        string `default:"127.0.0.1"`
-	Port        string `default:"2222"`
-	Exporter    Exporter
-	ServiceName string `default:"gotrue" split_words:"true"`
+	Host        string   `default:"127.0.0.1"`
+	Port        string   `default:"2222"`
+	Exporter    Exporter `default:"noop"`
+	ServiceName string   `default:"gotrue" split_words:"true"`
 	Tags        map[string]string
 
 	// INTERNAL, used to start in `api.go`
@@ -56,119 +57,124 @@ func (tc *TracingConfig) tracingAddr() string {
 }
 
 func ConfigureTracing(tc *TracingConfig) {
-	if tc.Enabled {
-		var t trace.TracerProvider
-		var c *controller.Controller
-		var customAttributes []attribute.KeyValue
-		for k, v := range tc.Tags {
-			customAttributes = append(customAttributes, attribute.Key(k).String(v))
+	var t trace.TracerProvider
+	var c *controller.Controller
+	var customAttributes []attribute.KeyValue
+	for k, v := range tc.Tags {
+		customAttributes = append(customAttributes, attribute.Key(k).String(v))
+	}
+	customAttributes = append(customAttributes, semconv.ServiceNameKey.String(tc.ServiceName))
+	resourceAttributes := resource.WithAttributes(customAttributes...)
+
+	switch tc.Exporter {
+	case OtlpGrpcExporter:
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		tc.ContextCancel = cancel
+		conn, err := grpc.DialContext(ctx, tc.tracingAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		if err != nil {
+			panic(fmt.Errorf("failed to create gRPC connection to collector: %w", err))
 		}
-		customAttributes = append(customAttributes, semconv.ServiceNameKey.String(tc.ServiceName))
-		resourceAttributes := resource.WithAttributes(customAttributes...)
-
-		switch tc.Exporter {
-		case OtlpGrpcExporter:
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-			tc.ContextCancel = cancel
-			conn, err := grpc.DialContext(ctx, tc.tracingAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-			if err != nil {
-				panic(fmt.Errorf("failed to create gRPC connection to collector: %w", err))
-			}
-			otlpMetrics, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithGRPCConn(conn))
-			if err != nil {
-				panic(fmt.Errorf("failed to start grpc metrics: %w", err))
-			}
-			otlpTracing, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
-			if err != nil {
-				panic(fmt.Errorf("failed to start grpc tracing: %w", err))
-			}
-
-			// Setup Metrics
-			tc.OtlpMetricExporter = otlpMetrics
-			c = controller.New(
-				processor.NewFactory(
-					simple.NewWithHistogramDistribution(),
-					otlpMetrics,
-				),
-				controller.WithExporter(otlpMetrics),
-				controller.WithCollectPeriod(2*time.Second),
-			)
-
-			// Setup Tracing
-			res, err := resource.New(
-				ctx,
-				resourceAttributes,
-			)
-			if err != nil {
-				panic(fmt.Errorf("failed to create resource: %w", err))
-			}
-
-			bsp := sdktrace.NewBatchSpanProcessor(otlpTracing)
-			traceProvider := sdktrace.NewTracerProvider(
-				sdktrace.WithSampler(sdktrace.AlwaysSample()),
-				sdktrace.WithResource(res),
-				sdktrace.WithSpanProcessor(bsp),
-			)
-			t = traceProvider
-			otel.SetTextMapPropagator(propagation.TraceContext{})
-			tc.TracingShutdown = traceProvider.Shutdown
-		case OtlpHttpExporter:
-			ctx := context.Background()
-			otlpMetrics, err := otlpmetrichttp.New(ctx)
-			if err != nil {
-				panic(fmt.Errorf("failed to start http metrics: %w", err))
-			}
-			otlpTracing, err := otlptracehttp.New(ctx)
-			if err != nil {
-				panic(fmt.Errorf("failed to start http tracing: %w", err))
-			}
-
-			// Setup Metrics
-			tc.OtlpMetricExporter = otlpMetrics
-			c = controller.New(
-				processor.NewFactory(
-					simple.NewWithHistogramDistribution(),
-					otlpMetrics,
-				),
-				controller.WithExporter(otlpMetrics),
-				controller.WithCollectPeriod(2*time.Second),
-			)
-
-			// Setup Tracing
-			res, err := resource.New(
-				ctx,
-				resourceAttributes,
-			)
-			if err != nil {
-				panic(fmt.Errorf("failed to create resource: %w", err))
-			}
-
-			bsp := sdktrace.NewBatchSpanProcessor(otlpTracing)
-			traceProvider := sdktrace.NewTracerProvider(
-				sdktrace.WithSampler(sdktrace.AlwaysSample()),
-				sdktrace.WithResource(res),
-				sdktrace.WithSpanProcessor(bsp),
-			)
-			t = traceProvider
-			otel.SetTextMapPropagator(propagation.TraceContext{})
-			tc.TracingShutdown = traceProvider.Shutdown
-		//! Doesn't support traces!
-		case PrometheusExporter:
-			p, err := prometheus.New(prometheus.Config{}, &basic.Controller{})
-			if err != nil {
-				panic(fmt.Errorf("failed to create prometheus exporter: %w", err))
-			}
-
-			pServerMux := http.NewServeMux()
-			pServerMux.HandleFunc("/", p.ServeHTTP)
-			go func() {
-				logrus.StandardLogger().Info(fmt.Sprintf("Prometheus started, listening at %s", tc.tracingAddr()))
-				_ = http.ListenAndServe(tc.tracingAddr(), pServerMux)
-			}()
-			c = p.Controller()
+		otlpMetrics, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithGRPCConn(conn))
+		if err != nil {
+			panic(fmt.Errorf("failed to start grpc metrics: %w", err))
+		}
+		otlpTracing, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
+		if err != nil {
+			panic(fmt.Errorf("failed to start grpc tracing: %w", err))
 		}
 
+		// Setup Metrics
+		tc.OtlpMetricExporter = otlpMetrics
+		c = controller.New(
+			processor.NewFactory(
+				simple.NewWithHistogramDistribution(),
+				otlpMetrics,
+			),
+			controller.WithExporter(otlpMetrics),
+			controller.WithCollectPeriod(2*time.Second),
+		)
+
+		// Setup Tracing
+		res, err := resource.New(
+			ctx,
+			resourceAttributes,
+		)
+		if err != nil {
+			panic(fmt.Errorf("failed to create resource: %w", err))
+		}
+
+		bsp := sdktrace.NewBatchSpanProcessor(otlpTracing)
+		traceProvider := sdktrace.NewTracerProvider(
+			sdktrace.WithSampler(sdktrace.AlwaysSample()),
+			sdktrace.WithResource(res),
+			sdktrace.WithSpanProcessor(bsp),
+		)
+		t = traceProvider
+		otel.SetTextMapPropagator(propagation.TraceContext{})
+		tc.TracingShutdown = traceProvider.Shutdown
+	case OtlpHttpExporter:
+		ctx := context.Background()
+		otlpMetrics, err := otlpmetrichttp.New(ctx)
+		if err != nil {
+			panic(fmt.Errorf("failed to start http metrics: %w", err))
+		}
+		otlpTracing, err := otlptracehttp.New(ctx)
+		if err != nil {
+			panic(fmt.Errorf("failed to start http tracing: %w", err))
+		}
+
+		// Setup Metrics
+		tc.OtlpMetricExporter = otlpMetrics
+		c = controller.New(
+			processor.NewFactory(
+				simple.NewWithHistogramDistribution(),
+				otlpMetrics,
+			),
+			controller.WithExporter(otlpMetrics),
+			controller.WithCollectPeriod(2*time.Second),
+		)
+
+		// Setup Tracing
+		res, err := resource.New(
+			ctx,
+			resourceAttributes,
+		)
+		if err != nil {
+			panic(fmt.Errorf("failed to create resource: %w", err))
+		}
+
+		bsp := sdktrace.NewBatchSpanProcessor(otlpTracing)
+		traceProvider := sdktrace.NewTracerProvider(
+			sdktrace.WithSampler(sdktrace.AlwaysSample()),
+			sdktrace.WithResource(res),
+			sdktrace.WithSpanProcessor(bsp),
+		)
+		t = traceProvider
+		otel.SetTextMapPropagator(propagation.TraceContext{})
+		tc.TracingShutdown = traceProvider.Shutdown
+	//! Doesn't support traces!
+	case PrometheusExporter:
+		p, err := prometheus.New(prometheus.Config{}, &basic.Controller{})
+		if err != nil {
+			panic(fmt.Errorf("failed to create prometheus exporter: %w", err))
+		}
+
+		pServerMux := http.NewServeMux()
+		pServerMux.HandleFunc("/", p.ServeHTTP)
+		go func() {
+			logrus.StandardLogger().Info(fmt.Sprintf("Prometheus started, listening at %s", tc.tracingAddr()))
+			_ = http.ListenAndServe(tc.tracingAddr(), pServerMux)
+		}()
+		c = p.Controller()
+	case NoopExporter:
+		t = trace.NewNoopTracerProvider()
+	}
+
+	if t != nil {
 		otel.SetTracerProvider(t)
+	}
+
+	if c != nil {
 		global.SetMeterProvider(c)
 	}
 }

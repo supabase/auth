@@ -156,21 +156,18 @@ If you wish logs to be written to a file, set `log_file` to a valid file path.
 ### Opentracing
 
 ```properties
-GOTRUE_TRACING_ENABLED=true
-GOTRUE_TRACING_EXPORTER=datadog
+GOTRUE_TRACING_EXPORTER=otlphttp
 GOTRUE_TRACING_HOST=127.0.0.1
 GOTRUE_TRACING_PORT=8126
 GOTRUE_TRACING_TAGS="tag1:value1,tag2:value2"
 GOTRUE_TRACING_SERVICE_NAME="gotrue"
 ```
 
-`TRACING_ENABLED` - `bool`
-
-Whether tracing is enabled or not. Defaults to `false`.
-
 `TRACING_EXPORTER` - `string`
 
-The selected exporter, must be one of: `prometheus`, `otlpgrpc` (Open Telemetry GRPC Collector), `otlphttp` (Open Telemetry HTTP Collector).
+The selected exporter, must be one of: `prometheus`, `otlpgrpc` (Open Telemetry GRPC Collector), `otlphttp` (Open Telemetry HTTP Collector), `noop`.
+
+This defaults to `noop` so that no actions happen. If you pick an option other than `noop` tracing is enabled.
 
 `TRACING_HOST` - `bool`
 

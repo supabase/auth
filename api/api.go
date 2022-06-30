@@ -49,8 +49,8 @@ func (a *API) ListenAndServe(hostAndPort string) {
 		Handler: a.handler,
 	}
 
-	// Datadog requires some extra deferrals!
-	if a.config.Tracing.Enabled && a.config.Tracing.OtlpMetricExporter != nil {
+	// Open Tracing GRPC requires some extra deferrals!
+	if a.config.Tracing.OtlpMetricExporter != nil {
 		defer a.config.Tracing.ContextCancel() // Defer GRPC Context Cancel
 		d := a.config.Tracing.OtlpMetricExporter
 		baseContext := context.Background()
@@ -74,7 +74,7 @@ func (a *API) ListenAndServe(hostAndPort string) {
 			}
 		}()
 	}
-	if a.config.Tracing.Enabled && a.config.Tracing.TracingShutdown != nil {
+	if a.config.Tracing.TracingShutdown != nil {
 		defer func() {
 			if err := a.config.Tracing.TracingShutdown(context.Background()); err != nil {
 				log.Fatal("failed to shutdown TracerProvider: %w", err)
