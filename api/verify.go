@@ -39,7 +39,8 @@ const (
 
 const (
 	// v1 uses crypto.SecureToken()
-	v1OtpLength = 22
+	v1OtpLength   = 22
+	md5HashLength = 32
 )
 
 // Only applicable when SECURE_EMAIL_CHANGE_ENABLED
@@ -501,32 +502,32 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		// TODO(km): remove when old token format is deprecated
 		// the new token format is represented by a MD5 hash which is 32 characters (128 bits) long
 		// anything shorter than 32 characters can safely be assumed to be using the old token format
-		if len(user.ConfirmationToken) < 32 {
+		if len(user.ConfirmationToken) < md5HashLength {
 			tokenHash = params.Token
 		}
 		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
 	case recoveryVerification, magicLinkVerification:
 		// TODO(km): remove when old token format is deprecated
-		if len(user.RecoveryToken) < 32 {
+		if len(user.RecoveryToken) < md5HashLength {
 			tokenHash = params.Token
 		}
 		isValid = isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
 	case emailChangeVerification:
 		// TODO(km): remove when old token format is deprecated
-		if len(user.EmailChangeTokenCurrent) < 32 && len(user.EmailChangeTokenNew) < 32 {
+		if len(user.EmailChangeTokenCurrent) < md5HashLength && len(user.EmailChangeTokenNew) < md5HashLength {
 			tokenHash = params.Token
 		}
 		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
 			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
 	case phoneChangeVerification:
 		// TODO(km): remove when old token format is deprecated
-		if len(user.PhoneChangeToken) < 32 {
+		if len(user.PhoneChangeToken) < md5HashLength {
 			tokenHash = params.Token
 		}
 		isValid = isOtpValid(tokenHash, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
 	case smsVerification:
 		// TODO(km): remove when old token format is deprecated
-		if len(user.ConfirmationToken) < 32 {
+		if len(user.ConfirmationToken) < md5HashLength {
 			tokenHash = params.Token
 		}
 		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Sms.OtpExp)
