@@ -7,7 +7,9 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric/global"
 	"go.opentelemetry.io/otel/propagation"
@@ -31,17 +33,17 @@ type Exporter = string
 const (
 	DatadogExporter    Exporter = "datadog"
 	OtlpGrpcExporter   Exporter = "otlpgrpc"
+	OtlpHttpExporter   Exporter = "otlphttp"
 	PrometheusExporter Exporter = "prometheus"
 )
 
 type TracingConfig struct {
-	Enabled           bool `default:"false"`
-	Host              string
-	Port              string
-	Exporter          Exporter `default:"datadog"`
-	PrometheusAddress string   `default:"127.0.0.1:2222" json:"prometheus_address" split_words:"true"`
-	ServiceName       string   `default:"gotrue" split_words:"true"`
-	Tags              map[string]string
+	Enabled     bool     `default:"false"`
+	Host        string   `default:"127.0.0.1"`
+	Port        string   `default:"2222"`
+	Exporter    Exporter `default:"datadog"`
+	ServiceName string   `default:"gotrue" split_words:"true"`
+	Tags        map[string]string
 
 	// INTERNAL, used to start in `api.go`
 	OtlpMetricExporter *otlpmetric.Exporter            `ignore:"true"`
@@ -109,6 +111,49 @@ func ConfigureTracing(tc *TracingConfig) {
 			otel.SetTextMapPropagator(propagation.TraceContext{})
 			tc.TracingShutdown = traceProvider.Shutdown
 
+		case OtlpHttpExporter:
+			ctx := context.Background()
+			otlpMetrics, err := otlpmetrichttp.New(ctx)
+			if err != nil {
+				panic(fmt.Errorf("failed to start http metrics: %w", err))
+			}
+			otlpTracing, err := otlptracehttp.New(ctx)
+			if err != nil {
+				panic(fmt.Errorf("failed to start http tracing: %w", err))
+			}
+
+			// Setup Metrics
+			tc.OtlpMetricExporter = otlpMetrics
+			c = controller.New(
+				processor.NewFactory(
+					simple.NewWithHistogramDistribution(),
+					otlpMetrics,
+				),
+				controller.WithExporter(otlpMetrics),
+				controller.WithCollectPeriod(2*time.Second),
+			)
+
+			// Setup Tracing
+			res, err := resource.New(
+				ctx,
+				resource.WithAttributes(
+					// the service name used to display traces in backends
+					semconv.ServiceNameKey.String(tc.ServiceName),
+				),
+			)
+			if err != nil {
+				panic(fmt.Errorf("failed to create resource: %w", err))
+			}
+
+			bsp := sdktrace.NewBatchSpanProcessor(otlpTracing)
+			traceProvider := sdktrace.NewTracerProvider(
+				sdktrace.WithSampler(sdktrace.AlwaysSample()),
+				sdktrace.WithResource(res),
+				sdktrace.WithSpanProcessor(bsp),
+			)
+			t = traceProvider
+			otel.SetTextMapPropagator(propagation.TraceContext{})
+			tc.TracingShutdown = traceProvider.Shutdown
 		//! Doesn't support traces!
 		case PrometheusExporter:
 			p, err := prometheus.New(prometheus.Config{}, &basic.Controller{})
@@ -119,8 +164,8 @@ func ConfigureTracing(tc *TracingConfig) {
 			pServerMux := http.NewServeMux()
 			pServerMux.HandleFunc("/", p.ServeHTTP)
 			go func() {
-				logrus.StandardLogger().Info(fmt.Sprintf("Prometheus started, listening at %s", tc.PrometheusAddress))
-				_ = http.ListenAndServe(tc.PrometheusAddress, pServerMux)
+				logrus.StandardLogger().Info(fmt.Sprintf("Prometheus started, listening at %s", tc.tracingAddr()))
+				_ = http.ListenAndServe(tc.tracingAddr(), pServerMux)
 			}()
 			c = p.Controller()
 		}

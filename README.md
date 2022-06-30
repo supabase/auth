@@ -170,15 +170,15 @@ Whether tracing is enabled or not. Defaults to `false`.
 
 `TRACING_EXPORTER` - `string`
 
-The selected exporter, must be one of: `datadog`, `prometheus`, `otlpgrpc` (Open Telemetry GRPC Collector)
+The selected exporter, must be one of: `datadog`, `prometheus`, `otlpgrpc` (Open Telemetry GRPC Collector), `otlphttp` (Open Telemetry HTTP Collector)
 
 `TRACING_HOST` - `bool`
 
-The tracing destination.
+The tracing destination. If using `prometheus` this is used as the listening host.
 
 `TRACING_PORT` - `bool`
 
-The port for the tracing host.
+The port for the tracing host. If using `prometheus` this is used as the listening port.
 
 `TRACING_TAGS` - `string`
 
@@ -187,10 +187,6 @@ A comma separated list of key:value pairs. These key value pairs will be added a
 `SERVICE_NAME` - `string`
 
 The name to use for the service.
-
-`PROMETHEUS_ADDRESS` - `string`
-
-Optional override for the listen address for prometheus, defaults to "127.0.0.1:2222"
 
 ### JSON Web Tokens (JWT)
 
