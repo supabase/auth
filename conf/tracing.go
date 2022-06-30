@@ -31,7 +31,6 @@ import (
 type Exporter = string
 
 const (
-	DatadogExporter    Exporter = "datadog"
 	OtlpGrpcExporter   Exporter = "otlpgrpc"
 	OtlpHttpExporter   Exporter = "otlphttp"
 	PrometheusExporter Exporter = "prometheus"
@@ -41,7 +40,7 @@ type TracingConfig struct {
 	Enabled     bool     `default:"false"`
 	Host        string   `default:"127.0.0.1"`
 	Port        string   `default:"2222"`
-	Exporter    Exporter `default:"datadog"`
+	Exporter    Exporter `default:"otlphttp"`
 	ServiceName string   `default:"gotrue" split_words:"true"`
 	Tags        map[string]string
 
@@ -62,7 +61,6 @@ func ConfigureTracing(tc *TracingConfig) {
 
 		switch tc.Exporter {
 		case OtlpGrpcExporter:
-		case DatadogExporter:
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			tc.ContextCancel = cancel
 			conn, err := grpc.DialContext(ctx, tc.tracingAddr(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())

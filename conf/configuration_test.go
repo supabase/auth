@@ -1,10 +1,11 @@
 package conf
 
 import (
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	"os"
 	"testing"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,9 +36,9 @@ func TestTracing(t *testing.T) {
 	os.Setenv("GOTRUE_TRACING_TAGS", "tag1:value1,tag2:value2")
 
 	gc, _ := LoadGlobal("")
-	tc := opentracing.GlobalTracer()
+	tc := otel.GetTracerProvider()
 
-	assert.Equal(t, opentracing.NoopTracer{}, tc)
+	assert.Equal(t, trace.NewNoopTracerProvider(), tc)
 	assert.Equal(t, false, gc.Tracing.Enabled)
 	assert.Equal(t, "identity", gc.Tracing.ServiceName)
 	assert.Equal(t, "8126", gc.Tracing.Port)

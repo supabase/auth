@@ -161,7 +161,7 @@ GOTRUE_TRACING_EXPORTER=datadog
 GOTRUE_TRACING_HOST=127.0.0.1
 GOTRUE_TRACING_PORT=8126
 GOTRUE_TRACING_TAGS="tag1:value1,tag2:value2"
-GOTRUE_SERVICE_NAME="gotrue"
+GOTRUE_TRACING_SERVICE_NAME="gotrue"
 ```
 
 `TRACING_ENABLED` - `bool`
@@ -170,7 +170,7 @@ Whether tracing is enabled or not. Defaults to `false`.
 
 `TRACING_EXPORTER` - `string`
 
-The selected exporter, must be one of: `datadog`, `prometheus`, `otlpgrpc` (Open Telemetry GRPC Collector), `otlphttp` (Open Telemetry HTTP Collector)
+The selected exporter, must be one of: `prometheus`, `otlpgrpc` (Open Telemetry GRPC Collector), `otlphttp` (Open Telemetry HTTP Collector).
 
 `TRACING_HOST` - `bool`
 
