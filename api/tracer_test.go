@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -65,11 +64,10 @@ func (ts *TracerTestSuite) TestTracer_Spans() {
 	req = httptest.NewRequest(http.MethodGet, "http://localhost/something2", nil)
 	ts.API.handler.ServeHTTP(w, req)
 
-	var spans []sdktrace.ReadOnlySpan
-	err := exporter.ExportSpans(context.Background(), spans)
-	isNilError := assert.Equal(ts.T(), nil, err)
+	spanStubs := exporter.GetSpans()
+	spans := spanStubs.Snapshots()
 
-	if isNilError && assert.Equal(ts.T(), 2, len(spans)) {
+	if assert.Equal(ts.T(), 2, len(spans)) {
 		attributes1 := spans[0].Attributes()
 		method1 := getAttribute(attributes1, semconv.HTTPMethodKey)
 		assert.Equal(ts.T(), "POST", method1.AsString())
