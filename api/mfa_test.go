@@ -50,7 +50,7 @@ func (ts *MFATestSuite) TestMFAEnable() {
 	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
 
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("http://localhost/mfa/%s/enable_mfa", u.ID), nil)
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("http://localhost/mfa/%s/enable", u.ID), nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
@@ -67,7 +67,7 @@ func (ts *MFATestSuite) TestMFADisable() {
 	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
 
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("http://localhost/mfa/%s/disable_mfa", u.ID), nil)
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("http://localhost/mfa/%s/disable", u.ID), nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
