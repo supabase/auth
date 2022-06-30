@@ -13,7 +13,7 @@ type RecoveryCode struct {
 	UserID       uuid.UUID  `json:"user_id" db:"user_id"`
 	CreatedAt    *time.Time `json:"created_at" db:"created_at"`
 	RecoveryCode string     `json:"recovery_code" db:"recovery_code"`
-	VerifiedAt   *time.Time `json:"verified_at" db:"verified_at"`
+	UsedAt   *time.Time `json:"used_at" db:"used_at"`
 }
 
 func (RecoveryCode) TableName() string {

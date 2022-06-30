@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS auth.mfa_recovery_codes(
        user_id uuid NOT NULL,
        recovery_code VARCHAR(32) NOT NULL,
        created_at timestamptz NOT NULL,
-       verified_at timestamptz NULL,
+       used_at timestamptz NULL,
        CONSTRAINT mfa_recovery_codes_user_id_recovery_code_pkey UNIQUE(user_id, recovery_code),
        CONSTRAINT mfa_recovery_codes_user_id_fkey FOREIGN KEY(user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
