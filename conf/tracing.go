@@ -38,11 +38,11 @@ const (
 )
 
 type TracingConfig struct {
-	Enabled     bool     `default:"false"`
-	Host        string   `default:"127.0.0.1"`
-	Port        string   `default:"2222"`
-	Exporter    Exporter `default:"otlphttp"`
-	ServiceName string   `default:"gotrue" split_words:"true"`
+	Enabled     bool   `default:"false"`
+	Host        string `default:"127.0.0.1"`
+	Port        string `default:"2222"`
+	Exporter    Exporter
+	ServiceName string `default:"gotrue" split_words:"true"`
 	Tags        map[string]string
 
 	// INTERNAL, used to start in `api.go`
@@ -170,8 +170,5 @@ func ConfigureTracing(tc *TracingConfig) {
 
 		otel.SetTracerProvider(t)
 		global.SetMeterProvider(c)
-	} else {
-		t := trace.NewNoopTracerProvider()
-		otel.SetTracerProvider(t)
 	}
 }
