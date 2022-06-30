@@ -78,6 +78,7 @@ func (ts *SignupTestSuite) TestSignup() {
 }
 
 func (ts *SignupTestSuite) TestWebhookTriggered() {
+	const numUserFields = 11
 	var callCount int
 	require := ts.Require()
 	assert := ts.Assert()
@@ -112,7 +113,7 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 
 		u, ok := data["user"].(map[string]interface{})
 		require.True(ok)
-		assert.Len(u, 10)
+		assert.Len(u, numUserFields)
 		// assert.Equal(t, user.ID, u["id"]) TODO
 		assert.Equal("authenticated", u["aud"])
 		assert.Equal("authenticated", u["role"])
