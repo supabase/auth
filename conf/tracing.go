@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -58,6 +59,12 @@ func ConfigureTracing(tc *TracingConfig) {
 	if tc.Enabled {
 		var t trace.TracerProvider
 		var c *controller.Controller
+		var customAttributes []attribute.KeyValue
+		for k, v := range tc.Tags {
+			customAttributes = append(customAttributes, attribute.Key(k).String(v))
+		}
+		customAttributes = append(customAttributes, semconv.ServiceNameKey.String(tc.ServiceName))
+		resourceAttributes := resource.WithAttributes(customAttributes...)
 
 		switch tc.Exporter {
 		case OtlpGrpcExporter:
@@ -90,10 +97,7 @@ func ConfigureTracing(tc *TracingConfig) {
 			// Setup Tracing
 			res, err := resource.New(
 				ctx,
-				resource.WithAttributes(
-					// the service name used to display traces in backends
-					semconv.ServiceNameKey.String(tc.ServiceName),
-				),
+				resourceAttributes,
 			)
 			if err != nil {
 				panic(fmt.Errorf("failed to create resource: %w", err))
@@ -108,7 +112,6 @@ func ConfigureTracing(tc *TracingConfig) {
 			t = traceProvider
 			otel.SetTextMapPropagator(propagation.TraceContext{})
 			tc.TracingShutdown = traceProvider.Shutdown
-
 		case OtlpHttpExporter:
 			ctx := context.Background()
 			otlpMetrics, err := otlpmetrichttp.New(ctx)
@@ -134,10 +137,7 @@ func ConfigureTracing(tc *TracingConfig) {
 			// Setup Tracing
 			res, err := resource.New(
 				ctx,
-				resource.WithAttributes(
-					// the service name used to display traces in backends
-					semconv.ServiceNameKey.String(tc.ServiceName),
-				),
+				resourceAttributes,
 			)
 			if err != nil {
 				panic(fmt.Errorf("failed to create resource: %w", err))
