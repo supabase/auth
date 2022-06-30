@@ -1,6 +1,7 @@
 -- See: https://stackoverflow.com/questions/7624919/check-if-a-user-defined-type-already-exists-in-postgresql/48382296#48382296
 DO $$ BEGIN
     CREATE TYPE factor_type AS ENUM('totp', 'webauthn');
+    CREATE TYPE factor_status AS ENUM('enabled', 'disabled', 'unverified', 'verified')
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
@@ -9,13 +10,13 @@ END $$;
 CREATE TABLE IF NOT EXISTS auth.mfa_factors(
        id VARCHAR(256) NOT NULL,
        user_id uuid NOT NULL,
-       simple_name VARCHAR(256) NULL,
+       friendly_name VARCHAR(256) NULL,
        factor_type factor_type NOT NULL,
-       enabled BOOLEAN NOT NULL,
+       status factor_status NOT NULL,
        created_at timestamptz NOT NULL,
        updated_at timestamptz NOT NULL,
        secret_key VARCHAR(256) NOT NULL,
-       UNIQUE(user_id, simple_name),
+       UNIQUE(user_id, friendly_name),
        CONSTRAINT mfa_factors_pkey PRIMARY KEY(id),
        CONSTRAINT mfa_factors_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
