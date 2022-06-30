@@ -3,37 +3,38 @@ package models
 import (
 	"database/sql"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
-	"golang.org/x/crypto/bcrypt"
 	"time"
 )
 
 type RecoveryCode struct {
+	ID           uuid.UUID  `json:"id" db:"id"`
 	UserID       uuid.UUID  `json:"user_id" db:"user_id"`
 	CreatedAt    *time.Time `json:"created_at" db:"created_at"`
 	RecoveryCode string     `json:"recovery_code" db:"recovery_code"`
-	Valid        bool       `json:"valid" db:"valid"`
-	TimeUsed     time.Time  `json:"time_used" db:"time_used"`
+	VerifiedAt   *time.Time `json:"verified_at" db:"verified_at"`
 }
 
 func (RecoveryCode) TableName() string {
-	tableName := "recovery_codes"
+	tableName := "mfa_recovery_codes"
 	return tableName
 }
 
 // Returns a new recovery code associated with the user
 func NewRecoveryCode(user *User, recoveryCode string, now *time.Time) (*RecoveryCode, error) {
-	rc, err := hashRecoveryCode(recoveryCode)
-	if err != nil {
-		return nil, err
-	}
+	tokenLength := 10
 
+	id, err := uuid.NewV4()
+	if err != nil {
+		return nil, errors.Wrap(err, "Error generating unique id")
+	}
 	code := &RecoveryCode{
+		ID:           id,
 		UserID:       user.ID,
-		RecoveryCode: rc,
+		RecoveryCode: crypto.SecureToken(tokenLength),
 		CreatedAt:    now,
-		Valid:        true,
 	}
 
 	return code, nil
@@ -49,13 +50,4 @@ func FindValidRecoveryCodesByUser(tx *storage.Connection, user *User) ([]*Recove
 		return nil, errors.Wrap(err, "Error finding recovery codes")
 	}
 	return recoveryCodes, nil
-}
-
-// hashRecoveryCode generates a hashed recoveryCode from a plaintext string
-func hashRecoveryCode(recoveryCode string) (string, error) {
-	rc, err := bcrypt.GenerateFromPassword([]byte(recoveryCode), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-	return string(rc), nil
 }

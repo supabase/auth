@@ -84,8 +84,10 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 		recoveryCodeModels = append(recoveryCodeModels, recoveryCodeModel)
 	}
 	terr = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr = tx.Create(recoveryCodeModels); terr != nil {
-			return terr
+		for _, recoveryCodeModel := range recoveryCodeModels {
+			if terr = tx.Create(recoveryCodeModel); terr != nil {
+				return terr
+			}
 		}
 
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.GenerateRecoveryCodesAction, r.RemoteAddr, nil); terr != nil {
@@ -93,6 +95,7 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 		}
 		return nil
 	})
+
 	return sendJSON(w, http.StatusOK, &RecoveryCodesResponse{
 		RecoveryCodes: recoveryCodes,
 	})
