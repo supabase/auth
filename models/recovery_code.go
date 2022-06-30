@@ -3,7 +3,6 @@ package models
 import (
 	"database/sql"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"time"
@@ -24,7 +23,6 @@ func (RecoveryCode) TableName() string {
 
 // Returns a new recovery code associated with the user
 func NewRecoveryCode(user *User, recoveryCode string, now *time.Time) (*RecoveryCode, error) {
-	tokenLength := 10
 
 	id, err := uuid.NewV4()
 	if err != nil {
@@ -33,7 +31,7 @@ func NewRecoveryCode(user *User, recoveryCode string, now *time.Time) (*Recovery
 	code := &RecoveryCode{
 		ID:           id,
 		UserID:       user.ID,
-		RecoveryCode: crypto.SecureToken(tokenLength),
+		RecoveryCode: recoveryCode,
 		CreatedAt:    now,
 	}
 
