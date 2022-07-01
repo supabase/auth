@@ -1,6 +1,7 @@
 package models
 
 import (
+	"database/sql"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
@@ -41,7 +42,7 @@ func GrantRefreshTokenSwap(tx *storage.Connection, user *User, token *RefreshTok
 	var newToken *RefreshToken
 	err := tx.Transaction(func(rtx *storage.Connection) error {
 		var terr error
-		if terr = NewAuditLogEntry(tx, user.InstanceID, user, TokenRevokedAction, nil); terr != nil {
+		if terr = NewAuditLogEntry(tx, user.InstanceID, user, TokenRevokedAction, "", nil); terr != nil {
 			return errors.Wrap(terr, "error creating audit log entry")
 		}
 
@@ -57,17 +58,31 @@ func GrantRefreshTokenSwap(tx *storage.Connection, user *User, token *RefreshTok
 
 // RevokeTokenFamily revokes all refresh tokens that descended from the provided token.
 func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
+	tablename := (&pop.Model{Value: RefreshToken{}}).TableName()
 	err := tx.RawQuery(`
 	with recursive token_family as (
-		select id, user_id, token, revoked, parent from refresh_tokens where parent = ?
+		select id, user_id, token, revoked, parent from `+tablename+` where parent = ?
 		union
-		select r.id, r.user_id, r.token, r.revoked, r.parent from `+(&pop.Model{Value: RefreshToken{}}).TableName()+` r inner join token_family t on t.token = r.parent
+		select r.id, r.user_id, r.token, r.revoked, r.parent from `+tablename+` r inner join token_family t on t.token = r.parent
 	)
-	update `+(&pop.Model{Value: RefreshToken{}}).TableName()+` r set revoked = true from token_family where token_family.id = r.id;`, token.Token).Exec()
+	update `+tablename+` r set revoked = true from token_family where token_family.id = r.id;`, token.Token).Exec()
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+// GetValidChildToken returns the child token of the token provided if the child is not revoked.
+func GetValidChildToken(tx *storage.Connection, token *RefreshToken) (*RefreshToken, error) {
+	refreshToken := &RefreshToken{}
+	err := tx.Q().Where("parent = ? and revoked = false", token.Token).First(refreshToken)
+	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, RefreshTokenNotFoundError{}
+		}
+		return nil, err
+	}
+	return refreshToken, nil
 }
 
 // Logout deletes all refresh tokens for a user.

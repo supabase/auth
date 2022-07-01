@@ -1,10 +1,10 @@
 package cmd
 
 import (
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
-	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -83,7 +83,7 @@ func adminCreateUser(globalConfig *conf.GlobalConfiguration, config *conf.Config
 		logrus.Fatalf("Error checking user email: %+v", err)
 	}
 
-	user, err := models.NewUser(iid, args[0], args[1], aud, nil)
+	user, err := models.NewUser(iid, "", args[0], args[1], aud, nil)
 	if err != nil {
 		logrus.Fatalf("Error creating new user: %+v", err)
 	}

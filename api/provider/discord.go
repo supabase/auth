@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/netlify/gotrue/conf"
@@ -21,7 +22,7 @@ type discordProvider struct {
 
 type discordUser struct {
 	Avatar        string `json:"avatar"`
-	Discriminator int    `json:"discriminator,string"`
+	Discriminator string `json:"discriminator"`
 	Email         string `json:"email"`
 	ID            string `json:"id"`
 	Name          string `json:"username"`
@@ -76,11 +77,15 @@ func (g discordProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 
 	var avatarURL string
 	extension := "png"
-	// https://discord.com/developers/docs/reference#image-formatting-cdn-endpoints:
-	// In the case of the Default User Avatar endpoint, the value for
-	// user_discriminator in the path should be the user's discriminator modulo 5
 	if u.Avatar == "" {
-		avatarURL = fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.%s", u.Discriminator%5, extension)
+		if intDiscriminator, err := strconv.Atoi(u.Discriminator); err != nil {
+			return nil, err
+		} else {
+			// https://discord.com/developers/docs/reference#image-formatting-cdn-endpoints:
+			// In the case of the Default User Avatar endpoint, the value for
+			// user_discriminator in the path should be the user's discriminator modulo 5
+			avatarURL = fmt.Sprintf("https://cdn.discordapp.com/embed/avatars/%d.%s", intDiscriminator%5, extension)
+		}
 	} else {
 		// https://discord.com/developers/docs/reference#image-formatting:
 		// "In the case of endpoints that support GIFs, the hash will begin with a_

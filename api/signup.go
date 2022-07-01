@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -75,9 +76,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone signups are disabled")
 		}
-		params.Phone = a.formatPhoneNumber(params.Phone)
-		if isValid := a.validateE164Format(params.Phone); !isValid {
-			return unprocessableEntityError("Invalid phone number format")
+		params.Phone, err = a.validatePhone(params.Phone)
+		if err != nil {
+			return err
 		}
 		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, params.Aud)
 	default:
@@ -112,7 +113,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 		if params.Provider == "email" && !user.IsConfirmed() {
 			if config.Mailer.Autoconfirm {
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
+				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -126,7 +127,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			} else {
 				mailer := a.Mailer(ctx)
 				referrer := a.getReferrer(r)
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserConfirmationRequestedAction, map[string]interface{}{
+				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -142,7 +143,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			}
 		} else if params.Provider == "phone" && !user.IsPhoneConfirmed() {
 			if config.Sms.Autoconfirm {
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
+				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -154,12 +155,16 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					return internalServerError("Database error updating user").WithInternalError(terr)
 				}
 			} else {
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserConfirmationRequestedAction, map[string]interface{}{
+				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
 				}
-				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone); terr != nil {
+				smsProvider, terr := sms_provider.GetSmsProvider(*config)
+				if terr != nil {
+					return badRequestError("Error sending confirmation sms: %v", terr)
+				}
+				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider); terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
 			}
@@ -174,7 +179,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		}
 		if errors.Is(err, UserExistsError) {
 			err = a.db.Transaction(func(tx *storage.Connection) error {
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRepeatedSignUpAction, map[string]interface{}{
+				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRepeatedSignUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -201,7 +206,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		var token *AccessTokenResponse
 		err = a.db.Transaction(func(tx *storage.Connection) error {
 			var terr error
-			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, map[string]interface{}{
+			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr
@@ -273,13 +278,12 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 	var err error
 	switch params.Provider {
 	case "email":
-		user, err = models.NewUser(instanceID, params.Email, params.Password, params.Aud, params.Data)
+		user, err = models.NewUser(instanceID, "", params.Email, params.Password, params.Aud, params.Data)
 	case "phone":
-		user, err = models.NewUser(instanceID, "", params.Password, params.Aud, params.Data)
-		user.Phone = storage.NullString(params.Phone)
+		user, err = models.NewUser(instanceID, params.Phone, "", params.Password, params.Aud, params.Data)
 	default:
 		// handles external provider case
-		user, err = models.NewUser(instanceID, params.Email, params.Password, params.Aud, params.Data)
+		user, err = models.NewUser(instanceID, "", params.Email, params.Password, params.Aud, params.Data)
 	}
 
 	if err != nil {

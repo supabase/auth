@@ -68,7 +68,7 @@ func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Bad Pagination Parameters: %v", err)
 	}
 
-	sortParams, err := sort(r, map[string]bool{models.CreatedAt: true}, []models.SortField{models.SortField{Name: models.CreatedAt, Dir: models.Descending}})
+	sortParams, err := sort(r, map[string]bool{models.CreatedAt: true}, []models.SortField{{Name: models.CreatedAt, Dir: models.Descending}})
 	if err != nil {
 		return badRequestError("Bad Sort Parameters: %v", err)
 	}
@@ -175,7 +175,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserModifiedAction, map[string]interface{}{
+		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserModifiedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
@@ -231,9 +231,9 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Phone != "" {
-		params.Phone = a.formatPhoneNumber(params.Phone)
-		if isValid := a.validateE164Format(params.Phone); !isValid {
-			return unprocessableEntityError("Invalid phone format")
+		params.Phone, err = a.validatePhone(params.Phone)
+		if err != nil {
+			return err
 		}
 		if exists, err := models.IsDuplicatedPhone(a.db, instanceID, params.Phone, aud); err != nil {
 			return internalServerError("Database error checking phone").WithInternalError(err)
@@ -250,12 +250,9 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		params.Password = &password
 	}
 
-	user, err := models.NewUser(instanceID, params.Email, *params.Password, aud, params.UserMetaData)
+	user, err := models.NewUser(instanceID, params.Phone, params.Email, *params.Password, aud, params.UserMetaData)
 	if err != nil {
 		return internalServerError("Error creating user").WithInternalError(err)
-	}
-	if params.Phone != "" {
-		user.Phone = storage.NullString(params.Phone)
 	}
 	if user.AppMetaData == nil {
 		user.AppMetaData = make(map[string]interface{})
@@ -273,7 +270,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserSignedUpAction, map[string]interface{}{
+		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserSignedUpAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
@@ -326,7 +323,7 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	adminUser := getAdminUser(ctx)
 
 	err := a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserDeletedAction, map[string]interface{}{
+		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserDeletedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,

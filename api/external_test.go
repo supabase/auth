@@ -47,7 +47,8 @@ func (ts *ExternalTestSuite) createUser(providerId string, email string, name st
 		require.NoError(ts.T(), ts.API.db.Destroy(u), "Error deleting user")
 	}
 
-	u, err := models.NewUser(ts.instanceID, email, "test", ts.Config.JWT.Aud, map[string]interface{}{"provider_id": providerId, "full_name": name, "avatar_url": avatar})
+	// TODO: [Joel] -- refactor to take in phone
+	u, err := models.NewUser(ts.instanceID, "", email, "test", ts.Config.JWT.Aud, map[string]interface{}{"provider_id": providerId, "full_name": name, "avatar_url": avatar})
 
 	if confirmationToken != "" {
 		u.ConfirmationToken = confirmationToken
@@ -120,7 +121,11 @@ func assertAuthorizationSuccess(ts *ExternalTestSuite, u *url.URL, tokenCount in
 	ts.Require().NoError(err)
 	ts.Equal(providerId, user.UserMetaData["provider_id"])
 	ts.Equal(name, user.UserMetaData["full_name"])
-	ts.Equal(avatar, user.UserMetaData["avatar_url"])
+	if avatar == "" {
+		ts.Equal(nil, user.UserMetaData["avatar_url"])
+	} else {
+		ts.Equal(avatar, user.UserMetaData["avatar_url"])
+	}
 }
 
 func assertAuthorizationFailure(ts *ExternalTestSuite, u *url.URL, errorDescription string, errorType string, email string) {

@@ -54,7 +54,7 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 }
 
 // Send an SMS containing the OTP with Twilio's API
-func (t TwilioProvider) SendSms(phone string, message string) error {
+func (t *TwilioProvider) SendSms(phone string, message string) error {
 	body := url.Values{
 		"To":      {"+" + phone}, // twilio api requires "+" extension to be included
 		"Channel": {"sms"},
@@ -62,7 +62,7 @@ func (t TwilioProvider) SendSms(phone string, message string) error {
 		"Body":    {message},
 	}
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: defaultTimeout}
 	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
 	if err != nil {
 		return err
@@ -73,7 +73,7 @@ func (t TwilioProvider) SendSms(phone string, message string) error {
 	if err != nil {
 		return err
 	}
-	if res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusForbidden {
+	if res.StatusCode/100 != 2 {
 		resp := &twilioErrResponse{}
 		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
 			return err

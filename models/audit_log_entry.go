@@ -8,6 +8,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type AuditAction string
@@ -22,6 +23,7 @@ const (
 	UserDeletedAction               AuditAction = "user_deleted"
 	UserModifiedAction              AuditAction = "user_modified"
 	UserRecoveryRequestedAction     AuditAction = "user_recovery_requested"
+	UserReauthenticateAction        AuditAction = "user_reauthenticate_requested"
 	UserConfirmationRequestedAction AuditAction = "user_confirmation_requested"
 	UserRepeatedSignUpAction        AuditAction = "user_repeated_signup"
 	TokenRevokedAction              AuditAction = "token_revoked"
@@ -52,10 +54,9 @@ var actionLogTypeMap = map[AuditAction]auditLogType{
 type AuditLogEntry struct {
 	InstanceID uuid.UUID `json:"-" db:"instance_id"`
 	ID         uuid.UUID `json:"id" db:"id"`
-
-	Payload JSONMap `json:"payload" db:"payload"`
-
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	Payload    JSONMap   `json:"payload" db:"payload"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
+	IPAddress  string    `json:"ip_address" db:"ip_address"`
 }
 
 func (AuditLogEntry) TableName() string {
@@ -63,7 +64,7 @@ func (AuditLogEntry) TableName() string {
 	return tableName
 }
 
-func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User, action AuditAction, traits map[string]interface{}) error {
+func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User, action AuditAction, ipAddress string, traits map[string]interface{}) error {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return errors.Wrap(err, "Error generating unique id")
@@ -85,6 +86,7 @@ func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User,
 			"action":         action,
 			"log_type":       actionLogTypeMap[action],
 		},
+		IPAddress: ipAddress,
 	}
 
 	if name, ok := actor.UserMetaData["full_name"]; ok {
@@ -95,7 +97,12 @@ func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User,
 		l.Payload["traits"] = traits
 	}
 
-	return errors.Wrap(tx.Create(&l), "Database error creating audit log entry")
+	if err := tx.Create(&l); err != nil {
+		return errors.Wrap(err, "Database error creating audit log entry")
+	}
+
+	logrus.Infof("{\"actor_id\": %v, \"action\": %v, \"timestamp\": %v, \"log_type\": %v, \"ip_address\": %v}", actor.ID, action, l.Payload["timestamp"], actionLogTypeMap[action], ipAddress)
+	return nil
 }
 
 func FindAuditLogEntries(tx *storage.Connection, instanceID uuid.UUID, filterColumns []string, filterValue string, pageParams *Pagination) ([]*AuditLogEntry, error) {

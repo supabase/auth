@@ -92,7 +92,7 @@ func (t twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	req.Header.Set("Client-Id", t.Config.ClientID)
 	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: defaultTimeout}
 	resp, err := client.Do(req)
 
 	if err != nil {
