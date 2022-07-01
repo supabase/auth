@@ -2,7 +2,7 @@ package api
 
 import (
 	"bytes"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -153,7 +153,7 @@ func (ts *InviteTestSuite) TestVerifyInvite() {
 			user.InvitedAt = &now
 			user.ConfirmationSentAt = &now
 			user.EncryptedPassword = ""
-			user.ConfirmationToken = fmt.Sprintf("%x", md5.Sum([]byte(c.email+c.requestBody["token"].(string))))
+			user.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(c.email+c.requestBody["token"].(string))))
 			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Create(user))
 

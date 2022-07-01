@@ -2,7 +2,7 @@ package api
 
 import (
 	"bytes"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -630,7 +630,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      smsVerification,
-				"tokenHash": fmt.Sprintf("%x", md5.Sum([]byte(u.GetPhone()+"123456"))),
+				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetPhone()+"123456"))),
 				"token":     "123456",
 				"phone":     u.GetPhone(),
 			},
@@ -641,7 +641,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      signupVerification,
-				"tokenHash": fmt.Sprintf("%x", md5.Sum([]byte(u.GetEmail()+"123456"))),
+				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
 				"token":     "123456",
 				"email":     u.GetEmail(),
 			},
@@ -652,7 +652,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      recoveryVerification,
-				"tokenHash": fmt.Sprintf("%x", md5.Sum([]byte(u.GetEmail()+"123456"))),
+				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
 				"token":     "123456",
 				"email":     u.GetEmail(),
 			},
@@ -663,7 +663,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      emailChangeVerification,
-				"tokenHash": fmt.Sprintf("%x", md5.Sum([]byte(u.EmailChange+"123456"))),
+				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+"123456"))),
 				"token":     "123456",
 				"email":     u.EmailChange,
 			},
@@ -674,7 +674,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      phoneChangeVerification,
-				"tokenHash": fmt.Sprintf("%x", md5.Sum([]byte(u.PhoneChange+"123456"))),
+				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.PhoneChange+"123456"))),
 				"token":     "123456",
 				"phone":     u.PhoneChange,
 			},

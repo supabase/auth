@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -80,7 +80,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
 				return terr
 			}
-			user.RecoveryToken = fmt.Sprintf("%x", md5.Sum([]byte(string(user.Email)+otp)))
+			user.RecoveryToken = fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+otp)))
 			user.RecoverySentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
 		case "invite":
@@ -106,7 +106,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			}); terr != nil {
 				return terr
 			}
-			user.ConfirmationToken = fmt.Sprintf("%x", md5.Sum([]byte(string(user.Email)+otp)))
+			user.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+otp)))
 			user.ConfirmationSentAt = &now
 			user.InvitedAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at", "invited_at"), "Database error updating user for invite")
@@ -137,7 +137,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			}
-			user.ConfirmationToken = fmt.Sprintf("%x", md5.Sum([]byte(string(user.Email)+otp)))
+			user.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+otp)))
 			user.ConfirmationSentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at"), "Database error updating user for confirmation")
 		default:
@@ -182,7 +182,7 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 	if err != nil {
 		return err
 	}
-	u.ConfirmationToken = fmt.Sprintf("%x", md5.Sum([]byte(string(u.Email)+otp)))
+	u.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	now := time.Now()
 	if err := mailer.ConfirmationMail(u, otp, referrerURL); err != nil {
 		u.ConfirmationToken = oldToken
@@ -199,7 +199,7 @@ func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, re
 	if err != nil {
 		return err
 	}
-	u.ConfirmationToken = fmt.Sprintf("%x", md5.Sum([]byte(string(u.Email)+otp)))
+	u.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	now := time.Now()
 	if err := mailer.InviteMail(u, otp, referrerURL); err != nil {
 		u.ConfirmationToken = oldToken
@@ -221,7 +221,7 @@ func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, maile
 	if err != nil {
 		return err
 	}
-	u.RecoveryToken = fmt.Sprintf("%x", md5.Sum([]byte(string(u.Email)+otp)))
+	u.RecoveryToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	now := time.Now()
 	if err := mailer.RecoveryMail(u, otp, referrerURL); err != nil {
 		u.RecoveryToken = oldToken
@@ -242,7 +242,7 @@ func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, ma
 	if err != nil {
 		return err
 	}
-	u.ReauthenticationToken = fmt.Sprintf("%x", md5.Sum([]byte(string(u.Email)+otp)))
+	u.ReauthenticationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 	if err != nil {
 		return err
 	}
-	u.RecoveryToken = fmt.Sprintf("%x", md5.Sum([]byte(string(u.Email)+otp)))
+	u.RecoveryToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	now := time.Now()
 	if err := mailer.MagicLinkMail(u, otp, referrerURL); err != nil {
 		u.RecoveryToken = oldToken
@@ -284,7 +284,7 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.Configuration
 	if err != nil {
 		return err
 	}
-	u.EmailChangeTokenNew = fmt.Sprintf("%x", md5.Sum([]byte(string(u.EmailChange)+otpNew)))
+	u.EmailChangeTokenNew = fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+otpNew)))
 
 	otpCurrent := ""
 	if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
@@ -292,7 +292,7 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.Configuration
 		if err != nil {
 			return err
 		}
-		u.EmailChangeTokenCurrent = fmt.Sprintf("%x", md5.Sum([]byte(string(u.Email)+otpCurrent)))
+		u.EmailChangeTokenCurrent = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otpCurrent)))
 		if err != nil {
 			return err
 		}

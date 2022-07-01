@@ -2,7 +2,7 @@ package api
 
 import (
 	"bytes"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -293,7 +293,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
 
 	// update reauthentication token to a known token
-	u.ReauthenticationToken = fmt.Sprintf("%x", md5.Sum([]byte(u.GetEmail()+"123456")))
+	u.ReauthenticationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456")))
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
 	// update password with reauthentication token

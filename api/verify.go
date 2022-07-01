@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,8 +39,8 @@ const (
 
 const (
 	// v1 uses crypto.SecureToken()
-	v1OtpLength   = 22
-	md5HashLength = 32
+	v1OtpLength      = 22
+	sum224HashLength = 28
 )
 
 // Only applicable when SECURE_EMAIL_CHANGE_ENABLED
@@ -461,7 +461,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		if err != nil {
 			return nil, err
 		}
-		tokenHash = fmt.Sprintf("%x", md5.Sum([]byte(string(params.Phone)+params.Token)))
+		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
 		switch params.Type {
 		case phoneChangeVerification:
 			user, err = models.FindUserByPhoneChangeAndAudience(conn, instanceID, params.Phone, aud)
@@ -474,7 +474,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		if err := a.validateEmail(ctx, params.Email); err != nil {
 			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}
-		tokenHash = fmt.Sprintf("%x", md5.Sum([]byte(string(params.Email)+params.Token)))
+		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))
 		switch params.Type {
 		case emailChangeVerification:
 			user, err = models.FindUserForEmailChange(conn, instanceID, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
@@ -502,32 +502,32 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		// TODO(km): remove when old token format is deprecated
 		// the new token format is represented by a MD5 hash which is 32 characters (128 bits) long
 		// anything shorter than 32 characters can safely be assumed to be using the old token format
-		if len(user.ConfirmationToken) < md5HashLength {
+		if len(user.ConfirmationToken) < sum224HashLength {
 			tokenHash = params.Token
 		}
 		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
 	case recoveryVerification, magicLinkVerification:
 		// TODO(km): remove when old token format is deprecated
-		if len(user.RecoveryToken) < md5HashLength {
+		if len(user.RecoveryToken) < sum224HashLength {
 			tokenHash = params.Token
 		}
 		isValid = isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
 	case emailChangeVerification:
 		// TODO(km): remove when old token format is deprecated
-		if len(user.EmailChangeTokenCurrent) < md5HashLength && len(user.EmailChangeTokenNew) < md5HashLength {
+		if len(user.EmailChangeTokenCurrent) < sum224HashLength && len(user.EmailChangeTokenNew) < sum224HashLength {
 			tokenHash = params.Token
 		}
 		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
 			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
 	case phoneChangeVerification:
 		// TODO(km): remove when old token format is deprecated
-		if len(user.PhoneChangeToken) < md5HashLength {
+		if len(user.PhoneChangeToken) < sum224HashLength {
 			tokenHash = params.Token
 		}
 		isValid = isOtpValid(tokenHash, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
 	case smsVerification:
 		// TODO(km): remove when old token format is deprecated
-		if len(user.ConfirmationToken) < md5HashLength {
+		if len(user.ConfirmationToken) < sum224HashLength {
 			tokenHash = params.Token
 		}
 		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Sms.OtpExp)

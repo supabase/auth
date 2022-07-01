@@ -1,7 +1,7 @@
 package api
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net/http"
@@ -83,10 +83,10 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 	}
 	var isValid bool
 	if user.GetEmail() != "" {
-		tokenHash := fmt.Sprintf("%x", md5.Sum([]byte(user.GetEmail()+nonce)))
+		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+nonce)))
 		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
 	} else if user.GetPhone() != "" {
-		tokenHash := fmt.Sprintf("%x", md5.Sum([]byte(user.GetPhone()+nonce)))
+		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetPhone()+nonce)))
 		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
 	} else {
 		return unprocessableEntityError("Reauthentication requires an email or a phone number")

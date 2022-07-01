@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"fmt"
 	"regexp"
 	"strings"
@@ -78,7 +78,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	if err != nil {
 		return internalServerError("error generating otp").WithInternalError(err)
 	}
-	*token = fmt.Sprintf("%x", md5.Sum([]byte(phone+otp)))
+	*token = fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
 
 	var message string
 	if config.Sms.Template == "" {
