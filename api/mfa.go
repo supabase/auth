@@ -93,6 +93,9 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 		}
 		return nil
 	})
+	if terr != nil {
+		return terr
+	}
 
 	return sendJSON(w, http.StatusOK, &RecoveryCodesResponse{
 		RecoveryCodes: recoveryCodes,
