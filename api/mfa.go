@@ -11,7 +11,6 @@ import (
 	"github.com/pquerna/otp/totp"
 	"image/png"
 	"net/http"
-	"time"
 )
 
 type EnrollFactorParams struct {
@@ -33,23 +32,20 @@ type EnrollFactorResponse struct {
 	TOTP      TOTPObject
 }
 
-// RecoveryCodesResponse repreesnts a successful Backup code generation response
+// RecoveryCodesResponse repreesnts a successful Recovery code generation response
+
 type RecoveryCodesResponse struct {
-	RecoveryCodes []string
+	RecoveryCodes []string `json:"recovery_codes"`
 }
 
 func (a *API) EnableMFA(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
-	if user.MFAEnabled {
-		return MFANotEnabled
-	}
 	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := user.EnableMFA(tx); terr != nil {
 			return terr
 		}
-
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, r.RemoteAddr, map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
@@ -63,21 +59,16 @@ func (a *API) EnableMFA(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return sendJSON(w, http.StatusOK, user)
-
 }
 
 func (a *API) DisableMFA(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
-	if !user.MFAEnabled {
-		return MFANotDisabled
-	}
 	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := user.DisableMFA(tx); terr != nil {
 			return terr
 		}
-
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, r.RemoteAddr, map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
@@ -85,45 +76,42 @@ func (a *API) DisableMFA(w http.ResponseWriter, r *http.Request) error {
 		}); terr != nil {
 			return terr
 		}
-
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 	return sendJSON(w, http.StatusOK, user)
-
 }
 
 func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) error {
-	const NUM_RECOVERY_CODES = 8
-	const RECOVERY_CODE_LENGTH = 8
-
+	const numRecoveryCodes = 8
+	const recoveryCodeLength = 8
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
 		return MFANotEnabledError
 	}
-	now := time.Now()
 	recoveryCodeModels := []*models.RecoveryCode{}
 	var terr error
 	var recoveryCode string
 	var recoveryCodes []string
 	var recoveryCodeModel *models.RecoveryCode
-
-	for i := 0; i < NUM_RECOVERY_CODES; i++ {
-		recoveryCode = crypto.SecureToken(RECOVERY_CODE_LENGTH)
-		recoveryCodeModel, terr = models.NewRecoveryCode(user, recoveryCode, &now)
+	for i := 0; i < numRecoveryCodes; i++ {
+		recoveryCode = crypto.SecureToken(recoveryCodeLength)
+		recoveryCodeModel, terr = models.NewRecoveryCode(user, recoveryCode)
 		if terr != nil {
-			return internalServerError("Error creating backup code").WithInternalError(terr)
+			return internalServerError("Error creating recovery code").WithInternalError(terr)
 		}
 		recoveryCodes = append(recoveryCodes, recoveryCode)
 		recoveryCodeModels = append(recoveryCodeModels, recoveryCodeModel)
 	}
 	terr = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr = tx.Create(recoveryCodeModels); terr != nil {
-			return terr
+		for _, recoveryCodeModel := range recoveryCodeModels {
+			if terr = tx.Create(recoveryCodeModel); terr != nil {
+				return terr
+			}
 		}
 
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.GenerateRecoveryCodesAction, r.RemoteAddr, nil); terr != nil {
@@ -131,6 +119,9 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 		}
 		return nil
 	})
+	if terr != nil {
+		return terr
+	}
 
 	return sendJSON(w, http.StatusOK, &RecoveryCodesResponse{
 		RecoveryCodes: recoveryCodes,

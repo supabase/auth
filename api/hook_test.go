@@ -99,7 +99,7 @@ func TestSignupHookFromClaims(t *testing.T) {
 
 	ctx := context.Background()
 	ctx = withFunctionHooks(ctx, map[string][]string{
-		"signup": []string{svr.URL},
+		"signup": {svr.URL},
 	})
 
 	require.NoError(t, triggerEventHooks(ctx, conn, SignupEvent, user, iid, config))

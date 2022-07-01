@@ -5,57 +5,45 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
-	"golang.org/x/crypto/bcrypt"
 	"time"
 )
 
 type RecoveryCode struct {
+	ID           uuid.UUID  `json:"id" db:"id"`
 	UserID       uuid.UUID  `json:"user_id" db:"user_id"`
-	CreatedAt    *time.Time `json:"created_at" db:"created_at"`
+	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
 	RecoveryCode string     `json:"recovery_code" db:"recovery_code"`
-	Valid        bool       `json:"valid" db:"valid"`
-	TimeUsed     time.Time  `json:"time_used" db:"time_used"`
+	UsedAt       *time.Time `json:"used_at" db:"used_at"`
 }
 
 func (RecoveryCode) TableName() string {
-	tableName := "recovery_codes"
+	tableName := "mfa_recovery_codes"
 	return tableName
 }
 
 // Returns a new recovery code associated with the user
-func NewRecoveryCode(user *User, recoveryCode string, now *time.Time) (*RecoveryCode, error) {
-	rc, err := hashRecoveryCode(recoveryCode)
+func NewRecoveryCode(user *User, recoveryCode string) (*RecoveryCode, error) {
+	id, err := uuid.NewV4()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Error generating unique id")
 	}
-
 	code := &RecoveryCode{
+		ID:           id,
 		UserID:       user.ID,
-		RecoveryCode: rc,
-		CreatedAt:    now,
-		Valid:        true,
+		RecoveryCode: recoveryCode,
 	}
 
 	return code, nil
 }
 
-// FindRecoveryCodes returns all valid recovery codes associated to a user
-func FindRecoveryCodesByUser(tx *storage.Connection, user *User) ([]*RecoveryCode, error) {
+// FindValidRecoveryCodes returns all valid recovery codes associated to a user
+func FindValidRecoveryCodesByUser(tx *storage.Connection, user *User) ([]*RecoveryCode, error) {
 	recoveryCodes := []*RecoveryCode{}
-	if err := tx.Q().Where("user_id = ? AND valid = ?", user.ID, true).All(&recoveryCodes); err != nil {
+	if err := tx.Q().Where("user_id = ? AND used_at IS NOT NULL", user.ID).All(&recoveryCodes); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return recoveryCodes, nil
 		}
 		return nil, errors.Wrap(err, "Error finding recovery codes")
 	}
 	return recoveryCodes, nil
-}
-
-// hashRecoveryCode generates a hashed recoveryCode from a plaintext string
-func hashRecoveryCode(recoveryCode string) (string, error) {
-	rc, err := bcrypt.GenerateFromPassword([]byte(recoveryCode), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-	return string(rc), nil
 }
