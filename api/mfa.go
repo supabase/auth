@@ -5,7 +5,6 @@ import (
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"net/http"
-	"time"
 )
 
 // RecoveryCodesResponse repreesnts a successful recovery code generation response
@@ -68,7 +67,6 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 	if !user.MFAEnabled {
 		return MFANotEnabledError
 	}
-	now := time.Now()
 	recoveryCodeModels := []*models.RecoveryCode{}
 	var terr error
 	var recoveryCode string
@@ -76,7 +74,7 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 	var recoveryCodeModel *models.RecoveryCode
 	for i := 0; i < NUM_RECOVERY_CODES; i++ {
 		recoveryCode = crypto.SecureToken(RECOVERY_CODE_LENGTH)
-		recoveryCodeModel, terr = models.NewRecoveryCode(user, recoveryCode, &now)
+		recoveryCodeModel, terr = models.NewRecoveryCode(user, recoveryCode)
 		if terr != nil {
 			return internalServerError("Error creating recovery code").WithInternalError(terr)
 		}
