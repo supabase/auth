@@ -11,9 +11,9 @@ import (
 type RecoveryCode struct {
 	ID           uuid.UUID  `json:"id" db:"id"`
 	UserID       uuid.UUID  `json:"user_id" db:"user_id"`
-	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
 	RecoveryCode string     `json:"recovery_code" db:"recovery_code"`
-	UsedAt   *time.Time `json:"used_at" db:"used_at"`
+	UsedAt       *time.Time `json:"used_at" db:"used_at"`
 }
 
 func (RecoveryCode) TableName() string {
