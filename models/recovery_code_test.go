@@ -41,6 +41,7 @@ func TestRecoveryCode(t *testing.T) {
 
 
 func (ts *RecoveryCodeTestSuite)TestFindValidRecoveryCodesByUser() {
+	// TODO: Joel -- convert numRecoveryCodes and recoveryCodeLength into constants in mfa.go
 	numRecoveryCodes := 8
 	var expectedRecoveryCodes []string
 	user, err := NewUser(uuid.Nil, "", "", "", "", nil)
