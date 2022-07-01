@@ -168,7 +168,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	factorID := fmt.Sprintf("%s_%s", FACTOR_PREFIX, crypto.SecureToken())
 
-	factor, terr := models.NewFactor(user, params.FactorSimpleName, factorID, params.FactorType, key.Secret())
+	// TODO(Joel): Convert this into an Enum
+	factor, terr := models.NewFactor(user, params.FactorSimpleName, factorID, params.FactorType, "disabled", key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}

@@ -9,14 +9,14 @@ import (
 )
 
 type Factor struct {
-	UserID           uuid.UUID `json`
-	ID               string    `json:"id" db:"id"`
-	CreatedAt        time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
-	Enabled          bool      `json:"enabled" db:"enabled"`
-	FactorSimpleName string    `json:"factor_simple_name" db:"factor_simple_name"`
-	SecretKey        string    `json:'-' db:'secret_key'`
-	FactorType       string    `json:"factor_type" db:"factor_type"`
+	UserID       uuid.UUID `json: "user_id" db:"user_id"`
+	ID           string    `json:"id" db:"id"`
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+	Status       string    `json:"status" db:"status"`
+	FriendlyName string    `json:"friendly_name" db:"friendly_name"`
+	SecretKey    string    `json:'-' db:'secret_key'`
+	FactorType   string    `json:"factor_type" db:"factor_type"`
 }
 
 func (Factor) TableName() string {
@@ -24,15 +24,14 @@ func (Factor) TableName() string {
 	return tableName
 }
 
-func NewFactor(user *User, factorSimpleName, id, factorType, secretKey string) (*Factor, error) {
-	// TODO: Pass in secret and hash it using bcrypt or equiv
+func NewFactor(user *User, friendlyName, id, factorType, status, secretKey string) (*Factor, error) {
 	factor := &Factor{
-		ID:               id,
-		UserID:           user.ID,
-		Enabled:          true,
-		FactorSimpleName: factorSimpleName,
-		SecretKey:        secretKey,
-		FactorType:       factorType,
+		ID:           id,
+		UserID:       user.ID,
+		Status:       status,
+		FriendlyName: friendlyName,
+		SecretKey:    secretKey,
+		FactorType:   factorType,
 	}
 	return factor, nil
 }
@@ -49,18 +48,14 @@ func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	return factors, nil
 }
 
-// Change the factor simple name
-func (f *Factor) UpdateFactorSimpleName(tx *storage.Connection) error {
-	f.UpdatedAt = time.Now()
-	return tx.UpdateOnly(f, "factor_simple_name", "updated_at")
+// Change the friendly name
+func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
+	f.FriendlyName = friendlyName
+	return tx.UpdateOnly(f, "friendly_name", "updated_at")
 }
 
-func (f *Factor) Disable(tx *storage.Connection) error {
-	f.Enabled = false
-	return tx.UpdateOnly(f, "enabled")
-}
-
-func (f *Factor) Enable(tx *storage.Connection) error {
-	f.Enabled = true
-	return tx.UpdateOnly(f, "enabled")
+//Change the factor status
+func (f *Factor) UpdateStatus(tx *storage.Connection, status string) error {
+	f.Status = status
+	return tx.UpdateOnly(f, "status", "updated_at")
 }

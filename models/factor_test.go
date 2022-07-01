@@ -34,20 +34,28 @@ func (ts *FactorTestSuite) SetupTest() {
 	TruncateAll(ts.db)
 }
 
-func (ts *FactorTestSuite) TestToggleFactorEnabled() {
+func (ts *FactorTestSuite) TestUpdateStatus() {
+	newFactorStatus := "verified"
 	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
 	require.NoError(ts.T(), err)
 
-	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "some-secret", "")
+	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "some-secret", "disabled", "")
 	require.NoError(ts.T(), err)
 
-	require.NoError(ts.T(), f.Disable(ts.db))
-	require.Equal(ts.T(), false, f.Enabled)
+	require.NoError(ts.T(), f.UpdateStatus(ts.db, newFactorStatus))
+	require.Equal(ts.T(), newFactorStatus, f.Status)
+}
 
-	require.NoError(ts.T(), f.Enable(ts.db))
-	require.Equal(ts.T(), true, f.Enabled)
+func (ts *FactorTestSuite) TestUpdateFriendlyName() {
+	newSimpleName := "newFactorName"
 
-	require.NoError(ts.T(), f.Enable(ts.db))
-	require.Equal(ts.T(), true, f.Enabled)
+	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
+	require.NoError(ts.T(), err)
+
+	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "some-secret", "disabled", "")
+	require.NoError(ts.T(), err)
+
+	require.NoError(ts.T(), f.UpdateFriendlyName(ts.db, newSimpleName))
+	require.Equal(ts.T(), newSimpleName, f.FriendlyName)
 
 }
