@@ -17,6 +17,8 @@ var (
 	DuplicateEmailMsg       = "A user with this email address has already been registered"
 	DuplicatePhoneMsg       = "A user with this phone number has already been registered"
 	UserExistsError   error = errors.New("User already exists")
+	// MFA Related errors
+	MFANotEnabledError error = errors.New("MFA not enabled")
 )
 
 var oauthErrorMap = map[int]string{

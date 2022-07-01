@@ -125,7 +125,7 @@ func (ts *UserTestSuite) TestFindUsersInAudience() {
 
 	sp := &SortParams{
 		Fields: []SortField{
-			SortField{Name: "created_at", Dir: Descending},
+			{Name: "created_at", Dir: Descending},
 		},
 	}
 	n, err = FindUsersInAudience(ts.db, u.InstanceID, u.Aud, nil, sp, "")

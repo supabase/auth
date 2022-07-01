@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -75,4 +76,27 @@ func (ts *MFATestSuite) TestMFADisable() {
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	require.False(ts.T(), u.MFAEnabled)
+}
+
+func (ts *MFATestSuite) TestMFARecoveryCodeGeneration() {
+	const EXPECTED_NUM_OF_RECOVERY_CODES = 8
+
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	ts.Require().NoError(err)
+	require.NoError(ts.T(), user.EnableMFA(ts.API.db))
+
+	token, err := generateAccessToken(user, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	require.NoError(ts.T(), err)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/mfa/%s/generate_recovery_codes", user.ID), nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	data := make(map[string]interface{})
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+	recoveryCodes := data["recovery_codes"].([]interface{})
+	require.Equal(ts.T(), EXPECTED_NUM_OF_RECOVERY_CODES, len(recoveryCodes))
 }

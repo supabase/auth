@@ -28,6 +28,7 @@ const (
 	UserRepeatedSignUpAction        AuditAction = "user_repeated_signup"
 	TokenRevokedAction              AuditAction = "token_revoked"
 	TokenRefreshedAction            AuditAction = "token_refreshed"
+	GenerateRecoveryCodesAction     AuditAction = "generate_recovery_codes"
 
 	account auditLogType = "account"
 	team    auditLogType = "team"
@@ -48,15 +49,16 @@ var actionLogTypeMap = map[AuditAction]auditLogType{
 	UserRecoveryRequestedAction:     user,
 	UserConfirmationRequestedAction: user,
 	UserRepeatedSignUpAction:        user,
+	GenerateRecoveryCodesAction:     user,
 }
 
 // AuditLogEntry is the database model for audit log entries.
 type AuditLogEntry struct {
 	InstanceID uuid.UUID `json:"-" db:"instance_id"`
 	ID         uuid.UUID `json:"id" db:"id"`
-	Payload JSONMap `json:"payload" db:"payload"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	IPAddress string `json:"ip_address" db:"ip_address"`
+	Payload    JSONMap   `json:"payload" db:"payload"`
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`
+	IPAddress  string    `json:"ip_address" db:"ip_address"`
 }
 
 func (AuditLogEntry) TableName() string {
