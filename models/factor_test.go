@@ -34,28 +34,10 @@ func (ts *FactorTestSuite) SetupTest() {
 	TruncateAll(ts.db)
 }
 
-func (ts *FactorTestSuite) TestToggleFactorEnabled() {
-	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
-	require.NoError(ts.T(), err)
-
-	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "phone", "some-secret")
-	require.NoError(ts.T(), err)
-
-	require.NoError(ts.T(), f.Disable(ts.db))
-	require.Equal(ts.T(), false, f.Enabled)
-
-	require.NoError(ts.T(), f.Enable(ts.db))
-	require.Equal(ts.T(), true, f.Enabled)
-
-	require.NoError(ts.T(), f.Enable(ts.db))
-	require.Equal(ts.T(), true, f.Enabled)
-
-}
-
-func (ts *FactorTestSuite) TestFindFactorBySimpleName() {
+func (ts *FactorTestSuite) TestFindFactorByFriendlyName() {
 	f := ts.createFactor()
 
-	n, err := FindFactorBySimpleName(ts.db, f.SimpleName)
+	n, err := FindFactorByFriendlyName(ts.db, f.FriendlyName)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), f.ID, n.ID)
 }
@@ -75,7 +57,7 @@ func (ts *FactorTestSuite) createFactor() *Factor {
 	err = ts.db.Create(user)
 	require.NoError(ts.T(), err)
 
-	factor, err := NewFactor(user, "asimplename", "factor-which-shall-not-be-named", "phone", "topsecret")
+	factor, err := NewFactor(user, "asimplename", "factor-which-shall-not-be-named", "totp", "disabled", "topsecret")
 	require.NoError(ts.T(), err)
 
 	err = ts.db.Create(factor)

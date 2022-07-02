@@ -1,7 +1,6 @@
 package api
 
 import (
-	"time"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
@@ -12,12 +11,13 @@ import (
 	"github.com/pquerna/otp/totp"
 	"image/png"
 	"net/http"
+	"time"
 )
 
 type EnrollFactorParams struct {
-	SimpleName string `json:"simple_name"`
-	FactorType string `json:"factor_type"`
-	Issuer     string `json:"issuer"`
+	FriendlyName string `json:"friendly_name"`
+	FactorType   string `json:"factor_type"`
+	Issuer       string `json:"issuer"`
 }
 
 type TOTPObject struct {
@@ -34,17 +34,17 @@ type EnrollFactorResponse struct {
 }
 
 type ChallengeFactorParams struct {
-	FactorID         string `json:"factor_id"`
-	FactorSimpleName string `json:"factor_simple_name"`
+	FactorID     string `json:"factor_id"`
+	FriendlyName string `json:"friendly_name"`
 }
 
 type ChallengeFactorResponse struct {
-	ID               string
-	CreatedAt        string
-	UpdatedAt        string
-	ExpiresAt        string
-	FactorID         string
-	FactorSimpleName string
+	ID           string
+	CreatedAt    string
+	UpdatedAt    string
+	ExpiresAt    string
+	FactorID     string
+	FriendlyName string
 }
 
 // RecoveryCodesResponse repreesnts a successful recovery code generation response
@@ -182,7 +182,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	factorID := fmt.Sprintf("%s_%s", FACTOR_PREFIX, crypto.SecureToken())
 
-	factor, terr := models.NewFactor(user, params.SimpleName, factorID, params.FactorType, key.Secret())
+	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, "disabled", key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}
@@ -227,16 +227,16 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read EnrollFactor params: %v", err)
 	}
 	factorID := params.FactorID
-	factorSimpleName := params.FactorSimpleName
+	friendlyName := params.FriendlyName
 
-	if factorID != "" && factorSimpleName != "" {
+	if factorID != "" && friendlyName != "" {
 		return unprocessableEntityError("Only a FactorID or FactorSimpleName should be provided on signup.")
 	}
 
 	if factorID != "" {
 		factor, err = models.FindFactorByFactorID(a.db, factorID)
-	} else if factorSimpleName != "" {
-		factor, err = models.FindFactorBySimpleName(a.db, factorSimpleName)
+	} else if friendlyName != "" {
+		factor, err = models.FindFactorByFriendlyName(a.db, friendlyName)
 	} else {
 		return unprocessableEntityError("Either FactorID or FactorSimpleName should be provided on signup.")
 	}
@@ -257,8 +257,9 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
-			"factor_id":          params.FactorID,
-			"factor_simple_name": params.FactorSimpleName,
+			"factor_id":     params.FactorID,
+			"friendly_name": params.FriendlyName,
+			"factor_status": factor.Status,
 		}); terr != nil {
 			return terr
 		}
@@ -271,10 +272,10 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
-		ID:               challenge.ID,
-		CreatedAt:        creationTime.String(),
-		ExpiresAt:        creationTime.Add(time.Second * CHALLENGE_EXPIRY_DURATION).String(),
-		FactorID:         factor.ID,
-		FactorSimpleName: factor.SimpleName,
+		ID:           challenge.ID,
+		CreatedAt:    creationTime.String(),
+		ExpiresAt:    creationTime.Add(time.Second * CHALLENGE_EXPIRY_DURATION).String(),
+		FactorID:     factor.ID,
+		FriendlyName: factor.FriendlyName,
 	})
 }

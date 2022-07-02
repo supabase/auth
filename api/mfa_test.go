@@ -44,7 +44,7 @@ func (ts *MFATestSuite) SetupTest() {
 	u, err := models.NewUser(ts.instanceID, "123456789", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
-	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "phone", "disabled", "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", "disabled", "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 }
@@ -110,7 +110,7 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 	cases := []struct {
 		desc         string
 		id           string
-		simpleName   string
+		friendlyName string
 		mfaEnabled   bool
 		expectedCode int
 	}{
@@ -165,8 +165,8 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 
 			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-				"factor_id":          c.id,
-				"factor_simple_name": c.simpleName,
+				"factor_id":     c.id,
+				"friendly_name": c.friendlyName,
 			}))
 
 			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/mfa/%s/challenge_factor", u.ID), &buffer)

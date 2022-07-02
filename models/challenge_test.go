@@ -41,7 +41,7 @@ func (ts *FactorTestSuite) TestFindChallengesByFactorID() {
 	err = ts.db.Create(u)
 	require.NoError(ts.T(), err)
 
-	f, err := NewFactor(u, "asimplename", "factor-which-shall-not-be-named", "phone", "topsecret")
+	f, err := NewFactor(u, "asimplename", "factor-which-shall-not-be-named", "totp", "disabled", "topsecret")
 	require.NoError(ts.T(), err)
 
 	err = ts.db.Create(f)

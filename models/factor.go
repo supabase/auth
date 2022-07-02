@@ -9,14 +9,14 @@ import (
 )
 
 type Factor struct {
-	UserID     uuid.UUID `json:"user_id" db:"user_id"`
-	ID         string    `json:"id" db:"id"`
-	CreatedAt  time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
-	Enabled    bool      `json:"enabled" db:"enabled"`
-	SimpleName string    `json:"simple_name" db:"simple_name"`
-	SecretKey  string    `json:"secret_key" db:"secret_key"`
-	FactorType string    `json:"factor_type" db:"factor_type"`
+	UserID       uuid.UUID `json:"user_id" db:"user_id"`
+	ID           string    `json:"id" db:"id"`
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
+	Status       string    `json:"status" db:"status"`
+	FriendlyName string    `json:"friendly_name" db:"friendly_name"`
+	SecretKey    string    `json:"secret_key" db:"secret_key"`
+	FactorType   string    `json:"factor_type" db:"factor_type"`
 }
 
 func (Factor) TableName() string {
@@ -24,15 +24,15 @@ func (Factor) TableName() string {
 	return tableName
 }
 
-func NewFactor(user *User, simpleName, id, factorType, secretKey string) (*Factor, error) {
+func NewFactor(user *User, friendlyName, id, factorType, status, secretKey string) (*Factor, error) {
 	// TODO: Pass in secret and hash it using bcrypt or equiv
 	factor := &Factor{
-		ID:         id,
-		UserID:     user.ID,
-		Enabled:    true,
-		SimpleName: simpleName,
-		SecretKey:  secretKey,
-		FactorType: factorType,
+		ID:           id,
+		UserID:       user.ID,
+		Status:       status,
+		FriendlyName: friendlyName,
+		SecretKey:    secretKey,
+		FactorType:   factorType,
 	}
 	return factor, nil
 }
@@ -40,7 +40,7 @@ func NewFactor(user *User, simpleName, id, factorType, secretKey string) (*Facto
 // FindFactorsByUser returns all factors belonging to a user
 func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	factors := []*Factor{}
-	if err := tx.Q().Where("user_id = ?", user.ID, true).All(&factors); err != nil {
+	if err := tx.Q().Where("user_id = ?", user.ID).All(&factors); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return factors, nil
 		}
@@ -57,8 +57,8 @@ func FindFactorByFactorID(tx *storage.Connection, factorID string) (*Factor, err
 	return factor, nil
 }
 
-func FindFactorBySimpleName(tx *storage.Connection, simpleName string) (*Factor, error) {
-	factor, err := findFactor(tx, "simple_name = ?", simpleName)
+func FindFactorByFriendlyName(tx *storage.Connection, friendlyName string) (*Factor, error) {
+	factor, err := findFactor(tx, "friendly_name = ?", friendlyName)
 	if err != nil {
 		return nil, FactorNotFoundError{}
 	}
@@ -66,19 +66,14 @@ func FindFactorBySimpleName(tx *storage.Connection, simpleName string) (*Factor,
 }
 
 // Change the factor simple name
-func (f *Factor) UpdateFactorSimpleName(tx *storage.Connection) error {
+func (f *Factor) UpdateFactorFriendlyName(tx *storage.Connection, friendlyName string) error {
 	f.UpdatedAt = time.Now()
-	return tx.UpdateOnly(f, "simple_name", "updated_at")
+	return tx.UpdateOnly(f, "friendly_name", "updated_at")
 }
 
-func (f *Factor) Disable(tx *storage.Connection) error {
-	f.Enabled = false
-	return tx.UpdateOnly(f, "enabled")
-}
-
-func (f *Factor) Enable(tx *storage.Connection) error {
-	f.Enabled = true
-	return tx.UpdateOnly(f, "enabled")
+func (f *Factor) UpdateFactorStatus(tx *storage.Connection, status string) error {
+	f.Status = status
+	return tx.UpdateOnly(f, "status")
 }
 
 func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Factor, error) {
