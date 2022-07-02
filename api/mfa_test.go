@@ -44,7 +44,7 @@ func (ts *MFATestSuite) SetupTest() {
 	u, err := models.NewUser(ts.instanceID, "123456789", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
-	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "phone", "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "phone", "disabled", "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 }
@@ -85,33 +85,24 @@ func (ts *MFATestSuite) TestMFADisable() {
 func (ts *MFATestSuite) TestMFARecoveryCodeGeneration() {
 	const EXPECTED_NUM_OF_RECOVERY_CODES = 8
 
-	u, err := models.NewUser(ts.instanceID, "", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
-	u.MFAEnabled = true
-
-	err = ts.API.db.Create(u)
-	require.NoError(ts.T(), err)
-
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	require.NoError(ts.T(), err)
-
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test1@example.com", ts.Config.JWT.Aud)
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	ts.Require().NoError(err)
+	require.NoError(ts.T(), user.EnableMFA(ts.API.db))
+
+	token, err := generateAccessToken(user, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	require.NoError(ts.T(), err)
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/mfa/%s/generate_recovery_codes", user.ID), nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-
 	ts.API.handler.ServeHTTP(w, req)
-
-	data := make(map[string]interface{})
-
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
+	data := make(map[string]interface{})
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-	backupCodes := data["RecoveryCodes"].([]interface{})
 
-	numCodes := len(backupCodes)
-	require.Equal(ts.T(), EXPECTED_NUM_OF_RECOVERY_CODES, numCodes)
+	recoveryCodes := data["recovery_codes"].([]interface{})
+	require.Equal(ts.T(), EXPECTED_NUM_OF_RECOVERY_CODES, len(recoveryCodes))
 }
 
 func (ts *MFATestSuite) TestChallengeFactor() {

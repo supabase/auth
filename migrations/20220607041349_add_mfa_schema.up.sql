@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS auth.mfa_challenges(
        id VARCHAR(255) NOT NULL,
        factor_id VARCHAR(255) NOT NULL,
        created_at timestamptz NOT NULL,
-       verified_at timestamptz NOT NULL,
+       verified_at timestamptz  NULL,
        CONSTRAINT mfa_challenges_pkey PRIMARY KEY (id),
        CONSTRAINT mfa_challenges_auth_factor_id_fkey FOREIGN KEY (factor_id) REFERENCES auth.mfa_factors(id) ON DELETE CASCADE
 );
@@ -35,11 +35,11 @@ comment on table auth.mfa_challenges is 'Auth: stores metadata about challenge r
 
 -- auth.mfa_recovery_codes definition
 CREATE TABLE IF NOT EXISTS auth.mfa_recovery_codes(
-       id bigint generated always as identity,
+	id uuid NOT NULL,
        user_id uuid NOT NULL,
        recovery_code VARCHAR(32) NOT NULL,
        created_at timestamptz NOT NULL,
-       used_at timestamptz NOT NULL,
+       used_at timestamptz NULL,
        CONSTRAINT mfa_recovery_codes_user_id_recovery_code_pkey UNIQUE(user_id, recovery_code),
        CONSTRAINT mfa_recovery_codes_user_id_fkey FOREIGN KEY(user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
