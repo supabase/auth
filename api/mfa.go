@@ -14,9 +14,9 @@ import (
 )
 
 type EnrollFactorParams struct {
-	FactorSimpleName string `json:"factor_simple_name"`
-	FactorType       string `json:"factor_type"`
-	Issuer           string `json:"issuer"`
+	FriendlyName string `json:"friendly_name"`
+	FactorType   string `json:"factor_type"`
+	Issuer       string `json:"issuer"`
 }
 
 type TOTPObject struct {
@@ -129,8 +129,8 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 }
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
-	const FACTOR_PREFIX = "factor"
-	const IMAGE_SIDE_LENGTH = 300
+	const factorPrefix = "factor"
+	const imageSideLength = 300
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
@@ -160,16 +160,16 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	var buf bytes.Buffer
 
 	// Test with QRCode Encode
-	img, err := key.Image(IMAGE_SIDE_LENGTH, IMAGE_SIDE_LENGTH)
+	img, err := key.Image(imageSideLength, imageSideLength)
 	png.Encode(&buf, img)
 	if err != nil {
 		return internalServerError("Error generating QR Code image").WithInternalError(err)
 	}
 	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-	factorID := fmt.Sprintf("%s_%s", FACTOR_PREFIX, crypto.SecureToken())
+	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())
 
 	// TODO(Joel): Convert this into an Enum
-	factor, terr := models.NewFactor(user, params.FactorSimpleName, factorID, params.FactorType, "disabled", key.Secret())
+	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, "disabled", key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}
