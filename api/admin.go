@@ -342,3 +342,19 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 
 	return sendJSON(w, http.StatusOK, map[string]interface{}{})
 }
+
+func (a *API) adminUserUpdateFactorStatus(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+func (a *API) adminUserEnableMFA(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+func (a *API) adminUserDisableMFA(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}

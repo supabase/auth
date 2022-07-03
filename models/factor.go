@@ -60,3 +60,7 @@ func (f *Factor) UpdateStatus(tx *storage.Connection, status string) error {
 	f.Status = status
 	return tx.UpdateOnly(f, "status", "updated_at")
 }
+
+func (f *Factor) DeleteFactor(tx *storage.Connection, factor *Factor) error {
+	return tx.Destroy(factor)
+}
