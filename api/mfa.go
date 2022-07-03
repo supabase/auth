@@ -149,9 +149,10 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return unprocessableEntityError("FactorType needs to be either 'totp' or 'webauthn'")
 	}
 
+	// TODO(Joel): Review this portion when email is no longer a primary key
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      params.Issuer,
-		AccountName: params.Issuer,
+		AccountName: user.GetEmail(),
 	})
 
 	if err != nil {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -102,79 +103,63 @@ func (ts *MFATestSuite) TestMFARecoveryCodeGeneration() {
 }
 
 func (ts *MFATestSuite) TestEnrollFactor() {
-	// var cases = []struct {
-	// 	desc                    string
-	// 	newPassword             string
-	// 	nonce                   string
-	// 	requireReauthentication bool
-	// 	expected                expected
-	// }{
-	// 	{
-	// 		"Valid password length",
-	// 		"newpassword",
-	// 		"",
-	// 		false,
-	// 		expected{code: http.StatusOK, isAuthenticated: true},
-	// 	},
-	// 	{
-	// 		"Invalid password length",
-	// 		"",
-	// 		"",
-	// 		false,
-	// 		expected{code: http.StatusUnprocessableEntity, isAuthenticated: false},
-	// 	},
-	// 	{
-	// 		"No reauthentication provided",
-	// 		"newpassword123",
-	// 		"",
-	// 		true,
-	// 		expected{code: http.StatusUnauthorized, isAuthenticated: false},
-	// 	},
-	// 	{
-	// 		"Invalid nonce",
-	// 		"newpassword123",
-	// 		"123456",
-	// 		true,
-	// 		expected{code: http.StatusBadRequest, isAuthenticated: false},
-	// 	},
-	// }
+	var cases = []struct {
+		desc         string
+		FriendlyName string
+		FactorType   string
+		Issuer       string
+		MFAEnabled   bool
+		expectedCode int
+	}{
+		{
+			"TOTP: MFA is disabled",
+			"",
+			"totp",
+			"supabase.com",
+			false,
+			http.StatusForbidden,
+		},
+		{
+			"TOTP: Factor has friendly name",
+			"bob",
+			"totp",
+			"supabase.com",
+			true,
+			http.StatusOK,
+		},
+		{
+			"TOTP: Without simple name",
+			"",
+			"totp",
+			"supabase.com",
+			true,
+			http.StatusOK,
+		},
+	}
 	// Check the return type, QR Code representation should be accurate
-	//
-	// for _, c := range cases {
-	// 	ts.Run(c.desc, func() {
-	// 		ts.Config.Security.UpdatePasswordRequireReauthentication = c.requireReauthentication
-	// 		var buffer bytes.Buffer
-	// 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"password": c.newPassword, "nonce": c.nonce}))
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": c.FriendlyName, "factor_type": c.FactorType, "issuer": c.Issuer}))
+			user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+			ts.Require().NoError(err)
+			require.NoError(ts.T(), user.EnableMFA(ts.API.db))
 
-	// 		req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
-	// 		req.Header.Set("Content-Type", "application/json")
+			token, err := generateAccessToken(user, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+			require.NoError(ts.T(), err)
 
-	// 		token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	// 		require.NoError(ts.T(), err)
-	// 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/enroll_factor", user.ID), &buffer)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+			req.Header.Set("Content-Type", "application/json")
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
+			// Should be able to convert the returned string into a base64 image
+			// FactorType returned should be the same
+			// Factor is disabled
+			// DB level checks
+			// If simple name is pased in it should be present
+		})
+	}
 
-	// 		// Setup response recorder
-	// 		w := httptest.NewRecorder()
-	// 		ts.API.handler.ServeHTTP(w, req)
-	// 		require.Equal(ts.T(), c.expected.code, w.Code)
-
-	// 		// Request body
-	// 		u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-	// 		require.NoError(ts.T(), err)
-
-	// 		require.Equal(ts.T(), c.expected.isAuthenticated, u.Authenticate(c.newPassword))
-	// 	})
-	// }
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-	ts.Require().NoError(err)
-	require.NoError(ts.T(), user.EnableMFA(ts.API.db))
-
-	token, err := generateAccessToken(user, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	require.NoError(ts.T(), err)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/enroll_factor", user.ID), nil)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
