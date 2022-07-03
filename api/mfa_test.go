@@ -136,7 +136,6 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			http.StatusOK,
 		},
 	}
-	// Check the return type, QR Code representation should be accurate
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			var buffer bytes.Buffer
@@ -154,11 +153,13 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			req.Header.Set("Content-Type", "application/json")
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), http.StatusOK, w.Code)
-			// Should be able to convert the returned string into a base64 image
-			// FactorType returned should be the same
-			// Factor is disabled
-			// DB level checks
-			// If simple name is pased in it should be present
+			factors, err := models.FindFactorsByUser(ts.API.db, user)
+			ts.Require().NoError(err)
+			latestFactor := factors[len(factors)-1]
+			require.Equal(ts.T(), "disabled", latestFactor.Status)
+			if c.FriendlyName != "" {
+				require.Equal(ts.T(), c.FriendlyName, latestFactor.FriendlyName)
+			}
 		})
 	}
 

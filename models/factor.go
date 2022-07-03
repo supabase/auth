@@ -9,13 +9,14 @@ import (
 )
 
 type Factor struct {
-	UserID       uuid.UUID `json: "user_id" db:"user_id"`
 	ID           string    `json:"id" db:"id"`
+	User         User      `belongs_to:"user"`
+	UserID       uuid.UUID `json:"user_id" db:"user_id"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 	Status       string    `json:"status" db:"status"`
 	FriendlyName string    `json:"friendly_name" db:"friendly_name"`
-	SecretKey    string    `json:'-' db:'secret_key'`
+	SecretKey    string    `json:"-" db:"secret_key"`
 	FactorType   string    `json:"factor_type" db:"factor_type"`
 }
 
@@ -26,8 +27,8 @@ func (Factor) TableName() string {
 
 func NewFactor(user *User, friendlyName, id, factorType, status, secretKey string) (*Factor, error) {
 	factor := &Factor{
-		ID:           id,
 		UserID:       user.ID,
+		ID:           id,
 		Status:       status,
 		FriendlyName: friendlyName,
 		SecretKey:    secretKey,
@@ -39,7 +40,7 @@ func NewFactor(user *User, friendlyName, id, factorType, status, secretKey strin
 // FindFactorsByUser returns all factors belonging to a user
 func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	factors := []*Factor{}
-	if err := tx.Q().Where("user_id = ?", user.ID, true).All(&factors); err != nil {
+	if err := tx.Q().Where("user_id = ?", user.ID).Order("created_at asc").All(&factors); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return factors, nil
 		}

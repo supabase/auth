@@ -61,6 +61,7 @@ type User struct {
 
 	IsSuperAdmin bool       `json:"-" db:"is_super_admin"`
 	Identities   []Identity `json:"identities" has_many:"identities"`
+	Factors      []Factor   `json:"factors" has_many:"factors"`
 
 	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
