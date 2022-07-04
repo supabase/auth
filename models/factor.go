@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+const FactorDisabledState = "disabled"
+const FactorUnverifiedState = "unverified"
+const FactorVerifiedState = "verified"
+
 type Factor struct {
 	ID           string    `json:"id" db:"id"`
 	User         User      `belongs_to:"user"`
