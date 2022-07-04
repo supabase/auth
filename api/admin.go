@@ -28,6 +28,15 @@ type adminUserParams struct {
 	BanDuration  string                 `json:"ban_duration"`
 }
 
+type AdminUserDeleteFactorParams struct {
+	FactorID string `json:"factor_id"`
+}
+
+type AdminUserUpdateFactorStatusParams struct {
+	FactorID string `json:"factor_id"`
+	Status   string `json:"status"`
+}
+
 func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
@@ -344,17 +353,122 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) adminUserUpdateFactorStatus(w http.ResponseWriter, r *http.Request) error {
-	return nil
+	ctx := r.Context()
+	user := getUser(ctx)
+	instanceID := getInstanceID(ctx)
+
+	params := &AdminUserUpdateFactorStatusParams{}
+	jsonDecoder := json.NewDecoder(r.Body)
+	err := jsonDecoder.Decode(params)
+	if err != nil {
+		return badRequestError("Could not read AdminUpdateFactorStatus params: %v", err)
+	}
+
+	status := params.Status
+	if (status != "disabled") && (status != "unverified") && (status != "verified") {
+		return unprocessableEntityError("FactorType needs to be either 'disabled', 'unverified' or 'verified'")
+	}
+	factor, terr := models.FindFactorByID(a.db, params.FactorID)
+	if terr != nil {
+		return terr
+	}
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.FactorModifiedAction, r.RemoteAddr, map[string]interface{}{
+			"user_id":    user.ID,
+			"user_email": user.Email,
+			"user_phone": user.Phone,
+		}); terr != nil {
+			return terr
+		}
+		if terr := factor.UpdateStatus(a.db, status); terr != nil {
+			return internalServerError("Database error deleting user").WithInternalError(terr)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return sendJSON(w, http.StatusOK, factor)
 }
 
 func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) error {
-	return nil
+	ctx := r.Context()
+	user := getUser(ctx)
+	instanceID := getInstanceID(ctx)
+
+	params := &AdminUserDeleteFactorParams{}
+	jsonDecoder := json.NewDecoder(r.Body)
+	err := jsonDecoder.Decode(params)
+	if err != nil {
+		return badRequestError("Could not read AdminUpdateFactorStatus params: %v", err)
+	}
+
+	factor, terr := models.FindFactorByID(a.db, params.FactorID)
+	if terr != nil {
+		return terr
+	}
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.FactorModifiedAction, r.RemoteAddr, map[string]interface{}{
+			"user_id":    user.ID,
+			"user_email": user.Email,
+			"user_phone": user.Phone,
+		}); terr != nil {
+			return terr
+		}
+		if terr := tx.Destroy(factor); terr != nil {
+			return internalServerError("Database error deleting user").WithInternalError(terr)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return sendJSON(w, http.StatusOK, factor)
+
 }
 
 func (a *API) adminUserEnableMFA(w http.ResponseWriter, r *http.Request) error {
-	return nil
+	ctx := r.Context()
+	user := getUser(ctx)
+	instanceID := getInstanceID(ctx)
+	err := a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := user.EnableMFA(tx); terr != nil {
+			return terr
+		}
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, r.RemoteAddr, map[string]interface{}{
+			"user_id":    user.ID,
+			"user_email": user.Email,
+			"user_phone": user.Phone,
+		}); terr != nil {
+			return terr
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return sendJSON(w, http.StatusOK, user)
 }
 
 func (a *API) adminUserDisableMFA(w http.ResponseWriter, r *http.Request) error {
-	return nil
+	ctx := r.Context()
+	user := getUser(ctx)
+	instanceID := getInstanceID(ctx)
+	err := a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := user.DisableMFA(tx); terr != nil {
+			return terr
+		}
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, r.RemoteAddr, map[string]interface{}{
+			"user_id":    user.ID,
+			"user_email": user.Email,
+			"user_phone": user.Phone,
+		}); terr != nil {
+			return terr
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return sendJSON(w, http.StatusOK, user)
 }

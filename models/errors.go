@@ -54,6 +54,12 @@ func (e InstanceNotFoundError) Error() string {
 	return "Instance not found"
 }
 
+type FactorNotFoundError struct{}
+
+func (e FactorNotFoundError) Error() string {
+	return "Factor not found"
+}
+
 type TotpSecretNotFoundError struct{}
 
 func (e TotpSecretNotFoundError) Error() string {

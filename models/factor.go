@@ -49,6 +49,23 @@ func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	return factors, nil
 }
 
+// FindFactorByID finds a factor matching the provided ID.
+func FindFactorByID(tx *storage.Connection, factorID string) (*Factor, error) {
+	return findFactor(tx, "id = ?", factorID)
+}
+
+func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Factor, error) {
+	obj := &Factor{}
+	if err := tx.Eager().Q().Where(query, args...).First(obj); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, FactorNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding factor")
+	}
+
+	return obj, nil
+}
+
 // Change the friendly name
 func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	f.FriendlyName = friendlyName
@@ -59,8 +76,4 @@ func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string)
 func (f *Factor) UpdateStatus(tx *storage.Connection, status string) error {
 	f.Status = status
 	return tx.UpdateOnly(f, "status", "updated_at")
-}
-
-func (f *Factor) DeleteFactor(tx *storage.Connection, factor *Factor) error {
-	return tx.Destroy(factor)
 }
