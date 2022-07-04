@@ -47,7 +47,6 @@ type ChallengeFactorResponse struct {
 	FriendlyName string
 }
 
-// RecoveryCodesResponse repreesnts a successful recovery code generation response
 type RecoveryCodesResponse struct {
 	RecoveryCodes []string `json:"recovery_codes"`
 }
@@ -143,8 +142,8 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 }
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
-	const FACTOR_PREFIX = "factor"
-	const IMAGE_SIDE_LENGTH = 300
+	const factorPrefix = "factor"
+	const imageSideLength = 300
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
@@ -158,35 +157,30 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return badRequestError("Could not read EnrollFactor params: %v", err)
 	}
-
 	if (params.FactorType != "totp") && (params.FactorType != "webauthn") {
 		return unprocessableEntityError("FactorType needs to be either 'totp' or 'webauthn'")
 	}
-
+	// TODO(Joel): Review this portion when email is no longer a primary key
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      params.Issuer,
-		AccountName: params.Issuer,
+		AccountName: user.GetEmail(),
 	})
-
 	if err != nil {
 		return internalServerError("Error generating QR Code secret key").WithInternalError(err)
 	}
 	var buf bytes.Buffer
-
-	// Test with QRCode Encode
-	img, err := key.Image(IMAGE_SIDE_LENGTH, IMAGE_SIDE_LENGTH)
+	img, err := key.Image(imageSideLength, imageSideLength)
 	png.Encode(&buf, img)
 	if err != nil {
 		return internalServerError("Error generating QR Code image").WithInternalError(err)
 	}
 	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-	factorID := fmt.Sprintf("%s_%s", FACTOR_PREFIX, crypto.SecureToken())
-
-	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, "disabled", key.Secret())
+	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())
+	// TODO(Joel): Convert constants into an Enum in future
+	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, models.FactorDisabledState, key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}
-
 	terr = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr = tx.Create(factor); terr != nil {
 			return terr
@@ -194,10 +188,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.EnrollFactorAction, r.RemoteAddr, nil); terr != nil {
 			return terr
 		}
-
 		return nil
 	})
-
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:   factor.ID,
 		Type: factor.FactorType,
@@ -208,7 +200,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		},
 	})
 }
-
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	const CHALLENGE_EXPIRY_DURATION = 300
 	ctx := r.Context()
@@ -279,3 +270,4 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		FriendlyName: factor.FriendlyName,
 	})
 }
+

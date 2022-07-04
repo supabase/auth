@@ -18,15 +18,12 @@ type FactorTestSuite struct {
 func TestFactor(t *testing.T) {
 	globalConfig, err := conf.LoadGlobal(modelsTestConfig)
 	require.NoError(t, err)
-
 	conn, err := test.SetupDBConnection(globalConfig)
 	require.NoError(t, err)
-
 	ts := &FactorTestSuite{
 		db: conn,
 	}
 	defer ts.db.Close()
-
 	suite.Run(t, ts)
 }
 
@@ -64,4 +61,23 @@ func (ts *FactorTestSuite) createFactor() *Factor {
 	require.NoError(ts.T(), err)
 
 	return factor
+  }
+func (ts *FactorTestSuite) TestUpdateStatus() {
+	newFactorStatus := FactorVerifiedState
+	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
+	require.NoError(ts.T(), err)
+	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "some-secret", FactorDisabledState, "")
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), f.UpdateStatus(ts.db, newFactorStatus))
+	require.Equal(ts.T(), newFactorStatus, f.Status)
+}
+
+func (ts *FactorTestSuite) TestUpdateFriendlyName() {
+	newSimpleName := "newFactorName"
+	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
+	require.NoError(ts.T(), err)
+	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "some-secret", FactorDisabledState, "")
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), f.UpdateFriendlyName(ts.db, newSimpleName))
+	require.Equal(ts.T(), newSimpleName, f.FriendlyName)
 }

@@ -32,6 +32,7 @@ const (
 	EnrollFactorAction              AuditAction = "factor_enrolled"
 	CreateChallengeAction           AuditAction = "challenge_created"
 
+
 	account auditLogType = "account"
 	team    auditLogType = "team"
 	token   auditLogType = "token"
