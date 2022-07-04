@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-
 const FactorDisabledState = "disabled"
 const FactorUnverifiedState = "unverified"
 const FactorVerifiedState = "verified"
@@ -42,7 +41,6 @@ func NewFactor(user *User, friendlyName, id, factorType, status, secretKey strin
 	return factor, nil
 }
 
-
 // FindFactorsByUser returns all factors belonging to a user ordered by timestamp
 func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	factors := []*Factor{}
@@ -71,7 +69,6 @@ func FindFactorByFriendlyName(tx *storage.Connection, friendlyName string) (*Fac
 	return factor, nil
 }
 
-
 func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Factor, error) {
 	obj := &Factor{}
 	if err := tx.Eager().Q().Where(query, args...).First(obj); err != nil {
@@ -83,6 +80,7 @@ func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Fac
 
 	return obj, nil
 }
+
 // Change the friendly name
 func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	f.FriendlyName = friendlyName

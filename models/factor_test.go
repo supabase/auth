@@ -41,7 +41,6 @@ func (ts *FactorTestSuite) TestFindFactorByFriendlyName() {
 
 func (ts *FactorTestSuite) TestFindFactorByFactorID() {
 	f := ts.createFactor()
-
 	n, err := FindFactorByFactorID(ts.db, f.ID)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), f.ID, n.ID)
@@ -50,18 +49,15 @@ func (ts *FactorTestSuite) TestFindFactorByFactorID() {
 func (ts *FactorTestSuite) createFactor() *Factor {
 	user, err := NewUser(uuid.Nil, "", "agenericemail@gmail.com", "secret", "test", nil)
 	require.NoError(ts.T(), err)
-
 	err = ts.db.Create(user)
 	require.NoError(ts.T(), err)
-
 	factor, err := NewFactor(user, "asimplename", "factor-which-shall-not-be-named", "totp", "disabled", "topsecret")
 	require.NoError(ts.T(), err)
-
 	err = ts.db.Create(factor)
 	require.NoError(ts.T(), err)
 
 	return factor
-  }
+}
 func (ts *FactorTestSuite) TestUpdateStatus() {
 	newFactorStatus := FactorVerifiedState
 	u, err := NewUser(uuid.Nil, "", "", "", "", nil)

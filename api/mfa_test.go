@@ -44,7 +44,7 @@ func (ts *MFATestSuite) SetupTest() {
 	u, err := models.NewUser(ts.instanceID, "123456789", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
-	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", "disabled", "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorDisabledState, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 }
@@ -167,7 +167,6 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 }
 
 func (ts *MFATestSuite) TestChallengeFactor() {
-
 	cases := []struct {
 		desc         string
 		id           string
@@ -211,7 +210,6 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 			http.StatusUnprocessableEntity,
 		},
 	}
-
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)

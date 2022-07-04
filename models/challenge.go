@@ -20,7 +20,6 @@ func (Challenge) TableName() string {
 	return tableName
 }
 
-
 const ChallengePrefix = "challenge"
 
 func NewChallenge(factor *Factor) (*Challenge, error) {

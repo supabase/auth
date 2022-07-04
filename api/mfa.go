@@ -201,7 +201,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
-	const CHALLENGE_EXPIRY_DURATION = 300
+	const challengeExpiryDuration = 300
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
@@ -265,9 +265,8 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:           challenge.ID,
 		CreatedAt:    creationTime.String(),
-		ExpiresAt:    creationTime.Add(time.Second * CHALLENGE_EXPIRY_DURATION).String(),
+		ExpiresAt:    creationTime.Add(time.Second * challengeExpiryDuration).String(),
 		FactorID:     factor.ID,
 		FriendlyName: factor.FriendlyName,
 	})
 }
-
