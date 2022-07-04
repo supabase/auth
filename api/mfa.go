@@ -159,8 +159,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Error generating QR Code secret key").WithInternalError(err)
 	}
 	var buf bytes.Buffer
-
-	// Test with QRCode Encode
 	img, err := key.Image(imageSideLength, imageSideLength)
 	png.Encode(&buf, img)
 	if err != nil {
@@ -174,7 +172,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}
-
 	terr = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr = tx.Create(factor); terr != nil {
 			return terr

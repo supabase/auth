@@ -143,10 +143,8 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 			ts.Require().NoError(err)
 			require.NoError(ts.T(), user.EnableMFA(ts.API.db))
-
 			token, err := generateAccessToken(user, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
-
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/enroll_factor", user.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
