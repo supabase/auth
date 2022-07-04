@@ -246,7 +246,7 @@ The URI a OAuth2 provider will redirect to with the `code` and `state` values.
 
 `EXTERNAL_X_URL` - `string`
 
-The base URL used for constructing the URLs to request authorization and access tokens. Used by `gitlab` and `keycloak`. For `gitlab` it defaults to `https://gitlab.com`. For `keycloak` you need to set this to your instance, for example: `https://keycloak.example.com/auth/realms/myrealm`
+The base URL used for constructing the URLs to request authorization and access tokens. Used by `gitlab` and `keycloak`. For `gitlab` it defaults to `https://gitlab.com`. For `keycloak` you need to set this to your instance, for example: `https://keycloak.example.com/realms/myrealm`
 
 #### Apple OAuth
 
