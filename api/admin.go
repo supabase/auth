@@ -364,6 +364,8 @@ func (a *API) adminUserUpdateFactorStatus(w http.ResponseWriter, r *http.Request
 		return badRequestError("Could not read AdminUpdateFactorStatus params: %v", err)
 	}
 
+	//TODO(Joel): Decide whether to guard for empty factor param here
+
 	status := params.Status
 	if (status != "disabled") && (status != "unverified") && (status != "verified") {
 		return unprocessableEntityError("FactorType needs to be either 'disabled', 'unverified' or 'verified'")
@@ -400,7 +402,7 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
 	if err != nil {
-		return badRequestError("Could not read AdminUpdateFactorStatus params: %v", err)
+		return badRequestError("Could not read AdminUserDeleteFactor params: %v", err)
 	}
 
 	factor, terr := models.FindFactorByID(a.db, params.FactorID)
