@@ -17,6 +17,7 @@ type InviteParams struct {
 // Invite is the endpoint for inviting a new user
 func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	config := a.getConfig(ctx)
 	instanceID := getInstanceID(ctx)
 	adminUser := getAdminUser(ctx)
 	params := &InviteParams{}
@@ -64,7 +65,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
-		if err := sendInvite(tx, user, mailer, referrer); err != nil {
+		if err := sendInvite(tx, user, mailer, referrer, config.Mailer.OtpLength); err != nil {
 			return internalServerError("Error inviting user").WithInternalError(err)
 		}
 		return nil

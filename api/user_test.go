@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -291,11 +292,15 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	require.NotEmpty(ts.T(), u.ReauthenticationToken)
 	require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
 
+	// update reauthentication token to a known token
+	u.ReauthenticationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456")))
+	require.NoError(ts.T(), ts.API.db.Update(u))
+
 	// update password with reauthentication token
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"password": "newpass",
-		"nonce":    u.ReauthenticationToken,
+		"nonce":    "123456",
 	}))
 
 	req = httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)

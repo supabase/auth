@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -126,6 +127,7 @@ func (ts *InviteTestSuite) TestVerifyInvite() {
 			"Verify invite with password",
 			"test@example.com",
 			map[string]interface{}{
+				"email":    "test@example.com",
 				"type":     "invite",
 				"token":    "asdf",
 				"password": "testing",
@@ -136,6 +138,7 @@ func (ts *InviteTestSuite) TestVerifyInvite() {
 			"Verify invite with no password",
 			"test1@example.com",
 			map[string]interface{}{
+				"email": "test1@example.com",
 				"type":  "invite",
 				"token": "asdf",
 			},
@@ -150,7 +153,7 @@ func (ts *InviteTestSuite) TestVerifyInvite() {
 			user.InvitedAt = &now
 			user.ConfirmationSentAt = &now
 			user.EncryptedPassword = ""
-			user.ConfirmationToken = c.requestBody["token"].(string)
+			user.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(c.email+c.requestBody["token"].(string))))
 			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Create(user))
 

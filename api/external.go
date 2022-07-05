@@ -235,7 +235,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				if !emailData.Verified && !config.Mailer.Autoconfirm {
 					mailer := a.Mailer(ctx)
 					referrer := a.getReferrer(r)
-					if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
+					if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {
 						if errors.Is(terr, MaxFrequencyLimitError) {
 							return tooManyRequestsError("For security purposes, you can only request this once every minute")
 						}

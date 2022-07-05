@@ -3,9 +3,11 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -244,21 +246,20 @@ func (ts *SignupTestSuite) TestVerifySignup() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	// Request body
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"type":  "signup",
-		"token": u.ConfirmationToken,
-	}))
-
 	// Setup request
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+	reqUrl := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", signupVerification, u.ConfirmationToken)
+	req := httptest.NewRequest(http.MethodGet, reqUrl, nil)
 
 	// Setup response recorder
 	w := httptest.NewRecorder()
-
 	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
 
-	assert.Equal(ts.T(), http.StatusOK, w.Code, w.Body.String())
+	urlVal, err := url.Parse(w.Result().Header.Get("Location"))
+	require.NoError(ts.T(), err)
+	v, err := url.ParseQuery(urlVal.Fragment)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), v.Get("access_token"))
+	require.NotEmpty(ts.T(), v.Get("expires_in"))
+	require.NotEmpty(ts.T(), v.Get("refresh_token"))
 }
