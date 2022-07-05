@@ -11,6 +11,7 @@ import (
 	"github.com/pquerna/otp/totp"
 	"image/png"
 	"net/http"
+	"time"
 )
 
 type EnrollFactorParams struct {
@@ -33,8 +34,8 @@ type EnrollFactorResponse struct {
 }
 
 type ChallengeFactorParams struct {
-	FactorID         string
-	FactorSimpleName string
+	FactorID     string `json:"factor_id"`
+	FriendlyName string `json:"friendly_name"`
 }
 
 type VerifyFactorParams struct {
@@ -55,7 +56,6 @@ type VerifyFactorResponse struct {
 	MFAType     string
 	Success     string
 }
-
 
 // RecoveryCodesResponse repreesnts a successful recovery code generation response
 type RecoveryCodesResponse struct {
@@ -193,7 +193,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	factorID := fmt.Sprintf("%s_%s", FACTOR_PREFIX, crypto.SecureToken())
 
-	factor, terr := models.NewFactor(user, params.FactorSimpleName, factorID, params.FactorType, key.Secret())
+	factor, terr := models.NewFactor(user, params.FactorSimpleName, factorID, params.FactorType, "disabled", key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}
@@ -238,16 +238,16 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read EnrollFactor params: %v", err)
 	}
 	factorID := params.FactorID
-	factorSimpleName := params.FactorSimpleName
+	friendlyName := params.FriendlyName
 
-	if factorID != "" && factorSimpleName != "" {
+	if factorID != "" && friendlyName != "" {
 		return unprocessableEntityError("Only a FactorID or FactorSimpleName should be provided on signup.")
 	}
 
 	if factorID != "" {
-		factor, err = models.FindFactorByFactorID(a.db, factorID)
-	} else if params.FactorSimpleName != "" {
-		factor, err = models.FindFactorBySimpleName(a.db, factorSimpleName)
+		factor, err = models.FindFactorByID(a.db, factorID)
+	} else if params.FriendlyName != "" {
+		factor, err = models.FindFactorByFriendlyName(a.db, friendlyName)
 	}
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -267,7 +267,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":          params.FactorID,
-			"factor_simple_name": params.FactorSimpleName,
+			"factor_simple_name": params.FriendlyName,
 		}); terr != nil {
 			return terr
 		}
@@ -309,14 +309,32 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return internalServerError("Database error finding factor").WithInternalError(err)
 	}
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return notFoundError(err.Error())
+		}
+		return internalServerError("Database error finding Challenge").WithInternalError(err)
 
+	}
+
+	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if err = models.NewAuditLogEntry(tx, instanceID, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":    factor.ID,
 			"challenge_id": params.ChallengeID,
 		}); err != nil {
 			return err
 		}
+		if err = challenge.Verify(a.db); err != nil {
+			return err
+		}
+		// TODO: Joel -- substitute this with status constants once main branch is merged in
+		if factor.Status != "verified" {
+			if err = factor.UpdateStatus(a.db, "verified"); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 	valid := totp.Validate(params.Code, factor.SecretKey)

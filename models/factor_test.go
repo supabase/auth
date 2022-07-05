@@ -46,19 +46,6 @@ func (ts *FactorTestSuite) SetupTest() {
 	TruncateAll(ts.db)
 }
 
-func (ts *FactorTestSuite) TestToggleFactorEnabled() {
-	f := ts.createFactor()
-	require.NoError(ts.T(), f.Disable(ts.db))
-	require.Equal(ts.T(), false, f.Enabled)
-
-	require.NoError(ts.T(), f.Enable(ts.db))
-	require.Equal(ts.T(), true, f.Enabled)
-
-	require.NoError(ts.T(), f.Enable(ts.db))
-	require.Equal(ts.T(), true, f.Enabled)
-
-}
-
 func (ts *FactorTestSuite) createFactor() *Factor {
 	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
 	require.NoError(ts.T(), err)
@@ -66,7 +53,7 @@ func (ts *FactorTestSuite) createFactor() *Factor {
 	err = ts.db.Create(u)
 	require.NoError(ts.T(), err)
 
-	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "phone", "supersecretkey")
+	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "totp", "disabled", "supersecretkey")
 	require.NoError(ts.T(), err)
 
 	err = ts.db.Create(f)
