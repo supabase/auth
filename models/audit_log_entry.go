@@ -31,6 +31,7 @@ const (
 	GenerateRecoveryCodesAction     AuditAction = "generate_recovery_codes"
 	EnrollFactorAction              AuditAction = "factor_enrolled"
 	CreateChallengeAction           AuditAction = "challenge_created"
+	VerifyFactorAction              AuditAction = "verification_attempted"
 
 	account auditLogType = "account"
 	team    auditLogType = "team"
@@ -54,6 +55,7 @@ var actionLogTypeMap = map[AuditAction]auditLogType{
 	GenerateRecoveryCodesAction:     user,
 	EnrollFactorAction:              user,
 	CreateChallengeAction:           user,
+	VerifyFactorAction:              user,
 }
 
 // AuditLogEntry is the database model for audit log entries.

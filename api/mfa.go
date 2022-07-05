@@ -298,7 +298,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
-	// TODO: Joel We need to attach a rate limiter to this so it doesn't get fuzzed
 	var err error
 	ctx := r.Context()
 	user := getUser(ctx)
@@ -312,7 +311,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return badRequestError("Could not read VerifyFactor params: %v", err)
 	}
-
 	factor, err := models.FindFactorByChallengeID(a.db, params.ChallengeID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -320,10 +318,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return internalServerError("Database error finding factor").WithInternalError(err)
 	}
-	// No unhashing it
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 
-		if err = models.NewAuditLogEntry(tx, instanceID, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
+		if err = models.NewAuditLogEntry(tx, instanceID, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":    factor.ID,
 			"challenge_id": params.ChallengeID,
 		}); err != nil {
@@ -331,7 +328,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
-	//
 	valid := totp.Validate(params.Code, factor.SecretKey)
 	if valid != true {
 		return unauthorizedError("Invalid code entered")
