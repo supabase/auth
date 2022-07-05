@@ -270,3 +270,8 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		FriendlyName: factor.FriendlyName,
 	})
 }
+
+//Endpoint to handle step up login flows
+func (a *API) MFALogin(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}

@@ -192,6 +192,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 				r.Post("/enroll_factor", api.EnrollFactor)
 				r.Post("/challenge_factor", api.ChallengeFactor)
 			})
+			r.Post("/login", api.MFALogin)
 		})
 	})
 
