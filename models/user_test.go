@@ -38,6 +38,18 @@ func TestUser(t *testing.T) {
 	suite.Run(t, ts)
 }
 
+func (ts *UserTestSuite) TestToggleMFA() {
+	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
+	require.NoError(ts.T(), err)
+	require.False(ts.T(), u.MFAEnabled)
+
+	require.NoError(ts.T(), u.EnableMFA(ts.db))
+	require.True(ts.T(), u.MFAEnabled)
+
+	require.NoError(ts.T(), u.DisableMFA(ts.db))
+	require.False(ts.T(), u.MFAEnabled)
+}
+
 func (ts *UserTestSuite) TestUpdateAppMetadata() {
 	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
 	require.NoError(ts.T(), err)
@@ -113,7 +125,7 @@ func (ts *UserTestSuite) TestFindUsersInAudience() {
 
 	sp := &SortParams{
 		Fields: []SortField{
-			SortField{Name: "created_at", Dir: Descending},
+			{Name: "created_at", Dir: Descending},
 		},
 	}
 	n, err = FindUsersInAudience(ts.db, u.InstanceID, u.Aud, nil, sp, "")
