@@ -172,8 +172,8 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 					r.Route("/mfa", func(r *router) {
 						r.Put("/update_factor_status", api.adminUserUpdateFactorStatus)
 						r.Delete("/delete_factor", api.adminUserDeleteFactor)
-						r.Put("/disable", api.adminUserEnableMFA)
-						r.Put("/enable", api.adminUserDisableMFA)
+						r.Put("/disable", api.DisableMFA)
+						r.Put("/enable", api.EnableMFA)
 					})
 				})
 			})
