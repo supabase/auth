@@ -596,69 +596,6 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 	}
 }
 
-func (ts *AdminTestSuite) TestAdminUserEnableMFA() {
-	user, err := models.NewUser(ts.instanceID, "123456789", "test-enable@example.com", "test", ts.Config.JWT.Aud, nil)
-	user.Role = "supabase_admin"
-	require.NoError(ts.T(), err, "Error making new user")
-	require.NoError(ts.T(), ts.API.db.Create(user), "Error creating user")
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test-enable@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), u.EnableMFA(ts.API.db))
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("http://localhost/admin/users/%s/mfa/enable", u.ID), nil)
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	require.NoError(ts.T(), err, "Error generating access token")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test-enable@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	require.True(ts.T(), u.MFAEnabled)
-}
-
-func (ts *AdminTestSuite) TestAdminUserDisableMFA() {
-	user, err := models.NewUser(ts.instanceID, "123456789", "test-disable@example.com", "test", ts.Config.JWT.Aud, nil)
-	user.Role = "supabase_admin"
-	require.NoError(ts.T(), err, "Error making new user")
-	require.NoError(ts.T(), ts.API.db.Create(user), "Error creating user")
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test-disable@example.com", ts.Config.JWT.Aud)
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	require.NoError(ts.T(), err, "Error generating access token")
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("http://localhost/admin/users/%s/mfa/disable", u.ID), nil)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test-disable@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	require.False(ts.T(), u.MFAEnabled)
-}
-
-func (ts *AdminTestSuite) TestAdminUserUpdateFactorStatus() {
-	u, err := models.NewUser(ts.instanceID, "123456789", "test-factor-delete@example.com", "test", ts.Config.JWT.Aud, nil)
-	require.NoError(ts.T(), err, "Error making new user")
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
-
-	f, err := models.NewFactor(u, "A1B2C3", "testfactor-id", "totp", "disabled", "")
-	require.NoError(ts.T(), err, "Error making new factor")
-	require.NoError(ts.T(), ts.API.db.Create(f), "Error creating factor")
-
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"status":    "verified",
-		"factor_id": f.ID,
-	}))
-	// Setup request
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s/mfa/update_factor_status", u.ID), &buffer)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	data := models.Factor{}
-	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-	assert.Equal(ts.T(), "verified", data.Status)
-}
-
 // TestAdminUserDelete tests API /admin/users/<id>/mfa/delete_factor route (DELETE)
 func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 	u, err := models.NewUser(ts.instanceID, "123456789", "test-factor-delete@example.com", "test", ts.Config.JWT.Aud, nil)
@@ -675,7 +612,7 @@ func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 	}))
 	// Setup request
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s/mfa/delete_factor", u.ID), &buffer)
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s/mfa/", u.ID), &buffer)
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 

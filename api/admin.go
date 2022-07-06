@@ -26,6 +26,7 @@ type adminUserParams struct {
 	UserMetaData map[string]interface{} `json:"user_metadata"`
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	BanDuration  string                 `json:"ban_duration"`
+	MFAEnabled   string                 `json:"mfa_enabled"`
 }
 
 type AdminUserDeleteFactorParams struct {
@@ -166,6 +167,20 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			if terr := user.UpdateUserMetaData(tx, params.UserMetaData); terr != nil {
 				return terr
 			}
+		}
+
+		if params.MFAEnabled != "" {
+			if params.MFAEnabled == "true" {
+				if terr := user.EnableMFA(tx); terr != nil {
+					return terr
+				}
+
+			} else if params.MFAEnabled == "false" {
+				if terr := user.DisableMFA(tx); terr != nil {
+					return terr
+				}
+			}
+
 		}
 
 		if params.BanDuration != "" {
@@ -352,7 +367,7 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, map[string]interface{}{})
 }
 
-func (a *API) adminUserUpdateFactorStatus(w http.ResponseWriter, r *http.Request) error {
+func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
