@@ -596,6 +596,31 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 	}
 }
 
+// func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
+// 	u, err := models.NewUser(ts.instanceID, "123456789", "test-factor-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+// 	require.NoError(ts.T(), err, "Error making new user")
+// 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+// 	f, err := models.NewFactor(u, "A1B2C3", "testfactor-id", "totp", "disabled", "")
+// 	require.NoError(ts.T(), err, "Error making new factor")
+// 	require.NoError(ts.T(), ts.API.db.Create(f), "Error creating factor")
+
+// 	var buffer bytes.Buffer
+// 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+// 		"status":    "verified",
+// 		"factor_id": f.ID,
+// 	}))
+// 	// Setup request
+// 	w := httptest.NewRecorder()
+// 	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s/mfa/", u.ID), &buffer)
+// 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+// 	ts.API.handler.ServeHTTP(w, req)
+// 	require.Equal(ts.T(), http.StatusOK, w.Code)
+// 	data := models.Factor{}
+// 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+// 	assert.Equal(ts.T(), "verified", data.Status)
+// }
+
 // TestAdminUserDelete tests API /admin/users/<id>/mfa/delete_factor route (DELETE)
 func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 	u, err := models.NewUser(ts.instanceID, "123456789", "test-factor-delete@example.com", "test", ts.Config.JWT.Aud, nil)
