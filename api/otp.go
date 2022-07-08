@@ -15,16 +15,16 @@ import (
 
 // OtpParams contains the request body params for the otp endpoint
 type OtpParams struct {
-	Email      string `json:"email"`
-	Phone      string `json:"phone"`
-	CreateUser bool   `json:"create_user"`
-	Metadata map[string]interface{} `json:"metadata"`
+	Email      string                 `json:"email"`
+	Phone      string                 `json:"phone"`
+	CreateUser bool                   `json:"create_user"`
+	Metadata   map[string]interface{} `json:"metadata"`
 }
 
 // SmsParams contains the request body params for sms otp
 type SmsParams struct {
-	Phone string                 `json:"phone"`
-	Metadata  map[string]interface{} `json:"metadata"`
+	Phone    string                 `json:"phone"`
+	Metadata map[string]interface{} `json:"metadata"`
 }
 
 // Otp returns the MagicLink or SmsOtp handler based on the request body params
@@ -35,7 +35,6 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	if params.Metadata == nil {
 		params.Metadata = make(map[string]interface{})
 	}
-
 
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -83,13 +82,8 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read sms otp params: %v", err)
 	}
 	if params.Metadata == nil {
-              params.Metadata = make(map[string]interface{})
-      }
-        metadata, err := json.Marshal(params.Metadata)
-      if err != nil {
-            return badRequestError("Could not parse metadata: %v", err)
-      }
-
+		params.Metadata = make(map[string]interface{})
+	}
 
 	params.Phone, err = a.validatePhone(params.Phone)
 	if err != nil {
@@ -106,9 +100,18 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				internalServerError("error creating user").WithInternalError(err)
 			}
-			newBodyContent := `{"phone":"` + params.Phone + `","password":"` + password + `","data":"` + string(metadata) + `"}`
-			r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
-			r.ContentLength = int64(len(newBodyContent))
+
+			signUpParams := &SignupParams{
+				Phone:    params.Phone,
+				Password: password,
+				Data:     params.Metadata,
+			}
+			newBodyContent, err := json.Marshal(signUpParams)
+			if err != nil {
+				return badRequestError("Could not parse metadata: %v", err)
+			}
+			r.Body = ioutil.NopCloser(strings.NewReader(string(newBodyContent)))
+			r.ContentLength = int64(len(string(newBodyContent)))
 
 			fakeResponse := &responseStub{}
 
@@ -117,6 +120,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 				if err := a.Signup(fakeResponse, r); err != nil {
 					return err
 				}
+
 				newBodyContent := `{"phone":"` + params.Phone + `"}`
 				r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
 				r.ContentLength = int64(len(newBodyContent))

@@ -14,8 +14,8 @@ import (
 
 // MagicLinkParams holds the parameters for a magic link request
 type MagicLinkParams struct {
-	Email string                 `json:"email"`
-	Metadata  map[string]interface{} `json:"metadata"`
+	Email    string                 `json:"email"`
+	Metadata map[string]interface{} `json:"metadata"`
 }
 
 // MagicLink sends a recovery email
@@ -38,10 +38,6 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	if params.Metadata == nil {
 		params.Metadata = make(map[string]interface{})
 	}
-	metadata, err := json.Marshal(params.Metadata)
-	if err != nil {
-		return badRequestError("Could not parse metadata: %v", err)
-	}
 
 	if params.Email == "" {
 		return unprocessableEntityError("Password recovery requires an email")
@@ -59,9 +55,18 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				internalServerError("error creating user").WithInternalError(err)
 			}
-			newBodyContent := `{"email":"` + params.Email + `","password":"` + password + `",data":"` + string(metadata) + `"}`
-			r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
-			r.ContentLength = int64(len(newBodyContent))
+
+			signUpParams := &SignupParams{
+				Email:    params.Email,
+				Password: password,
+				Data:     params.Metadata,
+			}
+			newBodyContent, err := json.Marshal(signUpParams)
+			if err != nil {
+				return badRequestError("Could not parse metadata: %v", err)
+			}
+			r.Body = ioutil.NopCloser(strings.NewReader(string(newBodyContent)))
+			r.ContentLength = int64(len(string(newBodyContent)))
 
 			fakeResponse := &responseStub{}
 			if config.Mailer.Autoconfirm {
@@ -69,9 +74,16 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 				if err := a.Signup(fakeResponse, r); err != nil {
 					return err
 				}
-				newBodyContent := `{"email":"` + params.Email + `"}`
-				r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
-				r.ContentLength = int64(len(newBodyContent))
+				newBodyContent := &SignupParams{
+					Email: params.Email,
+					Data:  params.Metadata,
+				}
+				metadata, err := json.Marshal(newBodyContent)
+				if err != nil {
+					return badRequestError("Could not parse metadata: %v", err)
+				}
+				r.Body = ioutil.NopCloser(strings.NewReader(string(metadata)))
+				r.ContentLength = int64(len(string(metadata)))
 				return a.MagicLink(w, r)
 			}
 			// otherwise confirmation email already contains 'magic link'
