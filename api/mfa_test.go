@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -79,7 +80,7 @@ func (ts *MFATestSuite) TestMFADisable() {
 }
 
 func (ts *MFATestSuite) TestMFARecoveryCodeGeneration() {
-	const EXPECTED_NUM_OF_RECOVERY_CODES = 8
+	const expectedNumOfRecoveryCodes = 8
 
 	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	ts.Require().NoError(err)
@@ -98,5 +99,66 @@ func (ts *MFATestSuite) TestMFARecoveryCodeGeneration() {
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 
 	recoveryCodes := data["recovery_codes"].([]interface{})
-	require.Equal(ts.T(), EXPECTED_NUM_OF_RECOVERY_CODES, len(recoveryCodes))
+	require.Equal(ts.T(), expectedNumOfRecoveryCodes, len(recoveryCodes))
+}
+
+func (ts *MFATestSuite) TestEnrollFactor() {
+	var cases = []struct {
+		desc         string
+		FriendlyName string
+		FactorType   string
+		Issuer       string
+		MFAEnabled   bool
+		expectedCode int
+	}{
+		{
+			"TOTP: MFA is disabled",
+			"",
+			"totp",
+			"supabase.com",
+			false,
+			http.StatusForbidden,
+		},
+		{
+			"TOTP: Factor has friendly name",
+			"bob",
+			"totp",
+			"supabase.com",
+			true,
+			http.StatusOK,
+		},
+		{
+			"TOTP: Without simple name",
+			"",
+			"totp",
+			"supabase.com",
+			true,
+			http.StatusOK,
+		},
+	}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": c.FriendlyName, "factor_type": c.FactorType, "issuer": c.Issuer}))
+			user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+			ts.Require().NoError(err)
+			require.NoError(ts.T(), user.EnableMFA(ts.API.db))
+			token, err := generateAccessToken(user, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+			require.NoError(ts.T(), err)
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/factor", user.ID), &buffer)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+			req.Header.Set("Content-Type", "application/json")
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
+			factors, err := models.FindFactorsByUser(ts.API.db, user)
+			ts.Require().NoError(err)
+			latestFactor := factors[len(factors)-1]
+			require.Equal(ts.T(), "disabled", latestFactor.Status)
+			if c.FriendlyName != "" {
+				require.Equal(ts.T(), c.FriendlyName, latestFactor.FriendlyName)
+			}
+		})
+	}
+
 }
