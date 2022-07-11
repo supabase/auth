@@ -20,15 +20,15 @@ type EnrollFactorParams struct {
 }
 
 type TOTPObject struct {
-	QRCode string
-	Secret string
-	URI    string
+	QRCode string `json:"qr_code"`
+	Secret string `json:"secret"`
+	URI    string `json:"uri"`
 }
 
 type EnrollFactorResponse struct {
-	ID        string
-	CreatedAt string
-	Type      string
+	ID        string `json:"id"`
+	CreatedAt string `json:"created_at"`
+	Type      string `json:"type"`
 	TOTP      TOTPObject
 }
 
@@ -139,7 +139,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
 	if err != nil {
-		return badRequestError("Could not read EnrollFactor params: %v", err)
+		return badRequestError(err.Error())
 	}
 	if (params.FactorType != "totp") && (params.FactorType != "webauthn") {
 		return unprocessableEntityError("FactorType needs to be either 'totp' or 'webauthn'")
