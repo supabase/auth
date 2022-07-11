@@ -20,11 +20,11 @@ func (Challenge) TableName() string {
 	return tableName
 }
 
-const CHALLENGE_PREFIX = "challenge"
+const ChallengePrefix = "challenge"
 
 func NewChallenge(factor *Factor) (*Challenge, error) {
 	challenge := &Challenge{
-		ID:       fmt.Sprintf("%s_%s", CHALLENGE_PREFIX, crypto.SecureToken()),
+		ID:       fmt.Sprintf("%s_%s", ChallengePrefix, crypto.SecureToken()),
 		FactorID: factor.ID,
 	}
 	return challenge, nil

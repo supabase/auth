@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+const FactorDisabledState = "disabled"
+const FactorUnverifiedState = "unverified"
+const FactorVerifiedState = "verified"
+
 type Factor struct {
 	ID           string    `json:"id" db:"id"`
 	User         User      `belongs_to:"user"`
@@ -37,7 +41,7 @@ func NewFactor(user *User, friendlyName, id, factorType, status, secretKey strin
 	return factor, nil
 }
 
-// FindFactorsByUser returns all factors belonging to a user
+// FindFactorsByUser returns all factors belonging to a user ordered by timestamp
 func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	factors := []*Factor{}
 	if err := tx.Q().Where("user_id = ?", user.ID).Order("created_at asc").All(&factors); err != nil {
@@ -72,7 +76,7 @@ func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string)
 	return tx.UpdateOnly(f, "friendly_name", "updated_at")
 }
 
-//Change the factor status
+// Change the factor status
 func (f *Factor) UpdateStatus(tx *storage.Connection, status string) error {
 	f.Status = status
 	return tx.UpdateOnly(f, "status", "updated_at")

@@ -20,19 +20,17 @@ type EnrollFactorParams struct {
 }
 
 type TOTPObject struct {
-	QRCode string
-	Secret string
-	URI    string
+	QRCode string `json:"qr_code"`
+	Secret string `json:"secret"`
+	URI    string `json:"uri"`
 }
 
 type EnrollFactorResponse struct {
-	ID        string
-	CreatedAt string
-	Type      string
+	ID        string `json:"id"`
+	CreatedAt string `json:"created_at"`
+	Type      string `json:"type"`
 	TOTP      TOTPObject
 }
-
-// RecoveryCodesResponse repreesnts a successful Recovery code generation response
 
 type RecoveryCodesResponse struct {
 	RecoveryCodes []string `json:"recovery_codes"`
@@ -137,30 +135,24 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if !user.MFAEnabled {
 		return MFANotEnabledError
 	}
-
 	params := &EnrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
 	if err != nil {
-		return badRequestError("Could not read EnrollFactor params: %v", err)
+		return badRequestError(err.Error())
 	}
-
 	if (params.FactorType != "totp") && (params.FactorType != "webauthn") {
 		return unprocessableEntityError("FactorType needs to be either 'totp' or 'webauthn'")
 	}
-
 	// TODO(Joel): Review this portion when email is no longer a primary key
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      params.Issuer,
 		AccountName: user.GetEmail(),
 	})
-
 	if err != nil {
 		return internalServerError("Error generating QR Code secret key").WithInternalError(err)
 	}
 	var buf bytes.Buffer
-
-	// Test with QRCode Encode
 	img, err := key.Image(imageSideLength, imageSideLength)
 	png.Encode(&buf, img)
 	if err != nil {
@@ -168,13 +160,11 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())
-
-	// TODO(Joel): Convert this into an Enum
-	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, "disabled", key.Secret())
+	// TODO(Joel): Convert constants into an Enum in future
+	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, models.FactorDisabledState, key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}
-
 	terr = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr = tx.Create(factor); terr != nil {
 			return terr
@@ -182,10 +172,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.EnrollFactorAction, r.RemoteAddr, nil); terr != nil {
 			return terr
 		}
-
 		return nil
 	})
-
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:   factor.ID,
 		Type: factor.FactorType,
