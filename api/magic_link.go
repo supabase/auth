@@ -83,7 +83,6 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 					return badRequestError("Could not parse metadata: %v", err)
 				}
 				r.Body = ioutil.NopCloser(strings.NewReader(string(metadata)))
-				r.ContentLength = int64(len(string(metadata)))
 				return a.MagicLink(w, r)
 			}
 			// otherwise confirmation email already contains 'magic link'

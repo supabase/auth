@@ -111,7 +111,6 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 				return badRequestError("Could not parse metadata: %v", err)
 			}
 			r.Body = ioutil.NopCloser(strings.NewReader(string(newBodyContent)))
-			r.ContentLength = int64(len(string(newBodyContent)))
 
 			fakeResponse := &responseStub{}
 
@@ -123,7 +122,6 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 
 				newBodyContent := `{"phone":"` + params.Phone + `"}`
 				r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
-				r.ContentLength = int64(len(newBodyContent))
 				return a.SmsOtp(w, r)
 			}
 
