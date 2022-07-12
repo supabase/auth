@@ -39,12 +39,12 @@ type ChallengeFactorParams struct {
 }
 
 type ChallengeFactorResponse struct {
-	ID           string
-	CreatedAt    string
-	UpdatedAt    string
-	ExpiresAt    string
-	FactorID     string
-	FriendlyName string
+	ID           string `json:"id"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+	ExpiresAt    string `json:"expires_at"`
+	FactorID     string `json:"factor_id"`
+	FriendlyName string `json:"friendly_name"`
 }
 
 type RecoveryCodesResponse struct {
@@ -104,7 +104,7 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
-		forbiddenError(MFANotEnabledMsg)
+		return forbiddenError(MFANotEnabledMsg)
 	}
 	recoveryCodeModels := []*models.RecoveryCode{}
 	var terr error
