@@ -637,7 +637,7 @@ func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 	}))
 	// Setup request
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s/mfa/", u.ID), &buffer)
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s/mfa/factor", u.ID), &buffer)
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 

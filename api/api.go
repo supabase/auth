@@ -170,7 +170,9 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 					r.Put("/", api.adminUserUpdate)
 					r.Delete("/", api.adminUserDelete)
 					r.Route("/mfa", func(r *router) {
-						r.Delete("/", api.adminUserDeleteFactor)
+						r.Delete("/factor", api.adminUserDeleteFactor)
+						r.Get("/factor", api.adminUserListFactors)
+						r.Put("/factor", api.adminUserUpdateFactor)
 					})
 				})
 			})

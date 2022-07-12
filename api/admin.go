@@ -169,16 +169,14 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if params.MFAEnabled != "" {
-			if params.MFAEnabled == "true" {
-				if terr := user.EnableMFA(tx); terr != nil {
-					return terr
-				}
+		if params.MFAEnabled == "true" {
+			if terr := user.EnableMFA(tx); terr != nil {
+				return terr
+			}
 
-			} else if params.MFAEnabled == "false" {
-				if terr := user.DisableMFA(tx); terr != nil {
-					return terr
-				}
+		} else if params.MFAEnabled == "false" {
+			if terr := user.DisableMFA(tx); terr != nil {
+				return terr
 			}
 
 		}
@@ -367,47 +365,47 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, map[string]interface{}{})
 }
 
-// func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) error {
-// 	ctx := r.Context()
-// 	user := getUser(ctx)
-// 	instanceID := getInstanceID(ctx)
+func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) error {
+	// 	ctx := r.Context()
+	// 	user := getUser(ctx)
+	// 	instanceID := getInstanceID(ctx)
 
-// 	params := &AdminUserUpdateFactorStatusParams{}
-// 	jsonDecoder := json.NewDecoder(r.Body)
-// 	err := jsonDecoder.Decode(params)
-// 	if err != nil {
-// 		return badRequestError("Could not read AdminUpdateFactorStatus params: %v", err)
-// 	}
+	// 	params := &AdminUserUpdateFactorStatusParams{}
+	// 	jsonDecoder := json.NewDecoder(r.Body)
+	// 	err := jsonDecoder.Decode(params)
+	// 	if err != nil {
+	// 		return badRequestError("Could not read AdminUpdateFactorStatus params: %v", err)
+	// 	}
 
-// 	status := params.Status
-// 	switch status {
-// 	case "disabled", "unverified", "verified":
-// 		factor, terr := models.FindFactorByID(a.db, params.FactorID)
-// 		if terr != nil {
-// 			return terr
-// 		}
-// 	default:
-// 		return unprocessableEntityError("Status needs to be either 'disabled', 'unverified' or 'verified'")
-// 	}
+	// 	status := params.Status
+	// 	switch status {
+	// 	case "disabled", "unverified", "verified":
+	// 		factor, terr := models.FindFactorByID(a.db, params.FactorID)
+	// 		if terr != nil {
+	// 			return terr
+	// 		}
+	// 	default:
+	// 		return unprocessableEntityError("Status needs to be either 'disabled', 'unverified' or 'verified'")
+	// 	}
 
-// 	err = a.db.Transaction(func(tx *storage.Connection) error {
-// 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.FactorModifiedAction, r.RemoteAddr, map[string]interface{}{
-// 			"user_id":    user.ID,
-// 			"user_email": user.Email,
-// 			"user_phone": user.Phone,
-// 		}); terr != nil {
-// 			return terr
-// 		}
-// 		if terr := factor.UpdateStatus(a.db, status); terr != nil {
-// 			return internalServerError("Database error deleting user").WithInternalError(terr)
-// 		}
-// 		return nil
-// 	})
-// 	if err != nil {
-// 		return err
-// 	}
-// 	return sendJSON(w, http.StatusOK, factor)
-// }
+	// 	err = a.db.Transaction(func(tx *storage.Connection) error {
+	// 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.FactorModifiedAction, r.RemoteAddr, map[string]interface{}{
+	// 			"user_id":    user.ID,
+	// 			"user_email": user.Email,
+	// 			"user_phone": user.Phone,
+	// 		}); terr != nil {
+	// 			return terr
+	// 		}
+	// 		if terr := factor.UpdateStatus(a.db, status); terr != nil {
+	// 			return internalServerError("Database error deleting user").WithInternalError(terr)
+	// 		}
+	// 		return nil
+	// 	})
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	return sendJSON(w, http.StatusOK, nil)
+}
 
 func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -442,5 +440,11 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 		return err
 	}
 	return sendJSON(w, http.StatusOK, factor)
+
+}
+
+func (a *API) adminUserListFactors(w http.ResponseWriter, r *http.Request) error {
+
+	return sendJSON(w, http.StatusOK, nil)
 
 }
