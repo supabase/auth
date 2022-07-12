@@ -16,17 +16,17 @@ type Challenge struct {
 	VerifiedAt *time.Time `json:"verified_at" db:"verified_at"`
 }
 
-const CHALLENGE_PREFIX = "challenge"
-
 func (Challenge) TableName() string {
 	tableName := "mfa_challenges"
 	return tableName
 }
 
-func NewChallenge(factorID string) (*Challenge, error) {
+const ChallengePrefix = "challenge"
+
+func NewChallenge(factor *Factor) (*Challenge, error) {
 	challenge := &Challenge{
-		ID:       fmt.Sprintf("%s_%s", CHALLENGE_PREFIX, crypto.SecureToken()),
-		FactorID: factorID,
+		ID:       fmt.Sprintf("%s_%s", ChallengePrefix, crypto.SecureToken()),
+		FactorID: factor.ID,
 	}
 	return challenge, nil
 }
@@ -41,7 +41,7 @@ func FindChallengeByChallengeID(tx *storage.Connection, challengeID string) (*Ch
 
 func FindChallengesByFactorID(tx *storage.Connection, factorID string) ([]*Challenge, error) {
 	challenges := []*Challenge{}
-	if err := tx.Q().Where("factor_id = ?", factorID, true).All(&challenges); err != nil {
+	if err := tx.Q().Where("factor_id = ?", factorID).All(&challenges); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return challenges, nil
 		}

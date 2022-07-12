@@ -15,21 +15,21 @@ import (
 )
 
 type EnrollFactorParams struct {
-	FactorSimpleName string `json:"factor_simple_name"`
-	FactorType       string `json:"factor_type"`
-	Issuer           string `json:"issuer"`
+	FriendlyName string `json:"friendly_name"`
+	FactorType   string `json:"factor_type"`
+	Issuer       string `json:"issuer"`
 }
 
 type TOTPObject struct {
-	QRCode string
-	Secret string
-	URI    string
+	QRCode string `json:"qr_code"`
+	Secret string `json:"secret"`
+	URI    string `json:"uri"`
 }
 
 type EnrollFactorResponse struct {
-	ID        string
-	CreatedAt string
-	Type      string
+	ID        string `json:"id"`
+	CreatedAt string `json:"created_at"`
+	Type      string `json:"type"`
 	TOTP      TOTPObject
 }
 
@@ -44,17 +44,18 @@ type VerifyFactorParams struct {
 }
 
 type ChallengeFactorResponse struct {
-	ID        string
-	CreatedAt string
-	UpdatedAt string
-	ExpiresAt string
-	FactorID  string
+	ID           string `json:"id"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+	ExpiresAt    string `json:"expires_at"`
+	FactorID     string `json:"factor_id"`
+	FriendlyName string `json:"friendly_name"`
 }
 
 type VerifyFactorResponse struct {
-	ChallengeID string
-	MFAType     string
-	Success     string
+	ChallengeID string `json:"challenge_id"`
+	MFAType     string `json:"mfa_type"`
+	Success     string `json:"success"`
 }
 
 // RecoveryCodesResponse repreesnts a successful recovery code generation response
@@ -115,7 +116,7 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
-		return MFANotEnabledError
+		return forbiddenError(MFANotEnabledMsg)
 	}
 	recoveryCodeModels := []*models.RecoveryCode{}
 	var terr error
@@ -153,51 +154,45 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 }
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
-	const FACTOR_PREFIX = "factor"
-	const IMAGE_SIDE_LENGTH = 300
-	var factor *models.Factor
+	const factorPrefix = "factor"
+	const imageSideLength = 300
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
-		return MFANotEnabledError
+		return forbiddenError(MFANotEnabledMsg)
 	}
 
 	params := &EnrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
 	if err != nil {
-		return badRequestError("Could not read EnrollFactor params: %v", err)
+		return badRequestError(err.Error())
 	}
-
 	if (params.FactorType != "totp") && (params.FactorType != "webauthn") {
 		return unprocessableEntityError("FactorType needs to be either 'totp' or 'webauthn'")
 	}
-
+	// TODO(Joel): Review this portion when email is no longer a primary key
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      params.Issuer,
-		AccountName: params.Issuer,
+		AccountName: user.GetEmail(),
 	})
-
 	if err != nil {
 		return internalServerError("Error generating QR Code secret key").WithInternalError(err)
 	}
 	var buf bytes.Buffer
-
-	// Test with QRCode Encode
-	img, err := key.Image(IMAGE_SIDE_LENGTH, IMAGE_SIDE_LENGTH)
+	img, err := key.Image(imageSideLength, imageSideLength)
 	png.Encode(&buf, img)
 	if err != nil {
 		return internalServerError("Error generating QR Code image").WithInternalError(err)
 	}
 	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-	factorID := fmt.Sprintf("%s_%s", FACTOR_PREFIX, crypto.SecureToken())
-
-	factor, terr := models.NewFactor(user, params.FactorSimpleName, factorID, params.FactorType, "disabled", key.Secret())
+	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())
+	// TODO(Joel): Convert constants into an Enum in future
+	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, models.FactorDisabledState, key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}
-
 	terr = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr = tx.Create(factor); terr != nil {
 			return terr
@@ -205,10 +200,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.EnrollFactorAction, r.RemoteAddr, nil); terr != nil {
 			return terr
 		}
-
 		return nil
 	})
-
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:   factor.ID,
 		Type: factor.FactorType,
@@ -219,14 +212,13 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		},
 	})
 }
-
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
-	const CHALLENGE_EXPIRY_DURATION = 300
+	const challengeExpiryDuration = 300
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
-		return MFANotEnabledError
+		return forbiddenError(MFANotEnabledMsg)
 	}
 	var factor *models.Factor
 	var err error
@@ -245,9 +237,11 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if factorID != "" {
-		factor, err = models.FindFactorByID(a.db, factorID)
-	} else if params.FriendlyName != "" {
+		factor, err = models.FindFactorByFactorID(a.db, factorID)
+	} else if friendlyName != "" {
 		factor, err = models.FindFactorByFriendlyName(a.db, friendlyName)
+	} else {
+		return unprocessableEntityError("Either FactorID or FactorSimpleName should be provided on signup.")
 	}
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -256,7 +250,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding factor").WithInternalError(err)
 	}
 
-	challenge, terr := models.NewChallenge(factor.ID)
+	challenge, terr := models.NewChallenge(factor)
 	if terr != nil {
 		return internalServerError("Database error creating challenge").WithInternalError(err)
 	}
@@ -266,25 +260,26 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
-			"factor_id":          params.FactorID,
-			"factor_simple_name": params.FriendlyName,
+			"factor_id":     params.FactorID,
+			"friendly_name": params.FriendlyName,
+			"factor_status": factor.Status,
 		}); terr != nil {
 			return terr
 		}
 
 		return nil
 	})
-	creationTime := challenge.CreatedAt.String()
-	expiryTimeAsTimestamp, err := time.Parse(time.RFC3339, creationTime)
+	creationTime := challenge.CreatedAt
 	if err != nil {
 		return internalServerError("Error parsing database timestamp").WithInternalError(err)
 	}
 
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
-		ID:        challenge.ID,
-		CreatedAt: creationTime,
-		ExpiresAt: expiryTimeAsTimestamp.Add(time.Second * CHALLENGE_EXPIRY_DURATION).String(),
-		FactorID:  factor.ID,
+		ID:           challenge.ID,
+		CreatedAt:    creationTime.String(),
+		ExpiresAt:    creationTime.Add(time.Second * challengeExpiryDuration).String(),
+		FactorID:     factor.ID,
+		FriendlyName: factor.FriendlyName,
 	})
 }
 
@@ -294,7 +289,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
-		return MFANotEnabledError
+		return forbiddenError(MFANotEnabledMsg)
 	}
 	params := &VerifyFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)

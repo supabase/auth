@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+const FactorDisabledState = "disabled"
+const FactorUnverifiedState = "unverified"
+const FactorVerifiedState = "verified"
+
 type Factor struct {
 	ID           string    `json:"id" db:"id"`
 	User         User      `belongs_to:"user"`
@@ -37,7 +41,7 @@ func NewFactor(user *User, friendlyName, id, factorType, status, secretKey strin
 	return factor, nil
 }
 
-// FindFactorsByUser returns all factors belonging to a user
+// FindFactorsByUser returns all factors belonging to a user ordered by timestamp
 func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	factors := []*Factor{}
 	if err := tx.Q().Where("user_id = ?", user.ID).Order("created_at asc").All(&factors); err != nil {
@@ -49,9 +53,20 @@ func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	return factors, nil
 }
 
-// FindFactorByID finds a factor matching the provided ID.
-func FindFactorByID(tx *storage.Connection, factorID string) (*Factor, error) {
-	return findFactor(tx, "id = ?", factorID)
+func FindFactorByFactorID(tx *storage.Connection, factorID string) (*Factor, error) {
+	factor, err := findFactor(tx, "id = ?", factorID)
+	if err != nil {
+		return nil, FactorNotFoundError{}
+	}
+	return factor, nil
+}
+
+func FindFactorByFriendlyName(tx *storage.Connection, friendlyName string) (*Factor, error) {
+	factor, err := findFactor(tx, "friendly_name = ?", friendlyName)
+	if err != nil {
+		return nil, FactorNotFoundError{}
+	}
+	return factor, nil
 }
 
 func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Factor, error) {
@@ -77,21 +92,13 @@ func FindFactorByChallengeID(tx *storage.Connection, challengeID string) (*Facto
 	return factor, nil
 }
 
-func FindFactorByFriendlyName(tx *storage.Connection, friendlyName string) (*Factor, error) {
-	factor, err := findFactor(tx, "friendly_name = ?", friendlyName)
-	if err != nil {
-		return nil, FactorNotFoundError{}
-	}
-	return factor, nil
-}
-
 // Change the friendly name
 func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	f.FriendlyName = friendlyName
 	return tx.UpdateOnly(f, "friendly_name", "updated_at")
 }
 
-//Change the factor status
+// Change the factor status
 func (f *Factor) UpdateStatus(tx *storage.Connection, status string) error {
 	f.Status = status
 	return tx.UpdateOnly(f, "status", "updated_at")
