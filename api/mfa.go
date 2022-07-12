@@ -11,6 +11,7 @@ import (
 	"github.com/pquerna/otp/totp"
 	"image/png"
 	"net/http"
+	"time"
 )
 
 type EnrollFactorParams struct {
@@ -30,6 +31,20 @@ type EnrollFactorResponse struct {
 	CreatedAt string `json:"created_at"`
 	Type      string `json:"type"`
 	TOTP      TOTPObject
+}
+
+type ChallengeFactorParams struct {
+	FactorID     string `json:"factor_id"`
+	FriendlyName string `json:"friendly_name"`
+}
+
+type ChallengeFactorResponse struct {
+	ID           string `json:"id"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+	ExpiresAt    string `json:"expires_at"`
+	FactorID     string `json:"factor_id"`
+	FriendlyName string `json:"friendly_name"`
 }
 
 type RecoveryCodesResponse struct {
@@ -89,7 +104,7 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
-		return MFANotEnabledError
+		return forbiddenError(MFANotEnabledMsg)
 	}
 	recoveryCodeModels := []*models.RecoveryCode{}
 	var terr error
@@ -133,8 +148,9 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
-		return MFANotEnabledError
+		return forbiddenError(MFANotEnabledMsg)
 	}
+
 	params := &EnrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
@@ -182,5 +198,75 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 			Secret: factor.SecretKey,
 			URI:    key.URL(),
 		},
+	})
+}
+func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
+	const challengeExpiryDuration = 300
+	ctx := r.Context()
+	user := getUser(ctx)
+	instanceID := getInstanceID(ctx)
+	if !user.MFAEnabled {
+		return forbiddenError(MFANotEnabledMsg)
+	}
+	var factor *models.Factor
+	var err error
+
+	params := &ChallengeFactorParams{}
+	jsonDecoder := json.NewDecoder(r.Body)
+	err = jsonDecoder.Decode(params)
+	if err != nil {
+		return badRequestError("Could not read EnrollFactor params: %v", err)
+	}
+	factorID := params.FactorID
+	friendlyName := params.FriendlyName
+
+	if factorID != "" && friendlyName != "" {
+		return unprocessableEntityError("Only a FactorID or FactorSimpleName should be provided on signup.")
+	}
+
+	if factorID != "" {
+		factor, err = models.FindFactorByFactorID(a.db, factorID)
+	} else if friendlyName != "" {
+		factor, err = models.FindFactorByFriendlyName(a.db, friendlyName)
+	} else {
+		return unprocessableEntityError("Either FactorID or FactorSimpleName should be provided on signup.")
+	}
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return notFoundError(err.Error())
+		}
+		return internalServerError("Database error finding factor").WithInternalError(err)
+	}
+
+	challenge, terr := models.NewChallenge(factor)
+	if terr != nil {
+		return internalServerError("Database error creating challenge").WithInternalError(err)
+	}
+
+	terr = a.db.Transaction(func(tx *storage.Connection) error {
+		if terr = tx.Create(challenge); terr != nil {
+			return terr
+		}
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
+			"factor_id":     params.FactorID,
+			"friendly_name": params.FriendlyName,
+			"factor_status": factor.Status,
+		}); terr != nil {
+			return terr
+		}
+
+		return nil
+	})
+	creationTime := challenge.CreatedAt
+	if err != nil {
+		return internalServerError("Error parsing database timestamp").WithInternalError(err)
+	}
+
+	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
+		ID:           challenge.ID,
+		CreatedAt:    creationTime.String(),
+		ExpiresAt:    creationTime.Add(time.Second * challengeExpiryDuration).String(),
+		FactorID:     factor.ID,
+		FriendlyName: factor.FriendlyName,
 	})
 }

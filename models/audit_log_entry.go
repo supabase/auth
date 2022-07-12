@@ -30,11 +30,13 @@ const (
 	TokenRefreshedAction            AuditAction = "token_refreshed"
 	GenerateRecoveryCodesAction     AuditAction = "generate_recovery_codes"
 	EnrollFactorAction              AuditAction = "factor_enrolled"
+	CreateChallengeAction           AuditAction = "challenge_created"
 
 	account auditLogType = "account"
 	team    auditLogType = "team"
 	token   auditLogType = "token"
 	user    auditLogType = "user"
+	factor  auditLogType = "factor"
 )
 
 var actionLogTypeMap = map[AuditAction]auditLogType{
@@ -51,7 +53,8 @@ var actionLogTypeMap = map[AuditAction]auditLogType{
 	UserConfirmationRequestedAction: user,
 	UserRepeatedSignUpAction:        user,
 	GenerateRecoveryCodesAction:     user,
-	EnrollFactorAction:              user,
+	EnrollFactorAction:              factor,
+	CreateChallengeAction:           factor,
 }
 
 // AuditLogEntry is the database model for audit log entries.
