@@ -380,7 +380,7 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 	// 	status := params.Status
 	// 	switch status {
 	// 	case "disabled", "unverified", "verified":
-	// 		factor, terr := models.FindFactorByID(a.db, params.FactorID)
+	// 		factor, terr := models.FindFactorByFactorID(a.db, params.FactorID)
 	// 		if terr != nil {
 	// 			return terr
 	// 		}
@@ -419,7 +419,7 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 		return badRequestError("Could not read AdminUserDeleteFactor params: %v", err)
 	}
 
-	factor, terr := models.FindFactorByID(a.db, params.FactorID)
+	factor, terr := models.FindFactorByFactorID(a.db, params.FactorID)
 	if terr != nil {
 		return terr
 	}

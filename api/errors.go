@@ -18,7 +18,7 @@ var (
 	DuplicatePhoneMsg       = "A user with this phone number has already been registered"
 	UserExistsError   error = errors.New("User already exists")
 	// MFA Related errors
-	MFANotEnabledError error = errors.New("MFA not enabled")
+	MFANotEnabledMsg = "MFA not enabled"
 )
 
 var oauthErrorMap = map[int]string{

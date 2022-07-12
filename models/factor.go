@@ -53,9 +53,20 @@ func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	return factors, nil
 }
 
-// FindFactorByID finds a factor matching the provided ID.
-func FindFactorByID(tx *storage.Connection, factorID string) (*Factor, error) {
-	return findFactor(tx, "id = ?", factorID)
+func FindFactorByFactorID(tx *storage.Connection, factorID string) (*Factor, error) {
+	factor, err := findFactor(tx, "id = ?", factorID)
+	if err != nil {
+		return nil, FactorNotFoundError{}
+	}
+	return factor, nil
+}
+
+func FindFactorByFriendlyName(tx *storage.Connection, friendlyName string) (*Factor, error) {
+	factor, err := findFactor(tx, "friendly_name = ?", friendlyName)
+	if err != nil {
+		return nil, FactorNotFoundError{}
+	}
+	return factor, nil
 }
 
 func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Factor, error) {
