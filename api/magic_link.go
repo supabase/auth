@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
@@ -82,7 +83,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 				if err != nil {
 					return badRequestError("Could not parse metadata: %v", err)
 				}
-				r.Body = ioutil.NopCloser(strings.NewReader(string(metadata)))
+				r.Body = ioutil.NopCloser(bytes.NewReader(metadata))
 				return a.MagicLink(w, r)
 			}
 			// otherwise confirmation email already contains 'magic link'
