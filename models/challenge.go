@@ -40,3 +40,10 @@ func FindChallengesByFactorID(tx *storage.Connection, factorID string) ([]*Chall
 	}
 	return challenges, nil
 }
+
+// Returns whether challenges are still valid
+// func IsExpired(tx *storage.Connection) {
+// 	currentTime := time.Now()
+//challenge.CreatedAt.Add(expiryDuration).Before(currentTIme)
+// 	return true
+// // }

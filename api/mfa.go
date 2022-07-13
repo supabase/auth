@@ -47,6 +47,12 @@ type ChallengeFactorResponse struct {
 	FriendlyName string `json:"friendly_name"`
 }
 
+type LoginParams struct {
+}
+
+type LoginResponse struct {
+}
+
 type RecoveryCodesResponse struct {
 	RecoveryCodes []string `json:"recovery_codes"`
 }
@@ -271,7 +277,54 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-//Endpoint to handle step up login flows
+// Endpoint to handle step up login flows
 func (a *API) MFALogin(w http.ResponseWriter, r *http.Request) error {
-	return nil
+	// Check if the factor status is verified, if not return error
+	// Find the factor
+	// if factor is not verified return error
+	//
+	// Check if the challenge hasn't expried and that there's a corresponding twoFactorID which has been made in the past 5 minutes
+	// We need a separate two factor ID
+	// Logic here should be same as verify
+	//
+	//
+	// Here, after we verify and if it succeds we return the access token
+	// var tokenString string
+	// var newTokenResponse *AccessTokenResponse
+	// err = a.db.Transaction(func(tx *storage.Connection) error {
+	// 		var terr error
+	// 		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.TokenRefreshedAction, "", nil); terr != nil {
+	// 			return terr
+	// 		}
+
+	// 		if newToken == nil {
+	// 			newToken, terr = models.GrantRefreshTokenSwap(tx, user, token)
+	// 			if terr != nil {
+	// 				return internalServerError(terr.Error())
+	// 			}
+	// 		}
+
+	// 		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+	// 		if terr != nil {
+	// 			return internalServerError("error generating jwt token").WithInternalError(terr)
+	// 		}
+
+	// 		newTokenResponse = &AccessTokenResponse{
+	// 			Token:        tokenString,
+	// 			TokenType:    "bearer",
+	// 			ExpiresIn:    config.JWT.Exp,
+	// 			RefreshToken: newToken.Token,
+	// 			User:         user,
+	// 		}
+	// 		if terr = a.setCookieTokens(config, newTokenResponse, false, w); terr != nil {
+	// 			return internalServerError("Failed to set JWT cookie. %s", terr)
+	// 		}
+
+	// 		return nil
+	// 	})
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	metering.RecordLogin("token", user.ID, instanceID)
+	return sendJSON(w, http.StatusOK, nil)
 }

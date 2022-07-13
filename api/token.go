@@ -35,6 +35,7 @@ type AccessTokenResponse struct {
 	ExpiresIn    int          `json:"expires_in"`
 	RefreshToken string       `json:"refresh_token"`
 	User         *models.User `json:"user"`
+	// This would have an additional AMR field
 }
 
 // PasswordGrantParams are the parameters the ResourceOwnerPasswordGrant method accepts
@@ -216,6 +217,8 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return oauthError("invalid_grant", "Phone not confirmed")
 	}
 
+	// MFA Return here during login
+
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -318,6 +321,11 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 	var tokenString string
 	var newTokenResponse *AccessTokenResponse
+	// if user.MFAEnabled
+	// Fetch the challenge
+	// Generate a nonce for a given challenge and save it
+	// Return a separate JSON response
+	//
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error

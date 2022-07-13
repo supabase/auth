@@ -81,6 +81,10 @@ func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Fac
 	return obj, nil
 }
 
+// func (f *Factor) IsVerified(tx *storage.Connection) {
+// 	return f.Status == FactorVerifiedState
+// }
+
 // Change the friendly name
 func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	f.FriendlyName = friendlyName
