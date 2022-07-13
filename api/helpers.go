@@ -111,13 +111,38 @@ func getRedirectTo(r *http.Request) (reqref string) {
 	return
 }
 
+func parseURL(u string) (*url.URL, error) {
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return nil, err
+	}
+
+	if parsed.Scheme == "https" || parsed.Scheme == "http" {
+		// this normalizes URLs that end with just a `/` as you would
+		// get from window.location.href on the frontend, so that they
+		// would match glob rules correctly
+
+		// applied only http and https URLs as trailing slashes don't
+		// change the behavior, while in other schemes they may have
+		// another meaning
+
+		// see: https://en.wikipedia.org/wiki/URI_normalization#Normalizations_that_usually_preserve_semantics
+
+		parsed.Path = strings.TrimSuffix(parsed.Path, "/")
+	}
+
+	return parsed, nil
+}
+
 func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
 	if redirectURL == "" {
 		return false
 	}
 
-	base, berr := url.Parse(config.SiteURL)
-	refurl, rerr := url.Parse(redirectURL)
+	base, berr := parseURL(config.SiteURL)
+	refurl, rerr := parseURL(redirectURL)
+
+	matchURL := refurl.String()
 
 	// As long as the referrer came from the site, we will redirect back there
 	if berr == nil && rerr == nil && base.Hostname() == refurl.Hostname() {
@@ -128,10 +153,11 @@ func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
 	for uri, g := range config.URIAllowListMap {
 		// Only allow wildcard matching if url scheme is http(s)
 		if strings.HasPrefix(uri, "http") || strings.HasPrefix(uri, "https") {
-			if g.Match(redirectURL) {
+			if g.Match(matchURL) {
 				return true
 			}
 		} else if redirectURL == uri {
+			// checking the raw URL as this is no longer a http(s) URL
 			return true
 		}
 	}
