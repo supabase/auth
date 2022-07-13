@@ -21,15 +21,15 @@ type EnrollFactorParams struct {
 }
 
 type TOTPObject struct {
-	QRCode string
-	Secret string
-	URI    string
+	QRCode string `json:"qr_code"`
+	Secret string `json:"secret"`
+	URI    string `json:"uri"`
 }
 
 type EnrollFactorResponse struct {
-	ID        string
-	CreatedAt string
-	Type      string
+	ID        string `json:"id"`
+	CreatedAt string `json:"created_at"`
+	Type      string `json:"type"`
 	TOTP      TOTPObject
 }
 
@@ -39,12 +39,12 @@ type ChallengeFactorParams struct {
 }
 
 type ChallengeFactorResponse struct {
-	ID           string
-	CreatedAt    string
-	UpdatedAt    string
-	ExpiresAt    string
-	FactorID     string
-	FriendlyName string
+	ID           string `json:"id"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+	ExpiresAt    string `json:"expires_at"`
+	FactorID     string `json:"factor_id"`
+	FriendlyName string `json:"friendly_name"`
 }
 
 type RecoveryCodesResponse struct {
@@ -104,7 +104,7 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
-		forbiddenError(MFANotEnabledMsg)
+		return forbiddenError(MFANotEnabledMsg)
 	}
 	recoveryCodeModels := []*models.RecoveryCode{}
 	var terr error
@@ -155,7 +155,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
 	if err != nil {
-		return badRequestError("Could not read EnrollFactor params: %v", err)
+		return badRequestError(err.Error())
 	}
 	if (params.FactorType != "totp") && (params.FactorType != "webauthn") {
 		return unprocessableEntityError("FactorType needs to be either 'totp' or 'webauthn'")

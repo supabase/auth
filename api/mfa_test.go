@@ -93,7 +93,7 @@ func (ts *MFATestSuite) TestMFARecoveryCodeGeneration() {
 	require.NoError(ts.T(), err)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/mfa/%s/generate_recovery_codes", user.ID), nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/mfa/%s/recovery_codes", user.ID), nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
@@ -149,7 +149,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			token, err := generateAccessToken(user, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/enroll_factor", user.ID), &buffer)
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/factor", user.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			req.Header.Set("Content-Type", "application/json")
 			ts.API.handler.ServeHTTP(w, req)
@@ -228,7 +228,7 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 				"friendly_name": c.friendlyName,
 			}))
 
-			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/mfa/%s/challenge_factor", u.ID), &buffer)
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/mfa/%s/challenge", u.ID), &buffer)
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
