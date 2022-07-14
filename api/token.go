@@ -479,6 +479,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				isEmailVerified = getEmailVerified(emailVerified)
 			}
 			if (!ok || !isEmailVerified) && !config.Mailer.Autoconfirm {
+
 				mailer := a.Mailer(ctx)
 				referrer := a.getReferrer(r)
 				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {

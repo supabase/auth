@@ -520,5 +520,60 @@ func (u *User) IsBanned() bool {
 
 func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
 	return tx.UpdateOnly(u, "banned_until")
+}
 
+// RemoveUnconfirmedIdentities removes potentially malicious unconfirmed identities from a user (if any)
+func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection) error {
+	if u.IsConfirmed() {
+		return nil
+	}
+
+	u.EncryptedPassword = ""
+
+	if terr := tx.UpdateOnly(u, "encrypted_password"); terr != nil {
+		return terr
+	}
+
+	if providersList, ok := u.AppMetaData["providers"].([]string); ok {
+		// user has "providers" metadata, and the "email" provider
+		// should be removed from it
+
+		var confirmedProviders []string
+
+		for _, provider := range providersList {
+			if provider != "email" {
+				confirmedProviders = append(confirmedProviders, provider)
+			}
+		}
+
+		u.AppMetaData["providers"] = confirmedProviders
+
+		if len(confirmedProviders) > 0 {
+			u.AppMetaData["provider"] = confirmedProviders[0]
+		} else {
+			u.AppMetaData["provider"] = nil
+		}
+
+		if terr := u.UpdateAppMetaData(tx, u.AppMetaData); terr != nil {
+			return terr
+		}
+	}
+
+	// finally, remove any identity with the "email" provider
+
+	var confirmedProviders []Identity
+
+	for _, identity := range u.Identities {
+		if identity.Provider == "email" {
+			if terr := tx.Destroy(&identity); terr != nil {
+				return terr
+			}
+		} else {
+			confirmedProviders = append(confirmedProviders, identity)
+		}
+	}
+
+	u.Identities = confirmedProviders
+
+	return nil
 }
