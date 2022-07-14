@@ -133,3 +133,25 @@ func (ts *RecoverTestSuite) TestRecover_NewEmailSent() {
 	// ensure it sent a new email
 	assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
 }
+
+func (ts *RecoverTestSuite) TestRecover_NoSideChannelLeak() {
+	email := "doesntexist@example.com"
+
+	_, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, email, ts.Config.JWT.Aud)
+	require.True(ts.T(), models.IsNotFoundError(err), "User with email %s does exist", email)
+
+	// Request body
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": email,
+	}))
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/recover", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Setup response recorder
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+}
