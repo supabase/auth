@@ -73,6 +73,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	hashedToken := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+otp)))
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
@@ -80,7 +81,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
 			}
-			user.RecoveryToken = fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+otp)))
+			user.RecoveryToken = hashedToken
 			user.RecoverySentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
 		case "invite":
@@ -106,7 +107,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			}); terr != nil {
 				return terr
 			}
-			user.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+otp)))
+			user.ConfirmationToken = hashedToken
 			user.ConfirmationSentAt = &now
 			user.InvitedAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at", "invited_at"), "Database error updating user for invite")
@@ -137,7 +138,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			}
-			user.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+otp)))
+			user.ConfirmationToken = hashedToken
 			user.ConfirmationSentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at"), "Database error updating user for confirmation")
 		default:
@@ -168,6 +169,10 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("User serialization error").WithInternalError(err)
 	}
 	resp["action_link"] = url
+	resp["email_otp"] = otp
+	resp["hashed_token"] = hashedToken
+	resp["verification_type"] = params.Type
+	resp["redirect_to"] = referrer
 
 	return sendJSON(w, http.StatusOK, resp)
 }
