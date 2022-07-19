@@ -24,5 +24,6 @@ COPY --from=build /go/src/github.com/netlify/gotrue/migrations /usr/local/etc/go
 
 ENV GOTRUE_DB_MIGRATIONS_PATH /usr/local/etc/gotrue/migrations
 
+
 USER netlify
 CMD ["gotrue"]
