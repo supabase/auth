@@ -55,9 +55,12 @@ func migrate(cmd *cobra.Command, args []string) {
 	}
 
 	u, err := url.Parse(globalConfig.DB.URL)
-
 	processedUrl := globalConfig.DB.URL
-
+	if len(u.Query()) != 0 {
+		processedUrl = fmt.Sprintf("%s&application_name=gotrue_migrations", processedUrl)
+	} else {
+		processedUrl = fmt.Sprintf("%s?application_name=gotrue_migrations", processedUrl)
+	}
 	deets := &pop.ConnectionDetails{
 		Dialect: globalConfig.DB.Driver,
 		URL:     processedUrl,
