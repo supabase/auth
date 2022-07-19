@@ -73,10 +73,23 @@ type GlobalConfiguration struct {
 	MultiInstanceMode     bool
 	Tracing               TracingConfig
 	SMTP                  SMTPConfiguration
-	RateLimitHeader       string  `split_words:"true"`
-	RateLimitEmailSent    float64 `split_words:"true" default:"30"`
-	RateLimitVerify       float64 `split_words:"true" default:"30"`
-	RateLimitTokenRefresh float64 `split_words:"true" default:"30"`
+	RateLimitHeader       string            `split_words:"true"`
+	RateLimitEmailSent    float64           `split_words:"true" default:"30"`
+	RateLimitVerify       float64           `split_words:"true" default:"30"`
+	RateLimitTokenRefresh float64           `split_words:"true" default:"30"`
+	SAML                  SAMLConfiguration `json:"saml"`
+}
+
+func (c *GlobalConfiguration) ApplyDefaults() error {
+	if c.SAML.Enabled {
+		if err := c.SAML.PopulateFields(c.API.ExternalURL); err != nil {
+			return err
+		}
+	} else {
+		c.SAML.PrivateKey = ""
+	}
+
+	return nil
 }
 
 // EmailContentConfiguration holds the configuration for emails, both subjects and template URLs.
@@ -258,6 +271,11 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 	if config.SMTP.MaxFrequency == 0 {
 		config.SMTP.MaxFrequency = 1 * time.Minute
 	}
+
+	if err := config.ApplyDefaults(); err != nil {
+		return nil, err
+	}
+
 	return config, nil
 }
 
@@ -271,12 +289,16 @@ func LoadConfig(filename string) (*Configuration, error) {
 	if err := envconfig.Process("gotrue", config); err != nil {
 		return nil, err
 	}
-	config.ApplyDefaults()
+
+	if err := config.ApplyDefaults(); err != nil {
+		return nil, err
+	}
+
 	return config, nil
 }
 
 // ApplyDefaults sets defaults for a Configuration
-func (config *Configuration) ApplyDefaults() {
+func (config *Configuration) ApplyDefaults() error {
 	if config.JWT.AdminGroupName == "" {
 		config.JWT.AdminGroupName = "admin"
 	}
@@ -360,6 +382,8 @@ func (config *Configuration) ApplyDefaults() {
 	if config.PasswordMinLength < defaultMinPasswordLength {
 		config.PasswordMinLength = defaultMinPasswordLength
 	}
+
+	return nil
 }
 
 func (config *Configuration) Value() (driver.Value, error) {
