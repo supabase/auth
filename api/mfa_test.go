@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"encoding/base32"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -248,16 +247,21 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 
-	f, err := models.NewFactor(u, "testSimpleName", "testFactorID2", "totp", models.FactorDisabledState, "secretkey")
+
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      "Example.com",
+		AccountName: "alice@example.com",
+	})
+
+	f, err := models.NewFactor(u, "testSimpleName", "testFactorID2", "totp", models.FactorDisabledState, key.Secret())
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 
 	c, err := models.NewChallenge(f)
 	require.NoError(ts.T(), err, "Error creating test Challenge model")
 	require.NoError(ts.T(), ts.API.db.Create(c), "Error saving new test challenge")
-	//TOTP library takes in base32 string
-	secret := base32.StdEncoding.EncodeToString([]byte(f.SecretKey))
-	code, err := totp.GenerateCode(secret, time.Now().UTC())
+	// TOTP library takes in base32 string
+	code, err := totp.GenerateCode(key.Secret(), time.Now().UTC())
 	require.NoError(ts.T(), err)
 
 	var buffer bytes.Buffer
@@ -265,20 +269,20 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 		"challenge_id": c.ID,
 		"code":         code,
 	}))
-	// user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-	// ts.Require().NoError(err)
-	// require.NoError(ts.T(), user.EnableMFA(ts.API.db))
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	ts.Require().NoError(err)
+	require.NoError(ts.T(), user.EnableMFA(ts.API.db))
 
-	// token, err := generateAccessToken(user, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	// require.NoError(ts.T(), err)
+	token, err := generateAccessToken(user, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	require.NoError(ts.T(), err)
 
-	// w := httptest.NewRecorder()
-	// req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/verify", user.ID), &buffer)
-	// req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	// ts.API.handler.ServeHTTP(w, req)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/verify", user.ID), &buffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	ts.API.handler.ServeHTTP(w, req)
 	// TODO(Joel) -- Must fix this -- figure out how to fix the totp code value generated so that we can test this
-	// require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	// data := make(map[string]interface{})
-	// require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	data := make(map[string]interface{})
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 }
