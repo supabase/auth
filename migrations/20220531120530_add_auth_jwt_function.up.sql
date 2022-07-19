@@ -1,10 +1,10 @@
--- add auth.jwt function
+-- add jwt function
 
-comment on function auth.uid() is 'Deprecated. Use auth.jwt() -> ''sub'' instead.';
-comment on function auth.role() is 'Deprecated. Use auth.jwt() -> ''role'' instead.';
-comment on function auth.email() is 'Deprecated. Use auth.jwt() -> ''email'' instead.';
+comment on function uid() is 'Deprecated. Use jwt() -> ''sub'' instead.';
+comment on function role() is 'Deprecated. Use jwt() -> ''role'' instead.';
+comment on function email() is 'Deprecated. Use jwt() -> ''email'' instead.';
 
-create or replace function auth.jwt()
+create or replace function jwt()
 returns jsonb
 language sql stable
 as $$

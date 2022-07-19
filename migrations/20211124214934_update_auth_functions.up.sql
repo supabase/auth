@@ -1,6 +1,6 @@
 -- update auth functions
 
-create or replace function auth.uid() 
+create or replace function uid()
 returns uuid 
 language sql stable
 as $$
@@ -11,7 +11,7 @@ as $$
 	)::uuid
 $$;
 
-create or replace function auth.role() 
+create or replace function role()
 returns text 
 language sql stable
 as $$
@@ -22,7 +22,7 @@ as $$
 	)::text
 $$;
 
-create or replace function auth.email() 
+create or replace function email()
 returns text 
 language sql stable
 as $$

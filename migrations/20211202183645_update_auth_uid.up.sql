@@ -1,6 +1,6 @@
--- update auth.uid()
+-- update uid()
 
-create or replace function auth.uid()
+create or replace function uid()
 returns uuid
 language sql stable
 as $$

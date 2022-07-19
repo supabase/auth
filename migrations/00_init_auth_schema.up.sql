@@ -1,6 +1,6 @@
--- auth.users definition
+-- users definition
 
-CREATE TABLE IF NOT EXISTS auth.users (
+CREATE TABLE IF NOT EXISTS users (
 	instance_id uuid NULL,
 	id uuid NOT NULL UNIQUE,
 	aud varchar(255) NULL,
@@ -24,13 +24,13 @@ CREATE TABLE IF NOT EXISTS auth.users (
 	updated_at timestamptz NULL,
 	CONSTRAINT users_pkey PRIMARY KEY (id)
 );
-CREATE INDEX IF NOT EXISTS users_instance_id_email_idx ON auth.users USING btree (instance_id, email);
-CREATE INDEX IF NOT EXISTS users_instance_id_idx ON auth.users USING btree (instance_id);
-comment on table auth.users is 'Auth: Stores user login data within a secure schema.';
+CREATE INDEX IF NOT EXISTS users_instance_id_email_idx ON users USING btree (instance_id, email);
+CREATE INDEX IF NOT EXISTS users_instance_id_idx ON users USING btree (instance_id);
+comment on table users is 'Auth: Stores user login data within a secure schema.';
 
--- auth.refresh_tokens definition
+-- refresh_tokens definition
 
-CREATE TABLE IF NOT EXISTS auth.refresh_tokens (
+CREATE TABLE IF NOT EXISTS refresh_tokens (
 	instance_id uuid NULL,
 	id bigserial NOT NULL,
 	"token" varchar(255) NULL,
@@ -40,14 +40,14 @@ CREATE TABLE IF NOT EXISTS auth.refresh_tokens (
 	updated_at timestamptz NULL,
 	CONSTRAINT refresh_tokens_pkey PRIMARY KEY (id)
 );
-CREATE INDEX IF NOT EXISTS refresh_tokens_instance_id_idx ON auth.refresh_tokens USING btree (instance_id);
-CREATE INDEX IF NOT EXISTS refresh_tokens_instance_id_user_id_idx ON auth.refresh_tokens USING btree (instance_id, user_id);
-CREATE INDEX IF NOT EXISTS refresh_tokens_token_idx ON auth.refresh_tokens USING btree (token);
-comment on table auth.refresh_tokens is 'Auth: Store of tokens used to refresh JWT tokens once they expire.';
+CREATE INDEX IF NOT EXISTS refresh_tokens_instance_id_idx ON refresh_tokens USING btree (instance_id);
+CREATE INDEX IF NOT EXISTS refresh_tokens_instance_id_user_id_idx ON refresh_tokens USING btree (instance_id, user_id);
+CREATE INDEX IF NOT EXISTS refresh_tokens_token_idx ON refresh_tokens USING btree (token);
+comment on table refresh_tokens is 'Auth: Store of tokens used to refresh JWT tokens once they expire.';
 
--- auth.instances definition
+-- instances definition
 
-CREATE TABLE IF NOT EXISTS auth.instances (
+CREATE TABLE IF NOT EXISTS instances (
 	id uuid NOT NULL,
 	uuid uuid NULL,
 	raw_base_config text NULL,
@@ -55,34 +55,34 @@ CREATE TABLE IF NOT EXISTS auth.instances (
 	updated_at timestamptz NULL,
 	CONSTRAINT instances_pkey PRIMARY KEY (id)
 );
-comment on table auth.instances is 'Auth: Manages users across multiple sites.';
+comment on table instances is 'Auth: Manages users across multiple sites.';
 
--- auth.audit_log_entries definition
+-- audit_log_entries definition
 
-CREATE TABLE IF NOT EXISTS auth.audit_log_entries (
+CREATE TABLE IF NOT EXISTS audit_log_entries (
 	instance_id uuid NULL,
 	id uuid NOT NULL,
 	payload json NULL,
 	created_at timestamptz NULL,
 	CONSTRAINT audit_log_entries_pkey PRIMARY KEY (id)
 );
-CREATE INDEX IF NOT EXISTS audit_logs_instance_id_idx ON auth.audit_log_entries USING btree (instance_id);
-comment on table auth.audit_log_entries is 'Auth: Audit trail for user actions.';
+CREATE INDEX IF NOT EXISTS audit_logs_instance_id_idx ON audit_log_entries USING btree (instance_id);
+comment on table audit_log_entries is 'Auth: Audit trail for user actions.';
 
--- auth.schema_migrations definition
+-- schema_migrations definition
 
-CREATE TABLE IF NOT EXISTS auth.schema_migrations (
+CREATE TABLE IF NOT EXISTS schema_migrations (
 	"version" varchar(255) NOT NULL,
 	CONSTRAINT schema_migrations_pkey PRIMARY KEY ("version")
 );
-comment on table auth.schema_migrations is 'Auth: Manages updates to the auth system.';
+comment on table schema_migrations is 'Auth: Manages updates to the auth system.';
 		
 -- Gets the User ID from the request cookie
-create or replace function auth.uid() returns uuid as $$
+create or replace function uid() returns uuid as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
 $$ language sql stable;
 
 -- Gets the User ID from the request cookie
-create or replace function auth.role() returns text as $$
+create or replace function role() returns text as $$
   select nullif(current_setting('request.jwt.claim.role', true), '')::text;
 $$ language sql stable;
