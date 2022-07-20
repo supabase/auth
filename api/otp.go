@@ -72,16 +72,17 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	if !config.External.Phone.Enabled {
 		return badRequestError("Unsupported phone provider")
 	}
-	// TODO(Joel): Block for non-Twilio SMS providers
-	if params.Phone != "" && params.Channel == "" {
-		params.Channel = "sms"
-	}
 
 	instanceID := getInstanceID(ctx)
 	params := &SmsParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	if err := jsonDecoder.Decode(params); err != nil {
 		return badRequestError("Could not read sms otp params: %v", err)
+	}
+
+	// TODO(Joel): Block for non-Twilio SMS providers
+	if params.Phone != "" && params.Channel == "" {
+		params.Channel = "sms"
 	}
 
 	var err error
