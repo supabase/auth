@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -160,7 +161,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			factors, err := models.FindFactorsByUser(ts.API.db, user)
 			ts.Require().NoError(err)
 			latestFactor := factors[len(factors)-1]
-			require.Equal(ts.T(), "disabled", latestFactor.Status)
+			require.Equal(ts.T(), models.FactorDisabledState, latestFactor.Status)
 			if c.FriendlyName != "" {
 				require.Equal(ts.T(), c.FriendlyName, latestFactor.FriendlyName)
 			}
@@ -243,35 +244,41 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 }
 
 func (ts *MFATestSuite) TestMFAVerifyFactor() {
-	u, err := models.NewUser(ts.instanceID, "1234567891", "test123@example.com", "password", ts.Config.JWT.Aud, nil)
+	testEmail := "test123@Example.com"
+	testDomain := strings.Split(testEmail, "@")[1]
+	testFactorType := "totp"
+
+	// Create a User with MFA enabled
+	u, err := models.NewUser(ts.instanceID, "1234567891", testEmail, "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+	require.NoError(ts.T(), u.EnableMFA(ts.API.db))
 
-
+	// Enroll a factor
 	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      "Example.com",
-		AccountName: "alice@example.com",
+		Issuer:      testDomain,
+		AccountName: testEmail,
 	})
-
-	f, err := models.NewFactor(u, "testSimpleName", "testFactorID2", "totp", models.FactorDisabledState, key.Secret())
+	sharedSecret := key.Secret()
+	f, err := models.NewFactor(u, "testSimpleName", "testFactorID2", testFactorType, models.FactorDisabledState, sharedSecret)
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 
+	// Make a challenge
 	c, err := models.NewChallenge(f)
 	require.NoError(ts.T(), err, "Error creating test Challenge model")
 	require.NoError(ts.T(), ts.API.db.Create(c), "Error saving new test challenge")
-	// TOTP library takes in base32 string
-	code, err := totp.GenerateCode(key.Secret(), time.Now().UTC())
-	require.NoError(ts.T(), err)
 
+	// Verify the user
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, testEmail, ts.Config.JWT.Aud)
+	ts.Require().NoError(err)
+	code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
+	require.NoError(ts.T(), err)
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"challenge_id": c.ID,
 		"code":         code,
 	}))
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-	ts.Require().NoError(err)
-	require.NoError(ts.T(), user.EnableMFA(ts.API.db))
 
 	token, err := generateAccessToken(user, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
@@ -280,9 +287,12 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/verify", user.ID), &buffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	ts.API.handler.ServeHTTP(w, req)
-	// TODO(Joel) -- Must fix this -- figure out how to fix the totp code value generated so that we can test this
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	data := make(map[string]interface{})
+	// Check response
+	data := VerifyFactorResponse{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.Equal(ts.T(), data.ChallengeID, c.ID)
+	require.Equal(ts.T(), data.MFAType, testFactorType)
+	require.Equal(ts.T(), data.Success, "true")
 }

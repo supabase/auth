@@ -295,7 +295,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	jsonDecoder := json.NewDecoder(r.Body)
 	err = jsonDecoder.Decode(params)
 	if err != nil {
-		return badRequestError("Could not read VerifyFactor params: %v", err)
+		return badRequestError("Please check the params passed into VerifyFactor: %v", err)
 	}
 	factor, err := models.FindFactorByChallengeID(a.db, params.ChallengeID)
 	if err != nil {
@@ -323,13 +323,11 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if err = challenge.Verify(a.db); err != nil {
 			return err
 		}
-		// TODO: Joel -- substitute this with status constants once main branch is merged in
-		if factor.Status != "verified" {
-			if err = factor.UpdateStatus(a.db, "verified"); err != nil {
+		if factor.Status != models.FactorVerifiedState {
+			if err = factor.UpdateStatus(a.db, models.FactorVerifiedState); err != nil {
 				return err
 			}
 		}
-
 		return nil
 	})
 	valid := totp.Validate(params.Code, factor.SecretKey)
