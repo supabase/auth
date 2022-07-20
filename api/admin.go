@@ -374,7 +374,7 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 	// 	jsonDecoder := json.NewDecoder(r.Body)
 	// 	err := jsonDecoder.Decode(params)
 	// 	if err != nil {
-	// 		return badRequestError("Could not read AdminUpdateFactorStatus params: %v", err)
+	// 		return badRequestError("Invalid parameters: Please recheck request parameters: %v", err)
 	// 	}
 
 	// 	status := params.Status
@@ -416,7 +416,7 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
 	if err != nil {
-		return badRequestError("Could not read AdminUserDeleteFactor params: %v", err)
+		return badRequestError("Invalid parameters: Please re-check request parameters: %v", err)
 	}
 
 	factor, terr := models.FindFactorByFactorID(a.db, params.FactorID)
@@ -444,6 +444,12 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 }
 
 func (a *API) adminUserListFactors(w http.ResponseWriter, r *http.Request) error {
+
+	return sendJSON(w, http.StatusOK, nil)
+
+}
+
+func (a *API) adminUserUpdateRecoveryCodes(w http.ResponseWriter, r *http.Request) error {
 
 	return sendJSON(w, http.StatusOK, nil)
 
