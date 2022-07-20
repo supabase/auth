@@ -58,7 +58,7 @@ type VerifyFactorResponse struct {
 	Success     string `json:"success"`
 }
 
-// RecoveryCodesResponse repreesnts a successful recovery code generation response
+// RecoveryCodesResponse represents a successful recovery code generation response
 type RecoveryCodesResponse struct {
 	RecoveryCodes []string `json:"recovery_codes"`
 }
