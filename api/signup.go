@@ -23,6 +23,7 @@ type SignupParams struct {
 	Data     map[string]interface{} `json:"data"`
 	Provider string                 `json:"-"`
 	Aud      string                 `json:"-"`
+	Channel  string                 `json:"channel"`
 }
 
 // Signup is the endpoint for registering a new user
@@ -57,6 +58,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
+	}
+	if params.Channel != "sms" && params.Channel != "whatsapp" {
+		params.Channel = "sms"
 	}
 
 	var user *models.User
@@ -164,7 +168,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
-				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider); terr != nil {
+				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
 			}

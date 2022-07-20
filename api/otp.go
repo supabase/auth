@@ -18,11 +18,13 @@ type OtpParams struct {
 	Email      string `json:"email"`
 	Phone      string `json:"phone"`
 	CreateUser bool   `json:"create_user"`
+	Channel    string `json:"channel"`
 }
 
 // SmsParams contains the request body params for sms otp
 type SmsParams struct {
-	Phone string `json:"phone"`
+	Phone   string `json:"phone"`
+	Channel string `json:"channel"`
 }
 
 // Otp returns the MagicLink or SmsOtp handler based on the request body params
@@ -40,6 +42,9 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	}
 	if params.Email != "" && params.Phone != "" {
 		return badRequestError("Only an email address or phone number should be provided")
+	}
+	if params.Email != "" && params.Channel != "" {
+		return badRequestError("Channel should only be specified with Phone OTP")
 	}
 
 	r.Body = ioutil.NopCloser(strings.NewReader(string(body)))
@@ -66,6 +71,10 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 
 	if !config.External.Phone.Enabled {
 		return badRequestError("Unsupported phone provider")
+	}
+	// TODO(Joel): Block for non-Twilio SMS providers
+	if params.Phone != "" && params.Channel == "" {
+		params.Channel = "sms"
 	}
 
 	instanceID := getInstanceID(ctx)
@@ -124,7 +133,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return badRequestError("Error sending sms: %v", terr)
 		}
-		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider); err != nil {
+		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); err != nil {
 			return badRequestError("Error sending sms otp: %v", err)
 		}
 		return nil
