@@ -46,8 +46,6 @@ func (t *VonageProvider) SendMessage(phone string, message string, messageType s
 	switch messageType {
 	case "sms":
 		return t.SendSms(phone, message)
-	case "whatsapp":
-		return t.SendWhatsappMessage(phone, message)
 	default:
 		return nil
 	}
@@ -59,49 +57,6 @@ func (t *VonageProvider) SendSms(phone string, message string) error {
 		"from":       {t.Config.From},
 		"to":         {phone},
 		"text":       {message},
-		"api_key":    {t.Config.ApiKey},
-		"api_secret": {t.Config.ApiSecret},
-	}
-
-	client := &http.Client{Timeout: defaultTimeout}
-	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
-	if err != nil {
-		return err
-	}
-
-	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	res, err := client.Do(r)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-
-	resp := &VonageResponse{}
-	derr := json.NewDecoder(res.Body).Decode(resp)
-	if derr != nil {
-		return derr
-	}
-
-	if len(resp.Messages) <= 0 {
-		return errors.New("Vonage error: Internal Error")
-	}
-
-	// A status of zero indicates success; a non-zero value means something went wrong.
-	if resp.Messages[0].Status != "0" {
-		return fmt.Errorf("Vonage error: %v (status: %v)", resp.Messages[0].ErrorText, resp.Messages[0].Status)
-	}
-
-	return nil
-}
-
-// TODO(Joel)-- convert so that it conforms to API
-// Send a Whatsapp Message containing the OTP with Vonage's API
-func (t *VonageProvider) SendWhatsappMessage(phone string, message string) error {
-	body := url.Values{
-		"from":       {t.Config.From},
-		"to":         {phone},
-		"text":       {message},
-		"channel":    {"whatsapp"},
 		"api_key":    {t.Config.ApiKey},
 		"api_secret": {t.Config.ApiSecret},
 	}

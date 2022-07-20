@@ -47,8 +47,6 @@ func (t *TextlocalProvider) SendMessage(phone string, message string, messageTyp
 	switch messageType {
 	case "sms":
 		return t.SendSms(phone, message)
-	case "whatsapp":
-		return t.SendWhatsappMessage(phone, message)
 	default:
 		return nil
 	}
@@ -56,45 +54,6 @@ func (t *TextlocalProvider) SendMessage(phone string, message string, messageTyp
 
 // Send an SMS containing the OTP with Textlocal's API
 func (t *TextlocalProvider) SendSms(phone string, message string) error {
-	body := url.Values{
-		"sender":  {t.Config.Sender},
-		"apikey":  {t.Config.ApiKey},
-		"message": {message},
-		"numbers": {phone},
-	}
-
-	client := &http.Client{Timeout: defaultTimeout}
-	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
-	if err != nil {
-		return err
-	}
-
-	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	res, err := client.Do(r)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-
-	resp := &TextlocalResponse{}
-	derr := json.NewDecoder(res.Body).Decode(resp)
-	if derr != nil {
-		return derr
-	}
-
-	if len(resp.Errors) == 0 {
-		return errors.New("Textlocal error: Internal Error")
-	}
-
-	if resp.Status != "success" {
-		return fmt.Errorf("Textlocal error: %v (code: %v)", resp.Errors[0].Message, resp.Errors[0].Code)
-	}
-
-	return nil
-}
-
-// TODO(Joel): Check API and update
-func (t *TextlocalProvider) SendWhatsappMessage(phone string, message string) error {
 	body := url.Values{
 		"sender":  {t.Config.Sender},
 		"apikey":  {t.Config.ApiKey},
