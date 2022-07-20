@@ -213,8 +213,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
-	const challengeExpiryDuration = 300
 	ctx := r.Context()
+	config := a.getConfig(ctx)
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
@@ -277,7 +277,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:           challenge.ID,
 		CreatedAt:    creationTime.String(),
-		ExpiresAt:    creationTime.Add(time.Second * challengeExpiryDuration).String(),
+		ExpiresAt:    creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)).String(),
 		FactorID:     factor.ID,
 		FriendlyName: factor.FriendlyName,
 	})
@@ -286,6 +286,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
+	config := a.getConfig(ctx)
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
@@ -312,6 +313,10 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 
 	}
+	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
+	if hasExpired {
+		return expiredChallengeError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
+	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if err = models.NewAuditLogEntry(tx, instanceID, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
@@ -331,7 +336,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	})
 	valid := totp.Validate(params.Code, factor.SecretKey)
-	if valid != true {
+	if !valid {
 		return unauthorizedError("Invalid code entered")
 	}
 
