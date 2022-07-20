@@ -55,6 +55,9 @@ func (ts *OtpTestSuite) TestOtp() {
 			OtpParams{
 				Email:      "test@example.com",
 				CreateUser: true,
+				Metadata: map[string]interface{}{
+					"somedata": "metadata",
+				},
 			},
 			struct {
 				code     int
