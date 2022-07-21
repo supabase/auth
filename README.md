@@ -484,7 +484,7 @@ Controls the number of digits of the sms otp sent.
 
 `SMS_PROVIDER` - `string`
 
-Available options are: `twilio`, `messagebird`, `textlocal`, and `vonage`
+Available options are: `twilio`, `messagebird`, `vonage`, `textlocal`, and `custom`
 
 Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/requests-to-twilio#credentials):
 
@@ -495,6 +495,11 @@ Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/req
 Or Messagebird credentials, which can be obtained in the [Dashboard](https://dashboard.messagebird.com/en/developers/access):
 - `SMS_MESSAGEBIRD_ACCESS_KEY` - your Messagebird access key
 - `SMS_MESSAGEBIRD_ORIGINATOR` - SMS sender (your Messagebird phone number with + or company name)
+
+Alternatively you can use a custom SMS gateway:
+- `SMS_CUSTOM_URL` - the URL of your SMS gateway
+- `SMS_CUSTOM_SENDER` - sender number
+- `SMS_CUSTOM_ACCESS_TOKEN` - optional token added to the `Authorization` header
 
 ### CAPTCHA
 
