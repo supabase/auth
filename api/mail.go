@@ -73,7 +73,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	hashedToken := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+otp)))
+	hashedToken := fmt.Sprintf("%x", sha256.Sum224([]byte(params.Email+otp)))
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
