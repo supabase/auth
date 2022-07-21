@@ -244,7 +244,6 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 }
 
 func (ts *MFATestSuite) TestMFAVerifyFactor() {
-	// TODO(Joel): test for cases where challenge has expired and code is invalid
 	cases := []struct {
 		desc             string
 		validChallenge   bool
