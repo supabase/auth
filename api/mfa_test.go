@@ -298,8 +298,10 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), ts.API.db.Create(c), "Error saving new test challenge")
 			if !v.validChallenge {
 				// Set challenge creation so that it has expired in present time.
-				c.CreatedAt = time.Now().UTC().Add(-1 * time.Second * time.Duration(ts.Config.MFA.ChallengeExpiryDuration+1))
-				require.NoError(ts.T(), ts.API.db.Update(c), "Error updating new test challenge")
+				newCreatedAt := time.Now().UTC().Add(-1 * time.Second * time.Duration(ts.Config.MFA.ChallengeExpiryDuration+1))
+				// created_at is managed by buffalo(ORM) needs to be raw query toe be updated
+				err := ts.API.db.RawQuery("UPDATE auth.mfa_challenges SET created_at = ? WHERE factor_id = ?", newCreatedAt, f.ID).Exec()
+				require.NoError(ts.T(), err, "Error updating new test challenge")
 			}
 
 			// Verify the user
