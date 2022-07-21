@@ -292,12 +292,14 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	if !user.MFAEnabled {
 		return forbiddenError(MFANotEnabledMsg)
 	}
+
 	params := &VerifyFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err = jsonDecoder.Decode(params)
 	if err != nil {
 		return badRequestError("Please check the params passed into VerifyFactor: %v", err)
 	}
+
 	factor, err := models.FindFactorByChallengeID(a.db, params.ChallengeID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -305,6 +307,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return internalServerError("Database error finding factor").WithInternalError(err)
 	}
+
 	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -337,7 +340,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 	valid := totp.Validate(params.Code, factor.SecretKey)
 	if !valid {
-		return unauthorizedError("Invalid code entered")
+		return unauthorizedError("Invalid TOTP code entered")
 	}
 
 	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
