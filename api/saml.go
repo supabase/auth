@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/crewjam/saml"
 	"github.com/crewjam/saml/samlsp"
@@ -15,11 +14,9 @@ import (
 func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor) *saml.ServiceProvider {
 	externalURL, err := url.ParseRequestURI(a.config.API.ExternalURL)
 	if err != nil {
+		// this should not fail as a.config should have been validated using #Validate()
 		panic(err)
 	}
-
-	externalURL.Path = strings.TrimSuffix(externalURL.Path, "/")
-	externalURL.Path += "/auth/v1/"
 
 	provider := samlsp.DefaultServiceProvider(samlsp.Options{
 		URL:         *externalURL,
