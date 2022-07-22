@@ -58,19 +58,3 @@ func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.User
 	}
 	return userData, nil
 }
-
-// SAMLMetadata returns metadata information about the SAML provider
-func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	config := getConfig(ctx)
-
-	samlProvider, err := provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
-	if err != nil {
-		return internalServerError("Could not create SAML Provider: %+v", err).WithInternalError(err)
-	}
-
-	metadata, err := samlProvider.SPMetadata()
-	w.Header().Set("Content-Type", "application/xml")
-	w.Write(metadata)
-	return nil
-}

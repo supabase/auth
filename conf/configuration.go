@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
 	"time"
 
@@ -47,6 +48,10 @@ type DBConfiguration struct {
 	MigrationsPath string `json:"migrations_path" split_words:"true" default:"./migrations"`
 }
 
+func (c *DBConfiguration) Validate() error {
+	return nil
+}
+
 // JWTConfiguration holds all the JWT related configuration.
 type JWTConfiguration struct {
 	Secret           string   `json:"secret" required:"true"`
@@ -57,15 +62,30 @@ type JWTConfiguration struct {
 	DefaultGroupName string   `json:"default_group_name" split_words:"true"`
 }
 
+type APIConfiguration struct {
+	Host            string
+	Port            int `envconfig:"PORT" default:"8081"`
+	Endpoint        string
+	RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
+	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
+}
+
+func (a *APIConfiguration) Validate() error {
+	if a.ExternalURL != "" {
+		// sometimes, in tests, ExternalURL is empty and we regard that
+		// as a valid value
+		_, err := url.ParseRequestURI(a.ExternalURL)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
-	API struct {
-		Host            string
-		Port            int `envconfig:"PORT" default:"8081"`
-		Endpoint        string
-		RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
-		ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
-	}
+	API                   APIConfiguration
 	DB                    DBConfiguration
 	External              ProviderConfiguration
 	Logging               LoggingConfig `envconfig:"LOG"`
@@ -78,6 +98,26 @@ type GlobalConfiguration struct {
 	RateLimitVerify       float64           `split_words:"true" default:"30"`
 	RateLimitTokenRefresh float64           `split_words:"true" default:"30"`
 	SAML                  SAMLConfiguration `json:"saml"`
+}
+
+func (c *GlobalConfiguration) Validate() error {
+	validatables := []interface {
+		Validate() error
+	}{
+		&c.API,
+		&c.DB,
+		&c.Tracing,
+		&c.SMTP,
+		&c.SAML,
+	}
+
+	for _, validatable := range validatables {
+		if err := validatable.Validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *GlobalConfiguration) ApplyDefaults() error {
@@ -135,6 +175,10 @@ type SMTPConfiguration struct {
 	Pass         string        `json:"pass,omitempty"`
 	AdminEmail   string        `json:"admin_email" split_words:"true"`
 	SenderName   string        `json:"sender_name" split_words:"true"`
+}
+
+func (c *SMTPConfiguration) Validate() error {
+	return nil
 }
 
 type MailerConfiguration struct {
@@ -270,6 +314,10 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 
 	if config.SMTP.MaxFrequency == 0 {
 		config.SMTP.MaxFrequency = 1 * time.Minute
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
 
 	if err := config.ApplyDefaults(); err != nil {
