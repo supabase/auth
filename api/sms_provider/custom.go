@@ -1,16 +1,16 @@
 package sms_provider
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
-	"strings"
 
 	"github.com/netlify/gotrue/conf"
 )
 
 type CustomProvider struct {
-	Config  *conf.CustomProviderConfiguration
+	Config *conf.CustomProviderConfiguration
 }
 
 // Creates a SmsProvider with the custom Config
@@ -20,24 +20,27 @@ func NewCustomProvider(config conf.CustomProviderConfiguration) (SmsProvider, er
 	}
 
 	return &CustomProvider{
-		Config:  &config,
+		Config: &config,
 	}, nil
 }
 
 // Send an SMS containing the OTP with custom URL
 func (t *CustomProvider) SendSms(phone string, message string) error {
-	body := url.Values{
-		"recipient": {phone},
-		"body":      {message},
-		"sender":    {t.Config.Sender},
-	}
-
-	client := &http.Client{Timeout: defaultTimeout}
-	r, err := http.NewRequest("POST", t.Config.Url, strings.NewReader(body.Encode()))
+	body, err := json.Marshal(map[string]string{
+		"recipient": phone,
+		"body":      message,
+		"sender":    t.Config.Sender,
+	})
 	if err != nil {
 		return err
 	}
-	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{Timeout: defaultTimeout}
+	r, err := http.NewRequest("POST", t.Config.Url, bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	r.Header.Add("Content-Type", "application/json")
 	if len(t.Config.AccessToken) > 0 {
 		r.Header.Add("Authorization", "Bearer "+t.Config.AccessToken)
 	}
