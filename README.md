@@ -501,6 +501,15 @@ Alternatively you can use a custom SMS gateway:
 - `SMS_CUSTOM_SENDER` - sender number
 - `SMS_CUSTOM_BEARER_TOKEN` - optional token added to the `Authorization` header
 
+GoTrue will send the following to your SMS gateway:
+```json
+{
+  "recipient": "+1 234 567",
+  "body": "This is from supabase. Your code is 123456 .",
+  "sender": "<sender_number>"
+}
+```
+
 ### CAPTCHA
 
 - If enabled, CAPTCHA will check the request body for the `hcaptcha_token` field and make a verification request to the CAPTCHA provider.
