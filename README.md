@@ -499,7 +499,7 @@ Or Messagebird credentials, which can be obtained in the [Dashboard](https://das
 Alternatively you can use a custom SMS gateway:
 - `SMS_CUSTOM_URL` - the URL of your SMS gateway
 - `SMS_CUSTOM_SENDER` - sender number
-- `SMS_CUSTOM_ACCESS_TOKEN` - optional token added to the `Authorization` header
+- `SMS_CUSTOM_BEARER_TOKEN` - optional token added to the `Authorization` header
 
 ### CAPTCHA
 

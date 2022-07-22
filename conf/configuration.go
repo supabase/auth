@@ -177,7 +177,7 @@ type VonageProviderConfiguration struct {
 type CustomProviderConfiguration struct {
 	Url         string `json:"url" split_words:"true"`
 	Sender      string `json:"sender" split_words:"true"`
-	AccessToken string `json:"access_token" split_words:"true"`
+	BearerToken string `json:"bearer_token" split_words:"true"`
 }
 
 type CaptchaConfiguration struct {

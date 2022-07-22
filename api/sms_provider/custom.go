@@ -41,8 +41,8 @@ func (t *CustomProvider) SendSms(phone string, message string) error {
 		return err
 	}
 	r.Header.Add("Content-Type", "application/json")
-	if len(t.Config.AccessToken) > 0 {
-		r.Header.Add("Authorization", "Bearer "+t.Config.AccessToken)
+	if len(t.Config.BearerToken) > 0 {
+		r.Header.Add("Authorization", "Bearer "+t.Config.BearerToken)
 	}
 	res, err := client.Do(r)
 	if err != nil {
