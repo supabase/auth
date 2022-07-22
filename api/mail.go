@@ -25,6 +25,7 @@ var (
 type GenerateLinkParams struct {
 	Type       string                 `json:"type"`
 	Email      string                 `json:"email"`
+	NewEmail   string                 `json:"new_email"`
 	Password   string                 `json:"password"`
 	Data       map[string]interface{} `json:"data"`
 	RedirectTo string                 `json:"redirect_to"`
@@ -52,13 +53,13 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			if params.Type == "magiclink" {
-				params.Type = "signup"
+			if params.Type == magicLinkVerification {
+				params.Type = signupVerification
 				params.Password, err = password.Generate(64, 10, 0, false, true)
 				if err != nil {
 					return internalServerError("error creating user").WithInternalError(err)
 				}
-			} else if params.Type == "recovery" {
+			} else if params.Type == recoveryVerification || params.Type == "email_change_current" || params.Type == "email_change_new" {
 				return notFoundError(err.Error())
 			}
 		} else {
@@ -77,14 +78,14 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
-		case "magiclink", "recovery":
+		case magicLinkVerification, recoveryVerification:
 			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
 			}
 			user.RecoveryToken = hashedToken
 			user.RecoverySentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
-		case "invite":
+		case inviteVerification:
 			if user != nil {
 				if user.IsConfirmed() {
 					return unprocessableEntityError(DuplicateEmailMsg)
@@ -111,7 +112,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			user.ConfirmationSentAt = &now
 			user.InvitedAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at", "invited_at"), "Database error updating user for invite")
-		case "signup":
+		case signupVerification:
 			if user != nil {
 				if user.IsConfirmed() {
 					return unprocessableEntityError(DuplicateEmailMsg)
@@ -141,6 +142,28 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			user.ConfirmationToken = hashedToken
 			user.ConfirmationSentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at"), "Database error updating user for confirmation")
+		case "email_change_current", "email_change_new":
+			if !config.Mailer.SecureEmailChangeEnabled && params.Type == "email_change_current" {
+				return unprocessableEntityError("Enable secure email change to generate link for current email")
+			}
+			if terr := a.validateEmail(ctx, params.NewEmail); terr != nil {
+				return unprocessableEntityError("The new email address provided is invalid")
+			}
+			if exists, terr := models.IsDuplicatedEmail(tx, instanceID, params.NewEmail, user.Aud); terr != nil {
+				return internalServerError("Database error checking email").WithInternalError(terr)
+			} else if exists {
+				return unprocessableEntityError(DuplicateEmailMsg)
+			}
+			now := time.Now()
+			user.EmailChangeSentAt = &now
+			user.EmailChange = params.NewEmail
+			user.EmailChangeConfirmStatus = zeroConfirmation
+			if params.Type == "email_change_current" {
+				user.EmailChangeTokenCurrent = hashedToken
+			} else if params.Type == "email_change_new" {
+				user.EmailChangeTokenNew = fmt.Sprintf("%x", sha256.Sum224([]byte(params.NewEmail+otp)))
+			}
+			terr = errors.Wrap(tx.UpdateOnly(user, "email_change_token_current", "email_change_token_new", "email_change", "email_change_sent_at", "email_change_confirm_status"), "Database error updating user for email change")
 		default:
 			return badRequestError("Invalid email action link type requested: %v", params.Type)
 		}
