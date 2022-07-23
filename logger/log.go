@@ -10,7 +10,9 @@ import (
 )
 
 func NewStructuredLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
-	logger.Formatter = &logrus.JSONFormatter{}
+	logger.Formatter = &logrus.JSONFormatter{
+		DisableTimestamp: true,
+	}
 	return chimiddleware.RequestLogger(&structuredLogger{logger})
 }
 
@@ -26,6 +28,7 @@ func (l *structuredLogger) NewLogEntry(r *http.Request) chimiddleware.LogEntry {
 		"path":        r.URL.Path,
 		"remote_addr": r.RemoteAddr,
 		"referer":     r.Referer(),
+		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 	}
 
 	if reqID := r.Context().Value("request_id"); reqID != nil {
