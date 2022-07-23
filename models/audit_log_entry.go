@@ -8,7 +8,6 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type AuditAction string
@@ -35,7 +34,7 @@ const (
 	user    auditLogType = "user"
 )
 
-var actionLogTypeMap = map[AuditAction]auditLogType{
+var ActionLogTypeMap = map[AuditAction]auditLogType{
 	LoginAction:                     account,
 	LogoutAction:                    account,
 	InviteAcceptedAction:            account,
@@ -76,17 +75,18 @@ func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User,
 		username = actor.GetPhone()
 	}
 
+	payload := JSONMap{
+		"timestamp":      time.Now().UTC().Format(time.RFC3339),
+		"actor_id":       actor.ID,
+		"actor_username": username,
+		"action":         action,
+		"log_type":       ActionLogTypeMap[action],
+	}
 	l := AuditLogEntry{
 		InstanceID: instanceID,
 		ID:         id,
-		Payload: JSONMap{
-			"timestamp":      time.Now().UTC().Format(time.RFC3339),
-			"actor_id":       actor.ID,
-			"actor_username": username,
-			"action":         action,
-			"log_type":       actionLogTypeMap[action],
-		},
-		IPAddress: ipAddress,
+		Payload:    payload,
+		IPAddress:  ipAddress,
 	}
 
 	if name, ok := actor.UserMetaData["full_name"]; ok {
@@ -101,7 +101,6 @@ func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User,
 		return errors.Wrap(err, "Database error creating audit log entry")
 	}
 
-	logrus.Infof("{\"actor_id\": %v, \"action\": %v, \"timestamp\": %v, \"log_type\": %v, \"ip_address\": %v}", actor.ID, action, l.Payload["timestamp"], actionLogTypeMap[action], ipAddress)
 	return nil
 }
 

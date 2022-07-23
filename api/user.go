@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/sms_provider"
+	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 )
@@ -76,7 +77,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}
 
-	log := getLogEntry(r)
+	log := logger.GetLogEntry(r)
 	log.Debugf("Checking params for token %v", params)
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {

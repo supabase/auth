@@ -15,6 +15,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/imdario/mergo"
 	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/mailer"
 	"github.com/netlify/gotrue/storage"
 	"github.com/rs/cors"
@@ -81,7 +82,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	api := &API{config: globalConfig, db: db, version: version}
 
 	xffmw, _ := xff.Default()
-	logger := newStructuredLogger(logrus.StandardLogger())
+	logger := logger.NewStructuredLogger(logrus.StandardLogger())
 
 	r := newRouter()
 	r.UseBypass(xffmw.Handler)

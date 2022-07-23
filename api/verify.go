@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
@@ -339,7 +340,7 @@ func (a *API) smsVerify(ctx context.Context, conn *storage.Connection, user *mod
 func (a *API) prepErrorRedirectURL(err *HTTPError, r *http.Request, rurl string) string {
 	q := url.Values{}
 
-	log := getLogEntry(r)
+	log := logger.GetLogEntry(r)
 	log.Error(err.Message)
 
 	if str, ok := oauthErrorMap[err.Code]; ok {

@@ -14,6 +14,7 @@ import (
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/utilities"
@@ -60,7 +61,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	}
 
 	redirectURL := a.getRedirectURLOrReferrer(r, query.Get("redirect_to"))
-	log := getLogEntry(r)
+	log := logger.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
@@ -443,7 +444,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string, query *u
 
 func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	log := getLogEntry(r)
+	log := logger.GetLogEntry(r)
 	errorID := getRequestID(ctx)
 	err := handler(w, r)
 	if err != nil {

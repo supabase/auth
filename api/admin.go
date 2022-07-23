@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
@@ -34,7 +35,7 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 		return nil, badRequestError("user_id must be an UUID")
 	}
 
-	logEntrySetField(r, "user_id", userID)
+	logger.LogEntrySetField(r, "user_id", userID)
 	instanceID := getInstanceID(r.Context())
 
 	u, err := models.FindUserByInstanceIDAndID(a.db, instanceID, userID)
