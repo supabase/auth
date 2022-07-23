@@ -509,6 +509,7 @@ GoTrue will send the following to your SMS gateway:
   "sender": "<sender_number>"
 }
 ```
+GoTrue will only consider the HTTP code returned from your SMS gateway; it ignores the rest of the response (e.g., response body and response type).
 
 ### CAPTCHA
 
