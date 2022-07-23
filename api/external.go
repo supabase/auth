@@ -262,11 +262,12 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 					return terr
 				}
 				logger.LogEntrySetFields(r, logrus.Fields{
-					"timestamp":      time.Now().UTC().Format(time.RFC3339),
-					"actor_id":       user.ID,
-					"actor_username": user.GetEmail(),
-					"action":         models.UserSignedUpAction,
-					"log_type":       models.ActionLogTypeMap[models.UserSignedUpAction],
+					"auth_event": logrus.Fields{
+						"actor_id":       user.ID,
+						"actor_username": user.GetEmail(),
+						"action":         models.UserSignedUpAction,
+						"log_type":       models.ActionLogTypeMap[models.UserSignedUpAction],
+					},
 				})
 				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
 					return terr
@@ -283,11 +284,12 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 					return terr
 				}
 				logger.LogEntrySetFields(r, logrus.Fields{
-					"timestamp":      time.Now().UTC().Format(time.RFC3339),
-					"actor_id":       user.ID,
-					"actor_username": user.GetEmail(),
-					"action":         models.LoginAction,
-					"log_type":       models.ActionLogTypeMap[models.LoginAction],
+					"auth_event": logrus.Fields{
+						"actor_id":       user.ID,
+						"actor_username": user.GetEmail(),
+						"action":         models.LoginAction,
+						"log_type":       models.ActionLogTypeMap[models.LoginAction],
+					},
 				})
 				if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
 					return terr
