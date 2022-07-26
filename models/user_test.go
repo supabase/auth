@@ -10,9 +10,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const modelsTestConfig = "../hack/test.env"
+
+func init() {
+	PasswordHashCost = bcrypt.MinCost
+}
 
 type UserTestSuite struct {
 	suite.Suite

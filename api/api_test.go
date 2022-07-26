@@ -12,6 +12,7 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -21,6 +22,8 @@ const (
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
+	models.PasswordHashCost = bcrypt.MinCost
+
 }
 
 // setupAPIForTest creates a new API to run tests with.
