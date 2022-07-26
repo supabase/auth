@@ -84,6 +84,16 @@ func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Fac
 // func (f *Factor) IsVerified(tx *storage.Connection) {
 // 	return f.Status == FactorVerifiedState
 // }
+func FindFactorByChallengeID(tx *storage.Connection, challengeID string) (*Factor, error) {
+	factor := &Factor{}
+	if err := tx.Q().Join("mfa_challenges", "mfa_factors.ID = mfa_challenges.factor_id").Where("mfa_challenges.id= ?", challengeID).First(factor); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, FactorNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding factor")
+	}
+	return factor, nil
+}
 
 // Change the friendly name
 func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
