@@ -384,7 +384,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if err = factor.UpdateStatus(a.db, models.FactorDisabledState); err != nil {
+		if err = tx.Destroy(factor); err != nil {
 			return err
 		}
 		if err = models.NewAuditLogEntry(tx, instanceID, user, models.UnenrollFactorAction, r.RemoteAddr, map[string]interface{}{

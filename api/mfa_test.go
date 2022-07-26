@@ -359,4 +359,7 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
+	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+
 }
