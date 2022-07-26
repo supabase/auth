@@ -261,14 +261,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				}); terr != nil {
 					return terr
 				}
-				logger.LogEntrySetFields(r, logrus.Fields{
-					"auth_event": logrus.Fields{
-						"actor_id":       user.ID,
-						"actor_username": user.GetEmail(),
-						"action":         models.UserSignedUpAction,
-						"log_type":       models.ActionLogTypeMap[models.UserSignedUpAction],
-					},
-				})
 				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
 					return terr
 				}
@@ -283,14 +275,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				}); terr != nil {
 					return terr
 				}
-				logger.LogEntrySetFields(r, logrus.Fields{
-					"auth_event": logrus.Fields{
-						"actor_id":       user.ID,
-						"actor_username": user.GetEmail(),
-						"action":         models.LoginAction,
-						"log_type":       models.ActionLogTypeMap[models.LoginAction],
-					},
-				})
 				if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
 					return terr
 				}
