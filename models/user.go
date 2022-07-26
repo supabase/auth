@@ -62,10 +62,12 @@ type User struct {
 
 	IsSuperAdmin bool       `json:"-" db:"is_super_admin"`
 	Identities   []Identity `json:"identities" has_many:"identities"`
+	Factors      []Factor   `json:"factors" has_many:"factors"`
 
 	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
 	BannedUntil *time.Time `json:"banned_until,omitempty" db:"banned_until"`
+	MFAEnabled  bool       `json:"mfa_enabled" db:"mfa_enabled"`
 }
 
 // NewUser initializes a new user from an email, password and user data.
@@ -522,4 +524,13 @@ func (u *User) IsBanned() bool {
 func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
 	return tx.UpdateOnly(u, "banned_until")
 
+}
+func (u *User) EnableMFA(tx *storage.Connection) error {
+	u.MFAEnabled = true
+	return tx.UpdateOnly(u, "mfa_enabled")
+}
+
+func (u *User) DisableMFA(tx *storage.Connection) error {
+	u.MFAEnabled = false
+	return tx.UpdateOnly(u, "mfa_enabled")
 }

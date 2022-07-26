@@ -13,8 +13,12 @@ import (
 )
 
 // SecureToken creates a new random token
-func SecureToken() string {
-	b := make([]byte, 16)
+func SecureToken(options ...int) string {
+	length := 16
+	if len(options) > 0 {
+		length = options[0]
+	}
+	b := make([]byte, length)
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
 		panic(err.Error()) // rand should never fail
 	}

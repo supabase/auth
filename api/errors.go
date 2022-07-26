@@ -17,6 +17,8 @@ var (
 	DuplicateEmailMsg       = "A user with this email address has already been registered"
 	DuplicatePhoneMsg       = "A user with this phone number has already been registered"
 	UserExistsError   error = errors.New("User already exists")
+	// MFA Related errors
+	MFANotEnabledMsg = "MFA not enabled"
 )
 
 var oauthErrorMap = map[int]string{
@@ -119,6 +121,10 @@ func unprocessableEntityError(fmtString string, args ...interface{}) *HTTPError 
 
 func tooManyRequestsError(fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusTooManyRequests, fmtString, args...)
+}
+
+func expiredChallengeError(fmtString string, args ...interface{}) *HTTPError {
+	return httpError(http.StatusUnauthorized, fmtString, args...)
 }
 
 // HTTPError is an error with a message and an HTTP status code.

@@ -68,7 +68,7 @@ func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Bad Pagination Parameters: %v", err)
 	}
 
-	sortParams, err := sort(r, map[string]bool{models.CreatedAt: true}, []models.SortField{models.SortField{Name: models.CreatedAt, Dir: models.Descending}})
+	sortParams, err := sort(r, map[string]bool{models.CreatedAt: true}, []models.SortField{{Name: models.CreatedAt, Dir: models.Descending}})
 	if err != nil {
 		return badRequestError("Bad Sort Parameters: %v", err)
 	}
@@ -175,7 +175,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserModifiedAction, "",  map[string]interface{}{
+		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserModifiedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
