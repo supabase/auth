@@ -56,7 +56,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserInvitedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, instanceID, adminUser, models.UserInvitedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 		}); terr != nil {

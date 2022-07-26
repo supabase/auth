@@ -158,9 +158,9 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving foo user")
 	first, err := models.GrantAuthenticatedUser(ts.API.db, u)
 	require.NoError(ts.T(), err)
-	second, err := models.GrantRefreshTokenSwap(ts.API.db, u, first)
+	second, err := models.GrantRefreshTokenSwap(&http.Request{}, ts.API.db, u, first)
 	require.NoError(ts.T(), err)
-	third, err := models.GrantRefreshTokenSwap(ts.API.db, u, second)
+	third, err := models.GrantRefreshTokenSwap(&http.Request{}, ts.API.db, u, second)
 	require.NoError(ts.T(), err)
 
 	cases := []struct {

@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
 	"github.com/pkg/errors"
 )
@@ -17,7 +18,7 @@ func (a *API) loadInstance(w http.ResponseWriter, r *http.Request) (context.Cont
 	if err != nil {
 		return nil, badRequestError("Invalid instance ID")
 	}
-	logEntrySetField(r, "instance_id", instanceID)
+	logger.LogEntrySetField(r, "instance_id", instanceID)
 
 	i, err := models.GetInstance(a.db, instanceID)
 	if err != nil {
