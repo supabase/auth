@@ -16,6 +16,7 @@ import (
 const SystemUserID = "0"
 
 var SystemUserUUID = uuid.Nil
+var PasswordHashCost = bcrypt.DefaultCost
 
 // User respresents a registered user with email/password authentication
 type User struct {
@@ -253,7 +254,7 @@ func (u *User) SetPhone(tx *storage.Connection, phone string) error {
 
 // hashPassword generates a hashed password from a plaintext string
 func hashPassword(password string) (string, error) {
-	pw, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	pw, err := bcrypt.GenerateFromPassword([]byte(password), PasswordHashCost)
 	if err != nil {
 		return "", err
 	}
