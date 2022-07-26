@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +22,11 @@ import (
 var (
 	// indicates that a user should be redirected due to an error
 	redirectWithQueryError = errors.New("redirect user")
+)
+
+var (
+	//go:embed verify.html
+	verifyWithJavaScript []byte
 )
 
 const (
@@ -49,11 +55,12 @@ const singleConfirmationAccepted = "Confirmation link accepted. Please proceed t
 
 // VerifyParams are the parameters the Verify endpoint accepts
 type VerifyParams struct {
-	Type       string `json:"type"`
-	Token      string `json:"token"`
-	Email      string `json:"email"`
-	Phone      string `json:"phone"`
-	RedirectTo string `json:"redirect_to"`
+	Type          string `json:"type"`
+	Token         string `json:"token"`
+	Email         string `json:"email"`
+	Phone         string `json:"phone"`
+	RedirectTo    string `json:"redirect_to"`
+	UseJavaScript string `json:"use_javascript"`
 }
 
 // Verify exchanges a confirmation or recovery token to a refresh token
@@ -68,13 +75,40 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 	}
 }
 
+func extractVerifyParams(r *http.Request) (*VerifyParams, error) {
+	contentType := r.Header.Get("Content-Type")
+	parts := strings.Split(contentType, ";")
+	mime := strings.Trim(parts[0])
+
+	params := &VerifyParams{}
+
+	if r.Method == http.MethodGet || mime == "application/x-www-form-urlencoded" || mime == "multipart/form-data" {
+		params.Token = r.FormValue("token")
+		params.Type = r.FormValue("type")
+		params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
+		params.UseJavaScript = r.FormValue("usejs")
+	} else {
+		jsonDecoder := json.NewDecoder(r.Body)
+		if err := jsonDecoder.Decode(params); err != nil {
+			return badRequestError("Could not read verification params: %v", err)
+		}
+	}
+
+	return params, nil
+}
+
 func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
-	params := &VerifyParams{}
-	params.Token = r.FormValue("token")
-	params.Type = r.FormValue("type")
-	params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
+	params, err := extractVerifyParams(r)
+	if err != nil {
+		return err
+	}
+
+	if params.UseJavaScript == "true" {
+		w.Header().Set("Content-Type", "text/html; charset=UTF-8")
+		return w.Write(verifyWithJavaScript)
+	}
 
 	var (
 		user  *models.User
@@ -158,11 +192,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
-	params := &VerifyParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
-	if err := jsonDecoder.Decode(params); err != nil {
-		return badRequestError("Could not read verification params: %v", err)
-	}
+	params, err := extractVerifyParams(r)
 
 	if params.Token == "" {
 		return badRequestError("Verify requires a token")
