@@ -320,3 +320,43 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 		})
 	}
 }
+
+func (ts *MFATestSuite) TestUnenrollFactor() {
+	// Create a User with MFA enabled
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), u.EnableMFA(ts.API.db))
+	emailValue, err := u.Email.Value()
+	require.NoError(ts.T(), err)
+	testEmail := emailValue.(string)
+	testDomain := strings.Split(testEmail, "@")[1]
+	// set factor secret
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      testDomain,
+		AccountName: testEmail,
+	})
+	sharedSecret := key.Secret()
+	factors, err := models.FindFactorsByUser(ts.API.db, u)
+	f := factors[0]
+	f.SecretKey = sharedSecret
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
+
+	var buffer bytes.Buffer
+
+	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	require.NoError(ts.T(), err)
+
+	code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
+	require.NoError(ts.T(), err)
+
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"factor_id": f.ID,
+		"code":      code,
+	}))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/unenroll", u.ID), &buffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+}

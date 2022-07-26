@@ -54,6 +54,15 @@ type VerifyFactorResponse struct {
 	Success string `json:"success"`
 }
 
+type UnenrollFactorResponse struct {
+	Success string `json:"success"`
+}
+
+type UnenrollFactorParams struct {
+	FactorID string `json:"factor_id"`
+	Code     string `json:"code"`
+}
+
 // RecoveryCodesResponse represents a successful recovery code generation response
 type RecoveryCodesResponse struct {
 	RecoveryCodes []string `json:"recovery_codes"`
@@ -342,4 +351,50 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		Success: fmt.Sprintf("%v", valid),
 	})
 
+}
+
+func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
+	var err error
+	ctx := r.Context()
+	user := getUser(ctx)
+	instanceID := getInstanceID(ctx)
+	if !user.MFAEnabled {
+		return forbiddenError(MFANotEnabledMsg)
+	}
+	params := &UnenrollFactorParams{}
+	jsonDecoder := json.NewDecoder(r.Body)
+	err = jsonDecoder.Decode(params)
+	if err != nil {
+		return badRequestError(err.Error())
+	}
+
+	factor, err := models.FindFactorByFactorID(a.db, params.FactorID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return notFoundError(err.Error())
+		}
+		return internalServerError("Database error finding factor").WithInternalError(err)
+	}
+
+	valid := totp.Validate(params.Code, factor.SecretKey)
+	if valid != true {
+		return unauthorizedError("Invalid code entered")
+	}
+
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		if err = factor.UpdateStatus(a.db, models.FactorDisabledState); err != nil {
+			return err
+		}
+		if err = models.NewAuditLogEntry(tx, instanceID, user, models.UnenrollFactorAction, r.RemoteAddr, map[string]interface{}{
+			"user_id":   user.ID,
+			"factor_id": factor.ID,
+		}); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{
+		Success: fmt.Sprintf("%v", valid),
+	})
 }

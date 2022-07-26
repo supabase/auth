@@ -195,6 +195,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 				r.Put("/enable", api.EnableMFA)
 				r.Post("/recovery_codes", api.GenerateRecoveryCodes)
 				r.Post("/factor", api.EnrollFactor)
+				r.Post("/unenroll", api.UnenrollFactor)
 				r.Post("/challenge", api.ChallengeFactor)
 				r.Post("/verify", api.VerifyFactor)
 
