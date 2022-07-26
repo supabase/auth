@@ -51,7 +51,6 @@ type ChallengeFactorResponse struct {
 }
 
 type VerifyFactorResponse struct {
-	MFAType string `json:"mfa_type"`
 	Success string `json:"success"`
 }
 
@@ -342,7 +341,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
-		MFAType: factor.FactorType,
 		Success: fmt.Sprintf("%v", valid),
 	})
 

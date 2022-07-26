@@ -259,7 +259,6 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), err)
 			testEmail := emailValue.(string)
 			testDomain := strings.Split(testEmail, "@")[1]
-			testFactorType := "totp"
 			// set factor secret
 			key, err := totp.Generate(totp.GenerateOpts{
 				Issuer:      testDomain,
@@ -312,7 +311,6 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			data := VerifyFactorResponse{}
 			if v.expectedHTTPCode == http.StatusOK {
 				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-				require.Equal(ts.T(), data.MFAType, testFactorType)
 				require.Equal(ts.T(), data.Success, "true")
 			}
 			if !v.validChallenge {
