@@ -94,7 +94,7 @@ func (ts *MFATestSuite) TestMFARecoveryCodeGeneration() {
 	require.NoError(ts.T(), err)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/mfa/%s/recovery_codes", user.ID), nil)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/recovery_codes", user.ID), nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
@@ -174,41 +174,23 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 	cases := []struct {
 		desc         string
 		id           string
-		friendlyName string
 		mfaEnabled   bool
 		expectedCode int
 	}{
 		{
 			"MFA Not Enabled",
 			"",
-			"",
 			false,
 			http.StatusForbidden,
 		},
 		{
-			"Both Factor ID and Simple Name are present",
+			"Factor ID present",
 			"testFactorID",
-			"testSimpleFactor",
-			true,
-			http.StatusUnprocessableEntity,
-		},
-		{
-			"Only factor simple name",
-			"",
-			"testSimpleName",
 			true,
 			http.StatusOK,
 		},
 		{
-			"Only factor ID",
-			"testFactorID",
-			"",
-			true,
-			http.StatusOK,
-		},
-		{
-			"Both factor and simple name missing",
-			"",
+			"Factor ID missing",
 			"",
 			true,
 			http.StatusUnprocessableEntity,
@@ -228,8 +210,7 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 
 			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-				"factor_id":     c.id,
-				"friendly_name": c.friendlyName,
+				"factor_id": c.id,
 			}))
 
 			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/mfa/%s/challenge", u.ID), &buffer)
@@ -331,7 +312,6 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			data := VerifyFactorResponse{}
 			if v.expectedHTTPCode == http.StatusOK {
 				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-				require.Equal(ts.T(), data.ChallengeID, c.ID)
 				require.Equal(ts.T(), data.MFAType, testFactorType)
 				require.Equal(ts.T(), data.Success, "true")
 			}

@@ -44,18 +44,15 @@ type VerifyFactorParams struct {
 }
 
 type ChallengeFactorResponse struct {
-	ID           string `json:"id"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
-	ExpiresAt    string `json:"expires_at"`
-	FactorID     string `json:"factor_id"`
-	FriendlyName string `json:"friendly_name"`
+	ID        string `json:"id"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+	ExpiresAt string `json:"expires_at"`
 }
 
 type VerifyFactorResponse struct {
-	ChallengeID string `json:"challenge_id"`
-	MFAType     string `json:"mfa_type"`
-	Success     string `json:"success"`
+	MFAType string `json:"mfa_type"`
+	Success string `json:"success"`
 }
 
 // RecoveryCodesResponse represents a successful recovery code generation response
@@ -230,18 +227,11 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read EnrollFactor params: %v", err)
 	}
 	factorID := params.FactorID
-	friendlyName := params.FriendlyName
-
-	if factorID != "" && friendlyName != "" {
-		return unprocessableEntityError("Only a FactorID or FactorSimpleName should be provided on signup.")
-	}
 
 	if factorID != "" {
 		factor, err = models.FindFactorByFactorID(a.db, factorID)
-	} else if friendlyName != "" {
-		factor, err = models.FindFactorByFriendlyName(a.db, friendlyName)
 	} else {
-		return unprocessableEntityError("Either FactorID or FactorSimpleName should be provided on signup.")
+		return unprocessableEntityError("FactorID should be provided to create a challenge")
 	}
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -261,7 +251,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":     params.FactorID,
-			"friendly_name": params.FriendlyName,
 			"factor_status": factor.Status,
 		}); terr != nil {
 			return terr
@@ -275,11 +264,9 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
-		ID:           challenge.ID,
-		CreatedAt:    creationTime.String(),
-		ExpiresAt:    creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)).String(),
-		FactorID:     factor.ID,
-		FriendlyName: factor.FriendlyName,
+		ID:        challenge.ID,
+		CreatedAt: creationTime.String(),
+		ExpiresAt: creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)).String(),
 	})
 }
 
@@ -355,9 +342,8 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
-		ChallengeID: params.ChallengeID,
-		MFAType:     factor.FactorType,
-		Success:     fmt.Sprintf("%v", valid),
+		MFAType: factor.FactorType,
+		Success: fmt.Sprintf("%v", valid),
 	})
 
 }
