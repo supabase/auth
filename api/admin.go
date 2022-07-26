@@ -28,6 +28,10 @@ type adminUserParams struct {
 	BanDuration  string                 `json:"ban_duration"`
 }
 
+type AdminUserDeleteFactorParams struct {
+	FactorID string `json:"factor_id"`
+}
+
 func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
@@ -338,6 +342,70 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	return sendJSON(w, http.StatusOK, map[string]interface{}{})
+}
+
+func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := getUser(ctx)
+	instanceID := getInstanceID(ctx)
+
+	params := &AdminUserDeleteFactorParams{}
+	jsonDecoder := json.NewDecoder(r.Body)
+	err := jsonDecoder.Decode(params)
+	if err != nil {
+		return badRequestError("Invalid parameters: Please re-check request parameters: %v", err)
+	}
+
+	factor, terr := models.FindFactorByFactorID(a.db, params.FactorID)
+	if terr != nil {
+		return terr
+	}
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.FactorModifiedAction, r.RemoteAddr, map[string]interface{}{
+			"user_id":   user.ID,
+			"factor_id": factor.ID,
+		}); terr != nil {
+			return terr
+		}
+		if terr := tx.Destroy(factor); terr != nil {
+			return internalServerError("Database error deleting factor").WithInternalError(terr)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return sendJSON(w, http.StatusOK, factor)
+
+}
+
+func (a *API) adminUserDeleteRecoveryCodes(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := getUser(ctx)
+	instanceID := getInstanceID(ctx)
+
+	recoveryCodes, terr := models.FindValidRecoveryCodesByUser(a.db, user)
+	if terr != nil {
+		return terr
+	}
+	terr = a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.DeleteRecoveryCodesAction, r.RemoteAddr, map[string]interface{}{
+			"user_id": user.ID,
+		}); terr != nil {
+			return terr
+		}
+		for _, recoveryCodeModel := range recoveryCodes {
+			if terr := tx.Destroy(recoveryCodeModel); terr != nil {
+				return terr
+			}
+		}
+		return nil
+	})
+	if terr != nil {
+		return terr
 	}
 
 	return sendJSON(w, http.StatusOK, map[string]interface{}{})
