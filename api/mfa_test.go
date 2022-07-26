@@ -335,6 +335,10 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 				require.Equal(ts.T(), data.MFAType, testFactorType)
 				require.Equal(ts.T(), data.Success, "true")
 			}
+			if !v.validChallenge {
+				_, err := models.FindChallengeByChallengeID(ts.API.db, c.ID)
+				require.EqualError(ts.T(), err, models.ChallengeNotFoundError{}.Error())
+			}
 		})
 	}
 }

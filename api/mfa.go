@@ -314,10 +314,21 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			return notFoundError(err.Error())
 		}
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
-
 	}
+
 	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
 	if hasExpired {
+		err := a.db.Transaction(func(tx *storage.Connection) error {
+			if terr := tx.Destroy(challenge); terr != nil {
+				return internalServerError("Database error deleting challenge").WithInternalError(terr)
+			}
+
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
 		return expiredChallengeError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
 	}
 
