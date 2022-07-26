@@ -12,7 +12,6 @@ import (
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -597,62 +596,4 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			require.Equal(ts.T(), c.expected, w.Code)
 		})
 	}
-}
-
-// TestAdminUserDelete tests API /admin/users/<id>/mfa/factor route (DELETE)
-func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
-	u, err := models.NewUser(ts.instanceID, "123456789", "test-factor-delete@example.com", "test", ts.Config.JWT.Aud, nil)
-	require.NoError(ts.T(), err, "Error making new user")
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
-
-	f, err := models.NewFactor(u, "A1B2C3", "testfactor-id", "totp", "disabled", "")
-	require.NoError(ts.T(), err, "Error making new factor")
-	require.NoError(ts.T(), ts.API.db.Create(f), "Error creating factor")
-
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"factor_id": f.ID,
-	}))
-	// Setup request
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s/mfa/factor", u.ID), &buffer)
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
-
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
-	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
-}
-
-// TestAdminUserDelete tests API /admin/users/<id>/mfa/recovery_codes route (DELETE)
-func (ts *AdminTestSuite) TestAdminUserDeleteRecoveryCodes() {
-	u, err := models.NewUser(ts.instanceID, "123456789", "test-factor-delete@example.com", "test", ts.Config.JWT.Aud, nil)
-	require.NoError(ts.T(), err, "Error making new user")
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
-
-	f, err := models.NewFactor(u, "A1B2C3", "testfactor-id", "totp", "disabled", "")
-	require.NoError(ts.T(), err, "Error making new factor")
-	require.NoError(ts.T(), ts.API.db.Create(f), "Error creating factor")
-
-	for i := 0; i <= models.NumRecoveryCodes; i++ {
-		rc, err := models.NewRecoveryCode(u, crypto.SecureToken(models.RecoveryCodeLength))
-		require.NoError(ts.T(), err)
-		err = ts.API.db.Create(rc)
-		require.NoError(ts.T(), err)
-	}
-
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{}))
-	// Setup request
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s/mfa/recovery_codes", u.ID), &buffer)
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
-
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	recoveryCodes, err := models.FindValidRecoveryCodesByUser(ts.API.db, u)
-	expectedRecoveryCodes := []*models.RecoveryCode{}
-	require.Equal(ts.T(), expectedRecoveryCodes, recoveryCodes)
 }
