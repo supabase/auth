@@ -38,6 +38,11 @@ type ChallengeFactorParams struct {
 	FriendlyName string `json:"friendly_name"`
 }
 
+type VerifyFactorParams struct {
+	ChallengeID string `json:"challenge_id"`
+	Code        string `json:"code"`
+}
+
 type ChallengeFactorResponse struct {
 	ID           string `json:"id"`
 	CreatedAt    string `json:"created_at"`
@@ -47,6 +52,13 @@ type ChallengeFactorResponse struct {
 	FriendlyName string `json:"friendly_name"`
 }
 
+type VerifyFactorResponse struct {
+	ChallengeID string `json:"challenge_id"`
+	MFAType     string `json:"mfa_type"`
+	Success     string `json:"success"`
+}
+
+// RecoveryCodesResponse represents a successful recovery code generation response
 type RecoveryCodesResponse struct {
 	RecoveryCodes []string `json:"recovery_codes"`
 }
@@ -201,8 +213,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
-	const challengeExpiryDuration = 300
 	ctx := r.Context()
+	config := a.getConfig(ctx)
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
@@ -265,8 +277,87 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:           challenge.ID,
 		CreatedAt:    creationTime.String(),
-		ExpiresAt:    creationTime.Add(time.Second * challengeExpiryDuration).String(),
+		ExpiresAt:    creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)).String(),
 		FactorID:     factor.ID,
 		FriendlyName: factor.FriendlyName,
 	})
+}
+
+func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
+	var err error
+	ctx := r.Context()
+	config := a.getConfig(ctx)
+	user := getUser(ctx)
+	instanceID := getInstanceID(ctx)
+	if !user.MFAEnabled {
+		return forbiddenError(MFANotEnabledMsg)
+	}
+
+	params := &VerifyFactorParams{}
+	jsonDecoder := json.NewDecoder(r.Body)
+	err = jsonDecoder.Decode(params)
+	if err != nil {
+		return badRequestError("Please check the params passed into VerifyFactor: %v", err)
+	}
+
+	factor, err := models.FindFactorByChallengeID(a.db, params.ChallengeID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return notFoundError(err.Error())
+		}
+		return internalServerError("Database error finding factor").WithInternalError(err)
+	}
+
+	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return notFoundError(err.Error())
+		}
+		return internalServerError("Database error finding Challenge").WithInternalError(err)
+	}
+
+	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
+	if hasExpired {
+		err := a.db.Transaction(func(tx *storage.Connection) error {
+			if terr := tx.Destroy(challenge); terr != nil {
+				return internalServerError("Database error deleting challenge").WithInternalError(terr)
+			}
+
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+
+		return expiredChallengeError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
+	}
+
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		if err = models.NewAuditLogEntry(tx, instanceID, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
+			"factor_id":    factor.ID,
+			"challenge_id": params.ChallengeID,
+		}); err != nil {
+			return err
+		}
+		if err = challenge.Verify(a.db); err != nil {
+			return err
+		}
+		if factor.Status != models.FactorVerifiedState {
+			if err = factor.UpdateStatus(a.db, models.FactorVerifiedState); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	valid := totp.Validate(params.Code, factor.SecretKey)
+	if !valid {
+		return unauthorizedError("Invalid TOTP code entered")
+	}
+
+	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
+		ChallengeID: params.ChallengeID,
+		MFAType:     factor.FactorType,
+		Success:     fmt.Sprintf("%v", valid),
+	})
+
 }

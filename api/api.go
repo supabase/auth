@@ -191,6 +191,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 				r.Get("/recovery_codes", api.GenerateRecoveryCodes)
 				r.Post("/factor", api.EnrollFactor)
 				r.Post("/challenge", api.ChallengeFactor)
+				r.Post("/verify", api.VerifyFactor)
 
 			})
 		})
