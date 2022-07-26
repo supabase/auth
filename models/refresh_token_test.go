@@ -1,6 +1,7 @@
 package models
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/gofrs/uuid"
@@ -49,7 +50,7 @@ func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwap() {
 	r, err := GrantAuthenticatedUser(ts.db, u)
 	require.NoError(ts.T(), err)
 
-	s, err := GrantRefreshTokenSwap(ts.db, u, r)
+	s, err := GrantRefreshTokenSwap(&http.Request{}, ts.db, u, r)
 	require.NoError(ts.T(), err)
 
 	_, nr, err := FindUserWithRefreshToken(ts.db, r.Token)

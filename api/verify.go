@@ -102,11 +102,11 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 
 		switch params.Type {
 		case signupVerification, inviteVerification:
-			user, terr = a.signupVerify(ctx, tx, user)
+			user, terr = a.signupVerify(r, ctx, tx, user)
 		case recoveryVerification, magicLinkVerification:
-			user, terr = a.recoverVerify(ctx, tx, user)
+			user, terr = a.recoverVerify(r, ctx, tx, user)
 		case emailChangeVerification:
-			user, terr = a.emailChangeVerify(ctx, tx, params, user)
+			user, terr = a.emailChangeVerify(r, ctx, tx, params, user)
 			if user == nil && terr == nil {
 				// when double confirmation is required
 				rurl := a.prepRedirectURL(singleConfirmationAccepted, params.RedirectTo)
@@ -192,11 +192,11 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 
 		switch params.Type {
 		case signupVerification, inviteVerification:
-			user, terr = a.signupVerify(ctx, tx, user)
+			user, terr = a.signupVerify(r, ctx, tx, user)
 		case recoveryVerification, magicLinkVerification:
-			user, terr = a.recoverVerify(ctx, tx, user)
+			user, terr = a.recoverVerify(r, ctx, tx, user)
 		case emailChangeVerification:
-			user, terr = a.emailChangeVerify(ctx, tx, params, user)
+			user, terr = a.emailChangeVerify(r, ctx, tx, params, user)
 			if user == nil && terr == nil {
 				return sendJSON(w, http.StatusOK, map[string]string{
 					"msg":  singleConfirmationAccepted,
@@ -204,7 +204,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 				})
 			}
 		case smsVerification, phoneChangeVerification:
-			user, terr = a.smsVerify(ctx, tx, user, params.Type)
+			user, terr = a.smsVerify(r, ctx, tx, user, params.Type)
 		default:
 			return unprocessableEntityError("Unsupported verification type")
 		}
@@ -230,7 +230,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func (a *API) signupVerify(ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
+func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
 
@@ -250,7 +250,7 @@ func (a *API) signupVerify(ctx context.Context, conn *storage.Connection, user *
 			}
 		}
 
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserSignedUpAction, "", nil); terr != nil {
 			return terr
 		}
 
@@ -269,7 +269,7 @@ func (a *API) signupVerify(ctx context.Context, conn *storage.Connection, user *
 	return user, nil
 }
 
-func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
+func (a *API) recoverVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
 
@@ -279,7 +279,7 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user 
 			return terr
 		}
 		if !user.IsConfirmed() {
-			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", nil); terr != nil {
+			if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserSignedUpAction, "", nil); terr != nil {
 				return terr
 			}
 
@@ -290,7 +290,7 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user 
 				return terr
 			}
 		} else {
-			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", nil); terr != nil {
+			if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.LoginAction, "", nil); terr != nil {
 				return terr
 			}
 			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
@@ -306,13 +306,13 @@ func (a *API) recoverVerify(ctx context.Context, conn *storage.Connection, user 
 	return user, nil
 }
 
-func (a *API) smsVerify(ctx context.Context, conn *storage.Connection, user *models.User, otpType string) (*models.User, error) {
+func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User, otpType string) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserSignedUpAction, "", nil); terr != nil {
 			return terr
 		}
 
@@ -357,7 +357,7 @@ func (a *API) prepRedirectURL(message string, rurl string) string {
 	return rurl + "#" + q.Encode()
 }
 
-func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
+func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
 
@@ -384,7 +384,7 @@ func (a *API) emailChangeVerify(ctx context.Context, conn *storage.Connection, p
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserModifiedAction, "", nil); terr != nil {
 			return terr
 		}
 

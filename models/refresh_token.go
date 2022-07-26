@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"net/http"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
@@ -38,11 +39,11 @@ func GrantAuthenticatedUser(tx *storage.Connection, user *User) (*RefreshToken, 
 }
 
 // GrantRefreshTokenSwap swaps a refresh token for a new one, revoking the provided token.
-func GrantRefreshTokenSwap(tx *storage.Connection, user *User, token *RefreshToken) (*RefreshToken, error) {
+func GrantRefreshTokenSwap(r *http.Request, tx *storage.Connection, user *User, token *RefreshToken) (*RefreshToken, error) {
 	var newToken *RefreshToken
 	err := tx.Transaction(func(rtx *storage.Connection) error {
 		var terr error
-		if terr = NewAuditLogEntry(tx, user.InstanceID, user, TokenRevokedAction, "", nil); terr != nil {
+		if terr = NewAuditLogEntry(r, tx, user.InstanceID, user, TokenRevokedAction, "", nil); terr != nil {
 			return errors.Wrap(terr, "error creating audit log entry")
 		}
 

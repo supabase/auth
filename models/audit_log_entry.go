@@ -3,11 +3,14 @@ package models
 import (
 	"bytes"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type AuditAction string
@@ -63,7 +66,7 @@ func (AuditLogEntry) TableName() string {
 	return tableName
 }
 
-func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User, action AuditAction, ipAddress string, traits map[string]interface{}) error {
+func NewAuditLogEntry(r *http.Request, tx *storage.Connection, instanceID uuid.UUID, actor *User, action AuditAction, ipAddress string, traits map[string]interface{}) error {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return errors.Wrap(err, "Error generating unique id")
@@ -75,8 +78,7 @@ func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User,
 		username = actor.GetPhone()
 	}
 
-	payload := JSONMap{
-		"timestamp":      time.Now().UTC().Format(time.RFC3339),
+	payload := map[string]interface{}{
 		"actor_id":       actor.ID,
 		"actor_username": username,
 		"action":         action,
@@ -85,9 +87,13 @@ func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User,
 	l := AuditLogEntry{
 		InstanceID: instanceID,
 		ID:         id,
-		Payload:    payload,
+		Payload:    JSONMap(payload),
 		IPAddress:  ipAddress,
 	}
+
+	logger.LogEntrySetFields(r, logrus.Fields{
+		"auth_event": logrus.Fields(payload),
+	})
 
 	if name, ok := actor.UserMetaData["full_name"]; ok {
 		l.Payload["actor_name"] = name

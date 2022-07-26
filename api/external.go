@@ -141,7 +141,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		var terr error
 		inviteToken := getInviteToken(ctx)
 		if inviteToken != "" {
-			if user, terr = a.processInvite(ctx, tx, userData, instanceID, inviteToken, providerType); terr != nil {
+			if user, terr = a.processInvite(r, ctx, tx, userData, instanceID, inviteToken, providerType); terr != nil {
 				return terr
 			}
 		} else {
@@ -256,7 +256,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 					return nil
 				}
 
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
+				if terr := models.NewAuditLogEntry(r, tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": providerType,
 				}); terr != nil {
 					return terr
@@ -278,7 +278,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 					return internalServerError("Error updating user").WithInternalError(terr)
 				}
 			} else {
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
+				if terr := models.NewAuditLogEntry(r, tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
 					"provider": providerType,
 				}); terr != nil {
 					return terr
@@ -328,7 +328,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
-func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, instanceID uuid.UUID, inviteToken, providerType string) (*models.User, error) {
+func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, instanceID uuid.UUID, inviteToken, providerType string) (*models.User, error) {
 	config := a.getConfig(ctx)
 	user, err := models.FindUserByConfirmationToken(tx, inviteToken)
 	if err != nil {
@@ -374,7 +374,7 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 		return nil, internalServerError("Database error updating user").WithInternalError(err)
 	}
 
-	if err := models.NewAuditLogEntry(tx, instanceID, user, models.InviteAcceptedAction, "", map[string]interface{}{
+	if err := models.NewAuditLogEntry(r, tx, instanceID, user, models.InviteAcceptedAction, "", map[string]interface{}{
 		"provider": providerType,
 	}); err != nil {
 		return nil, err
