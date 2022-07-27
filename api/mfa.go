@@ -60,6 +60,8 @@ type RecoveryCodesResponse struct {
 }
 
 func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) error {
+	const numRecoveryCodes = 8
+	const recoveryCodeLength = 8
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
@@ -71,8 +73,8 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 	var recoveryCode string
 	var recoveryCodes []string
 	var recoveryCodeModel *models.RecoveryCode
-	for i := 0; i < models.NumRecoveryCodes; i++ {
-		recoveryCode = crypto.SecureToken(models.RecoveryCodeLength)
+	for i := 0; i < numRecoveryCodes; i++ {
+		recoveryCode = crypto.SecureToken(recoveryCodeLength)
 		recoveryCodeModel, terr = models.NewRecoveryCode(user, recoveryCode)
 		if terr != nil {
 			return internalServerError("Error creating recovery code").WithInternalError(terr)

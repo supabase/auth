@@ -165,15 +165,10 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 				r.Route("/{user_id}", func(r *router) {
 					r.Use(api.loadUser)
-					r.Route("/mfa", func(r *router) {
-						r.Delete("/factor", api.adminUserDeleteFactor)
-						r.Delete("/recovery_codes", api.adminUserDeleteRecoveryCodes)
-					})
 
 					r.Get("/", api.adminUserGet)
 					r.Put("/", api.adminUserUpdate)
 					r.Delete("/", api.adminUserDelete)
-
 				})
 			})
 
