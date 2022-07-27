@@ -142,10 +142,16 @@ func TestHookRetry(t *testing.T) {
 }
 
 func TestHookTimeout(t *testing.T) {
+	realTimeout := defaultTimeout
+	defer func() {
+		defaultTimeout = realTimeout
+	}()
+	defaultTimeout = time.Millisecond * 10
+
 	var callCount int
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
-		<-time.After(2 * time.Second)
+		time.Sleep(20 * time.Millisecond)
 	}))
 	defer svr.Close()
 
@@ -154,9 +160,8 @@ func TestHookTimeout(t *testing.T) {
 	defer unshiftPrivateIPBlock(localhost)
 
 	config := &conf.WebhookConfig{
-		URL:        svr.URL,
-		Retries:    3,
-		TimeoutSec: 1,
+		URL:     svr.URL,
+		Retries: 3,
 	}
 	w := Webhook{
 		WebhookConfig: config,

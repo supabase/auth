@@ -51,39 +51,6 @@ func (ts *MFATestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 }
 
-func (ts *MFATestSuite) TestMFAEnable() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	require.NoError(ts.T(), err)
-
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("http://localhost/mfa/%s/enable", u.ID), nil)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), w.Code, http.StatusOK)
-
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	require.True(ts.T(), u.MFAEnabled)
-}
-
-func (ts *MFATestSuite) TestMFADisable() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), u.EnableMFA(ts.API.db))
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	require.NoError(ts.T(), err)
-
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("http://localhost/mfa/%s/disable", u.ID), nil)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), w.Code, http.StatusOK)
-
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	require.False(ts.T(), u.MFAEnabled)
-}
-
 func (ts *MFATestSuite) TestMFARecoveryCodeGeneration() {
 	const expectedNumOfRecoveryCodes = 8
 	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
