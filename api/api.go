@@ -191,8 +191,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.Route("/mfa", func(r *router) {
 			r.Route("/{user_id}", func(r *router) {
 				r.Use(api.loadUser)
-				r.Put("/disable", api.DisableMFA)
-				r.Put("/enable", api.EnableMFA)
 				r.Post("/recovery_codes", api.GenerateRecoveryCodes)
 				r.Post("/factor", api.EnrollFactor)
 				r.Post("/challenge", api.ChallengeFactor)
