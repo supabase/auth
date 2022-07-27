@@ -175,6 +175,17 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			})
 
 			r.Post("/generate_link", api.GenerateLink)
+
+			r.Route("/saml", func(r *router) {
+				r.Get("/", api.adminListSAMLIdPs)
+				r.Post("/", api.adminCreateSAMLIdP)
+
+				r.Route("/{idp}", func(r *router) {
+					r.Get("/", api.adminGetSAMLIdP)
+					r.Put("/", api.adminUpdateSAMLIdP)
+					r.Delete("/", api.adminDeleteSAMLIdP)
+				})
+			})
 		})
 
 		if api.config.SAML.Enabled {

@@ -120,3 +120,23 @@ func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.User
 		},
 	}, nil
 }
+
+func (a *API) adminListSAMLIdPs(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+func (a *API) adminCreateSAMLIdP(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+func (a *API) adminGetSAMLIdP(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+func (a *API) adminUpdateSAMLIdP(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
+
+func (a *API) adminDeleteSAMLIdP(w http.ResponseWriter, r *http.Request) error {
+	return nil
+}
