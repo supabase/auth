@@ -48,6 +48,21 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 	return withUser(r.Context(), u), nil
 }
 
+func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	factorID := chi.URLParam(r, "factor_id")
+
+	logEntrySetField(r, "factor_id", factorID)
+	f, err := models.FindFactorByFactorID(a.db, factorID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return nil, notFoundError("Factor not found")
+		}
+		return nil, internalServerError("Database error loading factor").WithInternalError(err)
+	}
+	// write withFactor
+	return withFactor(r.Context(), f), nil
+}
+
 func (a *API) getAdminParams(r *http.Request) (*adminUserParams, error) {
 	params := adminUserParams{}
 	err := json.NewDecoder(r.Body).Decode(&params)
