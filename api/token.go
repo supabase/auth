@@ -52,7 +52,7 @@ type RefreshTokenGrantParams struct {
 // IdTokenGrantParams are the parameters the IdTokenGrant method accepts
 type IdTokenGrantParams struct {
 	IdToken  string `json:"id_token"`
-	Nonce    string `json:"nonce"`
+	Nonce    []byte `json:"nonce"` // Cryptographic nonce
 	Provider string `json:"provider"`
 	ClientID string `json:"client_id"`
 	Issuer   string `json:"issuer"`
@@ -401,13 +401,13 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	hashedNonce, ok := claims["nonce"]
-	if (!ok && params.Nonce != "") || (ok && params.Nonce == "") {
+	if (!ok && len(params.Nonce) != 0) || (ok && len(params.Nonce) == 0) {
 		return oauthError("invalid request", "Passed nonce and nonce in id_token should either both exist or not.")
 	}
 
-	if ok && params.Nonce != "" {
+	if ok && len(params.Nonce) != 0 {
 		// verify nonce to mitigate replay attacks
-		hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
+		hash := fmt.Sprintf("%x", sha256.Sum256(params.Nonce))
 		if hash != hashedNonce.(string) {
 			return oauthError("invalid nonce", "").WithInternalMessage("Possible abuse attempt: %v", r)
 		}
