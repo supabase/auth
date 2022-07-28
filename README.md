@@ -1,5 +1,7 @@
 # GoTrue - User management for APIs
 
+[![Coverage Status](https://coveralls.io/repos/github/supabase/gotrue/badge.svg?branch=master)](https://coveralls.io/github/supabase/gotrue?branch=master)
+
 GoTrue is a small open-source API written in golang, that can act as a self-standing
 API service for handling user registration and authentication for JAM projects.
 
@@ -10,21 +12,24 @@ user data.
 
 Create a `.env` file to store your own custom env vars. See [`example.env`](example.env)
 
-1. Start the local postgres database in a postgres container: `./hack/postgresd.sh` 
+1. Start the local postgres database in a postgres container: `./hack/postgresd.sh`
 2. Build the gotrue binary: `make build` . You should see an output like this:
+
 ```
 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`"
 GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`" -o gotrue-arm64
 ```
+
 3. Execute the gotrue binary: `./gotrue`
 
-### If you have docker installed...
+### If you have docker installed
+
 Create a `.env.docker` file to store your own custom env vars. See [`example.docker.env`](example.docker.env)
 
 1. `make build`
 2. `make dev`
 3. `docker ps` should show 2 docker containers (`gotrue_postgresql` and `gotrue_gotrue`)
-4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that gotrue is running. 
+4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that gotrue is running.
 
 ## Configuration
 
@@ -82,9 +87,10 @@ If refresh token rotation is enabled, gotrue will automatically detect malicious
 
 `GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL` - `string`
 
-This setting is only applicable if `GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` is enabled. The reuse interval for a refresh token allows for exchanging the refresh token multiple times during the interval to support concurrency or offline issues. During the reuse interval, gotrue will not consider using a revoked token as a malicious attempt and will simply return the child refresh token. 
+This setting is only applicable if `GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` is enabled. The reuse interval for a refresh token allows for exchanging the refresh token multiple times during the interval to support concurrency or offline issues. During the reuse interval, gotrue will not consider using a revoked token as a malicious attempt and will simply return the child refresh token.
 
-Only the previous revoked token can be reused. Using an old refresh token way before the current valid refresh token will trigger the reuse detection. 
+Only the previous revoked token can be reused. Using an old refresh token way before the current valid refresh token will trigger the reuse detection.
+
 ### API
 
 ```properties
@@ -254,6 +260,7 @@ To try out external authentication with Apple locally, you will need to do the f
 
 1. Remap localhost to \<my_custom_dns \> in your `/etc/hosts` config.
 2. Configure gotrue to serve HTTPS traffic over localhost by replacing `ListenAndServe` in [api.go](api/api.go) with:
+
    ```
       func (a *API) ListenAndServe(hostAndPort string) {
         log := logrus.WithField("component", "api")
@@ -278,6 +285,7 @@ To try out external authentication with Apple locally, you will need to do the f
         }
     }
    ```
+
 3. Generate the crt and key file. See [here](https://www.freecodecamp.org/news/how-to-get-https-working-on-your-local-development-environment-in-5-minutes-7af615770eec/) for more information.
 4. Generate the `GOTRUE_EXTERNAL_APPLE_SECRET` by following this [post](https://medium.com/identity-beyond-borders/how-to-configure-sign-in-with-apple-77c61e336003)!
 
@@ -493,6 +501,7 @@ Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/req
 - `SMS_TWILIO_MESSAGE_SERVICE_SID` - can be set to your twilio sender mobile number
 
 Or Messagebird credentials, which can be obtained in the [Dashboard](https://dashboard.messagebird.com/en/developers/access):
+
 - `SMS_MESSAGEBIRD_ACCESS_KEY` - your Messagebird access key
 - `SMS_MESSAGEBIRD_ORIGINATOR` - SMS sender (your Messagebird phone number with + or company name)
 
@@ -545,7 +554,7 @@ Returns the publicly available settings for this gotrue instance.
     "spotify": true,
     "twitch": true,
     "twitter": true,
-    "workos": true,
+    "workos": true
   },
   "disable_signup": false,
   "autoconfirm": false
@@ -657,6 +666,7 @@ Returns:
 ```
 
 if AUTOCONFIRM is enabled and the sign up is a duplicate, then the endpoint will return:
+
 ```
 {
   "code":400,
@@ -939,12 +949,12 @@ Returns:
 }
 ```
 
-If `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` is enabled, the user will need to reauthenticate first. 
+If `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` is enabled, the user will need to reauthenticate first.
 
 ```json
 {
   "password": "new-password",
-  "nonce": "123456",
+  "nonce": "123456"
 }
 ```
 
@@ -979,7 +989,7 @@ scopes=<optional additional scopes depending on the provider (email and name are
 
 Redirects to provider and then to `/callback`
 
-For apple specific setup see: https://github.com/supabase/gotrue#apple-oauth
+For apple specific setup see: <https://github.com/supabase/gotrue#apple-oauth>
 
 ### **GET /callback**
 
