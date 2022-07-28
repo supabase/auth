@@ -27,7 +27,7 @@ migrate_test: ## Run database migrations for test.
 	hack/migrate.sh postgres
 
 test: ## Run tests.
-	go test -p 1 -v $(CHECK_FILES)
+	go test ./... -p 1 -race -v $(CHECK_FILES) -count=1 -coverpkg ./api/... -coverprofile=coverage.out
 
 vet: # Vet the code
 	go vet $(CHECK_FILES)
