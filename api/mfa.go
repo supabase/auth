@@ -104,9 +104,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
-	if !user.MFAEnabled {
-		return forbiddenError(MFANotEnabledMsg)
-	}
 
 	params := &EnrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)

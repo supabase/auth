@@ -106,7 +106,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor", user.ID), &buffer)
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor/", user.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			req.Header.Set("Content-Type", "application/json")
 			ts.API.handler.ServeHTTP(w, req)
@@ -222,7 +222,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/users/%s/factor/%s/verify", user.ID, f.ID), &buffer)
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor/%s/verify", user.ID, f.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), v.expectedHTTPCode, w.Code)

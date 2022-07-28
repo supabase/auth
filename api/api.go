@@ -153,9 +153,9 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Route("/{user_id}", func(r *router) {
 				r.Use(api.loadUser)
 				r.Route("/factor", func(r *router) {
+					r.Post("/", api.EnrollFactor)
 					r.Route("/{factor_id}", func(r *router) {
 						r.Use(api.loadFactor)
-						r.Post("/enroll", api.EnrollFactor)
 						r.Post("/verify", api.VerifyFactor)
 						r.Post("/challenge", api.ChallengeFactor)
 
