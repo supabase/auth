@@ -64,7 +64,7 @@ func (ts *TokenTestSuite) TestRateLimitTokenRefresh() {
 	req.Header.Set("My-Custom-Header", "1.2.3.4")
 
 	// It rate limits after 30 requests
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 35; i++ {
 		w := httptest.NewRecorder()
 		ts.API.handler.ServeHTTP(w, req)
 		assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
