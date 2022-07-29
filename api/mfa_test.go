@@ -41,7 +41,6 @@ func TestMFA(t *testing.T) {
 
 func (ts *MFATestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
-
 	// Create user
 	u, err := models.NewUser(ts.instanceID, "123456789", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
@@ -61,7 +60,7 @@ func (ts *MFATestSuite) TestMFARecoveryCodeGeneration() {
 	require.NoError(ts.T(), err)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/recovery_codes", user.ID), nil)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/recovery_codes", user.ID), nil)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
@@ -79,23 +78,13 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		FriendlyName string
 		FactorType   string
 		Issuer       string
-		MFAEnabled   bool
 		expectedCode int
 	}{
-		{
-			"TOTP: MFA is disabled",
-			"",
-			"totp",
-			"supabase.com",
-			false,
-			http.StatusForbidden,
-		},
 		{
 			"TOTP: Factor has friendly name",
 			"bob",
 			"totp",
 			"supabase.com",
-			true,
 			http.StatusOK,
 		},
 		{
@@ -103,7 +92,6 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			"",
 			"totp",
 			"supabase.com",
-			true,
 			http.StatusOK,
 		},
 	}
@@ -113,13 +101,12 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": c.FriendlyName, "factor_type": c.FactorType, "issuer": c.Issuer}))
 			user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 			ts.Require().NoError(err)
-			require.NoError(ts.T(), user.EnableMFA(ts.API.db))
 
 			token, err := generateAccessToken(user, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/factor", user.ID), &buffer)
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor/", user.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			req.Header.Set("Content-Type", "application/json")
 			ts.API.handler.ServeHTTP(w, req)
@@ -138,57 +125,23 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 }
 
 func (ts *MFATestSuite) TestChallengeFactor() {
-	cases := []struct {
-		desc         string
-		id           string
-		mfaEnabled   bool
-		expectedCode int
-	}{
-		{
-			"MFA Not Enabled",
-			"",
-			false,
-			http.StatusForbidden,
-		},
-		{
-			"Factor ID present",
-			"testFactorID",
-			true,
-			http.StatusOK,
-		},
-		{
-			"Factor ID missing",
-			"",
-			true,
-			http.StatusUnprocessableEntity,
-		},
-	}
-	for _, c := range cases {
-		ts.Run(c.desc, func() {
-			u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-			require.NoError(ts.T(), err)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
 
-			if c.mfaEnabled {
-				require.NoError(ts.T(), u.EnableMFA(ts.API.db), "Error setting MFA to disabled")
-			}
+	f, err := models.FindFactorByFactorID(ts.API.db, "testFactorID")
+	require.NoError(ts.T(), err)
 
-			token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-			require.NoError(ts.T(), err, "Error generating access token")
+	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	require.NoError(ts.T(), err, "Error generating access token")
 
-			var buffer bytes.Buffer
-			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-				"factor_id": c.id,
-			}))
+	var buffer bytes.Buffer
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/user/%s/factor/%s/challenge", u.ID, f.ID), &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
-			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/mfa/%s/challenge", u.ID), &buffer)
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-
-			w := httptest.NewRecorder()
-			ts.API.handler.ServeHTTP(w, req)
-			require.Equal(ts.T(), c.expectedCode, w.Code)
-		})
-	}
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
 func (ts *MFATestSuite) TestMFAVerifyFactor() {
@@ -269,7 +222,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/verify", user.ID), &buffer)
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor/%s/verify", user.ID, f.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), v.expectedHTTPCode, w.Code)
