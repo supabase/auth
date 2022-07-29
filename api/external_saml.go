@@ -3,8 +3,6 @@ package api
 import (
 	"context"
 	"net/http"
-
-	"github.com/netlify/gotrue/api/provider"
 )
 
 func (a *API) loadSAMLState(w http.ResponseWriter, r *http.Request) (context.Context, error) {
@@ -16,45 +14,4 @@ func (a *API) loadSAMLState(w http.ResponseWriter, r *http.Request) (context.Con
 	ctx := r.Context()
 
 	return a.loadExternalState(ctx, state)
-}
-
-func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.UserProvidedData, error) {
-	config := a.getConfig(ctx)
-
-	samlProvider, err := provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
-	if err != nil {
-		return nil, badRequestError("Could not initialize SAML provider: %+v", err).WithInternalError(err)
-	}
-
-	samlResponse := r.FormValue("SAMLResponse")
-	if samlResponse == "" {
-		return nil, badRequestError("SAML Response is missing")
-	}
-
-	assertionInfo, err := samlProvider.ServiceProvider.RetrieveAssertionInfo(samlResponse)
-	if err != nil {
-		return nil, internalServerError("Parsing SAML assertion failed: %+v", err).WithInternalError(err)
-	}
-
-	if assertionInfo.WarningInfo.InvalidTime {
-		return nil, forbiddenError("SAML response has invalid time")
-	}
-
-	if assertionInfo.WarningInfo.NotInAudience {
-		return nil, forbiddenError("SAML response is not in audience")
-	}
-
-	if assertionInfo == nil {
-		return nil, internalServerError("SAML Assertion is missing")
-	}
-	userData := &provider.UserProvidedData{
-		Emails: []provider.Email{{
-			Email:    assertionInfo.NameID,
-			Verified: true,
-		}},
-		Metadata: &provider.Claims{
-			Subject: assertionInfo.NameID,
-		},
-	}
-	return userData, nil
 }

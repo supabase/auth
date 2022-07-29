@@ -181,7 +181,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Route("/saml", func(r *router) {
 				r.Route("/acs", func(r *router) {
 					r.Use(api.loadSAMLState)
-					r.Post("/", api.ExternalProviderCallback)
+					r.Post("/", api.SAMLAssertionConsumerService)
 				})
 
 				r.Get("/metadata", api.SAMLMetadata)

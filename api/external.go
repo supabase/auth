@@ -103,6 +103,16 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
+// SAMLAssertionConsumerService handles the ACS endpoint
+func (a *API) SAMLAssertionConsumerService(w http.ResponseWriter, r *http.Request) error {
+	// TODO: I'm really not super happy with the handling of this in
+	// internalExternalProviderCallback -- needs to be refactored.
+	newReq := r.WithContext(withExternalProviderType(r.Context(), "saml"))
+
+	a.redirectErrors(a.internalExternalProviderCallback, w, newReq)
+	return nil
+}
+
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
@@ -432,8 +442,6 @@ func (a *API) Provider(ctx context.Context, name string, scopes string, query *u
 		return provider.NewTwitterProvider(config.External.Twitter, scopes)
 	case "workos":
 		return provider.NewWorkOSProvider(config.External.WorkOS, query)
-	case "saml":
-		return provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
 	case "zoom":
 		return provider.NewZoomProvider(config.External.Zoom)
 	default:
