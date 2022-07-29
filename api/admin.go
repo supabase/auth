@@ -59,7 +59,6 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 		}
 		return nil, internalServerError("Database error loading factor").WithInternalError(err)
 	}
-	// write withFactor
 	return withFactor(r.Context(), f), nil
 }
 
