@@ -180,7 +180,9 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 				r.Get("/", api.adminListSAMLIdPs)
 				r.Post("/", api.adminCreateSAMLIdP)
 
-				r.Route("/{idp}", func(r *router) {
+				r.Route("/{idp_id}", func(r *router) {
+					r.Use(api.loadSAMLIdP)
+
 					r.Get("/", api.adminGetSAMLIdP)
 					r.Put("/", api.adminUpdateSAMLIdP)
 					r.Delete("/", api.adminDeleteSAMLIdP)
@@ -191,7 +193,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		if api.config.SAML.Enabled {
 			r.Route("/saml", func(r *router) {
 				r.Route("/acs", func(r *router) {
-					r.Use(api.loadSAMLState)
+					//r.Use(api.loadSAMLState)
 					r.Post("/", api.SAMLAssertionConsumerService)
 				})
 

@@ -15,6 +15,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case IdentityNotFoundError:
 		return true
+	case SSOProviderNotFoundError:
+		return true
 	}
 	return false
 }
@@ -58,4 +60,10 @@ type TotpSecretNotFoundError struct{}
 
 func (e TotpSecretNotFoundError) Error() string {
 	return "Totp Secret not found"
+}
+
+type SSOProviderNotFoundError struct{}
+
+func (e SSOProviderNotFoundError) Error() string {
+	return "SSO Identity Provider not found"
 }

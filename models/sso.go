@@ -11,13 +11,13 @@ import (
 )
 
 type SSOProvider struct {
-	ID uuid.UUID `db:"id"`
+	ID uuid.UUID `db:"id" json:"id"`
 
-	SAMLProvider SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id"`
-	SSODomains   []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id"`
+	SAMLProvider SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
+	SSODomains   []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
 
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	CreatedAt time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
 }
 
 func (p SSOProvider) TableName() string {
@@ -25,17 +25,17 @@ func (p SSOProvider) TableName() string {
 }
 
 type SAMLProvider struct {
-	ID uuid.UUID `db:"id"`
+	ID uuid.UUID `db:"id" json:"-"`
 
-	SSOProvider   *SSOProvider `belongs_to:"sso_providers"`
-	SSOProviderID uuid.UUID    `db:"sso_provider_id"`
+	SSOProvider   *SSOProvider `belongs_to:"sso_providers" json:"-"`
+	SSOProviderID uuid.UUID    `db:"sso_provider_id" json:"-"`
 
-	EntityID    string `db:"entity_id"`
-	MetadataXML string `db:"metadata_xml"`
-	MetadataURL string `db:"metadata_url"`
+	EntityID    string `db:"entity_id" json:"entity_id"`
+	MetadataXML string `db:"metadata_xml" json:"metadata_xml,omitempty"`
+	MetadataURL string `db:"metadata_url" json:"metadata_url,omitempty"`
 
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	CreatedAt time.Time `db:"created_at" json:"-"`
+	UpdatedAt time.Time `db:"updated_at" json:"-"`
 }
 
 func (p SAMLProvider) TableName() string {
@@ -43,15 +43,15 @@ func (p SAMLProvider) TableName() string {
 }
 
 type SSODomain struct {
-	ID uuid.UUID `db:"id"`
+	ID uuid.UUID `db:"id" json:"-"`
 
-	SSOProvider   *SSOProvider `belongs_to:"sso_providers"`
-	SSOProviderID uuid.UUID    `db:"sso_provider_id"`
+	SSOProvider   *SSOProvider `belongs_to:"sso_providers" json:"-"`
+	SSOProviderID uuid.UUID    `db:"sso_provider_id" json:"-"`
 
-	Domain string `db:"domain"`
+	Domain string `db:"domain" json:"domain"`
 
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	CreatedAt time.Time `db:"created_at" json:"-"`
+	UpdatedAt time.Time `db:"updated_at" json:"-"`
 }
 
 func (d SSODomain) TableName() string {
@@ -62,28 +62,74 @@ func FindSSOProviderForEmailAddress(tx *storage.Connection, emailAddress string)
 	parts := strings.Split(emailAddress, "@")
 	emailDomain := parts[1]
 
-	var ssoDomain SSODomain
-
-	if err := tx.Eager().Q().Where("domain = ?", emailDomain).First(&ssoDomain); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, nil
-		}
-
-		return nil, errors.Wrap(err, "error finding SSO provider based on email address domain")
-	}
-
-	return ssoDomain.SSOProvider, nil
+	return FindSSOProviderByDomain(tx, emailDomain)
 }
 
 func FindSAMLProviderForEntityID(tx *storage.Connection, entityId string) (*SSOProvider, error) {
 	var samlProvider SAMLProvider
-	if err := tx.Eager().Q().Where("entity_id = ?", entityId).First(&samlProvider); err != nil {
+	if err := tx.Q().Where("entity_id = ?", entityId).First(&samlProvider); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, nil
+			return nil, SSOProviderNotFoundError{}
 		}
 
 		return nil, errors.Wrap(err, "error finding SAML SSO provider by EntityID")
 	}
 
-	return samlProvider.SSOProvider, nil
+	var ssoProvider SSOProvider
+	if err := tx.Eager().Q().Where("id = ?", samlProvider.SSOProviderID).First(&ssoProvider); err != nil {
+		return nil, errors.Wrap(err, "error finding SAML SSO provider by ID (via EntityID)")
+	}
+
+	return &ssoProvider, nil
+}
+
+func FindSAMLProviderByID(tx *storage.Connection, id uuid.UUID) (*SSOProvider, error) {
+	var ssoProvider SSOProvider
+
+	if err := tx.Eager().Q().Where("id = ?", id).First(&ssoProvider); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SSOProviderNotFoundError{}
+		}
+
+		return nil, errors.Wrap(err, "error finding SAML SSO provider by ID")
+	}
+
+	return &ssoProvider, nil
+}
+
+func FindSSOProviderByDomain(tx *storage.Connection, domain string) (*SSOProvider, error) {
+	var ssoDomain SSODomain
+
+	if err := tx.Q().Where("domain = ?", domain).First(&ssoDomain); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SSOProviderNotFoundError{}
+		}
+
+		return nil, errors.Wrap(err, "error finding SAML SSO domain")
+	}
+
+	var ssoProvider SSOProvider
+	if err := tx.Eager().Q().Where("id = ?", ssoDomain.SSOProviderID).First(&ssoProvider); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SSOProviderNotFoundError{}
+		}
+
+		return nil, errors.Wrap(err, "error finding SAML SSO provider by ID (via domain)")
+	}
+
+	return &ssoProvider, nil
+}
+
+func FindAllSAMLProviders(tx *storage.Connection) ([]SSOProvider, error) {
+	var providers []SSOProvider
+
+	if err := tx.Eager().All(&providers); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, nil
+		}
+
+		return nil, errors.Wrap(err, "error loading all SAML SSO providers")
+	}
+
+	return providers, nil
 }
