@@ -10,7 +10,6 @@ import (
 	"github.com/gobuffalo/pop/v5/columns"
 	"github.com/netlify/gotrue/conf"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 // Connection is the interface a storage provider must implement.
@@ -39,10 +38,6 @@ func Dial(config *conf.GlobalConfiguration) (*Connection, error) {
 	if err := db.Open(); err != nil {
 		return nil, errors.Wrap(err, "checking database connection")
 	}
-	if logrus.StandardLogger().Level == logrus.DebugLevel {
-		pop.Debug = true
-	}
-
 	return &Connection{db}, nil
 }
 

@@ -32,7 +32,7 @@ func migrate(cmd *cobra.Command, args []string) {
 		globalConfig.DB.Driver = u.Scheme
 	}
 
-	log := logrus.New()
+	log := logrus.StandardLogger()
 
 	pop.Debug = false
 	if globalConfig.Logging.Level != "" {
