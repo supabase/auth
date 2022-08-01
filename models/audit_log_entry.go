@@ -32,9 +32,6 @@ const (
 	EnrollFactorAction              AuditAction = "factor_enrolled"
 	CreateChallengeAction           AuditAction = "challenge_created"
 	VerifyFactorAction              AuditAction = "verification_attempted"
-	DeleteFactorAction              AuditAction = "factor_deleted"
-	FactorModifiedAction            AuditAction = "factor_modified"
-	DeleteRecoveryCodesAction       AuditAction = "recovery_codes_deleted"
 
 	account auditLogType = "account"
 	team    auditLogType = "team"
@@ -60,9 +57,6 @@ var actionLogTypeMap = map[AuditAction]auditLogType{
 	EnrollFactorAction:              factor,
 	CreateChallengeAction:           factor,
 	VerifyFactorAction:              factor,
-	DeleteFactorAction:              factor,
-	FactorModifiedAction:            factor,
-	DeleteRecoveryCodesAction:       team,
 }
 
 // AuditLogEntry is the database model for audit log entries.

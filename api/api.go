@@ -150,6 +150,20 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Use(api.requireAuthentication)
 			r.Get("/", api.UserGet)
 			r.With(sharedLimiter).Put("/", api.UserUpdate)
+			r.Route("/{user_id}", func(r *router) {
+				r.Use(api.loadUser)
+				r.Route("/factor", func(r *router) {
+					r.Post("/", api.EnrollFactor)
+					r.Route("/{factor_id}", func(r *router) {
+						r.Use(api.loadFactor)
+						r.Post("/verify", api.VerifyFactor)
+						r.Post("/challenge", api.ChallengeFactor)
+
+					})
+				})
+				r.Post("/recovery_codes", api.GenerateRecoveryCodes)
+			})
+
 		})
 
 		r.Route("/admin", func(r *router) {
@@ -172,10 +186,10 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 						r.Get("/{factor_id}", api.adminUserGetFactor)
 					})
 					r.Delete("/recovery_codes", api.adminUserDeleteRecoveryCodes)
+
 					r.Get("/", api.adminUserGet)
 					r.Put("/", api.adminUserUpdate)
 					r.Delete("/", api.adminUserDelete)
-
 				})
 			})
 
@@ -189,18 +203,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			})
 
 			r.Get("/metadata", api.SAMLMetadata)
-		})
-		r.Route("/mfa", func(r *router) {
-			r.Route("/{user_id}", func(r *router) {
-				r.Use(api.loadUser)
-				r.Put("/disable", api.DisableMFA)
-				r.Put("/enable", api.EnableMFA)
-				r.Post("/recovery_codes", api.GenerateRecoveryCodes)
-				r.Post("/factor", api.EnrollFactor)
-				r.Post("/challenge", api.ChallengeFactor)
-				r.Post("/verify", api.VerifyFactor)
-
-			})
 		})
 	})
 

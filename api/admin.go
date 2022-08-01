@@ -28,10 +28,6 @@ type adminUserParams struct {
 	BanDuration  string                 `json:"ban_duration"`
 }
 
-type AdminUserDeleteFactorParams struct {
-	FactorID string `json:"factor_id"`
-}
-
 func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
@@ -50,6 +46,20 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 	}
 
 	return withUser(r.Context(), u), nil
+}
+
+func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	factorID := chi.URLParam(r, "factor_id")
+
+	logEntrySetField(r, "factor_id", factorID)
+	f, err := models.FindFactorByFactorID(a.db, factorID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return nil, notFoundError("Factor not found")
+		}
+		return nil, internalServerError("Database error loading factor").WithInternalError(err)
+	}
+	return withFactor(r.Context(), f), nil
 }
 
 func (a *API) getAdminParams(r *http.Request) (*adminUserParams, error) {
