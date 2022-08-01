@@ -351,7 +351,6 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
-
 	params := &AdminUserDeleteFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
