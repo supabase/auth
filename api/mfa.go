@@ -33,11 +33,6 @@ type EnrollFactorResponse struct {
 	TOTP      TOTPObject
 }
 
-type ChallengeFactorParams struct {
-	FactorID     string `json:"factor_id"`
-	FriendlyName string `json:"friendly_name"`
-}
-
 type VerifyFactorParams struct {
 	ChallengeID string `json:"challenge_id"`
 	Code        string `json:"code"`
@@ -66,52 +61,6 @@ type UnenrollFactorParams struct {
 // RecoveryCodesResponse represents a successful recovery code generation response
 type RecoveryCodesResponse struct {
 	RecoveryCodes []string `json:"recovery_codes"`
-}
-
-func (a *API) EnableMFA(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	user := getUser(ctx)
-	instanceID := getInstanceID(ctx)
-	err := a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := user.EnableMFA(tx); terr != nil {
-			return terr
-		}
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, r.RemoteAddr, map[string]interface{}{
-			"user_id":    user.ID,
-			"user_email": user.Email,
-			"user_phone": user.Phone,
-		}); terr != nil {
-			return terr
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	return sendJSON(w, http.StatusOK, user)
-}
-
-func (a *API) DisableMFA(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	user := getUser(ctx)
-	instanceID := getInstanceID(ctx)
-	err := a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := user.DisableMFA(tx); terr != nil {
-			return terr
-		}
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, r.RemoteAddr, map[string]interface{}{
-			"user_id":    user.ID,
-			"user_email": user.Email,
-			"user_phone": user.Phone,
-		}); terr != nil {
-			return terr
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	return sendJSON(w, http.StatusOK, user)
 }
 
 func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) error {
@@ -164,9 +113,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
-	if !user.MFAEnabled {
-		return forbiddenError(MFANotEnabledMsg)
-	}
 
 	params := &EnrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -221,36 +167,11 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
 	user := getUser(ctx)
+	factor := getFactor(ctx)
 	instanceID := getInstanceID(ctx)
-	if !user.MFAEnabled {
-		return forbiddenError(MFANotEnabledMsg)
-	}
-	var factor *models.Factor
-	var err error
-
-	params := &ChallengeFactorParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
-	err = jsonDecoder.Decode(params)
-	if err != nil {
-		return badRequestError("Could not read EnrollFactor params: %v", err)
-	}
-	factorID := params.FactorID
-
-	if factorID != "" {
-		factor, err = models.FindFactorByFactorID(a.db, factorID)
-	} else {
-		return unprocessableEntityError("FactorID should be provided to create a challenge")
-	}
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return notFoundError(err.Error())
-		}
-		return internalServerError("Database error finding factor").WithInternalError(err)
-	}
-
 	challenge, terr := models.NewChallenge(factor)
 	if terr != nil {
-		return internalServerError("Database error creating challenge").WithInternalError(err)
+		return internalServerError("Database error creating challenge").WithInternalError(terr)
 	}
 
 	terr = a.db.Transaction(func(tx *storage.Connection) error {
@@ -258,23 +179,23 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
-			"factor_id":     params.FactorID,
+			"factor_id":     factor.ID,
 			"factor_status": factor.Status,
 		}); terr != nil {
 			return terr
 		}
-
 		return nil
 	})
-	creationTime := challenge.CreatedAt
-	if err != nil {
-		return internalServerError("Error parsing database timestamp").WithInternalError(err)
+	if terr != nil {
+		return terr
 	}
 
+	creationTime := challenge.CreatedAt
+	expiryTime := creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration))
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
 		CreatedAt: creationTime.String(),
-		ExpiresAt: creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)).String(),
+		ExpiresAt: expiryTime.String(),
 	})
 }
 
@@ -283,6 +204,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
 	user := getUser(ctx)
+	factor := getFactor(ctx)
 	instanceID := getInstanceID(ctx)
 	if !user.MFAEnabled {
 		return forbiddenError(MFANotEnabledMsg)
@@ -293,14 +215,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	err = jsonDecoder.Decode(params)
 	if err != nil {
 		return badRequestError("Please check the params passed into VerifyFactor: %v", err)
-	}
-
-	factor, err := models.FindFactorByChallengeID(a.db, params.ChallengeID)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return notFoundError(err.Error())
-		}
-		return internalServerError("Database error finding factor").WithInternalError(err)
 	}
 
 	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
