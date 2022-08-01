@@ -12,6 +12,7 @@ import (
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -600,11 +601,18 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 
 // TestAdminUserDeleteRecoveryCodes tests API /admin/users/<user_id>/recovery_codes/
 func (ts *AdminTestSuite) TestAdminUserDeleteRecoveryCodes() {
+	numRecoveryCodes := 8
+	recoveryCodeLength := 8
 	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	//TODO: Create Recovery Codes
+	// Create batch of Recovery Codes
+	for i := 0; i < numRecoveryCodes; i++ {
+		r, terr := models.NewRecoveryCode(u, crypto.SecureToken(recoveryCodeLength))
+		require.NoError(ts.T(), terr, "Error creating recovery code model")
+		require.NoError(ts.T(), ts.API.db.Create(r), "Error creating recovery code")
+	}
 
 	// Setup request
 	w := httptest.NewRecorder()
@@ -614,6 +622,10 @@ func (ts *AdminTestSuite) TestAdminUserDeleteRecoveryCodes() {
 
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
+	// No valid recovery codes as recovery codes are generated in batches.
+	rc, err := models.FindValidRecoveryCodesByUser(ts.API.db, u)
+	require.Equal(ts.T(), 0, len(rc))
+
 }
 
 // TestAdminUserDeleteFactor tests API /admin/users/<user_id>/factor/<factor_id>/
@@ -635,6 +647,9 @@ func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
 
 }
 
