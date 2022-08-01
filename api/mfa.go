@@ -54,8 +54,7 @@ type UnenrollFactorResponse struct {
 }
 
 type UnenrollFactorParams struct {
-	FactorID string `json:"factor_id"`
-	Code     string `json:"code"`
+	Code string `json:"code"`
 }
 
 // RecoveryCodesResponse represents a successful recovery code generation response
@@ -273,23 +272,14 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
 	user := getUser(ctx)
+	factor := getFactor(ctx)
 	instanceID := getInstanceID(ctx)
-	if !user.MFAEnabled {
-		return forbiddenError(MFANotEnabledMsg)
-	}
+
 	params := &UnenrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err = jsonDecoder.Decode(params)
 	if err != nil {
 		return badRequestError(err.Error())
-	}
-
-	factor, err := models.FindFactorByFactorID(a.db, params.FactorID)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return notFoundError(err.Error())
-		}
-		return internalServerError("Database error finding factor").WithInternalError(err)
 	}
 
 	valid := totp.Validate(params.Code, factor.SecretKey)

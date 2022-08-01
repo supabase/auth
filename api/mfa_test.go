@@ -275,7 +275,7 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 	}))
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/mfa/%s/unenroll", u.ID), &buffer)
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/user/%s/factor/%s/", u.ID, f.ID), &buffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
