@@ -179,11 +179,13 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 				r.Route("/{user_id}", func(r *router) {
 					r.Use(api.loadUser)
-					r.Route("/factors", func(r *router) {
-						r.Use(api.loadFactor)
-						r.Get("/", adminUserGetFactors)
-						r.Delete("/{factor_id}", api.adminUserDeleteFactor)
-						r.Get("/{factor_id}", api.adminUserGetFactor)
+					r.Route("/factor", func(r *router) {
+						r.Get("/", api.adminUserGetFactors)
+						r.Route("/{factor_id}", func(r *router) {
+							r.Use(api.loadFactor)
+							r.Delete("/", api.adminUserDeleteFactor)
+							r.Get("/", api.adminUserGetFactor)
+						})
 					})
 					r.Delete("/recovery_codes", api.adminUserDeleteRecoveryCodes)
 

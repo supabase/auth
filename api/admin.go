@@ -361,19 +361,10 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
-	params := &AdminUserDeleteFactorParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
-	err := jsonDecoder.Decode(params)
-	if err != nil {
-		return badRequestError("Invalid parameters: Please re-check request parameters: %v", err)
-	}
+	factor := getFactor(ctx)
 
-	factor, terr := models.FindFactorByFactorID(a.db, params.FactorID)
-	if terr != nil {
-		return terr
-	}
-	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.FactorModifiedAction, r.RemoteAddr, map[string]interface{}{
+	err := a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.DeleteFactorAction, r.RemoteAddr, map[string]interface{}{
 			"user_id":   user.ID,
 			"factor_id": factor.ID,
 		}); terr != nil {
@@ -418,4 +409,20 @@ func (a *API) adminUserDeleteRecoveryCodes(w http.ResponseWriter, r *http.Reques
 	}
 
 	return sendJSON(w, http.StatusOK, map[string]interface{}{})
+}
+
+func (a *API) adminUserGetFactors(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := getUser(ctx)
+	factors, terr := models.FindFactorsByUser(a.db, user)
+	if terr != nil {
+		return terr
+	}
+	return sendJSON(w, http.StatusOK, factors)
+}
+
+// Returns information about a single factor
+func (a *API) adminUserGetFactor(w http.ResponseWriter, r *http.Request) error {
+	factor := getFactor(r.Context())
+	return sendJSON(w, http.StatusOK, factor)
 }
