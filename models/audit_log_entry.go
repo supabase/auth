@@ -30,6 +30,7 @@ const (
 	TokenRefreshedAction            AuditAction = "token_refreshed"
 	GenerateRecoveryCodesAction     AuditAction = "generate_recovery_codes"
 	EnrollFactorAction              AuditAction = "factor_enrolled"
+	UnenrollFactorAction            AuditAction = "factor_unenrolled"
 	CreateChallengeAction           AuditAction = "challenge_created"
 	VerifyFactorAction              AuditAction = "verification_attempted"
 
@@ -55,6 +56,7 @@ var actionLogTypeMap = map[AuditAction]auditLogType{
 	UserRepeatedSignUpAction:        user,
 	GenerateRecoveryCodesAction:     user,
 	EnrollFactorAction:              factor,
+	UnenrollFactorAction:            factor,
 	CreateChallengeAction:           factor,
 	VerifyFactorAction:              factor,
 }

@@ -158,6 +158,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 						r.Use(api.loadFactor)
 						r.Post("/verify", api.VerifyFactor)
 						r.Post("/challenge", api.ChallengeFactor)
+						r.Delete("/", api.UnenrollFactor)
 
 					})
 				})
