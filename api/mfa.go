@@ -89,7 +89,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())
-	// TODO(Joel): Convert constants into an Enum in future
 	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, models.FactorDisabledState, key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
@@ -247,6 +246,9 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
 
 	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{
 		Success: fmt.Sprintf("%v", valid),
