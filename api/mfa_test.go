@@ -50,27 +50,6 @@ func (ts *MFATestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 }
 
-func (ts *MFATestSuite) TestMFARecoveryCodeGeneration() {
-	const expectedNumOfRecoveryCodes = 8
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-	ts.Require().NoError(err)
-
-	token, err := generateAccessToken(user, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	require.NoError(ts.T(), err)
-
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/recovery_codes", user.ID), nil)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-
-	data := make(map[string]interface{})
-	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-
-	recoveryCodes := data["recovery_codes"].([]interface{})
-	require.Equal(ts.T(), expectedNumOfRecoveryCodes, len(recoveryCodes))
-}
-
 func (ts *MFATestSuite) TestEnrollFactor() {
 	var cases = []struct {
 		desc         string

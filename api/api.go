@@ -162,7 +162,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 					})
 				})
-				r.Post("/recovery_codes", api.GenerateRecoveryCodes)
 			})
 
 		})
