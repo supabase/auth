@@ -26,6 +26,7 @@ const (
 	netlifyIDKey            = contextKey("netlify_id")
 	externalProviderTypeKey = contextKey("external_provider_type")
 	userKey                 = contextKey("user")
+	factorKey               = contextKey("factor")
 	externalReferrerKey     = contextKey("external_referrer")
 	functionHooksKey        = contextKey("function_hooks")
 	adminUserKey            = contextKey("admin_user")
@@ -117,6 +118,11 @@ func withUser(ctx context.Context, u *models.User) context.Context {
 	return context.WithValue(ctx, userKey, u)
 }
 
+// with Factor adds the factor id to the context.
+func withFactor(ctx context.Context, f *models.Factor) context.Context {
+	return context.WithValue(ctx, factorKey, f)
+}
+
 // getUser reads the user id from the context.
 func getUser(ctx context.Context) *models.User {
 	obj := ctx.Value(userKey)
@@ -124,6 +130,15 @@ func getUser(ctx context.Context) *models.User {
 		return nil
 	}
 	return obj.(*models.User)
+}
+
+// getFactor reads the factor id from the context
+func getFactor(ctx context.Context) *models.Factor {
+	obj := ctx.Value(factorKey)
+	if obj == nil {
+		return nil
+	}
+	return obj.(*models.Factor)
 }
 
 // withSignature adds the provided request ID to the context.

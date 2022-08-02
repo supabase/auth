@@ -51,7 +51,3 @@ CREATE TABLE IF NOT EXISTS auth.mfa_recovery_codes(
        CONSTRAINT mfa_recovery_codes_user_id_fkey FOREIGN KEY(user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
 comment on table auth.mfa_recovery_codes is 'Auth: stores recovery codes for Multi Factor Authentication';
-
--- Add MFA toggle on Users table
-ALTER TABLE auth.users
-ADD COLUMN IF NOT EXISTS mfa_enabled boolean NOT NULL DEFAULT FALSE;
