@@ -601,15 +601,13 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 
 // TestAdminUserDeleteRecoveryCodes tests API /admin/users/<user_id>/recovery_codes/
 func (ts *AdminTestSuite) TestAdminUserDeleteRecoveryCodes() {
-	numRecoveryCodes := 8
-	recoveryCodeLength := 8
 	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
 	// Create batch of Recovery Codes
-	for i := 0; i < numRecoveryCodes; i++ {
-		r, terr := models.NewRecoveryCode(u, crypto.SecureToken(recoveryCodeLength))
+	for i := 0; i < models.NumRecoveryCodes; i++ {
+		r, terr := models.NewRecoveryCode(u, crypto.SecureToken(models.RecoveryCodeLength))
 		require.NoError(ts.T(), terr, "Error creating recovery code model")
 		require.NoError(ts.T(), ts.API.db.Create(r), "Error creating recovery code")
 	}
