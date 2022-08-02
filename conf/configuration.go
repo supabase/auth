@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gobwas/glob"
@@ -137,6 +138,7 @@ type MailerConfiguration struct {
 	URLPaths                 EmailContentConfiguration `json:"url_paths"`
 	SecureEmailChangeEnabled bool                      `json:"secure_email_change_enabled" split_words:"true" default:"true"`
 	OtpExp                   uint                      `json:"otp_exp" split_words:"true"`
+	OtpLength                int                       `json:"otp_length" split_words:"true"`
 }
 
 type PhoneProviderConfiguration struct {
@@ -280,12 +282,15 @@ func LoadConfig(filename string) (*Configuration, error) {
 	if err := envconfig.Process("gotrue", config); err != nil {
 		return nil, err
 	}
-	config.ApplyDefaults()
+	if err := config.ApplyDefaults(); err != nil {
+		return nil, err
+	}
+
 	return config, nil
 }
 
 // ApplyDefaults sets defaults for a Configuration
-func (config *Configuration) ApplyDefaults() {
+func (config *Configuration) ApplyDefaults() error {
 	if config.JWT.AdminGroupName == "" {
 		config.JWT.AdminGroupName = "admin"
 	}
@@ -316,6 +321,11 @@ func (config *Configuration) ApplyDefaults() {
 
 	if config.Mailer.OtpExp == 0 {
 		config.Mailer.OtpExp = 86400 // 1 day
+	}
+
+	if config.Mailer.OtpLength == 0 || config.Mailer.OtpLength < 6 || config.Mailer.OtpLength > 10 {
+		// 6-digit otp by default
+		config.Mailer.OtpLength = 6
 	}
 
 	if config.SMTP.MaxFrequency == 0 {
@@ -355,6 +365,12 @@ func (config *Configuration) ApplyDefaults() {
 		config.URIAllowList = []string{}
 	}
 	if config.URIAllowList != nil {
+		for i, item := range config.URIAllowList {
+			// remove trailing slashes from the glob as they may confuse users
+			// when passing redirect_to URLs with or without slashes at the end
+			config.URIAllowList[i] = strings.TrimSuffix(item, "/")
+		}
+
 		config.URIAllowListMap = make(map[string]glob.Glob)
 		for _, uri := range config.URIAllowList {
 			g := glob.MustCompile(uri, '.', '/')
@@ -364,6 +380,8 @@ func (config *Configuration) ApplyDefaults() {
 	if config.PasswordMinLength < defaultMinPasswordLength {
 		config.PasswordMinLength = defaultMinPasswordLength
 	}
+
+	return nil
 }
 
 func (config *Configuration) Value() (driver.Value, error) {

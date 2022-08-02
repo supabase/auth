@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/security"
 	"github.com/sirupsen/logrus"
 
@@ -111,8 +112,8 @@ func (a *API) loadInstanceConfig(w http.ResponseWriter, r *http.Request) (contex
 		return nil, badRequestError("Instance ID is not a valid UUID")
 	}
 
-	logEntrySetField(r, "instance_id", instanceID)
-	logEntrySetField(r, "netlify_id", claims.NetlifyID)
+	logger.LogEntrySetField(r, "instance_id", instanceID)
+	logger.LogEntrySetField(r, "netlify_id", claims.NetlifyID)
 	instance, err := models.GetInstance(a.db, instanceID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -129,7 +130,7 @@ func (a *API) loadInstanceConfig(w http.ResponseWriter, r *http.Request) (contex
 	if claims.SiteURL != "" {
 		config.SiteURL = claims.SiteURL
 	}
-	logEntrySetField(r, "site_url", config.SiteURL)
+	logger.LogEntrySetField(r, "site_url", config.SiteURL)
 
 	ctx = withNetlifyID(ctx, claims.NetlifyID)
 	ctx = withFunctionHooks(ctx, claims.FunctionHooks)

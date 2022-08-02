@@ -138,12 +138,12 @@ func (ts *AdminTestSuite) TestAdminUsers_Pagination() {
 // TestAdminUsers tests API /admin/users route
 func (ts *AdminTestSuite) TestAdminUsers_SortAsc() {
 	u, err := models.NewUser(ts.instanceID, "", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	u.CreatedAt = time.Now().Add(-time.Minute)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	// if the created_at times are the same, then the sort order is not guaranteed
-	time.Sleep(1 * time.Second)
 	u, err = models.NewUser(ts.instanceID, "", "test2@example.com", "test", ts.Config.JWT.Aud, nil)
+	u.CreatedAt = time.Now()
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -173,12 +173,12 @@ func (ts *AdminTestSuite) TestAdminUsers_SortAsc() {
 // TestAdminUsers tests API /admin/users route
 func (ts *AdminTestSuite) TestAdminUsers_SortDesc() {
 	u, err := models.NewUser(ts.instanceID, "12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	u.CreatedAt = time.Now().Add(-time.Minute)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	// if the created_at times are the same, then the sort order is not guaranteed
-	time.Sleep(1 * time.Second)
 	u, err = models.NewUser(ts.instanceID, "987654321", "test2@example.com", "test", ts.Config.JWT.Aud, nil)
+	u.CreatedAt = time.Now()
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 

@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -142,21 +143,28 @@ func TestHookRetry(t *testing.T) {
 }
 
 func TestHookTimeout(t *testing.T) {
+	realTimeout := defaultTimeout
+	defer func() {
+		defaultTimeout = realTimeout
+	}()
+	defaultTimeout = time.Millisecond * 10
+
+	var mu sync.Mutex
 	var callCount int
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		callCount++
-		<-time.After(2 * time.Second)
+		mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
 	}))
-	defer svr.Close()
 
 	// Allowing connection to localhost for the tests only
 	localhost := removeLocalhostFromPrivateIPBlock()
 	defer unshiftPrivateIPBlock(localhost)
 
 	config := &conf.WebhookConfig{
-		URL:        svr.URL,
-		Retries:    3,
-		TimeoutSec: 1,
+		URL:     svr.URL,
+		Retries: 3,
 	}
 	w := Webhook{
 		WebhookConfig: config,
@@ -167,6 +175,7 @@ func TestHookTimeout(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, http.StatusGatewayTimeout, herr.Code)
 
+	svr.Close()
 	assert.Equal(t, 3, callCount)
 }
 

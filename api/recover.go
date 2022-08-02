@@ -32,7 +32,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 
 	var user *models.User
 	aud := a.requestAud(ctx, r)
-	recoverErrorMessage := "If a user exists, you will receive an email with instructions on how to reset your password."
+
 	if err := a.validateEmail(ctx, params.Email); err != nil {
 		return err
 	}
@@ -40,25 +40,25 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return notFoundError(err.Error())
+			return sendJSON(w, http.StatusOK, map[string]string{})
 		}
-		return internalServerError(recoverErrorMessage).WithInternalError(err)
+		return internalServerError("Unable to process request").WithInternalError(err)
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(r, tx, instanceID, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
-		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer)
+		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {
 			return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
 		}
-		return internalServerError(recoverErrorMessage).WithInternalError(err)
+		return internalServerError("Unable to process request").WithInternalError(err)
 	}
 
-	return sendJSON(w, http.StatusOK, &map[string]string{})
+	return sendJSON(w, http.StatusOK, map[string]string{})
 }

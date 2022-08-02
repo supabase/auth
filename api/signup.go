@@ -114,7 +114,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 		if params.Provider == "email" && !user.IsConfirmed() {
 			if config.Mailer.Autoconfirm {
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
+				if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -128,12 +128,12 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			} else {
 				mailer := a.Mailer(ctx)
 				referrer := a.getReferrer(r)
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
+				if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
 				}
-				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {
 						now := time.Now()
 						left := user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency).Sub(now) / time.Second
@@ -144,7 +144,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			}
 		} else if params.Provider == "phone" && !user.IsPhoneConfirmed() {
 			if config.Sms.Autoconfirm {
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
+				if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -156,7 +156,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					return internalServerError("Database error updating user").WithInternalError(terr)
 				}
 			} else {
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
+				if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -180,7 +180,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		}
 		if errors.Is(err, UserExistsError) {
 			err = a.db.Transaction(func(tx *storage.Connection) error {
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRepeatedSignUpAction, "", map[string]interface{}{
+				if terr := models.NewAuditLogEntry(r, tx, instanceID, user, models.UserRepeatedSignUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -207,7 +207,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		var token *AccessTokenResponse
 		err = a.db.Transaction(func(tx *storage.Connection) error {
 			var terr error
-			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
+			if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr

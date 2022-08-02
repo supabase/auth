@@ -6,6 +6,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/sms_provider"
+	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 )
@@ -76,7 +77,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}
 
-	log := getLogEntry(r)
+	log := logger.GetLogEntry(r)
 	log.Debugf("Checking params for token %v", params)
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -132,7 +133,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)
-			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer); terr != nil {
+			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, config.Mailer.OtpLength); terr != nil {
 				return internalServerError("Error sending change email").WithInternalError(terr)
 			}
 		}
@@ -161,7 +162,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserModifiedAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserModifiedAction, "", nil); terr != nil {
 			return internalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 

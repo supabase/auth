@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
@@ -34,7 +35,7 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 		return nil, badRequestError("user_id must be an UUID")
 	}
 
-	logEntrySetField(r, "user_id", userID)
+	logger.LogEntrySetField(r, "user_id", userID)
 	instanceID := getInstanceID(r.Context())
 
 	u, err := models.FindUserByInstanceIDAndID(a.db, instanceID, userID)
@@ -175,7 +176,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserModifiedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, instanceID, adminUser, models.UserModifiedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
@@ -270,7 +271,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserSignedUpAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, instanceID, adminUser, models.UserSignedUpAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
@@ -323,7 +324,7 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	adminUser := getAdminUser(ctx)
 
 	err := a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserDeletedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, instanceID, adminUser, models.UserDeletedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,

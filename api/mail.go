@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -14,7 +15,6 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
-	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -25,6 +25,7 @@ var (
 type GenerateLinkParams struct {
 	Type       string                 `json:"type"`
 	Email      string                 `json:"email"`
+	NewEmail   string                 `json:"new_email"`
 	Password   string                 `json:"password"`
 	Data       map[string]interface{} `json:"data"`
 	RedirectTo string                 `json:"redirect_to"`
@@ -52,13 +53,13 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			if params.Type == "magiclink" {
-				params.Type = "signup"
+			if params.Type == magicLinkVerification {
+				params.Type = signupVerification
 				params.Password, err = password.Generate(64, 10, 0, false, true)
 				if err != nil {
 					return internalServerError("error creating user").WithInternalError(err)
 				}
-			} else if params.Type == "recovery" {
+			} else if params.Type == recoveryVerification || params.Type == "email_change_current" || params.Type == "email_change_new" {
 				return notFoundError(err.Error())
 			}
 		} else {
@@ -69,17 +70,22 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	var url string
 	referrer := a.getRedirectURLOrReferrer(r, params.RedirectTo)
 	now := time.Now()
+	otp, err := crypto.GenerateOtp(config.Mailer.OtpLength)
+	if err != nil {
+		return err
+	}
+	hashedToken := fmt.Sprintf("%x", sha256.Sum224([]byte(params.Email+otp)))
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
-		case "magiclink", "recovery":
-			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
+		case magicLinkVerification, recoveryVerification:
+			if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
 			}
-			user.RecoveryToken = crypto.SecureToken()
+			user.RecoveryToken = hashedToken
 			user.RecoverySentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
-		case "invite":
+		case inviteVerification:
 			if user != nil {
 				if user.IsConfirmed() {
 					return unprocessableEntityError(DuplicateEmailMsg)
@@ -96,17 +102,17 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			}
-			if terr = models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserInvitedAction, "", map[string]interface{}{
+			if terr = models.NewAuditLogEntry(r, tx, instanceID, adminUser, models.UserInvitedAction, "", map[string]interface{}{
 				"user_id":    user.ID,
 				"user_email": user.Email,
 			}); terr != nil {
 				return terr
 			}
-			user.ConfirmationToken = crypto.SecureToken()
+			user.ConfirmationToken = hashedToken
 			user.ConfirmationSentAt = &now
 			user.InvitedAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at", "invited_at"), "Database error updating user for invite")
-		case "signup":
+		case signupVerification:
 			if user != nil {
 				if user.IsConfirmed() {
 					return unprocessableEntityError(DuplicateEmailMsg)
@@ -133,9 +139,31 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			}
-			user.ConfirmationToken = crypto.SecureToken()
+			user.ConfirmationToken = hashedToken
 			user.ConfirmationSentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at"), "Database error updating user for confirmation")
+		case "email_change_current", "email_change_new":
+			if !config.Mailer.SecureEmailChangeEnabled && params.Type == "email_change_current" {
+				return unprocessableEntityError("Enable secure email change to generate link for current email")
+			}
+			if terr := a.validateEmail(ctx, params.NewEmail); terr != nil {
+				return unprocessableEntityError("The new email address provided is invalid")
+			}
+			if exists, terr := models.IsDuplicatedEmail(tx, instanceID, params.NewEmail, user.Aud); terr != nil {
+				return internalServerError("Database error checking email").WithInternalError(terr)
+			} else if exists {
+				return unprocessableEntityError(DuplicateEmailMsg)
+			}
+			now := time.Now()
+			user.EmailChangeSentAt = &now
+			user.EmailChange = params.NewEmail
+			user.EmailChangeConfirmStatus = zeroConfirmation
+			if params.Type == "email_change_current" {
+				user.EmailChangeTokenCurrent = hashedToken
+			} else if params.Type == "email_change_new" {
+				user.EmailChangeTokenNew = fmt.Sprintf("%x", sha256.Sum224([]byte(params.NewEmail+otp)))
+			}
+			terr = errors.Wrap(tx.UpdateOnly(user, "email_change_token_current", "email_change_token_new", "email_change", "email_change_sent_at", "email_change_confirm_status"), "Database error updating user for email change")
 		default:
 			return badRequestError("Invalid email action link type requested: %v", params.Type)
 		}
@@ -164,22 +192,27 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("User serialization error").WithInternalError(err)
 	}
 	resp["action_link"] = url
+	resp["email_otp"] = otp
+	resp["hashed_token"] = hashedToken
+	resp["verification_type"] = params.Type
+	resp["redirect_to"] = referrer
 
 	return sendJSON(w, http.StatusOK, resp)
 }
 
-func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string) error {
+func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int) error {
 	var err error
 	if u.ConfirmationSentAt != nil && !u.ConfirmationSentAt.Add(maxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
 	}
 	oldToken := u.ConfirmationToken
-	u.ConfirmationToken, err = generateUniqueEmailOtp(tx, confirmationToken)
+	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		return err
 	}
+	u.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	now := time.Now()
-	if err := mailer.ConfirmationMail(u, referrerURL); err != nil {
+	if err := mailer.ConfirmationMail(u, otp, referrerURL); err != nil {
 		u.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending confirmation email")
 	}
@@ -187,15 +220,16 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 	return errors.Wrap(tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at"), "Database error updating user for confirmation")
 }
 
-func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, referrerURL string) error {
+func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, referrerURL string, otpLength int) error {
 	var err error
 	oldToken := u.ConfirmationToken
-	u.ConfirmationToken, err = generateUniqueEmailOtp(tx, confirmationToken)
+	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		return err
 	}
+	u.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	now := time.Now()
-	if err := mailer.InviteMail(u, referrerURL); err != nil {
+	if err := mailer.InviteMail(u, otp, referrerURL); err != nil {
 		u.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending invite email")
 	}
@@ -204,19 +238,20 @@ func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, re
 	return errors.Wrap(tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at", "invited_at"), "Database error updating user for invite")
 }
 
-func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string) error {
+func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int) error {
 	var err error
 	if u.RecoverySentAt != nil && !u.RecoverySentAt.Add(maxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
 	}
 
 	oldToken := u.RecoveryToken
-	u.RecoveryToken, err = generateUniqueEmailOtp(tx, recoveryToken)
+	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		return err
 	}
+	u.RecoveryToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	now := time.Now()
-	if err := mailer.RecoveryMail(u, referrerURL); err != nil {
+	if err := mailer.RecoveryMail(u, otp, referrerURL); err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending recovery email")
 	}
@@ -224,19 +259,23 @@ func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, maile
 	return errors.Wrap(tx.UpdateOnly(u, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
 }
 
-func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration) error {
+func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, otpLength int) error {
 	var err error
 	if u.ReauthenticationSentAt != nil && !u.ReauthenticationSentAt.Add(maxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
 	}
 
 	oldToken := u.ReauthenticationToken
-	u.ReauthenticationToken, err = generateUniqueEmailOtp(tx, reauthenticationToken)
+	otp, err := crypto.GenerateOtp(otpLength)
+	if err != nil {
+		return err
+	}
+	u.ReauthenticationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	if err != nil {
 		return err
 	}
 	now := time.Now()
-	if err := mailer.ReauthenticateMail(u); err != nil {
+	if err := mailer.ReauthenticateMail(u, otp); err != nil {
 		u.ReauthenticationToken = oldToken
 		return errors.Wrap(err, "Error sending reauthentication email")
 	}
@@ -244,7 +283,7 @@ func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, ma
 	return errors.Wrap(tx.UpdateOnly(u, "reauthentication_token", "reauthentication_sent_at"), "Database error updating user for reauthentication")
 }
 
-func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string) error {
+func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int) error {
 	var err error
 	// since Magic Link is just a recovery with a different template and behaviour
 	// around new users we will reuse the recovery db timer to prevent potential abuse
@@ -252,12 +291,13 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 		return MaxFrequencyLimitError
 	}
 	oldToken := u.RecoveryToken
-	u.RecoveryToken, err = generateUniqueEmailOtp(tx, recoveryToken)
+	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		return err
 	}
+	u.RecoveryToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	now := time.Now()
-	if err := mailer.MagicLinkMail(u, referrerURL); err != nil {
+	if err := mailer.MagicLinkMail(u, otp, referrerURL); err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending magic link email")
 	}
@@ -266,14 +306,21 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(tx *storage.Connection, config *conf.Configuration, u *models.User, mailer mailer.Mailer, email string, referrerURL string) error {
+func (a *API) sendEmailChange(tx *storage.Connection, config *conf.Configuration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int) error {
 	var err error
-	u.EmailChangeTokenNew, err = generateUniqueEmailOtp(tx, emailChangeTokenNew)
+	otpNew, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		return err
 	}
+	u.EmailChangeTokenNew = fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+otpNew)))
+
+	otpCurrent := ""
 	if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
-		u.EmailChangeTokenCurrent, err = generateUniqueEmailOtp(tx, emailChangeTokenCurrent)
+		otpCurrent, err = crypto.GenerateOtp(otpLength)
+		if err != nil {
+			return err
+		}
+		u.EmailChangeTokenCurrent = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otpCurrent)))
 		if err != nil {
 			return err
 		}
@@ -281,7 +328,7 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.Configuration
 	u.EmailChange = email
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
-	if err := mailer.EmailChangeMail(u, referrerURL); err != nil {
+	if err := mailer.EmailChangeMail(u, otpNew, otpCurrent, referrerURL); err != nil {
 		return err
 	}
 
@@ -305,31 +352,4 @@ func (a *API) validateEmail(ctx context.Context, email string) error {
 		return unprocessableEntityError("Unable to validate email address: " + err.Error())
 	}
 	return nil
-}
-
-// generateUniqueEmailOtp returns a unique otp
-func generateUniqueEmailOtp(tx *storage.Connection, tokenType tokenType) (string, error) {
-	maxRetries := 5
-	otpLength := 20
-	var otp string
-	var err error
-	for i := 0; i < maxRetries; i++ {
-		otp, err = crypto.GenerateEmailOtp(otpLength)
-		if err != nil {
-			return "", err
-		}
-		_, err = models.FindUserByTokenAndTokenType(tx, otp, string(tokenType))
-		if err != nil {
-			if models.IsNotFoundError(err) {
-				return otp, nil
-			}
-			return "", err
-		}
-		logrus.Warn("otp generated is not unique, retrying.")
-		err = errors.New("Could not generate a unique email otp")
-	}
-	if err != nil {
-		return "", err
-	}
-	return "", errors.New("Could not generate a unique email otp")
 }
