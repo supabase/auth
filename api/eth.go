@@ -69,6 +69,10 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 			})
 			didUserExist = false
 
+			if uerr = user.Confirm(tx); uerr != nil {
+				return uerr
+			}
+
 			if uerr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", nil); uerr != nil {
 				return uerr
 			}
