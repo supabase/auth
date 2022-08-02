@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/crewjam/saml"
@@ -50,10 +52,10 @@ func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor) *s
 	}
 
 	provider := samlsp.DefaultServiceProvider(samlsp.Options{
-		URL:               *externalURL,
-		Key:               a.config.SAML.RSAPrivateKey,
-		Certificate:       a.config.SAML.Certificate,
-		SignRequest:       true,
+		URL:         *externalURL,
+		Key:         a.config.SAML.RSAPrivateKey,
+		Certificate: a.config.SAML.Certificate,
+		//SignRequest:       true,
 		AllowIDPInitiated: true,
 		IDPMetadata:       identityProvider,
 	})
@@ -80,74 +82,98 @@ func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
 }
 
 // samlCallback implements the main Assertion Consumer Service endpoint behavior.
-func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.UserProvidedData, error) {
+func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.UserProvidedData, *models.GrantAuthenticatedConditions, error) {
 	if r.FormValue("SAMLart") != "" {
 		// TODO: SAML Artifact callbacks are only possible when you can
 		// identify the IdP via RelayState i.e. only the SP initiated
 		// flow is supported
-		return nil, badRequestError("SAML Response with artifacts not supported at this time")
+		return nil, nil, badRequestError("SAML Response with artifacts not supported at this time")
 	}
 
 	samlResponse := r.FormValue("SAMLResponse")
 	if samlResponse == "" {
-		return nil, badRequestError("SAMLResponse is missing")
+		return nil, nil, badRequestError("SAMLResponse is missing")
 	}
 
 	responseXML, err := base64.StdEncoding.DecodeString(samlResponse)
 	if err != nil {
-		return nil, badRequestError("SAMLResponse is not a valid Base64 string")
+		return nil, nil, badRequestError("SAMLResponse is not a valid Base64 string")
 	}
 
 	var peekResponse saml.Response
 	err = xml.Unmarshal(responseXML, &peekResponse)
 	if err != nil {
-		return nil, badRequestError("SAMLResponse is not a valid XML SAML assertion")
+		return nil, nil, badRequestError("SAMLResponse is not a valid XML SAML assertion")
 	}
 
 	entityId := peekResponse.Issuer.Value
 
 	ssoProvider, err := models.FindSAMLProviderForEntityID(a.db, entityId)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if ssoProvider == nil {
-		return nil, badRequestError("SAML Assertion has unrecognized Issuer")
+		return nil, nil, badRequestError("SAML Assertion has unrecognized Issuer")
 	}
 
 	idpMetadata, err := samlsp.ParseMetadata([]byte(ssoProvider.SAMLProvider.MetadataXML))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// TODO: fetch new metadata if possible when validUntil < time.Now()
 
 	serviceProvider := a.getSAMLServiceProvider(idpMetadata)
-	assertion, err := serviceProvider.ParseResponse(r, nil)
+	spAssertion, err := serviceProvider.ParseResponse(r, nil)
 	if err != nil {
-		return nil, badRequestError("SAML Assertion is not valid")
+		return nil, nil, badRequestError("SAML Assertion is not valid")
 	}
 
-	var email string
-
-	for _, stmt := range assertion.AttributeStatements {
-		for _, attr := range stmt.Attributes {
-			if attr.Name == "mail" {
-				email = attr.Values[0].Value
-				break
-			}
-		}
+	assertion := SAMLAssertion{
+		spAssertion,
 	}
 
-	return &provider.UserProvidedData{
-		Emails: []provider.Email{
-			{
-				Email:    email,
-				Verified: true,
-				Primary:  true,
-			},
-		},
-	}, nil
+	userID := assertion.UserID()
+	if userID == "" {
+		return nil, nil, badRequestError("SAML Assertion did not contain a persistent Subject Identifier attribute or Subject NameID uniquely identifying this user")
+	}
+
+	var userProvidedData provider.UserProvidedData
+	var cond models.GrantAuthenticatedConditions
+
+	// TODO: get emails from attribute mapping
+	emails := assertion.Emails()
+	for _, email := range emails {
+		userProvidedData.Emails = append(userProvidedData.Emails, provider.Email{
+			Email:    email,
+			Verified: true,
+			Primary:  true,
+		})
+	}
+
+	userProvidedData.Provider.Type = "saml"
+	userProvidedData.Provider.ID = ssoProvider.ID.String()
+	userProvidedData.Provider.SAMLEntityID = ssoProvider.SAMLProvider.EntityID
+
+	// TODO: determine whether login came from idp or sp
+	userProvidedData.Provider.SAMLInitiatedBy = "idp"
+
+	userProvidedData.Metadata = &provider.Claims{
+		Subject:       userID,
+		Email:         userProvidedData.Emails[0].Email,
+		EmailVerified: true,
+	}
+
+	cond.SSOProviderID = ssoProvider.ID
+
+	// TODO: determine whether login came from idp or sp
+	cond.InitiatedByProvider = true
+
+	cond.NotBefore = assertion.NotBefore()
+	cond.NotAfter = assertion.NotAfter()
+
+	return &userProvidedData, &cond, nil
 }
 
 // adminListSAMLIdPs lists all SAML SSO Identity Providers in the system. Does
@@ -167,12 +193,12 @@ func (a *API) adminListSAMLIdPs(w http.ResponseWriter, r *http.Request) error {
 }
 
 type CreateSAMLIdPParams struct {
-	Name             string      `json:"name"`
-	Description      string      `json:"description"`
-	MetadataURL      string      `json:"metadata_url"`
-	MetadataXML      string      `json:"metadata_xml"`
-	Domains          []string    `json:"domains"`
-	AttributeMapping interface{} `json:"attribute_mapping"`
+	Name             string               `json:"name"`
+	Description      string               `json:"description"`
+	MetadataURL      string               `json:"metadata_url"`
+	MetadataXML      string               `json:"metadata_xml"`
+	Domains          []string             `json:"domains"`
+	AttributeMapping SAMLAttributeMapping `json:"attribute_mapping"`
 }
 
 func (p *CreateSAMLIdPParams) validate(forUpdate bool) error {
@@ -446,4 +472,132 @@ func (a *API) adminDeleteSAMLIdP(w http.ResponseWriter, r *http.Request) error {
 	// TODO: destroy all sessions coming from this provider
 
 	return sendJSON(w, http.StatusOK, provider)
+}
+
+type SAMLAttributeMapping struct {
+	Keys SAMLAttributeMappingSet `json:"keys,omitempty"`
+}
+
+type SAMLAttributeMappingValue struct {
+	Name  string   `json:"name,omitempty"`
+	Names []string `json:"names,omitempty"`
+
+	IsEmail    bool `json:"is_email,omitempty"`
+	IsVerified bool `json:"is_verified,omitempty"`
+
+	Default interface{} `json:"default,omitempty"`
+}
+
+type SAMLAssertion struct {
+	*saml.Assertion
+}
+
+type SAMLAttributeMappingSet map[string]SAMLAttributeMappingValue
+
+const (
+	SAMLSubjectIDAttributeName = "urn:oasis:names:tc:SAML:attribute:subject-id"
+)
+
+// Attribute returns the first matching attribute value in the attribute
+// statements where name equals the official SAML attribute Name or
+// FriendlyName. Returns nil if such an attribute can't be found.
+func (a *SAMLAssertion) Attribute(name string) []saml.AttributeValue {
+	var values []saml.AttributeValue
+
+	for _, stmt := range a.AttributeStatements {
+		for _, attr := range stmt.Attributes {
+			// TODO: maybe this should be case-insentivite equality?
+			if attr.Name == name || attr.FriendlyName == name {
+				values = append(values, attr.Values...)
+			}
+		}
+	}
+
+	return values
+}
+
+// UserID returns the best choice for a persistent user identifier on the
+// Identity Provider side. Don't assume the format of the string returned, as
+// it's Identity Provider specific.
+func (a *SAMLAssertion) UserID() string {
+	// First we look up the SAMLSubjectIDAttributeName in the attribute
+	// section of the assertion, as this is the preferred way to
+	// persistently identify users in SAML 2.0.
+	// See: https://docs.oasis-open.org/security/saml-subject-id-attr/v1.0/cs01/saml-subject-id-attr-v1.0-cs01.html#_Toc536097226
+	values := a.Attribute(SAMLSubjectIDAttributeName)
+	if len(values) > 0 {
+		return values[0].Value
+	}
+
+	// Otherwise, fall back to the SubjectID value.
+	subjectID, isPersistent := a.SubjectID()
+	if !isPersistent {
+		return ""
+	}
+
+	return subjectID
+}
+
+// SubjectID returns the user identifier in present in the Subject section of
+// the SAML assertion. Note that this way of identifying the Subject is
+// generally superseded by the SAMLSubjectIDAttributeName assertion attribute;
+// tho must be present in all assertions. It can have a few formats, of which
+// the most important are: saml.EmailAddressNameIDFormat (meaning the user ID
+// is an email address), saml.PersistentNameIDFormat (the user ID is an opaque
+// string that does not change with each assertion, e.g. UUID),
+// saml.TransientNameIDFormat (the user ID changes with each assertion -- can't
+// be used to identify a user). The boolean returned identifies if the user ID
+// is persistent. If it's an email address, it's lowercased just in case.
+func (a *SAMLAssertion) SubjectID() (string, bool) {
+	if a.Subject == nil {
+		return "", false
+	}
+
+	if a.Subject.NameID == nil {
+		return "", false
+	}
+
+	if a.Subject.NameID.Value == "" {
+		return "", false
+	}
+
+	if a.Subject.NameID.Format == string(saml.EmailAddressNameIDFormat) {
+		return strings.ToLower(strings.TrimSpace(a.Subject.NameID.Value)), true
+	}
+
+	// all other NameID formats are regarded as persistent
+	isPersistent := a.Subject.NameID.Format != string(saml.TransientNameIDFormat)
+
+	return a.Subject.NameID.Value, isPersistent
+}
+
+const (
+	SAMLAttributeNameEmail = "urn:oid:0.9.2342.19200300.100.1.3"
+)
+
+// Emails returns all SAMLAttributeNameEmail attribute values.
+func (a *SAMLAssertion) Emails() []string {
+	values := a.Attribute(SAMLAttributeNameEmail)
+
+	var emails []string
+
+	for _, value := range values {
+		emails = append(emails, value.Value)
+	}
+
+	return emails
+}
+
+func (a *SAMLAssertion) Process(set SAMLAttributeMappingSet) map[string]interface{} {
+	return nil
+}
+
+func (a *SAMLAssertion) NotBefore() time.Time {
+	// TODO: extract this from the assertion conditions
+	return time.Now().UTC()
+}
+
+func (a *SAMLAssertion) NotAfter() time.Time {
+	// TODO: extract this from the assertion conditions
+	return time.Now().UTC().AddDate(0, 0, 1)
 }
