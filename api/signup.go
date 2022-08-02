@@ -285,7 +285,7 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 		user, err = models.NewUser(instanceID, params.Phone, "", params.Password, params.Aud, params.Data)
 		user.Phone = storage.NullString(params.Phone)
 	case "crypto":
-		user, err = models.NewUser(instanceID, "", "", "", params.Aud, params.Data)
+		user, err = models.NewUser(instanceID, "", "", params.Password, params.Aud, params.Data)
 		cryptoAddress, err = models.NewCryptoAddress(instanceID, user.ID, params.CryptoAddress)
 	default:
 		// handles external provider case
