@@ -54,7 +54,6 @@ func (ts *MFATestSuite) TestMFARecoveryCodeGeneration() {
 	const expectedNumOfRecoveryCodes = 8
 	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	ts.Require().NoError(err)
-	require.NoError(ts.T(), user.EnableMFA(ts.API.db))
 
 	token, err := generateAccessToken(user, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
@@ -172,9 +171,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	}
 	for _, v := range cases {
 		ts.Run(v.desc, func() {
-			// Create a User with MFA enabled
 			u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-			require.NoError(ts.T(), u.EnableMFA(ts.API.db))
 			emailValue, err := u.Email.Value()
 			require.NoError(ts.T(), err)
 			testEmail := emailValue.(string)
@@ -242,9 +239,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 }
 
 func (ts *MFATestSuite) TestUnenrollFactor() {
-	// Create a User with MFA enabled
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), u.EnableMFA(ts.API.db))
 	emailValue, err := u.Email.Value()
 	require.NoError(ts.T(), err)
 	testEmail := emailValue.(string)
