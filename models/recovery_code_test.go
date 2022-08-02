@@ -38,19 +38,17 @@ func TestRecoveryCode(t *testing.T) {
 }
 
 func (ts *RecoveryCodeTestSuite) TestFindValidRecoveryCodesByUser() {
-	// TODO: Joel -- convert numRecoveryCodes and recoveryCodeLength into constants in mfa.go
-	numRecoveryCodes := 8
 	var expectedRecoveryCodes []string
 	user, err := NewUser(uuid.Nil, "", "", "", "", nil)
 	err = ts.db.Create(user)
 	require.NoError(ts.T(), err)
-	for i := 0; i <= numRecoveryCodes; i++ {
+	for i := 0; i <= NumRecoveryCodes; i++ {
 		rc := ts.createRecoveryCode(user)
 		expectedRecoveryCodes = append(expectedRecoveryCodes, rc.RecoveryCode)
 	}
 	recoveryCodes, err := FindValidRecoveryCodesByUser(ts.db, user)
 	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), numRecoveryCodes, len(recoveryCodes), fmt.Sprintf("Expected %d recovery codes but got %d", numRecoveryCodes, len(recoveryCodes)))
+	require.Equal(ts.T(), NumRecoveryCodes, len(recoveryCodes), fmt.Sprintf("Expected %d recovery codes but got %d", NumRecoveryCodes, len(recoveryCodes)))
 
 	for index, recoveryCode := range recoveryCodes {
 		require.Equal(ts.T(), expectedRecoveryCodes[index], recoveryCode, "Recovery codes should match")
@@ -58,8 +56,7 @@ func (ts *RecoveryCodeTestSuite) TestFindValidRecoveryCodesByUser() {
 }
 
 func (ts *RecoveryCodeTestSuite) createRecoveryCode(u *User) *RecoveryCode {
-	recoveryCodeLength := 8
-	rc, err := NewRecoveryCode(u, crypto.SecureToken(recoveryCodeLength))
+	rc, err := NewRecoveryCode(u, crypto.SecureToken(RecoveryCodeLength))
 	require.NoError(ts.T(), err)
 	err = ts.db.Create(rc)
 	require.NoError(ts.T(), err)

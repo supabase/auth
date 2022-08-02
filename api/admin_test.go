@@ -12,6 +12,7 @@ import (
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -596,4 +597,94 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			require.Equal(ts.T(), c.expected, w.Code)
 		})
 	}
+}
+
+// TestAdminUserDeleteRecoveryCodes tests API /admin/users/<user_id>/recovery_codes/
+func (ts *AdminTestSuite) TestAdminUserDeleteRecoveryCodes() {
+	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	// Create batch of Recovery Codes
+	for i := 0; i < models.NumRecoveryCodes; i++ {
+		r, terr := models.NewRecoveryCode(u, crypto.SecureToken(models.RecoveryCodeLength))
+		require.NoError(ts.T(), terr, "Error creating recovery code model")
+		require.NoError(ts.T(), ts.API.db.Create(r), "Error creating recovery code")
+	}
+
+	// Setup request
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s/recovery_codes", u.ID), nil)
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	// No valid recovery codes as recovery codes are generated in batches.
+	rc, err := models.FindValidRecoveryCodesByUser(ts.API.db, u)
+	require.Equal(ts.T(), 0, len(rc))
+}
+
+// TestAdminUserDeleteFactor tests API /admin/users/<user_id>/factor/<factor_id>/
+func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
+	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorDisabledState, "secretkey")
+	require.NoError(ts.T(), err, "Error creating test factor model")
+	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
+
+	// Setup request
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s/factor/%s/", u.ID, f.ID), nil)
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+
+}
+
+// TestAdminUserGetFactor tests API /admin/user/<user_id>/factors/
+func (ts *AdminTestSuite) TestAdminUserGetFactors() {
+	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorDisabledState, "secretkey")
+	require.NoError(ts.T(), err, "Error creating test factor model")
+	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
+
+	// Setup request
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/users/%s/factor/", u.ID), nil)
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
+// TestAdminUserGetFactor tests API /admin/user/<user_id>/factors/<factor_id>
+func (ts *AdminTestSuite) TestAdminUserGetFactor() {
+	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorDisabledState, "secretkey")
+	require.NoError(ts.T(), err, "Error creating test factor model")
+	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
+
+	// Setup request
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/users/%s/factor/%s/", u.ID, f.ID), nil)
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
 }

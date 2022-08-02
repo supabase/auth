@@ -28,7 +28,6 @@ type MFATestSuite struct {
 func TestMFA(t *testing.T) {
 	api, config, instanceID, err := setupAPIForTestForInstance()
 	require.NoError(t, err)
-
 	ts := &MFATestSuite{
 		API:        api,
 		Config:     config,
@@ -45,6 +44,7 @@ func (ts *MFATestSuite) SetupTest() {
 	u, err := models.NewUser(ts.instanceID, "123456789", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+	// Create Factor
 	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorDisabledState, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
@@ -263,7 +263,6 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 
 	code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
 	require.NoError(ts.T(), err)
-
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"factor_id": f.ID,
 		"code":      code,
