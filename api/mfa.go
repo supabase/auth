@@ -68,9 +68,6 @@ func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) erro
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
-	if !user.MFAEnabled {
-		return forbiddenError(MFANotEnabledMsg)
-	}
 	recoveryCodeModels := []*models.RecoveryCode{}
 	var terr error
 	var recoveryCode string
@@ -205,9 +202,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	instanceID := getInstanceID(ctx)
-	if !user.MFAEnabled {
-		return forbiddenError(MFANotEnabledMsg)
-	}
 
 	params := &VerifyFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)

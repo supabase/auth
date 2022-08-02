@@ -78,7 +78,7 @@ func (ts *SignupTestSuite) TestSignup() {
 }
 
 func (ts *SignupTestSuite) TestWebhookTriggered() {
-	const numUserFields = 12
+	const numUserFields = 11
 	var callCount int
 	require := ts.Require()
 	assert := ts.Assert()
