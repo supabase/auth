@@ -69,7 +69,7 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 			})
 			didUserExist = false
 
-			if uerr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, nil); uerr != nil {
+			if uerr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", nil); uerr != nil {
 				return uerr
 			}
 			if uerr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); uerr != nil {
@@ -91,7 +91,7 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		// Add audit log entry for consuming nonce
-		return models.NewAuditLogEntry(tx, instanceID, user, models.NonceConsumed, nil)
+		return models.NewAuditLogEntry(tx, instanceID, user, models.NonceConsumed, "", nil)
 	})
 
 	if err != nil {
@@ -101,7 +101,7 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, nil); terr != nil {
+		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", nil); terr != nil {
 			return terr
 		}
 		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
