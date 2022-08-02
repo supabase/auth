@@ -57,50 +57,6 @@ type UnenrollFactorParams struct {
 	Code string `json:"code"`
 }
 
-// RecoveryCodesResponse represents a successful recovery code generation response
-type RecoveryCodesResponse struct {
-	RecoveryCodes []string `json:"recovery_codes"`
-}
-
-func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	user := getUser(ctx)
-	instanceID := getInstanceID(ctx)
-	recoveryCodeModels := []*models.RecoveryCode{}
-	var terr error
-	var recoveryCode string
-	var recoveryCodes []string
-	var recoveryCodeModel *models.RecoveryCode
-	for i := 0; i < models.NumRecoveryCodes; i++ {
-		recoveryCode = crypto.SecureToken(models.RecoveryCodeLength)
-		recoveryCodeModel, terr = models.NewRecoveryCode(user, recoveryCode)
-		if terr != nil {
-			return internalServerError("Error creating recovery code").WithInternalError(terr)
-		}
-		recoveryCodes = append(recoveryCodes, recoveryCode)
-		recoveryCodeModels = append(recoveryCodeModels, recoveryCodeModel)
-	}
-	terr = a.db.Transaction(func(tx *storage.Connection) error {
-		for _, recoveryCodeModel := range recoveryCodeModels {
-			if terr = tx.Create(recoveryCodeModel); terr != nil {
-				return terr
-			}
-		}
-
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.GenerateRecoveryCodesAction, r.RemoteAddr, nil); terr != nil {
-			return terr
-		}
-		return nil
-	})
-	if terr != nil {
-		return terr
-	}
-
-	return sendJSON(w, http.StatusOK, &RecoveryCodesResponse{
-		RecoveryCodes: recoveryCodes,
-	})
-}
-
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	const factorPrefix = "factor"
 	const imageSideLength = 300
