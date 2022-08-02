@@ -379,7 +379,6 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 		return err
 	}
 	return sendJSON(w, http.StatusOK, factor)
-
 }
 
 func (a *API) adminUserDeleteRecoveryCodes(w http.ResponseWriter, r *http.Request) error {

@@ -623,12 +623,10 @@ func (ts *AdminTestSuite) TestAdminUserDeleteRecoveryCodes() {
 	// No valid recovery codes as recovery codes are generated in batches.
 	rc, err := models.FindValidRecoveryCodesByUser(ts.API.db, u)
 	require.Equal(ts.T(), 0, len(rc))
-
 }
 
 // TestAdminUserDeleteFactor tests API /admin/users/<user_id>/factor/<factor_id>/
 func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
-	// TODO: Refactor this
 	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
@@ -689,5 +687,4 @@ func (ts *AdminTestSuite) TestAdminUserGetFactor() {
 
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
-
 }
