@@ -218,6 +218,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 }
 
 func (ts *MFATestSuite) TestUnenrollFactor() {
+	// TODO(Joel): Test case where factor is unverified
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
 	emailValue, err := u.Email.Value()
 	require.NoError(ts.T(), err)
@@ -232,6 +233,7 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 	factors, err := models.FindFactorsByUser(ts.API.db, u)
 	f := factors[0]
 	f.SecretKey = sharedSecret
+	err = f.UpdateStatus(ts.API.db, models.FactorVerifiedState)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
 

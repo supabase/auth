@@ -363,7 +363,14 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 	instanceID := getInstanceID(ctx)
 	factor := getFactor(ctx)
 
-	err := a.db.Transaction(func(tx *storage.Connection) error {
+	MFAEnabled, err := models.IsMFAEnabled(a.db, user)
+	if err != nil {
+		return err
+	} else if !MFAEnabled {
+		return forbiddenError("You do not have a verified factor enrolled")
+	}
+
+	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.DeleteFactorAction, r.RemoteAddr, map[string]interface{}{
 			"user_id":   user.ID,
 			"factor_id": factor.ID,
@@ -385,6 +392,13 @@ func (a *API) adminUserDeleteRecoveryCodes(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
+
+	MFAEnabled, err := models.IsMFAEnabled(a.db, user)
+	if err != nil {
+		return err
+	} else if !MFAEnabled {
+		return forbiddenError("You do not have a verified factor enrolled")
+	}
 
 	recoveryCodes, terr := models.FindValidRecoveryCodesByUser(a.db, user)
 	if terr != nil {
