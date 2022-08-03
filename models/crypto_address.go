@@ -59,9 +59,9 @@ func NewCryptoAddress(instanceID uuid.UUID, accountId uuid.UUID, provider string
 	return address, nil
 }
 
-func GetCryptoAddressByAddress(tx *storage.Connection, address string) (*CryptoAddress, error) {
+func GetCryptoAddressByAddress(tx *storage.Connection, instanceID uuid.UUID, address string) (*CryptoAddress, error) {
 	nonce := CryptoAddress{}
-	if err := tx.Where("address = ?", address).First(&nonce); err != nil {
+	if err := tx.Where("instance_id = ? and address = ?", instanceID, address).First(&nonce); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, CryptoAddressNotFoundError{}
 		}
@@ -70,9 +70,9 @@ func GetCryptoAddressByAddress(tx *storage.Connection, address string) (*CryptoA
 	return &nonce, nil
 }
 
-func GetCryptoAddressById(tx *storage.Connection, id uuid.UUID) (*CryptoAddress, error) {
+func GetCryptoAddressById(tx *storage.Connection, instanceID uuid.UUID, id uuid.UUID) (*CryptoAddress, error) {
 	nonce := CryptoAddress{}
-	if err := tx.Where("id = ?", id).First(&nonce); err != nil {
+	if err := tx.Where("instance_id = ? and id = ?", instanceID, id).First(&nonce); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, CryptoAddressNotFoundError{}
 		}

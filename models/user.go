@@ -382,7 +382,7 @@ func FindUserByPhoneAndAudience(tx *storage.Connection, instanceID uuid.UUID, ph
 
 // FindUserByCryptoAddressAndAudience find a user by their wallet address and audience.
 func FindUserByCryptoAddressAndAudience(tx *storage.Connection, instanceID uuid.UUID, cryptoAddress, aud string) (*User, error) {
-	address, err := GetCryptoAddressByCaip(tx, cryptoAddress)
+	address, err := GetCryptoAddressByAddress(tx, instanceID, cryptoAddress)
 	if err != nil {
 		return nil, err
 	}
