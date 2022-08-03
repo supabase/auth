@@ -122,7 +122,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
 
 		// TODO (HarryET): Create a nonce rate limiter
-		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/eth", api.Eth)
+		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/crypto", api.Crypto)
 		r.With(api.limitHandler(
 			// Allow requests at a rate of 30 per 5 minutes.
 			tollbooth.NewLimiter(30.0/(60*5), &limiter.ExpirableOptions{
