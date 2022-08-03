@@ -92,6 +92,17 @@ func FindFactorByChallengeID(tx *storage.Connection, challengeID string) (*Facto
 	return factor, nil
 }
 
+func FindVerifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
+	factors := []*Factor{}
+	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorVerifiedState).All(&factors); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return factors, nil
+		}
+		return nil, errors.Wrap(err, "Error finding verified mfa factors")
+	}
+	return factors, nil
+}
+
 // Change the friendly name
 func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	f.FriendlyName = friendlyName
@@ -102,4 +113,16 @@ func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string)
 func (f *Factor) UpdateStatus(tx *storage.Connection, status string) error {
 	f.Status = status
 	return tx.UpdateOnly(f, "status", "updated_at")
+}
+
+// Checks if MFA is Enabled
+func IsMFAEnabled(tx *storage.Connection, user *User) (bool, error) {
+	factors, err := FindVerifiedFactorsByUser(tx, user)
+	if err != nil {
+		return false, err
+	}
+	if len(factors) >= 1 {
+		return true, nil
+	}
+	return false, nil
 }
