@@ -152,7 +152,6 @@ func ConfigureTracing(tc *TracingConfig) {
 		t = traceProvider
 		otel.SetTextMapPropagator(propagation.TraceContext{})
 		tc.TracingShutdown = traceProvider.Shutdown
-	//! Doesn't support traces!
 	case PrometheusExporter:
 		p, err := prometheus.New(prometheus.Config{}, &basic.Controller{})
 		if err != nil {
