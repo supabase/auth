@@ -61,18 +61,19 @@ func (a *API) ListenAndServe(hostAndPort string) {
 				otel.Handle(err)
 			}
 		}()
-		pusher := otelglobal.MeterProvider().(*otelcontroller.Controller)
-		if err := pusher.Start(baseContext); err != nil {
-			log.Fatalf("could not start metric controller: %v", err)
-		}
-		defer func() {
-			ctx, cancel := context.WithTimeout(baseContext, time.Second)
-			defer cancel()
-			// pushes any last exports to the receiver
-			if err := pusher.Stop(ctx); err != nil {
-				otel.Handle(err)
+		if pusher, ok := otelglobal.MeterProvider().(*otelcontroller.Controller); ok {
+			if err := pusher.Start(baseContext); err != nil {
+				log.Fatalf("could not start metric controller: %v", err)
 			}
-		}()
+			defer func() {
+				ctx, cancel := context.WithTimeout(baseContext, time.Second)
+				defer cancel()
+				// pushes any last exports to the receiver
+				if err := pusher.Stop(ctx); err != nil {
+					otel.Handle(err)
+				}
+			}()
+		}
 	}
 	if a.config.Tracing.TracingShutdown != nil {
 		defer func() {
