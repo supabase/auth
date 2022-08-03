@@ -16,6 +16,7 @@ type CryptoAddress struct {
 
 	AccountId uuid.UUID `json:"account_id" db:"account_id"`
 	Address   string    `json:"address" db:"address"`
+	Provider  string    `json:"provider" db:"provider"`
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
@@ -40,7 +41,7 @@ func (c *CryptoAddress) BeforeSave(tx *pop.Connection) error {
 	return nil
 }
 
-func NewCryptoAddress(instanceID uuid.UUID, accountId uuid.UUID, caipString string) (*CryptoAddress, error) {
+func NewCryptoAddress(instanceID uuid.UUID, accountId uuid.UUID, provider string, caipString string) (*CryptoAddress, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -51,13 +52,14 @@ func NewCryptoAddress(instanceID uuid.UUID, accountId uuid.UUID, caipString stri
 		ID:         id,
 		AccountId:  accountId,
 		Address:    caipString,
+		Provider:   provider,
 		CreatedAt:  time.Now().UTC(),
 	}
 
 	return address, nil
 }
 
-func GetCryptoAddressByCaip(tx *storage.Connection, address string) (*CryptoAddress, error) {
+func GetCryptoAddressByAddress(tx *storage.Connection, address string) (*CryptoAddress, error) {
 	nonce := CryptoAddress{}
 	if err := tx.Where("address = ?", address).First(&nonce); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
@@ -71,17 +73,6 @@ func GetCryptoAddressByCaip(tx *storage.Connection, address string) (*CryptoAddr
 func GetCryptoAddressById(tx *storage.Connection, id uuid.UUID) (*CryptoAddress, error) {
 	nonce := CryptoAddress{}
 	if err := tx.Where("id = ?", id).First(&nonce); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, CryptoAddressNotFoundError{}
-		}
-		return nil, errors.Wrap(err, "error finding crypto address")
-	}
-	return &nonce, nil
-}
-
-func GetCryptoAddressesForAccount(tx *storage.Connection, accountId uuid.UUID) (*CryptoAddress, error) {
-	nonce := CryptoAddress{}
-	if err := tx.Where("account_id = ?", accountId).First(&nonce); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, CryptoAddressNotFoundError{}
 		}

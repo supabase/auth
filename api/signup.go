@@ -17,13 +17,14 @@ import (
 
 // SignupParams are the parameters the Signup endpoint accepts
 type SignupParams struct {
-	Email         string                 `json:"email"`
-	Phone         string                 `json:"phone"`
-	CryptoAddress string                 `json:"-"`
-	Password      string                 `json:"password"`
-	Data          map[string]interface{} `json:"data"`
-	Provider      string                 `json:"-"`
-	Aud           string                 `json:"-"`
+	Email          string                 `json:"email"`
+	Phone          string                 `json:"phone"`
+	Password       string                 `json:"password"`
+	Data           map[string]interface{} `json:"data"`
+	Provider       string                 `json:"-"`
+	Aud            string                 `json:"-"`
+	CryptoAddress  string                 `json:"-"`
+	CryptoProvider string                 `json:"-"`
 }
 
 // Signup is the endpoint for registering a new user
@@ -286,7 +287,7 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 		user.Phone = storage.NullString(params.Phone)
 	case "crypto":
 		user, err = models.NewUser(instanceID, "", "", params.Password, params.Aud, params.Data)
-		cryptoAddress, err = models.NewCryptoAddress(instanceID, user.ID, params.CryptoAddress)
+		cryptoAddress, err = models.NewCryptoAddress(instanceID, user.ID, params.CryptoProvider, params.CryptoAddress)
 	default:
 		// handles external provider case
 		user, err = models.NewUser(instanceID, "", params.Email, params.Password, params.Aud, params.Data)
@@ -301,10 +302,16 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 
 	user.Identities = make([]models.Identity, 0)
 
-	// TODO: Deprecate "provider" field
-	user.AppMetaData["provider"] = params.Provider
+	provider := params.Provider
+	if provider == "crypto" {
+		provider = params.CryptoProvider
+	}
 
-	user.AppMetaData["providers"] = []string{params.Provider}
+	// TODO: Deprecate "provider" field
+	user.AppMetaData["provider"] = provider
+
+	user.AppMetaData["providers"] = []string{provider}
+
 	if params.Password == "" {
 		user.EncryptedPassword = ""
 	}

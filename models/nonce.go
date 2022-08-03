@@ -3,7 +3,6 @@ package models
 import (
 	"database/sql"
 	"fmt"
-	"github.com/netlify/gotrue/conf"
 	"github.com/spruceid/siwe-go"
 	"net/url"
 	"time"
@@ -114,26 +113,13 @@ Expiration Time: %v
 Chain ID: %v`, uri.Hostname(), n.Address, statement, uri.String(), n.CreatedAt.UnixNano()/int64(time.Millisecond), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
 }
 
-func (n *Nonce) ToMessage(config *conf.GlobalConfiguration) *siwe.Message {
-	message, _ := siwe.InitMessage(n.Hostname, n.Address, n.Url, "1", map[string]interface{}{
-		"statement":      config.External.Eth.Message,
-		"issuedAt":       n.UpdatedAt,
-		"nonce":          n.Nonce,
-		"chainId":        n.ChainId,
-		"expirationTime": n.ExpiresAt,
-	})
-	// TODO (HarryET): Handle Errors better!
-	return message
-}
-
 func (n *Nonce) GetCaipAddress() string {
 	return fmt.Sprintf("%s:%s:%s", n.Namespace, n.ChainId, n.Address)
 }
 
-// TODO (HarryET): Fix queries!
-func GetNonceById(tx *storage.Connection, id uuid.UUID) (*Nonce, error) {
+func GetNonceById(tx *storage.Connection, instanceID uuid.UUID, id uuid.UUID) (*Nonce, error) {
 	nonce := Nonce{}
-	if err := tx.Where("id = ?", id).First(&nonce); err != nil {
+	if err := tx.Where("instance_id = ? and id = ?", instanceID, id).First(&nonce); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, NonceNotFoundError{}
 		}
@@ -142,9 +128,9 @@ func GetNonceById(tx *storage.Connection, id uuid.UUID) (*Nonce, error) {
 	return &nonce, nil
 }
 
-func GetNonceByWalletAddress(tx *storage.Connection, walletAddress string) (*Nonce, error) {
+func GetNonceByProviderAndWalletAddress(tx *storage.Connection, instanceID uuid.UUID, provider, walletAddress string) (*Nonce, error) {
 	nonce := Nonce{}
-	if err := tx.Where("address = ?", walletAddress).First(&nonce); err != nil {
+	if err := tx.Where("instance_id = ? and address = ? and provider = ?", instanceID, walletAddress, provider).First(&nonce); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, NonceNotFoundError{}
 		}

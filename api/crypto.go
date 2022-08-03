@@ -4,57 +4,72 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/api/crypto_provider"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"io/ioutil"
 	"net/http"
+	"strings"
 )
 
-// EthParams contains the request body params for the eth endpoint, all values hex encoded
-type EthParams struct {
-	NonceId   string `json:"nonce_id"`
-	Signature string `json:"signature"`
+// CryptoParams contains the request body params for the eth endpoint, all values hex encoded
+type CryptoParams struct {
+	Provider  string  `json:"provider"`
+	NonceId   *string `json:"nonce_id"`
+	Signature *string `json:"signature"`
 }
 
-func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
+func (a *API) Crypto(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
 	instanceID := getInstanceID(ctx)
 	useCookie := r.Header.Get(useCookieHeader)
 
-	// Check if ethereum is enabled
-	if !config.External.Eth.Enabled {
-		return badRequestError("Unsupported eth provider")
-	}
-
 	// Get the params
-	params := &EthParams{}
+	params := &CryptoParams{}
 	body, err := ioutil.ReadAll(r.Body)
 	jsonDecoder := json.NewDecoder(bytes.NewReader(body))
 	if err = jsonDecoder.Decode(params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
-	// Get the nonce from the id in params
-	nonce, err := models.GetNonceById(a.db, uuid.FromStringOrNil(params.NonceId))
-	if err != nil {
-		return badRequestError("Failed to find nonce: %v", err)
-	}
-
-	nonceMessage := nonce.ToMessage(a.config)
-	_, err = nonceMessage.Verify(params.Signature)
-
-	// Check if the address from params is the same as the recovered address
+	// Get the crypto provider
+	provider, err := crypto_provider.GetCryptoProvider(config, params.Provider)
 	if err != nil {
 		return badRequestError(err.Error())
 	}
 
-	// Default Signin/Signup logic from `./signup.go`
+	var nonce *models.Nonce = nil
+	if provider.RequiresNonce() {
+		if params.NonceId == nil {
+			return badRequestError("Missing `nonce_id` which is required by %s provider", strings.ToLower(params.Provider))
+		}
+
+		if params.Signature == nil {
+			return badRequestError("Missing `signature` which is required by %s provider", strings.ToLower(params.Provider))
+		}
+
+		// Get the nonce from the id in params
+		nonce, err = models.GetNonceById(a.db, instanceID, uuid.FromStringOrNil(*params.NonceId))
+		if err != nil {
+			return badRequestError("Failed to find nonce: %v", err)
+		}
+
+		safe, err := provider.ValidateNonce(nonce, *params.Signature)
+		if !safe {
+			return badRequestError(err.Error())
+		}
+
+		if err != nil {
+			return internalServerError(err.Error())
+		}
+	}
+
 	didUserExist := true
 
 	aud := a.requestAud(ctx, r)
-	user, uerr := models.FindUserByCryptoAddressAndAudience(a.db, instanceID, nonce.GetCaipAddress(), aud)
+	user, uerr := provider.FetchUser(a.db, instanceID, aud, nonce)
 
 	if err != nil && !models.IsNotFoundError(err) {
 		return internalServerError("Database error finding user").WithInternalError(err)
@@ -62,10 +77,16 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 
 	if models.IsNotFoundError(uerr) {
 		uerr = a.db.Transaction(func(tx *storage.Connection) error {
+			accountInfo, uerr := provider.FetchAccountInformation(nonce)
+			if uerr != nil {
+				return uerr
+			}
+
 			user, uerr = a.signupNewUser(ctx, tx, &SignupParams{
-				CryptoAddress: nonce.GetCaipAddress(),
-				Provider:      "crypto",
-				Aud:           aud,
+				CryptoAddress:  accountInfo.Address,
+				Provider:       "crypto",
+				CryptoProvider: params.Provider,
+				Aud:            aud,
 			})
 			didUserExist = false
 
@@ -127,7 +148,7 @@ func (a *API) Eth(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	metering.RecordLogin("eth", user.ID, instanceID)
+	metering.RecordLogin("crypto", user.ID, instanceID)
 	token.User = user
 
 	status := http.StatusOK

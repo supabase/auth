@@ -3,19 +3,18 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/netlify/gotrue/api/crypto_provider"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"io/ioutil"
 	"net/http"
-	"net/url"
-	"strconv"
+	"strings"
 	"time"
 )
 
 type NonceParams struct {
-	WalletAddress string `json:"wallet_address"` // Hex Encoded
-	ChainId       string `json:"chain_id"`
-	Url           string `json:"url"`
+	Provider string                             `json:"provider"`
+	Options  crypto_provider.CryptoNonceOptions `json:"options"`
 }
 
 type NonceResponse struct {
@@ -28,11 +27,6 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 	config := a.getConfig(ctx)
 	instanceID := getInstanceID(ctx)
 
-	// Check if Ethereum login enabled in env
-	if !config.External.Eth.Enabled {
-		return badRequestError("Unsupported eth provider")
-	}
-
 	// Read body into params
 	params := &NonceParams{}
 	body, err := ioutil.ReadAll(r.Body)
@@ -41,37 +35,51 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
-	nonce, err := models.GetNonceByWalletAddress(a.db, params.WalletAddress)
+	// Get the crypto provider
+	provider, err := crypto_provider.GetCryptoProvider(config, params.Provider)
+	if err != nil {
+		return badRequestError(err.Error())
+	}
+
+	if !provider.RequiresNonce() {
+		return badRequestError("%s provider does not require a nonce for authentication", strings.ToLower(params.Provider))
+	}
+
+	nonce, err := models.GetNonceByProviderAndWalletAddress(a.db, instanceID, params.Provider, params.Options.WalletAddress)
+	if err != nil {
+		// Only return if the error isn't `NonceNotFoundError`
+		if _, ok := err.(*models.NonceNotFoundError); !ok {
+			return badRequestError("Failed to find nonce: %v", err)
+		}
+	}
+
 	if nonce != nil {
 		nonce.UpdatedAt = time.Now().UTC()
 		nonce.ExpiresAt = time.Now().UTC().Add(time.Minute * 2)
 		if err = a.db.UpdateOnly(nonce, "updated_at", "expires_at"); err != nil {
 			return internalServerError("failed to refresh nonce")
 		}
-		message := nonce.ToMessage(a.config)
+		message, err := provider.BuildNonce(nonce)
+
+		if err != nil {
+			return internalServerError(err.Error())
+		}
+
 		return sendJSON(w, http.StatusOK, &NonceResponse{
 			Id:    nonce.ID.String(),
-			Nonce: message.PrepareMessage(),
+			Nonce: message,
 		})
 	}
 
-	uri, err := url.Parse(params.Url)
-	if err != nil {
-		return badRequestError("Invalid url")
-	}
-
-	_, err = strconv.ParseInt(params.ChainId, 16, 64)
-	if err == nil {
-		return badRequestError("Invalid Chain ID: Must be a valid integer")
-	}
-
-	// Create new nonce
-	nonce, err = models.NewNonce(instanceID, params.ChainId, uri.String(), uri.Hostname(), params.WalletAddress, "eip155")
+	nonce, err = provider.GenerateNonce(r, instanceID, params.Options)
 	if err != nil || nonce == nil {
 		return internalServerError("Failed to generate nonce")
 	}
 
-	message := nonce.ToMessage(a.config)
+	message, err := provider.BuildNonce(nonce)
+	if err != nil {
+		return internalServerError(err.Error())
+	}
 
 	// Create new transaction
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -92,6 +100,6 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 	// Return the nonce's id and the build string
 	return sendJSON(w, http.StatusCreated, &NonceResponse{
 		Id:    nonce.ID.String(),
-		Nonce: message.PrepareMessage(),
+		Nonce: message,
 	})
 }
