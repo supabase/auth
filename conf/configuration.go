@@ -355,13 +355,14 @@ func (config *Configuration) ApplyDefaults() error {
 		config.URIAllowList = []string{}
 	}
 	if config.URIAllowList != nil {
+		for i, item := range config.URIAllowList {
+			// remove trailing slashes from the glob as they may confuse users
+			// when passing redirect_to URLs with or without slashes at the end
+			config.URIAllowList[i] = strings.TrimSuffix(item, "/")
+		}
+
 		config.URIAllowListMap = make(map[string]glob.Glob)
 		for _, uri := range config.URIAllowList {
-			if strings.HasPrefix(uri, "http") || strings.HasPrefix(uri, "https") {
-				// remove trailing slashes from the glob as they may confuse users
-				// when passing redirect_to URLs with or without slashes at the end
-				uri = strings.TrimSuffix(uri, "/")
-			}
 			g := glob.MustCompile(uri, '.', '/')
 			config.URIAllowListMap[uri] = g
 		}
