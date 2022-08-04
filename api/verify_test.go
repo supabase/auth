@@ -517,6 +517,13 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			requestredirectURL:  "http://example.org/path/",
 			expectedredirectURL: "http://example.org/path/",
 		},
+		{
+			desc:                "uri allow list with deeplink and trailing slash",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"io.deeplink.example://path/"},
+			requestredirectURL:  "io.deeplink.example://path/",
+			expectedredirectURL: "io.deeplink.example://path/",
+		},
 	}
 
 	for _, tC := range testCases {
