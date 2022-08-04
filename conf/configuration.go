@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/gobwas/glob"
@@ -272,15 +271,12 @@ func LoadConfig(filename string) (*Configuration, error) {
 	if err := envconfig.Process("gotrue", config); err != nil {
 		return nil, err
 	}
-	if err := config.ApplyDefaults(); err != nil {
-		return nil, err
-	}
-
+	config.ApplyDefaults()
 	return config, nil
 }
 
 // ApplyDefaults sets defaults for a Configuration
-func (config *Configuration) ApplyDefaults() error {
+func (config *Configuration) ApplyDefaults() {
 	if config.JWT.AdminGroupName == "" {
 		config.JWT.AdminGroupName = "admin"
 	}
@@ -357,11 +353,6 @@ func (config *Configuration) ApplyDefaults() error {
 	if config.URIAllowList != nil {
 		config.URIAllowListMap = make(map[string]glob.Glob)
 		for _, uri := range config.URIAllowList {
-			if strings.HasPrefix(uri, "http") || strings.HasPrefix(uri, "https") {
-				// remove trailing slashes from the glob as they may confuse users
-				// when passing redirect_to URLs with or without slashes at the end
-				uri = strings.TrimSuffix(uri, "/")
-			}
 			g := glob.MustCompile(uri, '.', '/')
 			config.URIAllowListMap[uri] = g
 		}
@@ -369,8 +360,6 @@ func (config *Configuration) ApplyDefaults() error {
 	if config.PasswordMinLength < defaultMinPasswordLength {
 		config.PasswordMinLength = defaultMinPasswordLength
 	}
-
-	return nil
 }
 
 func (config *Configuration) Value() (driver.Value, error) {
