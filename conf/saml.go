@@ -12,8 +12,9 @@ import (
 
 // SAMLConfiguration holds configuration for native SAML support.
 type SAMLConfiguration struct {
-	Enabled    bool   `json:"enabled"`
-	PrivateKey string `json:"-" split_words:"true"`
+	Enabled                  bool          `json:"enabled"`
+	PrivateKey               string        `json:"-" split_words:"true"`
+	RelayStateValidityPeriod time.Duration `json:"relay_state_validity_period" split_words:"true"`
 
 	RSAPrivateKey *rsa.PrivateKey   `json:"-"`
 	RSAPublicKey  *rsa.PublicKey    `json:"-"`
@@ -43,6 +44,10 @@ func (c *SAMLConfiguration) Validate() error {
 
 		if privateKey.N.BitLen() < 2048 {
 			return errors.New("SAML private key must be at least RSA 2048")
+		}
+
+		if c.RelayStateValidityPeriod < 0 {
+			return errors.New("SAML RelayState validity period should be a positive duration")
 		}
 	}
 
@@ -91,6 +96,10 @@ func (c *SAMLConfiguration) PopulateFields(externalURL string) error {
 	}
 
 	c.Certificate = cert
+
+	if c.RelayStateValidityPeriod == 0 {
+		c.RelayStateValidityPeriod = 2 * time.Minute
+	}
 
 	return nil
 }

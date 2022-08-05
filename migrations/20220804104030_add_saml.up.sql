@@ -42,6 +42,26 @@ create index if not exists saml_providers_sso_provider_id_idx on auth.saml_provi
 
 comment on table auth.saml_providers is 'Auth: Manages SAML Identity Provider connections.';
 
+create table if not exists auth.saml_relay_states (
+	id uuid not null,
+	sso_provider_id uuid not null,
+	request_id text not null,
+	for_email text null,
+	redirect_to text null,
+	from_ip_address text not null,
+	created_at timestamptz null,
+	updated_at timestamptz null,
+	primary key (id),
+	foreign key (sso_provider_id) references auth.sso_providers(id) on delete cascade,
+	constraint "request_id not empty" check(char_length(request_id) > 0),
+	constraint "from_ip_address not empty" check(char_length(from_ip_address) > 0)
+);
+
+create index if not exists saml_relay_states_sso_provider_id_idx on auth.saml_relay_states (sso_provider_id);
+create index if not exists saml_relay_states_for_email_idx on auth.saml_relay_states (for_email);
+
+comment on table auth.saml_relay_states is 'Auth: Contains SAML Relay State information for each Service Provider initiated login.';
+
 create table if not exists auth.sso_sessions (
 	id uuid not null,
 	user_id uuid not null,

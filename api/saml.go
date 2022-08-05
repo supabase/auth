@@ -44,18 +44,20 @@ func (a *API) loadSAMLIdP(w http.ResponseWriter, r *http.Request) (context.Conte
 
 // getSAMLServiceProvider generates a new service provider object with the
 // (optionally) provided descriptor (metadata) for the identity provider.
-func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor) *saml.ServiceProvider {
+func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor, idpInitiated bool) *saml.ServiceProvider {
 	externalURL, err := url.ParseRequestURI(a.config.API.ExternalURL)
 	if err != nil {
 		// this should not fail as a.config should have been validated using #Validate()
 		panic(err)
 	}
 
+	// TODO: figure out idpInitiated properties for higher security
+
 	provider := samlsp.DefaultServiceProvider(samlsp.Options{
 		URL:         *externalURL,
 		Key:         a.config.SAML.RSAPrivateKey,
 		Certificate: a.config.SAML.Certificate,
-		//SignRequest:       true,
+		//SignRequest:       !idpInitiated,
 		AllowIDPInitiated: true,
 		IDPMetadata:       identityProvider,
 	})
@@ -65,7 +67,7 @@ func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor) *s
 
 // SAMLMetadata serves GoTrue's SAML Service Provider metadata file.
 func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
-	serviceProvider := a.getSAMLServiceProvider(nil)
+	serviceProvider := a.getSAMLServiceProvider(nil /* <- identityProvider */, false /* <- idpInitiated */)
 
 	metadata := serviceProvider.Metadata()
 
@@ -81,53 +83,122 @@ func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
 	return err
 }
 
+func (a *API) samlDestroyRelayState(relayState *models.SAMLRelayState) error {
+	// It's OK to destroy the RelayState, as a user will
+	// likely initiate a completely new login flow, instead
+	// of reusing the same one.
+
+	return a.db.Transaction(func(tx *storage.Connection) error {
+		return tx.Destroy(relayState)
+	})
+}
+
 // samlCallback implements the main Assertion Consumer Service endpoint behavior.
 func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.UserProvidedData, *models.GrantAuthenticatedConditions, error) {
-	if r.FormValue("SAMLart") != "" {
-		// TODO: SAML Artifact callbacks are only possible when you can
-		// identify the IdP via RelayState i.e. only the SP initiated
-		// flow is supported
-		return nil, nil, badRequestError("SAML Response with artifacts not supported at this time")
-	}
+	relayStateValue := r.FormValue("RelayState")
+	relayStateUUID := uuid.FromStringOrNil(relayStateValue)
+	relayStateURL, _ := url.ParseRequestURI(relayStateValue)
 
-	samlResponse := r.FormValue("SAMLResponse")
-	if samlResponse == "" {
-		return nil, nil, badRequestError("SAMLResponse is missing")
-	}
+	entityId := ""
+	initiatedBy := ""
+	//redirectTo := ""
+	var requestIds []string
 
-	responseXML, err := base64.StdEncoding.DecodeString(samlResponse)
-	if err != nil {
-		return nil, nil, badRequestError("SAMLResponse is not a valid Base64 string")
-	}
+	if relayStateUUID != uuid.Nil {
+		// relay state is a valid UUID, therefore this is likely a SP initiated flow
 
-	var peekResponse saml.Response
-	err = xml.Unmarshal(responseXML, &peekResponse)
-	if err != nil {
-		return nil, nil, badRequestError("SAMLResponse is not a valid XML SAML assertion")
-	}
+		relayState, err := models.FindSAMLRelayStateByID(a.db, relayStateUUID)
+		if models.IsNotFoundError(err) {
+			return nil, nil, badRequestError("SAML RelayState does not exist, try logging in again?")
+		} else if err != nil {
+			return nil, nil, err
+		}
 
-	entityId := peekResponse.Issuer.Value
+		if time.Since(relayState.CreatedAt) >= a.config.SAML.RelayStateValidityPeriod {
+			if err := a.samlDestroyRelayState(relayState); err != nil {
+				return nil, nil, internalServerError("SAML RelayState has expired and destroying it failed. Try logging in again?").WithInternalError(err)
+			}
+
+			return nil, nil, badRequestError("SAML RelayState has expired. Try loggin in again?")
+		}
+
+		if relayState.FromIPAddress != getIPAddress(r) {
+			if err := a.samlDestroyRelayState(relayState); err != nil {
+				return nil, nil, internalServerError("SAML RelayState comes from another IP address and destroying it failed. Try logging in again?").WithInternalError(err)
+			}
+
+			return nil, nil, badRequestError("SAML RelayState comes from another IP address, try logging in again?")
+		}
+
+		// TODO: add abuse detection to bind the RelayState UUID with a
+		// HTTP-Only cookie
+
+		ssoProvider, err := models.FindSAMLProviderByID(a.db, relayState.SSOProviderID)
+		if err != nil {
+			return nil, nil, internalServerError("Unable to find SSO Provider from SAML RelayState")
+		}
+
+		initiatedBy = "sp"
+		entityId = ssoProvider.SAMLProvider.EntityID
+		//redirectTo = relayState.RedirectTo
+		requestIds = append(requestIds, relayState.RequestID)
+
+		if err := a.samlDestroyRelayState(relayState); err != nil {
+			return nil, nil, err
+		}
+	} else if relayStateValue == "" || relayStateURL != nil {
+		// RelayState may be a URL in which case it's the URL where the
+		// IdP is telling us to redirect the user to
+
+		if r.FormValue("SAMLart") != "" {
+			// SAML Artifact responses are possible only when
+			// RelayState can be used to identify the Identity
+			// Provider.
+			return nil, nil, badRequestError("SAML Artifact response can only be used with SP initiated flow")
+		}
+
+		samlResponse := r.FormValue("SAMLResponse")
+		if samlResponse == "" {
+			return nil, nil, badRequestError("SAMLResponse is missing")
+		}
+
+		responseXML, err := base64.StdEncoding.DecodeString(samlResponse)
+		if err != nil {
+			return nil, nil, badRequestError("SAMLResponse is not a valid Base64 string")
+		}
+
+		var peekResponse saml.Response
+		err = xml.Unmarshal(responseXML, &peekResponse)
+		if err != nil {
+			return nil, nil, badRequestError("SAMLResponse is not a valid XML SAML assertion")
+		}
+
+		initiatedBy = "idp"
+		entityId = peekResponse.Issuer.Value
+		//redirectTo = relayStateValue
+	} else {
+		// RelayState can't be identified, so SAML flow can't continue
+		return nil, nil, badRequestError("SAML RelayState is not a valid UUID or URL")
+	}
 
 	ssoProvider, err := models.FindSAMLProviderForEntityID(a.db, entityId)
-	if err != nil {
+	if models.IsNotFoundError(err) {
+		return nil, nil, badRequestError("A SAML connection has not been established with this Identity Provider")
+	} else if err != nil {
 		return nil, nil, err
 	}
 
-	if ssoProvider == nil {
-		return nil, nil, badRequestError("SAML Assertion has unrecognized Issuer")
-	}
-
-	idpMetadata, err := samlsp.ParseMetadata([]byte(ssoProvider.SAMLProvider.MetadataXML))
+	idpMetadata, err := ssoProvider.SAMLProvider.EntityDescriptor()
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// TODO: fetch new metadata if possible when validUntil < time.Now()
 
-	serviceProvider := a.getSAMLServiceProvider(idpMetadata)
-	spAssertion, err := serviceProvider.ParseResponse(r, nil)
+	serviceProvider := a.getSAMLServiceProvider(idpMetadata, initiatedBy == "idp")
+	spAssertion, err := serviceProvider.ParseResponse(r, requestIds)
 	if err != nil {
-		return nil, nil, badRequestError("SAML Assertion is not valid")
+		return nil, nil, badRequestError("SAML Assertion is not valid").WithInternalError(err)
 	}
 
 	assertion := SAMLAssertion{
@@ -155,9 +226,7 @@ func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.User
 	userProvidedData.Provider.Type = "saml"
 	userProvidedData.Provider.ID = ssoProvider.ID.String()
 	userProvidedData.Provider.SAMLEntityID = ssoProvider.SAMLProvider.EntityID
-
-	// TODO: determine whether login came from idp or sp
-	userProvidedData.Provider.SAMLInitiatedBy = "idp"
+	userProvidedData.Provider.SAMLInitiatedBy = initiatedBy
 
 	userProvidedData.Metadata = &provider.Claims{
 		Subject:       userID,
@@ -166,10 +235,7 @@ func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.User
 	}
 
 	cond.SSOProviderID = ssoProvider.ID
-
-	// TODO: determine whether login came from idp or sp
-	cond.InitiatedByProvider = true
-
+	cond.InitiatedByProvider = initiatedBy == "idp"
 	cond.NotBefore = assertion.NotBefore()
 	cond.NotAfter = assertion.NotAfter()
 

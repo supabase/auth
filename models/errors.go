@@ -17,6 +17,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case SSOProviderNotFoundError:
 		return true
+	case SAMLRelayStateNotFoundError:
+		return true
 	}
 	return false
 }
@@ -66,4 +68,10 @@ type SSOProviderNotFoundError struct{}
 
 func (e SSOProviderNotFoundError) Error() string {
 	return "SSO Identity Provider not found"
+}
+
+type SAMLRelayStateNotFoundError struct{}
+
+func (e SAMLRelayStateNotFoundError) Error() string {
+	return "SAML RelayState not found"
 }
