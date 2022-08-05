@@ -63,52 +63,6 @@ type UnenrollFactorParams struct {
 	Code string `json:"code"`
 }
 
-// RecoveryCodesResponse represents a successful recovery code generation response
-type RecoveryCodesResponse struct {
-	RecoveryCodes []string `json:"recovery_codes"`
-}
-
-func (a *API) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) error {
-	const numRecoveryCodes = 8
-	const recoveryCodeLength = 8
-	ctx := r.Context()
-	user := getUser(ctx)
-	instanceID := getInstanceID(ctx)
-	recoveryCodeModels := []*models.RecoveryCode{}
-	var terr error
-	var recoveryCode string
-	var recoveryCodes []string
-	var recoveryCodeModel *models.RecoveryCode
-	for i := 0; i < numRecoveryCodes; i++ {
-		recoveryCode = crypto.SecureToken(recoveryCodeLength)
-		recoveryCodeModel, terr = models.NewRecoveryCode(user, recoveryCode)
-		if terr != nil {
-			return internalServerError("Error creating recovery code").WithInternalError(terr)
-		}
-		recoveryCodes = append(recoveryCodes, recoveryCode)
-		recoveryCodeModels = append(recoveryCodeModels, recoveryCodeModel)
-	}
-	terr = a.db.Transaction(func(tx *storage.Connection) error {
-		for _, recoveryCodeModel := range recoveryCodeModels {
-			if terr = tx.Create(recoveryCodeModel); terr != nil {
-				return terr
-			}
-		}
-
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.GenerateRecoveryCodesAction, r.RemoteAddr, nil); terr != nil {
-			return terr
-		}
-		return nil
-	})
-	if terr != nil {
-		return terr
-	}
-
-	return sendJSON(w, http.StatusOK, &RecoveryCodesResponse{
-		RecoveryCodes: recoveryCodes,
-	})
-}
-
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	const factorPrefix = "factor"
 	const imageSideLength = 300
@@ -141,7 +95,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())
-	// TODO(Joel): Convert constants into an Enum in future
 	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, models.FactorDisabledState, key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
@@ -351,6 +304,9 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
 
 	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{
 		Success: fmt.Sprintf("%v", valid),
