@@ -31,6 +31,7 @@ const (
 	adminUserKey            = contextKey("admin_user")
 	oauthTokenKey           = contextKey("oauth_token") // for OAuth1.0, also known as request token
 	oauthVerifierKey        = contextKey("oauth_verifier")
+	ssoProviderKey          = contextKey("sso_idp")
 )
 
 // withToken adds the JWT token to the context.
@@ -249,4 +250,12 @@ func getOAuthVerifier(ctx context.Context) string {
 		return ""
 	}
 	return obj.(string)
+}
+
+func withSSOProvider(ctx context.Context, provider *models.SSOProvider) context.Context {
+	return context.WithValue(ctx, ssoProviderKey, provider)
+}
+
+func getSSOProvider(ctx context.Context) *models.SSOProvider {
+	return ctx.Value(ssoProviderKey).(*models.SSOProvider)
 }

@@ -169,11 +169,12 @@ func (ts *SSOTestSuite) TestFindSSOProviderForEmailAddress() {
 
 	for i, example := range examples {
 		rp, err := FindSSOProviderForEmailAddress(ts.db, example.Address)
-		require.NoError(ts.T(), err, "Example %d failed with error", i)
 
 		if nil == example.Provider {
 			require.Nil(ts.T(), rp)
+			require.True(ts.T(), IsNotFoundError(err), "Example %d failed with error %w", i, err)
 		} else {
+			require.Nil(ts.T(), err, "Example %d failed with error %w", i, err)
 			require.Equal(ts.T(), rp.ID, example.Provider.ID)
 		}
 	}
@@ -219,11 +220,12 @@ func (ts *SSOTestSuite) TestFindSAMLProviderForEntityID() {
 
 	for i, example := range examples {
 		rp, err := FindSAMLProviderForEntityID(ts.db, example.EntityID)
-		require.NoError(ts.T(), err, "Example %d failed with error", i)
 
 		if nil == example.Provider {
+			require.True(ts.T(), IsNotFoundError(err), "Example %d failed with error", i)
 			require.Nil(ts.T(), rp)
 		} else {
+			require.Nil(ts.T(), err, "Example %d failed with error %w", i, err)
 			require.Equal(ts.T(), rp.ID, example.Provider.ID)
 		}
 	}
