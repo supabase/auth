@@ -541,6 +541,17 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 }
 
 func generateAccessToken(user *models.User, expiresIn time.Duration, secret string) (string, error) {
+	// oldClaims *GoTrueClaims, signInMethod string)
+	amr := []string{}
+	aal := "aal1"
+	// if oldClaims != nil {
+	// 	// Append to the old claims field
+	// 	// TODO: Define an AMREntry Type above, write the calculate AAR method
+	// 	// entry := AMREntry{method: signInMethod, timestamp: time.Now()}
+	// 	amr = append(oldClaims.AuthenticationMethodReference, entry)
+	// 	aar = calculateAAR(amr)
+	// }
+
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
@@ -552,15 +563,17 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, secret stri
 		AppMetaData:                   user.AppMetaData,
 		UserMetaData:                  user.UserMetaData,
 		Role:                          user.Role,
-		AuthenticationAssuranceLevel:  "aal1",
-		AuthenticationMethodReference: []string{"email"},
+		AuthenticationAssuranceLevel:  aal,
+		AuthenticationMethodReference: amr,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
 }
 
+// TODO: update all occurrences of this method to log the Authentication method
 func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User) (*AccessTokenResponse, error) {
 	config := a.getConfig(ctx)
+	// claims := a.getClaims(ctx)
 
 	now := time.Now()
 	user.LastSignInAt = &now
@@ -575,6 +588,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
+		// If there is an existing token, add additional claims to it
 		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)

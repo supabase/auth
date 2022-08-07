@@ -42,6 +42,14 @@ func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.R
 	return nil, unauthorizedError("User not allowed")
 }
 
+// func (a *API) requireMFA(ctx context.Context, w http.ResponseWriter, r *http.Request) (context.Context, error) {
+// 	token, err := a.extractBearerToken(w, r)
+// Note: Failing this shouldn't sign you out...
+//
+// TODO> Check for aal claim and require it to be "aal2"
+// return a.parseJWTWithClaims
+//}
+
 func (a *API) extractBearerToken(w http.ResponseWriter, r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
@@ -62,6 +70,8 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request, w http.ResponseWrit
 
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
 	token, err := p.ParseWithClaims(bearer, &GoTrueClaims{}, func(token *jwt.Token) (interface{}, error) {
+		// claims := token.Claims.(*GoTrueClaims)
+		// if claims
 		return []byte(config.JWT.Secret), nil
 	})
 	if err != nil {
