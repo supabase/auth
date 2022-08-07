@@ -21,11 +21,13 @@ import (
 // GoTrueClaims is a struct thats used for JWT claims
 type GoTrueClaims struct {
 	jwt.StandardClaims
-	Email        string                 `json:"email"`
-	Phone        string                 `json:"phone"`
-	AppMetaData  map[string]interface{} `json:"app_metadata"`
-	UserMetaData map[string]interface{} `json:"user_metadata"`
-	Role         string                 `json:"role"`
+	Email                         string                 `json:"email"`
+	Phone                         string                 `json:"phone"`
+	AppMetaData                   map[string]interface{} `json:"app_metadata"`
+	UserMetaData                  map[string]interface{} `json:"user_metadata"`
+	Role                          string                 `json:"role"`
+	AuthenticationAssuranceLevel  string                 `json:"aal"`
+	AuthenticationMethodReference []string               `json:"amr"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -545,13 +547,14 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, secret stri
 			Audience:  user.Aud,
 			ExpiresAt: time.Now().Add(expiresIn).Unix(),
 		},
-		Email:        user.GetEmail(),
-		Phone:        user.GetPhone(),
-		AppMetaData:  user.AppMetaData,
-		UserMetaData: user.UserMetaData,
-		Role:         user.Role,
+		Email:                         user.GetEmail(),
+		Phone:                         user.GetPhone(),
+		AppMetaData:                   user.AppMetaData,
+		UserMetaData:                  user.UserMetaData,
+		Role:                          user.Role,
+		AuthenticationAssuranceLevel:  "aal1",
+		AuthenticationMethodReference: []string{"email"},
 	}
-
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
 }
