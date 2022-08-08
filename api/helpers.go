@@ -282,3 +282,25 @@ func isStringInSlice(checkValue string, list []string) bool {
 	}
 	return false
 }
+
+func getIPAddress(r *http.Request) string {
+	xForwardedFor := r.Header.Get("X-Forwarded-For")
+	if xForwardedFor != "" {
+		ips := strings.Split(xForwardedFor, ",")
+		for i := range ips {
+			ips[i] = strings.TrimSpace(ips[i])
+		}
+
+		if len(ips) > 0 && ips[0] != "" {
+			return ips[0]
+		}
+	}
+
+	ipPort := r.RemoteAddr
+	ip, _, err := net.SplitHostPort(ipPort)
+	if err != nil {
+		return ipPort
+	}
+
+	return ip
+}

@@ -26,6 +26,19 @@ type GoTrueClaims struct {
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	UserMetaData map[string]interface{} `json:"user_metadata"`
 	Role         string                 `json:"role"`
+
+	Provider GoTrueProviderClaim `json:"provider,omitempty"`
+}
+
+// GoTrueProviderClaim encodes information about the source of the identity
+// encoded by a JWT. It's typically only present on federated identities (from
+// Google, Twitter, SAML).
+type GoTrueProviderClaim struct {
+	Type string `json:"type"`
+	ID   string `json:"id,omitempty"`
+
+	SAMLEntityID    string `json:"entity_id,omitempty"`
+	SAMLInitiatedBy string `json:"initiated_by,omitempty"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -228,7 +241,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, nil)
 		if terr != nil {
 			return terr
 		}
@@ -512,7 +525,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, nil)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
@@ -531,7 +544,47 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
+func generateAccessTokenFromRefreshToken(refreshToken *models.RefreshToken, expiresIn time.Duration, secret string) (string, error) {
+	user := refreshToken.User
+
+	claims := &GoTrueClaims{
+		StandardClaims: jwt.StandardClaims{
+			Subject:   user.ID.String(),
+			Audience:  user.Aud,
+			ExpiresAt: time.Now().Add(expiresIn).Unix(),
+		},
+		Email:        user.GetEmail(),
+		Phone:        user.GetPhone(),
+		AppMetaData:  user.AppMetaData,
+		UserMetaData: user.UserMetaData,
+		Role:         user.Role,
+	}
+
+	if refreshToken.SSOSession != nil {
+		if refreshToken.SSOSession.SSOProvider == nil {
+			panic("SSO Provider is nil!")
+		}
+
+		ssoProvider := refreshToken.SSOSession.SSOProvider
+
+		claims.Provider.Type = ssoProvider.Type()
+		claims.Provider.ID = ssoProvider.ID.String()
+		claims.Provider.SAMLEntityID = ssoProvider.SAMLProvider.EntityID
+
+		initiatedBy := "sp"
+		if refreshToken.SSOSession.IdPInitiated {
+			initiatedBy = "idp"
+		}
+
+		claims.Provider.SAMLInitiatedBy = initiatedBy
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
+}
+
 func generateAccessToken(user *models.User, expiresIn time.Duration, secret string) (string, error) {
+	// TODO use the above one
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
@@ -549,7 +602,7 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, secret stri
 	return token.SignedString([]byte(secret))
 }
 
-func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User) (*AccessTokenResponse, error) {
+func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, cond *models.GrantAuthenticatedConditions) (*AccessTokenResponse, error) {
 	config := a.getConfig(ctx)
 
 	now := time.Now()
@@ -560,12 +613,12 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		refreshToken, terr = models.GrantAuthenticatedUser(tx, user)
+		refreshToken, terr = models.GrantAuthenticatedUser(tx, user, cond)
 		if terr != nil {
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessTokenFromRefreshToken(refreshToken, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}

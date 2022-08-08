@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/crewjam/saml"
+	"github.com/crewjam/saml/samlsp"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
@@ -22,6 +24,10 @@ type SSOProvider struct {
 
 func (p SSOProvider) TableName() string {
 	return "sso_providers"
+}
+
+func (p SSOProvider) Type() string {
+	return "saml"
 }
 
 type SAMLProvider struct {
@@ -42,6 +48,10 @@ func (p SAMLProvider) TableName() string {
 	return "saml_providers"
 }
 
+func (p SAMLProvider) EntityDescriptor() (*saml.EntityDescriptor, error) {
+	return samlsp.ParseMetadata([]byte(p.MetadataXML))
+}
+
 type SSODomain struct {
 	ID uuid.UUID `db:"id" json:"-"`
 
@@ -58,9 +68,49 @@ func (d SSODomain) TableName() string {
 	return "sso_domains"
 }
 
+type SSOSession struct {
+	ID uuid.UUID `db:"id"`
+
+	UserID uuid.UUID `db:"user_id"`
+
+	SSOProvider   *SSOProvider `belongs_to:"sso_providers"`
+	SSOProviderID uuid.UUID    `db:"sso_provider_id"`
+
+	NotBefore time.Time `db:"not_before"`
+	NotAfter  time.Time `db:"not_after"`
+
+	IdPInitiated bool `db:"idp_initiated"`
+
+	CreatedAt time.Time `db:"created_at" json:"-"`
+	UpdatedAt time.Time `db:"updated_at" json:"-"`
+}
+
+func (s SSOSession) TableName() string {
+	return "sso_sessions"
+}
+
+type SAMLRelayState struct {
+	ID uuid.UUID `db:"id"`
+
+	SSOProviderID uuid.UUID `db:"sso_provider_id"`
+
+	RequestID     string             `db:"request_id"`
+	ForEmail      storage.NullString `db:"for_email"`
+	FromIPAddress string             `db:"from_ip_address"`
+
+	RedirectTo string `db:"redirect_to"`
+
+	CreatedAt time.Time `db:"created_at" json:"-"`
+	UpdatedAt time.Time `db:"updated_at" json:"-"`
+}
+
+func (s SAMLRelayState) TableName() string {
+	return "saml_relay_states"
+}
+
 func FindSSOProviderForEmailAddress(tx *storage.Connection, emailAddress string) (*SSOProvider, error) {
 	parts := strings.Split(emailAddress, "@")
-	emailDomain := parts[1]
+	emailDomain := strings.ToLower(parts[1])
 
 	return FindSSOProviderByDomain(tx, emailDomain)
 }
@@ -132,4 +182,18 @@ func FindAllSAMLProviders(tx *storage.Connection) ([]SSOProvider, error) {
 	}
 
 	return providers, nil
+}
+
+func FindSAMLRelayStateByID(tx *storage.Connection, id uuid.UUID) (*SAMLRelayState, error) {
+	var state SAMLRelayState
+
+	if err := tx.Eager().Q().Where("id = ?", id).First(&state); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SAMLRelayStateNotFoundError{}
+		}
+
+		return nil, errors.Wrap(err, "error loading SAML Relay State")
+	}
+
+	return &state, nil
 }

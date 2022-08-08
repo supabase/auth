@@ -120,13 +120,15 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	providerType := getExternalProviderType(ctx)
 	var userData *provider.UserProvidedData
+	var cond *models.GrantAuthenticatedConditions
 	var providerToken string
 	if providerType == "saml" {
-		samlUserData, err := a.samlCallback(ctx, r)
+		samlUserData, samlCond, err := a.samlCallback(ctx, r)
 		if err != nil {
 			return err
 		}
 		userData = samlUserData
+		cond = samlCond
 	} else if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
 		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)
@@ -290,7 +292,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, cond)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}

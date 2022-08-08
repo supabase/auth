@@ -88,6 +88,14 @@ type Email struct {
 
 // UserProvidedData is a struct that contains the user's data returned from the oauth provider
 type UserProvidedData struct {
+	Provider struct {
+		Type string
+		ID   string
+
+		SAMLEntityID    string
+		SAMLInitiatedBy string
+	}
+
 	Emails   []Email
 	Metadata *Claims
 }

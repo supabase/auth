@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/crewjam/saml"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
@@ -73,11 +74,21 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	params := &VerifyParams{}
 	params.Token = r.FormValue("token")
 	params.Type = r.FormValue("type")
+	params.Email = r.FormValue("email")
 	params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
+
+	ssoHandled, err := a.verifySSO(w, r, params)
+	if err != nil {
+		return err
+	}
+
+	if ssoHandled {
+		// verification will go via SSO
+		return nil
+	}
 
 	var (
 		user  *models.User
-		err   error
 		token *AccessTokenResponse
 	)
 
@@ -120,7 +131,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, nil)
 		if terr != nil {
 			return terr
 		}
@@ -175,9 +186,18 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Verify requires a verification type")
 	}
 
+	ssoHandled, err := a.verifySSO(w, r, params)
+	if err != nil {
+		return err
+	}
+
+	if ssoHandled {
+		// verification will go via SSO
+		return nil
+	}
+
 	var (
 		user  *models.User
-		err   error
 		token *AccessTokenResponse
 	)
 
@@ -212,7 +232,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, nil)
 		if terr != nil {
 			return terr
 		}
@@ -229,11 +249,99 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, token)
 }
 
+func (a *API) verifySSO(w http.ResponseWriter, r *http.Request, params *VerifyParams) (bool, error) {
+	if !a.config.SAML.Enabled {
+		// SAML is not enabled, SSO login is not handled
+		return false, nil
+	}
+
+	switch params.Type {
+	case signupVerification, inviteVerification, recoveryVerification, magicLinkVerification, emailChangeVerification:
+		if !strings.Contains(params.Email, "@") {
+			return false, nil
+		}
+
+		// continue
+
+	default:
+		// not handling verify on the other types
+		return false, nil
+	}
+
+	var ssoRedirectURL *url.URL
+
+	if err := a.db.Transaction(func(tx *storage.Connection) error {
+		ssoProvider, err := models.FindSSOProviderForEmailAddress(tx, params.Email)
+		if models.IsNotFoundError(err) {
+			// no SSO for this user
+			return nil
+		} else if err != nil {
+			return internalServerError("Error looking up SSO provider by user email address").WithInternalError(err)
+		} else {
+			// this user belongs to an SSO provider, do the flow
+
+			// It may appear that we should delete all
+			// SAMLRelayStates for users identified by the
+			// params.Email address; but this actually creates a
+			// security problem instead of solving it. Since at
+			// this point we can't verify the identity of
+			// params.Email, deleting any SAMLRelayStates may
+			// produce a denial-of-service attack to the legitimate
+			// user.
+			entityDescriptor, err := ssoProvider.SAMLProvider.EntityDescriptor()
+			if err != nil {
+				return internalServerError("Error parsing SAML Metadata for SAML provider").WithInternalError(err)
+			}
+
+			// TODO: fetch new metadata if validUntil < time.Now()
+
+			serviceProvider := a.getSAMLServiceProvider(entityDescriptor, false /* <- idpInitiated */)
+
+			authnRequest, err := serviceProvider.MakeAuthenticationRequest(serviceProvider.GetSSOBindingLocation(saml.HTTPRedirectBinding), saml.HTTPRedirectBinding, saml.HTTPPostBinding)
+			if err != nil {
+				return internalServerError("Error creating SAML Authentication Request").WithInternalError(err)
+			}
+
+			relayState := models.SAMLRelayState{
+				SSOProviderID: ssoProvider.ID,
+				RequestID:     authnRequest.ID,
+				ForEmail:      storage.NullString(params.Email),
+				FromIPAddress: getIPAddress(r),
+				RedirectTo:    params.RedirectTo,
+			}
+
+			if err := tx.Create(&relayState); err != nil {
+				return internalServerError("Error creating SAML relay state from sign up").WithInternalError(err)
+			}
+
+			url, err := authnRequest.Redirect(relayState.ID.String(), serviceProvider)
+			if err != nil {
+				return internalServerError("Error creating SAML Redirect Authentication Request URL from sign up").WithInternalError(err)
+			}
+
+			ssoRedirectURL = url
+		}
+
+		return nil
+	}); err != nil {
+		return false, err
+	}
+
+	if ssoRedirectURL == nil {
+		return false, nil
+	}
+
+	http.Redirect(w, r, ssoRedirectURL.String(), http.StatusSeeOther)
+
+	return true, nil
+}
+
 func (a *API) signupVerify(ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
 	config := a.getConfig(ctx)
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
+
 		var terr error
 		if user.EncryptedPassword == "" {
 			if user.InvitedAt != nil {

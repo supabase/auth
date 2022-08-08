@@ -215,7 +215,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 
-			token, terr = a.issueRefreshToken(ctx, tx, user)
+			token, terr = a.issueRefreshToken(ctx, tx, user, nil)
 			if terr != nil {
 				return terr
 			}
