@@ -33,12 +33,6 @@ CREATE TABLE IF NOT EXISTS auth.mfa_challenges(
 );
 comment on table auth.mfa_challenges is 'Auth: stores metadata about challenge requests made';
 
-CREATE TABLE IF NOT EXISTS auth.mfa_login_nonces(
-       id VARCHAR(255) NOT NULL,
-       login_nonce uuid NULL
-       created_at timestamptz NULL
-       CONSTRAINT mfa_login_nonces_fkey FOREIGN KEY(id) REFERENCES auth.mfa_challenges(id) ON DELETE CASCADE
-)
 
 -- auth.mfa_recovery_codes definition
 CREATE TABLE IF NOT EXISTS auth.mfa_recovery_codes(

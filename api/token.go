@@ -37,7 +37,6 @@ type AccessTokenResponse struct {
 	ExpiresIn    int          `json:"expires_in"`
 	RefreshToken string       `json:"refresh_token"`
 	User         *models.User `json:"user"`
-	// This would have an additional AMR field
 }
 
 // PasswordGrantParams are the parameters the ResourceOwnerPasswordGrant method accepts
@@ -323,11 +322,6 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 	var tokenString string
 	var newTokenResponse *AccessTokenResponse
-	// if user.MFAEnabled
-	// Fetch the challenge
-	// Generate a nonce for a given challenge and save it
-	// Return a separate JSON response
-	//
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -588,7 +582,6 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		// If there is an existing token, add additional claims to it
 		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
