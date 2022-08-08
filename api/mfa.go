@@ -41,7 +41,6 @@ type VerifyFactorParams struct {
 type ChallengeFactorResponse struct {
 	ID        string `json:"id"`
 	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
 	ExpiresAt string `json:"expires_at"`
 }
 
@@ -72,6 +71,9 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	if (params.FactorType != "totp") && (params.FactorType != "webauthn") {
 		return unprocessableEntityError("FactorType needs to be either 'totp' or 'webauthn'")
+	}
+	if params.Issuer == "" {
+		return unprocessableEntityError("Issuer is required")
 	}
 	// TODO(Joel): Review this portion when email is no longer a primary key
 	key, err := totp.Generate(totp.GenerateOpts{
@@ -190,7 +192,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if err = models.NewAuditLogEntry(tx, instanceID, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":    factor.ID,
-			"challenge_id": params.ChallengeID,
+			"challenge_id": challenge.ID,
 		}); err != nil {
 			return err
 		}
