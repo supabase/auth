@@ -27,7 +27,7 @@ type GoTrueClaims struct {
 	UserMetaData                  map[string]interface{} `json:"user_metadata"`
 	Role                          string                 `json:"role"`
 	AuthenticatorAssuranceLevel   string                 `json:"aal"`
-	AuthenticationMethodReference []string               `json:"amr"`
+	AuthenticationMethodReference []AMREntry             `json:"amr"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -61,8 +61,8 @@ type IdTokenGrantParams struct {
 }
 
 type AMREntry struct {
-	Method    string     `json:"method"`
-	Timestamp *time.Time `json:"timestamp"`
+	Method    string    `json:"method"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 type tokenType string
@@ -235,7 +235,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, "password")
 		if terr != nil {
 			return terr
 		}
@@ -518,7 +518,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, "id_token")
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
@@ -538,16 +538,31 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 }
 
 func generateAccessToken(user *models.User, expiresIn time.Duration, secret string) (string, error) {
-	// oldClaims *GoTrueClaims, signInMethod string)
-	amr := []string{}
+	claims := &GoTrueClaims{
+		StandardClaims: jwt.StandardClaims{
+			Subject:   user.ID.String(),
+			Audience:  user.Aud,
+			ExpiresAt: time.Now().Add(expiresIn).Unix(),
+		},
+		Email:        user.GetEmail(),
+		Phone:        user.GetPhone(),
+		AppMetaData:  user.AppMetaData,
+		UserMetaData: user.UserMetaData,
+		Role:         user.Role,
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
+}
+
+func generateAccessTokenWithAMRClaims(user *models.User, expiresIn time.Duration, secret string, oldClaims *GoTrueClaims, signInMethod string) (string, error) {
+	amr := []AMREntry{}
 	aal := "aal1"
-	// if oldClaims != nil {
-	// 	// Append to the old claims field
-	// TODO: Define an AMREntry Type above, write the calculate AAR method
-	// entry := AMREntry{method: signInMethod, timestamp: time.Now()}
-	// 	amr = append(oldClaims.AuthenticationMethodReference, entry)
-	// 	aar = calculateAAL(amr)
-	// }
+	if oldClaims != nil && oldClaims.AuthenticationMethodReference != nil {
+		amr = oldClaims.AuthenticationMethodReference
+		entry := AMREntry{Method: signInMethod, Timestamp: time.Now()}
+		amr = append(amr, entry)
+		aal = calculateAAL(amr)
+	}
 
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
@@ -568,9 +583,9 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, secret stri
 }
 
 // TODO: update all occurrences of this method to log the Authentication method
-func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User) (*AccessTokenResponse, error) {
+func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod string) (*AccessTokenResponse, error) {
 	config := a.getConfig(ctx)
-	// claims := a.getClaims(ctx)
+	currentClaims := getClaims(ctx)
 
 	now := time.Now()
 	user.LastSignInAt = &now
@@ -585,7 +600,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessTokenWithAMRClaims(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, currentClaims, signInMethod)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}

@@ -45,9 +45,8 @@ func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.R
 func (a *API) requireMFA(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	token, _ := a.extractBearerToken(w, r)
 	claims := getClaims(r.Context())
-	// TODO Check for aal claim and require it to be "aal2"
-	if !isStringInSlice("totp", claims.AuthenticationMethodReference) || !(claims.AuthenticatorAssuranceLevel == "aal2") {
-		return nil, unauthorizedError("User not allowed")
+	if !(claims.AuthenticatorAssuranceLevel == "aal2") {
+		return nil, unauthorizedError("User not allowed, MFA required")
 	}
 	return a.parseJWTClaims(token, r, w)
 }

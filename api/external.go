@@ -270,7 +270,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, "oauth")
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}

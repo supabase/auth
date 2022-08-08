@@ -46,8 +46,9 @@ type ChallengeFactorResponse struct {
 }
 
 type StepUpLoginParams struct {
-	ChallengeID string `json:"challenge_id"`
-	Code        string `json:"code"`
+	ChallengeID  string `json:"challenge_id"`
+	Code         string `json:"code"`
+	RecoveryCode string `json:"recovery_code"`
 }
 
 type VerifyFactorResponse struct {
@@ -158,15 +159,16 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	// TODO: Add the 1FA post-login claim to all methods
 	// Check if the challenge hasn't expried and that there's a corresponding twoFactorID which has been made in the past 5 minutes
 	// We need a separate two factor ID
-	// Logic here should be same as verify
 	//
-	//
+	// Check that only one of recovery code and code is used
+
 	// Here, after we verify and if it succeds we return the access token
 	// var tokenString string
 	// var newTokenResponse *AccessTokenResponse
 	// err = a.db.Transaction(func(tx *storage.Connection) error {
 	// 		var terr error
-	// 		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.TokenRefreshedAction, "", nil); terr != nil {
+	// TODO: change to MFA login action
+	// if terr = models.NewAuditLogEntry(tx, instanceID, user, models.TokenRefreshedAction, "", nil); terr != nil {
 	// 			return terr
 	// 		}
 
