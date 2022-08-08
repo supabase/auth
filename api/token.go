@@ -26,7 +26,7 @@ type GoTrueClaims struct {
 	AppMetaData                   map[string]interface{} `json:"app_metadata"`
 	UserMetaData                  map[string]interface{} `json:"user_metadata"`
 	Role                          string                 `json:"role"`
-	AuthenticationAssuranceLevel  string                 `json:"aal"`
+	AuthenticatorAssuranceLevel   string                 `json:"aal"`
 	AuthenticationMethodReference []string               `json:"amr"`
 }
 
@@ -560,7 +560,7 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, secret stri
 		AppMetaData:                   user.AppMetaData,
 		UserMetaData:                  user.UserMetaData,
 		Role:                          user.Role,
-		AuthenticationAssuranceLevel:  aal,
+		AuthenticatorAssuranceLevel:   aal,
 		AuthenticationMethodReference: amr,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

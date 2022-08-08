@@ -283,11 +283,13 @@ func isStringInSlice(checkValue string, list []string) bool {
 	return false
 }
 
-// Insert link to AAL definition
+// See https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.1800-17.pdf
 func calculateAAL(amr []AMREntry) string {
-	// TODO(Joel): Convert this into a constant somewhere
-	// Have an array of predefind
-	// Right now this can trivially check for totp to determine if it is MFA authenticated.
-	// However, this needs to be modified when other 2FA methods are introduced...
-	return "aal2"
+	// TODO(Joel): Modify the checking logic when we have more than 1 2FA method
+	for _, amrEntry := range amr {
+		if amrEntry.Method == "totp" {
+			return "aal2"
+		}
+	}
+	return "aal1"
 }
