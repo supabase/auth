@@ -28,6 +28,12 @@ type adminUserParams struct {
 	BanDuration  string                 `json:"ban_duration"`
 }
 
+type adminUserUpdateFactorParams struct {
+	FriendlyName string `json:"friendly_name"`
+	FactorType   string `json:"factor_type"`
+	FactorStatus string `json:"factor_status"`
+}
+
 func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
@@ -424,4 +430,57 @@ func (a *API) adminUserGetFactors(w http.ResponseWriter, r *http.Request) error 
 func (a *API) adminUserGetFactor(w http.ResponseWriter, r *http.Request) error {
 	factor := getFactor(r.Context())
 	return sendJSON(w, http.StatusOK, factor)
+}
+
+// adminUserUpdate updates a single factor object
+func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	factor := getFactor(ctx)
+	user := getUser(ctx)
+	adminUser := getAdminUser(ctx)
+	instanceID := getInstanceID(ctx)
+
+	params := &adminUserUpdateFactorParams{}
+	jsonDecoder := json.NewDecoder(r.Body)
+	err := jsonDecoder.Decode(params)
+	if err != nil {
+		return badRequestError("Please check the params passed into admin user update factor: %v", err)
+	}
+
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		if params.FriendlyName != "" {
+			if terr := factor.UpdateFriendlyName(tx, params.FriendlyName); terr != nil {
+				return terr
+			}
+		}
+		if params.FactorType != "" {
+			// TODO(Joel): Update this to check factorType validity when we introduce webauthn
+			if terr := factor.UpdateFactorType(tx, params.FactorType); terr != nil {
+				return terr
+			}
+		}
+		if params.FactorStatus != "" {
+			if !isValidFactorStatus(params.FactorType) {
+				return errors.New("Factor Status should be one of the valid factor states: verified, unverified or disabled")
+			}
+			if terr := factor.UpdateStatus(tx, params.FactorStatus); terr != nil {
+				return terr
+			}
+		}
+
+		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UpdateFactorAction, "", map[string]interface{}{
+			"user_id":     user.ID,
+			"factor_id":   factor.ID,
+			"factor_type": factor.FactorType,
+		}); terr != nil {
+			return terr
+		}
+		return nil
+	})
+
+	return sendJSON(w, http.StatusOK, factor)
+}
+
+func isValidFactorStatus(factorStatus string) bool {
+	return factorStatus == models.FactorVerifiedState || factorStatus == models.FactorUnverifiedState || factorStatus == models.FactorDisabledState
 }

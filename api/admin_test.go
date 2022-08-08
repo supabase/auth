@@ -688,3 +688,57 @@ func (ts *AdminTestSuite) TestAdminUserGetFactor() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
+
+func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
+	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorDisabledState, "secretkey")
+	require.NoError(ts.T(), err, "Error creating test factor model")
+	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
+
+	var cases = []struct {
+		desc       string
+		factorData map[string]interface{}
+		expected   int
+	}{
+		{
+			"Update Factor friendly name",
+			map[string]interface{}{
+				"friendly_name": "john",
+			},
+			http.StatusOK,
+		},
+		{
+			"Update factor type",
+			map[string]interface{}{
+				"friendly_name": "john",
+				"factor_type":   "totp",
+				"factor_status": "unverified",
+			},
+			http.StatusOK,
+		},
+		{
+			"Update Factor Status",
+			map[string]interface{}{
+				"factor_status": models.FactorVerifiedState,
+			},
+			http.StatusOK,
+		},
+	}
+
+	// Initialize factor data
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.factorData))
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/admin/users/%s/factor/%s/", u.ID, f.ID), &buffer)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
+		})
+	}
+
+}
