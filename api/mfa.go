@@ -155,15 +155,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 // Takes in intermediary JWT
 func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
-	// Check if the factor status is verified, if not return error
 	// TODO: Add the 1FA post-login claim to all methods
-	// Convert all logged in methods into a set. Check that the keys of the set match ["1FA", "2FA"]. If so, authenticate
-	// otherwise reject
-	//
-	// Check the claims array and compare against available methods to see if mapping matches
-	// Find the factor
-	// if factor is not verified return error
-	//
 	// Check if the challenge hasn't expried and that there's a corresponding twoFactorID which has been made in the past 5 minutes
 	// We need a separate two factor ID
 	// Logic here should be same as verify

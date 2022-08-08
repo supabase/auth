@@ -60,6 +60,11 @@ type IdTokenGrantParams struct {
 	Issuer   string `json:"issuer"`
 }
 
+type AMREntry struct {
+	Method    string     `json:"method"`
+	Timestamp *time.Time `json:"timestamp"`
+}
+
 type tokenType string
 
 const (
@@ -217,8 +222,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	} else if params.Phone != "" && !user.IsPhoneConfirmed() {
 		return oauthError("invalid_grant", "Phone not confirmed")
 	}
-
-	// MFA Return here during login
 
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -540,10 +543,10 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, secret stri
 	aal := "aal1"
 	// if oldClaims != nil {
 	// 	// Append to the old claims field
-	// 	// TODO: Define an AMREntry Type above, write the calculate AAR method
-	// 	// entry := AMREntry{method: signInMethod, timestamp: time.Now()}
+	// TODO: Define an AMREntry Type above, write the calculate AAR method
+	// entry := AMREntry{method: signInMethod, timestamp: time.Now()}
 	// 	amr = append(oldClaims.AuthenticationMethodReference, entry)
-	// 	aar = calculateAAR(amr)
+	// 	aar = calculateAAL(amr)
 	// }
 
 	claims := &GoTrueClaims{

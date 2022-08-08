@@ -284,9 +284,10 @@ func isStringInSlice(checkValue string, list []string) bool {
 }
 
 // Insert link to AAL definition
-// func calculateAAL(amr *AMREntry{}) {
-// 	// Have an array of predefind
-// Right now this can trivially check for totp to determine if it is MFA authenticated.
-// However, this needs to be modified when other 2FA methods are introduced...
-
-// }
+func calculateAAL(amr []AMREntry) string {
+	// TODO(Joel): Convert this into a constant somewhere
+	// Have an array of predefind
+	// Right now this can trivially check for totp to determine if it is MFA authenticated.
+	// However, this needs to be modified when other 2FA methods are introduced...
+	return "aal2"
+}
