@@ -56,7 +56,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		FriendlyName string
 		FactorType   string
 		Issuer       string
-		expectedCode int
+		ExpectedCode int
 	}{
 		{
 			"TOTP: Factor has friendly name",
@@ -71,6 +71,20 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			"totp",
 			"supabase.com",
 			http.StatusOK,
+		},
+		{
+			"TOTP: No issuer",
+			"john",
+			"totp",
+			"",
+			http.StatusUnprocessableEntity,
+		},
+		{
+			"Invalid factor type",
+			"bob",
+			"",
+			"john.com",
+			http.StatusUnprocessableEntity,
 		},
 	}
 	for _, c := range cases {
@@ -88,13 +102,13 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			req.Header.Set("Content-Type", "application/json")
 			ts.API.handler.ServeHTTP(w, req)
-			require.Equal(ts.T(), http.StatusOK, w.Code)
+			require.Equal(ts.T(), c.ExpectedCode, w.Code)
 
 			factors, err := models.FindFactorsByUser(ts.API.db, user)
 			ts.Require().NoError(err)
 			latestFactor := factors[len(factors)-1]
 			require.Equal(ts.T(), models.FactorDisabledState, latestFactor.Status)
-			if c.FriendlyName != "" {
+			if c.FriendlyName != "" && c.ExpectedCode == http.StatusOK {
 				require.Equal(ts.T(), c.FriendlyName, latestFactor.FriendlyName)
 			}
 		})

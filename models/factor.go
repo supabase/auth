@@ -126,3 +126,9 @@ func IsMFAEnabled(tx *storage.Connection, user *User) (bool, error) {
 	}
 	return false, nil
 }
+
+// Change the factor type
+func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) error {
+	f.FactorType = factorType
+	return tx.UpdateOnly(f, "factor_type", "updated_at")
+}
