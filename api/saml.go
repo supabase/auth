@@ -210,29 +210,61 @@ func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.User
 		return nil, nil, badRequestError("SAML Assertion did not contain a persistent Subject Identifier attribute or Subject NameID uniquely identifying this user")
 	}
 
+	claims := assertion.Process(ssoProvider.SAMLProvider.AttributeMapping)
+
+	email, ok := claims["email"].(string)
+	if !ok || email == "" {
+		email = assertion.Email()
+	}
+
+	if email == "" {
+		return nil, nil, badRequestError("SAML Assertion did not contain a mapping for the email claim")
+	} else {
+		claims["email"] = email
+	}
+
+	jsonClaims, err := json.Marshal(claims)
+	if err != nil {
+		return nil, nil, internalServerError("Mapped claims from provider could not be serialized into JSON").WithInternalError(err)
+	}
+
+	providerClaims := &provider.Claims{}
+	if err := json.Unmarshal(jsonClaims, providerClaims); err != nil {
+		return nil, nil, internalServerError("Mapped claims from provider could not be deserialized from JSON").WithInternalError(err)
+	}
+
+	providerClaims.Subject = userID
+	providerClaims.Issuer = ssoProvider.SAMLProvider.EntityID
+	providerClaims.Email = email
+	providerClaims.EmailVerified = true
+
+	providerClaimsMap, err := providerClaims.ToMap()
+	if err != nil {
+		return nil, nil, internalServerError("Parsed provider claims could not be turned into a map").WithInternalError(err)
+	}
+
+	// remove all of the parsed claims, so that the rest can go into CustomClaims
+	for key := range providerClaimsMap {
+		delete(claims, key)
+	}
+
+	providerClaims.CustomClaims = claims
+
 	var userProvidedData provider.UserProvidedData
 	var cond models.GrantAuthenticatedConditions
 
-	// TODO: get emails from attribute mapping
-	emails := assertion.Emails()
-	for _, email := range emails {
-		userProvidedData.Emails = append(userProvidedData.Emails, provider.Email{
-			Email:    email,
-			Verified: true,
-			Primary:  true,
-		})
-	}
+	userProvidedData.Emails = append(userProvidedData.Emails, provider.Email{
+		Email:    email,
+		Verified: true,
+		Primary:  true,
+	})
 
 	userProvidedData.Provider.Type = "saml"
 	userProvidedData.Provider.ID = ssoProvider.ID.String()
 	userProvidedData.Provider.SAMLEntityID = ssoProvider.SAMLProvider.EntityID
 	userProvidedData.Provider.SAMLInitiatedBy = initiatedBy
 
-	userProvidedData.Metadata = &provider.Claims{
-		Subject:       userID,
-		Email:         userProvidedData.Emails[0].Email,
-		EmailVerified: true,
-	}
+	userProvidedData.Metadata = providerClaims
 
 	cond.SSOProviderID = ssoProvider.ID
 	cond.InitiatedByProvider = initiatedBy == "idp"
@@ -259,12 +291,12 @@ func (a *API) adminListSAMLIdPs(w http.ResponseWriter, r *http.Request) error {
 }
 
 type CreateSAMLIdPParams struct {
-	Name             string               `json:"name"`
-	Description      string               `json:"description"`
-	MetadataURL      string               `json:"metadata_url"`
-	MetadataXML      string               `json:"metadata_xml"`
-	Domains          []string             `json:"domains"`
-	AttributeMapping SAMLAttributeMapping `json:"attribute_mapping"`
+	Name             string                      `json:"name"`
+	Description      string                      `json:"description"`
+	MetadataURL      string                      `json:"metadata_url"`
+	MetadataXML      string                      `json:"metadata_xml"`
+	Domains          []string                    `json:"domains"`
+	AttributeMapping models.SAMLAttributeMapping `json:"attribute_mapping"`
 }
 
 func (p *CreateSAMLIdPParams) validate(forUpdate bool) error {
@@ -281,6 +313,8 @@ func (p *CreateSAMLIdPParams) validate(forUpdate bool) error {
 		if metadataURL.Scheme != "https" {
 			return badRequestError("metadata_url is not a HTTPS URL")
 		}
+	} else if !p.AttributeMapping.HasKey("email") {
+		return badRequestError("email key must be definied in a SAML Attribute Mapping")
 	}
 
 	return nil
@@ -535,30 +569,12 @@ func (a *API) adminDeleteSAMLIdP(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// TODO: destroy all sessions coming from this provider
-
 	return sendJSON(w, http.StatusOK, provider)
-}
-
-type SAMLAttributeMapping struct {
-	Keys SAMLAttributeMappingSet `json:"keys,omitempty"`
-}
-
-type SAMLAttributeMappingValue struct {
-	Name  string   `json:"name,omitempty"`
-	Names []string `json:"names,omitempty"`
-
-	IsEmail    bool `json:"is_email,omitempty"`
-	IsVerified bool `json:"is_verified,omitempty"`
-
-	Default interface{} `json:"default,omitempty"`
 }
 
 type SAMLAssertion struct {
 	*saml.Assertion
 }
-
-type SAMLAttributeMappingSet map[string]SAMLAttributeMappingValue
 
 const (
 	SAMLSubjectIDAttributeName = "urn:oasis:names:tc:SAML:attribute:subject-id"
@@ -637,33 +653,75 @@ func (a *SAMLAssertion) SubjectID() (string, bool) {
 	return a.Subject.NameID.Value, isPersistent
 }
 
-const (
-	SAMLAttributeNameEmail = "urn:oid:0.9.2342.19200300.100.1.3"
-)
-
-// Emails returns all SAMLAttributeNameEmail attribute values.
-func (a *SAMLAssertion) Emails() []string {
-	values := a.Attribute(SAMLAttributeNameEmail)
-
-	var emails []string
-
-	for _, value := range values {
-		emails = append(emails, value.Value)
+// Email returns the best guess for an email address.
+func (a *SAMLAssertion) Email() string {
+	attributeNames := []string{
+		"urn:oid:0.9.2342.19200300.100.1.3",
+		"http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
+		"http://schemas.xmlsoap.org/claims/EmailAddress",
+		"mail",
+		"email",
 	}
 
-	return emails
+	for _, name := range attributeNames {
+		for _, attr := range a.Attribute(name) {
+			if attr.Value != "" {
+				return attr.Value
+			}
+		}
+	}
+
+	if a.Subject.NameID.Format == string(saml.EmailAddressNameIDFormat) {
+		return a.Subject.NameID.Value
+	}
+
+	return ""
 }
 
-func (a *SAMLAssertion) Process(set SAMLAttributeMappingSet) map[string]interface{} {
-	return nil
+// Process processes this assertion according to the SAMLAttributeMapping. Never returns nil.
+func (a *SAMLAssertion) Process(mapping models.SAMLAttributeMapping) map[string]interface{} {
+	ret := make(map[string]interface{})
+
+	for key, mapper := range mapping.Keys {
+		names := []string{mapper.Name}
+		names = append(names, mapper.Names...)
+
+		setKey := false
+
+		for _, name := range names {
+			for _, attr := range a.Attribute(name) {
+				if attr.Value != "" {
+					ret[key] = attr.Value
+					setKey = true
+					break
+				}
+			}
+
+			if setKey {
+				break
+			}
+		}
+
+		if !setKey && mapper.Default != nil {
+			ret[key] = mapper.Default
+		}
+	}
+
+	return ret
 }
 
 func (a *SAMLAssertion) NotBefore() time.Time {
-	// TODO: extract this from the assertion conditions
-	return time.Now().UTC()
+	if a.Conditions != nil && !a.Conditions.NotBefore.IsZero() {
+		return a.Conditions.NotBefore.UTC()
+	}
+
+	return time.Time{}
 }
 
 func (a *SAMLAssertion) NotAfter() time.Time {
-	// TODO: extract this from the assertion conditions
-	return time.Now().UTC().AddDate(0, 0, 1)
+	if a.Conditions != nil && !a.Conditions.NotOnOrAfter.IsZero() {
+		return a.Conditions.NotOnOrAfter.UTC()
+	}
+
+	return time.Time{}
 }

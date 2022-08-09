@@ -2,6 +2,8 @@ package models
 
 import (
 	"database/sql"
+	"database/sql/driver"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -30,6 +32,63 @@ func (p SSOProvider) Type() string {
 	return "saml"
 }
 
+type SAMLAttribute struct {
+	Name    string      `json:"name,omitempty"`
+	Names   []string    `json:"names,omitempty"`
+	Default interface{} `json:"default,omitempty"`
+}
+
+func (a SAMLAttribute) HasName() bool {
+	if a.Name != "" {
+		return true
+	}
+
+	for _, name := range a.Names {
+		if name != "" {
+			return true
+		}
+	}
+
+	return false
+}
+
+type SAMLAttributeMapping struct {
+	Keys map[string]SAMLAttribute `json:"keys,omitempty"`
+}
+
+func (m SAMLAttributeMapping) HasKey(key string) bool {
+	attr, ok := m.Keys[key]
+	if !ok {
+		return false
+	}
+
+	if !attr.HasName() {
+		return false
+	}
+
+	return true
+}
+
+func (m *SAMLAttributeMapping) Scan(src interface{}) error {
+	b, ok := src.([]byte)
+	if !ok {
+		return errors.New("scan source was not []byte")
+	}
+	err := json.Unmarshal(b, m)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m SAMLAttributeMapping) Value() (driver.Value, error) {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
 type SAMLProvider struct {
 	ID uuid.UUID `db:"id" json:"-"`
 
@@ -39,6 +98,8 @@ type SAMLProvider struct {
 	EntityID    string `db:"entity_id" json:"entity_id"`
 	MetadataXML string `db:"metadata_xml" json:"metadata_xml,omitempty"`
 	MetadataURL string `db:"metadata_url" json:"metadata_url,omitempty"`
+
+	AttributeMapping SAMLAttributeMapping `db:"attribute_mapping" json:"attribute_mapping,omitempty"`
 
 	CreatedAt time.Time `db:"created_at" json:"-"`
 	UpdatedAt time.Time `db:"updated_at" json:"-"`

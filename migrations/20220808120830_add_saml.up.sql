@@ -30,6 +30,7 @@ create table if not exists auth.saml_providers (
 	entity_id text not null unique,
 	metadata_xml text not null,
 	metadata_url text null,
+	attribute_mapping jsonb null,
 	created_at timestamptz null,
 	updated_at timestamptz null,
 	primary key (id),
