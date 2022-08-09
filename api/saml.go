@@ -51,14 +51,12 @@ func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 		panic(err)
 	}
 
-	// TODO: figure out idpInitiated properties for higher security
-
 	provider := samlsp.DefaultServiceProvider(samlsp.Options{
-		URL:         *externalURL,
-		Key:         a.config.SAML.RSAPrivateKey,
-		Certificate: a.config.SAML.Certificate,
-		//SignRequest:       !idpInitiated,
-		AllowIDPInitiated: true,
+		URL:               *externalURL,
+		Key:               a.config.SAML.RSAPrivateKey,
+		Certificate:       a.config.SAML.Certificate,
+		SignRequest:       true,
+		AllowIDPInitiated: idpInitiated,
 		IDPMetadata:       identityProvider,
 	})
 
@@ -67,9 +65,18 @@ func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 
 // SAMLMetadata serves GoTrue's SAML Service Provider metadata file.
 func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
-	serviceProvider := a.getSAMLServiceProvider(nil /* <- identityProvider */, false /* <- idpInitiated */)
+	serviceProvider := a.getSAMLServiceProvider(nil, true)
 
 	metadata := serviceProvider.Metadata()
+
+	for i := range metadata.SPSSODescriptors {
+		// we set this to false since the IdP initiated flow can only
+		// sign the Assertion, and not the full Request
+		// unfortunately this is hardcoded in the crewjam library if
+		// signatures (instead of encryption) are supported
+		// https://github.com/crewjam/saml/blob/v0.4.8/service_provider.go#L217
+		metadata.SPSSODescriptors[i].AuthnRequestsSigned = nil
+	}
 
 	metadataXML, err := xml.Marshal(metadata)
 	if err != nil {

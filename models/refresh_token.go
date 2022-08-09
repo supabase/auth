@@ -22,8 +22,8 @@ type RefreshToken struct {
 	UserID uuid.UUID `db:"user_id"`
 	User   *User     `belongs_to:"users"`
 
-	SSOSession   *SSOSession `belongs_to:"sso_sessions"`
-	SSOSessionID uuid.UUID   `db:"sso_session_id"`
+	SSOSession   *SSOSession        `belongs_to:"sso_sessions"`
+	SSOSessionID storage.NullString `db:"sso_session_id"`
 
 	Revoked   bool      `db:"revoked"`
 	CreatedAt time.Time `db:"created_at"`
@@ -127,7 +127,7 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 		}
 
 		token.SSOSession = &ssoSession
-		token.SSOSessionID = ssoSession.ID
+		token.SSOSessionID = storage.NullString(ssoSession.ID.String())
 	}
 
 	if err := tx.Create(token); err != nil {
@@ -138,7 +138,7 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 		return nil, errors.Wrap(err, "error loading refresh token after create")
 	}
 
-	if token.SSOSessionID != (uuid.UUID{}) {
+	if token.SSOSessionID != storage.NullString("") {
 		if err := tx.Eager().Q().Where("id = ?", token.SSOSessionID).First(token.SSOSession); err != nil {
 			return nil, errors.Wrap(err, "error loading SSO session for refresh token after create")
 		}

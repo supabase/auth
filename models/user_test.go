@@ -152,7 +152,7 @@ func (ts *UserTestSuite) TestFindUserByRecoveryToken() {
 
 func (ts *UserTestSuite) TestFindUserWithRefreshToken() {
 	u := ts.createUser()
-	r, err := GrantAuthenticatedUser(ts.db, u)
+	r, err := GrantAuthenticatedUser(ts.db, u, nil)
 	require.NoError(ts.T(), err)
 
 	n, nr, err := FindUserWithRefreshToken(ts.db, r.Token)
