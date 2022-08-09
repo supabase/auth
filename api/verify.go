@@ -67,6 +67,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
+
 	params := &VerifyParams{}
 	params.Token = r.FormValue("token")
 	params.Type = r.FormValue("type")
@@ -154,6 +155,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
+
 	params := &VerifyParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	if err := jsonDecoder.Decode(params); err != nil {

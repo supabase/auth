@@ -559,10 +559,10 @@ func generateAccessTokenWithAMRClaims(user *models.User, expiresIn time.Duration
 	aal := "aal1"
 	if oldClaims != nil && oldClaims.AuthenticationMethodReference != nil {
 		amr = oldClaims.AuthenticationMethodReference
-		entry := AMREntry{Method: signInMethod, Timestamp: time.Now()}
-		amr = append(amr, entry)
-		aal = calculateAAL(amr)
 	}
+	entry := AMREntry{Method: signInMethod, Timestamp: time.Now()}
+	amr = append(amr, entry)
+	aal = calculateAAL(amr)
 
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{

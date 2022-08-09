@@ -42,11 +42,11 @@ func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.R
 	return nil, unauthorizedError("User not allowed")
 }
 
-func (a *API) requireMFA(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+func (a *API) require1FA(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	token, _ := a.extractBearerToken(w, r)
 	claims := getClaims(r.Context())
-	if !(claims.AuthenticatorAssuranceLevel == "aal2") {
-		return nil, unauthorizedError("User not allowed, MFA required")
+	if !(claims.AuthenticatorAssuranceLevel == "aal1") {
+		return nil, unauthorizedError("User not allowed, 1FA required")
 	}
 	return a.parseJWTClaims(token, r, w)
 }
