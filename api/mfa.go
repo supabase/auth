@@ -40,7 +40,6 @@ type VerifyFactorParams struct {
 
 type ChallengeFactorResponse struct {
 	ID        string `json:"id"`
-	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 	ExpiresAt string `json:"expires_at"`
 }
@@ -143,7 +142,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	expiryTime := creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration))
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
-		CreatedAt: creationTime.String(),
 		ExpiresAt: expiryTime.String(),
 	})
 }
