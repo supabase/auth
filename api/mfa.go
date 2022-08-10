@@ -228,6 +228,12 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return badRequestError(err.Error())
 	}
+	MFAEnabled, err := models.IsMFAEnabled(a.db, user)
+	if err != nil {
+		return err
+	} else if !MFAEnabled {
+		return forbiddenError("You do not have a verified factor enrolled")
+	}
 
 	valid := totp.Validate(params.Code, factor.SecretKey)
 	if valid != true {
