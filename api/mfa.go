@@ -157,10 +157,29 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 // Takes in intermediary JWT
 func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	// TODO: Add the 1FA post-login claim to all methods
-	// Check if the challenge hasn't expried and that there's a corresponding twoFactorID which has been made in the past 5 minutes
+	// Check if the challenge hasn't expired
 	// We need a separate two factor ID
-	//
-	// Check that only one of recovery code and code is used
+	ctx := r.Context()
+	config := a.getConfig(ctx)
+	user := getUser(ctx)
+	factor := getFactor(ctx)
+	instanceID := getInstanceID(ctx)
+
+	params:= &StepUpLoginParams{}
+	jsonDecoder := json.NewDecoder(r.Body)
+	err = jsonDecoder.Decode(params)
+	if err != nil {
+		return badRequestError("Please check the params passed into StepupLogin: %v", err)
+	}
+	if params.Code != "" && params.RecoveryCode != "" {
+		return unprocessableEntityError("Please attempt a login with only one of Code or Recovery Code'")
+	}
+
+	if params.Code != "" {
+
+	} else if params.RecoveryCode != "" {
+		// Check for recovery code and consume
+	}
 
 	// Here, after we verify and if it succeds we return the access token
 	// var tokenString string
