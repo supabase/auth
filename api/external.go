@@ -99,29 +99,35 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 
 // ExternalProviderCallback handles the callback endpoint in the external oauth provider flow
 func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
-	a.redirectErrors(a.internalExternalProviderCallback, w, r)
+	providerType := getExternalProviderType(r.Context())
+
+	a.redirectErrors(func(w http.ResponseWriter, r *http.Request) error {
+		return a.internalExternalProviderCallback(w, r, providerType)
+	}, w, r)
+
 	return nil
 }
 
 // SAMLAssertionConsumerService handles the ACS endpoint
 func (a *API) SAMLAssertionConsumerService(w http.ResponseWriter, r *http.Request) error {
-	// TODO: I'm really not super happy with the handling of this in
-	// internalExternalProviderCallback -- needs to be refactored.
-	newReq := r.WithContext(withExternalProviderType(r.Context(), "saml"))
+	a.redirectErrors(func(w http.ResponseWriter, r *http.Request) error {
+		return a.internalExternalProviderCallback(w, r, "saml")
+	}, w, r)
 
-	a.redirectErrors(a.internalExternalProviderCallback, w, newReq)
 	return nil
 }
 
-func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
+func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request, providerType string) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
 	instanceID := getInstanceID(ctx)
 
-	providerType := getExternalProviderType(ctx)
 	var userData *provider.UserProvidedData
 	var cond *models.GrantAuthenticatedConditions
 	var providerToken string
+	var redirectTo string
+	providerID := providerType
+
 	if providerType == "saml" {
 		samlUserData, samlCond, err := a.samlCallback(ctx, r)
 		if err != nil {
@@ -129,6 +135,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		}
 		userData = samlUserData
 		cond = samlCond
+		redirectTo = samlCond.RedirectURL
+		providerID = "saml:" + samlCond.SSOProviderID.String()
 	} else if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
 		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)
@@ -146,13 +154,17 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		providerToken = oAuthResponseData.token
 	}
 
+	if redirectTo == "" {
+		redirectTo = a.getExternalRedirectURL(r)
+	}
+
 	var user *models.User
 	var token *AccessTokenResponse
 	err := a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		inviteToken := getInviteToken(ctx)
 		if inviteToken != "" {
-			if user, terr = a.processInvite(ctx, tx, userData, instanceID, inviteToken, providerType); terr != nil {
+			if user, terr = a.processInvite(ctx, tx, userData, instanceID, inviteToken, providerID); terr != nil {
 				return terr
 			}
 		} else {
@@ -168,14 +180,14 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 			var identity *models.Identity
 			// check if identity exists
-			if identity, terr = models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType); terr != nil {
+			if identity, terr = models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerID); terr != nil {
 				if models.IsNotFoundError(terr) {
 					user, emailData, terr = a.getUserByVerifiedEmail(tx, config, userData.Emails, instanceID, aud)
 					if terr != nil && !models.IsNotFoundError(terr) {
 						return internalServerError("Error checking for existing users").WithInternalError(terr)
 					}
 					if user != nil {
-						if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+						if identity, terr = a.createNewIdentity(tx, user, providerID, identityData); terr != nil {
 							return terr
 						}
 						if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
@@ -196,7 +208,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 						}
 
 						params := &SignupParams{
-							Provider: providerType,
+							Provider: providerID,
 							Email:    emailData.Email,
 							Aud:      aud,
 							Data:     identityData,
@@ -207,7 +219,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 							return terr
 						}
 
-						if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+						if identity, terr = a.createNewIdentity(tx, user, providerID, identityData); terr != nil {
 							return terr
 						}
 					}
@@ -268,7 +280,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				}
 
 				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
-					"provider": providerType,
+					"provider": providerID,
 				}); terr != nil {
 					return terr
 				}
@@ -282,7 +294,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				}
 			} else {
 				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
-					"provider": providerType,
+					"provider": providerID,
 				}); terr != nil {
 					return terr
 				}
@@ -302,24 +314,27 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		return err
 	}
 
-	rurl := a.getExternalRedirectURL(r)
 	if token != nil {
 		q := url.Values{}
-		q.Set("provider_token", providerToken)
+
+		if providerToken != "" {
+			q.Set("provider_token", providerToken)
+		}
+
 		q.Set("access_token", token.Token)
 		q.Set("token_type", token.TokenType)
 		q.Set("expires_in", strconv.Itoa(token.ExpiresIn))
 		q.Set("refresh_token", token.RefreshToken)
-		rurl += "#" + q.Encode()
+		redirectTo += "#" + q.Encode()
 
 		if err := a.setCookieTokens(config, token, false, w); err != nil {
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
 	} else {
-		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), r, rurl)
+		redirectTo = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerID), r, redirectTo)
 	}
 
-	http.Redirect(w, r, rurl, http.StatusFound)
+	http.Redirect(w, r, redirectTo, http.StatusFound)
 	return nil
 }
 

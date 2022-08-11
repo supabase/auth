@@ -41,6 +41,7 @@ type GrantAuthenticatedConditions struct {
 	NotBefore           time.Time
 	NotAfter            time.Time
 	InitiatedByProvider bool
+	RedirectURL         string
 }
 
 // GrantAuthenticatedUser creates a refresh token for the provided user.
