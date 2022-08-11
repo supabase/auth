@@ -102,13 +102,15 @@ func (a *API) samlDestroyRelayState(relayState *models.SAMLRelayState) error {
 
 // samlCallback implements the main Assertion Consumer Service endpoint behavior.
 func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.UserProvidedData, *models.GrantAuthenticatedConditions, error) {
+	config := a.getConfig(ctx)
+
 	relayStateValue := r.FormValue("RelayState")
 	relayStateUUID := uuid.FromStringOrNil(relayStateValue)
 	relayStateURL, _ := url.ParseRequestURI(relayStateValue)
 
 	entityId := ""
 	initiatedBy := ""
-	//redirectTo := ""
+	redirectTo := ""
 	var requestIds []string
 
 	if relayStateUUID != uuid.Nil {
@@ -147,7 +149,7 @@ func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.User
 
 		initiatedBy = "sp"
 		entityId = ssoProvider.SAMLProvider.EntityID
-		//redirectTo = relayState.RedirectTo
+		redirectTo = relayState.RedirectTo
 		requestIds = append(requestIds, relayState.RequestID)
 
 		if err := a.samlDestroyRelayState(relayState); err != nil {
@@ -182,7 +184,7 @@ func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.User
 
 		initiatedBy = "idp"
 		entityId = peekResponse.Issuer.Value
-		//redirectTo = relayStateValue
+		redirectTo = relayStateValue
 	} else {
 		// RelayState can't be identified, so SAML flow can't continue
 		return nil, nil, badRequestError("SAML RelayState is not a valid UUID or URL")
@@ -277,6 +279,12 @@ func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.User
 	cond.InitiatedByProvider = initiatedBy == "idp"
 	cond.NotBefore = assertion.NotBefore()
 	cond.NotAfter = assertion.NotAfter()
+
+	if isRedirectURLValid(config, redirectTo) {
+		cond.RedirectURL = redirectTo
+	} else {
+		cond.RedirectURL = config.SiteURL
+	}
 
 	return &userProvidedData, &cond, nil
 }
