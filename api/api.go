@@ -77,9 +77,33 @@ func NewAPI(globalConfig *conf.GlobalConfiguration, db *storage.Connection) *API
 	return NewAPIWithVersion(context.Background(), globalConfig, db, defaultVersion)
 }
 
+func (a *API) deprecationNotices(ctx context.Context) {
+	instanceConfig := a.getConfig(ctx)
+
+	log := logrus.WithField("component", "api")
+
+	if a.config.External.Saml.Enabled {
+		log.Warn("DEPRECATION NOTICE: SAML not supported by Supabase's GoTrue, will be removed soon")
+	}
+
+	if instanceConfig.JWT.AdminGroupName != "" {
+		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_ADMIN_GROUP_NAME not supported by Supabase's GoTrue, will be removed soon")
+	}
+
+	if len(instanceConfig.JWT.AdminRoles) > 0 {
+		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_ADMIN_ROLES not supported by Supabase's GoTrue, will be removed soon")
+	}
+
+	if instanceConfig.JWT.DefaultGroupName != "" {
+		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_DEFAULT_GROUP_NAME not supported by Supabase's GoTrue, will be removed soon")
+	}
+}
+
 // NewAPIWithVersion creates a new REST API using the specified version
 func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
 	api := &API{config: globalConfig, db: db, version: version}
+
+	api.deprecationNotices(ctx)
 
 	xffmw, _ := xff.Default()
 	logger := logger.NewStructuredLogger(logrus.StandardLogger())
