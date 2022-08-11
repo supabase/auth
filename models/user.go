@@ -522,5 +522,4 @@ func (u *User) IsBanned() bool {
 
 func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
 	return tx.UpdateOnly(u, "banned_until")
-
 }

@@ -15,3 +15,12 @@ func RecordLogin(loginType string, userID, instanceID uuid.UUID) {
 		"user_id":      userID.String(),
 	}).Info("Login")
 }
+
+func RecordMFALogin(loginType string, userID, instanceID uuid.UUID) {
+	logger.WithFields(logrus.Fields{
+		"action":       "login",
+		"login_method": loginType,
+		"instance_id":  instanceID.String(),
+		"user_id":      userID.String(),
+	}).Info("Login")
+}

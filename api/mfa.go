@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/netlify/gotrue/crypto"
+	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pquerna/otp/totp"
@@ -157,17 +158,15 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 // Takes in intermediary JWT
 func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	// TODO: Add the 1FA post-login claim to all methods
-	// Check if the challenge hasn't expired
-	// We need a separate two factor ID
 	ctx := r.Context()
 	config := a.getConfig(ctx)
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	instanceID := getInstanceID(ctx)
 
-	params:= &StepUpLoginParams{}
+	params := &StepUpLoginParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
-	err = jsonDecoder.Decode(params)
+	err := jsonDecoder.Decode(params)
 	if err != nil {
 		return badRequestError("Please check the params passed into StepupLogin: %v", err)
 	}
@@ -176,51 +175,61 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Code != "" {
+		// regular check flow
+		challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
+		if err != nil {
+			if models.IsNotFoundError(err) {
+				return notFoundError(err.Error())
+			}
+			return internalServerError("Database error finding Challenge").WithInternalError(err)
+		}
+		hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
+		if hasExpired {
+			err := a.db.Transaction(func(tx *storage.Connection) error {
+				if terr := tx.Destroy(challenge); terr != nil {
+					return internalServerError("Database error deleting challenge").WithInternalError(terr)
+				}
 
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+
+			return expiredChallengeError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
+		}
+		valid := totp.Validate(params.Code, factor.SecretKey)
+		if !valid {
+			return unauthorizedError("Invalid TOTP code entered")
+		}
 	} else if params.RecoveryCode != "" {
-		// Check for recovery code and consume
+		// TODO: Add the logic here
+		return unauthorizedError("Invalid code entered ")
 	}
+	var token *AccessTokenResponse
 
 	// Here, after we verify and if it succeds we return the access token
-	// var tokenString string
-	// var newTokenResponse *AccessTokenResponse
-	// err = a.db.Transaction(func(tx *storage.Connection) error {
-	// 		var terr error
-	// TODO: change to MFA login action
-	// if terr = models.NewAuditLogEntry(tx, instanceID, user, models.TokenRefreshedAction, "", nil); terr != nil {
-	// 			return terr
-	// 		}
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.MFALoginAction, "", nil); terr != nil {
+			return terr
+		}
 
-	// 		if newToken == nil {
-	// 			newToken, terr = models.GrantRefreshTokenSwap(tx, user, token)
-	// 			if terr != nil {
-	// 				return internalServerError(terr.Error())
-	// 			}
-	// 		}
+		token, terr := a.issueRefreshToken(ctx, tx, user, "signup")
+		if terr != nil {
+			return terr
+		}
 
-	// 		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
-	// 		if terr != nil {
-	// 			return internalServerError("error generating jwt token").WithInternalError(terr)
-	// 		}
-
-	// 		newTokenResponse = &AccessTokenResponse{
-	// 			Token:        tokenString,
-	// 			TokenType:    "bearer",
-	// 			ExpiresIn:    config.JWT.Exp,
-	// 			RefreshToken: newToken.Token,
-	// 			User:         user,
-	// 		}
-	// 		if terr = a.setCookieTokens(config, newTokenResponse, false, w); terr != nil {
-	// 			return internalServerError("Failed to set JWT cookie. %s", terr)
-	// 		}
-
-	// 		return nil
-	// 	})
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	metering.RecordLogin("token", user.ID, instanceID)
-	return sendJSON(w, http.StatusOK, nil)
+		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+			return internalServerError("Failed to set JWT cookie. %s", terr)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	metering.RecordLogin("token", user.ID, instanceID)
+	return sendJSON(w, http.StatusOK, token)
 }
 
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {

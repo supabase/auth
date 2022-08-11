@@ -65,6 +65,5 @@ func findChallenge(tx *storage.Connection, query string, args ...interface{}) (*
 		}
 		return nil, errors.Wrap(err, "error finding challenge")
 	}
-
 	return obj, nil
 }

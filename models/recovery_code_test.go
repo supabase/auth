@@ -62,3 +62,17 @@ func (ts *RecoveryCodeTestSuite) createRecoveryCode(u *User) *RecoveryCode {
 	require.NoError(ts.T(), err)
 	return rc
 }
+
+// Create Recovery Code
+func (ts *RecoveryCodeTestSuite) TestConsumedRecoveryCodesAreNotValid() {
+	user, err := NewUser(uuid.Nil, "", "", "", "", nil)
+	err = ts.db.Create(user)
+	rc := ts.createRecoveryCode(user)
+	isRCValid, err := IsRecoveryCodeValid(ts.db, user, rc)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), true, isRCValid)
+	err = rc.Consume(ts.db)
+	require.NoError(ts.T(), err)
+	isRCValid, err = IsRecoveryCodeValid(ts.db, user, rc)
+	require.Equal(ts.T(), false, isRCValid)
+}

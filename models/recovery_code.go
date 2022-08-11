@@ -21,7 +21,7 @@ func (RecoveryCode) TableName() string {
 	return tableName
 }
 
-// Returns a new recovery code associated with the user
+// Returns a new recovery code associated with the factor
 func NewRecoveryCode(user *User, recoveryCode string) (*RecoveryCode, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
@@ -46,4 +46,23 @@ func FindValidRecoveryCodesByUser(tx *storage.Connection, user *User) ([]*Recove
 		return nil, errors.Wrap(err, "Error finding recovery codes")
 	}
 	return recoveryCodes, nil
+}
+
+// Validate recovery code
+func IsRecoveryCodeValid(tx *storage.Connection, user *User, recoveryCode *RecoveryCode) (bool, error) {
+	rc := &RecoveryCode{}
+	if err := tx.Q().Where("user_id = ? AND used_at IS NULL AND recovery_code = ?", user.ID, rc.RecoveryCode).First(&recoveryCode); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, nil
+	}
+	return true, nil
+}
+
+// Use and invalidate a recovery code
+func (r *RecoveryCode) Consume(tx *storage.Connection) error {
+	now := time.Now()
+	r.UsedAt = &now
+	return tx.UpdateOnly(r, "usedAt")
 }
