@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gobuffalo/nulls"
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/crypto"
@@ -21,7 +22,8 @@ type RefreshToken struct {
 
 	UserID uuid.UUID `db:"user_id"`
 
-	Parent storage.NullString `db:"parent"`
+	Parent    storage.NullString `db:"parent"`
+	SessionId nulls.UUID         `db:"session_id"`
 
 	Revoked   bool      `db:"revoked"`
 	CreatedAt time.Time `db:"created_at"`
@@ -59,14 +61,19 @@ func GrantRefreshTokenSwap(r *http.Request, tx *storage.Connection, user *User, 
 
 // RevokeTokenFamily revokes all refresh tokens that descended from the provided token.
 func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
+	var err error
 	tablename := (&pop.Model{Value: RefreshToken{}}).TableName()
-	err := tx.RawQuery(`
-	with recursive token_family as (
-		select id, user_id, token, revoked, parent from `+tablename+` where parent = ?
-		union
-		select r.id, r.user_id, r.token, r.revoked, r.parent from `+tablename+` r inner join token_family t on t.token = r.parent
-	)
-	update `+tablename+` r set revoked = true from token_family where token_family.id = r.id;`, token.Token).Exec()
+	if token.SessionId.Valid && len(token.SessionId.UUID) > 0 {
+		err = tx.RawQuery(`update `+tablename+` set revoked = true where session_id = ?;`, token.SessionId).Exec()
+	} else {
+		err = tx.RawQuery(`
+		with recursive token_family as (
+			select id, user_id, token, revoked, parent from `+tablename+` where parent = ?
+			union
+			select r.id, r.user_id, r.token, r.revoked, r.parent from `+tablename+` r inner join token_family t on t.token = r.parent
+		)
+		update `+tablename+` r set revoked = true from token_family where token_family.id = r.id;`, token.Token).Exec()
+	}
 	if err != nil {
 		return err
 	}
@@ -100,6 +107,13 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 	}
 	if oldToken != nil {
 		token.Parent = storage.NullString(oldToken.Token)
+		token.SessionId = oldToken.SessionId
+	} else {
+		sessionId, err := uuid.NewV4()
+		if err != nil {
+			return nil, errors.Wrap(err, "Error generated unique session id")
+		}
+		token.SessionId = nulls.NewUUID(sessionId)
 	}
 
 	if err := tx.Create(token); err != nil {
