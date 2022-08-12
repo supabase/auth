@@ -28,7 +28,7 @@ func (e *EthProvider) RequiresNonce() bool {
 	return true
 }
 
-func (e *EthProvider) GenerateNonce(req *http.Request, instanceId uuid.UUID, options CryptoNonceOptions) (*models.Nonce, error) {
+func (e *EthProvider) GenerateNonce(_ *http.Request, instanceId uuid.UUID, options CryptoNonceOptions) (*models.Nonce, error) {
 	uri, err := url.Parse(options.Url)
 
 	if err != nil {
@@ -48,7 +48,7 @@ func (e *EthProvider) BuildNonce(n *models.Nonce) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	
+
 	return msg.String(), nil
 }
 
@@ -58,7 +58,7 @@ func (e *EthProvider) ValidateNonce(nonce *models.Nonce, signature string) (bool
 		return false, err
 	}
 
-	_, err = nonceMessage.Verify(signature, &nonce.Hostname, &nonce.Nonce, nil)
+	_, err = nonceMessage.Verify(signature, &nonce.Hostname, nil, nil)
 	if err != nil {
 		return false, err
 	}
@@ -68,7 +68,7 @@ func (e *EthProvider) ValidateNonce(nonce *models.Nonce, signature string) (bool
 
 // Used internally to convert to a SIWE message
 func (e *EthProvider) toSiweMessage(n *models.Nonce) (*siwe.Message, error) {
-	return siwe.InitMessage(n.Hostname, n.Address, n.Url, "1", map[string]interface{}{
+	return siwe.InitMessage(n.Hostname, n.Address, n.Url, n.Nonce, map[string]interface{}{
 		"statement":      e.config.Message,
 		"issuedAt":       n.UpdatedAt,
 		"nonce":          n.Nonce,
