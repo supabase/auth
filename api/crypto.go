@@ -90,7 +90,7 @@ func (a *API) Crypto(w http.ResponseWriter, r *http.Request) error {
 			})
 			didUserExist = false
 
-			identity, terr := a.createNewIdentity(tx, user, params.Provider, map[string]interface{}{"address": accountInfo.Address})
+			identity, terr := a.createNewIdentity(tx, user, params.Provider, map[string]interface{}{"sub": accountInfo.Address, "address": accountInfo.Address})
 			if terr != nil {
 				return terr
 			}
