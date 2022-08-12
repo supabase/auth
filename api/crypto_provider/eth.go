@@ -48,8 +48,8 @@ func (e *EthProvider) BuildNonce(n *models.Nonce) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	return msg.PrepareMessage(), nil
+	
+	return msg.String(), nil
 }
 
 func (e *EthProvider) ValidateNonce(nonce *models.Nonce, signature string) (bool, error) {
@@ -58,7 +58,7 @@ func (e *EthProvider) ValidateNonce(nonce *models.Nonce, signature string) (bool
 		return false, err
 	}
 
-	_, err = nonceMessage.Verify(signature)
+	_, err = nonceMessage.Verify(signature, &nonce.Hostname, &nonce.Nonce, nil)
 	if err != nil {
 		return false, err
 	}
