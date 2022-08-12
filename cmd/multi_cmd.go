@@ -23,9 +23,8 @@ func multi(cmd *cobra.Command, args []string) {
 	if err != nil {
 		logrus.Fatalf("Failed to load configuration: %+v", err)
 	}
-	if globalConfig.OperatorToken == "" {
-		logrus.Fatal("Operator token secret is required")
-	}
+
+	logrus.Warn("DEPRECATION NOTICE: multi-instance mode is not supported by Supabase's GoTrue, will be removed soon")
 
 	var db *storage.Connection
 	// try a couple times to connect to the database

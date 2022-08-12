@@ -2,8 +2,10 @@ package models
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 
+	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
@@ -41,6 +43,17 @@ func NewIdentity(user *User, provider string, identityData map[string]interface{
 	}
 
 	return identity, nil
+}
+
+func (i *Identity) BeforeCreate(tx *pop.Connection) error {
+	return i.BeforeUpdate(tx)
+}
+
+func (i *Identity) BeforeUpdate(tx *pop.Connection) error {
+	if _, ok := i.IdentityData["email"]; ok {
+		i.IdentityData["email"] = strings.ToLower(i.IdentityData["email"].(string))
+	}
+	return nil
 }
 
 // FindIdentityById searches for an identity with the matching provider_id and provider given.

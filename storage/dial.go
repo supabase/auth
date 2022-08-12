@@ -28,6 +28,10 @@ func Dial(config *conf.GlobalConfiguration) (*Connection, error) {
 		config.DB.Driver = u.Scheme
 	}
 
+	if config.DB.Driver != "postgres" {
+		logrus.Warn("DEPRECATION NOTICE: only PostgreSQL is supported by Supabase's GoTrue, will be removed soon")
+	}
+
 	db, err := pop.NewConnection(&pop.ConnectionDetails{
 		Dialect: config.DB.Driver,
 		URL:     config.DB.URL,
