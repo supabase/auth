@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS auth.nonces
 (
     instance_id uuid        NULL,
     id          uuid        NOT NULL,
+    provider    varchar     NOT NULL,
 
     uri         text        NOT NULL,
     hostname    text        NOT NULL,
@@ -9,7 +10,7 @@ CREATE TABLE IF NOT EXISTS auth.nonces
     namespace   varchar     NOT NULL,
     address     text        NOT NULL,
     nonce       varchar     NOT NULL,
-    chain_id    varchar     NOT NULL,
+    chain_id    int         NOT NULL,
 
     created_at  timestamptz NOT NULL DEFAULT now(),
     updated_at  timestamptz NOT NULL DEFAULT now(),

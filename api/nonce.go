@@ -48,8 +48,8 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 	nonce, err := models.GetNonceByProviderAndWalletAddress(a.db, instanceID, params.Provider, params.Options.WalletAddress)
 	if err != nil {
 		// Only return if the error isn't `NonceNotFoundError`
-		if _, ok := err.(*models.NonceNotFoundError); !ok {
-			return badRequestError("Failed to find nonce: %v", err)
+		if !models.IsNotFoundError(err) {
+			return err
 		}
 	}
 
@@ -86,7 +86,7 @@ func (a *API) Nonce(w http.ResponseWriter, r *http.Request) error {
 		// Save nonce in database
 		if err := tx.Create(nonce); err != nil {
 			// Return error
-			return internalServerError("Failed to save nonce")
+			return internalServerError("Failed to save nonce: %s", err.Error())
 		}
 
 		return nil

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/spruceid/siwe-go"
-	"net/url"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
@@ -16,11 +15,12 @@ import (
 type Nonce struct {
 	InstanceID uuid.UUID `json:"-" db:"instance_id"`
 	ID         uuid.UUID `json:"id" db:"id"`
+	Provider   string    `json:"provider" db:"provider"`
 
 	Url      string `json:"url" db:"uri"`
 	Hostname string `json:"hostname" db:"hostname"`
 
-	ChainId   string `json:"chain_id" db:"chain_id"`
+	ChainId   int    `json:"chain_id" db:"chain_id"`
 	Address   string `json:"address" db:"address"`
 	Namespace string `json:"namespace" db:"namespace"`
 	Nonce     string `json:"nonce" db:"nonce"`
@@ -30,12 +30,12 @@ type Nonce struct {
 	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
 }
 
-func (Nonce) TableName() string {
+func (*Nonce) TableName() string {
 	tableName := "nonces"
 	return tableName
 }
 
-func NewNonce(instanceID uuid.UUID, chainId, url, hostname, walletAddress, namespace string) (*Nonce, error) {
+func NewNonce(instanceID uuid.UUID, chainId int, provider, url, hostname, walletAddress, namespace string) (*Nonce, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -44,6 +44,7 @@ func NewNonce(instanceID uuid.UUID, chainId, url, hostname, walletAddress, names
 	nonce := &Nonce{
 		InstanceID: instanceID,
 		ID:         id,
+		Provider:   provider,
 		Namespace:  namespace,
 		ChainId:    chainId,
 		Address:    walletAddress,
@@ -64,12 +65,12 @@ func (n *Nonce) BeforeCreate(tx *pop.Connection) error {
 }
 
 // BeforeUpdate is invoked before an update operation is ran
-func (n *Nonce) BeforeUpdate(tx *pop.Connection) error {
+func (n *Nonce) BeforeUpdate(_ *pop.Connection) error {
 	return nil
 }
 
 // BeforeSave is invoked before the nonce is saved to the database
-func (n *Nonce) BeforeSave(tx *pop.Connection) error {
+func (n *Nonce) BeforeSave(_ *pop.Connection) error {
 	return nil
 }
 
@@ -77,44 +78,8 @@ func (n *Nonce) Consume(tx *storage.Connection) error {
 	return tx.Destroy(n)
 }
 
-func (n *Nonce) Build() (string, error) {
-	uri, err := url.Parse(n.Url)
-	if err != nil {
-		return "", err
-	}
-
-	return fmt.Sprintf(`%v wants you to sign in with your Ethereum account:
-%v
-
-URI: %v
-Version: 1
-Nonce: %v
-Issued At: %v
-Expiration Time: %v
-Chain ID: %v`, uri.Hostname(), n.Address, uri.String(), n.CreatedAt.UnixNano()/int64(time.Millisecond), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
-}
-
-func (n *Nonce) BuildWithStatement(statement string) (string, error) {
-	uri, err := url.Parse(n.Url)
-	if err != nil {
-		return "", err
-	}
-
-	return fmt.Sprintf(`%v wants you to sign in with your Ethereum account:
-%v
-
-%v
-
-URI: %v
-Version: 1
-Nonce: %v
-Issued At: %v
-Expiration Time: %v
-Chain ID: %v`, uri.Hostname(), n.Address, statement, uri.String(), n.CreatedAt.UnixNano()/int64(time.Millisecond), n.CreatedAt.Format(time.RFC3339), n.ExpiresAt.Format(time.RFC3339), n.ChainId), nil
-}
-
 func (n *Nonce) GetCaipAddress() string {
-	return fmt.Sprintf("%s:%s:%s", n.Namespace, n.ChainId, n.Address)
+	return fmt.Sprintf("%s:%d:%s", n.Namespace, n.ChainId, n.Address)
 }
 
 func GetNonceById(tx *storage.Connection, instanceID uuid.UUID, id uuid.UUID) (*Nonce, error) {

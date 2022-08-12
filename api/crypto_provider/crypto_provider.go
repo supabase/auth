@@ -18,7 +18,7 @@ type CryptoNonceOptions struct {
 	WalletAddress string `json:"wallet_address"` // Hex Encoded
 	Url           string `json:"url"`
 	// Option as only used by EVM
-	ChainId *string `json:"chain_id"`
+	ChainId *int `json:"chain_id"`
 }
 
 type CryptoProvider interface {

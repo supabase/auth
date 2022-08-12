@@ -8,6 +8,8 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/spruceid/siwe-go"
 	"net/http"
+	"net/url"
+	"strconv"
 )
 
 type EthProvider struct {
@@ -27,13 +29,17 @@ func (e *EthProvider) RequiresNonce() bool {
 }
 
 func (e *EthProvider) GenerateNonce(req *http.Request, instanceId uuid.UUID, options CryptoNonceOptions) (*models.Nonce, error) {
-	uri := req.URL
+	uri, err := url.Parse(options.Url)
+
+	if err != nil {
+		return nil, err
+	}
 
 	if options.ChainId == nil {
 		return nil, fmt.Errorf("eth provider requires a `chain_id` be provided")
 	}
 
-	return models.NewNonce(instanceId, *options.ChainId, uri.String(), uri.Hostname(), options.WalletAddress, "eip155")
+	return models.NewNonce(instanceId, *options.ChainId, "eth", uri.String(), uri.Hostname(), options.WalletAddress, "eip155")
 }
 
 func (e *EthProvider) BuildNonce(n *models.Nonce) (string, error) {
@@ -66,7 +72,7 @@ func (e *EthProvider) toSiweMessage(n *models.Nonce) (*siwe.Message, error) {
 		"statement":      e.config.Message,
 		"issuedAt":       n.UpdatedAt,
 		"nonce":          n.Nonce,
-		"chainId":        n.ChainId,
+		"chainId":        strconv.Itoa(n.ChainId),
 		"expirationTime": n.ExpiresAt,
 	})
 }
