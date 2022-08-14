@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// TODO(Joel): Remove notion of disabled
 const FactorDisabledState = "disabled"
 const FactorUnverifiedState = "unverified"
 const FactorVerifiedState = "verified"

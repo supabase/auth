@@ -256,6 +256,3 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
 
 }
-
-func (ts *MFATestSuite) TestStepUpLogin() {
-}

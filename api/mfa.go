@@ -41,8 +41,6 @@ type VerifyFactorParams struct {
 
 type ChallengeFactorResponse struct {
 	ID        string `json:"id"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
 	ExpiresAt string `json:"expires_at"`
 }
 
@@ -150,19 +148,21 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	expiryTime := creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration))
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
-		CreatedAt: creationTime.String(),
 		ExpiresAt: expiryTime.String(),
 	})
 }
 
 // Takes in intermediary JWT
 func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
-	// TODO: Add the 1FA post-login claim to all methods
 	ctx := r.Context()
 	config := a.getConfig(ctx)
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	instanceID := getInstanceID(ctx)
+	// TODO: return error if factor is not verified
+	if factor.Status != models.FactorVerifiedState {
+		return unprocessableEntityError("Please attempt a login with a verified factor")
+	}
 
 	params := &StepUpLoginParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -175,7 +175,6 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Code != "" {
-		// regular check flow
 		challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
@@ -215,7 +214,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr := a.issueRefreshToken(ctx, tx, user, "signup")
+		token, terr = a.issueRefreshToken(ctx, tx, user, "totp")
 		if terr != nil {
 			return terr
 		}
@@ -254,6 +253,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
+	// TODO: Gatekeep this by checking for the verified_at timestamp. Verified Challenges should not be able to be reused
 
 	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
 	if hasExpired {
@@ -288,10 +288,14 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
 	valid := totp.Validate(params.Code, factor.SecretKey)
 	if !valid {
 		return unauthorizedError("Invalid TOTP code entered")
 	}
+	// TODO(Joel): Generate and Return recovery codes + update corresponding tests
 
 	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
 		Success: fmt.Sprintf("%v", valid),
