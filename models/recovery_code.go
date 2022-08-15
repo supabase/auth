@@ -49,20 +49,20 @@ func FindValidRecoveryCodesByUser(tx *storage.Connection, user *User) ([]*Recove
 }
 
 // Validate recovery code
-func IsRecoveryCodeValid(tx *storage.Connection, user *User, recoveryCode *RecoveryCode) (bool, error) {
+func IsRecoveryCodeValid(tx *storage.Connection, user *User, recoveryCode string) (*RecoveryCode, error) {
 	rc := &RecoveryCode{}
-	if err := tx.Q().Where("user_id = ? AND used_at IS NULL AND recovery_code = ?", user.ID, rc.RecoveryCode).First(&recoveryCode); err != nil {
+	if err := tx.Q().Where("user_id = ? AND used_at IS NULL AND recovery_code = ?", user.ID, recoveryCode).First(&rc); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			return false, nil
+			return nil, nil
 		}
-		return false, nil
+		return nil, nil
 	}
-	return true, nil
+	return rc, nil
 }
 
 // Use and invalidate a recovery code
 func (r *RecoveryCode) Consume(tx *storage.Connection) error {
 	now := time.Now()
 	r.UsedAt = &now
-	return tx.UpdateOnly(r, "usedAt")
+	return tx.UpdateOnly(r, "used_at")
 }

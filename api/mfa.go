@@ -152,14 +152,13 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-// Takes in intermediary JWT
 func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	instanceID := getInstanceID(ctx)
-	// TODO: return error if factor is not verified
+
 	if factor.Status != models.FactorVerifiedState {
 		return unprocessableEntityError("Please attempt a login with a verified factor")
 	}
@@ -199,11 +198,32 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		}
 		valid := totp.Validate(params.Code, factor.SecretKey)
 		if !valid {
-			return unauthorizedError("Invalid TOTP code entered")
+			return unauthorizedError("Invalid code entered")
 		}
 	} else if params.RecoveryCode != "" {
-		// TODO: Add the logic here
-		return unauthorizedError("Invalid code entered ")
+		err := a.db.Transaction(func(tx *storage.Connection) error {
+			rc, terr := models.IsRecoveryCodeValid(tx, user, params.RecoveryCode)
+			if terr != nil {
+				return terr
+			}
+			if rc.RecoveryCode == params.RecoveryCode {
+				terr = rc.Consume(tx)
+				if terr != nil {
+					return terr
+				}
+			} else {
+				return unauthorizedError("Invalid code entered")
+			}
+
+			return nil
+
+		})
+		if err != nil {
+			return err
+		}
+
+		// TODO: Check that the recovery code exists for a user and that it hasn't been used prior
+		return unauthorizedError("Invalid code entered")
 	}
 	var token *AccessTokenResponse
 
@@ -228,6 +248,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	metering.RecordLogin("token", user.ID, instanceID)
+	// TODO: branching logic for recovery codes
 	return sendJSON(w, http.StatusOK, token)
 }
 
@@ -253,7 +274,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
-	// TODO: Gatekeep this by checking for the verified_at timestamp. Verified Challenges should not be able to be reused
+	if challenge.VerifiedAt != nil {
+		return badRequestError("Challenge has already been verified")
+	}
 
 	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
 	if hasExpired {
@@ -295,8 +318,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	if !valid {
 		return unauthorizedError("Invalid TOTP code entered")
 	}
-	// TODO(Joel): Generate and Return recovery codes + update corresponding tests
-
 	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
 		Success: fmt.Sprintf("%v", valid),
 	})
