@@ -23,18 +23,16 @@ type TokenTestSuite struct {
 	Config *conf.Configuration
 
 	RefreshToken *models.RefreshToken
-	instanceID   uuid.UUID
 }
 
 func TestToken(t *testing.T) {
 	os.Setenv("GOTRUE_RATE_LIMIT_HEADER", "My-Custom-Header")
-	api, config, instanceID, err := setupAPIForTestForInstance()
+	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	ts := &TokenTestSuite{
-		API:        api,
-		Config:     config,
-		instanceID: instanceID,
+		API:    api,
+		Config: config,
 	}
 	defer api.db.Close()
 
@@ -46,7 +44,7 @@ func (ts *TokenTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
 	// Create user & refresh token
-	u, err := models.NewUser(ts.instanceID, "12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser(uuid.Nil, "12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	t := time.Now()
 	u.EmailConfirmedAt = &t
@@ -151,7 +149,7 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenGrantFailure() {
 }
 
 func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
-	u, err := models.NewUser(ts.instanceID, "", "foo@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser(uuid.Nil, "", "foo@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	t := time.Now()
 	u.EmailConfirmedAt = &t
@@ -240,7 +238,7 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
 }
 
 func (ts *TokenTestSuite) createBannedUser() *models.User {
-	u, err := models.NewUser(ts.instanceID, "", "banned@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser(uuid.Nil, "", "banned@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	t := time.Now()
 	u.EmailConfirmedAt = &t

@@ -98,20 +98,6 @@ func getInstanceID(ctx context.Context) uuid.UUID {
 	return obj.(uuid.UUID)
 }
 
-// withInstance adds the instance id to the context.
-func withInstance(ctx context.Context, i *models.Instance) context.Context {
-	return context.WithValue(ctx, instanceKey, i)
-}
-
-// getInstance reads the instance id from the context.
-func getInstance(ctx context.Context) *models.Instance {
-	obj := ctx.Value(instanceKey)
-	if obj == nil {
-		return nil
-	}
-	return obj.(*models.Instance)
-}
-
 // withUser adds the user id to the context.
 func withUser(ctx context.Context, u *models.User) context.Context {
 	return context.WithValue(ctx, userKey, u)

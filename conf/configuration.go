@@ -61,7 +61,6 @@ type GlobalConfiguration struct {
 	External              ProviderConfiguration
 	Logging               LoggingConfig `envconfig:"LOG"`
 	OperatorToken         string        `split_words:"true" required:"false"`
-	MultiInstanceMode     bool
 	Tracing               TracingConfig
 	SMTP                  SMTPConfiguration
 	RateLimitHeader       string  `split_words:"true"`

@@ -92,18 +92,18 @@ func (ts *UserTestSuite) TestFindUserByConfirmationToken() {
 func (ts *UserTestSuite) TestFindUserByEmailAndAudience() {
 	u := ts.createUser()
 
-	n, err := FindUserByEmailAndAudience(ts.db, u.InstanceID, u.GetEmail(), "test")
+	n, err := FindUserByEmailAndAudience(ts.db, uuid.Nil, u.GetEmail(), "test")
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), u.ID, n.ID)
 
-	_, err = FindUserByEmailAndAudience(ts.db, u.InstanceID, u.GetEmail(), "invalid")
+	_, err = FindUserByEmailAndAudience(ts.db, uuid.Nil, u.GetEmail(), "invalid")
 	require.EqualError(ts.T(), err, UserNotFoundError{}.Error())
 }
 
 func (ts *UserTestSuite) TestFindUsersInAudience() {
 	u := ts.createUser()
 
-	n, err := FindUsersInAudience(ts.db, u.InstanceID, u.Aud, nil, nil, "")
+	n, err := FindUsersInAudience(ts.db, uuid.Nil, u.Aud, nil, nil, "")
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), n, 1)
 
@@ -111,7 +111,7 @@ func (ts *UserTestSuite) TestFindUsersInAudience() {
 		Page:    1,
 		PerPage: 50,
 	}
-	n, err = FindUsersInAudience(ts.db, u.InstanceID, u.Aud, &p, nil, "")
+	n, err = FindUsersInAudience(ts.db, uuid.Nil, u.Aud, &p, nil, "")
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), n, 1)
 	assert.Equal(ts.T(), uint64(1), p.Count)
@@ -121,7 +121,7 @@ func (ts *UserTestSuite) TestFindUsersInAudience() {
 			{Name: "created_at", Dir: Descending},
 		},
 	}
-	n, err = FindUsersInAudience(ts.db, u.InstanceID, u.Aud, nil, sp, "")
+	n, err = FindUsersInAudience(ts.db, uuid.Nil, u.Aud, nil, sp, "")
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), n, 1)
 }
@@ -137,7 +137,7 @@ func (ts *UserTestSuite) TestFindUserByID() {
 func (ts *UserTestSuite) TestFindUserByInstanceIDAndID() {
 	u := ts.createUser()
 
-	n, err := FindUserByInstanceIDAndID(ts.db, u.InstanceID, u.ID)
+	n, err := FindUserByInstanceIDAndID(ts.db, uuid.Nil, u.ID)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), u.ID, n.ID)
 }
@@ -167,21 +167,21 @@ func (ts *UserTestSuite) TestFindUserWithRefreshToken() {
 }
 
 func (ts *UserTestSuite) TestIsDuplicatedEmail() {
-	u := ts.createUserWithEmail("david.calavera@netlify.com")
+	_ = ts.createUserWithEmail("david.calavera@netlify.com")
 
-	e, err := IsDuplicatedEmail(ts.db, u.InstanceID, "david.calavera@netlify.com", "test")
+	e, err := IsDuplicatedEmail(ts.db, uuid.Nil, "david.calavera@netlify.com", "test")
 	require.NoError(ts.T(), err)
 	require.True(ts.T(), e, "expected email to be duplicated")
 
-	e, err = IsDuplicatedEmail(ts.db, u.InstanceID, "davidcalavera@netlify.com", "test")
+	e, err = IsDuplicatedEmail(ts.db, uuid.Nil, "davidcalavera@netlify.com", "test")
 	require.NoError(ts.T(), err)
 	require.False(ts.T(), e, "expected email to not be duplicated")
 
-	e, err = IsDuplicatedEmail(ts.db, u.InstanceID, "david@netlify.com", "test")
+	e, err = IsDuplicatedEmail(ts.db, uuid.Nil, "david@netlify.com", "test")
 	require.NoError(ts.T(), err)
 	require.False(ts.T(), e, "expected same email to not be duplicated")
 
-	e, err = IsDuplicatedEmail(ts.db, u.InstanceID, "david.calavera@netlify.com", "other-aud")
+	e, err = IsDuplicatedEmail(ts.db, uuid.Nil, "david.calavera@netlify.com", "other-aud")
 	require.NoError(ts.T(), err)
 	require.False(ts.T(), e, "expected same email to not be duplicated")
 }
