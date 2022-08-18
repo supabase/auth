@@ -62,9 +62,6 @@ func getUserFromClaims(ctx context.Context, conn *storage.Connection) (*models.U
 	// System User
 	instanceID := getInstanceID(ctx)
 
-	if claims.Subject == models.SystemUserUUID.String() || claims.Subject == models.SystemUserID {
-		return models.NewSystemUser(instanceID, claims.Audience), nil
-	}
 	userID, err := uuid.FromString(claims.Subject)
 	if err != nil {
 		return nil, errors.New("Invalid user ID")
