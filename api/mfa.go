@@ -63,6 +63,7 @@ type UnenrollFactorParams struct {
 }
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
+	// TODO(suggest): Limit number of factors for TOTP to 1, if people want more they can toggle a config to get more factors
 	const factorPrefix = "factor"
 	const imageSideLength = 300
 	ctx := r.Context()
@@ -110,6 +111,9 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:   factor.ID,
 		Type: factor.FactorType,
+		// TODO (Suggest): Consider sending string and encourage users to generate image
+		// TODO(Suggest): Look for SVG QRCode Generator in Go or use a query param which allows user to decide whether to generate image(defaults to sending large QRCode)
+		// TODO(Suggest) Consider generating in the client library
 		TOTP: TOTPObject{
 			QRCode: fmt.Sprintf("data:img/png;base64,%v", qrAsBase64),
 			Secret: factor.SecretKey,
@@ -152,6 +156,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
+
 func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.getConfig(ctx)
@@ -174,6 +179,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Code != "" {
+		// TODO(suggest): Either reorganize to token grant style case statement with types OR dump this into models
 		challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
@@ -201,6 +207,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 			return unauthorizedError("Invalid code entered")
 		}
 	} else if params.RecoveryCode != "" {
+		// TODO(suggest): Shorten session duration for sessions arising from recovery code
 		err := a.db.Transaction(func(tx *storage.Connection) error {
 			rc, terr := models.IsRecoveryCodeValid(tx, user, params.RecoveryCode)
 			if terr != nil {
@@ -221,13 +228,10 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-
-		// TODO: Check that the recovery code exists for a user and that it hasn't been used prior
 		return unauthorizedError("Invalid code entered")
 	}
 	var token *AccessTokenResponse
 
-	// Here, after we verify and if it succeds we return the access token
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.MFALoginAction, "", nil); terr != nil {
@@ -248,7 +252,15 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	metering.RecordLogin("token", user.ID, instanceID)
-	// TODO: branching logic for recovery codes
+	// if user.IsFirstMFALogin(){
+	//  // Wrap this in a transaction
+	//  recoveryCodes, err := models.GenerateRecoveryCodesBatch()
+	//	return sendJSON(w, http.StatusOK, StepUpLoginResponse{
+	//	     token: token
+	//	     recovery_code: recoveryCodes
+	//	 })
+	// }
+
 	return sendJSON(w, http.StatusOK, token)
 }
 
@@ -318,6 +330,8 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	if !valid {
 		return unauthorizedError("Invalid TOTP code entered")
 	}
+
+	// TODO(Joel): Invalidate all other sessions at this point
 	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
 		Success: fmt.Sprintf("%v", valid),
 	})
@@ -358,6 +372,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// TODO(Suggest): Log out person from all other sessions
 
 	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{
 		Success: fmt.Sprintf("%v", valid),

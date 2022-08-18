@@ -523,3 +523,9 @@ func (u *User) IsBanned() bool {
 func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
 	return tx.UpdateOnly(u, "banned_until")
 }
+
+// TODO: implement this
+// func (u *User) IsFirstMFALogin() bool {
+// 	// User has one verified factor
+
+// }

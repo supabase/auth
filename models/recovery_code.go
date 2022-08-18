@@ -6,6 +6,8 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"time"
+	"github.com/netlify/gotrue/crypto"
+
 )
 
 type RecoveryCode struct {
@@ -65,4 +67,16 @@ func (r *RecoveryCode) Consume(tx *storage.Connection) error {
 	now := time.Now()
 	r.UsedAt = &now
 	return tx.UpdateOnly(r, "used_at")
+}
+
+func GenerateBatchOfRecoveryCodes(tx *storage.Connection, user *User) ([]*RecoveryCode, error) {
+	recoveryCodes := []*RecoveryCode{}
+	for i := 0; i <= NumRecoveryCodes; i++ {
+		rc, err := NewRecoveryCode(user, crypto.SecureToken(RecoveryCodeLength))
+		if err = tx.Create(rc); err != nil {
+			return nil, errors.Wrap(err, "error creating recovery code")
+		}
+		recoveryCodes = append(recoveryCodes, rc)
+	}
+	return recoveryCodes, nil
 }

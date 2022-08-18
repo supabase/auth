@@ -286,6 +286,7 @@ func isStringInSlice(checkValue string, list []string) bool {
 // See https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.1800-17.pdf
 func calculateAAL(amr []AMREntry) string {
 	// TODO(Joel): Modify the checking logic when we have more than 1 2FA method
+	// {"password": "1FA", "totp": 2FA, "phone": 1FA}
 	for _, amrEntry := range amr {
 		if amrEntry.Method == "totp" {
 			return "aal2"
