@@ -12,7 +12,6 @@ import (
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
 	"github.com/go-chi/chi"
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/mailer"
@@ -77,19 +76,19 @@ func NewAPI(globalConfig *conf.GlobalConfiguration, db *storage.Connection) *API
 }
 
 func (a *API) deprecationNotices(ctx context.Context) {
-	instanceConfig := a.getConfig(ctx)
+	config := a.config
 
 	log := logrus.WithField("component", "api")
 
-	if instanceConfig.JWT.AdminGroupName != "" {
+	if config.JWT.AdminGroupName != "" {
 		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_ADMIN_GROUP_NAME not supported by Supabase's GoTrue, will be removed soon")
 	}
 
-	if len(instanceConfig.JWT.AdminRoles) > 0 {
+	if len(config.JWT.AdminRoles) > 0 {
 		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_ADMIN_ROLES not supported by Supabase's GoTrue, will be removed soon")
 	}
 
-	if instanceConfig.JWT.DefaultGroupName != "" {
+	if config.JWT.DefaultGroupName != "" {
 		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_DEFAULT_GROUP_NAME not supported by Supabase's GoTrue, will be removed soon")
 	}
 }
@@ -199,28 +198,18 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 }
 
 // NewAPIFromConfigFile creates a new REST API using the provided configuration file.
-func NewAPIFromConfigFile(filename string, version string) (*API, *conf.Configuration, error) {
-	globalConfig, err := conf.LoadGlobal(filename)
+func NewAPIFromConfigFile(filename string, version string) (*API, *conf.GlobalConfiguration, error) {
+	config, err := conf.LoadGlobal(filename)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	config, err := conf.LoadConfig(filename)
+	db, err := storage.Dial(config)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	ctx, err := WithInstanceConfig(context.Background(), config, uuid.Nil)
-	if err != nil {
-		logrus.Fatalf("Error loading instance config: %+v", err)
-	}
-
-	db, err := storage.Dial(globalConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return NewAPIWithVersion(ctx, globalConfig, db, version), config, nil
+	return NewAPIWithVersion(context.Background(), config, db, version), config, nil
 }
 
 // HealthCheck endpoint indicates if the gotrue api service is available
@@ -232,26 +221,8 @@ func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-// WithInstanceConfig adds the instanceID and tenant config to the context
-func WithInstanceConfig(ctx context.Context, config *conf.Configuration, instanceID uuid.UUID) (context.Context, error) {
-	ctx = withConfig(ctx, config)
-	ctx = withInstanceID(ctx, instanceID)
-	return ctx, nil
-}
-
 // Mailer returns NewMailer with the current tenant config
 func (a *API) Mailer(ctx context.Context) mailer.Mailer {
-	config := a.getConfig(ctx)
+	config := a.config
 	return mailer.NewMailer(config)
-}
-
-func (a *API) getConfig(ctx context.Context) *conf.Configuration {
-	obj := ctx.Value(configKey)
-	if obj == nil {
-		return nil
-	}
-
-	config := obj.(*conf.Configuration)
-
-	return config
 }

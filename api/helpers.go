@@ -70,7 +70,7 @@ func getUserFromClaims(ctx context.Context, conn *storage.Connection) (*models.U
 }
 
 func (a *API) isAdmin(ctx context.Context, u *models.User, aud string) bool {
-	config := a.getConfig(ctx)
+	config := a.config
 	if aud == "" {
 		aud = config.JWT.Aud
 	}
@@ -78,7 +78,7 @@ func (a *API) isAdmin(ctx context.Context, u *models.User, aud string) bool {
 }
 
 func (a *API) requestAud(ctx context.Context, r *http.Request) string {
-	config := a.getConfig(ctx)
+	config := a.config
 	// First check for an audience in the header
 	if aud := r.Header.Get(audHeaderName); aud != "" {
 		return aud
@@ -108,7 +108,7 @@ func getRedirectTo(r *http.Request) (reqref string) {
 	return
 }
 
-func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
+func isRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bool {
 	if redirectURL == "" {
 		return false
 	}
@@ -137,8 +137,7 @@ func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
 }
 
 func (a *API) getReferrer(r *http.Request) string {
-	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	// try get redirect url from query or post data first
 	reqref := getRedirectTo(r)
@@ -157,8 +156,7 @@ func (a *API) getReferrer(r *http.Request) string {
 
 // getRedirectURLOrReferrer ensures any redirect URL is from a safe origin
 func (a *API) getRedirectURLOrReferrer(r *http.Request, reqref string) string {
-	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	// if redirect url fails - try fill by extra variant
 	if isRedirectURLValid(config, reqref) {

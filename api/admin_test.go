@@ -22,7 +22,7 @@ type AdminTestSuite struct {
 	suite.Suite
 	User   *models.User
 	API    *API
-	Config *conf.Configuration
+	Config *conf.GlobalConfiguration
 
 	token string
 }
@@ -466,13 +466,13 @@ func (ts *AdminTestSuite) TestAdminUserDelete() {
 func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 	var cases = []struct {
 		desc         string
-		customConfig *conf.Configuration
+		customConfig *conf.GlobalConfiguration
 		userData     map[string]interface{}
 		expected     int
 	}{
 		{
 			"Email Signups Disabled",
-			&conf.Configuration{
+			&conf.GlobalConfiguration{
 				JWT: ts.Config.JWT,
 				External: conf.ProviderConfiguration{
 					Email: conf.EmailProviderConfiguration{
@@ -488,7 +488,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 		},
 		{
 			"Phone Signups Disabled",
-			&conf.Configuration{
+			&conf.GlobalConfiguration{
 				JWT: ts.Config.JWT,
 				External: conf.ProviderConfiguration{
 					Phone: conf.PhoneProviderConfiguration{
@@ -504,7 +504,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 		},
 		{
 			"All Signups Disabled",
-			&conf.Configuration{
+			&conf.GlobalConfiguration{
 				JWT:           ts.Config.JWT,
 				DisableSignup: true,
 			},

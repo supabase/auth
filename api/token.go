@@ -72,9 +72,7 @@ const useCookieHeader = "x-use-cookie"
 const useSessionCookie = "session"
 const InvalidLoginMessage = "Invalid login credentials"
 
-func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVerifier, error) {
-	config := getConfig(ctx)
-
+func (p *IdTokenGrantParams) getVerifier(ctx context.Context, config *conf.GlobalConfiguration) (*oidc.IDTokenVerifier, error) {
 	var provider *oidc.Provider
 	var err error
 	var oAuthProvider conf.OAuthProviderConfiguration
@@ -174,7 +172,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 
 	aud := a.requestAud(ctx, r)
 	instanceID := getInstanceID(ctx)
-	config := a.getConfig(ctx)
+	config := a.config
 
 	if params.Email != "" && params.Phone != "" {
 		return unprocessableEntityError("Only an email address or phone number should be provided on login.")
@@ -247,7 +245,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 
 // RefreshTokenGrant implements the refresh_token grant type flow
 func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	config := a.getConfig(ctx)
+	config := a.config
 	instanceID := getInstanceID(ctx)
 
 	params := &RefreshTokenGrantParams{}
@@ -359,7 +357,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 // IdTokenGrant implements the id_token grant type flow
 func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	config := a.getConfig(ctx)
+	config := a.config
 	instanceID := getInstanceID(ctx)
 
 	params := &IdTokenGrantParams{}
@@ -380,7 +378,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	var verifier *oidc.IDTokenVerifier
 	var err error
 	if params.Provider != "" {
-		verifier, err = params.getVerifier(ctx)
+		verifier, err = params.getVerifier(ctx, a.config)
 	} else if params.ClientID != "" && params.Issuer != "" {
 		verifier, err = params.getVerifierFromClientIDandIssuer(ctx)
 	} else {
@@ -550,7 +548,7 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, secret stri
 }
 
 func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User) (*AccessTokenResponse, error) {
-	config := a.getConfig(ctx)
+	config := a.config
 
 	now := time.Now()
 	user.LastSignInAt = &now
@@ -585,14 +583,14 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 }
 
 // setCookieTokens sets the access_token & refresh_token in the cookies
-func (a *API) setCookieTokens(config *conf.Configuration, token *AccessTokenResponse, session bool, w http.ResponseWriter) error {
+func (a *API) setCookieTokens(config *conf.GlobalConfiguration, token *AccessTokenResponse, session bool, w http.ResponseWriter) error {
 	// don't need to catch error here since we always set the cookie name
 	_ = a.setCookieToken(config, "access-token", token.Token, session, w)
 	_ = a.setCookieToken(config, "refresh-token", token.RefreshToken, session, w)
 	return nil
 }
 
-func (a *API) setCookieToken(config *conf.Configuration, name string, tokenString string, session bool, w http.ResponseWriter) error {
+func (a *API) setCookieToken(config *conf.GlobalConfiguration, name string, tokenString string, session bool, w http.ResponseWriter) error {
 	if name == "" {
 		return errors.New("Failed to set cookie, invalid name")
 	}
@@ -615,12 +613,12 @@ func (a *API) setCookieToken(config *conf.Configuration, name string, tokenStrin
 	return nil
 }
 
-func (a *API) clearCookieTokens(config *conf.Configuration, w http.ResponseWriter) {
+func (a *API) clearCookieTokens(config *conf.GlobalConfiguration, w http.ResponseWriter) {
 	a.clearCookieToken(config, "access-token", w)
 	a.clearCookieToken(config, "refresh-token", w)
 }
 
-func (a *API) clearCookieToken(config *conf.Configuration, name string, w http.ResponseWriter) {
+func (a *API) clearCookieToken(config *conf.GlobalConfiguration, name string, w http.ResponseWriter) {
 	cookieName := config.Cookie.Key
 	if name != "" {
 		cookieName += "-" + name

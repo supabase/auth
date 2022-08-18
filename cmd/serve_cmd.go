@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
@@ -20,20 +19,16 @@ var serveCmd = cobra.Command{
 	},
 }
 
-func serve(globalConfig *conf.GlobalConfiguration, config *conf.Configuration) {
-	db, err := storage.Dial(globalConfig)
+func serve(config *conf.GlobalConfiguration) {
+	db, err := storage.Dial(config)
 	if err != nil {
 		logrus.Fatalf("Error opening database: %+v", err)
 	}
 	defer db.Close()
 
-	ctx, err := api.WithInstanceConfig(context.Background(), config, uuid.Nil)
-	if err != nil {
-		logrus.Fatalf("Error loading instance config: %+v", err)
-	}
-	api := api.NewAPIWithVersion(ctx, globalConfig, db, Version)
+	api := api.NewAPIWithVersion(context.Background(), config, db, Version)
 
-	l := fmt.Sprintf("%v:%v", globalConfig.API.Host, globalConfig.API.Port)
+	l := fmt.Sprintf("%v:%v", config.API.Host, config.API.Port)
 	logrus.Infof("GoTrue API started on: %s", l)
 	api.ListenAndServe(l)
 }

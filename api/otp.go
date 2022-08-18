@@ -68,7 +68,7 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 // SmsOtp sends the user an otp via sms
 func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	if !config.External.Phone.Enabled {
 		return badRequestError("Unsupported phone provider")

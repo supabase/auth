@@ -20,7 +20,7 @@ import (
 type UserTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.Configuration
+	Config *conf.GlobalConfiguration
 }
 
 func TestUser(t *testing.T) {

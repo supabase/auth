@@ -45,7 +45,7 @@ func (a *API) formatPhoneNumber(phone string) string {
 
 // sendPhoneConfirmation sends an otp to the user's phone number
 func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider) error {
-	config := a.getConfig(ctx)
+	config := a.config
 
 	var token *string
 	var sentAt *time.Time

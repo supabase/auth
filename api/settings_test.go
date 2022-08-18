@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,8 +55,7 @@ func TestSettings_EmailDisabled(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/settings", nil)
 	req.Header.Set("Content-Type", "application/json")
 
-	ctx, err := WithInstanceConfig(context.Background(), config, uuid.Nil)
-	require.NoError(t, err)
+	ctx := context.Background()
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()

@@ -28,7 +28,7 @@ type SignupParams struct {
 // Signup is the endpoint for registering a new user
 func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	if config.DisableSignup {
 		return forbiddenError("Signups not allowed for this instance")
@@ -272,7 +272,7 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 
 func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, params *SignupParams) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
-	config := a.getConfig(ctx)
+	config := a.config
 
 	var user *models.User
 	var err error

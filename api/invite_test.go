@@ -23,7 +23,7 @@ import (
 type InviteTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.Configuration
+	Config *conf.GlobalConfiguration
 
 	token string
 }
