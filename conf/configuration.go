@@ -28,15 +28,6 @@ type EmailProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"true"`
 }
 
-type SamlProviderConfiguration struct {
-	Enabled     bool   `json:"enabled"`
-	MetadataURL string `json:"metadata_url" envconfig:"METADATA_URL"`
-	APIBase     string `json:"api_base" envconfig:"API_BASE"`
-	Name        string `json:"name"`
-	SigningCert string `json:"signing_cert" envconfig:"SIGNING_CERT"`
-	SigningKey  string `json:"signing_key" envconfig:"SIGNING_KEY"`
-}
-
 // DBConfiguration holds all the database related configuration.
 type DBConfiguration struct {
 	Driver string `json:"driver" required:"true"`
@@ -108,7 +99,6 @@ type ProviderConfiguration struct {
 	WorkOS      OAuthProviderConfiguration `json:"workos"`
 	Email       EmailProviderConfiguration `json:"email"`
 	Phone       PhoneProviderConfiguration `json:"phone"`
-	Saml        SamlProviderConfiguration  `json:"saml"`
 	Zoom        OAuthProviderConfiguration `json:"zoom"`
 	IosBundleId string                     `json:"ios_bundle_id" split_words:"true"`
 	RedirectURL string                     `json:"redirect_url"`

@@ -112,13 +112,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	providerType := getExternalProviderType(ctx)
 	var userData *provider.UserProvidedData
 	var providerToken string
-	if providerType == "saml" {
-		samlUserData, err := a.samlCallback(ctx, r)
-		if err != nil {
-			return err
-		}
-		userData = samlUserData
-	} else if providerType == "twitter" {
+	if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
 		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)
 		if err != nil {
@@ -433,8 +427,6 @@ func (a *API) Provider(ctx context.Context, name string, scopes string, query *u
 		return provider.NewTwitterProvider(config.External.Twitter, scopes)
 	case "workos":
 		return provider.NewWorkOSProvider(config.External.WorkOS, query)
-	case "saml":
-		return provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
 	case "zoom":
 		return provider.NewZoomProvider(config.External.Zoom)
 	default:

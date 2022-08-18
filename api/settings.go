@@ -25,13 +25,8 @@ type ProviderSettings struct {
 	Zoom      bool `json:"zoom"`
 }
 
-type ProviderLabels struct {
-	SAML string `json:"saml,omitempty"`
-}
-
 type Settings struct {
 	ExternalProviders ProviderSettings `json:"external"`
-	ExternalLabels    ProviderLabels   `json:"external_labels"`
 	DisableSignup     bool             `json:"disable_signup"`
 	MailerAutoconfirm bool             `json:"mailer_autoconfirm"`
 	PhoneAutoconfirm  bool             `json:"phone_autoconfirm"`
@@ -61,11 +56,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			WorkOS:    config.External.WorkOS.Enabled,
 			Email:     config.External.Email.Enabled,
 			Phone:     config.External.Phone.Enabled,
-			SAML:      config.External.Saml.Enabled,
 			Zoom:      config.External.Zoom.Enabled,
-		},
-		ExternalLabels: ProviderLabels{
-			SAML: config.External.Saml.Name,
 		},
 
 		DisableSignup:     config.DisableSignup,
