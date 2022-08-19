@@ -29,43 +29,22 @@ func init() {
 // setupAPIForTest creates a new API to run tests with.
 // Using this function allows us to keep track of the database connection
 // and cleaning up data between tests.
-func setupAPIForTest() (*API, *conf.Configuration, error) {
+func setupAPIForTest() (*API, *conf.GlobalConfiguration, error) {
 	return setupAPIForTestWithCallback(nil)
 }
 
-func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *conf.Configuration, *storage.Connection) (uuid.UUID, error)) (*API, *conf.Configuration, error) {
-	globalConfig, err := conf.LoadGlobal(apiTestConfig)
+func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *storage.Connection) (uuid.UUID, error)) (*API, *conf.GlobalConfiguration, error) {
+	config, err := conf.LoadGlobal(apiTestConfig)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	conn, err := test.SetupDBConnection(globalConfig)
+	conn, err := test.SetupDBConnection(config)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	config, err := conf.LoadConfig(apiTestConfig)
-	if err != nil {
-		conn.Close()
-		return nil, nil, err
-	}
-
-	instanceID := uuid.Nil
-	if cb != nil {
-		instanceID, err = cb(globalConfig, config, conn)
-		if err != nil {
-			conn.Close()
-			return nil, nil, err
-		}
-	}
-
-	ctx, err := WithInstanceConfig(context.Background(), config, instanceID)
-	if err != nil {
-		conn.Close()
-		return nil, nil, err
-	}
-
-	return NewAPIWithVersion(ctx, globalConfig, conn, apiTestVersion), config, nil
+	return NewAPIWithVersion(context.Background(), config, conn, apiTestVersion), config, nil
 }
 
 func TestEmailEnabledByDefault(t *testing.T) {

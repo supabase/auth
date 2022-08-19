@@ -23,7 +23,7 @@ import (
 type PhoneTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.Configuration
+	Config *conf.GlobalConfiguration
 }
 
 type TestSmsProvider struct {
@@ -69,8 +69,7 @@ func (ts *PhoneTestSuite) TestFormatPhoneNumber() {
 func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 	u, err := models.FindUserByPhoneAndAudience(ts.API.db, uuid.Nil, "123456789", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	ctx, err := WithInstanceConfig(context.Background(), ts.Config, uuid.Nil)
-	require.NoError(ts.T(), err)
+	ctx := context.Background()
 	cases := []struct {
 		desc     string
 		otpType  string

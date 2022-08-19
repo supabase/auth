@@ -12,7 +12,7 @@ import (
 var autoconfirm, isSuperAdmin, isAdmin bool
 var audience, instanceID string
 
-func getAudience(c *conf.Configuration) string {
+func getAudience(c *conf.GlobalConfiguration) string {
 	if audience == "" {
 		return c.JWT.Aud
 	}
@@ -67,10 +67,10 @@ var adminEditRoleCmd = cobra.Command{
 	},
 }
 
-func adminCreateUser(globalConfig *conf.GlobalConfiguration, config *conf.Configuration, args []string) {
+func adminCreateUser(config *conf.GlobalConfiguration, args []string) {
 	iid := uuid.Must(uuid.FromString(instanceID))
 
-	db, err := storage.Dial(globalConfig)
+	db, err := storage.Dial(config)
 	if err != nil {
 		logrus.Fatalf("Error opening database: %+v", err)
 	}
@@ -119,10 +119,10 @@ func adminCreateUser(globalConfig *conf.GlobalConfiguration, config *conf.Config
 	logrus.Infof("Created user: %s", args[0])
 }
 
-func adminDeleteUser(globalConfig *conf.GlobalConfiguration, config *conf.Configuration, args []string) {
+func adminDeleteUser(config *conf.GlobalConfiguration, args []string) {
 	iid := uuid.Must(uuid.FromString(instanceID))
 
-	db, err := storage.Dial(globalConfig)
+	db, err := storage.Dial(config)
 	if err != nil {
 		logrus.Fatalf("Error opening database: %+v", err)
 	}
@@ -144,10 +144,10 @@ func adminDeleteUser(globalConfig *conf.GlobalConfiguration, config *conf.Config
 	logrus.Infof("Removed user: %s", args[0])
 }
 
-func adminEditRole(globalConfig *conf.GlobalConfiguration, config *conf.Configuration, args []string) {
+func adminEditRole(config *conf.GlobalConfiguration, args []string) {
 	iid := uuid.Must(uuid.FromString(instanceID))
 
-	db, err := storage.Dial(globalConfig)
+	db, err := storage.Dial(config)
 	if err != nil {
 		logrus.Fatalf("Error opening database: %+v", err)
 	}

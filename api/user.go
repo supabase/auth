@@ -53,7 +53,7 @@ func (a *API) UserGet(w http.ResponseWriter, r *http.Request) error {
 // UserUpdate updates fields on a user
 func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 	instanceID := getInstanceID(ctx)
 
 	params := &UserUpdateParams{}

@@ -70,7 +70,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 
 func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 	params := &VerifyParams{}
 	params.Token = r.FormValue("token")
 	params.Type = r.FormValue("type")
@@ -157,7 +157,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 
 func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 	params := &VerifyParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	if err := jsonDecoder.Decode(params); err != nil {
@@ -232,7 +232,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 
 func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
-	config := a.getConfig(ctx)
+	config := a.config
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -271,7 +271,7 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 
 func (a *API) recoverVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
-	config := a.getConfig(ctx)
+	config := a.config
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -308,7 +308,7 @@ func (a *API) recoverVerify(r *http.Request, ctx context.Context, conn *storage.
 
 func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User, otpType string) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
-	config := a.getConfig(ctx)
+	config := a.config
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -359,7 +359,7 @@ func (a *API) prepRedirectURL(message string, rurl string) string {
 
 func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
-	config := a.getConfig(ctx)
+	config := a.config
 
 	if config.Mailer.SecureEmailChangeEnabled && user.EmailChangeConfirmStatus == zeroConfirmation && user.GetEmail() != "" {
 		err := conn.Transaction(func(tx *storage.Connection) error {
@@ -406,7 +406,7 @@ func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *stor
 }
 
 func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
-	config := getConfig(ctx)
+	config := a.config
 
 	var user *models.User
 	var err error
@@ -452,7 +452,7 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 // verifyUserAndToken verifies the token associated to the user based on the verify type
 func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
 	instanceID := getInstanceID(ctx)
-	config := getConfig(ctx)
+	config := a.config
 
 	var user *models.User
 	var err error

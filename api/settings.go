@@ -34,7 +34,7 @@ type Settings struct {
 }
 
 func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
-	config := a.getConfig(r.Context())
+	config := a.config
 
 	return sendJSON(w, http.StatusOK, &Settings{
 		ExternalProviders: ProviderSettings{

@@ -16,7 +16,7 @@ import (
 type TracerTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.Configuration
+	Config *conf.GlobalConfiguration
 }
 
 func TestTracer(t *testing.T) {

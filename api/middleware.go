@@ -105,7 +105,7 @@ func (a *API) limitEmailSentHandler() middlewareHandler {
 	}).SetBurst(int(a.config.RateLimitEmailSent)).SetMethods([]string{"PUT", "POST"})
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		c := req.Context()
-		config := a.getConfig(c)
+		config := a.config
 		if config.External.Email.Enabled && !config.Mailer.Autoconfirm {
 			if req.Method == "PUT" || req.Method == "POST" {
 				res := make(map[string]interface{})
@@ -152,7 +152,7 @@ func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) 
 
 func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	if !config.External.Email.Enabled {
 		return nil, badRequestError("Email logins are disabled")
@@ -163,7 +163,7 @@ func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (co
 
 func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 	if !config.Security.Captcha.Enabled {
 		return ctx, nil
 	}

@@ -1,8 +1,6 @@
 package conf
 
 import (
-	"database/sql/driver"
-	"encoding/json"
 	"errors"
 	"os"
 	"time"
@@ -67,6 +65,22 @@ type GlobalConfiguration struct {
 	RateLimitEmailSent    float64 `split_words:"true" default:"30"`
 	RateLimitVerify       float64 `split_words:"true" default:"30"`
 	RateLimitTokenRefresh float64 `split_words:"true" default:"30"`
+
+	SiteURL           string   `json:"site_url" split_words:"true" required:"true"`
+	URIAllowList      []string `json:"uri_allow_list" split_words:"true"`
+	URIAllowListMap   map[string]glob.Glob
+	PasswordMinLength int                      `json:"password_min_length" split_words:"true"`
+	JWT               JWTConfiguration         `json:"jwt"`
+	Mailer            MailerConfiguration      `json:"mailer"`
+	Sms               SmsProviderConfiguration `json:"sms"`
+	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
+	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
+	Security          SecurityConfiguration    `json:"security"`
+	Cookie            struct {
+		Key      string `json:"key"`
+		Domain   string `json:"domain"`
+		Duration int    `json:"duration"`
+	} `json:"cookies"`
 }
 
 // EmailContentConfiguration holds the configuration for emails, both subjects and template URLs.
@@ -175,27 +189,6 @@ type SecurityConfiguration struct {
 	UpdatePasswordRequireReauthentication bool                 `json:"update_password_require_reauthentication" split_words:"true"`
 }
 
-// Configuration holds all the per-instance configuration.
-type Configuration struct {
-	SiteURL           string   `json:"site_url" split_words:"true" required:"true"`
-	URIAllowList      []string `json:"uri_allow_list" split_words:"true"`
-	URIAllowListMap   map[string]glob.Glob
-	PasswordMinLength int                      `json:"password_min_length" split_words:"true"`
-	JWT               JWTConfiguration         `json:"jwt"`
-	SMTP              SMTPConfiguration        `json:"smtp"`
-	Mailer            MailerConfiguration      `json:"mailer"`
-	External          ProviderConfiguration    `json:"external"`
-	Sms               SmsProviderConfiguration `json:"sms"`
-	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
-	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
-	Security          SecurityConfiguration    `json:"security"`
-	Cookie            struct {
-		Key      string `json:"key"`
-		Domain   string `json:"domain"`
-		Duration int    `json:"duration"`
-	} `json:"cookies"`
-}
-
 func loadEnvironment(filename string) error {
 	var err error
 	if filename != "" {
@@ -238,6 +231,8 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		return nil, err
 	}
 
+	config.ApplyDefaults()
+
 	if _, err := ConfigureLogging(&config.Logging); err != nil {
 		return nil, err
 	}
@@ -250,22 +245,8 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 	return config, nil
 }
 
-// LoadConfig loads per-instance configuration.
-func LoadConfig(filename string) (*Configuration, error) {
-	if err := loadEnvironment(filename); err != nil {
-		return nil, err
-	}
-
-	config := new(Configuration)
-	if err := envconfig.Process("gotrue", config); err != nil {
-		return nil, err
-	}
-	config.ApplyDefaults()
-	return config, nil
-}
-
-// ApplyDefaults sets defaults for a Configuration
-func (config *Configuration) ApplyDefaults() {
+// ApplyDefaults sets defaults for a GlobalConfiguration
+func (config *GlobalConfiguration) ApplyDefaults() {
 	if config.JWT.AdminGroupName == "" {
 		config.JWT.AdminGroupName = "admin"
 	}
@@ -349,31 +330,6 @@ func (config *Configuration) ApplyDefaults() {
 	if config.PasswordMinLength < defaultMinPasswordLength {
 		config.PasswordMinLength = defaultMinPasswordLength
 	}
-}
-
-func (config *Configuration) Value() (driver.Value, error) {
-	data, err := json.Marshal(config)
-	if err != nil {
-		return driver.Value(""), err
-	}
-	return driver.Value(string(data)), nil
-}
-
-func (config *Configuration) Scan(src interface{}) error {
-	var source []byte
-	switch v := src.(type) {
-	case string:
-		source = []byte(v)
-	case []byte:
-		source = v
-	default:
-		return errors.New("Invalid data type for Configuration")
-	}
-
-	if len(source) == 0 {
-		source = []byte("{}")
-	}
-	return json.Unmarshal(source, &config)
 }
 
 func (o *OAuthProviderConfiguration) Validate() error {

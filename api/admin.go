@@ -102,7 +102,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	adminUser := getAdminUser(ctx)
 	instanceID := getInstanceID(ctx)
 	params, err := a.getAdminParams(r)
-	config := getConfig(ctx)
+	config := a.config
 	if err != nil {
 		return err
 	}
@@ -202,7 +202,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 // adminUserCreate creates a new user based on the provided data
 func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	instanceID := getInstanceID(ctx)
 	adminUser := getAdminUser(ctx)

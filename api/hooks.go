@@ -153,7 +153,7 @@ func closeBody(rsp *http.Response) {
 	}
 }
 
-func triggerEventHooks(ctx context.Context, conn *storage.Connection, event HookEvent, user *models.User, instanceID uuid.UUID, config *conf.Configuration) error {
+func triggerEventHooks(ctx context.Context, conn *storage.Connection, event HookEvent, user *models.User, instanceID uuid.UUID, config *conf.GlobalConfiguration) error {
 	if config.Webhook.URL != "" {
 		hookURL, err := url.Parse(config.Webhook.URL)
 		if err != nil {
@@ -183,7 +183,7 @@ func triggerEventHooks(ctx context.Context, conn *storage.Connection, event Hook
 	return nil
 }
 
-func triggerHook(ctx context.Context, hookURL *url.URL, secret string, conn *storage.Connection, event HookEvent, user *models.User, instanceID uuid.UUID, config *conf.Configuration) error {
+func triggerHook(ctx context.Context, hookURL *url.URL, secret string, conn *storage.Connection, event HookEvent, user *models.User, instanceID uuid.UUID, config *conf.GlobalConfiguration) error {
 	if !hookURL.IsAbs() {
 		siteURL, err := url.Parse(config.SiteURL)
 		if err != nil {
