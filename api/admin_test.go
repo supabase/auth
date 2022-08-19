@@ -66,22 +66,6 @@ func (ts *AdminTestSuite) makeSuperAdmin(email string) string {
 	return token
 }
 
-func (ts *AdminTestSuite) makeSystemUser() string {
-	u := models.NewSystemUser(uuid.Nil, ts.Config.JWT.Aud)
-	u.Role = "service_role"
-
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	require.NoError(ts.T(), err, "Error generating access token")
-
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
-	_, err = p.Parse(token, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
-	require.NoError(ts.T(), err, "Error parsing token")
-
-	return token
-}
-
 // TestAdminUsersUnauthorized tests API /admin/users route without authentication
 func (ts *AdminTestSuite) TestAdminUsersUnauthorized() {
 	req := httptest.NewRequest(http.MethodGet, "/admin/users", nil)
@@ -417,52 +401,6 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 	assert.Contains(ts.T(), data.AppMetaData["roles"], "writer")
 	assert.Contains(ts.T(), data.AppMetaData["roles"], "editor")
 	assert.NotNil(ts.T(), data.BannedUntil)
-}
-
-// TestAdminUserUpdate tests API /admin/user route (UPDATE) as system user
-func (ts *AdminTestSuite) TestAdminUserUpdateAsSystemUser() {
-	u, err := models.NewUser(ts.instanceID, "12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
-	require.NoError(ts.T(), err, "Error making new user")
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
-
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"role": "testing",
-		"app_metadata": map[string]interface{}{
-			"roles": []string{"writer", "editor"},
-		},
-		"user_metadata": map[string]interface{}{
-			"name": "David",
-		},
-	}))
-
-	// Setup request
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
-
-	token := ts.makeSystemUser()
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-
-	data := make(map[string]interface{})
-	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-
-	assert.Equal(ts.T(), data["role"], "testing")
-
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test1@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), u.Role, "testing")
-	require.NotNil(ts.T(), u.UserMetaData)
-	require.Contains(ts.T(), u.UserMetaData, "name")
-	assert.Equal(ts.T(), u.UserMetaData["name"], "David")
-	require.NotNil(ts.T(), u.AppMetaData)
-	require.Contains(ts.T(), u.AppMetaData, "roles")
-	assert.Len(ts.T(), u.AppMetaData["roles"], 2)
-	assert.Contains(ts.T(), u.AppMetaData["roles"], "writer")
-	assert.Contains(ts.T(), u.AppMetaData["roles"], "editor")
 }
 
 func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {

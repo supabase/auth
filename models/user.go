@@ -13,9 +13,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const SystemUserID = "0"
-
-var SystemUserUUID = uuid.Nil
 var PasswordHashCost = bcrypt.DefaultCost
 
 // User respresents a registered user with email/password authentication
@@ -93,42 +90,14 @@ func NewUser(instanceID uuid.UUID, phone, email, password, aud string, userData 
 	return user, nil
 }
 
-// NewSystemUser returns a user with the id as SystemUserUUID
-func NewSystemUser(instanceID uuid.UUID, aud string) *User {
-	return &User{
-		InstanceID:   instanceID,
-		ID:           SystemUserUUID,
-		Aud:          aud,
-		IsSuperAdmin: true,
-	}
-}
-
 // TableName overrides the table name used by pop
 func (User) TableName() string {
 	tableName := "users"
 	return tableName
 }
 
-// BeforeCreate is invoked before a create operation is ran
-func (u *User) BeforeCreate(tx *pop.Connection) error {
-	return u.BeforeUpdate(tx)
-}
-
-// BeforeUpdate is invoked before an update operation is ran
-func (u *User) BeforeUpdate(tx *pop.Connection) error {
-	if u.ID == SystemUserUUID {
-		return errors.New("Cannot persist system user")
-	}
-
-	return nil
-}
-
 // BeforeSave is invoked before the user is saved to the database
 func (u *User) BeforeSave(tx *pop.Connection) error {
-	if u.ID == SystemUserUUID {
-		return errors.New("Cannot persist system user")
-	}
-
 	if u.EmailConfirmedAt != nil && u.EmailConfirmedAt.IsZero() {
 		u.EmailConfirmedAt = nil
 	}
