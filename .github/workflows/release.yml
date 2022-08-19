@@ -30,7 +30,7 @@ jobs:
 
   deploy:
     needs: release
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     if: success() && needs.release.outputs.status == 'true'
     steps:
       - uses: actions/checkout@v3
