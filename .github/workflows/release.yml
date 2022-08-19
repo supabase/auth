@@ -8,57 +8,36 @@ on:
 
 jobs:
   release:
-    strategy:
-      matrix:
-        node: ["16"]
-
     outputs:
-      status: ${{ steps.pre-release.outputs.release != steps.post-release.outputs.release }}
-      version: ${{ steps.post-release.outputs.release }}
+      status: ${{ steps.semantic.outputs.new_release_published }}
+      version: ${{ steps.semantic.outputs.new_release_version }}
 
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - uses: actions/checkout@v2
-
-      - id: pre-release
-        uses: pozetroninc/github-action-get-latest-release@master
-        with:
-          owner: supabase
-          repo: gotrue
-          excludes: prerelease, draft
-
-      - name: Set up Node
-        uses: actions/setup-node@v2
-        with:
-          node-version: ${{ matrix.node }}
-
+      - uses: actions/checkout@v3
       - name: Release on GitHub
-        id: github-release
-        run: npx semantic-release -p        \
-          @semantic-release/commit-analyzer \
-          @semantic-release/github         \
-          @semantic-release/release-notes-generator
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v2
+        with:
+          semantic_version: 18
+          extra_plugins: |
+            @semantic-release/commit-analyzer
+            @semantic-release/release-notes-generator
+            @semantic-release/github
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - id: post-release
-        uses: pozetroninc/github-action-get-latest-release@master
-        with:
-          owner: supabase
-          repo: gotrue
-          excludes: prerelease, draft
 
   deploy:
     needs: release
     runs-on: ubuntu-18.04
     if: success() && needs.release.outputs.status == 'true'
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: "^1.18.0" # The Go version to download (if necessary) and use.
 
