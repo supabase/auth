@@ -39,14 +39,14 @@ jobs:
 
       - run: make deps
       - run: make all
-      - run: tar -czvf gotrue-${{ needs.release.outputs.version }}-x86.tar.gz gotrue migrations/
+      - run: tar -czvf gotrue-v${{ needs.release.outputs.version }}-x86.tar.gz gotrue migrations/
       - run: mv gotrue-arm64 gotrue
-      - run: tar -czvf gotrue-${{ needs.release.outputs.version }}-arm64.tar.gz gotrue migrations/
+      - run: tar -czvf gotrue-v${{ needs.release.outputs.version }}-arm64.tar.gz gotrue migrations/
 
       - uses: AButler/upload-release-assets@v2.0
         with:
-          files: "gotrue-${{ needs.release.outputs.version }}*.tar.gz"
-          release-tag: ${{ needs.release.outputs.version }}
+          files: "gotrue-v${{ needs.release.outputs.version }}*.tar.gz"
+          release-tag: v${{ needs.release.outputs.version }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
   publish:
