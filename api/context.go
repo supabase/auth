@@ -101,7 +101,6 @@ func getSignature(ctx context.Context) string {
 	return obj.(string)
 }
 
-
 func withInviteToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, inviteTokenKey, token)
 }
