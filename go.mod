@@ -1,13 +1,11 @@
 module github.com/netlify/gotrue
 
 require (
-	github.com/GoogleCloudPlatform/cloudsql-proxy v0.0.0-20170623214735-571947b0f240
 	github.com/badoux/checkmail v0.0.0-20170203135005-d0a759655d62
 	github.com/beevik/etree v1.1.0
 	github.com/coreos/go-oidc/v3 v3.0.0
 	github.com/didip/tollbooth/v5 v5.1.1
 	github.com/go-chi/chi v4.0.2+incompatible
-	github.com/go-sql-driver/mysql v1.5.0
 	github.com/gobuffalo/pop/v5 v5.3.3
 	github.com/gobwas/glob v0.2.3
 	github.com/gofrs/uuid v4.0.0+incompatible
@@ -40,12 +38,12 @@ require (
 )
 
 require (
-	cloud.google.com/go v0.67.0 // indirect
 	github.com/Masterminds/semver/v3 v3.1.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/fatih/structs v1.1.0 // indirect
+	github.com/go-sql-driver/mysql v1.5.0 // indirect
 	github.com/gobuffalo/envy v1.9.0 // indirect
 	github.com/gobuffalo/fizz v1.13.0 // indirect
 	github.com/gobuffalo/flect v0.2.2 // indirect
@@ -57,9 +55,8 @@ require (
 	github.com/gobuffalo/plush/v4 v4.1.0 // indirect
 	github.com/gobuffalo/tags/v3 v3.1.0 // indirect
 	github.com/gobuffalo/validate/v3 v3.3.0 // indirect
-	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/protobuf v1.4.2 // indirect
-	github.com/googleapis/gax-go/v2 v2.0.5 // indirect
+	github.com/google/go-cmp v0.5.2 // indirect
 	github.com/gorilla/context v1.1.1 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
@@ -91,17 +88,13 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.2.0 // indirect
 	github.com/tinylib/msgp v1.1.0 // indirect
-	go.opencensus.io v0.22.4 // indirect
 	golang.org/x/net v0.0.0-20220121210141-e204ce36a2ba // indirect
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a // indirect
 	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
-	google.golang.org/api v0.32.0 // indirect
 	google.golang.org/appengine v1.6.6 // indirect
-	google.golang.org/genproto v0.0.0-20200929141702-51c3e5b607fe // indirect
-	google.golang.org/grpc v1.32.0 // indirect
 	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect

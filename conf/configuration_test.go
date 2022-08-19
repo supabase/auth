@@ -15,7 +15,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestGlobal(t *testing.T) {
-	os.Setenv("GOTRUE_DB_DRIVER", "mysql")
+	os.Setenv("GOTRUE_DB_DRIVER", "postgres")
 	os.Setenv("GOTRUE_DB_DATABASE_URL", "fake")
 	os.Setenv("GOTRUE_OPERATOR_TOKEN", "token")
 	os.Setenv("GOTRUE_API_REQUEST_ID_HEADER", "X-Request-ID")
@@ -26,7 +26,7 @@ func TestGlobal(t *testing.T) {
 }
 
 func TestTracing(t *testing.T) {
-	os.Setenv("GOTRUE_DB_DRIVER", "mysql")
+	os.Setenv("GOTRUE_DB_DRIVER", "postgres")
 	os.Setenv("GOTRUE_DB_DATABASE_URL", "fake")
 	os.Setenv("GOTRUE_OPERATOR_TOKEN", "token")
 	os.Setenv("GOTRUE_TRACING_SERVICE_NAME", "identity")
