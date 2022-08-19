@@ -250,13 +250,13 @@ If you wish to inherit a request ID from the incoming request, specify the name 
 ### Database
 
 ```properties
-GOTRUE_DB_DRIVER=mysql
+GOTRUE_DB_DRIVER=postgres
 DATABASE_URL=root@localhost/gotrue
 ```
 
 `DB_DRIVER` - `string` **required**
 
-Chooses what dialect of database you want. Must be `mysql`.
+Chooses what dialect of database you want. Must be `postgres`.
 
 `DATABASE_URL` (no prefix) / `DB_DATABASE_URL` - `string` **required**
 
