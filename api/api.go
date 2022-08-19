@@ -13,7 +13,6 @@ import (
 	"github.com/didip/tollbooth/v5/limiter"
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
-	"github.com/imdario/mergo"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/mailer"
@@ -116,20 +115,12 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.UseBypass(logger)
 		r.Use(api.loadOAuthState)
 
-		if globalConfig.MultiInstanceMode {
-			r.Use(api.loadInstanceConfig)
-		}
 		r.Get("/", api.ExternalProviderCallback)
 		r.Post("/", api.ExternalProviderCallback)
 	})
 
 	r.Route("/", func(r *router) {
 		r.UseBypass(logger)
-
-		if globalConfig.MultiInstanceMode {
-			r.Use(api.loadJWSSignatureHeader)
-			r.Use(api.loadInstanceConfig)
-		}
 
 		r.Get("/settings", api.Settings)
 
@@ -197,23 +188,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		})
 	})
 
-	if globalConfig.MultiInstanceMode {
-		// Operator microservice API
-		r.WithBypass(logger).Get("/", api.GetAppManifest)
-		r.Route("/instances", func(r *router) {
-			r.UseBypass(logger)
-
-			r.Post("/", api.CreateInstance)
-			r.Route("/{instance_id}", func(r *router) {
-				r.Use(api.loadInstance)
-
-				r.Get("/", api.GetInstance)
-				r.Put("/", api.UpdateInstance)
-				r.Delete("/", api.DeleteInstance)
-			})
-		})
-	}
-
 	corsHandler := cors.New(cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", audHeaderName, useCookieHeader},
@@ -278,22 +252,6 @@ func (a *API) getConfig(ctx context.Context) *conf.Configuration {
 	}
 
 	config := obj.(*conf.Configuration)
-
-	// Merge global & per-instance external config for multi-instance mode
-	if a.config.MultiInstanceMode {
-		extConfig := (*a.config).External
-		if err := mergo.MergeWithOverwrite(&extConfig, config.External); err != nil {
-			return nil
-		}
-		config.External = extConfig
-
-		// Merge global & per-instance smtp config for multi-instance mode
-		smtpConfig := (*a.config).SMTP
-		if err := mergo.MergeWithOverwrite(&smtpConfig, config.SMTP); err != nil {
-			return nil
-		}
-		config.SMTP = smtpConfig
-	}
 
 	return config
 }

@@ -7,11 +7,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSettings_DefaultProviders(t *testing.T) {
-	api, _, _, err := setupAPIForTestForInstance()
+	api, _, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	// Setup request
@@ -46,7 +47,7 @@ func TestSettings_DefaultProviders(t *testing.T) {
 }
 
 func TestSettings_EmailDisabled(t *testing.T) {
-	api, config, instanceID, err := setupAPIForTestForInstance()
+	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	config.External.Email.Enabled = false
@@ -55,7 +56,7 @@ func TestSettings_EmailDisabled(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/settings", nil)
 	req.Header.Set("Content-Type", "application/json")
 
-	ctx, err := WithInstanceConfig(context.Background(), config, instanceID)
+	ctx, err := WithInstanceConfig(context.Background(), config, uuid.Nil)
 	require.NoError(t, err)
 	req = req.WithContext(ctx)
 

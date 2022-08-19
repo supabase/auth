@@ -24,18 +24,15 @@ type MiddlewareTestSuite struct {
 	suite.Suite
 	API    *API
 	Config *conf.Configuration
-
-	instanceID uuid.UUID
 }
 
 func TestHCaptcha(t *testing.T) {
-	api, config, instanceID, err := setupAPIForTestForInstance()
+	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	ts := &MiddlewareTestSuite{
-		API:        api,
-		Config:     config,
-		instanceID: instanceID,
+		API:    api,
+		Config: config,
 	}
 	defer api.db.Close()
 
@@ -58,7 +55,7 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 
 	req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)
 	req.Header.Set("Content-Type", "application/json")
-	beforeCtx, err := WithInstanceConfig(req.Context(), ts.Config, ts.instanceID)
+	beforeCtx, err := WithInstanceConfig(req.Context(), ts.Config, uuid.Nil)
 	require.NoError(ts.T(), err)
 
 	req = req.WithContext(beforeCtx)
@@ -134,7 +131,7 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 			}))
 			req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)
 			req.Header.Set("Content-Type", "application/json")
-			ctx, err := WithInstanceConfig(req.Context(), ts.Config, ts.instanceID)
+			ctx, err := WithInstanceConfig(req.Context(), ts.Config, uuid.Nil)
 			require.NoError(ts.T(), err)
 
 			req = req.WithContext(ctx)

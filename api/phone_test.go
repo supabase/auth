@@ -24,8 +24,6 @@ type PhoneTestSuite struct {
 	suite.Suite
 	API    *API
 	Config *conf.Configuration
-
-	instanceID uuid.UUID
 }
 
 type TestSmsProvider struct {
@@ -37,13 +35,12 @@ func (t *TestSmsProvider) SendSms(phone string, message string) error {
 }
 
 func TestPhone(t *testing.T) {
-	api, config, instanceID, err := setupAPIForTestForInstance()
+	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	ts := &PhoneTestSuite{
-		API:        api,
-		Config:     config,
-		instanceID: instanceID,
+		API:    api,
+		Config: config,
 	}
 	defer api.db.Close()
 
@@ -54,7 +51,7 @@ func (ts *PhoneTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
 	// Create user
-	u, err := models.NewUser(ts.instanceID, "123456789", "", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser(uuid.Nil, "123456789", "", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }
@@ -70,9 +67,9 @@ func (ts *PhoneTestSuite) TestFormatPhoneNumber() {
 }
 
 func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
-	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "123456789", ts.Config.JWT.Aud)
+	u, err := models.FindUserByPhoneAndAudience(ts.API.db, uuid.Nil, "123456789", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	ctx, err := WithInstanceConfig(context.Background(), ts.Config, ts.instanceID)
+	ctx, err := WithInstanceConfig(context.Background(), ts.Config, uuid.Nil)
 	require.NoError(ts.T(), err)
 	cases := []struct {
 		desc     string
@@ -105,7 +102,7 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 		ts.Run(c.desc, func() {
 			err = ts.API.sendPhoneConfirmation(ctx, ts.API.db, u, "123456789", c.otpType, &TestSmsProvider{})
 			require.Equal(ts.T(), c.expected, err)
-			u, err = models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "123456789", ts.Config.JWT.Aud)
+			u, err = models.FindUserByPhoneAndAudience(ts.API.db, uuid.Nil, "123456789", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
 			switch c.otpType {
@@ -125,7 +122,7 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 }
 
 func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
-	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "123456789", ts.Config.JWT.Aud)
+	u, err := models.FindUserByPhoneAndAudience(ts.API.db, uuid.Nil, "123456789", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	now := time.Now()
 	u.PhoneConfirmedAt = &now

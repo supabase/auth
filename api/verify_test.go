@@ -24,18 +24,15 @@ type VerifyTestSuite struct {
 	suite.Suite
 	API    *API
 	Config *conf.Configuration
-
-	instanceID uuid.UUID
 }
 
 func TestVerify(t *testing.T) {
-	api, config, instanceID, err := setupAPIForTestForInstance()
+	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	ts := &VerifyTestSuite{
-		API:        api,
-		Config:     config,
-		instanceID: instanceID,
+		API:    api,
+		Config: config,
 	}
 	defer api.db.Close()
 
@@ -46,13 +43,13 @@ func (ts *VerifyTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
 	// Create user
-	u, err := models.NewUser(ts.instanceID, "12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser(uuid.Nil, "12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }
 
 func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.RecoverySentAt = &time.Time{}
 	require.NoError(ts.T(), ts.API.db.Update(u))
@@ -72,7 +69,7 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
 	assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
@@ -85,13 +82,13 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	assert.True(ts.T(), u.IsConfirmed())
 }
 
 func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.EmailChangeSentAt = &time.Time{}
 	require.NoError(ts.T(), ts.API.db.Update(u))
@@ -116,7 +113,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
 	assert.WithinDuration(ts.T(), time.Now(), *u.EmailChangeSentAt, 1*time.Second)
@@ -136,7 +133,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 	ts.Require().NoError(err)
 	ts.Require().NotEmpty(v.Get("message"))
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	assert.Equal(ts.T(), singleConfirmation, u.EmailChangeConfirmStatus)
 
@@ -157,13 +154,13 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 	ts.Require().NotEmpty(v.Get("refresh_token"))
 
 	// user's email should've been updated to new@example.com
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "new@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "new@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), zeroConfirmation, u.EmailChangeConfirmStatus)
 }
 
 func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.ConfirmationToken = "asdf3"
 	sentTime := time.Now().Add(-48 * time.Hour)
@@ -192,7 +189,7 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 }
 
 func (ts *VerifyTestSuite) TestInvalidOtp() {
-	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "12345678", ts.Config.JWT.Aud)
+	u, err := models.FindUserByPhoneAndAudience(ts.API.db, uuid.Nil, "12345678", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	sentTime := time.Now().Add(-48 * time.Hour)
 	u.ConfirmationToken = "123456"
@@ -291,7 +288,7 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 }
 
 func (ts *VerifyTestSuite) TestExpiredRecoveryToken() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.RecoveryToken = "asdf3"
 	sentTime := time.Now().Add(-48 * time.Hour)
@@ -311,7 +308,7 @@ func (ts *VerifyTestSuite) TestExpiredRecoveryToken() {
 }
 
 func (ts *VerifyTestSuite) TestVerifyPermitedCustomUri() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.RecoverySentAt = &time.Time{}
 	require.NoError(ts.T(), ts.API.db.Update(u))
@@ -331,7 +328,7 @@ func (ts *VerifyTestSuite) TestVerifyPermitedCustomUri() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
 	assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
@@ -348,13 +345,13 @@ func (ts *VerifyTestSuite) TestVerifyPermitedCustomUri() {
 	rURL, _ := w.Result().Location()
 	assert.Equal(ts.T(), redirectURL.Hostname(), rURL.Hostname())
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	assert.True(ts.T(), u.IsConfirmed())
 }
 
 func (ts *VerifyTestSuite) TestVerifyNotPermitedCustomUri() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.RecoverySentAt = &time.Time{}
 	require.NoError(ts.T(), ts.API.db.Update(u))
@@ -374,7 +371,7 @@ func (ts *VerifyTestSuite) TestVerifyNotPermitedCustomUri() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
 	assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
@@ -392,7 +389,7 @@ func (ts *VerifyTestSuite) TestVerifyNotPermitedCustomUri() {
 	rURL, _ := w.Result().Location()
 	assert.Equal(ts.T(), siteURL.Hostname(), rURL.Hostname())
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	assert.True(ts.T(), u.IsConfirmed())
 }
@@ -500,7 +497,7 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			ts.Config.ApplyDefaults()
 
 			// set verify token to user as it actual do in magic link method
-			u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+			u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 			u.ConfirmationToken = "someToken"
 			sendTime := time.Now().Add(time.Hour)
@@ -516,7 +513,7 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			rURL, _ := w.Result().Location()
 			assert.Contains(ts.T(), rURL.String(), tC.expectedredirectURL) // redirected url starts with per test value
 
-			u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 			assert.True(ts.T(), u.IsConfirmed())
 		})
@@ -524,7 +521,7 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 }
 
 func (ts *VerifyTestSuite) TestVerifyBannedUser() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.ConfirmationToken = "confirmation_token"
 	u.RecoveryToken = "recovery_token"
@@ -604,7 +601,7 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 }
 
 func (ts *VerifyTestSuite) TestVerifyValidOtp() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.EmailChange = "new@example.com"
 	u.Phone = "12345678"
