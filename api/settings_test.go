@@ -40,7 +40,6 @@ func TestSettings_DefaultProviders(t *testing.T) {
 	require.True(t, p.Linkedin)
 	require.True(t, p.GitHub)
 	require.True(t, p.GitLab)
-	require.True(t, p.SAML)
 	require.True(t, p.Twitch)
 	require.True(t, p.WorkOS)
 	require.True(t, p.Zoom)
@@ -68,28 +67,4 @@ func TestSettings_EmailDisabled(t *testing.T) {
 
 	p := resp.ExternalProviders
 	require.False(t, p.Email)
-}
-
-func TestSettings_ExternalName(t *testing.T) {
-	api, _, _, err := setupAPIForTestForInstance()
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodGet, "http://localhost/settings", nil)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	api.handler.ServeHTTP(w, req)
-
-	require.Equal(t, w.Code, http.StatusOK)
-
-	type SettingsWithExternalName struct {
-		ExternalLabels struct {
-			SAML string `json:"saml"`
-		} `json:"external_labels"`
-	}
-	resp := SettingsWithExternalName{}
-	err = json.NewDecoder(w.Body).Decode(&resp)
-	require.NoError(t, err)
-
-	n := resp.ExternalLabels
-	require.Equal(t, n.SAML, "TestSamlName")
 }

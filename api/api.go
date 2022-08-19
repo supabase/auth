@@ -82,10 +82,6 @@ func (a *API) deprecationNotices(ctx context.Context) {
 
 	log := logrus.WithField("component", "api")
 
-	if a.config.External.Saml.Enabled {
-		log.Warn("DEPRECATION NOTICE: SAML not supported by Supabase's GoTrue, will be removed soon")
-	}
-
 	if instanceConfig.JWT.AdminGroupName != "" {
 		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_ADMIN_GROUP_NAME not supported by Supabase's GoTrue, will be removed soon")
 	}
@@ -198,15 +194,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			})
 
 			r.Post("/generate_link", api.GenerateLink)
-		})
-
-		r.Route("/saml", func(r *router) {
-			r.Route("/acs", func(r *router) {
-				r.Use(api.loadSAMLState)
-				r.Post("/", api.ExternalProviderCallback)
-			})
-
-			r.Get("/metadata", api.SAMLMetadata)
 		})
 	})
 
