@@ -71,7 +71,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 			},
 			SiteURL:    config.SiteURL,
 			InstanceID: getInstanceID(ctx).String(),
-			NetlifyID:  getNetlifyID(ctx),
 		},
 		Provider:    providerType,
 		InviteToken: inviteToken,

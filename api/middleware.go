@@ -28,7 +28,6 @@ type NetlifyMicroserviceClaims struct {
 	jwt.StandardClaims
 	SiteURL       string        `json:"site_url"`
 	InstanceID    string        `json:"id"`
-	NetlifyID     string        `json:"netlify_id"`
 	FunctionHooks FunctionHooks `json:"function_hooks"`
 }
 

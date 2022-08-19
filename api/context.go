@@ -19,7 +19,6 @@ const (
 	requestIDKey            = contextKey("request_id")
 	inviteTokenKey          = contextKey("invite_token")
 	signatureKey            = contextKey("signature")
-	netlifyIDKey            = contextKey("netlify_id")
 	externalProviderTypeKey = contextKey("external_provider_type")
 	userKey                 = contextKey("user")
 	externalReferrerKey     = contextKey("external_referrer")
@@ -102,20 +101,6 @@ func getSignature(ctx context.Context) string {
 	return obj.(string)
 }
 
-// withNetlifyID adds the provided request ID to the context.
-func withNetlifyID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, netlifyIDKey, id)
-}
-
-// getNetlifyID reads the request ID from the context.
-func getNetlifyID(ctx context.Context) string {
-	obj := ctx.Value(netlifyIDKey)
-	if obj == nil {
-		return ""
-	}
-
-	return obj.(string)
-}
 
 func withInviteToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, inviteTokenKey, token)
