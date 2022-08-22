@@ -50,10 +50,6 @@ latest version. You can do that by following this repository, specifically the
 [Releases](https://github.com/supabase/gotrue/releases) and [Security
 Advisories](https://github.com/supabase/gotrue/security/advisories) sections.
 
-You should also subscribe to the
-[supabase-gotrue-announcements](https://groups.google.com/g/supabase-gotrue-announcements)
-Google Group to get email updates for important releases.
-
 ### Backward compatibility
 
 GoTrue uses the [Semantic Versioning](https://semver.org) scheme. Here are some
