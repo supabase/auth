@@ -5,7 +5,6 @@ import (
 
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 )
 
@@ -18,12 +17,8 @@ func (c contextKey) String() string {
 const (
 	tokenKey                = contextKey("jwt")
 	requestIDKey            = contextKey("request_id")
-	configKey               = contextKey("config")
 	inviteTokenKey          = contextKey("invite_token")
-	instanceIDKey           = contextKey("instance_id")
-	instanceKey             = contextKey("instance")
 	signatureKey            = contextKey("signature")
-	netlifyIDKey            = contextKey("netlify_id")
 	externalProviderTypeKey = contextKey("external_provider_type")
 	userKey                 = contextKey("user")
 	externalReferrerKey     = contextKey("external_referrer")
@@ -71,45 +66,10 @@ func getRequestID(ctx context.Context) string {
 	return obj.(string)
 }
 
-// withConfig adds the tenant configuration to the context.
-func withConfig(ctx context.Context, config *conf.Configuration) context.Context {
-	return context.WithValue(ctx, configKey, config)
-}
-
-func getConfig(ctx context.Context) *conf.Configuration {
-	obj := ctx.Value(configKey)
-	if obj == nil {
-		return nil
-	}
-	return obj.(*conf.Configuration)
-}
-
-// withInstanceID adds the instance id to the context.
-func withInstanceID(ctx context.Context, id uuid.UUID) context.Context {
-	return context.WithValue(ctx, instanceIDKey, id)
-}
-
 // getInstanceID reads the instance id from the context.
 func getInstanceID(ctx context.Context) uuid.UUID {
-	obj := ctx.Value(instanceIDKey)
-	if obj == nil {
-		return uuid.Nil
-	}
-	return obj.(uuid.UUID)
-}
-
-// withInstance adds the instance id to the context.
-func withInstance(ctx context.Context, i *models.Instance) context.Context {
-	return context.WithValue(ctx, instanceKey, i)
-}
-
-// getInstance reads the instance id from the context.
-func getInstance(ctx context.Context) *models.Instance {
-	obj := ctx.Value(instanceKey)
-	if obj == nil {
-		return nil
-	}
-	return obj.(*models.Instance)
+	// TODO: remove this method, it's deprecated
+	return uuid.Nil
 }
 
 // withUser adds the user id to the context.
@@ -134,21 +94,6 @@ func withSignature(ctx context.Context, id string) context.Context {
 // getSignature reads the request ID from the context.
 func getSignature(ctx context.Context) string {
 	obj := ctx.Value(signatureKey)
-	if obj == nil {
-		return ""
-	}
-
-	return obj.(string)
-}
-
-// withNetlifyID adds the provided request ID to the context.
-func withNetlifyID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, netlifyIDKey, id)
-}
-
-// getNetlifyID reads the request ID from the context.
-func getNetlifyID(ctx context.Context) string {
-	obj := ctx.Value(netlifyIDKey)
 	if obj == nil {
 		return ""
 	}

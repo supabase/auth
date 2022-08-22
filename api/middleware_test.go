@@ -2,13 +2,13 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,19 +23,16 @@ const (
 type MiddlewareTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.Configuration
-
-	instanceID uuid.UUID
+	Config *conf.GlobalConfiguration
 }
 
 func TestHCaptcha(t *testing.T) {
-	api, config, instanceID, err := setupAPIForTestForInstance()
+	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	ts := &MiddlewareTestSuite{
-		API:        api,
-		Config:     config,
-		instanceID: instanceID,
+		API:    api,
+		Config: config,
 	}
 	defer api.db.Close()
 
@@ -58,9 +55,8 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 
 	req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)
 	req.Header.Set("Content-Type", "application/json")
-	beforeCtx, err := WithInstanceConfig(req.Context(), ts.Config, ts.instanceID)
-	require.NoError(ts.T(), err)
 
+	beforeCtx := context.Background()
 	req = req.WithContext(beforeCtx)
 
 	w := httptest.NewRecorder()
@@ -134,14 +130,12 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 			}))
 			req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)
 			req.Header.Set("Content-Type", "application/json")
-			ctx, err := WithInstanceConfig(req.Context(), ts.Config, ts.instanceID)
-			require.NoError(ts.T(), err)
 
-			req = req.WithContext(ctx)
+			req = req.WithContext(context.Background())
 
 			w := httptest.NewRecorder()
 
-			_, err = ts.API.verifyCaptcha(w, req)
+			_, err := ts.API.verifyCaptcha(w, req)
 			require.Equal(ts.T(), c.expectedCode, err.(*HTTPError).Code)
 			require.Equal(ts.T(), c.expectedMsg, err.(*HTTPError).Message)
 		})

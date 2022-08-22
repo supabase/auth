@@ -1,12 +1,20 @@
-# GoTrue - User management for APIs
+# GoTrue - Authentication and User Management by Supabase
 
 [![Coverage Status](https://coveralls.io/repos/github/supabase/gotrue/badge.svg?branch=master)](https://coveralls.io/github/supabase/gotrue?branch=master)
 
-GoTrue is a small open-source API written in golang, that can act as a self-standing
-API service for handling user registration and authentication for JAM projects.
+GoTrue is a user management and authentication server written in Go that powers
+[Supabase](https://supabase.com)'s features such as:
 
-It's based on OAuth2 and JWT and will handle user signup, authentication and custom
-user data.
+- Issuing JWTs
+- Row Level Security with PostgREST
+- User management
+- Sign in with email, password, magic link, phone number
+- Sign in with external providers (Google, Apple, Facebook, Discord, ...)
+
+It is originally based on the excellent
+[GoTrue](https://github.com/netlify/gotrue) codebase by
+[Netlify](https://netlify.com), however both have diverged significantly in
+features and capabilities.
 
 ## Quick Start
 
@@ -30,6 +38,131 @@ Create a `.env.docker` file to store your own custom env vars. See [`example.doc
 2. `make dev`
 3. `docker ps` should show 2 docker containers (`gotrue_postgresql` and `gotrue_gotrue`)
 4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that gotrue is running.
+
+## Running in production
+
+Running an authentication server in production is not an easy feat. We
+recommend using [Supabase Auth](https://supabase.com/auth) which gets regular
+security updates.
+
+Otherwise, please make sure you setup a process to promptly update to the
+latest version. You can do that by following this repository, specifically the
+[Releases](https://github.com/supabase/gotrue/releases) and [Security
+Advisories](https://github.com/supabase/gotrue/security/advisories) sections.
+
+You should also subscribe to the
+[supabase-gotrue-announcements](https://groups.google.com/g/supabase-gotrue-announcements)
+Google Group to get email updates for important releases.
+
+### Backward compatibility
+
+GoTrue uses the [Semantic Versioning](https://semver.org) scheme. Here are some
+further clarifications on backward compatibility guarantees:
+
+**Go API compatibility**
+
+GoTrue is not meant to be used as a Go library. There are no guarantees on
+backward API compatibility when used this way regardless which version number
+changes.
+
+**Patch**
+
+Changes to the patch version guarantees backward compatibility with:
+
+- Database objects (tables, columns, indexes, functions).
+- REST API
+- JWT structure
+- Configuration
+
+Guaranteed examples:
+
+- A column won't change its type.
+- A table won't change its primary key.
+- An index will not be removed.
+- A uniqueness constraint will not be removed.
+- A REST API will not be removed.
+- Parameters to REST APIs will work equivalently as before (or better, if a bug
+  has been fixed).
+- Configuration will not change.
+
+Not guaranteed examples:
+
+- A table may add new columns.
+- Columns in a table may be reordered.
+- Non-unique constraints may be removed (database level checks, null, default
+  values).
+- JWT may add new properties.
+
+**Minor**
+
+Changes to minor version guarantees backward compatibility with:
+
+- REST API
+- JWT structure
+- Configuration
+
+Exceptions to these guarantees will be made only when serious security issues
+are found that can't be remedied in any other way.
+
+Guaranteed examples:
+
+- Existing APIs may be deprecated but continue working for the next few minor
+  version releases.
+- Configuration changes may become deprecated but continue working for the next
+  few minor version releases.
+- Already issued JWTs will be accepted, but new JWTs may be with a different
+  structure (but usually similar).
+
+Not guaranteed examples:
+
+- Removal of JWT fields after a deprecation notice.
+- Removal of certain APIs after a deprecation notice.
+- Removal of sign-in with external providers, after a deprecation notice.
+- Deletion, truncation, significant schema changes to tables, indexes, views,
+  functions.
+
+We aim to provide a deprecation notice in execution logs for at least two major
+version releases or two weeks if multiple releases go out. Compatibility will
+be guaranteed while the notice is live.
+
+**Major**
+
+Changes to the major version do not guarantee any backward compatibility with
+previous versions.
+
+### Inherited features
+
+Certain inherited features from the Netlify codebase are not supported by
+Supabase and they may be removed without prior notice in the future. This is a
+comprehensive list of those features:
+
+1. Multi-tenancy via the `instances` table i.e. `GOTRUE_MULTI_INSTANCE_MODE`
+   configuration parameter.
+2. System user (zero UUID user).
+3. Super admin via the `is_super_admin` column.
+4. SAML sign-in provider via the `GOTRUE_SAML_ENABLED` configuration
+   parameter. (A different implementation for SAML may appear in the future
+   which will be supported.)
+5. Support for MySQL based databases. (Only Postgres is supported.)
+6. Group information in JWTs via `GOTRUE_JWT_ADMIN_GROUP_NAME` and other
+   configuration fields.
+7. Symmetrics JWTs. In the future it is very likely that GoTrue will begin
+   issuing asymmetric JWTs (subject to configuration), so do not rely on the
+   assumption that only HS256 signed JWTs will be issued long term.
+
+Note that this is not an exhaustive list and it may change.
+
+### Best practices when self-hosting
+
+These are some best practices to follow when self-hosting to ensure backward
+compatibility with GoTrue:
+
+1. Do not modify the schema managed by GoTrue. You can see all of the
+   migrations in the `migrations` directory.
+2. Do not rely on schema and structure of data in the database. Always use
+   GoTrue APIs and JWTs to infer information about users.
+3. Always run GoTrue behind a TLS-capable proxy such as a load balancer, CDN,
+   nginx or other similar software.
 
 ## Configuration
 
@@ -117,13 +250,13 @@ If you wish to inherit a request ID from the incoming request, specify the name 
 ### Database
 
 ```properties
-GOTRUE_DB_DRIVER=mysql
+GOTRUE_DB_DRIVER=postgres
 DATABASE_URL=root@localhost/gotrue
 ```
 
 `DB_DRIVER` - `string` **required**
 
-Chooses what dialect of database you want. Must be `mysql`.
+Chooses what dialect of database you want. Must be `postgres`.
 
 `DATABASE_URL` (no prefix) / `DB_DATABASE_URL` - `string` **required**
 

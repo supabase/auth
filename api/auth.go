@@ -14,7 +14,7 @@ import (
 // requireAuthentication checks incoming requests for tokens presented using the Authorization header
 func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	token, err := a.extractBearerToken(w, r)
-	config := getConfig(r.Context())
+	config := a.config
 	if err != nil {
 		a.clearCookieTokens(config, w)
 		return nil, err
@@ -31,7 +31,7 @@ func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.R
 		return nil, unauthorizedError("Invalid token")
 	}
 
-	adminRoles := a.getConfig(ctx).JWT.AdminRoles
+	adminRoles := a.config.JWT.AdminRoles
 
 	if isStringInSlice(claims.Role, adminRoles) {
 		// successful authentication
@@ -58,7 +58,7 @@ func (a *API) extractBearerToken(w http.ResponseWriter, r *http.Request) (string
 
 func (a *API) parseJWTClaims(bearer string, r *http.Request, w http.ResponseWriter) (context.Context, error) {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
 	token, err := p.ParseWithClaims(bearer, &GoTrueClaims{}, func(token *jwt.Token) (interface{}, error) {

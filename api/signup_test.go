@@ -23,19 +23,16 @@ import (
 type SignupTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.Configuration
-
-	instanceID uuid.UUID
+	Config *conf.GlobalConfiguration
 }
 
 func TestSignup(t *testing.T) {
-	api, config, instanceID, err := setupAPIForTestForInstance()
+	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	ts := &SignupTestSuite{
-		API:        api,
-		Config:     config,
-		instanceID: instanceID,
+		API:    api,
+		Config: config,
 	}
 	defer api.db.Close()
 
@@ -96,7 +93,7 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 			return []byte(ts.Config.Webhook.Secret), nil
 		})
 		assert.True(token.Valid)
-		assert.Equal(ts.instanceID.String(), claims.Subject) // not configured for multitenancy
+		assert.Equal(uuid.Nil.String(), claims.Subject) // not configured for multitenancy
 		assert.Equal("gotrue", claims.Issuer)
 		assert.WithinDuration(time.Now(), time.Unix(claims.IssuedAt, 0), 5*time.Second)
 
@@ -110,7 +107,7 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 
 		assert.Equal(3, len(data))
 		assert.Equal("validate", data["event"])
-		assert.Equal(ts.instanceID.String(), data["instance_id"])
+		assert.Equal(uuid.Nil.String(), data["instance_id"])
 
 		u, ok := data["user"].(map[string]interface{})
 		require.True(ok)
@@ -213,7 +210,7 @@ func (ts *SignupTestSuite) TestSignupTwice() {
 	y := httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(y, req)
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test1@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test1@example.com", ts.Config.JWT.Aud)
 	if err == nil {
 		require.NoError(ts.T(), u.Confirm(ts.API.db))
 	}
@@ -235,7 +232,7 @@ func (ts *SignupTestSuite) TestSignupTwice() {
 }
 
 func (ts *SignupTestSuite) TestVerifySignup() {
-	user, err := models.NewUser(ts.instanceID, "123456789", "test@example.com", "testing", ts.Config.JWT.Aud, nil)
+	user, err := models.NewUser(uuid.Nil, "123456789", "test@example.com", "testing", ts.Config.JWT.Aud, nil)
 	user.ConfirmationToken = "asdf3"
 	now := time.Now()
 	user.ConfirmationSentAt = &now
@@ -243,7 +240,7 @@ func (ts *SignupTestSuite) TestVerifySignup() {
 	require.NoError(ts.T(), ts.API.db.Create(user))
 
 	// Find test user
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
 	// Setup request

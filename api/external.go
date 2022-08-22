@@ -38,7 +38,7 @@ type ExternalSignupParams struct {
 // ExternalProviderRedirect redirects the request to the corresponding oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	query := r.URL.Query()
 	providerType := query.Get("provider")
@@ -71,7 +71,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 			},
 			SiteURL:    config.SiteURL,
 			InstanceID: getInstanceID(ctx).String(),
-			NetlifyID:  getNetlifyID(ctx),
 		},
 		Provider:    providerType,
 		InviteToken: inviteToken,
@@ -106,19 +105,13 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 	instanceID := getInstanceID(ctx)
 
 	providerType := getExternalProviderType(ctx)
 	var userData *provider.UserProvidedData
 	var providerToken string
-	if providerType == "saml" {
-		samlUserData, err := a.samlCallback(ctx, r)
-		if err != nil {
-			return err
-		}
-		userData = samlUserData
-	} else if providerType == "twitter" {
+	if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
 		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)
 		if err != nil {
@@ -313,7 +306,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 }
 
 func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, instanceID uuid.UUID, inviteToken, providerType string) (*models.User, error) {
-	config := a.getConfig(ctx)
+	config := a.config
 	user, err := models.FindUserByConfirmationToken(tx, inviteToken)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -375,7 +368,7 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 }
 
 func (a *API) loadExternalState(ctx context.Context, state string) (context.Context, error) {
-	config := a.getConfig(ctx)
+	config := a.config
 	claims := ExternalProviderClaims{}
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
@@ -397,7 +390,7 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 
 // Provider returns a Provider interface for the given name.
 func (a *API) Provider(ctx context.Context, name string, scopes string, query *url.Values) (provider.Provider, error) {
-	config := a.getConfig(ctx)
+	config := a.config
 	name = strings.ToLower(name)
 
 	switch name {
@@ -433,8 +426,6 @@ func (a *API) Provider(ctx context.Context, name string, scopes string, query *u
 		return provider.NewTwitterProvider(config.External.Twitter, scopes)
 	case "workos":
 		return provider.NewWorkOSProvider(config.External.WorkOS, query)
-	case "saml":
-		return provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
 	case "zoom":
 		return provider.NewZoomProvider(config.External.Zoom)
 	default:
@@ -495,7 +486,7 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger) *url
 
 func (a *API) getExternalRedirectURL(r *http.Request) string {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 	if config.External.RedirectURL != "" {
 		return config.External.RedirectURL
 	}
@@ -526,7 +517,7 @@ func (a *API) createNewIdentity(conn *storage.Connection, user *models.User, pro
 }
 
 // getUserByVerifiedEmail checks if one of the verified emails already belongs to a user
-func (a *API) getUserByVerifiedEmail(tx *storage.Connection, config *conf.Configuration, emails []provider.Email, instanceID uuid.UUID, aud string) (*models.User, provider.Email, error) {
+func (a *API) getUserByVerifiedEmail(tx *storage.Connection, config *conf.GlobalConfiguration, emails []provider.Email, instanceID uuid.UUID, aud string) (*models.User, provider.Email, error) {
 	var user *models.User
 	var emailData provider.Email
 	var err error

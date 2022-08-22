@@ -10,15 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/security"
 	"github.com/sirupsen/logrus"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
-	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/netlify/gotrue/models"
 )
 
 const (
@@ -31,7 +28,6 @@ type NetlifyMicroserviceClaims struct {
 	jwt.StandardClaims
 	SiteURL       string        `json:"site_url"`
 	InstanceID    string        `json:"id"`
-	NetlifyID     string        `json:"netlify_id"`
 	FunctionHooks FunctionHooks `json:"function_hooks"`
 }
 
@@ -86,63 +82,6 @@ func (a *API) loadJWSSignatureHeader(w http.ResponseWriter, r *http.Request) (co
 	return withSignature(ctx, signature), nil
 }
 
-func (a *API) loadInstanceConfig(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	ctx := r.Context()
-	config := a.getConfig(ctx)
-
-	signature := getSignature(ctx)
-	if signature == "" {
-		return nil, badRequestError("Operator signature missing")
-	}
-
-	claims := NetlifyMicroserviceClaims{}
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
-	_, err := p.ParseWithClaims(signature, &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(config.JWT.Secret), nil
-	})
-	if err != nil {
-		return nil, badRequestError("Operator microservice signature is invalid: %v", err)
-	}
-
-	if claims.InstanceID == "" {
-		return nil, badRequestError("Instance ID is missing")
-	}
-	instanceID, err := uuid.FromString(claims.InstanceID)
-	if err != nil {
-		return nil, badRequestError("Instance ID is not a valid UUID")
-	}
-
-	logger.LogEntrySetField(r, "instance_id", instanceID)
-	logger.LogEntrySetField(r, "netlify_id", claims.NetlifyID)
-	instance, err := models.GetInstance(a.db, instanceID)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return nil, notFoundError("Unable to locate site configuration")
-		}
-		return nil, internalServerError("Database error loading instance").WithInternalError(err)
-	}
-
-	config, err = instance.Config()
-	if err != nil {
-		return nil, internalServerError("Error loading environment config").WithInternalError(err)
-	}
-
-	if claims.SiteURL != "" {
-		config.SiteURL = claims.SiteURL
-	}
-	logger.LogEntrySetField(r, "site_url", config.SiteURL)
-
-	ctx = withNetlifyID(ctx, claims.NetlifyID)
-	ctx = withFunctionHooks(ctx, claims.FunctionHooks)
-
-	ctx, err = WithInstanceConfig(ctx, config, instanceID)
-	if err != nil {
-		return nil, internalServerError("Error loading instance config").WithInternalError(err)
-	}
-
-	return ctx, nil
-}
-
 func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		c := req.Context()
@@ -165,7 +104,7 @@ func (a *API) limitEmailSentHandler() middlewareHandler {
 	}).SetBurst(int(a.config.RateLimitEmailSent)).SetMethods([]string{"PUT", "POST"})
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		c := req.Context()
-		config := a.getConfig(c)
+		config := a.config
 		if config.External.Email.Enabled && !config.Mailer.Autoconfirm {
 			if req.Method == "PUT" || req.Method == "POST" {
 				res := make(map[string]interface{})
@@ -212,7 +151,7 @@ func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) 
 
 func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	if !config.External.Email.Enabled {
 		return nil, badRequestError("Email logins are disabled")
@@ -223,7 +162,7 @@ func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (co
 
 func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 	if !config.Security.Captcha.Enabled {
 		return ctx, nil
 	}

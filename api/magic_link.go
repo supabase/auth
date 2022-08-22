@@ -22,7 +22,7 @@ type MagicLinkParams struct {
 // MagicLink sends a recovery email
 func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	if !config.External.Email.Enabled {
 		return badRequestError("Email logins are disabled")
