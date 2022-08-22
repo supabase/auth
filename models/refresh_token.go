@@ -14,8 +14,7 @@ import (
 
 // RefreshToken is the database model for refresh tokens.
 type RefreshToken struct {
-	InstanceID uuid.UUID `json:"-" db:"instance_id"`
-	ID         int64     `db:"id"`
+	ID int64 `db:"id"`
 
 	Token string `db:"token"`
 
@@ -26,6 +25,8 @@ type RefreshToken struct {
 	Revoked   bool      `db:"revoked"`
 	CreatedAt time.Time `db:"created_at"`
 	UpdatedAt time.Time `db:"updated_at"`
+
+	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 }
 
 func (RefreshToken) TableName() string {
@@ -43,7 +44,7 @@ func GrantRefreshTokenSwap(r *http.Request, tx *storage.Connection, user *User, 
 	var newToken *RefreshToken
 	err := tx.Transaction(func(rtx *storage.Connection) error {
 		var terr error
-		if terr = NewAuditLogEntry(r, tx, user.InstanceID, user, TokenRevokedAction, "", nil); terr != nil {
+		if terr = NewAuditLogEntry(r, tx, user, TokenRevokedAction, "", nil); terr != nil {
 			return errors.Wrap(terr, "error creating audit log entry")
 		}
 
@@ -87,16 +88,15 @@ func GetValidChildToken(tx *storage.Connection, token *RefreshToken) (*RefreshTo
 }
 
 // Logout deletes all refresh tokens for a user.
-func Logout(tx *storage.Connection, instanceID uuid.UUID, id uuid.UUID) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: RefreshToken{}}).TableName()+" WHERE instance_id = ? AND user_id = ?", instanceID, id).Exec()
+func Logout(tx *storage.Connection, id uuid.UUID) error {
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: RefreshToken{}}).TableName()+" WHERE instance_id = ? AND user_id = ?", uuid.Nil, id).Exec()
 }
 
 func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshToken) (*RefreshToken, error) {
 	token := &RefreshToken{
-		InstanceID: user.InstanceID,
-		UserID:     user.ID,
-		Token:      crypto.SecureToken(),
-		Parent:     "",
+		UserID: user.ID,
+		Token:  crypto.SecureToken(),
+		Parent: "",
 	}
 	if oldToken != nil {
 		token.Parent = storage.NullString(oldToken.Token)

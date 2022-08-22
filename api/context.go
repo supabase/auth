@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 
-	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/models"
 )
@@ -64,12 +63,6 @@ func getRequestID(ctx context.Context) string {
 	}
 
 	return obj.(string)
-}
-
-// getInstanceID reads the instance id from the context.
-func getInstanceID(ctx context.Context) uuid.UUID {
-	// TODO: remove this method, it's deprecated
-	return uuid.Nil
 }
 
 // withUser adds the user id to the context.
