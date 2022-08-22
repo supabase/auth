@@ -69,6 +69,11 @@ func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
 
 	metadata := serviceProvider.Metadata()
 
+	if r.FormValue("download") == "true" {
+		// 5 year expiration, comparable to what GSuite does
+		metadata.ValidUntil = time.Now().UTC().AddDate(5, 0, 0)
+	}
+
 	for i := range metadata.SPSSODescriptors {
 		// we set this to false since the IdP initiated flow can only
 		// sign the Assertion, and not the full Request
@@ -78,6 +83,23 @@ func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
 		metadata.SPSSODescriptors[i].AuthnRequestsSigned = nil
 	}
 
+	// don't advertize the encryption keys as it makes it much difficult to debug
+	// requests / responses, and does not increase security since assertions are
+	// not "private" and not necessary to be hidden from the browser
+	for i := range metadata.SPSSODescriptors {
+		spd := &metadata.SPSSODescriptors[i]
+
+		var keyDescriptors []saml.KeyDescriptor
+
+		for _, kd := range spd.KeyDescriptors {
+			if kd.Use == "signing" {
+				keyDescriptors = append(keyDescriptors, kd)
+			}
+		}
+
+		spd.KeyDescriptors = keyDescriptors
+	}
+
 	metadataXML, err := xml.Marshal(metadata)
 	if err != nil {
 		return err
@@ -85,6 +107,11 @@ func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
 
 	w.Header().Set("Content-Type", "application/xml")
 	w.Header().Set("Cache-Control", "public, max-age=600") // cache at CDN for 10 minutes
+
+	if r.FormValue("download") == "true" {
+		w.Header().Set("Content-Disposition", "attachment; filename=\"metadata.xml\"")
+	}
+
 	_, err = w.Write(metadataXML)
 
 	return err
@@ -207,6 +234,10 @@ func (a *API) samlCallback(ctx context.Context, r *http.Request) (*provider.User
 	serviceProvider := a.getSAMLServiceProvider(idpMetadata, initiatedBy == "idp")
 	spAssertion, err := serviceProvider.ParseResponse(r, requestIds)
 	if err != nil {
+		if ire, ok := err.(*saml.InvalidResponseError); ok {
+			return nil, nil, badRequestError("SAML Assertion is not valid").WithInternalError(ire.PrivateErr)
+		}
+
 		return nil, nil, badRequestError("SAML Assertion is not valid").WithInternalError(err)
 	}
 
@@ -328,9 +359,9 @@ func (p *CreateSAMLIdPParams) validate(forUpdate bool) error {
 		if metadataURL.Scheme != "https" {
 			return badRequestError("metadata_url is not a HTTPS URL")
 		}
-	} else if !p.AttributeMapping.HasKey("email") {
-		return badRequestError("email key must be definied in a SAML Attribute Mapping")
 	}
+
+	// TODO validate p.AttributeMapping
 
 	return nil
 }
