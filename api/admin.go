@@ -255,6 +255,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return internalServerError("Error creating user").WithInternalError(err)
 	}
+
 	if user.AppMetaData == nil {
 		user.AppMetaData = make(map[string]interface{})
 	}
@@ -289,6 +290,12 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		}
 		if terr := user.SetRole(tx, role); terr != nil {
 			return terr
+		}
+
+		if params.AppMetaData != nil {
+			if terr := user.UpdateAppMetaData(tx, params.AppMetaData); terr != nil {
+				return terr
+			}
 		}
 
 		if params.EmailConfirm {
