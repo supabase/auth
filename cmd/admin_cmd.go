@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var autoconfirm, isSuperAdmin, isAdmin bool
+var autoconfirm, isAdmin bool
 var audience string
 
 func getAudience(c *conf.GlobalConfiguration) string {
@@ -29,7 +29,6 @@ func adminCmd() *cobra.Command {
 	adminCmd.PersistentFlags().StringVarP(&audience, "aud", "a", "", "Set the new user's audience")
 
 	adminCreateUserCmd.Flags().BoolVar(&autoconfirm, "confirm", false, "Automatically confirm user without sending an email")
-	adminCreateUserCmd.Flags().BoolVar(&isSuperAdmin, "superadmin", false, "Create user with superadmin privileges")
 	adminCreateUserCmd.Flags().BoolVar(&isAdmin, "admin", false, "Create user with admin privileges")
 
 	return adminCmd
@@ -84,7 +83,6 @@ func adminCreateUser(config *conf.GlobalConfiguration, args []string) {
 	if err != nil {
 		logrus.Fatalf("Error creating new user: %+v", err)
 	}
-	user.IsSuperAdmin = isSuperAdmin
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -154,8 +152,6 @@ func adminEditRole(config *conf.GlobalConfiguration, args []string) {
 			logrus.Fatalf("Error finding user (%s): %+v", userID, err)
 		}
 	}
-
-	user.IsSuperAdmin = isSuperAdmin
 
 	if len(args) > 0 {
 		user.Role = args[0]
