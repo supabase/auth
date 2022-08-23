@@ -2,14 +2,15 @@ package api
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/aaronarduino/goqrsvg"
+	"github.com/ajstarks/svgo"
+	"github.com/boombuler/barcode/qr"
 	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pquerna/otp/totp"
-	"image/png"
 	"net/http"
 	"time"
 )
@@ -56,8 +57,8 @@ type UnenrollFactorParams struct {
 }
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
+	const defaultSize = 5
 	const factorPrefix = "factor"
-	const imageSideLength = 300
 	ctx := r.Context()
 	user := getUser(ctx)
 	instanceID := getInstanceID(ctx)
@@ -83,12 +84,13 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Error generating QR Code secret key").WithInternalError(err)
 	}
 	var buf bytes.Buffer
-	img, err := key.Image(imageSideLength, imageSideLength)
-	png.Encode(&buf, img)
-	if err != nil {
-		return internalServerError("Error generating QR Code image").WithInternalError(err)
-	}
-	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
+	s := svg.New(&buf)
+	qrCode, _ := qr.Encode(key.String(), qr.M, qr.Auto)
+	qs := goqrsvg.NewQrSVG(qrCode, defaultSize)
+	qs.StartQrSVG(s)
+	qs.WriteQrSVG(s)
+	s.End()
+
 	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())
 	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, models.FactorDisabledState, key.Secret())
 	if terr != nil {
@@ -107,7 +109,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		ID:   factor.ID,
 		Type: factor.FactorType,
 		TOTP: TOTPObject{
-			QRCode: fmt.Sprintf("data:img/png;base64,%v", qrAsBase64),
+			// See: https://css-tricks.com/probably-dont-base64-svg/
+			QRCode: fmt.Sprintf("data:img/svg+xml;utf-8,%v", w),
 			Secret: factor.SecretKey,
 			URI:    key.URL(),
 		},

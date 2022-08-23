@@ -4,8 +4,11 @@ require (
 	cloud.google.com/go v0.67.0 // indirect
 	github.com/GoogleCloudPlatform/cloudsql-proxy v0.0.0-20170623214735-571947b0f240
 	github.com/Masterminds/semver/v3 v3.1.1 // indirect
+	github.com/aaronarduino/goqrsvg v0.0.0-20220419053939-17e843f1dd40
+	github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b // indirect
 	github.com/badoux/checkmail v0.0.0-20170203135005-d0a759655d62
 	github.com/beevik/etree v1.1.0
+	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc
 	github.com/coreos/go-oidc/v3 v3.0.0
 	github.com/didip/tollbooth/v5 v5.1.1
 	github.com/fatih/color v1.10.0 // indirect
@@ -19,28 +22,28 @@ require (
 	github.com/gobuffalo/plush/v4 v4.1.0 // indirect
 	github.com/gobuffalo/pop/v5 v5.3.3
 	github.com/gobuffalo/validate/v3 v3.3.0 // indirect
-	github.com/gobwas/glob v0.2.3 // indirect
+	github.com/gobwas/glob v0.2.3
 	github.com/gofrs/uuid v4.0.0+incompatible
 	github.com/golang-jwt/jwt v3.2.1+incompatible
 	github.com/gorilla/securecookie v1.1.1
 	github.com/gorilla/sessions v1.1.1
 	github.com/imdario/mergo v0.0.0-20160216103600-3e95a51e0639
-	github.com/jackc/pgconn v1.8.0 // indirect
-	github.com/jackc/pgerrcode v0.0.0-20201024163028-a0d42d470451 // indirect
+	github.com/jackc/pgconn v1.8.0
+	github.com/jackc/pgerrcode v0.0.0-20201024163028-a0d42d470451
 	github.com/jackc/pgproto3/v2 v2.0.7 // indirect
 	github.com/jmoiron/sqlx v1.3.1 // indirect
 	github.com/joho/godotenv v1.3.0
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/lestrrat-go/jwx v0.9.0
 	github.com/lib/pq v1.9.0 // indirect
-	github.com/microcosm-cc/bluemonday v1.0.16 // indirect
+	github.com/microcosm-cc/bluemonday v1.0.19 // indirect
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/mrjones/oauth v0.0.0-20190623134757-126b35219450
 	github.com/netlify/mailme v1.1.1
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pkg/errors v0.9.1
-	github.com/pquerna/otp v1.3.0 // indirect
+	github.com/pquerna/otp v1.3.0
 	github.com/rs/cors v1.6.0
 	github.com/russellhaering/gosaml2 v0.6.1-0.20210916051624-757d23f1bc28
 	github.com/russellhaering/goxmldsig v1.1.1
