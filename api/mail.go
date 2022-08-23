@@ -35,7 +35,6 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
 	mailer := a.Mailer(ctx)
-	instanceID := getInstanceID(ctx)
 	adminUser := getAdminUser(ctx)
 
 	params := &GenerateLinkParams{}
@@ -50,7 +49,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+	user, err := models.FindUserByEmailAndAudience(a.db, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			if params.Type == magicLinkVerification {
@@ -79,7 +78,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		switch params.Type {
 		case magicLinkVerification, recoveryVerification:
-			if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
+			if terr = models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
 			}
 			user.RecoveryToken = hashedToken
@@ -102,7 +101,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			}
-			if terr = models.NewAuditLogEntry(r, tx, instanceID, adminUser, models.UserInvitedAction, "", map[string]interface{}{
+			if terr = models.NewAuditLogEntry(r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
 				"user_id":    user.ID,
 				"user_email": user.Email,
 			}); terr != nil {
@@ -149,7 +148,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr := a.validateEmail(ctx, params.NewEmail); terr != nil {
 				return unprocessableEntityError("The new email address provided is invalid")
 			}
-			if exists, terr := models.IsDuplicatedEmail(tx, instanceID, params.NewEmail, user.Aud); terr != nil {
+			if exists, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud); terr != nil {
 				return internalServerError("Database error checking email").WithInternalError(terr)
 			} else if exists {
 				return unprocessableEntityError(DuplicateEmailMsg)

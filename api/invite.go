@@ -18,7 +18,6 @@ type InviteParams struct {
 func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
-	instanceID := getInstanceID(ctx)
 	adminUser := getAdminUser(ctx)
 	params := &InviteParams{}
 
@@ -33,7 +32,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+	user, err := models.FindUserByEmailAndAudience(a.db, params.Email, aud)
 	if err != nil && !models.IsNotFoundError(err) {
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}
@@ -56,7 +55,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if terr := models.NewAuditLogEntry(r, tx, instanceID, adminUser, models.UserInvitedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 		}); terr != nil {

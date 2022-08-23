@@ -75,7 +75,6 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	}
 	var err error
 
-	instanceID := getInstanceID(ctx)
 	params := &SmsParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	if err := jsonDecoder.Decode(params); err != nil {
@@ -92,7 +91,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 
 	aud := a.requestAud(ctx, r)
 
-	user, uerr := models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
+	user, uerr := models.FindUserByPhoneAndAudience(a.db, params.Phone, aud)
 	if uerr != nil {
 		// if user does not exists, sign up the user
 		if models.IsNotFoundError(uerr) {
@@ -140,7 +139,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if err := models.NewAuditLogEntry(r, tx, instanceID, user, models.UserRecoveryRequestedAction, "", nil); err != nil {
+		if err := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); err != nil {
 			return err
 		}
 		smsProvider, terr := sms_provider.GetSmsProvider(*config)
@@ -163,20 +162,19 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) (bool, error) {
 	if !params.CreateUser {
 		ctx := r.Context()
-		instanceID := getInstanceID(ctx)
 		aud := a.requestAud(ctx, r)
 		var err error
 		if params.Email != "" {
 			if err := a.validateEmail(ctx, params.Email); err != nil {
 				return false, err
 			}
-			_, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+			_, err = models.FindUserByEmailAndAudience(a.db, params.Email, aud)
 		} else if params.Phone != "" {
 			params.Phone, err = a.validatePhone(params.Phone)
 			if err != nil {
 				return false, err
 			}
-			_, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
+			_, err = models.FindUserByPhoneAndAudience(a.db, params.Phone, aud)
 		}
 
 		if err != nil && models.IsNotFoundError(err) {

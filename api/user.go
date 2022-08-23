@@ -54,7 +54,6 @@ func (a *API) UserGet(w http.ResponseWriter, r *http.Request) error {
 func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
-	instanceID := getInstanceID(ctx)
 
 	params := &UserUpdateParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -125,7 +124,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 
 			var exists bool
-			if exists, terr = models.IsDuplicatedEmail(tx, instanceID, params.Email, user.Aud); terr != nil {
+			if exists, terr = models.IsDuplicatedEmail(tx, params.Email, user.Aud); terr != nil {
 				return internalServerError("Database error checking email").WithInternalError(terr)
 			} else if exists {
 				return unprocessableEntityError(DuplicateEmailMsg)
@@ -144,7 +143,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			var exists bool
-			if exists, terr = models.IsDuplicatedPhone(tx, instanceID, params.Phone, user.Aud); terr != nil {
+			if exists, terr = models.IsDuplicatedPhone(tx, params.Phone, user.Aud); terr != nil {
 				return internalServerError("Database error checking phone").WithInternalError(terr)
 			} else if exists {
 				return unprocessableEntityError(DuplicatePhoneMsg)
@@ -162,7 +161,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserModifiedAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 			return internalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 
