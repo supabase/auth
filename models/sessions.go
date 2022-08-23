@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
@@ -53,4 +54,13 @@ func FindSessionById(tx *storage.Connection, id uuid.UUID) (*Session, error) {
 		return nil, errors.Wrap(err, "error finding user")
 	}
 	return session, nil
+}
+
+// Logout deletes all sessions for a user.
+func Logout(tx *storage.Connection, userId uuid.UUID) error {
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ?", userId).Exec()
+}
+
+func LogoutSession(tx *storage.Connection, sessionId uuid.UUID) error {
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE id = ?", sessionId).Exec()
 }

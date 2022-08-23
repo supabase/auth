@@ -49,6 +49,23 @@ func sendJSON(w http.ResponseWriter, status int, obj interface{}) error {
 	return err
 }
 
+func getSessionFromClaims(ctx context.Context, conn *storage.Connection) (*models.Session, error) {
+	claims := getClaims(ctx)
+	if claims == nil {
+		return nil, errors.New("Invalid token")
+	}
+
+	if claims.SessionId == "" {
+		return nil, nil
+	}
+
+	sessionId, err := uuid.FromString(claims.SessionId)
+	if err != nil {
+		return nil, errors.New("Invalid session ID")
+	}
+	return models.FindSessionById(conn, sessionId)
+}
+
 func getUserFromClaims(ctx context.Context, conn *storage.Connection) (*models.User, error) {
 	claims := getClaims(ctx)
 	if claims == nil {

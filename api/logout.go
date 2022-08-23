@@ -15,7 +15,18 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 
 	a.clearCookieTokens(config, w)
 
-	u, err := getUserFromClaims(ctx, a.db)
+	s, err := getSessionFromClaims(ctx, a.db)
+	if err != nil {
+		return unauthorizedError("Invalid session").WithInternalError(err)
+	}
+
+	var u *models.User
+	if s == nil && err == nil {
+		// For backward compatibility sake, some claims won't have the sessionId field in it.
+		u, err = getUserFromClaims(ctx, a.db)
+	} else {
+		u, err = models.FindUserByID(a.db, s.UserID)
+	}
 	if err != nil {
 		return unauthorizedError("Invalid user").WithInternalError(err)
 	}
@@ -24,7 +35,7 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(r, tx, instanceID, u, models.LogoutAction, "", nil); terr != nil {
 			return terr
 		}
-		return models.Logout(tx, instanceID, u.ID)
+		return models.Logout(tx, u.ID)
 	})
 	if err != nil {
 		return internalServerError("Error logging out user").WithInternalError(err)

@@ -68,7 +68,7 @@ func (ts *RefreshTokenTestSuite) TestLogout() {
 	r, err := GrantAuthenticatedUser(ts.db, u)
 	require.NoError(ts.T(), err)
 
-	require.NoError(ts.T(), Logout(ts.db, uuid.Nil, u.ID))
+	require.NoError(ts.T(), Logout(ts.db, u.ID))
 	u, r, err = FindUserWithRefreshToken(ts.db, r.Token)
 	require.Errorf(ts.T(), err, "expected error when there are no refresh tokens to authenticate. user: %v token: %v", u, r)
 
