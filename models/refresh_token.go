@@ -109,11 +109,11 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 		token.Parent = storage.NullString(oldToken.Token)
 		token.SessionId = oldToken.SessionId
 	} else {
-		sessionId, err := uuid.NewV4()
+		session, err := CreateSession(tx, user)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error generated unique session id")
 		}
-		token.SessionId = nulls.NewUUID(sessionId)
+		token.SessionId = nulls.NewUUID(session.ID)
 	}
 
 	if err := tx.Create(token); err != nil {

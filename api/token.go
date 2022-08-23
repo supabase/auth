@@ -26,6 +26,7 @@ type GoTrueClaims struct {
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	UserMetaData map[string]interface{} `json:"user_metadata"`
 	Role         string                 `json:"role"`
+	SessionId    string                 `json:"session_id"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -330,7 +331,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			}
 		}
 
-		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessToken(user, newToken.SessionId.UUID.String(), time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -529,7 +530,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func generateAccessToken(user *models.User, expiresIn time.Duration, secret string) (string, error) {
+func generateAccessToken(user *models.User, sessionId string, expiresIn time.Duration, secret string) (string, error) {
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
@@ -541,6 +542,7 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, secret stri
 		AppMetaData:  user.AppMetaData,
 		UserMetaData: user.UserMetaData,
 		Role:         user.Role,
+		SessionId:    sessionId,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -563,7 +565,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessToken(user, refreshToken.SessionId.UUID.String(), time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
