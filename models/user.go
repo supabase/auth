@@ -56,8 +56,7 @@ type User struct {
 	AppMetaData  JSONMap `json:"app_metadata" db:"raw_app_meta_data"`
 	UserMetaData JSONMap `json:"user_metadata" db:"raw_user_meta_data"`
 
-	IsSuperAdmin bool       `json:"-" db:"is_super_admin"`
-	Identities   []Identity `json:"identities" has_many:"identities"`
+	Identities []Identity `json:"identities" has_many:"identities"`
 
 	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
