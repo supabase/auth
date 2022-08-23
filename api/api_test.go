@@ -2,9 +2,7 @@ package api
 
 import (
 	"context"
-	"math/rand"
 	"testing"
-	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
@@ -21,7 +19,6 @@ const (
 )
 
 func init() {
-	rand.Seed(time.Now().UnixNano())
 	models.PasswordHashCost = bcrypt.MinCost
 
 }
@@ -52,14 +49,4 @@ func TestEmailEnabledByDefault(t *testing.T) {
 	require.NoError(t, err)
 
 	require.True(t, api.config.External.Email.Enabled)
-}
-
-const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-func randStringBytes(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letterBytes[rand.Int63()%int64(len(letterBytes))]
-	}
-	return string(b)
 }
