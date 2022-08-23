@@ -50,10 +50,16 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 
 func (a *API) getAdminParams(r *http.Request) (*adminUserParams, error) {
 	params := adminUserParams{}
-	err := json.NewDecoder(r.Body).Decode(&params)
+
+	body, err := getBodyBytes(r)
 	if err != nil {
+		return nil, badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, &params); err != nil {
 		return nil, badRequestError("Could not decode admin user params: %v", err)
 	}
+
 	return &params, nil
 }
 

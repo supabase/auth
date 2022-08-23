@@ -165,8 +165,12 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	params := &PasswordGrantParams{}
 
-	jsonDecoder := json.NewDecoder(r.Body)
-	if err := jsonDecoder.Decode(params); err != nil {
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read password grant params: %v", err)
 	}
 
@@ -178,7 +182,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	}
 	var user *models.User
 	var provider string
-	var err error
 	if params.Email != "" {
 		provider = "email"
 		if !config.External.Email.Enabled {
@@ -248,8 +251,12 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 	params := &RefreshTokenGrantParams{}
 
-	jsonDecoder := json.NewDecoder(r.Body)
-	if err := jsonDecoder.Decode(params); err != nil {
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read refresh token grant params: %v", err)
 	}
 
@@ -359,8 +366,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	params := &IdTokenGrantParams{}
 
-	jsonDecoder := json.NewDecoder(r.Body)
-	if err := jsonDecoder.Decode(params); err != nil {
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read id token grant params: %v", err)
 	}
 
@@ -373,7 +384,6 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	var verifier *oidc.IDTokenVerifier
-	var err error
 	if params.Provider != "" {
 		verifier, err = params.getVerifier(ctx, a.config)
 	} else if params.ClientID != "" && params.Issuer != "" {

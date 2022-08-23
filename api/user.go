@@ -56,9 +56,13 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 
 	params := &UserUpdateParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
-	err := jsonDecoder.Decode(params)
+
+	body, err := getBodyBytes(r)
 	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read User Update params: %v", err)
 	}
 
