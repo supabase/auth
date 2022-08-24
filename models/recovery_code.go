@@ -3,11 +3,10 @@ package models
 import (
 	"database/sql"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"time"
-	"github.com/netlify/gotrue/crypto"
-
 )
 
 type RecoveryCode struct {

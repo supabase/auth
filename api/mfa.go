@@ -95,7 +95,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
 	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())
-	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, models.FactorDisabledState, key.Secret())
+	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, models.FactorUnverifiedState, key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}
@@ -111,9 +111,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:   factor.ID,
 		Type: factor.FactorType,
-		// TODO (Suggest): Consider sending string and encourage users to generate image
-		// TODO(Suggest): Look for SVG QRCode Generator in Go or use a query param which allows user to decide whether to generate image(defaults to sending large QRCode)
-		// TODO(Suggest) Consider generating in the client library
+		// TODO(Joel) : Switch to SVG, see all other branch
 		TOTP: TOTPObject{
 			QRCode: fmt.Sprintf("data:img/png;base64,%v", qrAsBase64),
 			Secret: factor.SecretKey,
@@ -155,7 +153,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		ExpiresAt: expiryTime.String(),
 	})
 }
-
 
 func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
