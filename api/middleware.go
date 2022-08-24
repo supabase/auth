@@ -145,6 +145,10 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 	if !config.Security.Captcha.Enabled {
 		return ctx, nil
 	}
+	if ctx, err := a.requireAdminCredentials(w, req); err == nil {
+		// skip captcha validation if authorization header contains an admin role
+		return ctx, nil
+	}
 	if config.Security.Captcha.Provider != "hcaptcha" {
 		logrus.WithField("provider", config.Security.Captcha.Provider).Warn("Unsupported captcha provider")
 		return nil, internalServerError("server misconfigured")
@@ -164,8 +168,8 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 	} else if verificationResult == security.UserRequestFailed {
 		return nil, badRequestError("request disallowed")
 	}
-	if verificationResult == security.SuccessfullyVerified {
-		return ctx, nil
+	if verificationResult != security.SuccessfullyVerified {
+		return nil, internalServerError("")
 	}
-	return nil, internalServerError("")
+	return ctx, nil
 }
