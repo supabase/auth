@@ -20,6 +20,7 @@ const (
 	signatureKey            = contextKey("signature")
 	externalProviderTypeKey = contextKey("external_provider_type")
 	userKey                 = contextKey("user")
+	sessionKey              = contextKey("session")
 	externalReferrerKey     = contextKey("external_referrer")
 	functionHooksKey        = contextKey("function_hooks")
 	adminUserKey            = contextKey("admin_user")
@@ -65,18 +66,32 @@ func getRequestID(ctx context.Context) string {
 	return obj.(string)
 }
 
-// withUser adds the user id to the context.
+// withUser adds the user to the context.
 func withUser(ctx context.Context, u *models.User) context.Context {
 	return context.WithValue(ctx, userKey, u)
 }
 
-// getUser reads the user id from the context.
+// getUser reads the user from the context.
 func getUser(ctx context.Context) *models.User {
 	obj := ctx.Value(userKey)
 	if obj == nil {
 		return nil
 	}
 	return obj.(*models.User)
+}
+
+// withSession adds the session to the context.
+func withSession(ctx context.Context, s *models.Session) context.Context {
+	return context.WithValue(ctx, sessionKey, s)
+}
+
+// getSession reads the session from the context.
+func getSession(ctx context.Context) *models.Session {
+	obj := ctx.Value(sessionKey)
+	if obj == nil {
+		return nil
+	}
+	return obj.(*models.Session)
 }
 
 // withSignature adds the provided request ID to the context.
