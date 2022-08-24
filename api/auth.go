@@ -44,10 +44,6 @@ func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.R
 
 func (a *API) extractBearerToken(w http.ResponseWriter, r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		return "", unauthorizedError("This endpoint requires a Bearer token")
-	}
-
 	matches := bearerRegexp.FindStringSubmatch(authHeader)
 	if len(matches) != 2 {
 		return "", unauthorizedError("This endpoint requires a Bearer token")
