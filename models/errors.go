@@ -5,6 +5,8 @@ func IsNotFoundError(err error) bool {
 	switch err.(type) {
 	case UserNotFoundError:
 		return true
+	case SessionNotFoundError:
+		return true
 	case ConfirmationTokenNotFoundError:
 		return true
 	case RefreshTokenNotFoundError:
@@ -17,6 +19,12 @@ func IsNotFoundError(err error) bool {
 		return true
 	}
 	return false
+}
+
+type SessionNotFoundError struct{}
+
+func (e SessionNotFoundError) Error() string {
+	return "Session not found"
 }
 
 // UserNotFoundError represents when a user is not found.
