@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
@@ -20,19 +19,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
 
-	claims := getClaims(ctx)
-	userID, err := uuid.FromString(claims.Subject)
-	if err != nil {
-		return badRequestError("Could not read User ID claim")
-	}
-	user, err := models.FindUserByID(a.db, userID)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return notFoundError(err.Error())
-		}
-		return internalServerError("Database error finding user").WithInternalError(err)
-	}
-
+	user := getUser(ctx)
 	email, phone := user.GetEmail(), user.GetPhone()
 
 	if email == "" && phone == "" {
@@ -49,7 +36,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserReauthenticateAction, "", nil); terr != nil {
 			return terr
 		}
