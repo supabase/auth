@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/assert"
@@ -44,7 +43,7 @@ func (ts *TokenTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
 	// Create user & refresh token
-	u, err := models.NewUser(uuid.Nil, "12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	t := time.Now()
 	u.EmailConfirmedAt = &t
@@ -149,7 +148,7 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenGrantFailure() {
 }
 
 func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
-	u, err := models.NewUser(uuid.Nil, "", "foo@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("", "foo@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	t := time.Now()
 	u.EmailConfirmedAt = &t
@@ -238,7 +237,7 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
 }
 
 func (ts *TokenTestSuite) createBannedUser() *models.User {
-	u, err := models.NewUser(uuid.Nil, "", "banned@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("", "banned@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	t := time.Now()
 	u.EmailConfirmedAt = &t

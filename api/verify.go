@@ -231,7 +231,6 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
-	instanceID := getInstanceID(ctx)
 	config := a.config
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
@@ -250,11 +249,11 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 			}
 		}
 
-		if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserSignedUpAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
 			return terr
 		}
 
-		if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
+		if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
 			return terr
 		}
 
@@ -270,7 +269,6 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 }
 
 func (a *API) recoverVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
-	instanceID := getInstanceID(ctx)
 	config := a.config
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
@@ -279,21 +277,21 @@ func (a *API) recoverVerify(r *http.Request, ctx context.Context, conn *storage.
 			return terr
 		}
 		if !user.IsConfirmed() {
-			if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserSignedUpAction, "", nil); terr != nil {
+			if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
 				return terr
 			}
 
-			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
+			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
 				return terr
 			}
 			if terr = user.Confirm(tx); terr != nil {
 				return terr
 			}
 		} else {
-			if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.LoginAction, "", nil); terr != nil {
+			if terr = models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", nil); terr != nil {
 				return terr
 			}
-			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 				return terr
 			}
 		}
@@ -307,16 +305,15 @@ func (a *API) recoverVerify(r *http.Request, ctx context.Context, conn *storage.
 }
 
 func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User, otpType string) (*models.User, error) {
-	instanceID := getInstanceID(ctx)
 	config := a.config
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserSignedUpAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
 			return terr
 		}
 
-		if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
+		if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
 			return terr
 		}
 
@@ -358,7 +355,6 @@ func (a *API) prepRedirectURL(message string, rurl string) string {
 }
 
 func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
-	instanceID := getInstanceID(ctx)
 	config := a.config
 
 	if config.Mailer.SecureEmailChangeEnabled && user.EmailChangeConfirmStatus == zeroConfirmation && user.GetEmail() != "" {
@@ -384,11 +380,11 @@ func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *stor
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 
-		if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserModifiedAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 			return terr
 		}
 
-		if terr = triggerEventHooks(ctx, tx, EmailChangeEvent, user, instanceID, config); terr != nil {
+		if terr = triggerEventHooks(ctx, tx, EmailChangeEvent, user, config); terr != nil {
 			return terr
 		}
 
@@ -451,7 +447,6 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 
 // verifyUserAndToken verifies the token associated to the user based on the verify type
 func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
-	instanceID := getInstanceID(ctx)
 	config := a.config
 
 	var user *models.User
@@ -465,9 +460,9 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
 		switch params.Type {
 		case phoneChangeVerification:
-			user, err = models.FindUserByPhoneChangeAndAudience(conn, instanceID, params.Phone, aud)
+			user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
 		case smsVerification:
-			user, err = models.FindUserByPhoneAndAudience(conn, instanceID, params.Phone, aud)
+			user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
 		default:
 			return nil, badRequestError("Invalid sms verification type")
 		}
@@ -478,9 +473,9 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))
 		switch params.Type {
 		case emailChangeVerification:
-			user, err = models.FindUserForEmailChange(conn, instanceID, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
+			user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
 		default:
-			user, err = models.FindUserByEmailAndAudience(conn, instanceID, params.Email, aud)
+			user, err = models.FindUserByEmailAndAudience(conn, params.Email, aud)
 		}
 	} else {
 		return nil, badRequestError("Only an email address or phone number should be provided on verify")

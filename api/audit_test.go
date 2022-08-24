@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
@@ -44,7 +43,7 @@ func (ts *AuditTestSuite) SetupTest() {
 }
 
 func (ts *AuditTestSuite) makeSuperAdmin(email string) string {
-	u, err := models.NewUser(uuid.Nil, "", email, "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test User"})
+	u, err := models.NewUser("", email, "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test User"})
 	require.NoError(ts.T(), err, "Error making new user")
 
 	u.Role = "supabase_admin"
@@ -119,7 +118,7 @@ func (ts *AuditTestSuite) TestAuditFilters() {
 
 func (ts *AuditTestSuite) prepareDeleteEvent() {
 	// DELETE USER
-	u, err := models.NewUser(uuid.Nil, "12345678", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("12345678", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 

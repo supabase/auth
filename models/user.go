@@ -17,8 +17,7 @@ var PasswordHashCost = bcrypt.DefaultCost
 
 // User respresents a registered user with email/password authentication
 type User struct {
-	InstanceID uuid.UUID `json:"-" db:"instance_id"`
-	ID         uuid.UUID `json:"id" db:"id"`
+	ID uuid.UUID `json:"id" db:"id"`
 
 	Aud               string             `json:"aud" db:"aud"`
 	Role              string             `json:"role" db:"role"`
@@ -57,16 +56,17 @@ type User struct {
 	AppMetaData  JSONMap `json:"app_metadata" db:"raw_app_meta_data"`
 	UserMetaData JSONMap `json:"user_metadata" db:"raw_user_meta_data"`
 
-	IsSuperAdmin bool       `json:"-" db:"is_super_admin"`
-	Identities   []Identity `json:"identities" has_many:"identities"`
+	Identities []Identity `json:"identities" has_many:"identities"`
 
 	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
 	BannedUntil *time.Time `json:"banned_until,omitempty" db:"banned_until"`
+
+	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 }
 
 // NewUser initializes a new user from an email, password and user data.
-func NewUser(instanceID uuid.UUID, phone, email, password, aud string, userData map[string]interface{}) (*User, error) {
+func NewUser(phone, email, password, aud string, userData map[string]interface{}) (*User, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -79,7 +79,6 @@ func NewUser(instanceID uuid.UUID, phone, email, password, aud string, userData 
 		userData = make(map[string]interface{})
 	}
 	user := &User{
-		InstanceID:        instanceID,
 		ID:                id,
 		Aud:               aud,
 		Email:             storage.NullString(strings.ToLower(email)),
@@ -313,8 +312,8 @@ func (u *User) Recover(tx *storage.Connection) error {
 }
 
 // CountOtherUsers counts how many other users exist besides the one provided
-func CountOtherUsers(tx *storage.Connection, instanceID, id uuid.UUID) (int, error) {
-	userCount, err := tx.Q().Where("instance_id = ? and id != ?", instanceID, id).Count(&User{})
+func CountOtherUsers(tx *storage.Connection, id uuid.UUID) (int, error) {
+	userCount, err := tx.Q().Where("instance_id = ? and id != ?", uuid.Nil, id).Count(&User{})
 	return userCount, errors.Wrap(err, "error finding registered users")
 }
 
@@ -340,23 +339,18 @@ func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, e
 }
 
 // FindUserByEmailAndAudience finds a user with the matching email and audience.
-func FindUserByEmailAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and LOWER(email) = ? and aud = ?", instanceID, strings.ToLower(email), aud)
+func FindUserByEmailAndAudience(tx *storage.Connection, email, aud string) (*User, error) {
+	return findUser(tx, "instance_id = ? and LOWER(email) = ? and aud = ?", uuid.Nil, strings.ToLower(email), aud)
 }
 
 // FindUserByPhoneAndAudience finds a user with the matching email and audience.
-func FindUserByPhoneAndAudience(tx *storage.Connection, instanceID uuid.UUID, phone, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and phone = ? and aud = ?", instanceID, phone, aud)
+func FindUserByPhoneAndAudience(tx *storage.Connection, phone, aud string) (*User, error) {
+	return findUser(tx, "instance_id = ? and phone = ? and aud = ?", uuid.Nil, phone, aud)
 }
 
 // FindUserByID finds a user matching the provided ID.
 func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
-	return findUser(tx, "id = ?", id)
-}
-
-// FindUserByInstanceIDAndID finds a user matching the provided ID.
-func FindUserByInstanceIDAndID(tx *storage.Connection, instanceID, id uuid.UUID) (*User, error) {
-	return findUser(tx, "instance_id = ? and id = ?", instanceID, id)
+	return findUser(tx, "instance_id = ? and id = ?", uuid.Nil, id)
 }
 
 // FindUserByRecoveryToken finds a user with the matching recovery token.
@@ -394,9 +388,9 @@ func FindUserWithRefreshToken(tx *storage.Connection, token string) (*User, *Ref
 }
 
 // FindUsersInAudience finds users with the matching audience.
-func FindUsersInAudience(tx *storage.Connection, instanceID uuid.UUID, aud string, pageParams *Pagination, sortParams *SortParams, filter string) ([]*User, error) {
+func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Pagination, sortParams *SortParams, filter string) ([]*User, error) {
 	users := []*User{}
-	q := tx.Q().Where("instance_id = ? and aud = ?", instanceID, aud)
+	q := tx.Q().Where("instance_id = ? and aud = ?", uuid.Nil, aud)
 
 	if filter != "" {
 		lf := "%" + filter + "%"
@@ -422,43 +416,43 @@ func FindUsersInAudience(tx *storage.Connection, instanceID uuid.UUID, aud strin
 }
 
 // FindUserByEmailChangeCurrentAndAudience finds a user with the matching email change and audience.
-func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string) (*User, error) {
+func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
 	return findUser(
 		tx,
 		"instance_id = ? and LOWER(email) = ? and email_change_token_current = ? and aud = ?",
-		instanceID, strings.ToLower(email), token, aud,
+		uuid.Nil, strings.ToLower(email), token, aud,
 	)
 }
 
 // FindUserByEmailChangeNewAndAudience finds a user with the matching email change and audience.
-func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string) (*User, error) {
+func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
 	return findUser(
 		tx,
 		"instance_id = ? and LOWER(email_change) = ? and email_change_token_new = ? and aud = ?",
-		instanceID, strings.ToLower(email), token, aud,
+		uuid.Nil, strings.ToLower(email), token, aud,
 	)
 }
 
 // FindUserForEmailChange finds a user requesting for an email change
-func FindUserForEmailChange(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string, secureEmailChangeEnabled bool) (*User, error) {
+func FindUserForEmailChange(tx *storage.Connection, email, token, aud string, secureEmailChangeEnabled bool) (*User, error) {
 	if secureEmailChangeEnabled {
-		if user, err := FindUserByEmailChangeCurrentAndAudience(tx, instanceID, email, token, aud); err == nil {
+		if user, err := FindUserByEmailChangeCurrentAndAudience(tx, email, token, aud); err == nil {
 			return user, err
 		} else if !IsNotFoundError(err) {
 			return nil, err
 		}
 	}
-	return FindUserByEmailChangeNewAndAudience(tx, instanceID, email, token, aud)
+	return FindUserByEmailChangeNewAndAudience(tx, email, token, aud)
 }
 
 // FindUserByPhoneChangeAndAudience finds a user with the matching phone change and audience.
-func FindUserByPhoneChangeAndAudience(tx *storage.Connection, instanceID uuid.UUID, phone, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ?", instanceID, phone, aud)
+func FindUserByPhoneChangeAndAudience(tx *storage.Connection, phone, aud string) (*User, error) {
+	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ?", uuid.Nil, phone, aud)
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and audience.
-func IsDuplicatedEmail(tx *storage.Connection, instanceID uuid.UUID, email, aud string) (bool, error) {
-	_, err := FindUserByEmailAndAudience(tx, instanceID, email, aud)
+func IsDuplicatedEmail(tx *storage.Connection, email, aud string) (bool, error) {
+	_, err := FindUserByEmailAndAudience(tx, email, aud)
 	if err != nil {
 		if IsNotFoundError(err) {
 			return false, nil
@@ -469,8 +463,8 @@ func IsDuplicatedEmail(tx *storage.Connection, instanceID uuid.UUID, email, aud 
 }
 
 // IsDuplicatedPhone checks if the phone number already exists in the users table
-func IsDuplicatedPhone(tx *storage.Connection, instanceID uuid.UUID, phone, aud string) (bool, error) {
-	_, err := FindUserByPhoneAndAudience(tx, instanceID, phone, aud)
+func IsDuplicatedPhone(tx *storage.Connection, phone, aud string) (bool, error) {
+	_, err := FindUserByPhoneAndAudience(tx, phone, aud)
 	if err != nil {
 		if IsNotFoundError(err) {
 			return false, nil

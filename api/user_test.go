@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/require"
@@ -40,13 +39,13 @@ func (ts *UserTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
 	// Create user
-	u, err := models.NewUser(uuid.Nil, "123456789", "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("123456789", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }
 
 func (ts *UserTestSuite) TestUserGet() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err, "Error finding user")
 	token, err := generateAccessToken(u, "", time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err, "Error generating access token")
@@ -106,7 +105,7 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			u, err := models.NewUser(uuid.Nil, "", "", "", ts.Config.JWT.Aud, nil)
+			u, err := models.NewUser("", "", "", ts.Config.JWT.Aud, nil)
 			require.NoError(ts.T(), err, "Error creating test user model")
 			require.NoError(ts.T(), u.SetEmail(ts.API.db, c.userData["email"]), "Error setting user email")
 			require.NoError(ts.T(), u.SetPhone(ts.API.db, c.userData["phone"]), "Error setting user phone")
@@ -132,10 +131,10 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 
 }
 func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	existingUser, err := models.NewUser(uuid.Nil, "22222222", "", "", ts.Config.JWT.Aud, nil)
+	existingUser, err := models.NewUser("22222222", "", "", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Create(existingUser))
 
@@ -191,7 +190,7 @@ func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 }
 
 func (ts *UserTestSuite) TestUserUpdatePassword() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
 	type expected struct {
@@ -255,7 +254,7 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			require.Equal(ts.T(), c.expected.code, w.Code)
 
 			// Request body
-			u, err = models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
 			require.Equal(ts.T(), c.expected.isAuthenticated, u.Authenticate(c.newPassword))
@@ -267,7 +266,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	ts.Config.Security.UpdatePasswordRequireReauthentication = true
 
 	// create a confirmed user
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	now := time.Now()
 	u.EmailConfirmedAt = &now
@@ -284,7 +283,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), w.Code, http.StatusOK)
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), u.ReauthenticationToken)
 	require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
@@ -310,7 +309,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	require.Equal(ts.T(), w.Code, http.StatusOK)
 
 	// Request body
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
 	require.True(ts.T(), u.Authenticate("newpass"))

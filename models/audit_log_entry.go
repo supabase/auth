@@ -54,11 +54,12 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 
 // AuditLogEntry is the database model for audit log entries.
 type AuditLogEntry struct {
-	InstanceID uuid.UUID `json:"-" db:"instance_id"`
-	ID         uuid.UUID `json:"id" db:"id"`
-	Payload    JSONMap   `json:"payload" db:"payload"`
-	CreatedAt  time.Time `json:"created_at" db:"created_at"`
-	IPAddress  string    `json:"ip_address" db:"ip_address"`
+	ID        uuid.UUID `json:"id" db:"id"`
+	Payload   JSONMap   `json:"payload" db:"payload"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	IPAddress string    `json:"ip_address" db:"ip_address"`
+
+	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 }
 
 func (AuditLogEntry) TableName() string {
@@ -66,7 +67,7 @@ func (AuditLogEntry) TableName() string {
 	return tableName
 }
 
-func NewAuditLogEntry(r *http.Request, tx *storage.Connection, instanceID uuid.UUID, actor *User, action AuditAction, ipAddress string, traits map[string]interface{}) error {
+func NewAuditLogEntry(r *http.Request, tx *storage.Connection, actor *User, action AuditAction, ipAddress string, traits map[string]interface{}) error {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return errors.Wrap(err, "Error generating unique id")
@@ -85,10 +86,9 @@ func NewAuditLogEntry(r *http.Request, tx *storage.Connection, instanceID uuid.U
 		"log_type":       ActionLogTypeMap[action],
 	}
 	l := AuditLogEntry{
-		InstanceID: instanceID,
-		ID:         id,
-		Payload:    JSONMap(payload),
-		IPAddress:  ipAddress,
+		ID:        id,
+		Payload:   JSONMap(payload),
+		IPAddress: ipAddress,
 	}
 
 	logger.LogEntrySetFields(r, logrus.Fields{
@@ -110,8 +110,8 @@ func NewAuditLogEntry(r *http.Request, tx *storage.Connection, instanceID uuid.U
 	return nil
 }
 
-func FindAuditLogEntries(tx *storage.Connection, instanceID uuid.UUID, filterColumns []string, filterValue string, pageParams *Pagination) ([]*AuditLogEntry, error) {
-	q := tx.Q().Order("created_at desc").Where("instance_id = ?", instanceID)
+func FindAuditLogEntries(tx *storage.Connection, filterColumns []string, filterValue string, pageParams *Pagination) ([]*AuditLogEntry, error) {
+	q := tx.Q().Order("created_at desc").Where("instance_id = ?", uuid.Nil)
 
 	if len(filterColumns) > 0 && filterValue != "" {
 		lf := "%" + filterValue + "%"

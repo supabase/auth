@@ -107,12 +107,10 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 
 		assert.Equal(3, len(data))
 		assert.Equal("validate", data["event"])
-		assert.Equal(uuid.Nil.String(), data["instance_id"])
 
 		u, ok := data["user"].(map[string]interface{})
 		require.True(ok)
 		assert.Len(u, 10)
-		// assert.Equal(t, user.ID, u["id"]) TODO
 		assert.Equal("authenticated", u["aud"])
 		assert.Equal("authenticated", u["role"])
 		assert.Equal("test@example.com", u["email"])
@@ -210,7 +208,7 @@ func (ts *SignupTestSuite) TestSignupTwice() {
 	y := httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(y, req)
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test1@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test1@example.com", ts.Config.JWT.Aud)
 	if err == nil {
 		require.NoError(ts.T(), u.Confirm(ts.API.db))
 	}
@@ -232,7 +230,7 @@ func (ts *SignupTestSuite) TestSignupTwice() {
 }
 
 func (ts *SignupTestSuite) TestVerifySignup() {
-	user, err := models.NewUser(uuid.Nil, "123456789", "test@example.com", "testing", ts.Config.JWT.Aud, nil)
+	user, err := models.NewUser("123456789", "test@example.com", "testing", ts.Config.JWT.Aud, nil)
 	user.ConfirmationToken = "asdf3"
 	now := time.Now()
 	user.ConfirmationSentAt = &now
@@ -240,7 +238,7 @@ func (ts *SignupTestSuite) TestVerifySignup() {
 	require.NoError(ts.T(), ts.API.db.Create(user))
 
 	// Find test user
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, uuid.Nil, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
 	// Setup request

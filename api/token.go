@@ -172,7 +172,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	}
 
 	aud := a.requestAud(ctx, r)
-	instanceID := getInstanceID(ctx)
 	config := a.config
 
 	if params.Email != "" && params.Phone != "" {
@@ -186,14 +185,14 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		if !config.External.Email.Enabled {
 			return badRequestError("Email logins are disabled")
 		}
-		user, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+		user, err = models.FindUserByEmailAndAudience(a.db, params.Email, aud)
 	} else if params.Phone != "" {
 		provider = "phone"
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone logins are disabled")
 		}
 		params.Phone = a.formatPhoneNumber(params.Phone)
-		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
+		user, err = models.FindUserByPhoneAndAudience(a.db, params.Phone, aud)
 	} else {
 		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
@@ -218,12 +217,12 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
+		if terr = models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": provider,
 		}); terr != nil {
 			return terr
 		}
-		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 			return terr
 		}
 
@@ -240,14 +239,13 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	if err != nil {
 		return err
 	}
-	metering.RecordLogin("password", user.ID, instanceID)
+	metering.RecordLogin("password", user.ID)
 	return sendJSON(w, http.StatusOK, token)
 }
 
 // RefreshTokenGrant implements the refresh_token grant type flow
 func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	config := a.config
-	instanceID := getInstanceID(ctx)
 
 	params := &RefreshTokenGrantParams{}
 
@@ -320,7 +318,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.TokenRefreshedAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, user, models.TokenRefreshedAction, "", nil); terr != nil {
 			return terr
 		}
 
@@ -352,14 +350,13 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	if err != nil {
 		return err
 	}
-	metering.RecordLogin("token", user.ID, instanceID)
+	metering.RecordLogin("token", user.ID)
 	return sendJSON(w, http.StatusOK, newTokenResponse)
 }
 
 // IdTokenGrant implements the id_token grant type flow
 func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	config := a.config
-	instanceID := getInstanceID(ctx)
 
 	params := &IdTokenGrantParams{}
 
@@ -487,13 +484,13 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				return unauthorizedError("Error unverified email")
 			}
 
-			if terr := models.NewAuditLogEntry(r, tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
+			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr
 			}
 
-			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
+			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
 				return terr
 			}
 
@@ -501,12 +498,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				return internalServerError("Error updating user").WithInternalError(terr)
 			}
 		} else {
-			if terr := models.NewAuditLogEntry(r, tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
+			if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr
 			}
-			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 				return terr
 			}
 		}
@@ -526,7 +523,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return internalServerError("Failed to set JWT cookie. %s", err)
 	}
 
-	metering.RecordLogin("id_token", user.ID, instanceID)
+	metering.RecordLogin("id_token", user.ID)
 	return sendJSON(w, http.StatusOK, token)
 }
 
