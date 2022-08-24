@@ -131,7 +131,7 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 	if !config.Security.Captcha.Enabled {
 		return ctx, nil
 	}
-	if ctx, err := a.requireAdminCredentials(w, req); err == nil {
+	if _, err := a.requireAdminCredentials(w, req); err == nil {
 		// skip captcha validation if authorization header contains an admin role
 		return ctx, nil
 	}

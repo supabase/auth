@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,44 +41,70 @@ func TestHCaptcha(t *testing.T) {
 }
 
 func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"email":    "test@example.com",
-		"password": "secret",
-		"gotrue_meta_security": map[string]interface{}{
-			"captcha_token": HCaptchaResponse,
-		},
-	}))
-
 	ts.Config.Security.Captcha.Enabled = true
 	ts.Config.Security.Captcha.Provider = "hcaptcha"
 	ts.Config.Security.Captcha.Secret = HCaptchaSecret
 
-	req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)
-	req.Header.Set("Content-Type", "application/json")
-
-	beforeCtx := context.Background()
-	req = req.WithContext(beforeCtx)
-
-	w := httptest.NewRecorder()
-
-	afterCtx, err := ts.API.verifyCaptcha(w, req)
+	adminClaims := &GoTrueClaims{
+		Role: "supabase_admin",
+	}
+	adminJwt, err := jwt.NewWithClaims(jwt.SigningMethodHS256, adminClaims).SignedString([]byte(ts.Config.JWT.Secret))
 	require.NoError(ts.T(), err)
-
-	body, err := ioutil.ReadAll(req.Body)
-
-	// re-initialize buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"email":    "test@example.com",
-		"password": "secret",
-		"gotrue_meta_security": map[string]interface{}{
-			"captcha_token": HCaptchaResponse,
+	cases := []struct {
+		desc          string
+		adminJwt      string
+		captcha_token string
+	}{
+		{
+			"Valid captcha response",
+			"",
+			HCaptchaResponse,
 		},
-	}))
+		{
+			"Ignore captcha if admin role is present",
+			adminJwt,
+			"",
+		},
+	}
+	for _, c := range cases {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email":    "test@example.com",
+			"password": "secret",
+			"gotrue_meta_security": map[string]interface{}{
+				"captcha_token": c.captcha_token,
+			},
+		}))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		if c.adminJwt != "" {
+			req.Header.Set("Authorization", "Bearer "+c.adminJwt)
+		}
 
-	// check if body is the same
-	require.Equal(ts.T(), body, buffer.Bytes())
-	require.Equal(ts.T(), afterCtx, beforeCtx)
+		beforeCtx := context.Background()
+		req = req.WithContext(beforeCtx)
+
+		w := httptest.NewRecorder()
+
+		afterCtx, err := ts.API.verifyCaptcha(w, req)
+		require.NoError(ts.T(), err)
+
+		body, err := ioutil.ReadAll(req.Body)
+		require.NoError(ts.T(), err)
+
+		// re-initialize buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email":    "test@example.com",
+			"password": "secret",
+			"gotrue_meta_security": map[string]interface{}{
+				"captcha_token": c.captcha_token,
+			},
+		}))
+
+		// check if body is the same
+		require.Equal(ts.T(), body, buffer.Bytes())
+		require.Equal(ts.T(), afterCtx, beforeCtx)
+	}
 }
 
 func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
