@@ -17,10 +17,6 @@ import (
 	jwt "github.com/golang-jwt/jwt"
 )
 
-const (
-	jwsSignatureHeaderName = "x-nf-sign"
-)
-
 type FunctionHooks map[string][]string
 
 type NetlifyMicroserviceClaims struct {
@@ -50,15 +46,6 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 		(*f)[event] = []string{hook}
 	}
 	return nil
-}
-
-func (a *API) loadJWSSignatureHeader(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	ctx := r.Context()
-	signature := r.Header.Get(jwsSignatureHeaderName)
-	if signature == "" {
-		return nil, badRequestError("Operator microservice headers missing")
-	}
-	return withSignature(ctx, signature), nil
 }
 
 func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
@@ -114,13 +101,12 @@ func (a *API) limitEmailSentHandler() middlewareHandler {
 }
 
 func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) (context.Context, error) {
-	ctx := req.Context()
 	t, err := a.extractBearerToken(w, req)
 	if err != nil || t == "" {
 		return nil, err
 	}
 
-	ctx, err = a.parseJWTClaims(t, req, w)
+	ctx, err := a.parseJWTClaims(t, req, w)
 	if err != nil {
 		return nil, err
 	}
