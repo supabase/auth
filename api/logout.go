@@ -14,16 +14,17 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 
 	a.clearCookieTokens(config, w)
 
-	u, err := getUserFromClaims(ctx, a.db)
-	if err != nil {
-		return unauthorizedError("Invalid user").WithInternalError(err)
-	}
+	s := getSession(ctx)
+	u := getUser(ctx)
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, u, models.LogoutAction, "", nil); terr != nil {
 			return terr
 		}
-		return models.Logout(tx, u.ID)
+		if s != nil {
+			return models.Logout(tx, u.ID)
+		}
+		return models.LogoutAllRefreshTokens(tx, u.ID)
 	})
 	if err != nil {
 		return internalServerError("Error logging out user").WithInternalError(err)

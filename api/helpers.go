@@ -13,7 +13,6 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -47,23 +46,6 @@ func sendJSON(w http.ResponseWriter, status int, obj interface{}) error {
 	w.WriteHeader(status)
 	_, err = w.Write(b)
 	return err
-}
-
-func getUserFromClaims(ctx context.Context, conn *storage.Connection) (*models.User, error) {
-	claims := getClaims(ctx)
-	if claims == nil {
-		return nil, errors.New("Invalid token")
-	}
-
-	if claims.Subject == "" {
-		return nil, errors.New("Invalid claim: id")
-	}
-
-	userID, err := uuid.FromString(claims.Subject)
-	if err != nil {
-		return nil, errors.New("Invalid user ID")
-	}
-	return models.FindUserByID(conn, userID)
 }
 
 func (a *API) isAdmin(ctx context.Context, u *models.User, aud string) bool {

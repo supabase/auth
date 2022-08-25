@@ -2,10 +2,12 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -20,7 +22,16 @@ func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (con
 		return nil, err
 	}
 
-	return a.parseJWTClaims(token, r, w)
+	ctx, err := a.parseJWTClaims(token, r, w)
+	if err != nil {
+		return ctx, err
+	}
+
+	ctx, err = a.maybeLoadUserOrSession(ctx)
+	if err != nil {
+		return ctx, err
+	}
+	return ctx, err
 }
 
 func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.Request) (context.Context, error) {
@@ -66,4 +77,42 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request, w http.ResponseWrit
 	}
 
 	return withToken(ctx, token), nil
+}
+
+func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, error) {
+	claims := getClaims(ctx)
+	if claims == nil {
+		return ctx, errors.New("invalid token")
+	}
+
+	if claims.Subject == "" {
+		return nil, errors.New("invalid claim: subject missing")
+	}
+
+	var user *models.User
+	if claims.Subject != "" {
+		userId, err := uuid.FromString(claims.Subject)
+		if err != nil {
+			return ctx, err
+		}
+		user, err = models.FindUserByID(a.db, userId)
+		if err != nil {
+			return ctx, err
+		}
+		ctx = withUser(ctx, user)
+	}
+
+	var session *models.Session
+	if claims.SessionId != "" {
+		sessionId, err := uuid.FromString(claims.SessionId)
+		if err != nil {
+			return ctx, err
+		}
+		session, err = models.FindSessionById(a.db, sessionId)
+		if err != nil {
+			return ctx, err
+		}
+		ctx = withSession(ctx, session)
+	}
+	return ctx, nil
 }
