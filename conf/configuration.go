@@ -149,7 +149,7 @@ type SmsProviderConfiguration struct {
 	Messagebird  MessagebirdProviderConfiguration `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration   `json:"textlocal"`
 	Vonage       VonageProviderConfiguration      `json:"vonage"`
-	Custom       CustomProviderConfiguration      `json:"custom"`
+	Gateway      GatewayProviderConfiguration     `json:"gateway"`
 }
 
 type TwilioProviderConfiguration struct {
@@ -174,7 +174,7 @@ type VonageProviderConfiguration struct {
 	From      string `json:"from" split_words:"true"`
 }
 
-type CustomProviderConfiguration struct {
+type GatewayProviderConfiguration struct {
 	Url         string `json:"url" split_words:"true"`
 	Sender      string `json:"sender" split_words:"true"`
 	BearerToken string `json:"bearer_token" split_words:"true"`
@@ -456,12 +456,12 @@ func (t *VonageProviderConfiguration) Validate() error {
 	return nil
 }
 
-func (t *CustomProviderConfiguration) Validate() error {
+func (t *GatewayProviderConfiguration) Validate() error {
 	if t.Url == "" {
-		return errors.New("Missing custom url")
+		return errors.New("Missing gateway url")
 	}
 	if t.Sender == "" {
-		return errors.New("Missing custom sender")
+		return errors.New("Missing gateway sender")
 	}
 	return nil
 }

@@ -484,7 +484,7 @@ Controls the number of digits of the sms otp sent.
 
 `SMS_PROVIDER` - `string`
 
-Available options are: `twilio`, `messagebird`, `vonage`, `textlocal`, and `custom`
+Available options are: `twilio`, `messagebird`, `textlocal`, `vonage`, and `gateway`
 
 Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/requests-to-twilio#credentials):
 
@@ -497,9 +497,9 @@ Or Messagebird credentials, which can be obtained in the [Dashboard](https://das
 - `SMS_MESSAGEBIRD_ORIGINATOR` - SMS sender (your Messagebird phone number with + or company name)
 
 Alternatively you can use a custom SMS gateway:
-- `SMS_CUSTOM_URL` - the URL of your SMS gateway
-- `SMS_CUSTOM_SENDER` - sender number
-- `SMS_CUSTOM_BEARER_TOKEN` - optional token added to the `Authorization` header
+- `SMS_GATEWAY_URL` - the URL of your SMS gateway
+- `SMS_GATEWAY_SENDER` - sender number
+- `SMS_GATEWAY_BEARER_TOKEN` - optional token added to the `Authorization` header
 
 GoTrue will send the following to your SMS gateway:
 ```json

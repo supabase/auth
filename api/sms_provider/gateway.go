@@ -9,23 +9,23 @@ import (
 	"github.com/netlify/gotrue/conf"
 )
 
-type CustomProvider struct {
-	Config *conf.CustomProviderConfiguration
+type GatewayProvider struct {
+	Config *conf.GatewayProviderConfiguration
 }
 
-// Creates a SmsProvider with the custom Config
-func NewCustomProvider(config conf.CustomProviderConfiguration) (SmsProvider, error) {
+// Creates a SmsProvider with the gateway Config
+func NewGatewayProvider(config conf.GatewayProviderConfiguration) (SmsProvider, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
 
-	return &CustomProvider{
+	return &GatewayProvider{
 		Config: &config,
 	}, nil
 }
 
-// Send an SMS containing the OTP with custom URL
-func (t *CustomProvider) SendSms(phone string, message string) error {
+// Send an SMS containing the OTP with gateway
+func (t *GatewayProvider) SendSms(phone string, message string) error {
 	body, err := json.Marshal(map[string]string{
 		"recipient": phone,
 		"body":      message,
