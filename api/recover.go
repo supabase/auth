@@ -19,9 +19,13 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
 	params := &RecoverParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
-	err := jsonDecoder.Decode(params)
+
+	body, err := getBodyBytes(r)
 	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 

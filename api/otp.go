@@ -3,9 +3,8 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
-	"strings"
 
 	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/models"
@@ -36,19 +35,17 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 		params.Metadata = make(map[string]interface{})
 	}
 
-	body, err := ioutil.ReadAll(r.Body)
+	body, err := getBodyBytes(r)
 	if err != nil {
 		return err
 	}
-	jsonDecoder := json.NewDecoder(bytes.NewReader(body))
-	if err = jsonDecoder.Decode(params); err != nil {
+
+	if err = json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 	if params.Email != "" && params.Phone != "" {
 		return badRequestError("Only an email address or phone number should be provided")
 	}
-
-	r.Body = ioutil.NopCloser(strings.NewReader(string(body)))
 
 	if ok, err := a.shouldCreateUser(r, params); !ok {
 		return badRequestError("Signups not allowed for otp")
@@ -76,8 +73,13 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	var err error
 
 	params := &SmsParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
-	if err := jsonDecoder.Decode(params); err != nil {
+
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read sms otp params: %v", err)
 	}
 	if params.Metadata == nil {
@@ -109,7 +111,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return badRequestError("Could not parse metadata: %v", err)
 			}
-			r.Body = ioutil.NopCloser(bytes.NewReader(newBodyContent))
+			r.Body = io.NopCloser(bytes.NewReader(newBodyContent))
 
 			fakeResponse := &responseStub{}
 
@@ -126,7 +128,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 				if err != nil {
 					return badRequestError("Could not parse metadata: %v", err)
 				}
-				r.Body = ioutil.NopCloser(bytes.NewReader(newBodyContent))
+				r.Body = io.NopCloser(bytes.NewReader(newBodyContent))
 				return a.SmsOtp(w, r)
 			}
 

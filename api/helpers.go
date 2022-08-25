@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptrace"
@@ -255,4 +257,23 @@ func isStringInSlice(checkValue string, list []string) bool {
 		}
 	}
 	return false
+}
+
+// getBodyBytes returns a byte array of the request's Body.
+func getBodyBytes(req *http.Request) ([]byte, error) {
+	if req.Body == nil || req.Body == http.NoBody {
+		return nil, nil
+	}
+
+	originalBody := req.Body
+	defer originalBody.Close()
+
+	buf, err := io.ReadAll(originalBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Body = io.NopCloser(bytes.NewReader(buf))
+
+	return buf, nil
 }

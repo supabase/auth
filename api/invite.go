@@ -21,9 +21,12 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	adminUser := getAdminUser(ctx)
 	params := &InviteParams{}
 
-	jsonDecoder := json.NewDecoder(r.Body)
-	err := jsonDecoder.Decode(params)
+	body, err := getBodyBytes(r)
 	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read Invite params: %v", err)
 	}
 

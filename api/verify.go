@@ -159,8 +159,13 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
 	params := &VerifyParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
-	if err := jsonDecoder.Decode(params); err != nil {
+
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
@@ -178,7 +183,6 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 
 	var (
 		user  *models.User
-		err   error
 		token *AccessTokenResponse
 	)
 

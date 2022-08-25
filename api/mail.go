@@ -38,10 +38,14 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	adminUser := getAdminUser(ctx)
 
 	params := &GenerateLinkParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
 
-	if err := jsonDecoder.Decode(params); err != nil {
-		return badRequestError("Could not read body: %v", err)
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
+		return badRequestError("Could not parse JSON: %v", err)
 	}
 
 	if err := a.validateEmail(ctx, params.Email); err != nil {
