@@ -316,10 +316,10 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 
 	var emailData *provider.Email
 	var emails []string
-	for _, e := range userData.Emails {
+	for i, e := range userData.Emails {
 		emails = append(emails, e.Email)
 		if user.GetEmail() == e.Email {
-			emailData = &e
+			emailData = &userData.Emails[i]
 			break
 		}
 	}

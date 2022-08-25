@@ -34,7 +34,7 @@ func ConfigureLogging(config *LoggingConfig) (*logrus.Entry, error) {
 
 	// use a file if you want
 	if config.File != "" {
-		f, errOpen := os.OpenFile(config.File, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0664)
+		f, errOpen := os.OpenFile(config.File, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0660) //#nosec G302 -- Log files should be rw-rw-r--
 		if errOpen != nil {
 			return nil, errOpen
 		}

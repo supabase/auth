@@ -527,9 +527,9 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection) error {
 
 	var confirmedProviders []Identity
 
-	for _, identity := range u.Identities {
+	for i, identity := range u.Identities {
 		if identity.Provider == "email" {
-			if terr := tx.Destroy(&identity); terr != nil {
+			if terr := tx.Destroy(&u.Identities[i]); terr != nil {
 				return terr
 			}
 		} else {

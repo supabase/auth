@@ -19,7 +19,7 @@ const (
 	defaultTwitterAPIBase = "api.twitter.com"
 	requestURL            = "/oauth/request_token"
 	authenticateURL       = "/oauth/authenticate"
-	tokenURL              = "/oauth/access_token"
+	tokenURL              = "/oauth/access_token" //#nosec G101 -- Not a secret value.
 	endpointProfile       = "/1.1/account/verify_credentials.json"
 )
 

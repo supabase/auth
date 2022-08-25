@@ -20,13 +20,13 @@ import (
 const (
 	defaultAppleAPIBase = "appleid.apple.com"
 	authEndpoint        = "/auth/authorize"
-	tokenEndpoint       = "/auth/token"
+	tokenEndpoint       = "/auth/token" //#nosec G101 -- Not a secret value.
 
 	scopeEmail = "email"
 	scopeName  = "name"
 
 	appleAudOrIss                  = "https://appleid.apple.com"
-	idTokenVerificationKeyEndpoint = "/auth/keys"
+	idTokenVerificationKeyEndpoint = "/auth/keys" //#nosec G101 -- Not a secret value.
 )
 
 // AppleProvider stores the custom config for apple provider
