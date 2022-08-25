@@ -17,10 +17,6 @@ import (
 	jwt "github.com/golang-jwt/jwt"
 )
 
-const (
-	jwsSignatureHeaderName = "x-nf-sign"
-)
-
 type FunctionHooks map[string][]string
 
 type NetlifyMicroserviceClaims struct {
@@ -50,15 +46,6 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 		(*f)[event] = []string{hook}
 	}
 	return nil
-}
-
-func (a *API) loadJWSSignatureHeader(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	ctx := r.Context()
-	signature := r.Header.Get(jwsSignatureHeaderName)
-	if signature == "" {
-		return nil, badRequestError("Operator microservice headers missing")
-	}
-	return withSignature(ctx, signature), nil
 }
 
 func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
@@ -114,13 +101,12 @@ func (a *API) limitEmailSentHandler() middlewareHandler {
 }
 
 func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) (context.Context, error) {
-	ctx := req.Context()
 	t, err := a.extractBearerToken(w, req)
 	if err != nil || t == "" {
 		return nil, err
 	}
 
-	ctx, err = a.parseJWTClaims(t, req, w)
+	ctx, err := a.parseJWTClaims(t, req, w)
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +131,10 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 	if !config.Security.Captcha.Enabled {
 		return ctx, nil
 	}
+	if _, err := a.requireAdminCredentials(w, req); err == nil {
+		// skip captcha validation if authorization header contains an admin role
+		return ctx, nil
+	}
 	if config.Security.Captcha.Provider != "hcaptcha" {
 		logrus.WithField("provider", config.Security.Captcha.Provider).Warn("Unsupported captcha provider")
 		return nil, internalServerError("server misconfigured")
@@ -164,8 +154,8 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 	} else if verificationResult == security.UserRequestFailed {
 		return nil, badRequestError("request disallowed")
 	}
-	if verificationResult == security.SuccessfullyVerified {
-		return ctx, nil
+	if verificationResult != security.SuccessfullyVerified {
+		return nil, internalServerError("")
 	}
-	return nil, internalServerError("")
+	return ctx, nil
 }

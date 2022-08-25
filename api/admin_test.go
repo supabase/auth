@@ -42,25 +42,12 @@ func TestAdmin(t *testing.T) {
 func (ts *AdminTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 	ts.Config.External.Email.Enabled = true
-	ts.token = ts.makeSuperAdmin("")
-}
-
-func (ts *AdminTestSuite) makeSuperAdmin(email string) string {
-	u, err := models.NewUser("9123456", email, "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test User"})
-	require.NoError(ts.T(), err, "Error making new user")
-
-	u.Role = "supabase_admin"
-
-	token, err := generateAccessToken(u, "", time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	require.NoError(ts.T(), err, "Error generating access token")
-
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
-	_, err = p.Parse(token, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
-	require.NoError(ts.T(), err, "Error parsing token")
-
-	return token
+	claims := &GoTrueClaims{
+		Role: "supabase_admin",
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))
+	require.NoError(ts.T(), err, "Error generating admin jwt")
+	ts.token = token
 }
 
 // TestAdminUsersUnauthorized tests API /admin/users route without authentication
