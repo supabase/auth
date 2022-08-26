@@ -65,7 +65,10 @@ func VerifyRequest(r *http.Request, secretKey string) (VerificationResult, error
 	if err != nil {
 		return UserRequestFailed, err
 	}
-	r.Body.Close()
+	if err := r.Body.Close(); err != nil {
+		return UserRequestFailed, err
+	}
+
 	// re-init body so downstream route handlers don't get borked
 	r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 

@@ -51,7 +51,7 @@ jobs:
         run: |
           set -x
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          gosec -tests -exclude=G104 ./... # exclude unhandled errors for the time being
+          make sec
       - name: Init Database
         run: psql -f hack/init_postgres.sql postgresql://postgres:root@localhost:5432/postgres
       - name: Run migrations
