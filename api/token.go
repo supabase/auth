@@ -59,18 +59,7 @@ type IdTokenGrantParams struct {
 	Issuer   string `json:"issuer"`
 }
 
-type tokenType string
-
-const (
-	confirmationToken       tokenType = "confirmation_token"
-	recoveryToken           tokenType = "recovery_token"
-	emailChangeTokenNew     tokenType = "email_change_token_new"
-	emailChangeTokenCurrent tokenType = "email_change_token_current"
-	reauthenticationToken   tokenType = "reauthentication_token"
-)
-
 const useCookieHeader = "x-use-cookie"
-const useSessionCookie = "session"
 const InvalidLoginMessage = "Invalid login credentials"
 
 func (p *IdTokenGrantParams) getVerifier(ctx context.Context, config *conf.GlobalConfiguration) (*oidc.IDTokenVerifier, error) {

@@ -25,12 +25,6 @@ type azureUser struct {
 	Sub   string `json:"sub"`
 }
 
-type azureEmail struct {
-	Email    string `json:"email"`
-	Primary  bool   `json:"is_primary"`
-	Verified bool   `json:"is_confirmed"`
-}
-
 // NewAzureProvider creates a Azure account provider.
 func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
