@@ -15,6 +15,7 @@ build: deps ## Build the binary.
 dev-deps: deps ## Install developer dependencies
 	@go install github.com/gobuffalo/pop/soda@latest
 	@go install github.com/securego/gosec/v2/cmd/gosec@latest
+	@go install honnef.co/go/tools/cmd/staticcheck@latest
 
 deps: ## Install dependencies.
 	@go mod download
@@ -35,6 +36,15 @@ vet: # Vet the code
 sec: # Check for security vulnerabilities
 	gosec -quiet $(CHECK_FILES)
 	gosec -quiet -tests -exclude=G104 $(CHECK_FILES)
+
+unused: # Look for unused code
+	@echo "Unused code:"
+	staticcheck -checks U1000 $(CHECK_FILES)
+	
+	@echo
+	
+	@echo "Code used only in _test.go (do move it in those files):"
+	staticcheck -checks U1000 -tests=false $(CHECK_FILES)
 
 dev: ## Run the development containers
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up

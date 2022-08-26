@@ -2,7 +2,6 @@ package mailer
 
 import (
 	"net/url"
-	"regexp"
 
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
@@ -78,10 +77,4 @@ func getSiteURL(referrerURL, siteURL, filepath, fragment string) (string, error)
 	}
 	site.RawQuery = fragment
 	return site.String(), nil
-}
-
-var urlRegexp = regexp.MustCompile(`^https?://[^/]+`)
-
-func enforceRelativeURL(url string) string {
-	return urlRegexp.ReplaceAllString(url, "")
 }

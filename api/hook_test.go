@@ -17,6 +17,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// withFunctionHooks adds the provided function hooks to the context.
+func withFunctionHooks(ctx context.Context, hooks map[string][]string) context.Context {
+	return context.WithValue(ctx, functionHooksKey, hooks)
+}
+
 func TestSignupHookSendInstanceID(t *testing.T) {
 	globalConfig, err := conf.LoadGlobal(apiTestConfig)
 	require.NoError(t, err)
