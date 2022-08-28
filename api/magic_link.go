@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
@@ -14,24 +15,28 @@ import (
 
 // MagicLinkParams holds the parameters for a magic link request
 type MagicLinkParams struct {
-	Email string `json:"email"`
+	Email    string                 `json:"email"`
+	Metadata map[string]interface{} `json:"metadata"`
 }
 
 // MagicLink sends a recovery email
 func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	if !config.External.Email.Enabled {
 		return badRequestError("Email logins are disabled")
 	}
 
-	instanceID := getInstanceID(ctx)
 	params := &MagicLinkParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
 	if err != nil {
 		return badRequestError("Could not read verification params: %v", err)
+	}
+
+	if params.Metadata == nil {
+		params.Metadata = make(map[string]interface{})
 	}
 
 	if params.Email == "" {
@@ -42,7 +47,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+	user, err := models.FindUserByEmailAndAudience(a.db, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			// User doesn't exist, sign them up with temporary password
@@ -50,9 +55,18 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				internalServerError("error creating user").WithInternalError(err)
 			}
-			newBodyContent := `{"email":"` + params.Email + `","password":"` + password + `"}`
-			r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
-			r.ContentLength = int64(len(newBodyContent))
+
+			signUpParams := &SignupParams{
+				Email:    params.Email,
+				Password: password,
+				Data:     params.Metadata,
+			}
+			newBodyContent, err := json.Marshal(signUpParams)
+			if err != nil {
+				return badRequestError("Could not parse metadata: %v", err)
+			}
+			r.Body = ioutil.NopCloser(strings.NewReader(string(newBodyContent)))
+			r.ContentLength = int64(len(string(newBodyContent)))
 
 			fakeResponse := &responseStub{}
 			if config.Mailer.Autoconfirm {
@@ -60,9 +74,15 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 				if err := a.Signup(fakeResponse, r); err != nil {
 					return err
 				}
-				newBodyContent := `{"email":"` + params.Email + `"}`
-				r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
-				r.ContentLength = int64(len(newBodyContent))
+				newBodyContent := &SignupParams{
+					Email: params.Email,
+					Data:  params.Metadata,
+				}
+				metadata, err := json.Marshal(newBodyContent)
+				if err != nil {
+					return badRequestError("Could not parse metadata: %v", err)
+				}
+				r.Body = ioutil.NopCloser(bytes.NewReader(metadata))
 				return a.MagicLink(w, r)
 			}
 			// otherwise confirmation email already contains 'magic link'
@@ -76,13 +96,13 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
 
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
-		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer)
+		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {

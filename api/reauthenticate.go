@@ -1,10 +1,11 @@
 package api
 
 import (
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"net/http"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
@@ -16,22 +17,9 @@ const InvalidNonceMessage = "Nonce has expired or is invalid"
 // Reauthenticate sends a reauthentication otp to either the user's email or phone
 func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
-	instanceID := getInstanceID(ctx)
+	config := a.config
 
-	claims := getClaims(ctx)
-	userID, err := uuid.FromString(claims.Subject)
-	if err != nil {
-		return badRequestError("Could not read User ID claim")
-	}
-	user, err := models.FindUserByID(a.db, userID)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return notFoundError(err.Error())
-		}
-		return internalServerError("Database error finding user").WithInternalError(err)
-	}
-
+	user := getUser(ctx)
 	email, phone := user.GetEmail(), user.GetPhone()
 
 	if email == "" && phone == "" {
@@ -48,13 +36,13 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserReauthenticateAction, "", nil); terr != nil {
+	err := a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.NewAuditLogEntry(r, tx, user, models.UserReauthenticateAction, "", nil); terr != nil {
 			return terr
 		}
 		if email != "" {
 			mailer := a.Mailer(ctx)
-			return a.sendReauthenticationOtp(tx, user, mailer, config.SMTP.MaxFrequency)
+			return a.sendReauthenticationOtp(tx, user, mailer, config.SMTP.MaxFrequency, config.Mailer.OtpLength)
 		} else if phone != "" {
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)
 			if terr != nil {
@@ -75,15 +63,17 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 }
 
 // verifyReauthentication checks if the nonce provided is valid
-func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.Configuration, user *models.User) error {
+func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.GlobalConfiguration, user *models.User) error {
 	if user.ReauthenticationToken == "" || user.ReauthenticationSentAt == nil {
 		return badRequestError(InvalidNonceMessage)
 	}
 	var isValid bool
 	if user.GetEmail() != "" {
-		isValid = isOtpValid(nonce, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
+		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+nonce)))
+		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
 	} else if user.GetPhone() != "" {
-		isValid = isOtpValid(nonce, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
+		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetPhone()+nonce)))
+		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
 	} else {
 		return unprocessableEntityError("Reauthentication requires an email or a phone number")
 	}

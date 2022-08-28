@@ -1,24 +1,24 @@
-.PHONY: all build deps image lint migrate test vet
-CHECK_FILES?=$$(go list ./... | grep -v /vendor/)
+.PHONY: all build deps dev-deps image migrate test vet sec format
+CHECK_FILES?=./...
 FLAGS?=-ldflags "-X github.com/netlify/gotrue/cmd.Version=`git describe --tags`"
 DEV_DOCKER_COMPOSE:=docker-compose-dev.yml
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {sub("\\\\n",sprintf("\n%22c"," "), $$2);printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-all: lint vet build ## Run the tests and build the binary.
+all: vet sec build ## Run the tests and build the binary.
 
-build: ## Build the binary.
+build: deps ## Build the binary.
 	go build $(FLAGS)
 	GOOS=linux GOARCH=arm64 go build $(FLAGS) -o gotrue-arm64
 
-deps: ## Install dependencies.
+dev-deps: deps ## Install developer dependencies
 	@go install github.com/gobuffalo/pop/soda@latest
-	@go install golang.org/x/lint/golint@latest
-	@go mod download
+	@go install github.com/securego/gosec/v2/cmd/gosec@latest
 
-lint: ## Lint the code.
-	golint $(CHECK_FILES)
+deps: ## Install dependencies.
+	@go mod download
+	@go mod verify
 
 migrate_dev: ## Run database migrations for development.
 	hack/migrate.sh postgres
@@ -26,11 +26,14 @@ migrate_dev: ## Run database migrations for development.
 migrate_test: ## Run database migrations for test.
 	hack/migrate.sh postgres
 
-test: ## Run tests.
-	go test -p 1 -v $(CHECK_FILES)
+test: build ## Run tests.
+	go test $(CHECK_FILES) -coverprofile=coverage.out -coverpkg ./... -p 1 -race -v -count=1
 
 vet: # Vet the code
 	go vet $(CHECK_FILES)
+
+sec: # Check for security vulnerabilities
+	gosec -tests -exclude=G104 $(CHECK_FILES)
 
 dev: ## Run the development containers
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up
@@ -53,3 +56,6 @@ docker-build: ## Force a full rebuild of the development containers
 
 docker-clean: ## Remove the development containers and volumes
 	docker-compose -f $(DEV_DOCKER_COMPOSE) rm -fsv
+
+format:
+	gofmt -s -w .

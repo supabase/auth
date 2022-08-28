@@ -1,9 +1,9 @@
 package models
 
 import (
+	"net/http"
 	"testing"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
@@ -49,7 +49,7 @@ func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwap() {
 	r, err := GrantAuthenticatedUser(ts.db, u)
 	require.NoError(ts.T(), err)
 
-	s, err := GrantRefreshTokenSwap(ts.db, u, r)
+	s, err := GrantRefreshTokenSwap(&http.Request{}, ts.db, u, r)
 	require.NoError(ts.T(), err)
 
 	_, nr, err := FindUserWithRefreshToken(ts.db, r.Token)
@@ -67,7 +67,7 @@ func (ts *RefreshTokenTestSuite) TestLogout() {
 	r, err := GrantAuthenticatedUser(ts.db, u)
 	require.NoError(ts.T(), err)
 
-	require.NoError(ts.T(), Logout(ts.db, uuid.Nil, u.ID))
+	require.NoError(ts.T(), Logout(ts.db, u.ID))
 	u, r, err = FindUserWithRefreshToken(ts.db, r.Token)
 	require.Errorf(ts.T(), err, "expected error when there are no refresh tokens to authenticate. user: %v token: %v", u, r)
 
@@ -79,7 +79,7 @@ func (ts *RefreshTokenTestSuite) createUser() *User {
 }
 
 func (ts *RefreshTokenTestSuite) createUserWithEmail(email string) *User {
-	user, err := NewUser(uuid.Nil, "", email, "secret", "test", nil)
+	user, err := NewUser("", email, "secret", "test", nil)
 	require.NoError(ts.T(), err)
 
 	err = ts.db.Create(user)

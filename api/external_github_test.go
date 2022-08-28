@@ -215,7 +215,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenUserBanned() {
 	u := performAuthorization(ts, "github", code, "")
 	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "github@example.com", "GitHub Test", "123", "http://example.com/avatar")
 
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "github@example.com", ts.Config.JWT.Aud)
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, "github@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	t := time.Now().Add(24 * time.Hour)
 	user.BannedUntil = &t

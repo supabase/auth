@@ -1,8 +1,24 @@
 -- adds parent column
 
 ALTER TABLE auth.refresh_tokens
-ADD COLUMN IF NOT EXISTS parent varchar(255) NULL,
-ADD CONSTRAINT refresh_tokens_token_unique UNIQUE ("token"),
-ADD CONSTRAINT refresh_tokens_parent_fkey FOREIGN KEY (parent) REFERENCES auth.refresh_tokens("token");
+ADD COLUMN IF NOT EXISTS parent varchar(255) NULL;
 
-CREATE INDEX IF NOT EXISTS refresh_tokens_parent_idx ON refresh_tokens USING btree (parent);
+DO $$
+BEGIN
+  IF NOT EXISTS(SELECT *
+    FROM information_schema.constraint_column_usage
+    WHERE table_schema = 'auth' and table_name='refresh_tokens' and constraint_name='refresh_tokens_token_unique')
+  THEN
+      ALTER TABLE "auth"."refresh_tokens" ADD CONSTRAINT refresh_tokens_token_unique UNIQUE ("token");
+  END IF;
+
+  IF NOT EXISTS(SELECT *
+    FROM information_schema.constraint_column_usage
+    WHERE table_schema = 'auth' and table_name='refresh_tokens' and constraint_name='refresh_tokens_parent_fkey')
+  THEN
+      ALTER TABLE "auth"."refresh_tokens" ADD CONSTRAINT refresh_tokens_parent_fkey FOREIGN KEY (parent) REFERENCES auth.refresh_tokens("token");
+  END IF;
+
+  CREATE INDEX IF NOT EXISTS refresh_tokens_parent_idx ON refresh_tokens USING btree (parent);
+END $$;
+

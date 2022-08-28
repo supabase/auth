@@ -14,7 +14,7 @@ import (
 
 const (
 	defaultFacebookAuthBase  = "www.facebook.com"
-	defaultFacebookTokenBase = "graph.facebook.com"
+	defaultFacebookTokenBase = "graph.facebook.com" //#nosec G101 -- Not a secret value.
 	defaultFacebookAPIBase   = "graph.facebook.com"
 )
 

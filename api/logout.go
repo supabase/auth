@@ -10,21 +10,21 @@ import (
 // Logout is the endpoint for logging out a user and thereby revoking any refresh tokens
 func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	instanceID := getInstanceID(ctx)
-	config := getConfig(ctx)
+	config := a.config
 
 	a.clearCookieTokens(config, w)
 
-	u, err := getUserFromClaims(ctx, a.db)
-	if err != nil {
-		return unauthorizedError("Invalid user").WithInternalError(err)
-	}
+	s := getSession(ctx)
+	u := getUser(ctx)
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, u, models.LogoutAction, "", nil); terr != nil {
+	err := a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.NewAuditLogEntry(r, tx, u, models.LogoutAction, "", nil); terr != nil {
 			return terr
 		}
-		return models.Logout(tx, instanceID, u.ID)
+		if s != nil {
+			return models.Logout(tx, u.ID)
+		}
+		return models.LogoutAllRefreshTokens(tx, u.ID)
 	})
 	if err != nil {
 		return internalServerError("Error logging out user").WithInternalError(err)

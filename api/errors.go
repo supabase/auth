@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 
 	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/utilities"
 	"github.com/pkg/errors"
 )
@@ -64,11 +65,11 @@ func (e *OAuthError) Cause() error {
 	return e
 }
 
-func invalidPasswordLengthError(config *conf.Configuration) *HTTPError {
+func invalidPasswordLengthError(config *conf.GlobalConfiguration) *HTTPError {
 	return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", config.PasswordMinLength))
 }
 
-func invalidSignupError(config *conf.Configuration) *HTTPError {
+func invalidSignupError(config *conf.GlobalConfiguration) *HTTPError {
 	var msg string
 	if config.External.Email.Enabled && config.External.Phone.Enabled {
 		msg = "To signup, please provide your email or phone number"
@@ -220,7 +221,7 @@ func recoverer(w http.ResponseWriter, r *http.Request) (context.Context, error) 
 	defer func() {
 		if rvr := recover(); rvr != nil {
 
-			logEntry := getLogEntry(r)
+			logEntry := logger.GetLogEntry(r)
 			if logEntry != nil {
 				logEntry.Panic(rvr, debug.Stack())
 			} else {
@@ -245,7 +246,7 @@ type ErrorCause interface {
 }
 
 func handleError(err error, w http.ResponseWriter, r *http.Request) {
-	log := getLogEntry(r)
+	log := logger.GetLogEntry(r)
 	errorID := getRequestID(r.Context())
 	switch e := err.(type) {
 	case *HTTPError:
