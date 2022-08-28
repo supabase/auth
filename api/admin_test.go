@@ -524,7 +524,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 // TestAdminUserDeleteRecoveryCodes tests API /admin/users/<user_id>/recovery_codes/
 func (ts *AdminTestSuite) TestAdminUserDeleteRecoveryCodes() {
 	// TODO(Joel): Test case where factor is unverified
-	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -555,7 +555,7 @@ func (ts *AdminTestSuite) TestAdminUserDeleteRecoveryCodes() {
 // TestAdminUserDeleteFactor tests API /admin/users/<user_id>/factor/<factor_id>/
 func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 	// TODO(Joel): Test case where factor is unverified
-	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -579,7 +579,7 @@ func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 
 // TestAdminUserGetFactor tests API /admin/user/<user_id>/factors/
 func (ts *AdminTestSuite) TestAdminUserGetFactors() {
-	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -599,7 +599,7 @@ func (ts *AdminTestSuite) TestAdminUserGetFactors() {
 
 // TestAdminUserGetFactor tests API /admin/user/<user_id>/factors/<factor_id>
 func (ts *AdminTestSuite) TestAdminUserGetFactor() {
-	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -618,7 +618,7 @@ func (ts *AdminTestSuite) TestAdminUserGetFactor() {
 }
 
 func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
-	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 

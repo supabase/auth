@@ -1,7 +1,6 @@
 package models
 
 import (
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
@@ -58,7 +57,7 @@ func (ts *FactorTestSuite) TestFindFactorByFactorID() {
 }
 
 func (ts *FactorTestSuite) createFactor() *Factor {
-	user, err := NewUser(uuid.Nil, "", "agenericemail@gmail.com", "secret", "test", nil)
+	user, err := NewUser("", "agenericemail@gmail.com", "secret", "test", nil)
 	require.NoError(ts.T(), err)
 
 	err = ts.db.Create(user)
@@ -74,7 +73,7 @@ func (ts *FactorTestSuite) createFactor() *Factor {
 }
 func (ts *FactorTestSuite) TestUpdateStatus() {
 	newFactorStatus := FactorVerifiedState
-	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
+	u, err := NewUser("", "", "", "", nil)
 	require.NoError(ts.T(), err)
 
 	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "some-secret", FactorDisabledState, "")
@@ -85,7 +84,7 @@ func (ts *FactorTestSuite) TestUpdateStatus() {
 
 func (ts *FactorTestSuite) TestUpdateFriendlyName() {
 	newSimpleName := "newFactorName"
-	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
+	u, err := NewUser("", "", "", "", nil)
 	require.NoError(ts.T(), err)
 
 	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "some-secret", FactorDisabledState, "")

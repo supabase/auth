@@ -2,7 +2,6 @@ package models
 
 import (
 	"fmt"
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/storage"
@@ -39,7 +38,7 @@ func TestRecoveryCode(t *testing.T) {
 
 func (ts *RecoveryCodeTestSuite) TestFindValidRecoveryCodesByUser() {
 	var expectedRecoveryCodes []string
-	user, err := NewUser(uuid.Nil, "", "", "", "", nil)
+	user, err := NewUser("", "", "", "", nil)
 	err = ts.db.Create(user)
 	require.NoError(ts.T(), err)
 	for i := 0; i <= NumRecoveryCodes; i++ {

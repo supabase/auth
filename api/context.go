@@ -93,6 +93,8 @@ func getFactor(ctx context.Context) *models.Factor {
 		return nil
 	}
 	return obj.(*models.Factor)
+}
+
 // withSession adds the session to the context.
 func withSession(ctx context.Context, s *models.Session) context.Context {
 	return context.WithValue(ctx, sessionKey, s)

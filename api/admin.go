@@ -57,7 +57,7 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	factorID := chi.URLParam(r, "factor_id")
 
-	logEntrySetField(r, "factor_id", factorID)
+	logger.LogEntrySetField(r, "factor_id", factorID)
 	f, err := models.FindFactorByFactorID(a.db, factorID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -375,7 +375,6 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
-	instanceID := getInstanceID(ctx)
 	factor := getFactor(ctx)
 
 	MFAEnabled, err := models.IsMFAEnabled(a.db, user)
@@ -386,7 +385,7 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.DeleteFactorAction, r.RemoteAddr, map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, user, models.DeleteFactorAction, r.RemoteAddr, map[string]interface{}{
 			"user_id":   user.ID,
 			"factor_id": factor.ID,
 		}); terr != nil {
@@ -406,7 +405,6 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 func (a *API) adminUserDeleteRecoveryCodes(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
-	instanceID := getInstanceID(ctx)
 
 	MFAEnabled, err := models.IsMFAEnabled(a.db, user)
 	if err != nil {
@@ -420,7 +418,7 @@ func (a *API) adminUserDeleteRecoveryCodes(w http.ResponseWriter, r *http.Reques
 		return terr
 	}
 	terr = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.DeleteRecoveryCodesAction, r.RemoteAddr, map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, user, models.DeleteRecoveryCodesAction, r.RemoteAddr, map[string]interface{}{
 			"user_id": user.ID,
 		}); terr != nil {
 			return terr
@@ -461,8 +459,6 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 	factor := getFactor(ctx)
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
-	instanceID := getInstanceID(ctx)
-
 	params := &adminUserUpdateFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
@@ -491,7 +487,7 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 			}
 		}
 
-		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UpdateFactorAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UpdateFactorAction, "", map[string]interface{}{
 			"user_id":     user.ID,
 			"factor_id":   factor.ID,
 			"factor_type": factor.FactorType,

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -60,7 +61,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	const imageSideLength = 300
 	ctx := r.Context()
 	user := getUser(ctx)
-	instanceID := getInstanceID(ctx)
 
 	params := &EnrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -98,7 +98,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = tx.Create(factor); terr != nil {
 			return terr
 		}
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.EnrollFactorAction, r.RemoteAddr, nil); terr != nil {
+		if terr := models.NewAuditLogEntry(r, tx, user, models.EnrollFactorAction, r.RemoteAddr, nil); terr != nil {
 			return terr
 		}
 		return nil
@@ -115,20 +115,22 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 }
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	globalConfig, err := conf.LoadGlobal(configFile)
+	if err != nil {
+		return internalServerError("Error loading Config").WithInternalError(err)
+	}
 	user := getUser(ctx)
 	factor := getFactor(ctx)
-	instanceID := getInstanceID(ctx)
 	challenge, terr := models.NewChallenge(factor)
-	if terr != nil {
-		return internalServerError("Database error creating challenge").WithInternalError(terr)
+	if err != nil {
+		return internalServerError("Database error creating challenge").WithInternalError(err)
 	}
 
 	terr = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr = tx.Create(challenge); terr != nil {
 			return terr
 		}
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":     factor.ID,
 			"factor_status": factor.Status,
 		}); terr != nil {
@@ -141,7 +143,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	creationTime := challenge.CreatedAt
-	expiryTime := creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration))
+	expiryTime := creationTime.Add(time.Second * time.Duration(globalConfig.MFA.ChallengeExpiryDuration))
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
 		ExpiresAt: expiryTime.String(),
@@ -151,10 +153,9 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
-	config := a.getConfig(ctx)
 	user := getUser(ctx)
 	factor := getFactor(ctx)
-	instanceID := getInstanceID(ctx)
+	globalConfig, err := conf.LoadGlobal(configFile)
 
 	params := &VerifyFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -171,7 +172,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
 
-	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
+	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(globalConfig.MFA.ChallengeExpiryDuration)))
 	if hasExpired {
 		err := a.db.Transaction(func(tx *storage.Connection) error {
 			if terr := tx.Destroy(challenge); terr != nil {
@@ -188,7 +189,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if err = models.NewAuditLogEntry(tx, instanceID, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
+		if err = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":    factor.ID,
 			"challenge_id": challenge.ID,
 		}); err != nil {
@@ -220,7 +221,6 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
 	factor := getFactor(ctx)
-	instanceID := getInstanceID(ctx)
 
 	params := &UnenrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -244,7 +244,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		if err = tx.Destroy(factor); err != nil {
 			return err
 		}
-		if err = models.NewAuditLogEntry(tx, instanceID, user, models.UnenrollFactorAction, r.RemoteAddr, map[string]interface{}{
+		if err = models.NewAuditLogEntry(r, tx, user, models.UnenrollFactorAction, r.RemoteAddr, map[string]interface{}{
 			"user_id":   user.ID,
 			"factor_id": factor.ID,
 		}); err != nil {
