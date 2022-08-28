@@ -38,14 +38,13 @@ func (ts *ExternalTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 }
 
-func (ts *ExternalTestSuite) createUser(providerId string, email string, name string, avatar string, confirmationToken string) (*models.User, error) {
+func (ts *ExternalTestSuite) createUser(phone, providerId, email, name, avatar, confirmationToken string) (*models.User, error) {
 	// Cleanup existing user, if they already exist
 	if u, _ := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud); u != nil {
 		require.NoError(ts.T(), ts.API.db.Destroy(u), "Error deleting user")
 	}
 
-	// TODO: [Joel] -- refactor to take in phone
-	u, err := models.NewUser("", email, "test", ts.Config.JWT.Aud, map[string]interface{}{"provider_id": providerId, "full_name": name, "avatar_url": avatar})
+	u, err := models.NewUser(phone, email, "test", ts.Config.JWT.Aud, map[string]interface{}{"provider_id": providerId, "full_name": name, "avatar_url": avatar})
 
 	if confirmationToken != "" {
 		u.ConfirmationToken = confirmationToken

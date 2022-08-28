@@ -106,7 +106,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHubDisableSignupErrorWhenEmpty
 func (ts *ExternalTestSuite) TestSignupExternalGitHubDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("123", "github@example.com", "GitHub Test", "http://example.com/avatar", "")
+	ts.createUser("+9112345678", "123", "github@example.com", "GitHub Test", "http://example.com/avatar", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -122,7 +122,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHubDisableSignupSuccessWithPri
 func (ts *ExternalTestSuite) TestSignupExternalGitHubDisableSignupSuccessWithNonPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("123", "secondary@example.com", "GitHub Test", "http://example.com/avatar", "")
+	ts.createUser("+9112345678", "123", "secondary@example.com", "GitHub Test", "http://example.com/avatar", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -137,7 +137,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHubDisableSignupSuccessWithNon
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalGitHubSuccessWhenMatchingToken() {
 	// name and avatar should be populated from GitHub API
-	ts.createUser("123", "github@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "123", "github@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -162,7 +162,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalGitHubErrorWhenNoMatchingTok
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalGitHubErrorWhenWrongToken() {
-	ts.createUser("123", "github@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "123", "github@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -175,7 +175,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalGitHubErrorWhenWrongToken() 
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalGitHubErrorWhenEmailDoesntMatch() {
-	ts.createUser("123", "github@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "123", "github@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"

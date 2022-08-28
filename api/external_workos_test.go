@@ -160,7 +160,7 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkosDisableSignupErrorWhenEmpty
 func (ts *ExternalTestSuite) TestSignupExternalWorkosDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("test_prof_workos", "workos@example.com", "John Doe", "http://example.com/avatar", "")
+	ts.createUser("+9112345678", "test_prof_workos", "workos@example.com", "John Doe", "http://example.com/avatar", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -173,7 +173,7 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkosDisableSignupSuccessWithPri
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalWorkosSuccessWhenMatchingToken() {
-	ts.createUser("test_prof_workos", "workos@example.com", "", "http://example.com/avatar", "invite_token")
+	ts.createUser("+9112345678", "test_prof_workos", "workos@example.com", "", "http://example.com/avatar", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -196,7 +196,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalWorkosErrorWhenNoMatchingTok
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalWorkosErrorWhenWrongToken() {
-	ts.createUser("test_prof_workos", "workos@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "test_prof_workos", "workos@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -208,7 +208,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalWorkosErrorWhenWrongToken() 
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalWorkosErrorWhenEmailDoesntMatch() {
-	ts.createUser("test_prof_workos", "workos@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "test_prof_workos", "workos@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"

@@ -105,7 +105,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGoogleDisableSignupErrorWhenEmpty
 func (ts *ExternalTestSuite) TestSignupExternalGoogleDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("googleTestId", "google@example.com", "Google Test", "http://example.com/avatar", "")
+	ts.createUser("+9112345678", "googleTestId", "google@example.com", "Google Test", "http://example.com/avatar", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -119,7 +119,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGoogleDisableSignupSuccessWithPri
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalGoogleSuccessWhenMatchingToken() {
 	// name and avatar should be populated from Google API
-	ts.createUser("googleTestId", "google@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "googleTestId", "google@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -142,7 +142,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalGoogleErrorWhenNoMatchingTok
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalGoogleErrorWhenWrongToken() {
-	ts.createUser("googleTestId", "google@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "googleTestId", "google@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -154,7 +154,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalGoogleErrorWhenWrongToken() 
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalGoogleErrorWhenEmailDoesntMatch() {
-	ts.createUser("googleTestId", "google@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "googleTestId", "google@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
