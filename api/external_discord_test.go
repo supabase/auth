@@ -105,7 +105,7 @@ func (ts *ExternalTestSuite) TestSignupExternalDiscordDisableSignupErrorWhenEmpt
 func (ts *ExternalTestSuite) TestSignupExternalDiscordDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("discordTestId", "discord@example.com", "Discord Test", "https://cdn.discordapp.com/avatars/discordTestId/abc.png", "")
+	ts.createUser("+9112345678", "discordTestId", "discord@example.com", "Discord Test", "https://cdn.discordapp.com/avatars/discordTestId/abc.png", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -119,7 +119,7 @@ func (ts *ExternalTestSuite) TestSignupExternalDiscordDisableSignupSuccessWithPr
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalDiscordSuccessWhenMatchingToken() {
 	// name and avatar should be populated from Discord API
-	ts.createUser("discordTestId", "discord@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "discordTestId", "discord@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -142,7 +142,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalDiscordErrorWhenNoMatchingTo
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalDiscordErrorWhenWrongToken() {
-	ts.createUser("discordTestId", "discord@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "discordTestId", "discord@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -154,7 +154,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalDiscordErrorWhenWrongToken()
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalDiscordErrorWhenEmailDoesntMatch() {
-	ts.createUser("discordTestId", "discord@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "discordTestId", "discord@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"

@@ -114,7 +114,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitLabDisableSignupErrorWhenEmpty
 func (ts *ExternalTestSuite) TestSignupExternalGitLabDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("123", "gitlab@example.com", "GitLab Test", "http://example.com/avatar", "")
+	ts.createUser("+9112345678", "123", "gitlab@example.com", "GitLab Test", "http://example.com/avatar", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -132,7 +132,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitLabDisableSignupSuccessWithSec
 	ts.Config.Mailer.Autoconfirm = true
 	ts.Config.DisableSignup = true
 
-	ts.createUser("123", "secondary@example.com", "GitLab Test", "http://example.com/avatar", "")
+	ts.createUser("+9112345678", "123", "secondary@example.com", "GitLab Test", "http://example.com/avatar", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -147,7 +147,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitLabDisableSignupSuccessWithSec
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalGitLabSuccessWhenMatchingToken() {
 	// name and avatar should be populated from GitLab API
-	ts.createUser("123", "gitlab@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "123", "gitlab@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -172,7 +172,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalGitLabErrorWhenNoMatchingTok
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalGitLabErrorWhenWrongToken() {
-	ts.createUser("123", "gitlab@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "123", "gitlab@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -185,7 +185,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalGitLabErrorWhenWrongToken() 
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalGitLabErrorWhenEmailDoesntMatch() {
-	ts.createUser("123", "gitlab@example.com", "", "", "invite_token")
+	ts.createUser("+9112345678", "123", "gitlab@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
