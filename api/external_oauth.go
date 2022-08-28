@@ -14,8 +14,9 @@ import (
 
 // OAuthProviderData contains the userData and token returned by the oauth provider
 type OAuthProviderData struct {
-	userData *provider.UserProvidedData
-	token    string
+	userData     *provider.UserProvidedData
+	token        string
+	refreshToken string
 }
 
 // loadOAuthState parses the `state` query parameter as a JWS payload,
@@ -96,8 +97,9 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 	}
 
 	return &OAuthProviderData{
-		userData: userData,
-		token:    token.AccessToken,
+		userData:     userData,
+		token:        token.AccessToken,
+		refreshToken: token.RefreshToken,
 	}, nil
 }
 
@@ -134,8 +136,9 @@ func (a *API) oAuth1Callback(ctx context.Context, r *http.Request, providerType 
 	}
 
 	return &OAuthProviderData{
-		userData: userData,
-		token:    accessToken.Token,
+		userData:     userData,
+		token:        accessToken.Token,
+		refreshToken: "",
 	}, nil
 
 }

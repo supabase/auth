@@ -109,7 +109,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	providerType := getExternalProviderType(ctx)
 	var userData *provider.UserProvidedData
-	var providerToken string
+	var providerAccessToken string
+	var providerRefreshToken string
 	if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
 		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)
@@ -117,14 +118,16 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			return err
 		}
 		userData = oAuthResponseData.userData
-		providerToken = oAuthResponseData.token
+		providerAccessToken = oAuthResponseData.token
+		providerRefreshToken = oAuthResponseData.refreshToken
 	} else {
 		oAuthResponseData, err := a.oAuthCallback(ctx, r, providerType)
 		if err != nil {
 			return err
 		}
 		userData = oAuthResponseData.userData
-		providerToken = oAuthResponseData.token
+		providerAccessToken = oAuthResponseData.token
+		providerRefreshToken = oAuthResponseData.refreshToken
 	}
 
 	var user *models.User
@@ -286,7 +289,11 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	rurl := a.getExternalRedirectURL(r)
 	if token != nil {
 		q := url.Values{}
-		q.Set("provider_token", providerToken)
+		q.Set("provider_token", providerAccessToken)
+		// Because not all providers give out a refresh token
+		if providerRefreshToken != "" {
+			q.Set("provider_refresh_token", providerRefreshToken)
+		}
 		q.Set("access_token", token.Token)
 		q.Set("token_type", token.TokenType)
 		q.Set("expires_in", strconv.Itoa(token.ExpiresIn))
