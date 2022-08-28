@@ -4,6 +4,9 @@ create table if not exists auth.sessions (
     user_id uuid not null,
     created_at timestamptz null,
     updated_at timestamptz null,
+    factor_id  text null,
+    amr_claims text [] null,
+
     constraint sessions_pkey primary key (id),
     constraint sessions_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade
 );
