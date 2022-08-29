@@ -48,6 +48,7 @@ func (ts *MFATestSuite) SetupTest() {
 }
 
 func (ts *MFATestSuite) TestEnrollFactor() {
+	// TODO(Joel): Check that only one factor can be enrolled
 	var cases = []struct {
 		desc         string
 		FriendlyName string
@@ -229,43 +230,69 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 }
 
 func (ts *MFATestSuite) TestUnenrollFactor() {
-	// TODO(Joel): Test case where factor is unverified
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	emailValue, err := u.Email.Value()
-	require.NoError(ts.T(), err)
-	testEmail := emailValue.(string)
-	testDomain := strings.Split(testEmail, "@")[1]
-	// set factor secret
-	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      testDomain,
-		AccountName: testEmail,
-	})
-	sharedSecret := key.Secret()
-	factors, err := models.FindFactorsByUser(ts.API.db, u)
-	f := factors[0]
-	f.SecretKey = sharedSecret
-	err = f.UpdateStatus(ts.API.db, models.FactorVerifiedState)
-	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
+	cases := []struct {
+		desc             string
+		IsFactorVerified bool
+		ExpectedHTTPCode int
+	}{
+		{
+			"Unverified Factor",
+			false,
+			http.StatusForbidden,
+		},
+		{
+			"Verified Factor",
+			true,
+			http.StatusOK,
+		},
+	}
+	for _, v := range cases {
 
-	var buffer bytes.Buffer
+		ts.Run(v.desc, func() {
+			u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+			emailValue, err := u.Email.Value()
+			require.NoError(ts.T(), err)
+			testEmail := emailValue.(string)
+			testDomain := strings.Split(testEmail, "@")[1]
+			// Set factor secret
+			key, err := totp.Generate(totp.GenerateOpts{
+				Issuer:      testDomain,
+				AccountName: testEmail,
+			})
+			sharedSecret := key.Secret()
+			factors, err := models.FindFactorsByUser(ts.API.db, u)
+			f := factors[0]
+			f.SecretKey = sharedSecret
+			if v.IsFactorVerified {
+				err = f.UpdateStatus(ts.API.db, models.FactorVerifiedState)
+				require.NoError(ts.T(), err)
+			}
 
-	token, err := generateAccessToken(u, "", time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	require.NoError(ts.T(), err)
 
-	code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
-	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"factor_id": f.ID,
-		"code":      code,
-	}))
+			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
 
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/user/%s/factor/%s/", u.ID, f.ID), &buffer)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
-	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+			var buffer bytes.Buffer
+
+			token, err := generateAccessToken(u, "", time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+			require.NoError(ts.T(), err)
+
+			code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
+			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"factor_id": f.ID,
+				"code":      code,
+			}))
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/user/%s/factor/%s/", u.ID, f.ID), &buffer)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), v.ExpectedHTTPCode, w.Code)
+			if v.IsFactorVerified {
+				_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
+				require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+			}
+		})
+	}
 
 }
