@@ -2,6 +2,7 @@ package conf
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"time"
 
@@ -36,6 +37,10 @@ type DBConfiguration struct {
 	MigrationsPath string `json:"migrations_path" split_words:"true" default:"./migrations"`
 }
 
+func (c *DBConfiguration) Validate() error {
+	return nil
+}
+
 // JWTConfiguration holds all the JWT related configuration.
 type JWTConfiguration struct {
 	Secret           string   `json:"secret" required:"true"`
@@ -46,15 +51,30 @@ type JWTConfiguration struct {
 	DefaultGroupName string   `json:"default_group_name" split_words:"true"`
 }
 
+type APIConfiguration struct {
+	Host            string
+	Port            int `envconfig:"PORT" default:"8081"`
+	Endpoint        string
+	RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
+	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
+}
+
+func (a *APIConfiguration) Validate() error {
+	if a.ExternalURL != "" {
+		// sometimes, in tests, ExternalURL is empty and we regard that
+		// as a valid value
+		_, err := url.ParseRequestURI(a.ExternalURL)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
-	API struct {
-		Host            string
-		Port            int `envconfig:"PORT" default:"8081"`
-		Endpoint        string
-		RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
-		ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
-	}
+	API                   APIConfiguration
 	DB                    DBConfiguration
 	External              ProviderConfiguration
 	Logging               LoggingConfig `envconfig:"LOG"`
@@ -125,6 +145,10 @@ type SMTPConfiguration struct {
 	Pass         string        `json:"pass,omitempty"`
 	AdminEmail   string        `json:"admin_email" split_words:"true"`
 	SenderName   string        `json:"sender_name" split_words:"true"`
+}
+
+func (c *SMTPConfiguration) Validate() error {
+	return nil
 }
 
 type MailerConfiguration struct {
@@ -231,7 +255,13 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		return nil, err
 	}
 
-	config.ApplyDefaults()
+	if err := config.ApplyDefaults(); err != nil {
+		return nil, err
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
 
 	if _, err := ConfigureLogging(&config.Logging); err != nil {
 		return nil, err
@@ -239,14 +269,11 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 
 	ConfigureTracing(&config.Tracing)
 
-	if config.SMTP.MaxFrequency == 0 {
-		config.SMTP.MaxFrequency = 1 * time.Minute
-	}
 	return config, nil
 }
 
 // ApplyDefaults sets defaults for a GlobalConfiguration
-func (config *GlobalConfiguration) ApplyDefaults() {
+func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.JWT.AdminGroupName == "" {
 		config.JWT.AdminGroupName = "admin"
 	}
@@ -320,6 +347,7 @@ func (config *GlobalConfiguration) ApplyDefaults() {
 	if config.URIAllowList == nil {
 		config.URIAllowList = []string{}
 	}
+
 	if config.URIAllowList != nil {
 		config.URIAllowListMap = make(map[string]glob.Glob)
 		for _, uri := range config.URIAllowList {
@@ -327,9 +355,32 @@ func (config *GlobalConfiguration) ApplyDefaults() {
 			config.URIAllowListMap[uri] = g
 		}
 	}
+
 	if config.PasswordMinLength < defaultMinPasswordLength {
 		config.PasswordMinLength = defaultMinPasswordLength
 	}
+
+	return nil
+}
+
+// Validate validates all of configuration.
+func (c *GlobalConfiguration) Validate() error {
+	validatables := []interface {
+		Validate() error
+	}{
+		&c.API,
+		&c.DB,
+		&c.Tracing,
+		&c.SMTP,
+	}
+
+	for _, validatable := range validatables {
+		if err := validatable.Validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (o *OAuthProviderConfiguration) Validate() error {
