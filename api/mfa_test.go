@@ -268,7 +268,6 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 				require.NoError(ts.T(), err)
 			}
 
-
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
 
 			var buffer bytes.Buffer
