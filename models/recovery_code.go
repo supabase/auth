@@ -22,7 +22,7 @@ func (RecoveryCode) TableName() string {
 	return tableName
 }
 
-// Returns a new recovery code associated with the factor
+// Returns a new recovery code associated with the user
 func NewRecoveryCode(user *User, recoveryCode string) (*RecoveryCode, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
