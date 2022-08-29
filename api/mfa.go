@@ -57,7 +57,7 @@ type UnenrollFactorParams struct {
 }
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
-	const factorPrefix = "factor"
+	// TODO(joel): Gate the endpoint with a config var such that only one factor can be enrolled
 	const imageSideLength = 300
 	ctx := r.Context()
 	user := getUser(ctx)
@@ -68,7 +68,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return badRequestError(err.Error())
 	}
-	if (params.FactorType != "totp") && (params.FactorType != "webauthn") {
+	factorType := params.FactorType
+	if (factorType != models.TOTP) && (factorType != models.Webauthn) {
 		return unprocessableEntityError("FactorType needs to be either 'totp' or 'webauthn'")
 	}
 	if params.Issuer == "" {
@@ -89,8 +90,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Error generating QR Code image").WithInternalError(err)
 	}
 	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())
-	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, models.FactorDisabledState, key.Secret())
+	factorID := fmt.Sprintf("%s_%s", models.FactorPrefix, crypto.SecureToken())
+	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, factorType, models.FactorDisabledState, key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}
@@ -202,11 +203,11 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}); err != nil {
 			return err
 		}
-		if err = challenge.Verify(a.db); err != nil {
+		if err = challenge.Verify(tx); err != nil {
 			return err
 		}
 		if factor.Status != models.FactorVerifiedState {
-			if err = factor.UpdateStatus(a.db, models.FactorVerifiedState); err != nil {
+			if err = factor.UpdateStatus(tx, models.FactorVerifiedState); err != nil {
 				return err
 			}
 		}

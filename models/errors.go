@@ -19,6 +19,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case ChallengeNotFoundError:
 		return true
+	case FactorNotFoundError:
+		return true
 	}
 	return false
 }
