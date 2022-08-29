@@ -87,7 +87,11 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	qrCode, _ := qr.Encode(key.String(), qr.M, qr.Auto)
 	qs := goqrsvg.NewQrSVG(qrCode, models.DefaultQRSize)
 	qs.StartQrSVG(s)
-	qs.WriteQrSVG(s)
+	err = qs.WriteQrSVG(s)
+	if err != nil {
+		return internalServerError("Error writing to QR Code").WithInternalError(err)
+	}
+
 	s.End()
 
 	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())

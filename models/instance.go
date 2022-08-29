@@ -11,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-
 type Instance struct {
 	ID uuid.UUID `json:"id" db:"id"`
 	// Netlify UUID
