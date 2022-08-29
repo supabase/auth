@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"time"
@@ -21,7 +22,7 @@ func (RecoveryCode) TableName() string {
 	return tableName
 }
 
-// Returns a new recovery code associated with the user
+// Returns a new recovery code associated with the factor
 func NewRecoveryCode(user *User, recoveryCode string) (*RecoveryCode, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
@@ -46,4 +47,51 @@ func FindValidRecoveryCodesByUser(tx *storage.Connection, user *User) ([]*Recove
 		return nil, errors.Wrap(err, "Error finding recovery codes")
 	}
 	return recoveryCodes, nil
+}
+
+// Validate recovery code
+func IsRecoveryCodeValid(tx *storage.Connection, user *User, recoveryCode string) (*RecoveryCode, error) {
+	rc := &RecoveryCode{}
+	if err := tx.Q().Where("user_id = ? AND used_at IS NULL AND recovery_code = ?", user.ID, recoveryCode).First(&rc); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, nil
+	}
+	return rc, nil
+}
+
+// Use and invalidate a recovery code
+func (r *RecoveryCode) Consume(tx *storage.Connection) error {
+	now := time.Now()
+	r.UsedAt = &now
+	return tx.UpdateOnly(r, "used_at")
+}
+
+func GenerateBatchOfRecoveryCodes(tx *storage.Connection, user *User) ([]*RecoveryCode, error) {
+	recoveryCodes := []*RecoveryCode{}
+	for i := 0; i <= NumRecoveryCodes; i++ {
+		rc, err := NewRecoveryCode(user, crypto.SecureToken(RecoveryCodeLength))
+		if err = tx.Create(rc); err != nil {
+			return nil, errors.Wrap(err, "error creating recovery code")
+		}
+		recoveryCodes = append(recoveryCodes, rc)
+	}
+	return recoveryCodes, nil
+}
+
+func ValidateRecoveryCode(tx *storage.Connection, user *User, recoveryCode string) error {
+	rc, terr := IsRecoveryCodeValid(tx, user, recoveryCode)
+	if terr != nil {
+		return terr
+	}
+	if rc.RecoveryCode == recoveryCode {
+		terr = rc.Consume(tx)
+		if terr != nil {
+			return terr
+		}
+		return nil
+	}
+	return errors.New("Invalid code entered")
+
 }

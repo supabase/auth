@@ -57,6 +57,12 @@ type UnenrollFactorParams struct {
 	Code string `json:"code"`
 }
 
+type StepUpLoginParams struct {
+	ChallengeID  string `json:"challenge_id"`
+	Code         string `json:"code"`
+	RecoveryCode string `json:"recovery_code"`
+}
+
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	const factorPrefix = "factor"
 	ctx := r.Context()
@@ -237,8 +243,8 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		if terr = models.NewAuditLogEntry(tx, user, models.MFALoginAction, "", nil); terr != nil {
 			return terr
 		}
-
-		token, terr = a.issueRefreshToken(ctx, tx, user, "totp")
+		// TODO(joel): Reinstate the TOTP claim when we add the claims logic to all endpoints
+		token, terr = a.issueRefreshToken(ctx, tx, user)
 		if terr != nil {
 			return terr
 		}
