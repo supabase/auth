@@ -12,9 +12,8 @@ import (
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
 	"github.com/go-chi/chi"
-	"github.com/gofrs/uuid"
-	"github.com/imdario/mergo"
 	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/mailer"
 	"github.com/netlify/gotrue/storage"
 	"github.com/rs/cors"
@@ -41,8 +40,9 @@ type API struct {
 func (a *API) ListenAndServe(hostAndPort string) {
 	log := logrus.WithField("component", "api")
 	server := &http.Server{
-		Addr:    hostAndPort,
-		Handler: a.handler,
+		Addr:              hostAndPort,
+		Handler:           a.handler,
+		ReadHeaderTimeout: 2 * time.Second, // to mitigate a Slowloris attack
 	}
 
 	done := make(chan struct{})
@@ -76,12 +76,32 @@ func NewAPI(globalConfig *conf.GlobalConfiguration, db *storage.Connection) *API
 	return NewAPIWithVersion(context.Background(), globalConfig, db, defaultVersion)
 }
 
+func (a *API) deprecationNotices(ctx context.Context) {
+	config := a.config
+
+	log := logrus.WithField("component", "api")
+
+	if config.JWT.AdminGroupName != "" {
+		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_ADMIN_GROUP_NAME not supported by Supabase's GoTrue, will be removed soon")
+	}
+
+	if len(config.JWT.AdminRoles) > 0 {
+		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_ADMIN_ROLES not supported by Supabase's GoTrue, will be removed soon")
+	}
+
+	if config.JWT.DefaultGroupName != "" {
+		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_DEFAULT_GROUP_NAME not supported by Supabase's GoTrue, will be removed soon")
+	}
+}
+
 // NewAPIWithVersion creates a new REST API using the specified version
 func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
 	api := &API{config: globalConfig, db: db, version: version}
 
+	api.deprecationNotices(ctx)
+
 	xffmw, _ := xff.Default()
-	logger := newStructuredLogger(logrus.StandardLogger())
+	logger := logger.NewStructuredLogger(logrus.StandardLogger())
 
 	r := newRouter()
 	r.UseBypass(xffmw.Handler)
@@ -95,20 +115,12 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.UseBypass(logger)
 		r.Use(api.loadOAuthState)
 
-		if globalConfig.MultiInstanceMode {
-			r.Use(api.loadInstanceConfig)
-		}
 		r.Get("/", api.ExternalProviderCallback)
 		r.Post("/", api.ExternalProviderCallback)
 	})
 
 	r.Route("/", func(r *router) {
 		r.UseBypass(logger)
-
-		if globalConfig.MultiInstanceMode {
-			r.Use(api.loadJWSSignatureHeader)
-			r.Use(api.loadInstanceConfig)
-		}
 
 		r.Get("/settings", api.Settings)
 
@@ -127,7 +139,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			tollbooth.NewLimiter(api.config.RateLimitTokenRefresh/(60*5), &limiter.ExpirableOptions{
 				DefaultExpirationTTL: time.Hour,
 			}).SetBurst(30),
-		)).Post("/token", api.Token)
+		)).With(api.verifyCaptcha).Post("/token", api.Token)
 
 		r.With(api.limitHandler(
 			// Allow requests at the specified rate per 5 minutes.
@@ -136,18 +148,16 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			}).SetBurst(30),
 		)).Route("/verify", func(r *router) {
 			r.Get("/", api.Verify)
-			r.Post("/", api.Verify)
+			r.With(api.verifyCaptcha).Post("/", api.Verify)
 		})
 
 		r.With(api.requireAuthentication).Post("/logout", api.Logout)
 
-		r.Route("/reauthenticate", func(r *router) {
-			r.Use(api.requireAuthentication)
+		r.With(api.requireAuthentication).Route("/reauthenticate", func(r *router) {
 			r.Get("/", api.Reauthenticate)
 		})
 
-		r.Route("/user", func(r *router) {
-			r.Use(api.requireAuthentication)
+		r.With(api.requireAuthentication).Route("/user", func(r *router) {
 			r.Get("/", api.UserGet)
 			r.With(sharedLimiter).Put("/", api.UserUpdate)
 			r.Route("/{user_id}", func(r *router) {
@@ -198,33 +208,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 			r.Post("/generate_link", api.GenerateLink)
 		})
-
-		r.Route("/saml", func(r *router) {
-			r.Route("/acs", func(r *router) {
-				r.Use(api.loadSAMLState)
-				r.Post("/", api.ExternalProviderCallback)
-			})
-
-			r.Get("/metadata", api.SAMLMetadata)
-		})
 	})
-
-	if globalConfig.MultiInstanceMode {
-		// Operator microservice API
-		r.WithBypass(logger).Get("/", api.GetAppManifest)
-		r.Route("/instances", func(r *router) {
-			r.UseBypass(logger)
-
-			r.Post("/", api.CreateInstance)
-			r.Route("/{instance_id}", func(r *router) {
-				r.Use(api.loadInstance)
-
-				r.Get("/", api.GetInstance)
-				r.Put("/", api.UpdateInstance)
-				r.Delete("/", api.DeleteInstance)
-			})
-		})
-	}
 
 	corsHandler := cors.New(cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
@@ -237,28 +221,18 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 }
 
 // NewAPIFromConfigFile creates a new REST API using the provided configuration file.
-func NewAPIFromConfigFile(filename string, version string) (*API, *conf.Configuration, error) {
-	globalConfig, err := conf.LoadGlobal(filename)
+func NewAPIFromConfigFile(filename string, version string) (*API, *conf.GlobalConfiguration, error) {
+	config, err := conf.LoadGlobal(filename)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	config, err := conf.LoadConfig(filename)
+	db, err := storage.Dial(config)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	ctx, err := WithInstanceConfig(context.Background(), config, uuid.Nil)
-	if err != nil {
-		logrus.Fatalf("Error loading instance config: %+v", err)
-	}
-
-	db, err := storage.Dial(globalConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return NewAPIWithVersion(ctx, globalConfig, db, version), config, nil
+	return NewAPIWithVersion(context.Background(), config, db, version), config, nil
 }
 
 // HealthCheck endpoint indicates if the gotrue api service is available
@@ -270,42 +244,8 @@ func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-// WithInstanceConfig adds the instanceID and tenant config to the context
-func WithInstanceConfig(ctx context.Context, config *conf.Configuration, instanceID uuid.UUID) (context.Context, error) {
-	ctx = withConfig(ctx, config)
-	ctx = withInstanceID(ctx, instanceID)
-	return ctx, nil
-}
-
 // Mailer returns NewMailer with the current tenant config
 func (a *API) Mailer(ctx context.Context) mailer.Mailer {
-	config := a.getConfig(ctx)
+	config := a.config
 	return mailer.NewMailer(config)
-}
-
-func (a *API) getConfig(ctx context.Context) *conf.Configuration {
-	obj := ctx.Value(configKey)
-	if obj == nil {
-		return nil
-	}
-
-	config := obj.(*conf.Configuration)
-
-	// Merge global & per-instance external config for multi-instance mode
-	if a.config.MultiInstanceMode {
-		extConfig := (*a.config).External
-		if err := mergo.MergeWithOverwrite(&extConfig, config.External); err != nil {
-			return nil
-		}
-		config.External = extConfig
-
-		// Merge global & per-instance smtp config for multi-instance mode
-		smtpConfig := (*a.config).SMTP
-		if err := mergo.MergeWithOverwrite(&smtpConfig, config.SMTP); err != nil {
-			return nil
-		}
-		config.SMTP = smtpConfig
-	}
-
-	return config
 }

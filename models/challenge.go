@@ -54,7 +54,7 @@ func FindChallengesByFactorID(tx *storage.Connection, factorID string) ([]*Chall
 func (f *Challenge) Verify(tx *storage.Connection) error {
 	now := time.Now()
 	f.VerifiedAt = &now
-	return tx.UpdateOnly(f, "verifiedAt")
+	return tx.UpdateOnly(f, "verified_at")
 }
 
 func findChallenge(tx *storage.Connection, query string, args ...interface{}) (*Challenge, error) {
@@ -65,6 +65,5 @@ func findChallenge(tx *storage.Connection, query string, args ...interface{}) (*
 		}
 		return nil, errors.Wrap(err, "error finding challenge")
 	}
-
 	return obj, nil
 }

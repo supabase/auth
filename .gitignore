@@ -3,6 +3,8 @@ vendor/
 gotrue
 gotrue-arm64
 
+coverage.out
+
 .DS_Store
 .vscode
 www/dist/

@@ -8,9 +8,14 @@ import (
 	"time"
 )
 
+const FactorPrefix = "factor"
+
 const FactorDisabledState = "disabled"
 const FactorUnverifiedState = "unverified"
 const FactorVerifiedState = "verified"
+
+const TOTP = "totp"
+const Webauthn = "webauthn"
 
 type Factor struct {
 	ID           string    `json:"id" db:"id"`

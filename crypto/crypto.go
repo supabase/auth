@@ -32,6 +32,7 @@ func GenerateOtp(digits int) (string, error) {
 	if err != nil {
 		return "", errors.WithMessage(err, "Error generating otp")
 	}
+	// adds a variable zero-padding to the left to ensure otp is uniformly random
 	expr := "%0" + strconv.Itoa(digits) + "v"
 	otp := fmt.Sprintf(expr, val.String())
 	return otp, nil

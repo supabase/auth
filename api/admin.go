@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
@@ -40,10 +41,9 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 		return nil, badRequestError("user_id must be an UUID")
 	}
 
-	logEntrySetField(r, "user_id", userID)
-	instanceID := getInstanceID(r.Context())
+	logger.LogEntrySetField(r, "user_id", userID)
 
-	u, err := models.FindUserByInstanceIDAndID(a.db, instanceID, userID)
+	u, err := models.FindUserByID(a.db, userID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return nil, notFoundError("User not found")
@@ -57,7 +57,7 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	factorID := chi.URLParam(r, "factor_id")
 
-	logEntrySetField(r, "factor_id", factorID)
+	logger.LogEntrySetField(r, "factor_id", factorID)
 	f, err := models.FindFactorByFactorID(a.db, factorID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -70,17 +70,22 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 
 func (a *API) getAdminParams(r *http.Request) (*adminUserParams, error) {
 	params := adminUserParams{}
-	err := json.NewDecoder(r.Body).Decode(&params)
+
+	body, err := getBodyBytes(r)
 	if err != nil {
+		return nil, badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, &params); err != nil {
 		return nil, badRequestError("Could not decode admin user params: %v", err)
 	}
+
 	return &params, nil
 }
 
 // adminUsers responds with a list of all users in a given audience
 func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	instanceID := getInstanceID(ctx)
 	aud := a.requestAud(ctx, r)
 
 	pageParams, err := paginate(r)
@@ -95,7 +100,7 @@ func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 
 	filter := r.URL.Query().Get("filter")
 
-	users, err := models.FindUsersInAudience(a.db, instanceID, aud, pageParams, sortParams, filter)
+	users, err := models.FindUsersInAudience(a.db, aud, pageParams, sortParams, filter)
 	if err != nil {
 		return internalServerError("Database error finding users").WithInternalError(err)
 	}
@@ -119,9 +124,8 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
-	instanceID := getInstanceID(ctx)
 	params, err := a.getAdminParams(r)
-	config := getConfig(ctx)
+	config := a.config
 	if err != nil {
 		return err
 	}
@@ -195,7 +199,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserModifiedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserModifiedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
@@ -221,9 +225,8 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 // adminUserCreate creates a new user based on the provided data
 func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
-	instanceID := getInstanceID(ctx)
 	adminUser := getAdminUser(ctx)
 	params, err := a.getAdminParams(r)
 	if err != nil {
@@ -243,7 +246,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if err := a.validateEmail(ctx, params.Email); err != nil {
 			return err
 		}
-		if exists, err := models.IsDuplicatedEmail(a.db, instanceID, params.Email, aud); err != nil {
+		if exists, err := models.IsDuplicatedEmail(a.db, params.Email, aud); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
 		} else if exists {
 			return unprocessableEntityError("Email address already registered by another user")
@@ -255,7 +258,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if exists, err := models.IsDuplicatedPhone(a.db, instanceID, params.Phone, aud); err != nil {
+		if exists, err := models.IsDuplicatedPhone(a.db, params.Phone, aud); err != nil {
 			return internalServerError("Database error checking phone").WithInternalError(err)
 		} else if exists {
 			return unprocessableEntityError("Phone number already registered by another user")
@@ -270,10 +273,11 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		params.Password = &password
 	}
 
-	user, err := models.NewUser(instanceID, params.Phone, params.Email, *params.Password, aud, params.UserMetaData)
+	user, err := models.NewUser(params.Phone, params.Email, *params.Password, aud, params.UserMetaData)
 	if err != nil {
 		return internalServerError("Error creating user").WithInternalError(err)
 	}
+
 	if user.AppMetaData == nil {
 		user.AppMetaData = make(map[string]interface{})
 	}
@@ -290,7 +294,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserSignedUpAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserSignedUpAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
@@ -308,6 +312,12 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		}
 		if terr := user.SetRole(tx, role); terr != nil {
 			return terr
+		}
+
+		if params.AppMetaData != nil {
+			if terr := user.UpdateAppMetaData(tx, params.AppMetaData); terr != nil {
+				return terr
+			}
 		}
 
 		if params.EmailConfirm {
@@ -339,11 +349,10 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
-	instanceID := getInstanceID(ctx)
 	adminUser := getAdminUser(ctx)
 
 	err := a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserDeletedAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserDeletedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
@@ -366,7 +375,6 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
-	instanceID := getInstanceID(ctx)
 	factor := getFactor(ctx)
 
 	MFAEnabled, err := models.IsMFAEnabled(a.db, user)
@@ -377,7 +385,7 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.DeleteFactorAction, r.RemoteAddr, map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, user, models.DeleteFactorAction, r.RemoteAddr, map[string]interface{}{
 			"user_id":   user.ID,
 			"factor_id": factor.ID,
 		}); terr != nil {
@@ -397,7 +405,6 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 func (a *API) adminUserDeleteRecoveryCodes(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
-	instanceID := getInstanceID(ctx)
 
 	MFAEnabled, err := models.IsMFAEnabled(a.db, user)
 	if err != nil {
@@ -411,7 +418,7 @@ func (a *API) adminUserDeleteRecoveryCodes(w http.ResponseWriter, r *http.Reques
 		return terr
 	}
 	terr = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.DeleteRecoveryCodesAction, r.RemoteAddr, map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, user, models.DeleteRecoveryCodesAction, r.RemoteAddr, map[string]interface{}{
 			"user_id": user.ID,
 		}); terr != nil {
 			return terr
@@ -452,8 +459,6 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 	factor := getFactor(ctx)
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
-	instanceID := getInstanceID(ctx)
-
 	params := &adminUserUpdateFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
@@ -482,7 +487,7 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 			}
 		}
 
-		if terr := models.NewAuditLogEntry(tx, instanceID, adminUser, models.UpdateFactorAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UpdateFactorAction, "", map[string]interface{}{
 			"user_id":     user.ID,
 			"factor_id":   factor.ID,
 			"factor_type": factor.FactorType,

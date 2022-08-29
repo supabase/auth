@@ -1,7 +1,6 @@
 package models
 
 import (
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
@@ -32,7 +31,7 @@ func (ts *ChallengeTestSuite) SetupTest() {
 }
 
 func (ts *FactorTestSuite) TestFindChallengesByFactorID() {
-	u, err := NewUser(uuid.Nil, "", "genericemail@gmail.com", "secret", "test", nil)
+	u, err := NewUser("", "genericemail@gmail.com", "secret", "test", nil)
 	require.NoError(ts.T(), err)
 	err = ts.db.Create(u)
 	require.NoError(ts.T(), err)

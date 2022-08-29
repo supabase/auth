@@ -26,6 +26,7 @@ type GoTrueClaims struct {
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	UserMetaData map[string]interface{} `json:"user_metadata"`
 	Role         string                 `json:"role"`
+	SessionId    string                 `json:"session_id"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -72,9 +73,7 @@ const useCookieHeader = "x-use-cookie"
 const useSessionCookie = "session"
 const InvalidLoginMessage = "Invalid login credentials"
 
-func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVerifier, error) {
-	config := getConfig(ctx)
-
+func (p *IdTokenGrantParams) getVerifier(ctx context.Context, config *conf.GlobalConfiguration) (*oidc.IDTokenVerifier, error) {
 	var provider *oidc.Provider
 	var err error
 	var oAuthProvider conf.OAuthProviderConfiguration
@@ -167,34 +166,36 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	params := &PasswordGrantParams{}
 
-	jsonDecoder := json.NewDecoder(r.Body)
-	if err := jsonDecoder.Decode(params); err != nil {
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read password grant params: %v", err)
 	}
 
 	aud := a.requestAud(ctx, r)
-	instanceID := getInstanceID(ctx)
-	config := a.getConfig(ctx)
+	config := a.config
 
 	if params.Email != "" && params.Phone != "" {
 		return unprocessableEntityError("Only an email address or phone number should be provided on login.")
 	}
 	var user *models.User
 	var provider string
-	var err error
 	if params.Email != "" {
 		provider = "email"
 		if !config.External.Email.Enabled {
 			return badRequestError("Email logins are disabled")
 		}
-		user, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+		user, err = models.FindUserByEmailAndAudience(a.db, params.Email, aud)
 	} else if params.Phone != "" {
 		provider = "phone"
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone logins are disabled")
 		}
 		params.Phone = a.formatPhoneNumber(params.Phone)
-		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
+		user, err = models.FindUserByPhoneAndAudience(a.db, params.Phone, aud)
 	} else {
 		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
@@ -219,12 +220,12 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
+		if terr = models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": provider,
 		}); terr != nil {
 			return terr
 		}
-		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 			return terr
 		}
 
@@ -241,19 +242,22 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	if err != nil {
 		return err
 	}
-	metering.RecordLogin("password", user.ID, instanceID)
+	metering.RecordLogin("password", user.ID)
 	return sendJSON(w, http.StatusOK, token)
 }
 
 // RefreshTokenGrant implements the refresh_token grant type flow
 func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	config := a.getConfig(ctx)
-	instanceID := getInstanceID(ctx)
+	config := a.config
 
 	params := &RefreshTokenGrantParams{}
 
-	jsonDecoder := json.NewDecoder(r.Body)
-	if err := jsonDecoder.Decode(params); err != nil {
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read refresh token grant params: %v", err)
 	}
 
@@ -321,18 +325,18 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.TokenRefreshedAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, user, models.TokenRefreshedAction, "", nil); terr != nil {
 			return terr
 		}
 
 		if newToken == nil {
-			newToken, terr = models.GrantRefreshTokenSwap(tx, user, token)
+			newToken, terr = models.GrantRefreshTokenSwap(r, tx, user, token)
 			if terr != nil {
 				return internalServerError(terr.Error())
 			}
 		}
 
-		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessToken(user, newToken.SessionId.UUID.String(), time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -353,19 +357,22 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	if err != nil {
 		return err
 	}
-	metering.RecordLogin("token", user.ID, instanceID)
+	metering.RecordLogin("token", user.ID)
 	return sendJSON(w, http.StatusOK, newTokenResponse)
 }
 
 // IdTokenGrant implements the id_token grant type flow
 func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	config := a.getConfig(ctx)
-	instanceID := getInstanceID(ctx)
+	config := a.config
 
 	params := &IdTokenGrantParams{}
 
-	jsonDecoder := json.NewDecoder(r.Body)
-	if err := jsonDecoder.Decode(params); err != nil {
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read id token grant params: %v", err)
 	}
 
@@ -378,9 +385,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	var verifier *oidc.IDTokenVerifier
-	var err error
 	if params.Provider != "" {
-		verifier, err = params.getVerifier(ctx)
+		verifier, err = params.getVerifier(ctx, a.config)
 	} else if params.ClientID != "" && params.Issuer != "" {
 		verifier, err = params.getVerifierFromClientIDandIssuer(ctx)
 	} else {
@@ -479,21 +485,22 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				isEmailVerified = getEmailVerified(emailVerified)
 			}
 			if (!ok || !isEmailVerified) && !config.Mailer.Autoconfirm {
+
 				mailer := a.Mailer(ctx)
 				referrer := a.getReferrer(r)
-				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {
 					return internalServerError("Error sending confirmation mail").WithInternalError(terr)
 				}
 				return unauthorizedError("Error unverified email")
 			}
 
-			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
+			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr
 			}
 
-			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
+			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
 				return terr
 			}
 
@@ -501,12 +508,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				return internalServerError("Error updating user").WithInternalError(terr)
 			}
 		} else {
-			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
+			if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr
 			}
-			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 				return terr
 			}
 		}
@@ -526,11 +533,11 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return internalServerError("Failed to set JWT cookie. %s", err)
 	}
 
-	metering.RecordLogin("id_token", user.ID, instanceID)
+	metering.RecordLogin("id_token", user.ID)
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func generateAccessToken(user *models.User, expiresIn time.Duration, secret string) (string, error) {
+func generateAccessToken(user *models.User, sessionId string, expiresIn time.Duration, secret string) (string, error) {
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
@@ -542,6 +549,7 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, secret stri
 		AppMetaData:  user.AppMetaData,
 		UserMetaData: user.UserMetaData,
 		Role:         user.Role,
+		SessionId:    sessionId,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -549,7 +557,7 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, secret stri
 }
 
 func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User) (*AccessTokenResponse, error) {
-	config := a.getConfig(ctx)
+	config := a.config
 
 	now := time.Now()
 	user.LastSignInAt = &now
@@ -564,7 +572,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessToken(user, refreshToken.SessionId.UUID.String(), time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -584,14 +592,14 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 }
 
 // setCookieTokens sets the access_token & refresh_token in the cookies
-func (a *API) setCookieTokens(config *conf.Configuration, token *AccessTokenResponse, session bool, w http.ResponseWriter) error {
+func (a *API) setCookieTokens(config *conf.GlobalConfiguration, token *AccessTokenResponse, session bool, w http.ResponseWriter) error {
 	// don't need to catch error here since we always set the cookie name
 	_ = a.setCookieToken(config, "access-token", token.Token, session, w)
 	_ = a.setCookieToken(config, "refresh-token", token.RefreshToken, session, w)
 	return nil
 }
 
-func (a *API) setCookieToken(config *conf.Configuration, name string, tokenString string, session bool, w http.ResponseWriter) error {
+func (a *API) setCookieToken(config *conf.GlobalConfiguration, name string, tokenString string, session bool, w http.ResponseWriter) error {
 	if name == "" {
 		return errors.New("Failed to set cookie, invalid name")
 	}
@@ -614,12 +622,12 @@ func (a *API) setCookieToken(config *conf.Configuration, name string, tokenStrin
 	return nil
 }
 
-func (a *API) clearCookieTokens(config *conf.Configuration, w http.ResponseWriter) {
+func (a *API) clearCookieTokens(config *conf.GlobalConfiguration, w http.ResponseWriter) {
 	a.clearCookieToken(config, "access-token", w)
 	a.clearCookieToken(config, "refresh-token", w)
 }
 
-func (a *API) clearCookieToken(config *conf.Configuration, name string, w http.ResponseWriter) {
+func (a *API) clearCookieToken(config *conf.GlobalConfiguration, name string, w http.ResponseWriter) {
 	cookieName := config.Cookie.Key
 	if name != "" {
 		cookieName += "-" + name

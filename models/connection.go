@@ -41,6 +41,6 @@ func TruncateAll(conn *storage.Connection) error {
 		if err := tx.RawQuery("delete from " + (&pop.Model{Value: AuditLogEntry{}}).TableName()).Exec(); err != nil {
 			return err
 		}
-		return tx.RawQuery("delete from " + (&pop.Model{Value: Instance{}}).TableName()).Exec()
+		return nil
 	})
 }

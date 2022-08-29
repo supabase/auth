@@ -18,7 +18,7 @@ type Instance struct {
 	// Netlify UUID
 	UUID uuid.UUID `json:"uuid,omitempty" db:"uuid"`
 
-	BaseConfig *conf.Configuration `json:"config" db:"raw_base_config"`
+	BaseConfig *conf.GlobalConfiguration `json:"config" db:"raw_base_config"`
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
@@ -30,12 +30,12 @@ func (Instance) TableName() string {
 }
 
 // Config loads the the base configuration values with defaults.
-func (i *Instance) Config() (*conf.Configuration, error) {
+func (i *Instance) Config() (*conf.GlobalConfiguration, error) {
 	if i.BaseConfig == nil {
 		return nil, errors.New("no configuration data available")
 	}
 
-	baseConf := &conf.Configuration{}
+	baseConf := &conf.GlobalConfiguration{}
 	*baseConf = *i.BaseConfig
 	baseConf.ApplyDefaults()
 
@@ -43,7 +43,7 @@ func (i *Instance) Config() (*conf.Configuration, error) {
 }
 
 // UpdateConfig updates the base config
-func (i *Instance) UpdateConfig(tx *storage.Connection, config *conf.Configuration) error {
+func (i *Instance) UpdateConfig(tx *storage.Connection, config *conf.GlobalConfiguration) error {
 	i.BaseConfig = config
 	return tx.UpdateOnly(i, "raw_base_config")
 }
