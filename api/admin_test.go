@@ -623,7 +623,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorDisabledState, "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorUnverifiedState, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 

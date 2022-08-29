@@ -164,6 +164,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
+// TODO(Joel): Move over other supporting changes from other branch. Don't use until properly tested.
 func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
@@ -240,7 +241,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(tx, user, models.MFALoginAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, user, models.MFALoginAction, "", nil); terr != nil {
 			return terr
 		}
 		// TODO(joel): Reinstate the TOTP claim when we add the claims logic to all endpoints

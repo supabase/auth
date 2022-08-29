@@ -38,6 +38,7 @@ const (
 	DeleteFactorAction              AuditAction = "factor_deleted"
 	DeleteRecoveryCodesAction       AuditAction = "recovery_codes_deleted"
 	UpdateFactorAction              AuditAction = "factor_updated"
+	MFALoginAction                  AuditAction = "mfa_login"
 
 	account       auditLogType = "account"
 	team          auditLogType = "team"
@@ -67,6 +68,7 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	VerifyFactorAction:              factor,
 	DeleteFactorAction:              factor,
 	UpdateFactorAction:              factor,
+	MFALoginAction:                  factor,
 	DeleteRecoveryCodesAction:       recoveryCodes,
 }
 
