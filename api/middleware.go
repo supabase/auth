@@ -49,6 +49,12 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		c := req.Context()
+
+		if a.isAdmin(c) {
+			// rate limiting does not apply for admin
+			return c, nil
+		}
+
 		if limitHeader := a.config.RateLimitHeader; limitHeader != "" {
 			key := req.Header.Get(a.config.RateLimitHeader)
 			err := tollbooth.LimitByKeys(lmt, []string{key})
@@ -68,6 +74,12 @@ func (a *API) limitEmailSentHandler() middlewareHandler {
 	}).SetBurst(int(a.config.RateLimitEmailSent)).SetMethods([]string{"PUT", "POST"})
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		c := req.Context()
+
+		if a.isAdmin(c) {
+			// rate limiting does not apply for admin
+			return c, nil
+		}
+
 		config := a.config
 		if config.External.Email.Enabled && !config.Mailer.Autoconfirm {
 			if req.Method == "PUT" || req.Method == "POST" {
@@ -127,7 +139,7 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 	if !config.Security.Captcha.Enabled {
 		return ctx, nil
 	}
-	if _, err := a.requireAdminCredentials(w, req); err == nil {
+	if a.isAdmin(ctx) {
 		// skip captcha validation if authorization header contains an admin role
 		return ctx, nil
 	}

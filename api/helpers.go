@@ -14,7 +14,6 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/models"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -48,14 +47,6 @@ func sendJSON(w http.ResponseWriter, status int, obj interface{}) error {
 	w.WriteHeader(status)
 	_, err = w.Write(b)
 	return err
-}
-
-func (a *API) isAdmin(ctx context.Context, u *models.User, aud string) bool {
-	config := a.config
-	if aud == "" {
-		aud = config.JWT.Aud
-	}
-	return aud == u.Aud && u.HasRole(config.JWT.AdminGroupName)
 }
 
 func (a *API) requestAud(ctx context.Context, r *http.Request) string {

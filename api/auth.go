@@ -34,19 +34,27 @@ func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (con
 	return ctx, err
 }
 
-func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	// Find the administrative user
+// isAdmin checks if the current context's JWT represents an admin user (i.e.
+// service_role or supabase_admin).
+func (a *API) isAdmin(ctx context.Context) bool {
 	claims := getClaims(ctx)
 	if claims == nil {
-		fmt.Printf("[%s] %s %s %d %s\n", time.Now().Format("2006-01-02 15:04:05"), r.Method, r.RequestURI, http.StatusForbidden, "Invalid token")
-		return nil, unauthorizedError("Invalid token")
+		return false
 	}
 
 	adminRoles := a.config.JWT.AdminRoles
 
-	if isStringInSlice(claims.Role, adminRoles) {
+	return isStringInSlice(claims.Role, adminRoles)
+}
+
+func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	if a.isAdmin(ctx) {
+		claims := getClaims(ctx)
+
 		// successful authentication
 		return withAdminUser(ctx, &models.User{Role: claims.Role, Email: storage.NullString(claims.Role)}), nil
+	} else {
+		fmt.Printf("[%s] %s %s %d %s\n", time.Now().Format("2006-01-02 15:04:05"), r.Method, r.RequestURI, http.StatusForbidden, "Invalid token")
 	}
 
 	fmt.Printf("[%s] %s %s %d %s\n", time.Now().Format("2006-01-02 15:04:05"), r.Method, r.RequestURI, http.StatusForbidden, "this token needs role 'supabase_admin' or 'service_role'")
