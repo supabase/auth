@@ -13,7 +13,6 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/pquerna/otp/totp"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -21,7 +20,6 @@ type EnrollFactorParams struct {
 	FriendlyName string `json:"friendly_name"`
 	FactorType   string `json:"factor_type"`
 	Issuer       string `json:"issuer"`
-	QRCodeSize   string `json:"qr_code_size"`
 }
 
 type TOTPObject struct {
@@ -60,8 +58,6 @@ type UnenrollFactorParams struct {
 }
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
-	var qrCodeSize int
-	const defaultSize = 5
 	const factorPrefix = "factor"
 	ctx := r.Context()
 	user := getUser(ctx)
@@ -79,15 +75,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if params.Issuer == "" {
 		return unprocessableEntityError("Issuer is required")
 	}
-	if params.QRCodeSize != "" {
-		if i, err := strconv.Atoi(params.QRCodeSize); err == nil {
-			qrCodeSize = i
-		} else {
-			return unprocessableEntityError("Please enter a valid QR Code Size")
-		}
-	} else if params.QRCodeSize == "" {
-		qrCodeSize = defaultSize
-	}
 	// TODO(Joel): Review this portion when email is no longer a primary key
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      params.Issuer,
@@ -99,7 +86,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	var buf bytes.Buffer
 	s := svg.New(&buf)
 	qrCode, _ := qr.Encode(key.String(), qr.M, qr.Auto)
-	qs := goqrsvg.NewQrSVG(qrCode, qrCodeSize)
+	qs := goqrsvg.NewQrSVG(qrCode, models.DefaultQRSize)
 	qs.StartQrSVG(s)
 	qs.WriteQrSVG(s)
 	s.End()
@@ -126,7 +113,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		Type: factor.FactorType,
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
-			QRCode: fmt.Sprintf("data:img/svg+xml;utf-8,%v", w),
+			QRCode: fmt.Sprintf("data:img/svg+xml;utf-8,%v", &buf),
 			Secret: factor.SecretKey,
 			URI:    key.URL(),
 		},
