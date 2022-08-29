@@ -49,8 +49,7 @@ type JWTConfiguration struct {
 
 // MFAConfiguration holds all the MFA related Configuration
 type MFAConfiguration struct {
-	Enabled                 bool    `json:"mfa_enabled" default:"false"`
-	ChallengeExpiryDuration float64 `json:"challenge_expiry_duration" default:"300"`
+	ChallengeExpiryDuration float64 `json:"challenge_expiry_duration" default:"300" split_words:"true"`
 }
 
 // GlobalConfiguration holds all the configuration that applies to all instances.

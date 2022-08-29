@@ -103,6 +103,9 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
+	if terr != nil {
+		return terr
+	}
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:   factor.ID,
 		Type: factor.FactorType,
@@ -171,6 +174,10 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
+	valid := totp.Validate(params.Code, factor.SecretKey)
+	if !valid {
+		return unauthorizedError("Invalid TOTP code entered")
+	}
 
 	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(globalConfig.MFA.ChallengeExpiryDuration)))
 	if hasExpired {
@@ -205,9 +212,8 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
-	valid := totp.Validate(params.Code, factor.SecretKey)
-	if !valid {
-		return unauthorizedError("Invalid TOTP code entered")
+	if err != nil {
+		return err
 	}
 
 	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
