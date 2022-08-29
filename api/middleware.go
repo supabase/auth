@@ -1,10 +1,8 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -74,15 +72,13 @@ func (a *API) limitEmailSentHandler() middlewareHandler {
 		if config.External.Email.Enabled && !config.Mailer.Autoconfirm {
 			if req.Method == "PUT" || req.Method == "POST" {
 				res := make(map[string]interface{})
-				bodyBytes, err := ioutil.ReadAll(req.Body)
+
+				bodyBytes, err := getBodyBytes(req)
 				if err != nil {
 					return c, internalServerError("Error invalid request body").WithInternalError(err)
 				}
-				req.Body.Close()
-				req.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
 
-				jsonDecoder := json.NewDecoder(bytes.NewBuffer(bodyBytes))
-				if err := jsonDecoder.Decode(&res); err != nil {
+				if err := json.Unmarshal(bodyBytes, &res); err != nil {
 					return c, badRequestError("Error invalid request body").WithInternalError(err)
 				}
 

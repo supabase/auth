@@ -33,7 +33,8 @@ vet: # Vet the code
 	go vet $(CHECK_FILES)
 
 sec: # Check for security vulnerabilities
-	gosec -tests -exclude=G104 $(CHECK_FILES)
+	gosec -quiet $(CHECK_FILES)
+	gosec -quiet -tests -exclude=G104 $(CHECK_FILES)
 
 dev: ## Run the development containers
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up

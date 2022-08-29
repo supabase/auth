@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"os/signal"
@@ -51,7 +52,10 @@ func (a *API) ListenAndServe(hostAndPort string) {
 		waitForTermination(log, done)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		server.Shutdown(ctx)
+		err := server.Shutdown(ctx)
+		if err != nil && !errors.Is(err, context.Canceled) && errors.Is(err, context.DeadlineExceeded) {
+			log.WithError(err).Error("Shutdown failed")
+		}
 	}()
 
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
