@@ -48,7 +48,6 @@ type Webhook struct {
 	jwtSecret string
 	claims    jwt.Claims
 	payload   []byte
-	headers   map[string]string
 }
 
 type WebhookResponse struct {

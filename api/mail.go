@@ -19,7 +19,6 @@ import (
 
 var (
 	MaxFrequencyLimitError error = errors.New("Frequency limit reached")
-	configFile                   = ""
 )
 
 type GenerateLinkParams struct {

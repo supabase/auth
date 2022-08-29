@@ -99,16 +99,6 @@ func withSignature(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, signatureKey, id)
 }
 
-// getSignature reads the request ID from the context.
-func getSignature(ctx context.Context) string {
-	obj := ctx.Value(signatureKey)
-	if obj == nil {
-		return ""
-	}
-
-	return obj.(string)
-}
-
 func withInviteToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, inviteTokenKey, token)
 }
