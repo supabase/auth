@@ -11,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const baseConfigKey = ""
 
 type Instance struct {
 	ID uuid.UUID `json:"id" db:"id"`
