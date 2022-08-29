@@ -65,7 +65,7 @@ func KeycloakTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalKeycloakWithoutURLSetup() {
-	ts.createUser("+9112345678", "keycloaktestid", "keycloak@example.com", "Keycloak Test", "", "")
+	ts.createUser("keycloaktestid", "keycloak@example.com", "Keycloak Test", "", "")
 	tokenCount, userCount := 0, 0
 	code := "authcode"
 	server := KeycloakTestSignupSetup(ts, &tokenCount, &userCount, code, keycloakUser)
@@ -78,7 +78,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKeycloakWithoutURLSetup() {
 
 func (ts *ExternalTestSuite) TestSignupExternalKeycloak_AuthorizationCode() {
 	ts.Config.DisableSignup = false
-	ts.createUser("+9112345678", "keycloaktestid", "keycloak@example.com", "Keycloak Test", "http://example.com/avatar", "")
+	ts.createUser("keycloaktestid", "keycloak@example.com", "Keycloak Test", "http://example.com/avatar", "")
 	tokenCount, userCount := 0, 0
 	code := "authcode"
 	server := KeycloakTestSignupSetup(ts, &tokenCount, &userCount, code, keycloakUser)
@@ -117,7 +117,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKeycloakDisableSignupErrorWhenNoE
 func (ts *ExternalTestSuite) TestSignupExternalKeycloakDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("+9112345678", "keycloaktestid", "keycloak@example.com", "Keycloak Test", "http://example.com/avatar", "")
+	ts.createUser("keycloaktestid", "keycloak@example.com", "Keycloak Test", "http://example.com/avatar", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -131,7 +131,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKeycloakDisableSignupSuccessWithP
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalKeycloakSuccessWhenMatchingToken() {
 	// name and avatar should be populated from Keycloak API
-	ts.createUser("+9112345678", "keycloaktestid", "keycloak@example.com", "", "http://example.com/avatar", "invite_token")
+	ts.createUser("keycloaktestid", "keycloak@example.com", "", "http://example.com/avatar", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -155,7 +155,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalKeycloakErrorWhenNoMatchingT
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalKeycloakErrorWhenWrongToken() {
-	ts.createUser("+9112345678", "keycloaktestid", "keycloak@example.com", "", "", "invite_token")
+	ts.createUser("keycloaktestid", "keycloak@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -168,7 +168,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalKeycloakErrorWhenWrongToken(
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalKeycloakErrorWhenEmailDoesntMatch() {
-	ts.createUser("+9112345678", "keycloaktestid", "keycloak@example.com", "", "", "invite_token")
+	ts.createUser("keycloaktestid", "keycloak@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"

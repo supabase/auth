@@ -96,7 +96,7 @@ func (ts *ExternalTestSuite) TestSignupExternalLinkedinDisableSignupErrorWhenNoU
 func (ts *ExternalTestSuite) TestSignupExternalLinkedinDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("+9112345678", "linkedinTestId", "linkedin@example.com", "Linkedin Test", "http://example.com/avatar", "")
+	ts.createUser("linkedinTestId", "linkedin@example.com", "Linkedin Test", "http://example.com/avatar", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -110,7 +110,7 @@ func (ts *ExternalTestSuite) TestSignupExternalLinkedinDisableSignupSuccessWithP
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalLinkedinSuccessWhenMatchingToken() {
 	// name and avatar should be populated from Linkedin API
-	ts.createUser("+9112345678", "linkedinTestId", "linkedin@example.com", "", "", "invite_token")
+	ts.createUser("linkedinTestId", "linkedin@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -133,7 +133,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalLinkedinErrorWhenNoMatchingT
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalLinkedinErrorWhenWrongToken() {
-	ts.createUser("+9112345678", "linkedinTestId", "linkedin@example.com", "", "", "invite_token")
+	ts.createUser("linkedinTestId", "linkedin@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -145,7 +145,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalLinkedinErrorWhenWrongToken(
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalLinkedinErrorWhenEmailDoesntMatch() {
-	ts.createUser("+9112345678", "linkedinTestId", "linkedin@example.com", "", "", "invite_token")
+	ts.createUser("linkedinTestId", "linkedin@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"

@@ -107,7 +107,7 @@ func (ts *ExternalTestSuite) TestSignupExternalTwitchDisableSignupErrorWhenEmpty
 func (ts *ExternalTestSuite) TestSignupExternalTwitchDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("+9112345678", "twitchTestId", "twitch@example.com", "Twitch Test", "https://s.gravatar.com/avatar/23463b99b62a72f26ed677cc556c44e8", "")
+	ts.createUser("twitchTestId", "twitch@example.com", "Twitch Test", "https://s.gravatar.com/avatar/23463b99b62a72f26ed677cc556c44e8", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -121,7 +121,7 @@ func (ts *ExternalTestSuite) TestSignupExternalTwitchDisableSignupSuccessWithPri
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalTwitchSuccessWhenMatchingToken() {
 	// name and avatar should be populated from Twitch API
-	ts.createUser("+9112345678", "twitchTestId", "twitch@example.com", "", "", "invite_token")
+	ts.createUser("twitchTestId", "twitch@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -146,7 +146,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalTwitchErrorWhenNoMatchingTok
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalTwitchErrorWhenWrongToken() {
-	ts.createUser("+9112345678", "twitchTestId", "twitch@example.com", "", "", "invite_token")
+	ts.createUser("twitchTestId", "twitch@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -158,7 +158,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalTwitchErrorWhenWrongToken() 
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalTwitchErrorWhenEmailDoesntMatch() {
-	ts.createUser("+9112345678", "twitchTestId", "twitch@example.com", "", "", "invite_token")
+	ts.createUser("twitchTestId", "twitch@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"

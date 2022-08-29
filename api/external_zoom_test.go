@@ -106,7 +106,7 @@ func (ts *ExternalTestSuite) TestSignupExternalZoomDisableSignupErrorWhenEmptyEm
 func (ts *ExternalTestSuite) TestSignupExternalZoomDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("+9112345678", "zoomUserId", "zoom@example.com", "John Doe", "http://example.com/avatar", "")
+	ts.createUser("zoomUserId", "zoom@example.com", "John Doe", "http://example.com/avatar", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -119,7 +119,7 @@ func (ts *ExternalTestSuite) TestSignupExternalZoomDisableSignupSuccessWithPrima
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalZoomSuccessWhenMatchingToken() {
-	ts.createUser("+9112345678", "zoomUserId", "zoom@example.com", "", "", "invite_token")
+	ts.createUser("zoomUserId", "zoom@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -142,7 +142,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalZoomErrorWhenNoMatchingToken
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalZoomErrorWhenWrongToken() {
-	ts.createUser("+9112345678", "zoomUserId", "zoom@example.com", "", "", "invite_token")
+	ts.createUser("zoomUserId", "zoom@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -154,7 +154,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalZoomErrorWhenWrongToken() {
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalZoomErrorWhenEmailDoesntMatch() {
-	ts.createUser("+9112345678", "zoomUserId", "zoom@example.com", "", "", "invite_token")
+	ts.createUser("zoomUserId", "zoom@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"

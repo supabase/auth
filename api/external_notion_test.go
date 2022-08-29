@@ -106,7 +106,7 @@ func (ts *ExternalTestSuite) TestSignupExternalNotionDisableSignupErrorWhenEmpty
 func (ts *ExternalTestSuite) TestSignupExternalNotionDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("+9112345678", "notionTestId", "notion@example.com", "Notion Test", "http://example.com/avatar", "")
+	ts.createUser("notionTestId", "notion@example.com", "Notion Test", "http://example.com/avatar", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -120,7 +120,7 @@ func (ts *ExternalTestSuite) TestSignupExternalNotionDisableSignupSuccessWithPri
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalNotionSuccessWhenMatchingToken() {
 	// name and avatar should be populated from Notion API
-	ts.createUser("+9112345678", "notionTestId", "notion@example.com", "", "", "invite_token")
+	ts.createUser("notionTestId", "notion@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -145,7 +145,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalNotionErrorWhenNoMatchingTok
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalNotionErrorWhenWrongToken() {
-	ts.createUser("+9112345678", "notionTestId", "notion@example.com", "", "", "invite_token")
+	ts.createUser("notionTestId", "notion@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -157,7 +157,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalNotionErrorWhenWrongToken() 
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalNotionErrorWhenEmailDoesntMatch() {
-	ts.createUser("+9112345678", "notionTestId", "notion@example.com", "", "", "invite_token")
+	ts.createUser("notionTestId", "notion@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
