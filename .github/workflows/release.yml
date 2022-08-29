@@ -4,7 +4,9 @@ on:
   workflow_run:
     workflows: [Test]
     types: [completed]
-    branches: [master]
+    branches:
+      - master
+      - mfa
 
 jobs:
   release:

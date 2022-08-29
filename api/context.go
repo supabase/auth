@@ -114,16 +114,6 @@ func withSignature(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, signatureKey, id)
 }
 
-// getSignature reads the request ID from the context.
-func getSignature(ctx context.Context) string {
-	obj := ctx.Value(signatureKey)
-	if obj == nil {
-		return ""
-	}
-
-	return obj.(string)
-}
-
 func withInviteToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, inviteTokenKey, token)
 }
@@ -163,11 +153,6 @@ func getExternalReferrer(ctx context.Context) string {
 	}
 
 	return obj.(string)
-}
-
-// withFunctionHooks adds the provided function hooks to the context.
-func withFunctionHooks(ctx context.Context, hooks map[string][]string) context.Context {
-	return context.WithValue(ctx, functionHooksKey, hooks)
 }
 
 // getFunctionHooks reads the request ID from the context.

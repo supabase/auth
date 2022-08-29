@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"os/signal"
@@ -51,7 +52,10 @@ func (a *API) ListenAndServe(hostAndPort string) {
 		waitForTermination(log, done)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		server.Shutdown(ctx)
+		err := server.Shutdown(ctx)
+		if err != nil && !errors.Is(err, context.Canceled) && errors.Is(err, context.DeadlineExceeded) {
+			log.WithError(err).Error("Shutdown failed")
+		}
 	}()
 
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
@@ -83,10 +87,6 @@ func (a *API) deprecationNotices(ctx context.Context) {
 
 	if config.JWT.AdminGroupName != "" {
 		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_ADMIN_GROUP_NAME not supported by Supabase's GoTrue, will be removed soon")
-	}
-
-	if len(config.JWT.AdminRoles) > 0 {
-		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_ADMIN_ROLES not supported by Supabase's GoTrue, will be removed soon")
 	}
 
 	if config.JWT.DefaultGroupName != "" {

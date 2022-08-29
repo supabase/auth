@@ -100,10 +100,6 @@ func notFoundError(fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusNotFound, fmtString, args...)
 }
 
-func acceptedTokenError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusAccepted, fmtString, args...)
-}
-
 func expiredTokenError(fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusUnauthorized, fmtString, args...)
 }

@@ -48,7 +48,6 @@ type Webhook struct {
 	jwtSecret string
 	claims    jwt.Claims
 	payload   []byte
-	headers   map[string]string
 }
 
 type WebhookResponse struct {
@@ -148,7 +147,9 @@ func (w *Webhook) generateSignature() (string, error) {
 
 func closeBody(rsp *http.Response) {
 	if rsp != nil && rsp.Body != nil {
-		rsp.Body.Close()
+		if err := rsp.Body.Close(); err != nil {
+			logrus.WithError(err).Warn("body close in hooks failed")
+		}
 	}
 }
 
@@ -231,11 +232,9 @@ func triggerHook(ctx context.Context, hookURL *url.URL, secret string, conn *sto
 	w.URL = hookURL.String()
 
 	body, err := w.trigger()
-	defer func() {
-		if body != nil {
-			body.Close()
-		}
-	}()
+	if body != nil {
+		defer body.Close()
+	}
 	if err == nil && body != nil {
 		webhookRsp := &WebhookResponse{}
 		decoder := json.NewDecoder(body)
