@@ -57,7 +57,7 @@ type UnenrollFactorParams struct {
 }
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
-	// TODO(joel): Gat such that only one factor can be enrolled
+	// TODO(joel): Gate the endpoint with a config var such that only one factor can be enrolled
 	const imageSideLength = 300
 	ctx := r.Context()
 	user := getUser(ctx)
