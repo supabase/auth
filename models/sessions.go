@@ -15,6 +15,8 @@ type Session struct {
 	UserID    uuid.UUID `json:"user_id" db:"user_id"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	FactorID  string    `json:"factor_id" db:"factor_id"`
+	AMRClaims []string  `json:"amr_claims" db:"amr_claims"`
 }
 
 func (Session) TableName() string {
