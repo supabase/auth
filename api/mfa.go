@@ -7,7 +7,6 @@ import (
 	"github.com/aaronarduino/goqrsvg"
 	"github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
-	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -121,19 +120,17 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 }
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	globalConfig, err := conf.LoadGlobal(configFile)
-	if err != nil {
-		return internalServerError("Error loading Config").WithInternalError(err)
-	}
+	config := a.config
+
 	user := getUser(ctx)
 	factor := getFactor(ctx)
-	challenge, terr := models.NewChallenge(factor)
+	challenge, err := models.NewChallenge(factor)
 	if err != nil {
 		return internalServerError("Database error creating challenge").WithInternalError(err)
 	}
 
-	terr = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr = tx.Create(challenge); terr != nil {
+	terr := a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := tx.Create(challenge); terr != nil {
 			return terr
 		}
 		if terr := models.NewAuditLogEntry(r, tx, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
@@ -149,7 +146,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	creationTime := challenge.CreatedAt
-	expiryTime := creationTime.Add(time.Second * time.Duration(globalConfig.MFA.ChallengeExpiryDuration))
+	expiryTime := creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration))
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
 		ExpiresAt: expiryTime.String(),
@@ -161,7 +158,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
 	factor := getFactor(ctx)
-	globalConfig, err := conf.LoadGlobal(configFile)
+	config := a.config
 
 	params := &VerifyFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -182,7 +179,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return unauthorizedError("Invalid TOTP code entered")
 	}
 
-	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(globalConfig.MFA.ChallengeExpiryDuration)))
+	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
 	if hasExpired {
 		err := a.db.Transaction(func(tx *storage.Connection) error {
 			if terr := tx.Destroy(challenge); terr != nil {
