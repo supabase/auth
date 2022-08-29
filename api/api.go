@@ -85,10 +85,6 @@ func (a *API) deprecationNotices(ctx context.Context) {
 		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_ADMIN_GROUP_NAME not supported by Supabase's GoTrue, will be removed soon")
 	}
 
-	if len(config.JWT.AdminRoles) > 0 {
-		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_ADMIN_ROLES not supported by Supabase's GoTrue, will be removed soon")
-	}
-
 	if config.JWT.DefaultGroupName != "" {
 		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_DEFAULT_GROUP_NAME not supported by Supabase's GoTrue, will be removed soon")
 	}
