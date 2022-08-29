@@ -1,16 +1,25 @@
 module github.com/netlify/gotrue
 
 require (
+	cloud.google.com/go v0.67.0 // indirect
+	github.com/GoogleCloudPlatform/cloudsql-proxy v0.0.0-20170623214735-571947b0f240
+	github.com/Masterminds/semver/v3 v3.1.1 // indirect
+	github.com/aaronarduino/goqrsvg v0.0.0-20220419053939-17e843f1dd40
+	github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b // indirect
 	github.com/badoux/checkmail v0.0.0-20170203135005-d0a759655d62
+	github.com/beevik/etree v1.1.0
+	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc
 	github.com/coreos/go-oidc/v3 v3.0.0
 	github.com/didip/tollbooth/v5 v5.1.1
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/gobuffalo/pop/v5 v5.3.3
+	github.com/gobuffalo/validate/v3 v3.3.0 // indirect
 	github.com/gobwas/glob v0.2.3
 	github.com/gofrs/uuid v4.0.0+incompatible
 	github.com/golang-jwt/jwt v3.2.1+incompatible
 	github.com/gorilla/securecookie v1.1.1
 	github.com/gorilla/sessions v1.1.1
+	github.com/imdario/mergo v0.0.0-20160216103600-3e95a51e0639
 	github.com/jackc/pgconn v1.8.0
 	github.com/jackc/pgerrcode v0.0.0-20201024163028-a0d42d470451
 	github.com/jackc/pgproto3/v2 v2.0.7 // indirect
@@ -18,6 +27,8 @@ require (
 	github.com/joho/godotenv v1.3.0
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/lestrrat-go/jwx v0.9.0
+	github.com/lib/pq v1.9.0 // indirect
+	github.com/microcosm-cc/bluemonday v1.0.19 // indirect
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/mrjones/oauth v0.0.0-20190623134757-126b35219450
 	github.com/netlify/mailme v1.1.1
@@ -39,9 +50,7 @@ require (
 require github.com/gobuffalo/nulls v0.4.0
 
 require (
-	github.com/Masterminds/semver/v3 v3.1.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
-	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.10.0 // indirect
 	github.com/fatih/structs v1.1.0 // indirect
@@ -55,7 +64,6 @@ require (
 	github.com/gobuffalo/packr/v2 v2.8.1 // indirect
 	github.com/gobuffalo/plush/v4 v4.1.0 // indirect
 	github.com/gobuffalo/tags/v3 v3.1.0 // indirect
-	github.com/gobuffalo/validate/v3 v3.3.0 // indirect
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/google/go-cmp v0.5.2 // indirect
 	github.com/gorilla/context v1.1.1 // indirect
@@ -69,12 +77,10 @@ require (
 	github.com/jackc/pgx/v4 v4.10.1 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
-	github.com/lib/pq v1.9.0 // indirect
 	github.com/luna-duclos/instrumentedsql v1.1.3 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
-	github.com/microcosm-cc/bluemonday v1.0.16 // indirect
 	github.com/netlify/netlify-commons v0.32.0 // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/philhofer/fwd v1.0.0 // indirect

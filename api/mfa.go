@@ -2,15 +2,16 @@ package api
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/aaronarduino/goqrsvg"
+	"github.com/ajstarks/svgo"
+	"github.com/boombuler/barcode/qr"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pquerna/otp/totp"
-	"image/png"
 	"net/http"
 	"time"
 )
@@ -57,8 +58,7 @@ type UnenrollFactorParams struct {
 }
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
-	// TODO(joel): Gate the endpoint with a config var such that only one factor can be enrolled
-	const imageSideLength = 300
+	const factorPrefix = "factor"
 	ctx := r.Context()
 	user := getUser(ctx)
 
@@ -84,14 +84,15 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Error generating QR Code secret key").WithInternalError(err)
 	}
 	var buf bytes.Buffer
-	img, err := key.Image(imageSideLength, imageSideLength)
-	png.Encode(&buf, img)
-	if err != nil {
-		return internalServerError("Error generating QR Code image").WithInternalError(err)
-	}
-	qrAsBase64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-	factorID := fmt.Sprintf("%s_%s", models.FactorPrefix, crypto.SecureToken())
-	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, factorType, models.FactorDisabledState, key.Secret())
+	s := svg.New(&buf)
+	qrCode, _ := qr.Encode(key.String(), qr.M, qr.Auto)
+	qs := goqrsvg.NewQrSVG(qrCode, models.DefaultQRSize)
+	qs.StartQrSVG(s)
+	qs.WriteQrSVG(s)
+	s.End()
+
+	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())
+	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, models.FactorDisabledState, key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}
@@ -111,7 +112,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		ID:   factor.ID,
 		Type: factor.FactorType,
 		TOTP: TOTPObject{
-			QRCode: fmt.Sprintf("data:img/png;base64,%v", qrAsBase64),
+			// See: https://css-tricks.com/probably-dont-base64-svg/
+			QRCode: fmt.Sprintf("data:img/svg+xml;utf-8,%v", &buf),
 			Secret: factor.SecretKey,
 			URI:    key.URL(),
 		},
