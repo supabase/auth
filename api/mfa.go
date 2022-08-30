@@ -244,8 +244,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		if terr = models.NewAuditLogEntry(r, tx, user, models.MFALoginAction, "", nil); terr != nil {
 			return terr
 		}
-		// TODO(joel): Reinstate the TOTP claim when we add the claims logic to all endpoints
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.TOTP)
 		if terr != nil {
 			return terr
 		}

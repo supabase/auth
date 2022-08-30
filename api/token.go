@@ -226,7 +226,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant)
 		if terr != nil {
 			return terr
 		}
@@ -515,7 +515,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuthIDGrant)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
@@ -553,7 +553,7 @@ func generateAccessToken(user *models.User, sessionId string, expiresIn time.Dur
 	return token.SignedString([]byte(secret))
 }
 
-func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User) (*AccessTokenResponse, error) {
+func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod string) (*AccessTokenResponse, error) {
 	config := a.config
 
 	now := time.Now()
