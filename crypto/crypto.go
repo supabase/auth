@@ -33,5 +33,3 @@ func GenerateOtp(digits int) (string, error) {
 	otp := fmt.Sprintf(expr, val.String())
 	return otp, nil
 }
-
-
