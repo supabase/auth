@@ -50,6 +50,12 @@ type RefreshTokenGrantParams struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+// AMREntry represents a method that a user has logged in together with the corresponding time
+type AMREntry struct {
+	Method    string    `json:"method"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // IdTokenGrantParams are the parameters the IdTokenGrant method accepts
 type IdTokenGrantParams struct {
 	IdToken  string `json:"id_token"`
