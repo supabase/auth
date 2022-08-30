@@ -21,12 +21,14 @@ import (
 // GoTrueClaims is a struct thats used for JWT claims
 type GoTrueClaims struct {
 	jwt.StandardClaims
-	Email        string                 `json:"email"`
-	Phone        string                 `json:"phone"`
-	AppMetaData  map[string]interface{} `json:"app_metadata"`
-	UserMetaData map[string]interface{} `json:"user_metadata"`
-	Role         string                 `json:"role"`
-	SessionId    string                 `json:"session_id"`
+	Email                         string                 `json:"email"`
+	Phone                         string                 `json:"phone"`
+	AppMetaData                   map[string]interface{} `json:"app_metadata"`
+	UserMetaData                  map[string]interface{} `json:"user_metadata"`
+	Role                          string                 `json:"role"`
+	AuthenticatorAssuranceLevel   string                 `json:"aal"`
+	AuthenticationMethodReference []AMREntry             `json:"amr"`
+	SessionId                     string                 `json:"session_id"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
