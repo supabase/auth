@@ -10,7 +10,6 @@ import (
 
 const FactorPrefix = "factor"
 
-const FactorDisabledState = "disabled"
 const FactorUnverifiedState = "unverified"
 const FactorVerifiedState = "verified"
 

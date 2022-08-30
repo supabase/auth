@@ -42,7 +42,7 @@ func (ts *MFATestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 	// Create Factor
-	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorDisabledState, "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorUnverifiedState, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 }
@@ -105,7 +105,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			factors, err := models.FindFactorsByUser(ts.API.db, user)
 			ts.Require().NoError(err)
 			latestFactor := factors[len(factors)-1]
-			require.Equal(ts.T(), models.FactorDisabledState, latestFactor.Status)
+			require.Equal(ts.T(), models.FactorUnverifiedState, latestFactor.Status)
 			if c.FriendlyName != "" && c.ExpectedCode == http.StatusOK {
 				require.Equal(ts.T(), c.FriendlyName, latestFactor.FriendlyName)
 			}

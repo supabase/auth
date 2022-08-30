@@ -8,6 +8,7 @@ import (
 	"github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
 	"github.com/netlify/gotrue/crypto"
+	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pquerna/otp/totp"
@@ -56,6 +57,12 @@ type UnenrollFactorParams struct {
 	Code string `json:"code"`
 }
 
+type StepUpLoginParams struct {
+	ChallengeID  string `json:"challenge_id"`
+	Code         string `json:"code"`
+	RecoveryCode string `json:"recovery_code"`
+}
+
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	const factorPrefix = "factor"
 	ctx := r.Context()
@@ -95,7 +102,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	s.End()
 
 	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())
-	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, models.FactorDisabledState, key.Secret())
+	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, models.FactorUnverifiedState, key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}
@@ -155,6 +162,113 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		ID:        challenge.ID,
 		ExpiresAt: expiryTime.String(),
 	})
+}
+
+// TODO(Joel): Move over other supporting changes from other branch. Don't use until properly tested.
+func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	config := a.config
+	user := getUser(ctx)
+	factor := getFactor(ctx)
+
+	if factor.Status != models.FactorVerifiedState {
+		return unprocessableEntityError("Please attempt a login with a verified factor")
+	}
+
+	params := &StepUpLoginParams{}
+	jsonDecoder := json.NewDecoder(r.Body)
+	err := jsonDecoder.Decode(params)
+	if err != nil {
+		return badRequestError("Please check the params passed into StepupLogin: %v", err)
+	}
+	if params.Code != "" && params.RecoveryCode != "" {
+		return unprocessableEntityError("Please attempt a login with only one of Code or Recovery Code'")
+	}
+
+	if params.Code != "" {
+		// TODO(suggest): Either reorganize to token grant style case statement with types OR dump this into models
+		challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
+		if err != nil {
+			if models.IsNotFoundError(err) {
+				return notFoundError(err.Error())
+			}
+			return internalServerError("Database error finding Challenge").WithInternalError(err)
+		}
+		hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
+		if hasExpired {
+			err := a.db.Transaction(func(tx *storage.Connection) error {
+				if terr := tx.Destroy(challenge); terr != nil {
+					return internalServerError("Database error deleting challenge").WithInternalError(terr)
+				}
+
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+
+			return expiredChallengeError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
+		}
+		valid := totp.Validate(params.Code, factor.SecretKey)
+		if !valid {
+			return unauthorizedError("Invalid code entered")
+		}
+	} else if params.RecoveryCode != "" {
+		// TODO(suggest): Shorten session duration for sessions arising from recovery code
+		err := a.db.Transaction(func(tx *storage.Connection) error {
+			rc, terr := models.IsRecoveryCodeValid(tx, user, params.RecoveryCode)
+			if terr != nil {
+				return terr
+			}
+			if rc.RecoveryCode == params.RecoveryCode {
+				terr = rc.Consume(tx)
+				if terr != nil {
+					return terr
+				}
+			} else {
+				return unauthorizedError("Invalid code entered")
+			}
+
+			return nil
+
+		})
+		if err != nil {
+			return err
+		}
+		return unauthorizedError("Invalid code entered")
+	}
+	var token *AccessTokenResponse
+
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		if terr = models.NewAuditLogEntry(r, tx, user, models.MFALoginAction, "", nil); terr != nil {
+			return terr
+		}
+		// TODO(joel): Reinstate the TOTP claim when we add the claims logic to all endpoints
+		token, terr = a.issueRefreshToken(ctx, tx, user)
+		if terr != nil {
+			return terr
+		}
+
+		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+			return internalServerError("Failed to set JWT cookie. %s", terr)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	metering.RecordLogin("token", user.ID)
+	// if user.IsFirstMFALogin(){
+	//  // Wrap this in a transaction
+	//  recoveryCodes, err := models.GenerateRecoveryCodesBatch()
+	//	return sendJSON(w, http.StatusOK, StepUpLoginResponse{
+	//	     token: token
+	//	     recovery_code: recoveryCodes
+	//	 })
+	// }
+
+	return sendJSON(w, http.StatusOK, token)
 }
 
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {

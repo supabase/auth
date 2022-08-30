@@ -501,5 +501,5 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 }
 
 func isValidFactorStatus(factorStatus string) bool {
-	return factorStatus == models.FactorVerifiedState || factorStatus == models.FactorUnverifiedState || factorStatus == models.FactorDisabledState
+	return factorStatus == models.FactorVerifiedState || factorStatus == models.FactorUnverifiedState
 }
