@@ -174,6 +174,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	if factor.Status != models.FactorVerifiedState {
 		return unprocessableEntityError("Please attempt a login with a verified factor")
 	}
+	actionType := ""
 
 	params := &StepUpLoginParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -213,6 +214,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		if !valid {
 			return unauthorizedError("Invalid code entered")
 		}
+		actionType = models.MFACodeLoginAction
 	} else if params.RecoveryCode != "" {
 		// TODO(suggest): Shorten session duration for sessions arising from recovery code
 		err := a.db.Transaction(func(tx *storage.Connection) error {
@@ -235,13 +237,15 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		return unauthorizedError("Invalid code entered")
+		actionType = models.MFARecoveryCodeLoginAction
+
 	}
 	var token *AccessTokenResponse
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
-		var terr error
-		if terr = models.NewAuditLogEntry(r, tx, user, models.MFALoginAction, "", nil); terr != nil {
+	var terr error
+
+	terr = a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.NewAuditLogEntry(r, tx, user, actionType, r.remoteAddr, nil); terr != nil {
 			return terr
 		}
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.TOTP)
@@ -257,9 +261,9 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	metering.RecordLogin("token", user.ID)
-	// if user.IsFirstMFALogin(){
-	//  // Wrap this in a transaction
+	metering.RecordLogin(actionType, user.ID)
+
+	// if user.IsFirstMFALogin() && actionType != models.RecoveryCodeAction{
 	//  recoveryCodes, err := models.GenerateRecoveryCodesBatch()
 	//	return sendJSON(w, http.StatusOK, StepUpLoginResponse{
 	//	     token: token
