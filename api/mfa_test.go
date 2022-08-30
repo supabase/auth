@@ -295,3 +295,70 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 	}
 
 }
+
+func (ts *MFATestSuite) TestStepUpLogin() {
+	cases := []struct {
+		desc             string
+		RecoveryCode     string
+		Code             string
+		IsFirstMFALogin  bool
+		IsOneFAVerified  bool
+		ExpectedHTTPCode int
+	}{
+		{
+			"Successful login with code",
+			"",
+			"123456",
+			true,
+			true,
+			http.StatusOK,
+		},
+
+		{"Using both code and recovery code is forbidden",
+			"123456",
+			"12345678",
+			true,
+			true,
+			http.StatusForbidden,
+		},
+		{
+			"Should not return recovery codes if not first login",
+			"",
+			"123456",
+			false,
+			true,
+			http.StatusOK,
+		},
+		{
+			"Successful login with recovery code",
+			"12345678",
+			"",
+			false,
+			true,
+			http.StatusOK,
+		},
+		{
+			"Login without 1FA verified should fail",
+			"",
+			"123456",
+			true,
+			false,
+			http.StatusForbidden,
+		},
+	}
+	for _, v := range cases {
+		ts.Run(v.desc, func() {
+			var buffer bytes.Buffer
+
+			token, err := generateAccessToken(u, "", time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+			require.NoError(ts.T(), err)
+			w := httptest.NewRecorder()
+
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor/%s/login", u.ID, f.ID), &buffer)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), v.ExpectedHTTPCode, w.Code)
+		})
+	}
+
+}

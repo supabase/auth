@@ -108,6 +108,7 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 		if err != nil {
 			return nil, errors.Wrap(err, "Error generated unique session id")
 		}
+		// Expire claims here
 		token.SessionId = nulls.NewUUID(session.ID)
 	}
 
