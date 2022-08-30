@@ -170,6 +170,11 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 						r.Post("/challenge", api.ChallengeFactor)
 						r.Delete("/", api.UnenrollFactor)
 
+						r.Route("/login", func(r *router) {
+							r.Use(api.require1FA)
+							r.Post("/", api.StepUpLogin)
+						})
+
 					})
 				})
 			})
