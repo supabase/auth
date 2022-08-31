@@ -26,8 +26,9 @@ func NewAMRClaim(sessionID uuid.UUID, signInMethod string) (*AMRClaim, error) {
 		return nil, errors.Wrap(err, "Error generating unique id")
 	}
 	claim := &AMRClaim{
-		ID:        id,
-		SessionID: sessionID,
+		ID:           id,
+		SessionID:    sessionID,
+		SignInMethod: signInMethod,
 	}
 	return claim, nil
 

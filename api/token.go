@@ -571,6 +571,13 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		}
 
 		session := getSession(ctx)
+		if session == nil {
+			err, session := models.FindSessionById(tx, refreshToken.SessionId)
+			if err != nil {
+				return err
+			}
+		}
+		// What happens if session is nil
 		terr = models.AddClaimToSession(tx, session, signInMethod)
 		if terr != nil {
 			return terr

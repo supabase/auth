@@ -349,7 +349,18 @@ func (ts *MFATestSuite) TestStepUpLogin() {
 	for _, v := range cases {
 		ts.Run(v.desc, func() {
 			var buffer bytes.Buffer
-
+			u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+			emailValue, err := u.Email.Value()
+			require.NoError(ts.T(), err)
+			testEmail := emailValue.(string)
+			testDomain := strings.Split(testEmail, "@")[1]
+			// Set factor secret
+			_, err = totp.Generate(totp.GenerateOpts{
+				Issuer:      testDomain,
+				AccountName: testEmail,
+			})
+			factors, err := models.FindFactorsByUser(ts.API.db, u)
+			f := factors[0]
 			token, err := generateAccessToken(u, "", time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
 			w := httptest.NewRecorder()

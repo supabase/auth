@@ -50,7 +50,7 @@ func (ts *TokenTestSuite) SetupTest() {
 	u.BannedUntil = nil
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 
-	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u, nil)
+	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u, "")
 	require.NoError(ts.T(), err, "Error creating refresh token")
 }
 
@@ -153,7 +153,7 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
 	t := time.Now()
 	u.EmailConfirmedAt = &t
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving foo user")
-	first, err := models.GrantAuthenticatedUser(ts.API.db, u, nil)
+	first, err := models.GrantAuthenticatedUser(ts.API.db, u, "")
 	require.NoError(ts.T(), err)
 	second, err := models.GrantRefreshTokenSwap(&http.Request{}, ts.API.db, u, first)
 	require.NoError(ts.T(), err)
@@ -245,7 +245,7 @@ func (ts *TokenTestSuite) createBannedUser() *models.User {
 	u.BannedUntil = &t
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test banned user")
 
-	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u, nil)
+	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u, "")
 	require.NoError(ts.T(), err, "Error creating refresh token")
 
 	return u

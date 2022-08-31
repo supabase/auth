@@ -37,7 +37,7 @@ func TestRefreshToken(t *testing.T) {
 
 func (ts *RefreshTokenTestSuite) TestGrantAuthenticatedUser() {
 	u := ts.createUser()
-	r, err := GrantAuthenticatedUser(ts.db, u)
+	r, err := GrantAuthenticatedUser(ts.db, u, "")
 	require.NoError(ts.T(), err)
 
 	require.NotEmpty(ts.T(), r.Token)
@@ -46,7 +46,7 @@ func (ts *RefreshTokenTestSuite) TestGrantAuthenticatedUser() {
 
 func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwap() {
 	u := ts.createUser()
-	r, err := GrantAuthenticatedUser(ts.db, u)
+	r, err := GrantAuthenticatedUser(ts.db, u, "")
 	require.NoError(ts.T(), err)
 
 	s, err := GrantRefreshTokenSwap(&http.Request{}, ts.db, u, r)
@@ -64,7 +64,7 @@ func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwap() {
 
 func (ts *RefreshTokenTestSuite) TestLogout() {
 	u := ts.createUser()
-	r, err := GrantAuthenticatedUser(ts.db, u)
+	r, err := GrantAuthenticatedUser(ts.db, u, "")
 	require.NoError(ts.T(), err)
 
 	require.NoError(ts.T(), Logout(ts.db, u.ID))
