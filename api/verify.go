@@ -121,7 +121,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.EmailVerification)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.EmailVerification, nil)
 		if terr != nil {
 			return terr
 		}
@@ -217,7 +217,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.SMSOTPOrGeneratedToken)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.SMSOTPOrGeneratedToken, nil)
 		if terr != nil {
 			return terr
 		}

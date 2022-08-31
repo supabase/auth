@@ -226,7 +226,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, nil)
 		if terr != nil {
 			return terr
 		}
@@ -515,7 +515,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuthIDGrant)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuthIDGrant, nil)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
@@ -534,6 +534,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
+// TODO(Joel): Add Factor ID to access token
 func generateAccessToken(user *models.User, sessionId string, expiresIn time.Duration, secret string) (string, error) {
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
@@ -553,9 +554,10 @@ func generateAccessToken(user *models.User, sessionId string, expiresIn time.Dur
 	return token.SignedString([]byte(secret))
 }
 
-func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod string) (*AccessTokenResponse, error) {
+func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod, factorID string) (*AccessTokenResponse, error) {
 	config := a.config
-
+	claims := getClaims(ctx)
+	const isMFASignInMethod = signInMethod == models.TOTP
 	now := time.Now()
 	user.LastSignInAt = &now
 
@@ -567,6 +569,18 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		refreshToken, terr = models.GrantAuthenticatedUser(tx, user)
 		if terr != nil {
 			return internalServerError("Database error granting user").WithInternalError(terr)
+		}
+
+		session := getSession(ctx)
+		terr = models.AddClaimToSession(session, signInMethod)
+		if terr != nil {
+			return terr
+		}
+
+		if isMFASignInMethod {
+			if err := session.UpdateAssociatedFactor(factorID); err != nil {
+				return err
+			}
 		}
 
 		tokenString, terr = generateAccessToken(user, refreshToken.SessionId.UUID.String(), time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)

@@ -545,7 +545,6 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection) error {
 	return nil
 }
 
-
 func (u *User) HasReceivedRecoveryCodes() bool {
 	return u.RecoveryCodesReceivedAt != nil
 }

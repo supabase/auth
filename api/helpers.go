@@ -263,7 +263,6 @@ func getBodyBytes(req *http.Request) ([]byte, error) {
 // See https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.1800-17.pdf.
 // Computes AAL based on list of AMR entries.
 func calculateAAL(amr []AMREntry) string {
-	// TODO(Joel): Modify the checking logic when we have more than 1 2FA method
 	for _, amrEntry := range amr {
 		if amrEntry.Method == models.TOTP {
 			return "aal2"

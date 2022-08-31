@@ -472,14 +472,13 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 				return terr
 			}
 		}
-		if params.FactorType != "" {
-			// TODO(Joel): Update this to check factorType validity when we introduce webauthn
+		if params.FactorType != "" && !(params.FactorType == models.TOTP || params.FactorType == models.Webauthn) {
 			if terr := factor.UpdateFactorType(tx, params.FactorType); terr != nil {
 				return terr
 			}
 		}
 		if params.FactorStatus != "" {
-			if !isValidFactorStatus(params.FactorType) {
+			if !isValidFactorStatus(params.FactorStatus) {
 				return errors.New("Factor Status should be one of the valid factor states: verified, unverified or disabled")
 			}
 			if terr := factor.UpdateStatus(tx, params.FactorStatus); terr != nil {

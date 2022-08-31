@@ -104,7 +104,7 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 		token.Parent = storage.NullString(oldToken.Token)
 		token.SessionId = oldToken.SessionId
 	} else {
-		// TODO(joel): Sessions need to take in the factorID and AMR claims
+		// TODO(joel): Sessions need to take in the factorID
 		session, err := CreateSession(tx, user)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error generated unique session id")

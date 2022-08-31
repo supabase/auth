@@ -52,7 +52,6 @@ ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS received_recovery_codes_at times
 CREATE TABLE IF NOT EXISTS auth.mfa_amr_claims(
     id uuid NOT NULL,
     session_id uuid NOT NULL,
-    factor_id string NOT NULL,
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
     sign_in_method string NOT NULL,

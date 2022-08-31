@@ -215,7 +215,6 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		}
 		actionType = models.MFACodeLoginAction
 	} else if params.RecoveryCode != "" {
-		// TODO(suggest): Shorten session duration for sessions arising from recovery code
 		err := a.db.Transaction(func(tx *storage.Connection) error {
 			rc, terr := models.IsRecoveryCodeValid(tx, user, params.RecoveryCode)
 			if terr != nil {
@@ -247,7 +246,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, actionType, r.remoteAddr, nil); terr != nil {
 			return terr
 		}
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.TOTP)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.TOTP, factor.ID)
 		if terr != nil {
 			return terr
 		}
@@ -262,11 +261,11 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	}
 	metering.RecordLogin(actionType, user.ID)
 
-	if !user.HasReceivedRecoveryCodes() && actionType != models.RecoveryCodeAction{
+	if !user.HasReceivedRecoveryCodes() && actionType != models.RecoveryCodeAction {
 		recoveryCodes, err := models.GenerateRecoveryCodesBatch()
 		return sendJSON(w, http.StatusOK, StepUpLoginResponse{
-		     recovery_code: recoveryCodes
-		 })
+			recovery_code: recoveryCodes,
+		})
 	}
 
 	return sendJSON(w, http.StatusOK, token)
@@ -293,6 +292,11 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
+
+	if challenge.VerifiedAt != nil {
+		return badRequestError("Challenge has already been verified")
+	}
+
 	valid := totp.Validate(params.Code, factor.SecretKey)
 	if !valid {
 		return unauthorizedError("Invalid TOTP code entered")
@@ -334,6 +338,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// InvalidateSessionWith Exxception
 
 	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
 		Success: fmt.Sprintf("%v", valid),
@@ -380,6 +385,8 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+
+	// Drop all Sessions to AAL1 here
 
 	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{
 		Success: fmt.Sprintf("%v", valid),
