@@ -1,7 +1,10 @@
 package models
 
 import (
-	"fmt"
+	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/storage"
+	"github.com/pkg/errors"
+	"time"
 )
 
 type AMRClaim struct {
@@ -12,29 +15,34 @@ type AMRClaim struct {
 	SignInMethod string    `json:"sign_in_method" db:"sign_in_method"`
 }
 
-func (RecoveryCode) TableName() string {
+func (AMRClaim) TableName() string {
 	tableName := "mfa_amr_claims"
 	return tableName
 }
 
-func NewAMRClaim(sessionID uuid.UUID, signInMethod string) {
+func NewAMRClaim(sessionID uuid.UUID, signInMethod string) (*AMRClaim, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
 	}
 	claim := &AMRClaim{
 		ID:        id,
-		SessionID: sesionID,
+		SessionID: sessionID,
 	}
+	return claim, nil
 
 }
 
-func AddClaimToSession(session *Session, signInMethod string) error {
-	claim := NewAMRClaim(session.ID, signInMethod)
+func AddClaimToSession(tx *storage.Connection, session *Session, signInMethod string) error {
+	claim, err := NewAMRClaim(session.ID, signInMethod)
+	if err != nil {
+		return err
+	}
 	return tx.Create(claim)
 }
 
 // Finds all Sessions associated to a factor and deletes them
 func DeleteClaimsByFactorID(tx *storage.Connection, factorID string, claimType string) error {
+	return errors.New("Unimplemented")
 	// Join on sessions and calims  Find all fclaims assoicated with a given TOTP factor
 }

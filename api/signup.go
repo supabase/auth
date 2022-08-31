@@ -218,7 +218,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 
-			token, terr = a.issueRefreshToken(ctx, tx, user, models.AutoConfirmSignup, nil)
+			token, terr = a.issueRefreshToken(ctx, tx, user, models.AutoConfirmSignup, "")
 			if terr != nil {
 				return terr
 			}

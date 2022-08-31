@@ -37,8 +37,8 @@ func (RefreshToken) TableName() string {
 }
 
 // GrantAuthenticatedUser creates a refresh token for the provided user.
-func GrantAuthenticatedUser(tx *storage.Connection, user *User) (*RefreshToken, error) {
-	return createRefreshToken(tx, user, nil)
+func GrantAuthenticatedUser(tx *storage.Connection, user *User, factorID string) (*RefreshToken, error) {
+	return createRefreshToken(tx, user, nil, factorID)
 }
 
 // GrantRefreshTokenSwap swaps a refresh token for a new one, revoking the provided token.
@@ -54,7 +54,7 @@ func GrantRefreshTokenSwap(r *http.Request, tx *storage.Connection, user *User, 
 		if terr = tx.UpdateOnly(token, "revoked"); terr != nil {
 			return terr
 		}
-		newToken, terr = createRefreshToken(rtx, user, token)
+		newToken, terr = createRefreshToken(rtx, user, token, "")
 		return terr
 	})
 	return newToken, err
@@ -94,7 +94,7 @@ func GetValidChildToken(tx *storage.Connection, token *RefreshToken) (*RefreshTo
 	return refreshToken, nil
 }
 
-func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshToken) (*RefreshToken, error) {
+func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshToken, factorID string) (*RefreshToken, error) {
 	token := &RefreshToken{
 		UserID: user.ID,
 		Token:  crypto.SecureToken(),
@@ -104,8 +104,7 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 		token.Parent = storage.NullString(oldToken.Token)
 		token.SessionId = oldToken.SessionId
 	} else {
-		// TODO(joel): Sessions need to take in the factorID
-		session, err := CreateSession(tx, user)
+		session, err := CreateSession(tx, user, factorID)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error generated unique session id")
 		}

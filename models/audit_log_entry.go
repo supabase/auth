@@ -70,7 +70,7 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	DeleteFactorAction:              factor,
 	UpdateFactorAction:              factor,
 	MFACodeLoginAction:              factor,
-	MFARecoveryCodeLogin:            recoveryCodes,
+	MFARecoveryCodeLoginAction:      recoveryCodes,
 	DeleteRecoveryCodesAction:       recoveryCodes,
 }
 

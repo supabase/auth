@@ -38,8 +38,8 @@ func NewSession(user *User, factorID string) (*Session, error) {
 	return session, nil
 }
 
-func CreateSession(tx *storage.Connection, user *User) (*Session, error) {
-	session, err := NewSession(user)
+func CreateSession(tx *storage.Connection, user *User, factorID string) (*Session, error) {
+	session, err := NewSession(user, factorID)
 	if err != nil {
 		return nil, err
 	}
@@ -61,8 +61,8 @@ func FindSessionById(tx *storage.Connection, id uuid.UUID) (*Session, error) {
 }
 
 // TODO(Joel): Invalidate all other sessions once MFA is enabled ( A verified factor has been produced). Make use of this in unenroll
-func InvalidateSessionsExcludingCurrent(tx *storage.Connection, currentSessionID uuid.UUID) {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND session_id != ?", userId, currentSessionID).Exec()
+func InvalidateSessionsExcludingCurrent(tx *storage.Connection, currentSessionID uuid.UUID, userID uuid.UUID) error {
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND session_id != ?", userID, currentSessionID).Exec()
 }
 
 // Logout deletes all sessions for a user.
@@ -74,8 +74,8 @@ func LogoutSession(tx *storage.Connection, sessionId uuid.UUID) error {
 	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE id = ?", sessionId).Exec()
 }
 
-func (*Session) UpdateAssociatedFactor(tx *storage.Connection, factorID string) error {
-	session.FactorID = factorID
-	return tx.Update(session)
+func (s *Session) UpdateAssociatedFactor(tx *storage.Connection, factorID string) error {
+	s.FactorID = factorID
+	return tx.Update(s)
 
 }

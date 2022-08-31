@@ -226,7 +226,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, nil)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, "")
 		if terr != nil {
 			return terr
 		}
@@ -515,7 +515,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuthIDGrant, nil)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuthIDGrant, "")
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
@@ -566,7 +566,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		refreshToken, terr = models.GrantAuthenticatedUser(tx, user)
+		refreshToken, terr = models.GrantAuthenticatedUser(tx, user, factorID)
 		if terr != nil {
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
