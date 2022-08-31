@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS auth.mfa_amr_claims(
     session_id uuid NOT NULL,
     created_at timestamptz NOT NULL,
     updated_at timestamptz NOT NULL,
-    sign_in_method string NOT NULL,
-    CONSTRAINT mfa_amr_claims_session_id_fkey FOREIGN KEY(session_id) REFERENCES auth.sessions(id)) ON DELETE CASCADE
+    sign_in_method text NOT NULL,
+    CONSTRAINT mfa_amr_claims_session_id_pkey UNIQUE(session_id, id),
+    CONSTRAINT mfa_amr_claims_session_id_fkey FOREIGN KEY(session_id) REFERENCES auth.sessions(id) ON DELETE CASCADE
 );
 comment on table auth.mfa_amr_claims is 'Auth: stores authenticator method reference claims for multi factor authentication';
