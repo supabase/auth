@@ -213,7 +213,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		if !valid {
 			return unauthorizedError("Invalid code entered")
 		}
-		actionType = models.MFACodeLoginAction
+		actionType = string(models.MFACodeLoginAction)
 	} else if params.RecoveryCode != "" {
 		err := a.db.Transaction(func(tx *storage.Connection) error {
 			rc, terr := models.IsRecoveryCodeValid(tx, user, params.RecoveryCode)
@@ -235,15 +235,17 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		actionType = models.MFARecoveryCodeLoginAction
+		actionType = string(models.MFARecoveryCodeLoginAction)
 
 	}
 	var token *AccessTokenResponse
+	var recoveryCodes []*models.RecoveryCode
 
 	var terr error
+	shouldReturnRecoveryCodes := !user.HasReceivedRecoveryCodes() && actionType != string(models.MFARecoveryCodeLoginAction)
 
 	terr = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(r, tx, user, actionType, r.RemoteAddr, nil); terr != nil {
+		if terr := models.NewAuditLogEntry(r, tx, user, models.AuditAction(actionType), r.RemoteAddr, nil); terr != nil {
 			return terr
 		}
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.TOTP, factor.ID)
@@ -254,6 +256,11 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
 			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
+		recoveryCodes, err = models.GenerateBatchOfRecoveryCodes(tx, user)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -261,11 +268,9 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	}
 	metering.RecordLogin(actionType, user.ID)
 
-	if !user.HasReceivedRecoveryCodes() && actionType != models.RecoveryCodeAction {
-		recoveryCodes, err := models.GenerateRecoveryCodesBatch()
-		return sendJSON(w, http.StatusOK, StepUpLoginResponse{
-			recovery_code: recoveryCodes,
-		})
+	// TODO(Joel): Find a way to refactor this in a transaction
+	if shouldReturnRecoveryCodes {
+		return sendJSON(w, http.StatusOK, recoveryCodes)
 	}
 
 	return sendJSON(w, http.StatusOK, token)

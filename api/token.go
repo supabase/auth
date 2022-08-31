@@ -556,8 +556,7 @@ func generateAccessToken(user *models.User, sessionId string, expiresIn time.Dur
 
 func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod, factorID string) (*AccessTokenResponse, error) {
 	config := a.config
-	claims := getClaims(ctx)
-	const isMFASignInMethod = signInMethod == models.TOTP
+	isMFASignInMethod := signInMethod == models.TOTP
 	now := time.Now()
 	user.LastSignInAt = &now
 
@@ -572,13 +571,13 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		}
 
 		session := getSession(ctx)
-		terr = models.AddClaimToSession(session, signInMethod)
+		terr = models.AddClaimToSession(tx, session, signInMethod)
 		if terr != nil {
 			return terr
 		}
 
 		if isMFASignInMethod {
-			if err := session.UpdateAssociatedFactor(factorID); err != nil {
+			if err := session.UpdateAssociatedFactor(tx, factorID); err != nil {
 				return err
 			}
 		}
