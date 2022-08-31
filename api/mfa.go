@@ -81,7 +81,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if params.Issuer == "" {
 		return unprocessableEntityError("Issuer is required")
 	}
-	// TODO(Joel): Review this portion when email is no longer a primary key
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      params.Issuer,
 		AccountName: user.GetEmail(),
@@ -263,13 +262,12 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	}
 	metering.RecordLogin(actionType, user.ID)
 
-	// if user.IsFirstMFALogin() && actionType != models.RecoveryCodeAction{
-	//  recoveryCodes, err := models.GenerateRecoveryCodesBatch()
-	//	return sendJSON(w, http.StatusOK, StepUpLoginResponse{
-	//	     token: token
-	//	     recovery_code: recoveryCodes
-	//	 })
-	// }
+	if !user.HasReceivedRecoveryCodes() && actionType != models.RecoveryCodeAction{
+		recoveryCodes, err := models.GenerateRecoveryCodesBatch()
+		return sendJSON(w, http.StatusOK, StepUpLoginResponse{
+		     recovery_code: recoveryCodes
+		 })
+	}
 
 	return sendJSON(w, http.StatusOK, token)
 }

@@ -44,3 +44,18 @@ CREATE TABLE IF NOT EXISTS auth.mfa_recovery_codes(
        CONSTRAINT mfa_recovery_codes_user_id_fkey FOREIGN KEY(user_id) REFERENCES auth.users(id) ON DELETE CASCADE
 );
 comment on table auth.mfa_recovery_codes is 'Auth: stores recovery codes for Multi Factor Authentication';
+
+-- Add time at which recovery codes were issued
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS received_recovery_codes_at timestamptz NULL;
+
+-- Add factor_id and AMR claims to session
+CREATE TABLE IF NOT EXISTS auth.mfa_amr_claims(
+    id uuid NOT NULL,
+    session_id uuid NOT NULL,
+    factor_id string NOT NULL,
+    created_at timestamptz NOT NULL,
+    updated_at timestamptz NOT NULL,
+    sign_in_method string NOT NULL,
+    CONSTRAINT mfa_amr_claims_session_id_fkey FOREIGN KEY(session_id) REFERENCES auth.sessions(id)) ON DELETE CASCADE
+);
+comment on table auth.mfa_amr_claims is 'Auth: stores authenticator method reference claims for multi factor authentication';

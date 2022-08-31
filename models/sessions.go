@@ -22,7 +22,7 @@ func (Session) TableName() string {
 	return tableName
 }
 
-func NewSession(user *User) (*Session, error) {
+func NewSession(user *User, factorID string) (*Session, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique session id")
@@ -31,6 +31,7 @@ func NewSession(user *User) (*Session, error) {
 	session := &Session{
 		ID:     id,
 		UserID: user.ID,
+		FactorID: factorID,
 	}
 	return session, nil
 }
@@ -56,6 +57,7 @@ func FindSessionById(tx *storage.Connection, id uuid.UUID) (*Session, error) {
 	}
 	return session, nil
 }
+
 
 // Logout deletes all sessions for a user.
 func Logout(tx *storage.Connection, userId uuid.UUID) error {
