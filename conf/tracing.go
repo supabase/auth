@@ -16,6 +16,10 @@ type TracingConfig struct {
 	Tags        map[string]string
 }
 
+func (tc *TracingConfig) Validate() error {
+	return nil
+}
+
 func (tc *TracingConfig) tracingAddr() string {
 	return fmt.Sprintf("%s:%s", tc.Host, tc.Port)
 }
