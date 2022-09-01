@@ -35,7 +35,9 @@ func (i *Instance) Config() (*conf.GlobalConfiguration, error) {
 
 	baseConf := &conf.GlobalConfiguration{}
 	*baseConf = *i.BaseConfig
-	baseConf.ApplyDefaults()
+	if err := baseConf.ApplyDefaults(); err != nil {
+		return nil, nil
+	}
 
 	return baseConf, nil
 }

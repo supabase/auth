@@ -10,4 +10,4 @@ const PasswordGrant = "password"
 const AutoConfirmSignup = "autoconfirm"
 
 const EmailVerification = "email_verification"
-const SMSOTPOrGeneratedToken = "sms_or_generated_token"
+const SMSOrGeneratedLink = "sms_or_generated_link"

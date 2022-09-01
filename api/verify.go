@@ -217,7 +217,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.SMSOTPOrGeneratedToken, "")
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.SMSOrGeneratedLink, "")
 		if terr != nil {
 			return terr
 		}
