@@ -248,6 +248,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.AuditAction(actionType), r.RemoteAddr, nil); terr != nil {
 			return terr
 		}
+
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.TOTP, factor.ID)
 		if terr != nil {
 			return terr

@@ -333,7 +333,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			}
 		}
 
-		tokenString, terr = generateAccessToken(user, newToken.SessionId.UUID.String(), time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessToken(user, newToken.SessionId.UUID.String(), time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, nil, "")
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -535,19 +535,29 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 }
 
 // TODO(Joel): Add Factor ID to access token
-func generateAccessToken(user *models.User, sessionId string, expiresIn time.Duration, secret string) (string, error) {
+func generateAccessToken(user *models.User, sessionId string, expiresIn time.Duration, secret string, oldClaims *GoTrueClaims, signInMethod string) (string, error) {
+	amr := []AMREntry{}
+	aal := "aal1"
+	if oldClaims != nil && oldClaims.AuthenticationMethodReference != nil {
+		amr = oldClaims.AuthenticationMethodReference
+	}
+	entry := AMREntry{Method: signInMethod, Timestamp: time.Now()}
+	amr = append(amr, entry)
+	aal = calculateAAL(amr)
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
 			Audience:  user.Aud,
 			ExpiresAt: time.Now().Add(expiresIn).Unix(),
 		},
-		Email:        user.GetEmail(),
-		Phone:        user.GetPhone(),
-		AppMetaData:  user.AppMetaData,
-		UserMetaData: user.UserMetaData,
-		Role:         user.Role,
-		SessionId:    sessionId,
+		Email:                         user.GetEmail(),
+		Phone:                         user.GetPhone(),
+		AppMetaData:                   user.AppMetaData,
+		UserMetaData:                  user.UserMetaData,
+		Role:                          user.Role,
+		SessionId:                     sessionId,
+		AuthenticatorAssuranceLevel:   aal,
+		AuthenticationMethodReference: amr,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -562,6 +572,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 
 	var tokenString string
 	var refreshToken *models.RefreshToken
+	currentClaims := getClaims(ctx)
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -590,7 +601,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		// 	}
 		// }
 
-		tokenString, terr = generateAccessToken(user, refreshToken.SessionId.UUID.String(), time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessToken(user, refreshToken.SessionId.UUID.String(), time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, currentClaims, signInMethod)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
