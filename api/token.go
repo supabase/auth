@@ -556,7 +556,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		refreshToken, terr = models.GrantAuthenticatedUser(tx, user)
+		refreshToken, terr = models.GrantAuthenticatedUser(tx, user, models.GrantParams{})
 		if terr != nil {
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
