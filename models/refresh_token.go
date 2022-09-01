@@ -36,9 +36,16 @@ func (RefreshToken) TableName() string {
 	return tableName
 }
 
+// GrantParams is used to pass session-specific parameters when issuing a new
+// refresh token to authenticated users.
+type GrantParams struct {
+	FactorID string
+}
+
 // GrantAuthenticatedUser creates a refresh token for the provided user.
-func GrantAuthenticatedUser(tx *storage.Connection, user *User, factorID string) (*RefreshToken, error) {
-	return createRefreshToken(tx, user, nil, factorID)
+
+func GrantAuthenticatedUser(tx *storage.Connection, user *User, params GrantParams) (*RefreshToken, error) {
+	return createRefreshToken(tx, user, nil, &params)
 }
 
 // GrantRefreshTokenSwap swaps a refresh token for a new one, revoking the provided token.
@@ -54,7 +61,8 @@ func GrantRefreshTokenSwap(r *http.Request, tx *storage.Connection, user *User, 
 		if terr = tx.UpdateOnly(token, "revoked"); terr != nil {
 			return terr
 		}
-		newToken, terr = createRefreshToken(rtx, user, token, "")
+
+		newToken, terr = createRefreshToken(rtx, user, token, nil)
 		return terr
 	})
 	return newToken, err
@@ -94,7 +102,7 @@ func GetValidChildToken(tx *storage.Connection, token *RefreshToken) (*RefreshTo
 	return refreshToken, nil
 }
 
-func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshToken, factorID string) (*RefreshToken, error) {
+func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshToken, params *GrantParams) (*RefreshToken, error) {
 	token := &RefreshToken{
 		UserID: user.ID,
 		Token:  crypto.SecureToken(),
@@ -104,7 +112,7 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 		token.Parent = storage.NullString(oldToken.Token)
 		token.SessionId = oldToken.SessionId
 	} else {
-		session, err := CreateSession(tx, user, factorID)
+		session, err := CreateSession(tx, user, params.FactorID)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error generated unique session id")
 		}

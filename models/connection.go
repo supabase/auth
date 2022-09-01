@@ -30,17 +30,24 @@ type SortField struct {
 	Dir  SortDirection
 }
 
+// TruncateAll deletes all data from the database, as managed by GoTrue. Not
+// intended for use outside of tests.
 func TruncateAll(conn *storage.Connection) error {
 	return conn.Transaction(func(tx *storage.Connection) error {
-		if err := tx.RawQuery("delete from " + (&pop.Model{Value: User{}}).TableName()).Exec(); err != nil {
-			return err
+		tables := []string{
+			(&pop.Model{Value: User{}}).TableName(),
+			(&pop.Model{Value: Identity{}}).TableName(),
+			(&pop.Model{Value: RefreshToken{}}).TableName(),
+			(&pop.Model{Value: AuditLogEntry{}}).TableName(),
+			(&pop.Model{Value: Session{}}).TableName(),
 		}
-		if err := tx.RawQuery("delete from " + (&pop.Model{Value: RefreshToken{}}).TableName()).Exec(); err != nil {
-			return err
+
+		for _, tableName := range tables {
+			if err := tx.RawQuery("TRUNCATE " + tableName + " CASCADE").Exec(); err != nil {
+				return err
+			}
 		}
-		if err := tx.RawQuery("delete from " + (&pop.Model{Value: AuditLogEntry{}}).TableName()).Exec(); err != nil {
-			return err
-		}
+
 		return nil
 	})
 }
