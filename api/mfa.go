@@ -190,7 +190,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 		challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return notFoundError(err.Error())
+				return internalServerError(err.Error())
 			}
 			return internalServerError("Database error finding Challenge").WithInternalError(err)
 		}

@@ -355,16 +355,34 @@ func (ts *MFATestSuite) TestStepUpLogin() {
 			testEmail := emailValue.(string)
 			testDomain := strings.Split(testEmail, "@")[1]
 			// Set factor secret
-			_, err = totp.Generate(totp.GenerateOpts{
+			key, err := totp.Generate(totp.GenerateOpts{
 				Issuer:      testDomain,
 				AccountName: testEmail,
 			})
+			sharedSecret := key.Secret()
+
 			factors, err := models.FindFactorsByUser(ts.API.db, u)
 			f := factors[0]
+			f.SecretKey = sharedSecret
+			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
+
+			err = f.UpdateStatus(ts.API.db, models.FactorVerifiedState)
+			require.NoError(ts.T(), err)
+			code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
+			require.NoError(ts.T(), err)
+			c, err := models.NewChallenge(f)
+			require.NoError(ts.T(), err, "Error creating test Challenge model")
+			require.NoError(ts.T(), ts.API.db.Create(c), "Error saving new test challenge")
 			// Sign in with regular email password
 			token, err := generateAccessToken(u, "", time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
 			require.NoError(ts.T(), err)
 			w := httptest.NewRecorder()
+
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"challenge_id":  c.ID,
+				"code":          code,
+				"recovery_code": "",
+			}))
 
 			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor/%s/login", u.ID, f.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
