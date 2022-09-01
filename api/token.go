@@ -556,7 +556,7 @@ func generateAccessToken(user *models.User, sessionId string, expiresIn time.Dur
 
 func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod, factorID string) (*AccessTokenResponse, error) {
 	config := a.config
-	isMFASignInMethod := signInMethod == models.TOTP
+	// isMFASignInMethod := signInMethod == models.TOTP
 	now := time.Now()
 	user.LastSignInAt = &now
 
@@ -570,24 +570,24 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		session := getSession(ctx)
-		if session == nil {
-			err, session := models.FindSessionById(tx, refreshToken.SessionId)
-			if err != nil {
-				return err
-			}
-		}
-		// What happens if session is nil
-		terr = models.AddClaimToSession(tx, session, signInMethod)
-		if terr != nil {
-			return terr
-		}
+		// session := getSession(ctx)
+		// if session == nil {
+		// 	err, session := models.FindSessionById(tx, refreshToken.SessionId)
+		// 	if err != nil {
+		// 		return err
+		// 	}
+		// }
+		// // What happens if session is nil
+		// terr = models.AddClaimToSession(tx, session, signInMethod)
+		// if terr != nil {
+		// 	return terr
+		// }
 
-		if isMFASignInMethod {
-			if err := session.UpdateAssociatedFactor(tx, factorID); err != nil {
-				return err
-			}
-		}
+		// if isMFASignInMethod {
+		// 	if err := session.UpdateAssociatedFactor(tx, factorID); err != nil {
+		// 		return err
+		// 	}
+		// }
 
 		tokenString, terr = generateAccessToken(user, refreshToken.SessionId.UUID.String(), time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {

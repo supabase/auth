@@ -361,6 +361,7 @@ func (ts *MFATestSuite) TestStepUpLogin() {
 			})
 			factors, err := models.FindFactorsByUser(ts.API.db, u)
 			f := factors[0]
+			// Sign in with regular email password
 			token, err := generateAccessToken(u, "", time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
 			w := httptest.NewRecorder()
@@ -369,6 +370,7 @@ func (ts *MFATestSuite) TestStepUpLogin() {
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), v.ExpectedHTTPCode, w.Code)
+			// Assertion logic
 		})
 	}
 
