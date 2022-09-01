@@ -6,6 +6,7 @@ import (
 	"time"
 
 	chimiddleware "github.com/go-chi/chi/middleware"
+	"github.com/netlify/gotrue/utilities"
 	"github.com/sirupsen/logrus"
 )
 
@@ -26,7 +27,7 @@ func (l *structuredLogger) NewLogEntry(r *http.Request) chimiddleware.LogEntry {
 		"component":   "api",
 		"method":      r.Method,
 		"path":        r.URL.Path,
-		"remote_addr": r.RemoteAddr,
+		"remote_addr": utilities.GetIPAddress(r),
 		"referer":     r.Referer(),
 		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 	}

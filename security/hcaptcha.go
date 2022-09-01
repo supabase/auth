@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netlify/gotrue/utilities"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -77,7 +78,7 @@ func VerifyRequest(r *http.Request, secretKey string) (VerificationResult, error
 	if err != nil || strings.TrimSpace(res.Security.Token) == "" {
 		return UserRequestFailed, errors.Wrap(err, "couldn't decode captcha info")
 	}
-	clientIP := strings.Split(r.RemoteAddr, ":")[0]
+	clientIP := utilities.GetIPAddress(r)
 	return verifyCaptchaCode(res.Security.Token, secretKey, clientIP)
 }
 
