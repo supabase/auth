@@ -17,13 +17,13 @@ type OtpParams struct {
 	Email      string                 `json:"email"`
 	Phone      string                 `json:"phone"`
 	CreateUser bool                   `json:"create_user"`
-	Data   map[string]interface{} `json:"data"`
+	Data       map[string]interface{} `json:"data"`
 }
 
 // SmsParams contains the request body params for sms otp
 type SmsParams struct {
-	Phone    string                 `json:"phone"`
-	Data map[string]interface{} `json:"data"`
+	Phone string                 `json:"phone"`
+	Data  map[string]interface{} `json:"data"`
 }
 
 // Otp returns the MagicLink or SmsOtp handler based on the request body params
