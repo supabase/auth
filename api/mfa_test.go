@@ -321,22 +321,14 @@ func (ts *MFATestSuite) TestStepUpLogin() {
 			true,
 			http.StatusUnprocessableEntity,
 		},
-		// {
-		// 	"Should not return recovery codes if not first login",
-		// 	false,
-		// 	true,
-		// 	false,
-		// 	true,
-		// 	http.StatusOK,
-		// },
-		// {
-		// 	"Successful login with recovery code",
-		// 	false,
-		// 	true,
-		// 	false,
-		// 	true,
-		// 	http.StatusOK,
-		// },
+		{
+			"Successful login with recovery code",
+			false,
+			true,
+			false,
+			true,
+			http.StatusOK,
+		},
 		// {
 		// 	"Login without 1FA verified should fail",
 		// 	"",
@@ -381,6 +373,7 @@ func (ts *MFATestSuite) TestStepUpLogin() {
 			code := ""
 
 			if v.IsRecoveryCodeLogin {
+				// Need to create actual recovery Codes to handle
 				recoveryCode = "123456"
 			}
 			if v.IsCodeLogin {
@@ -393,12 +386,34 @@ func (ts *MFATestSuite) TestStepUpLogin() {
 				"code":          code,
 				"recovery_code": recoveryCode,
 			}))
+			if !v.IsFirstMFALogin {
+				t := time.Now()
+				u.RecoveryCodesReceivedAt = &t
+				require.NoError(ts.T(), ts.API.db.Update(u), "Error updating user")
+
+			}
 
 			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor/%s/login", u.ID, f.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), v.ExpectedHTTPCode, w.Code)
-			// Assertion logic
+			// Check for first recovery code login
+			if v.ExpectedHTTPCode == http.StatusOK && v.IsFirstMFALogin && v.IsCodeLogin {
+				data := StepUpLoginRecoveryCodeResponse{}
+				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+				require.NotEmpty(ts.T(), data.RecoveryCodes)
+			} else if v.ExpectedHTTPCode == http.StatusOK && v.IsCodeLogin && !v.IsFirstMFALogin {
+				data := StepUpLoginCodeResponse{}
+				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+				require.Equal(ts.T(), "true", data.Success)
+			}
+
+			// else if v.ExpectedHTTPCode == http.StatusOK && v.IsRecoveryCodeLogin {
+			// 	data := StepUpLoginCodeResponse{}
+			// 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			// 	require.Equal(ts.T(), "true", data.Success)
+
+			// }
 		})
 	}
 

@@ -48,6 +48,13 @@ type ChallengeFactorResponse struct {
 type VerifyFactorResponse struct {
 	Success string `json:"success"`
 }
+type StepUpLoginCodeResponse struct {
+	Success string `json:"success"`
+}
+
+type StepUpLoginRecoveryCodeResponse struct {
+	RecoveryCodes []*models.RecoveryCode `json:"recovery_codes"`
+}
 
 type UnenrollFactorResponse struct {
 	Success string `json:"success"`
@@ -187,6 +194,10 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 
 	if params.Code != "" {
 		// TODO(suggest): Either reorganize to token grant style case statement with types OR dump this into models
+		valid := totp.Validate(params.Code, factor.SecretKey)
+		if !valid {
+			return unauthorizedError("Invalid code entered")
+		}
 		challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
@@ -209,10 +220,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 
 			return expiredChallengeError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
 		}
-		valid := totp.Validate(params.Code, factor.SecretKey)
-		if !valid {
-			return unauthorizedError("Invalid code entered")
-		}
+
 		actionType = string(models.MFACodeLoginAction)
 	} else if params.RecoveryCode != "" {
 		err := a.db.Transaction(func(tx *storage.Connection) error {
@@ -271,10 +279,14 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 
 	// TODO(Joel): Find a way to refactor this in a transaction
 	if shouldReturnRecoveryCodes {
-		return sendJSON(w, http.StatusOK, recoveryCodes)
+		return sendJSON(w, http.StatusOK, &StepUpLoginRecoveryCodeResponse{
+			RecoveryCodes: recoveryCodes,
+		})
 	}
 
-	return sendJSON(w, http.StatusOK, token)
+	return sendJSON(w, http.StatusOK, &StepUpLoginCodeResponse{
+		Success: fmt.Sprintf("true"),
+	})
 }
 
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
