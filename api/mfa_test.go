@@ -406,6 +406,8 @@ func (ts *MFATestSuite) TestStepUpLogin() {
 				data := StepUpLoginCodeResponse{}
 				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 				require.Equal(ts.T(), "true", data.Success)
+				// TODO(Joel): Parse this and show that the claims are valid
+				// 	require.Nil(ts.T(), data.Token)
 			}
 
 			// else if v.ExpectedHTTPCode == http.StatusOK && v.IsRecoveryCodeLogin {

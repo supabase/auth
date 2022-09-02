@@ -49,6 +49,7 @@ type VerifyFactorResponse struct {
 	Success string `json:"success"`
 }
 type StepUpLoginCodeResponse struct {
+	Token   string `json:"token"`
 	Success string `json:"success"`
 }
 
@@ -285,6 +286,7 @@ func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, &StepUpLoginCodeResponse{
+		Token:   token.Token,
 		Success: fmt.Sprintf("true"),
 	})
 }
