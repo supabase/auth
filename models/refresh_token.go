@@ -43,7 +43,6 @@ type GrantParams struct {
 }
 
 // GrantAuthenticatedUser creates a refresh token for the provided user.
-
 func GrantAuthenticatedUser(tx *storage.Connection, user *User, params GrantParams) (*RefreshToken, error) {
 	return createRefreshToken(tx, user, nil, &params)
 }
