@@ -110,7 +110,9 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	providerType := getExternalProviderType(ctx)
 	var userData *provider.UserProvidedData
 	var providerAccessToken string
-	var providerRefreshToken string = ""
+	var providerRefreshToken string
+	var grantParams models.GrantParams
+
 	if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
 		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)
@@ -275,7 +277,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}

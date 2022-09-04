@@ -77,9 +77,10 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
 
 	var (
-		user  *models.User
-		err   error
-		token *AccessTokenResponse
+		user        *models.User
+		grantParams models.GrantParams
+		err         error
+		token       *AccessTokenResponse
 	)
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -121,7 +122,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 		if terr != nil {
 			return terr
 		}
@@ -182,8 +183,9 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var (
-		user  *models.User
-		token *AccessTokenResponse
+		user        *models.User
+		grantParams models.GrantParams
+		token       *AccessTokenResponse
 	)
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -217,7 +219,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 		if terr != nil {
 			return terr
 		}
