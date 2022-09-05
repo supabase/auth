@@ -4,6 +4,10 @@
     {
         "name": "mfa",
         "prerelease": true
+    },
+    {
+        "name": "zerosessionidfix",
+        "prerelease": true
     }
   ],
   "plugins": [
