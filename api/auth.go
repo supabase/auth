@@ -103,7 +103,7 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 	}
 
 	var session *models.Session
-	if claims.SessionId != "" {
+	if claims.SessionId != "" && claims.SessionId != "00000000-0000-0000-0000-000000000000" {
 		sessionId, err := uuid.FromString(claims.SessionId)
 		if err != nil {
 			return ctx, err
