@@ -10,13 +10,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// withFunctionHooks adds the provided function hooks to the context.
+func withFunctionHooks(ctx context.Context, hooks map[string][]string) context.Context {
+	return context.WithValue(ctx, functionHooksKey, hooks)
+}
 
 func TestSignupHookSendInstanceID(t *testing.T) {
 	globalConfig, err := conf.LoadGlobal(apiTestConfig)
@@ -25,8 +29,7 @@ func TestSignupHookSendInstanceID(t *testing.T) {
 	conn, err := test.SetupDBConnection(globalConfig)
 	require.NoError(t, err)
 
-	iid := uuid.Must(uuid.NewV4())
-	user, err := models.NewUser(iid, "81234567", "test@truth.com", "thisisapassword", "", nil)
+	user, err := models.NewUser("81234567", "test@truth.com", "thisisapassword", "", nil)
 	require.NoError(t, err)
 
 	var callCount int
@@ -40,7 +43,6 @@ func TestSignupHookSendInstanceID(t *testing.T) {
 		require.NoError(t, json.Unmarshal(raw, &data))
 
 		assert.Len(t, data, 3)
-		assert.Equal(t, iid.String(), data["instance_id"])
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer svr.Close()
@@ -49,14 +51,14 @@ func TestSignupHookSendInstanceID(t *testing.T) {
 	localhost := removeLocalhostFromPrivateIPBlock()
 	defer unshiftPrivateIPBlock(localhost)
 
-	config := &conf.Configuration{
+	config := &conf.GlobalConfiguration{
 		Webhook: conf.WebhookConfig{
 			URL:    svr.URL,
 			Events: []string{SignupEvent},
 		},
 	}
 
-	require.NoError(t, triggerEventHooks(context.Background(), conn, SignupEvent, user, iid, config))
+	require.NoError(t, triggerEventHooks(context.Background(), conn, SignupEvent, user, config))
 
 	assert.Equal(t, 1, callCount)
 }
@@ -68,8 +70,7 @@ func TestSignupHookFromClaims(t *testing.T) {
 	conn, err := test.SetupDBConnection(globalConfig)
 	require.NoError(t, err)
 
-	iid := uuid.Must(uuid.NewV4())
-	user, err := models.NewUser(iid, "", "test@truth.com", "thisisapassword", "", nil)
+	user, err := models.NewUser("", "test@truth.com", "thisisapassword", "", nil)
 	require.NoError(t, err)
 
 	var callCount int
@@ -83,7 +84,6 @@ func TestSignupHookFromClaims(t *testing.T) {
 		require.NoError(t, json.Unmarshal(raw, &data))
 
 		assert.Len(t, data, 3)
-		assert.Equal(t, iid.String(), data["instance_id"])
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer svr.Close()
@@ -92,7 +92,7 @@ func TestSignupHookFromClaims(t *testing.T) {
 	localhost := removeLocalhostFromPrivateIPBlock()
 	defer unshiftPrivateIPBlock(localhost)
 
-	config := &conf.Configuration{
+	config := &conf.GlobalConfiguration{
 		Webhook: conf.WebhookConfig{
 			Events: []string{"signup"},
 		},
@@ -103,7 +103,7 @@ func TestSignupHookFromClaims(t *testing.T) {
 		"signup": {svr.URL},
 	})
 
-	require.NoError(t, triggerEventHooks(ctx, conn, SignupEvent, user, iid, config))
+	require.NoError(t, triggerEventHooks(ctx, conn, SignupEvent, user, config))
 
 	assert.Equal(t, 1, callCount)
 }

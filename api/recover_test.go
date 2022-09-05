@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/assert"
@@ -19,19 +18,16 @@ import (
 type RecoverTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.Configuration
-
-	instanceID uuid.UUID
+	Config *conf.GlobalConfiguration
 }
 
 func TestRecover(t *testing.T) {
-	api, config, instanceID, err := setupAPIForTestForInstance()
+	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	ts := &RecoverTestSuite{
-		API:        api,
-		Config:     config,
-		instanceID: instanceID,
+		API:    api,
+		Config: config,
 	}
 	defer api.db.Close()
 
@@ -42,13 +38,13 @@ func (ts *RecoverTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
 	// Create user
-	u, err := models.NewUser(ts.instanceID, "", "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }
 
 func (ts *RecoverTestSuite) TestRecover_FirstRecovery() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.RecoverySentAt = &time.Time{}
 	require.NoError(ts.T(), ts.API.db.Update(u))
@@ -68,7 +64,7 @@ func (ts *RecoverTestSuite) TestRecover_FirstRecovery() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
 	assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
@@ -76,7 +72,7 @@ func (ts *RecoverTestSuite) TestRecover_FirstRecovery() {
 
 func (ts *RecoverTestSuite) TestRecover_NoEmailSent() {
 	recoveryTime := time.Now().UTC().Add(-59 * time.Second)
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.RecoverySentAt = &recoveryTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
@@ -96,7 +92,7 @@ func (ts *RecoverTestSuite) TestRecover_NoEmailSent() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
 	// ensure it did not send a new email
@@ -107,7 +103,7 @@ func (ts *RecoverTestSuite) TestRecover_NoEmailSent() {
 
 func (ts *RecoverTestSuite) TestRecover_NewEmailSent() {
 	recoveryTime := time.Now().UTC().Add(-20 * time.Minute)
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.RecoverySentAt = &recoveryTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
@@ -127,7 +123,7 @@ func (ts *RecoverTestSuite) TestRecover_NewEmailSent() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
 	// ensure it sent a new email
@@ -137,7 +133,7 @@ func (ts *RecoverTestSuite) TestRecover_NewEmailSent() {
 func (ts *RecoverTestSuite) TestRecover_NoSideChannelLeak() {
 	email := "doesntexist@example.com"
 
-	_, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, email, ts.Config.JWT.Aud)
+	_, err := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
 	require.True(ts.T(), models.IsNotFoundError(err), "User with email %s does exist", email)
 
 	// Request body

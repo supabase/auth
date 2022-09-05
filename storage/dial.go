@@ -4,12 +4,11 @@ import (
 	"net/url"
 	"reflect"
 
-	_ "github.com/GoogleCloudPlatform/cloudsql-proxy/proxy/dialers/mysql"
-	_ "github.com/go-sql-driver/mysql"
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gobuffalo/pop/v5/columns"
 	"github.com/netlify/gotrue/conf"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 // Connection is the interface a storage provider must implement.
@@ -25,6 +24,10 @@ func Dial(config *conf.GlobalConfiguration) (*Connection, error) {
 			return nil, errors.Wrap(err, "parsing db connection url")
 		}
 		config.DB.Driver = u.Scheme
+	}
+
+	if config.DB.Driver != "postgres" {
+		logrus.Warn("DEPRECATION NOTICE: only PostgreSQL is supported by Supabase's GoTrue, will be removed soon")
 	}
 
 	db, err := pop.NewConnection(&pop.ConnectionDetails{

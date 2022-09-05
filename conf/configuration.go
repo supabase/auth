@@ -1,11 +1,9 @@
 package conf
 
 import (
-	"database/sql/driver"
-	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/gobwas/glob"
@@ -29,15 +27,6 @@ type EmailProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"true"`
 }
 
-type SamlProviderConfiguration struct {
-	Enabled     bool   `json:"enabled"`
-	MetadataURL string `json:"metadata_url" envconfig:"METADATA_URL"`
-	APIBase     string `json:"api_base" envconfig:"API_BASE"`
-	Name        string `json:"name"`
-	SigningCert string `json:"signing_cert" envconfig:"SIGNING_CERT"`
-	SigningKey  string `json:"signing_key" envconfig:"SIGNING_KEY"`
-}
-
 // DBConfiguration holds all the database related configuration.
 type DBConfiguration struct {
 	Driver string `json:"driver" required:"true"`
@@ -46,6 +35,10 @@ type DBConfiguration struct {
 	// MaxPoolSize defaults to 0 (unlimited).
 	MaxPoolSize    int    `json:"max_pool_size" split_words:"true"`
 	MigrationsPath string `json:"migrations_path" split_words:"true" default:"./migrations"`
+}
+
+func (c *DBConfiguration) Validate() error {
+	return nil
 }
 
 // JWTConfiguration holds all the JWT related configuration.
@@ -58,26 +51,56 @@ type JWTConfiguration struct {
 	DefaultGroupName string   `json:"default_group_name" split_words:"true"`
 }
 
+type APIConfiguration struct {
+	Host            string
+	Port            int `envconfig:"PORT" default:"8081"`
+	Endpoint        string
+	RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
+	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
+}
+
+func (a *APIConfiguration) Validate() error {
+	if a.ExternalURL != "" {
+		// sometimes, in tests, ExternalURL is empty and we regard that
+		// as a valid value
+		_, err := url.ParseRequestURI(a.ExternalURL)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
-	API struct {
-		Host            string
-		Port            int `envconfig:"PORT" default:"8081"`
-		Endpoint        string
-		RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
-		ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
-	}
+	API                   APIConfiguration
 	DB                    DBConfiguration
 	External              ProviderConfiguration
 	Logging               LoggingConfig `envconfig:"LOG"`
 	OperatorToken         string        `split_words:"true" required:"false"`
-	MultiInstanceMode     bool
 	Tracing               TracingConfig
 	SMTP                  SMTPConfiguration
 	RateLimitHeader       string  `split_words:"true"`
 	RateLimitEmailSent    float64 `split_words:"true" default:"30"`
 	RateLimitVerify       float64 `split_words:"true" default:"30"`
 	RateLimitTokenRefresh float64 `split_words:"true" default:"30"`
+
+	SiteURL           string   `json:"site_url" split_words:"true" required:"true"`
+	URIAllowList      []string `json:"uri_allow_list" split_words:"true"`
+	URIAllowListMap   map[string]glob.Glob
+	PasswordMinLength int                      `json:"password_min_length" split_words:"true"`
+	JWT               JWTConfiguration         `json:"jwt"`
+	Mailer            MailerConfiguration      `json:"mailer"`
+	Sms               SmsProviderConfiguration `json:"sms"`
+	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
+	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
+	Security          SecurityConfiguration    `json:"security"`
+	Cookie            struct {
+		Key      string `json:"key"`
+		Domain   string `json:"domain"`
+		Duration int    `json:"duration"`
+	} `json:"cookies"`
 }
 
 // EmailContentConfiguration holds the configuration for emails, both subjects and template URLs.
@@ -109,7 +132,6 @@ type ProviderConfiguration struct {
 	WorkOS      OAuthProviderConfiguration `json:"workos"`
 	Email       EmailProviderConfiguration `json:"email"`
 	Phone       PhoneProviderConfiguration `json:"phone"`
-	Saml        SamlProviderConfiguration  `json:"saml"`
 	Zoom        OAuthProviderConfiguration `json:"zoom"`
 	IosBundleId string                     `json:"ios_bundle_id" split_words:"true"`
 	RedirectURL string                     `json:"redirect_url"`
@@ -123,6 +145,10 @@ type SMTPConfiguration struct {
 	Pass         string        `json:"pass,omitempty"`
 	AdminEmail   string        `json:"admin_email" split_words:"true"`
 	SenderName   string        `json:"sender_name" split_words:"true"`
+}
+
+func (c *SMTPConfiguration) Validate() error {
+	return nil
 }
 
 type MailerConfiguration struct {
@@ -187,27 +213,6 @@ type SecurityConfiguration struct {
 	UpdatePasswordRequireReauthentication bool                 `json:"update_password_require_reauthentication" split_words:"true"`
 }
 
-// Configuration holds all the per-instance configuration.
-type Configuration struct {
-	SiteURL           string   `json:"site_url" split_words:"true" required:"true"`
-	URIAllowList      []string `json:"uri_allow_list" split_words:"true"`
-	URIAllowListMap   map[string]glob.Glob
-	PasswordMinLength int                      `json:"password_min_length" split_words:"true"`
-	JWT               JWTConfiguration         `json:"jwt"`
-	SMTP              SMTPConfiguration        `json:"smtp"`
-	Mailer            MailerConfiguration      `json:"mailer"`
-	External          ProviderConfiguration    `json:"external"`
-	Sms               SmsProviderConfiguration `json:"sms"`
-	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
-	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
-	Security          SecurityConfiguration    `json:"security"`
-	Cookie            struct {
-		Key      string `json:"key"`
-		Domain   string `json:"domain"`
-		Duration int    `json:"duration"`
-	} `json:"cookies"`
-}
-
 func loadEnvironment(filename string) error {
 	var err error
 	if filename != "" {
@@ -250,37 +255,25 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		return nil, err
 	}
 
+	if err := config.ApplyDefaults(); err != nil {
+		return nil, err
+	}
+
 	if err := ConfigureLogging(&config.Logging); err != nil {
+		return nil, err
+	}
+
+	if err := config.Validate(); err != nil {
 		return nil, err
 	}
 
 	ConfigureTracing(&config.Tracing)
 
-	if config.SMTP.MaxFrequency == 0 {
-		config.SMTP.MaxFrequency = 1 * time.Minute
-	}
 	return config, nil
 }
 
-// LoadConfig loads per-instance configuration.
-func LoadConfig(filename string) (*Configuration, error) {
-	if err := loadEnvironment(filename); err != nil {
-		return nil, err
-	}
-
-	config := new(Configuration)
-	if err := envconfig.Process("gotrue", config); err != nil {
-		return nil, err
-	}
-	if err := config.ApplyDefaults(); err != nil {
-		return nil, err
-	}
-
-	return config, nil
-}
-
-// ApplyDefaults sets defaults for a Configuration
-func (config *Configuration) ApplyDefaults() error {
+// ApplyDefaults sets defaults for a GlobalConfiguration
+func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.JWT.AdminGroupName == "" {
 		config.JWT.AdminGroupName = "admin"
 	}
@@ -354,19 +347,15 @@ func (config *Configuration) ApplyDefaults() error {
 	if config.URIAllowList == nil {
 		config.URIAllowList = []string{}
 	}
-	if config.URIAllowList != nil {
-		for i, item := range config.URIAllowList {
-			// remove trailing slashes from the glob as they may confuse users
-			// when passing redirect_to URLs with or without slashes at the end
-			config.URIAllowList[i] = strings.TrimSuffix(item, "/")
-		}
 
+	if config.URIAllowList != nil {
 		config.URIAllowListMap = make(map[string]glob.Glob)
 		for _, uri := range config.URIAllowList {
 			g := glob.MustCompile(uri, '.', '/')
 			config.URIAllowListMap[uri] = g
 		}
 	}
+
 	if config.PasswordMinLength < defaultMinPasswordLength {
 		config.PasswordMinLength = defaultMinPasswordLength
 	}
@@ -374,29 +363,24 @@ func (config *Configuration) ApplyDefaults() error {
 	return nil
 }
 
-func (config *Configuration) Value() (driver.Value, error) {
-	data, err := json.Marshal(config)
-	if err != nil {
-		return driver.Value(""), err
-	}
-	return driver.Value(string(data)), nil
-}
-
-func (config *Configuration) Scan(src interface{}) error {
-	var source []byte
-	switch v := src.(type) {
-	case string:
-		source = []byte(v)
-	case []byte:
-		source = v
-	default:
-		return errors.New("Invalid data type for Configuration")
+// Validate validates all of configuration.
+func (c *GlobalConfiguration) Validate() error {
+	validatables := []interface {
+		Validate() error
+	}{
+		&c.API,
+		&c.DB,
+		&c.Tracing,
+		&c.SMTP,
 	}
 
-	if len(source) == 0 {
-		source = []byte("{}")
+	for _, validatable := range validatables {
+		if err := validatable.Validate(); err != nil {
+			return err
+		}
 	}
-	return json.Unmarshal(source, &config)
+
+	return nil
 }
 
 func (o *OAuthProviderConfiguration) Validate() error {

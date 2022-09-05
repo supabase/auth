@@ -19,7 +19,6 @@ import (
 
 var (
 	MaxFrequencyLimitError error = errors.New("Frequency limit reached")
-	configFile                   = ""
 )
 
 type GenerateLinkParams struct {
@@ -33,16 +32,19 @@ type GenerateLinkParams struct {
 
 func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 	mailer := a.Mailer(ctx)
-	instanceID := getInstanceID(ctx)
 	adminUser := getAdminUser(ctx)
 
 	params := &GenerateLinkParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
 
-	if err := jsonDecoder.Decode(params); err != nil {
-		return badRequestError("Could not read body: %v", err)
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
+		return badRequestError("Could not parse JSON: %v", err)
 	}
 
 	if err := a.validateEmail(ctx, params.Email); err != nil {
@@ -50,7 +52,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+	user, err := models.FindUserByEmailAndAudience(a.db, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			if params.Type == magicLinkVerification {
@@ -79,7 +81,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		switch params.Type {
 		case magicLinkVerification, recoveryVerification:
-			if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
+			if terr = models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
 			}
 			user.RecoveryToken = hashedToken
@@ -102,7 +104,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			}
-			if terr = models.NewAuditLogEntry(r, tx, instanceID, adminUser, models.UserInvitedAction, "", map[string]interface{}{
+			if terr = models.NewAuditLogEntry(r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
 				"user_id":    user.ID,
 				"user_email": user.Email,
 			}); terr != nil {
@@ -149,7 +151,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr := a.validateEmail(ctx, params.NewEmail); terr != nil {
 				return unprocessableEntityError("The new email address provided is invalid")
 			}
-			if exists, terr := models.IsDuplicatedEmail(tx, instanceID, params.NewEmail, user.Aud); terr != nil {
+			if exists, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud); terr != nil {
 				return internalServerError("Database error checking email").WithInternalError(terr)
 			} else if exists {
 				return unprocessableEntityError(DuplicateEmailMsg)
@@ -306,7 +308,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(tx *storage.Connection, config *conf.Configuration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int) error {
+func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int) error {
 	var err error
 	otpNew, err := crypto.GenerateOtp(otpLength)
 	if err != nil {

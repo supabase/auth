@@ -5,7 +5,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/mocktracer"
@@ -17,19 +16,16 @@ import (
 type TracerTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.Configuration
-
-	instanceID uuid.UUID
+	Config *conf.GlobalConfiguration
 }
 
 func TestTracer(t *testing.T) {
-	api, config, instanceID, err := setupAPIForTestForInstance()
+	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	ts := &TracerTestSuite{
-		API:        api,
-		Config:     config,
-		instanceID: instanceID,
+		API:    api,
+		Config: config,
 	}
 	defer api.db.Close()
 

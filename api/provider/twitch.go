@@ -94,18 +94,24 @@ func (t twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 
 	client := &http.Client{Timeout: defaultTimeout}
 	resp, err := client.Do(req)
-
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("a %v error occurred with retrieving user from twitch", resp.StatusCode)
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
-	json.Unmarshal(body, &u)
-	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(body, &u)
+	if err != nil {
+		return nil, err
+	}
 
 	if len(u.Data) == 0 {
 		return nil, errors.New("unable to find user with twitch provider")

@@ -1,0 +1,69 @@
+name: Publish to Image Registry
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: |
+            supabase/gotrue
+            public.ecr.aws/t3w2s2c9/gotrue
+            436098097459.dkr.ecr.us-east-1.amazonaws.com/gotrue
+            646182064048.dkr.ecr.us-east-1.amazonaws.com/gotrue
+          flavor: |
+            latest=false
+          tags: |
+            type=ref,event=tag
+            type=raw,value=${{ inputs.version }},enable=${{ github.event_name != 'push' }}
+
+      - uses: docker/setup-qemu-action@v2
+        with:
+          platforms: amd64,arm64
+      - uses: docker/setup-buildx-action@v2
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Login to ECR
+        uses: docker/login-action@v2
+        with:
+          registry: public.ecr.aws
+          username: ${{ secrets.PROD_ACCESS_KEY_ID }}
+          password: ${{ secrets.PROD_SECRET_ACCESS_KEY }}
+
+      - name: Login to ECR account - staging
+        uses: docker/login-action@v2
+        with:
+          registry: 436098097459.dkr.ecr.us-east-1.amazonaws.com
+          username: ${{ secrets.DEV_ACCESS_KEY_ID }}
+          password: ${{ secrets.DEV_SECRET_ACCESS_KEY }}
+
+      - name: Login to ECR account - prod
+        uses: docker/login-action@v2
+        with:
+          registry: 646182064048.dkr.ecr.us-east-1.amazonaws.com
+          username: ${{ secrets.PROD_ACCESS_KEY_ID }}
+          password: ${{ secrets.PROD_SECRET_ACCESS_KEY }}
+
+      - uses: docker/build-push-action@v3
+        with:
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

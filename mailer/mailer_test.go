@@ -1,10 +1,17 @@
 package mailer
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+var urlRegexp = regexp.MustCompile(`^https?://[^/]+`)
+
+func enforceRelativeURL(url string) string {
+	return urlRegexp.ReplaceAllString(url, "")
+}
 
 func TestGetSiteURL(t *testing.T) {
 	cases := []struct {

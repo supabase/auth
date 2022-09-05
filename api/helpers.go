@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptrace"
@@ -13,7 +15,6 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -49,39 +50,16 @@ func sendJSON(w http.ResponseWriter, status int, obj interface{}) error {
 	return err
 }
 
-func getUserFromClaims(ctx context.Context, conn *storage.Connection) (*models.User, error) {
-	claims := getClaims(ctx)
-	if claims == nil {
-		return nil, errors.New("Invalid token")
-	}
-
-	if claims.Subject == "" {
-		return nil, errors.New("Invalid claim: id")
-	}
-
-	// System User
-	instanceID := getInstanceID(ctx)
-
-	if claims.Subject == models.SystemUserUUID.String() || claims.Subject == models.SystemUserID {
-		return models.NewSystemUser(instanceID, claims.Audience), nil
-	}
-	userID, err := uuid.FromString(claims.Subject)
-	if err != nil {
-		return nil, errors.New("Invalid user ID")
-	}
-	return models.FindUserByInstanceIDAndID(conn, instanceID, userID)
-}
-
 func (a *API) isAdmin(ctx context.Context, u *models.User, aud string) bool {
-	config := a.getConfig(ctx)
+	config := a.config
 	if aud == "" {
 		aud = config.JWT.Aud
 	}
-	return u.IsSuperAdmin || (aud == u.Aud && u.HasRole(config.JWT.AdminGroupName))
+	return aud == u.Aud && u.HasRole(config.JWT.AdminGroupName)
 }
 
 func (a *API) requestAud(ctx context.Context, r *http.Request) string {
-	config := a.getConfig(ctx)
+	config := a.config
 	// First check for an audience in the header
 	if aud := r.Header.Get(audHeaderName); aud != "" {
 		return aud
@@ -111,38 +89,13 @@ func getRedirectTo(r *http.Request) (reqref string) {
 	return
 }
 
-func parseURL(u string) (*url.URL, error) {
-	parsed, err := url.Parse(u)
-	if err != nil {
-		return nil, err
-	}
-
-	if parsed.Scheme == "https" || parsed.Scheme == "http" {
-		// this normalizes URLs that end with just a `/` as you would
-		// get from window.location.href on the frontend, so that they
-		// would match glob rules correctly
-
-		// applied only http and https URLs as trailing slashes don't
-		// change the behavior, while in other schemes they may have
-		// another meaning
-
-		// see: https://en.wikipedia.org/wiki/URI_normalization#Normalizations_that_usually_preserve_semantics
-
-		parsed.Path = strings.TrimSuffix(parsed.Path, "/")
-	}
-
-	return parsed, nil
-}
-
-func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
+func isRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bool {
 	if redirectURL == "" {
 		return false
 	}
 
-	base, berr := parseURL(config.SiteURL)
-	refurl, rerr := parseURL(redirectURL)
-
-	matchURL := refurl.String()
+	base, berr := url.Parse(config.SiteURL)
+	refurl, rerr := url.Parse(redirectURL)
 
 	// As long as the referrer came from the site, we will redirect back there
 	if berr == nil && rerr == nil && base.Hostname() == refurl.Hostname() {
@@ -153,11 +106,10 @@ func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
 	for uri, g := range config.URIAllowListMap {
 		// Only allow wildcard matching if url scheme is http(s)
 		if strings.HasPrefix(uri, "http") || strings.HasPrefix(uri, "https") {
-			if g.Match(matchURL) {
+			if g.Match(redirectURL) {
 				return true
 			}
 		} else if redirectURL == uri {
-			// checking the raw URL as this is no longer a http(s) URL
 			return true
 		}
 	}
@@ -166,8 +118,7 @@ func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
 }
 
 func (a *API) getReferrer(r *http.Request) string {
-	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	// try get redirect url from query or post data first
 	reqref := getRedirectTo(r)
@@ -186,8 +137,7 @@ func (a *API) getReferrer(r *http.Request) string {
 
 // getRedirectURLOrReferrer ensures any redirect URL is from a safe origin
 func (a *API) getRedirectURLOrReferrer(r *http.Request, reqref string) string {
-	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	// if redirect url fails - try fill by extra variant
 	if isRedirectURLValid(config, reqref) {
@@ -224,24 +174,6 @@ func isPrivateIP(ip net.IP) bool {
 		}
 	}
 	return false
-}
-
-func removeLocalhostFromPrivateIPBlock() *net.IPNet {
-	_, localhost, _ := net.ParseCIDR("127.0.0.0/8")
-
-	var localhostIndex int
-	for i := 0; i < len(privateIPBlocks); i++ {
-		if privateIPBlocks[i] == localhost {
-			localhostIndex = i
-		}
-	}
-	privateIPBlocks = append(privateIPBlocks[:localhostIndex], privateIPBlocks[localhostIndex+1:]...)
-
-	return localhost
-}
-
-func unshiftPrivateIPBlock(address *net.IPNet) {
-	privateIPBlocks = append([]*net.IPNet{address}, privateIPBlocks...)
 }
 
 type noLocalTransport struct {
@@ -307,4 +239,23 @@ func isStringInSlice(checkValue string, list []string) bool {
 		}
 	}
 	return false
+}
+
+// getBodyBytes returns a byte array of the request's Body.
+func getBodyBytes(req *http.Request) ([]byte, error) {
+	if req.Body == nil || req.Body == http.NoBody {
+		return nil, nil
+	}
+
+	originalBody := req.Body
+	defer originalBody.Close()
+
+	buf, err := io.ReadAll(originalBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Body = io.NopCloser(bytes.NewReader(buf))
+
+	return buf, nil
 }

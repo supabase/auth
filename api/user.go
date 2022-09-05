@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
@@ -29,54 +28,32 @@ func (a *API) UserGet(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read claims")
 	}
 
-	userID, err := uuid.FromString(claims.Subject)
-	if err != nil {
-		return badRequestError("Could not read User ID claim")
-	}
-
 	aud := a.requestAud(ctx, r)
 	if aud != claims.Audience {
 		return badRequestError("Token audience doesn't match request audience")
 	}
 
-	user, err := models.FindUserByID(a.db, userID)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return notFoundError(err.Error())
-		}
-		return internalServerError("Database error finding user").WithInternalError(err)
-	}
-
+	user := getUser(ctx)
 	return sendJSON(w, http.StatusOK, user)
 }
 
 // UserUpdate updates fields on a user
 func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
-	instanceID := getInstanceID(ctx)
+	config := a.config
 
 	params := &UserUpdateParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
-	err := jsonDecoder.Decode(params)
+
+	body, err := getBodyBytes(r)
 	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read User Update params: %v", err)
 	}
 
-	claims := getClaims(ctx)
-	userID, err := uuid.FromString(claims.Subject)
-	if err != nil {
-		return badRequestError("Could not read User ID claim")
-	}
-
-	user, err := models.FindUserByID(a.db, userID)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return notFoundError(err.Error())
-		}
-		return internalServerError("Database error finding user").WithInternalError(err)
-	}
-
+	user := getUser(ctx)
 	log := logger.GetLogEntry(r)
 	log.Debugf("Checking params for token %v", params)
 
@@ -125,7 +102,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 
 			var exists bool
-			if exists, terr = models.IsDuplicatedEmail(tx, instanceID, params.Email, user.Aud); terr != nil {
+			if exists, terr = models.IsDuplicatedEmail(tx, params.Email, user.Aud); terr != nil {
 				return internalServerError("Database error checking email").WithInternalError(terr)
 			} else if exists {
 				return unprocessableEntityError(DuplicateEmailMsg)
@@ -144,7 +121,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			var exists bool
-			if exists, terr = models.IsDuplicatedPhone(tx, instanceID, params.Phone, user.Aud); terr != nil {
+			if exists, terr = models.IsDuplicatedPhone(tx, params.Phone, user.Aud); terr != nil {
 				return internalServerError("Database error checking phone").WithInternalError(terr)
 			} else if exists {
 				return unprocessableEntityError(DuplicatePhoneMsg)
@@ -162,7 +139,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if terr = models.NewAuditLogEntry(r, tx, instanceID, user, models.UserModifiedAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 			return internalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 

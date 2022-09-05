@@ -2,7 +2,6 @@ package mailer
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/badoux/checkmail"
 	"github.com/netlify/gotrue/conf"
@@ -16,7 +15,7 @@ type MailClient interface {
 // TemplateMailer will send mail and use templates from the site for easy mail styling
 type TemplateMailer struct {
 	SiteURL string
-	Config  *conf.Configuration
+	Config  *conf.GlobalConfiguration
 	Mailer  MailClient
 }
 
@@ -328,18 +327,4 @@ func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referr
 		return "", err
 	}
 	return url, nil
-}
-
-// formatEmailOtp separates the otp into chunks of 5 with "-" as the separator
-func formatEmailOtp(otp string) string {
-	chunkSize := 5
-	var chunks []string
-	for i := 0; i < len(otp); i += chunkSize {
-		if i+chunkSize >= len(otp) {
-			chunks = append(chunks, otp[i:])
-		} else {
-			chunks = append(chunks, otp[i:i+chunkSize])
-		}
-	}
-	return strings.Join(chunks, "-")
 }

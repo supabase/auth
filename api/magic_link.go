@@ -22,13 +22,12 @@ type MagicLinkParams struct {
 // MagicLink sends a recovery email
 func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	if !config.External.Email.Enabled {
 		return badRequestError("Email logins are disabled")
 	}
 
-	instanceID := getInstanceID(ctx)
 	params := &MagicLinkParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
@@ -48,7 +47,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+	user, err := models.FindUserByEmailAndAudience(a.db, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			// User doesn't exist, sign them up with temporary password
@@ -97,7 +96,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(r, tx, instanceID, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
 

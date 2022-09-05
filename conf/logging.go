@@ -5,7 +5,6 @@ import (
 
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gobuffalo/pop/v5/logging"
-	plog "github.com/gobuffalo/pop/v5/logging"
 	"github.com/sirupsen/logrus"
 )
 
@@ -30,9 +29,9 @@ func ConfigureLogging(config *LoggingConfig) error {
 
 	// use a file if you want
 	if config.File != "" {
-		f, err := os.OpenFile(config.File, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0664)
-		if err != nil {
-			return err
+		f, errOpen := os.OpenFile(config.File, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0660) //#nosec G302 -- Log files should be rw-rw-r--
+		if errOpen != nil {
+			return errOpen
 		}
 		logrus.SetOutput(f)
 		logrus.Infof("Set output file to %s", config.File)
@@ -65,7 +64,7 @@ func setPopLogger(sql string) {
 	shouldLogSQL := sql == LOG_SQL_STATEMENT || sql == LOG_SQL_ALL
 	shouldLogSQLArgs := sql == LOG_SQL_ALL
 
-	pop.SetLogger(func(lvl plog.Level, s string, args ...interface{}) {
+	pop.SetLogger(func(lvl logging.Level, s string, args ...interface{}) {
 		// Special case SQL logging since we have 2 extra flags to check
 		if lvl == logging.SQL {
 			if !shouldLogSQL {
@@ -96,11 +95,4 @@ func setPopLogger(sql string) {
 			l.Error(s)
 		}
 	})
-}
-
-func conditionallyPopArgs(log *logrus.Entry, args []interface{}) *logrus.Entry {
-	if len(args) == 0 {
-		return log
-	}
-	return log.WithField("args", args)
 }
