@@ -259,11 +259,11 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		return nil, err
 	}
 
-	if err := config.Validate(); err != nil {
+	if err := ConfigureLogging(&config.Logging); err != nil {
 		return nil, err
 	}
 
-	if _, err := ConfigureLogging(&config.Logging); err != nil {
+	if err := config.Validate(); err != nil {
 		return nil, err
 	}
 

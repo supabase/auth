@@ -41,10 +41,6 @@ func Dial(config *conf.GlobalConfiguration) (*Connection, error) {
 	if err := db.Open(); err != nil {
 		return nil, errors.Wrap(err, "checking database connection")
 	}
-	if logrus.StandardLogger().Level == logrus.DebugLevel {
-		pop.Debug = true
-	}
-
 	return &Connection{db}, nil
 }
 

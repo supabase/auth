@@ -40,7 +40,7 @@ func NewMailer(instanceConfig *conf.GlobalConfiguration) Mailer {
 			Pass:    instanceConfig.SMTP.Pass,
 			From:    from,
 			BaseURL: instanceConfig.SiteURL,
-			Logger:  logrus.New(),
+			Logger:  logrus.StandardLogger(),
 		}
 	}
 
