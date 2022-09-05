@@ -171,125 +171,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-// TODO(Joel): Move over other supporting changes from other branch. Don't use until properly tested.
-func (a *API) StepUpLogin(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	config := a.config
-	user := getUser(ctx)
-	factor := getFactor(ctx)
-
-	if factor.Status != models.FactorVerifiedState {
-		return unprocessableEntityError("Please attempt a login with a verified factor")
-	}
-	actionType := ""
-
-	params := &StepUpLoginParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
-	err := jsonDecoder.Decode(params)
-	if err != nil {
-		return badRequestError("Please check the params passed into StepupLogin: %v", err)
-	}
-	if params.Code != "" && params.RecoveryCode != "" {
-		return unprocessableEntityError("Please attempt a login with only one of Code or Recovery Code'")
-	}
-
-	if params.Code != "" {
-		// TODO(suggest): Either reorganize to token grant style case statement with types OR dump this into models
-		valid := totp.Validate(params.Code, factor.SecretKey)
-		if !valid {
-			return unauthorizedError("Invalid code entered")
-		}
-		challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
-		if err != nil {
-			if models.IsNotFoundError(err) {
-				return internalServerError(err.Error())
-			}
-			return internalServerError("Database error finding Challenge").WithInternalError(err)
-		}
-		hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
-		if hasExpired {
-			err := a.db.Transaction(func(tx *storage.Connection) error {
-				if terr := tx.Destroy(challenge); terr != nil {
-					return internalServerError("Database error deleting challenge").WithInternalError(terr)
-				}
-
-				return nil
-			})
-			if err != nil {
-				return err
-			}
-
-			return expiredChallengeError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
-		}
-
-		actionType = string(models.MFACodeLoginAction)
-	} else if params.RecoveryCode != "" {
-		err := a.db.Transaction(func(tx *storage.Connection) error {
-			rc, terr := models.IsRecoveryCodeValid(tx, user, params.RecoveryCode)
-			if terr != nil {
-				return terr
-			}
-			if rc.RecoveryCode == params.RecoveryCode {
-				terr = rc.Consume(tx)
-				if terr != nil {
-					return terr
-				}
-			} else {
-				return unauthorizedError("Invalid code entered")
-			}
-
-			return nil
-
-		})
-		if err != nil {
-			return err
-		}
-		actionType = string(models.MFARecoveryCodeLoginAction)
-
-	}
-	var token *AccessTokenResponse
-	var recoveryCodes []*models.RecoveryCode
-
-	var terr error
-	shouldReturnRecoveryCodes := !user.HasReceivedRecoveryCodes() && actionType != string(models.MFARecoveryCodeLoginAction)
-
-	terr = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(r, tx, user, models.AuditAction(actionType), r.RemoteAddr, nil); terr != nil {
-			return terr
-		}
-
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.TOTP, factor.ID)
-		if terr != nil {
-			return terr
-		}
-
-		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-			return internalServerError("Failed to set JWT cookie. %s", terr)
-		}
-		recoveryCodes, err = models.GenerateBatchOfRecoveryCodes(tx, user)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	metering.RecordLogin(actionType, user.ID)
-
-	// TODO(Joel): Find a way to refactor this in a transaction
-	if shouldReturnRecoveryCodes {
-		return sendJSON(w, http.StatusOK, &StepUpLoginRecoveryCodeResponse{
-			RecoveryCodes: recoveryCodes,
-		})
-	}
-
-	return sendJSON(w, http.StatusOK, &StepUpLoginCodeResponse{
-		Token:   token.Token,
-		Success: fmt.Sprintf("true"),
-	})
-}
 
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
@@ -353,12 +234,20 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 		}
+		token, terr := a.issueRefreshToken(ctx, tx, user, models.TOTP, factor.ID)
+		if terr != nil {
+			return terr
+		}
+		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+			return internalServerError("Failed to set JWT cookie. %s", terr)
+		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	// InvalidateSessionWith Exxception
+	metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
+	// TODO(Joel): Invalidate all sessions with <= AAL1
 
 	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
 		Success: fmt.Sprintf("%v", valid),
