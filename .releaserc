@@ -1,6 +1,14 @@
 {
   "branches": [
-    "master"
+    "master",
+    {
+        "name": "mfa",
+        "prerelease": true
+    },
+    {
+        "name": "zerosessionidfix",
+        "prerelease": true
+    }
   ],
   "plugins": [
     "@semantic-release/commit-analyzer",
