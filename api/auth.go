@@ -15,7 +15,7 @@ import (
 
 // requireAuthentication checks incoming requests for tokens presented using the Authorization header
 func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	token, err := a.extractBearerToken(w, r)
+	token, err := a.extractBearerToken(r)
 	config := a.config
 	if err != nil {
 		a.clearCookieTokens(config, w)
@@ -53,7 +53,7 @@ func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.R
 	return nil, unauthorizedError("User not allowed")
 }
 
-func (a *API) extractBearerToken(w http.ResponseWriter, r *http.Request) (string, error) {
+func (a *API) extractBearerToken(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	matches := bearerRegexp.FindStringSubmatch(authHeader)
 	if len(matches) != 2 {
