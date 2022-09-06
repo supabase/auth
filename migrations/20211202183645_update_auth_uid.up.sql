@@ -1,6 +1,6 @@
 -- update auth.uid()
 
-create or replace function auth.uid()
+create or replace function {{ index .Options "Namespace" }}.uid()
 returns uuid
 language sql stable
 as $$
