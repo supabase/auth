@@ -97,7 +97,7 @@ func (a *API) limitEmailSentHandler() middlewareHandler {
 }
 
 func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) (context.Context, error) {
-	t, err := a.extractBearerToken(w, req)
+	t, err := a.extractBearerToken(req)
 	if err != nil || t == "" {
 		return nil, err
 	}

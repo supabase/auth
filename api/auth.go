@@ -15,7 +15,7 @@ import (
 
 // requireAuthentication checks incoming requests for tokens presented using the Authorization header
 func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	token, err := a.extractBearerToken(w, r)
+	token, err := a.extractBearerToken(r)
 	config := a.config
 	if err != nil {
 		a.clearCookieTokens(config, w)
@@ -53,7 +53,7 @@ func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.R
 	return nil, unauthorizedError("User not allowed")
 }
 
-func (a *API) extractBearerToken(w http.ResponseWriter, r *http.Request) (string, error) {
+func (a *API) extractBearerToken(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	matches := bearerRegexp.FindStringSubmatch(authHeader)
 	if len(matches) != 2 {
@@ -103,13 +103,13 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 	}
 
 	var session *models.Session
-	if claims.SessionId != "" {
+	if claims.SessionId != "" && claims.SessionId != uuid.Nil.String() {
 		sessionId, err := uuid.FromString(claims.SessionId)
 		if err != nil {
 			return ctx, err
 		}
 		session, err = models.FindSessionById(a.db, sessionId)
-		if err != nil {
+		if err != nil && !models.IsNotFoundError(err) {
 			return ctx, err
 		}
 		ctx = withSession(ctx, session)
