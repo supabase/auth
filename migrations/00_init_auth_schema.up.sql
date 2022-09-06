@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS {{ index .Options "Namespace" }}.audit_log_entries (
 	created_at timestamptz NULL,
 	CONSTRAINT audit_log_entries_pkey PRIMARY KEY (id)
 );
-CREATE INDEX IF NOT EXISTS audit_logs_instance_id_idx ON auth.audit_log_entries USING btree (instance_id);
+CREATE INDEX IF NOT EXISTS audit_logs_instance_id_idx ON {{ index .Options "Namespace" }}.audit_log_entries USING btree (instance_id);
 comment on table {{ index .Options "Namespace" }}.audit_log_entries is 'Auth: Audit trail for user actions.';
 
 -- auth.schema_migrations definition
