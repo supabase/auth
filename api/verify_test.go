@@ -103,7 +103,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 	req.Header.Set("Content-Type", "application/json")
 
 	// Generate access token for request
-	token, err := generateAccessToken(u, "", time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	token, err := generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
