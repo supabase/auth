@@ -17,6 +17,7 @@ type Session struct {
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
 	FactorID  string     `json:"factor_id" db:"factor_id"`
 	AMRClaims []AMRClaim `json:"amr_claims" has_many:"amr_claims"`
+	AAL       int        `json:"aal" db:"aal"`
 }
 
 func (Session) TableName() string {
@@ -60,9 +61,12 @@ func FindSessionById(tx *storage.Connection, id uuid.UUID) (*Session, error) {
 	return session, nil
 }
 
-// TODO(Joel): Invalidate all other sessions once MFA is enabled ( A verified factor has been produced). Make use of this in unenroll
-func InvalidateSessionsExcludingCurrent(tx *storage.Connection, currentSessionID uuid.UUID, userID uuid.UUID) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND session_id != ?", userID, currentSessionID).Exec()
+func InvalidateOtherFactorAssociatedSessions(tx *storage.Connection, currentSessionID, userID uuid.UUID, factorID string) error {
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND factor_id = ? AND session_id != ?", userID, factorID, currentSessionID).Exec()
+}
+
+func InvalidateSessionsWithAALLessThan(tx *storage.Connection, userID uuid.UUID, level int) error {
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND aal <= ?", userID, level).Exec()
 }
 
 // Logout deletes all sessions for a user.

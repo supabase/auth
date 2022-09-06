@@ -164,8 +164,9 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 				r.Use(api.loadUser)
 				r.Route("/factor", func(r *router) {
 					r.Post("/", api.EnrollFactor)
-					r.Route("/{factor_id}", func(r *router) {
+					r.With(api.requireAuthentication).Route("/{factor_id}", func(r *router) {
 						r.Use(api.loadFactor)
+
 						r.Post("/verify", api.VerifyFactor)
 						r.Post("/challenge", api.ChallengeFactor)
 						r.Delete("/", api.UnenrollFactor)
@@ -212,8 +213,9 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 	corsHandler := cors.New(cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", audHeaderName, useCookieHeader},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Client-IP", "X-Client-Info", audHeaderName, useCookieHeader},
 		AllowCredentials: true,
+		Debug:            true,
 	})
 
 	api.handler = corsHandler.Handler(chi.ServerBaseContext(ctx, r))

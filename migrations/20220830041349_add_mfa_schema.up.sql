@@ -45,10 +45,9 @@ CREATE TABLE IF NOT EXISTS auth.mfa_recovery_codes(
 );
 comment on table auth.mfa_recovery_codes is 'Auth: stores recovery codes for Multi Factor Authentication';
 
--- Add time at which recovery codes were issued
-ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS recovery_codes_received_at timestamptz NULL;
 -- Add factor_id to sessions
 ALTER TABLE auth.sessions ADD COLUMN IF NOT EXISTS factor_id text NULL;
+ALTER TABLE auth.sessions ADD COLUMN IF NOT EXISTS aal integer NULL;
 
 -- Add factor_id and AMR claims to session
 CREATE TABLE IF NOT EXISTS auth.mfa_amr_claims(

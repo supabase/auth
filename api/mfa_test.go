@@ -134,6 +134,7 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
+// TODO: Check behavior that downgrades all other sessions
 func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	cases := []struct {
 		desc             string
@@ -225,6 +226,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 				_, err := models.FindChallengeByChallengeID(ts.API.db, c.ID)
 				require.EqualError(ts.T(), err, models.ChallengeNotFoundError{}.Error())
 			}
+			// Check the JWT to see if AAL is appropriate
 		})
 	}
 }

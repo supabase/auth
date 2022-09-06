@@ -48,14 +48,6 @@ type ChallengeFactorResponse struct {
 type VerifyFactorResponse struct {
 	Success string `json:"success"`
 }
-type StepUpLoginCodeResponse struct {
-	Token   string `json:"token"`
-	Success string `json:"success"`
-}
-
-type StepUpLoginRecoveryCodeResponse struct {
-	RecoveryCodes []*models.RecoveryCode `json:"recovery_codes"`
-}
 
 type UnenrollFactorResponse struct {
 	Success string `json:"success"`
@@ -65,16 +57,13 @@ type UnenrollFactorParams struct {
 	Code string `json:"code"`
 }
 
-type StepUpLoginParams struct {
-	ChallengeID  string `json:"challenge_id"`
-	Code         string `json:"code"`
-	RecoveryCode string `json:"recovery_code"`
-}
-
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	const factorPrefix = "factor"
 	ctx := r.Context()
 	user := getUser(ctx)
+	// if len(user.Factors) >=1 {
+	// // 	return badRequestError("Only one factor can be enrolled at a time, please unenroll to continue")
+	// }
 
 	params := &EnrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -83,8 +72,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError(err.Error())
 	}
 	factorType := params.FactorType
-	if (factorType != models.TOTP) && (factorType != models.Webauthn) {
-		return unprocessableEntityError("FactorType needs to be either 'totp' or 'webauthn'")
+	if factorType != models.TOTP {
+		return unprocessableEntityError("FactorType needs to be TOTP")
 	}
 	if params.Issuer == "" {
 		return unprocessableEntityError("Issuer is required")
@@ -125,6 +114,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if terr != nil {
 		return terr
 	}
+	// TODO(Joel):Escape the characters accordingly so that it can be copied
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:   factor.ID,
 		Type: factor.FactorType,
@@ -165,12 +155,12 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 	creationTime := challenge.CreatedAt
 	expiryTime := creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration))
+	// TODO(Joel): Convert this to unix timestamp
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
-		ExpiresAt: expiryTime.String(),
+		ExpiresAt: fmt.Sprintf("%v", expiryTime.Unix()),
 	})
 }
-
 
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
@@ -218,7 +208,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 		return expiredChallengeError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
 	}
-
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if err = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":    factor.ID,
@@ -241,13 +230,15 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
 			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
+		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, 2); terr != nil {
+			return internalServerError("Failed to update sessions. %s", terr)
+		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 	metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
-	// TODO(Joel): Invalidate all sessions with <= AAL1
 
 	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
 		Success: fmt.Sprintf("%v", valid),
@@ -260,6 +251,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
 	factor := getFactor(ctx)
+	session := getSession(ctx)
 
 	params := &UnenrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -272,6 +264,9 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	} else if !MFAEnabled {
 		return forbiddenError("You do not have a verified factor enrolled")
+	}
+	if session == nil {
+		return badRequestError("session is not available")
 	}
 
 	valid := totp.Validate(params.Code, factor.SecretKey)
@@ -289,13 +284,15 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		}); err != nil {
 			return err
 		}
+		// TODO (Joel)Write test for this
+		if err = models.InvalidateOtherFactorAssociatedSessions(tx, session.ID, user.ID, factor.ID); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-
-	// Drop all Sessions to AAL1 here
 
 	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{
 		Success: fmt.Sprintf("%v", valid),

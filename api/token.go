@@ -534,7 +534,6 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
-// TODO(Joel): Add Factor ID to access token
 func generateAccessToken(user *models.User, sessionId string, expiresIn time.Duration, secret string, oldClaims *GoTrueClaims, signInMethod string) (string, error) {
 	amr := []AMREntry{}
 	aal := "aal1"

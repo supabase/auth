@@ -63,8 +63,6 @@ type User struct {
 	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
 	BannedUntil *time.Time `json:"banned_until,omitempty" db:"banned_until"`
 
-	RecoveryCodesReceivedAt *time.Time `json:"recovery_codes_recived_at" db:"recovery_codes_received_at"`
-
 	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 }
 
@@ -543,8 +541,4 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection) error {
 	u.Identities = confirmedProviders
 
 	return nil
-}
-
-func (u *User) HasReceivedRecoveryCodes() bool {
-	return u.RecoveryCodesReceivedAt != nil
 }
