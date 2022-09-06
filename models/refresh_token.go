@@ -108,7 +108,10 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 	if oldToken != nil {
 		token.Parent = storage.NullString(oldToken.Token)
 		token.SessionId = oldToken.SessionId
-	} else {
+	}
+
+	if !token.SessionId.Valid {
+		// Existing refresh tokens may have a null session_id if they were created before v2.15.3
 		session, err := CreateSession(tx, user)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error generated unique session id")

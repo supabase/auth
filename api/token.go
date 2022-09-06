@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/metering"
@@ -26,7 +27,7 @@ type GoTrueClaims struct {
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	UserMetaData map[string]interface{} `json:"user_metadata"`
 	Role         string                 `json:"role"`
-	SessionId    string                 `json:"session_id"`
+	SessionId    string                 `json:"session_id,omitempty"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -527,6 +528,9 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 }
 
 func generateAccessToken(user *models.User, sessionId string, expiresIn time.Duration, secret string) (string, error) {
+	if sessionId == uuid.Nil.String() {
+		sessionId = ""
+	}
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
