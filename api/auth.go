@@ -109,7 +109,7 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 			return ctx, err
 		}
 		session, err = models.FindSessionById(a.db, sessionId)
-		if err != nil {
+		if err != nil && !models.IsNotFoundError(err) {
 			return ctx, err
 		}
 		ctx = withSession(ctx, session)
