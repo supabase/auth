@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gobuffalo/nulls"
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/crypto"
@@ -22,7 +21,7 @@ type RefreshToken struct {
 	UserID uuid.UUID `db:"user_id"`
 
 	Parent    storage.NullString `db:"parent"`
-	SessionId nulls.UUID         `db:"session_id"`
+	SessionId *uuid.UUID         `db:"session_id"`
 
 	Revoked   bool      `db:"revoked"`
 	CreatedAt time.Time `db:"created_at"`
@@ -69,7 +68,7 @@ func GrantRefreshTokenSwap(r *http.Request, tx *storage.Connection, user *User, 
 func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
 	var err error
 	tablename := (&pop.Model{Value: RefreshToken{}}).TableName()
-	if token.SessionId.Valid && len(token.SessionId.UUID) > 0 {
+	if token.SessionId != nil {
 		err = tx.RawQuery(`update `+tablename+` set revoked = true where session_id = ?;`, token.SessionId).Exec()
 	} else {
 		err = tx.RawQuery(`
@@ -110,13 +109,13 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 		token.SessionId = oldToken.SessionId
 	}
 
-	if !token.SessionId.Valid {
+	if token.SessionId == nil {
 		// Existing refresh tokens may have a null session_id if they were created before v2.15.3
 		session, err := CreateSession(tx, user)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error generated unique session id")
 		}
-		token.SessionId = nulls.NewUUID(session.ID)
+		token.SessionId = &session.ID
 	}
 
 	if err := tx.Create(token); err != nil {
