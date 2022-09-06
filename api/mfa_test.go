@@ -57,20 +57,6 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		ExpectedCode int
 	}{
 		{
-			"TOTP: Factor has friendly name",
-			"bob",
-			"totp",
-			"supabase.com",
-			http.StatusOK,
-		},
-		{
-			"TOTP: Without simple name",
-			"",
-			"totp",
-			"supabase.com",
-			http.StatusOK,
-		},
-		{
 			"TOTP: No issuer",
 			"john",
 			"totp",
@@ -84,6 +70,22 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			"john.com",
 			http.StatusUnprocessableEntity,
 		},
+
+		{
+			"TOTP: Factor has friendly name",
+			"bob",
+			"totp",
+			"supabase.com",
+			http.StatusOK,
+		},
+		{
+			"TOTP: Enrolling without friendly name",
+			"",
+			"totp",
+			"supabase.com",
+			http.StatusOK,
+		},
+
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {

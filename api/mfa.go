@@ -30,8 +30,6 @@ type TOTPObject struct {
 
 type EnrollFactorResponse struct {
 	ID        string `json:"id"`
-	CreatedAt string `json:"created_at"`
-	Type      string `json:"type"`
 	TOTP      TOTPObject
 }
 
@@ -61,9 +59,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	const factorPrefix = "factor"
 	ctx := r.Context()
 	user := getUser(ctx)
-	// if len(user.Factors) >=1 {
-	// // 	return badRequestError("Only one factor can be enrolled at a time, please unenroll to continue")
-	// }
 
 	params := &EnrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -78,6 +73,16 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if params.Issuer == "" {
 		return unprocessableEntityError("Issuer is required")
 	}
+	// Read from DB for certainty
+	factors, err := models.FindVerifiedFactorsByUser(a.db, user)
+	if err != nil {
+		return internalServerError("Error validating number of factors in system")
+	}
+	// Remove this at v2
+	if len(factors) >= 1 {
+		return forbiddenError("Only one factor can be enrolled at a time, please unenroll to continue")
+	}
+
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      params.Issuer,
 		AccountName: user.GetEmail(),
@@ -94,7 +99,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return internalServerError("Error writing to QR Code").WithInternalError(err)
 	}
-
 	s.End()
 
 	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())
@@ -114,10 +118,10 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if terr != nil {
 		return terr
 	}
+
 	// TODO(Joel):Escape the characters accordingly so that it can be copied
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:   factor.ID,
-		Type: factor.FactorType,
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
 			QRCode: fmt.Sprintf("data:img/svg+xml;utf-8,%v", &buf),
@@ -126,6 +130,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		},
 	})
 }
+
+
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
@@ -155,13 +161,13 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 	creationTime := challenge.CreatedAt
 	expiryTime := creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration))
-	// TODO(Joel): Convert this to unix timestamp
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
 		ExpiresAt: fmt.Sprintf("%v", expiryTime.Unix()),
 	})
 }
 
+// TODO: Test Case: Create two sessions, one signed in regularly and the other with
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
@@ -205,7 +211,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-
 		return expiredChallengeError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
 	}
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -246,12 +251,16 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 }
 
+
+
+// TODO: Test case: Create Two Sessions with two separate factors
+// Unenroll one, the other session should be deleted
 func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
 	user := getUser(ctx)
 	factor := getFactor(ctx)
-	session := getSession(ctx)
+	// session := getSession(ctx)
 
 	params := &UnenrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -265,9 +274,9 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	} else if !MFAEnabled {
 		return forbiddenError("You do not have a verified factor enrolled")
 	}
-	if session == nil {
-		return badRequestError("session is not available")
-	}
+	// if session == nil {
+	// 	return badRequestError("session is not available")
+	// }
 
 	valid := totp.Validate(params.Code, factor.SecretKey)
 	if valid != true {
@@ -284,10 +293,9 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		}); err != nil {
 			return err
 		}
-		// TODO (Joel)Write test for this
-		if err = models.InvalidateOtherFactorAssociatedSessions(tx, session.ID, user.ID, factor.ID); err != nil {
-			return err
-		}
+		// if err = models.InvalidateOtherFactorAssociatedSessions(tx, session.ID, user.ID, factor.ID); err != nil {
+		// 	return err
+		// }
 		return nil
 	})
 	if err != nil {
