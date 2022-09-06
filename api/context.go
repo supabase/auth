@@ -79,6 +79,9 @@ func withFactor(ctx context.Context, f *models.Factor) context.Context {
 
 // getUser reads the user from the context.
 func getUser(ctx context.Context) *models.User {
+	if ctx == nil {
+		return nil
+	}
 	obj := ctx.Value(userKey)
 	if obj == nil {
 		return nil
@@ -102,6 +105,9 @@ func withSession(ctx context.Context, s *models.Session) context.Context {
 
 // getSession reads the session from the context.
 func getSession(ctx context.Context) *models.Session {
+	if ctx == nil {
+		return nil
+	}
 	obj := ctx.Value(sessionKey)
 	if obj == nil {
 		return nil

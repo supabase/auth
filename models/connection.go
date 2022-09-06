@@ -43,7 +43,7 @@ func TruncateAll(conn *storage.Connection) error {
 		}
 
 		for _, tableName := range tables {
-			if err := tx.RawQuery("TRUNCATE " + tableName + " CASCADE").Exec(); err != nil {
+			if err := tx.RawQuery("DELETE FROM " + tableName + " CASCADE").Exec(); err != nil {
 				return err
 			}
 		}

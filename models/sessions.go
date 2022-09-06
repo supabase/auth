@@ -35,6 +35,7 @@ func NewSession(user *User, factorID string) (*Session, error) {
 		ID:       id,
 		UserID:   user.ID,
 		FactorID: factorID,
+		AAL: 1,
 	}
 	return session, nil
 }
@@ -66,7 +67,7 @@ func InvalidateOtherFactorAssociatedSessions(tx *storage.Connection, currentSess
 }
 
 func InvalidateSessionsWithAALLessThan(tx *storage.Connection, userID uuid.UUID, level int) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND aal <= ?", userID, level).Exec()
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND aal < ?", userID, level).Exec()
 }
 
 // Logout deletes all sessions for a user.

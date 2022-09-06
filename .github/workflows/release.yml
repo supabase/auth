@@ -1,12 +1,15 @@
 name: Build and Release on Push to Master
 
 on:
+  workflow_dispatch:
+
   workflow_run:
     workflows: [Test]
     types: [completed]
     branches:
       - master
       - mfa
+      - zerosessionidfix
 
 jobs:
   release:

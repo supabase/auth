@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/metering"
@@ -28,7 +29,7 @@ type GoTrueClaims struct {
 	Role                          string                 `json:"role"`
 	AuthenticatorAssuranceLevel   string                 `json:"aal"`
 	AuthenticationMethodReference []AMREntry             `json:"amr"`
-	SessionId                     string                 `json:"session_id"`
+	SessionId    string                 `json:"session_id,omitempty"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -333,7 +334,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			}
 		}
 
-		tokenString, terr = generateAccessToken(user, newToken.SessionId.UUID.String(), time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, nil, "")
+		tokenString, terr = generateAccessToken(user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, nil, "")
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -534,7 +535,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func generateAccessToken(user *models.User, sessionId string, expiresIn time.Duration, secret string, oldClaims *GoTrueClaims, signInMethod string) (string, error) {
+func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string, oldClaims *GoTrueClaims, signInMethod string) (string, error) {
 	amr := []AMREntry{}
 	aal := "aal1"
 	if oldClaims != nil && oldClaims.AuthenticationMethodReference != nil {
@@ -543,6 +544,10 @@ func generateAccessToken(user *models.User, sessionId string, expiresIn time.Dur
 	entry := AMREntry{Method: signInMethod, Timestamp: time.Now()}
 	amr = append(amr, entry)
 	aal = calculateAAL(amr)
+	sid := ""
+	if sessionId != nil {
+		sid = sessionId.String()
+	}
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
@@ -554,9 +559,10 @@ func generateAccessToken(user *models.User, sessionId string, expiresIn time.Dur
 		AppMetaData:                   user.AppMetaData,
 		UserMetaData:                  user.UserMetaData,
 		Role:                          user.Role,
-		SessionId:                     sessionId,
+		SessionId:                     sid,
 		AuthenticatorAssuranceLevel:   aal,
 		AuthenticationMethodReference: amr,
+
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -581,7 +587,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		session, terr := models.FindSessionById(tx, refreshToken.SessionId.UUID)
+		session, terr := models.FindSessionById(tx, *refreshToken.SessionId)
 		if terr != nil {
 			return terr
 		}
@@ -596,7 +602,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			}
 		}
 
-		tokenString, terr = generateAccessToken(user, refreshToken.SessionId.UUID.String(), time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, currentClaims, signInMethod)
+		tokenString, terr = generateAccessToken(user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, currentClaims, signInMethod)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}

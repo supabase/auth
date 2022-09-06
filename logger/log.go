@@ -11,9 +11,6 @@ import (
 )
 
 func NewStructuredLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
-	logger.Formatter = &logrus.JSONFormatter{
-		DisableTimestamp: true,
-	}
 	return chimiddleware.RequestLogger(&structuredLogger{logger})
 }
 

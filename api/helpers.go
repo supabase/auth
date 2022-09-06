@@ -50,6 +50,7 @@ func sendJSON(w http.ResponseWriter, status int, obj interface{}) error {
 	return err
 }
 
+
 func (a *API) isAdmin(ctx context.Context, u *models.User, aud string) bool {
 	config := a.config
 	if aud == "" {
