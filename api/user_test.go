@@ -111,7 +111,7 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 			require.NoError(ts.T(), u.SetPhone(ts.API.db, c.userData["phone"]), "Error setting user phone")
 			require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user")
 
-	token, err := generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
+			token, err := generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
 			require.NoError(ts.T(), err, "Error generating access token")
 
 			var buffer bytes.Buffer

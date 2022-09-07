@@ -35,7 +35,7 @@ func NewSession(user *User, factorID string) (*Session, error) {
 		ID:       id,
 		UserID:   user.ID,
 		FactorID: factorID,
-		AAL: 1,
+		AAL:      1,
 	}
 	return session, nil
 }

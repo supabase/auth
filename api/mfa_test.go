@@ -85,7 +85,6 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			"supabase.com",
 			http.StatusOK,
 		},
-
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {

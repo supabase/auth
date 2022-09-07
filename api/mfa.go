@@ -29,8 +29,8 @@ type TOTPObject struct {
 }
 
 type EnrollFactorResponse struct {
-	ID        string `json:"id"`
-	TOTP      TOTPObject
+	ID   string `json:"id"`
+	TOTP TOTPObject
 }
 
 type VerifyFactorParams struct {
@@ -121,7 +121,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	// TODO(Joel):Escape the characters accordingly so that it can be copied
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
-		ID:   factor.ID,
+		ID: factor.ID,
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
 			QRCode: fmt.Sprintf("data:img/svg+xml;utf-8,%v", &buf),
@@ -250,9 +250,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 }
 
-
-
-// TODO: Test case: Create Two Sessions with two separate factors
+// TODO: Test case: Create two Sessions with two separate factors
 // Unenroll one, the other session should be deleted
 func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error

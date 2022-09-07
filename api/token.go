@@ -29,7 +29,7 @@ type GoTrueClaims struct {
 	Role                          string                 `json:"role"`
 	AuthenticatorAssuranceLevel   string                 `json:"aal"`
 	AuthenticationMethodReference []AMREntry             `json:"amr"`
-	SessionId    string                 `json:"session_id,omitempty"`
+	SessionId                     string                 `json:"session_id,omitempty"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -562,7 +562,6 @@ func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time
 		SessionId:                     sid,
 		AuthenticatorAssuranceLevel:   aal,
 		AuthenticationMethodReference: amr,
-
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
