@@ -402,40 +402,6 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 	return sendJSON(w, http.StatusOK, factor)
 }
 
-func (a *API) adminUserDeleteRecoveryCodes(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	user := getUser(ctx)
-
-	MFAEnabled, err := models.IsMFAEnabled(a.db, user)
-	if err != nil {
-		return err
-	} else if !MFAEnabled {
-		return forbiddenError("You do not have a verified factor enrolled")
-	}
-
-	recoveryCodes, terr := models.FindValidRecoveryCodesByUser(a.db, user)
-	if terr != nil {
-		return terr
-	}
-	terr = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(r, tx, user, models.DeleteRecoveryCodesAction, r.RemoteAddr, map[string]interface{}{
-			"user_id": user.ID,
-		}); terr != nil {
-			return terr
-		}
-		for _, recoveryCodeModel := range recoveryCodes {
-			if terr := tx.Destroy(recoveryCodeModel); terr != nil {
-				return terr
-			}
-		}
-		return nil
-	})
-	if terr != nil {
-		return terr
-	}
-
-	return sendJSON(w, http.StatusOK, map[string]interface{}{})
-}
 
 func (a *API) adminUserGetFactors(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()

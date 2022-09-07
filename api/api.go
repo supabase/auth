@@ -199,7 +199,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 							r.Post("/", api.adminUserUpdateFactor)
 						})
 					})
-					r.Delete("/recovery_codes", api.adminUserDeleteRecoveryCodes)
 
 					r.Get("/", api.adminUserGet)
 					r.Put("/", api.adminUserUpdate)
