@@ -64,6 +64,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var user *models.User
+	var grantParams models.GrantParams
 	params.Aud = a.requestAud(ctx, r)
 
 	switch params.Provider {
@@ -218,7 +219,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 
-			token, terr = a.issueRefreshToken(ctx, tx, user)
+			token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 			if terr != nil {
 				return terr
 			}

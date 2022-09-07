@@ -172,6 +172,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return unprocessableEntityError("Only an email address or phone number should be provided on login.")
 	}
 	var user *models.User
+	var grantParams models.GrantParams
 	var provider string
 	if params.Email != "" {
 		provider = "email"
@@ -219,7 +220,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 		if terr != nil {
 			return terr
 		}
@@ -420,6 +421,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	var user *models.User
+	var grantParams models.GrantParams
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -508,7 +510,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
@@ -550,7 +552,7 @@ func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time
 	return token.SignedString([]byte(secret))
 }
 
-func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User) (*AccessTokenResponse, error) {
+func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 	config := a.config
 
 	now := time.Now()
@@ -561,7 +563,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		refreshToken, terr = models.GrantAuthenticatedUser(tx, user, models.GrantParams{})
+		refreshToken, terr = models.GrantAuthenticatedUser(tx, user, grantParams)
 		if terr != nil {
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
