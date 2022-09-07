@@ -8,7 +8,7 @@ on:
     types: [completed]
     branches:
       - master
-      - mfa
+      - mfa_v1
       - zerosessionidfix
 
 jobs:
