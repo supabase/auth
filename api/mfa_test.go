@@ -42,7 +42,7 @@ func (ts *MFATestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 	// Create Factor
-	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorUnverifiedState, "secretkey")
+	f, err := models.NewFactor(u, "test_factor", "totp", models.FactorUnverifiedState, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 }
@@ -119,7 +119,7 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	f, err := models.FindFactorByFactorID(ts.API.db, "testFactorID")
+	f, err := models.FindFactorByFriendlyName(ts.API.db, "test_factor")
 	require.NoError(ts.T(), err)
 
 	token, err := generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
@@ -291,7 +291,7 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), v.ExpectedHTTPCode, w.Code)
 			if v.IsFactorVerified {
-				_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
+				_, err = models.FindFactorByFactorID(ts.API.db, f.ID.String())
 				require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
 			}
 		})

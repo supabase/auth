@@ -8,8 +8,6 @@ import (
 	"time"
 )
 
-const FactorPrefix = "factor"
-
 const FactorUnverifiedState = "unverified"
 const FactorVerifiedState = "verified"
 
@@ -17,7 +15,7 @@ const TOTP = "totp"
 const Webauthn = "webauthn"
 
 type Factor struct {
-	ID           string    `json:"id" db:"id"`
+	ID           uuid.UUID `json:"id" db:"id"`
 	User         User      `belongs_to:"user"`
 	UserID       uuid.UUID `json:"user_id" db:"user_id"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
@@ -33,7 +31,11 @@ func (Factor) TableName() string {
 	return tableName
 }
 
-func NewFactor(user *User, friendlyName, id, factorType, status, secretKey string) (*Factor, error) {
+func NewFactor(user *User, friendlyName, factorType, status, secretKey string) (*Factor, error) {
+	id, err := uuid.NewV4()
+	if err != nil {
+		return nil, errors.Wrap(err, "Error generating unique id")
+	}
 	factor := &Factor{
 		UserID:       user.ID,
 		ID:           id,
@@ -85,7 +87,7 @@ func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Fac
 	return obj, nil
 }
 
-func FindFactorByChallengeID(tx *storage.Connection, challengeID string) (*Factor, error) {
+func FindFactorByChallengeID(tx *storage.Connection, challengeID uuid.UUID) (*Factor, error) {
 	factor := &Factor{}
 	if err := tx.Q().Join("mfa_challenges", "mfa_factors.ID = mfa_challenges.factor_id").Where("mfa_challenges.id= ?", challengeID).First(factor); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {

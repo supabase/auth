@@ -7,7 +7,7 @@ import (
 	"github.com/aaronarduino/goqrsvg"
 	"github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
-	"github.com/netlify/gotrue/crypto"
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -29,18 +29,18 @@ type TOTPObject struct {
 }
 
 type EnrollFactorResponse struct {
-	ID   string `json:"id"`
+	ID   uuid.UUID `json:"id"`
 	TOTP TOTPObject
 }
 
 type VerifyFactorParams struct {
-	ChallengeID string `json:"challenge_id"`
-	Code        string `json:"code"`
+	ChallengeID uuid.UUID `json:"challenge_id"`
+	Code        string    `json:"code"`
 }
 
 type ChallengeFactorResponse struct {
-	ID        string `json:"id"`
-	ExpiresAt string `json:"expires_at"`
+	ID        uuid.UUID `json:"id"`
+	ExpiresAt string    `json:"expires_at"`
 }
 
 type VerifyFactorResponse struct {
@@ -56,7 +56,6 @@ type UnenrollFactorParams struct {
 }
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
-	const factorPrefix = "factor"
 	ctx := r.Context()
 	user := getUser(ctx)
 
@@ -101,8 +100,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	s.End()
 
-	factorID := fmt.Sprintf("%s_%s", factorPrefix, crypto.SecureToken())
-	factor, terr := models.NewFactor(user, params.FriendlyName, factorID, params.FactorType, models.FactorUnverifiedState, key.Secret())
+	factor, terr := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorUnverifiedState, key.Secret())
 	if terr != nil {
 		return internalServerError("Database error creating factor").WithInternalError(err)
 	}

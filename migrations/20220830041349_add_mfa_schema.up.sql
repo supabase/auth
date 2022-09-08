@@ -8,7 +8,7 @@ END $$;
 
 -- auth.mfa_factors definition
 CREATE TABLE IF NOT EXISTS auth.mfa_factors(
-       id text NOT NULL,
+       id uuid NOT NULL,
        user_id uuid NOT NULL,
        friendly_name text NULL,
        factor_type factor_type NOT NULL,
@@ -24,7 +24,7 @@ comment on table auth.mfa_factors is 'Auth: stores metadata about factors';
 
 -- auth.mfa_challenges definition
 CREATE TABLE IF NOT EXISTS auth.mfa_challenges(
-       id text NOT NULL,
+       id uuid NOT NULL,
        factor_id text NOT NULL,
        created_at timestamptz NOT NULL,
        verified_at timestamptz  NULL,

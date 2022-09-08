@@ -41,4 +41,3 @@ func AddClaimToSession(tx *storage.Connection, session *Session, signInMethod st
 	}
 	return tx.Create(claim)
 }
-

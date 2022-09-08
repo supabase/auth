@@ -15,7 +15,7 @@ type Session struct {
 	UserID    uuid.UUID  `json:"user_id" db:"user_id"`
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
-	FactorID  string     `json:"factor_id" db:"factor_id"`
+	FactorID  uuid.UUID  `json:"factor_id" db:"factor_id"`
 	AMRClaims []AMRClaim `json:"amr_claims" has_many:"amr_claims"`
 	AAL       int        `json:"aal" db:"aal"`
 }
@@ -25,7 +25,7 @@ func (Session) TableName() string {
 	return tableName
 }
 
-func NewSession(user *User, factorID string) (*Session, error) {
+func NewSession(user *User, factorID uuid.UUID) (*Session, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique session id")
@@ -40,7 +40,7 @@ func NewSession(user *User, factorID string) (*Session, error) {
 	return session, nil
 }
 
-func CreateSession(tx *storage.Connection, user *User, factorID string) (*Session, error) {
+func CreateSession(tx *storage.Connection, user *User, factorID uuid.UUID) (*Session, error) {
 	session, err := NewSession(user, factorID)
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func LogoutSession(tx *storage.Connection, sessionId uuid.UUID) error {
 	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE id = ?", sessionId).Exec()
 }
 
-func (s *Session) UpdateAssociatedFactor(tx *storage.Connection, factorID string) error {
+func (s *Session) UpdateAssociatedFactor(tx *storage.Connection, factorID uuid.UUID) error {
 	s.FactorID = factorID
 	return tx.Update(s)
 

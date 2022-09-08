@@ -520,14 +520,13 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 	}
 }
 
-
 // TestAdminUserDeleteFactor tests API /admin/users/<user_id>/factor/<factor_id>/
 func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorVerifiedState, "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", "totp", models.FactorVerifiedState, "secretkey")
 
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
@@ -541,7 +540,7 @@ func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
+	_, err = models.FindFactorByFactorID(ts.API.db, f.ID.String())
 	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
 
 }
@@ -552,7 +551,7 @@ func (ts *AdminTestSuite) TestAdminUserGetFactors() {
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorUnverifiedState, "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", "totp", models.FactorUnverifiedState, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 
@@ -572,7 +571,7 @@ func (ts *AdminTestSuite) TestAdminUserGetFactor() {
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorUnverifiedState, "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", "totp", models.FactorUnverifiedState, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 
@@ -591,7 +590,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	f, err := models.NewFactor(u, "testSimpleName", "testFactorID", "totp", models.FactorUnverifiedState, "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", "totp", models.FactorUnverifiedState, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 

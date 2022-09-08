@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -121,7 +122,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.EmailVerification, "")
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.EmailVerification, uuid.Nil)
 		if terr != nil {
 			return terr
 		}
@@ -217,7 +218,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.SMSOrGeneratedLink, "")
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.SMSOrGeneratedLink, uuid.Nil)
 		if terr != nil {
 			return terr
 		}

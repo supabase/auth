@@ -275,7 +275,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, "")
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, uuid.Nil)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}

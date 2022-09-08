@@ -402,7 +402,6 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 	return sendJSON(w, http.StatusOK, factor)
 }
 
-
 func (a *API) adminUserGetFactors(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)

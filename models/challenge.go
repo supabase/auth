@@ -2,16 +2,15 @@ package models
 
 import (
 	"database/sql"
-	"fmt"
-	"github.com/netlify/gotrue/crypto"
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"time"
 )
 
 type Challenge struct {
-	ID         string     `json:"challenge_id" db:"id"`
-	FactorID   string     `json:"factor_id" db:"factor_id"`
+	ID         uuid.UUID  `json:"challenge_id" db:"id"`
+	FactorID   uuid.UUID  `json:"factor_id" db:"factor_id"`
 	CreatedAt  time.Time  `json:"created_at" db:"created_at"`
 	VerifiedAt *time.Time `json:"verified_at" db:"verified_at"`
 }
@@ -24,14 +23,18 @@ func (Challenge) TableName() string {
 const ChallengePrefix = "challenge"
 
 func NewChallenge(factor *Factor) (*Challenge, error) {
+	id, err := uuid.NewV4()
+	if err != nil {
+		return nil, errors.Wrap(err, "Error generating unique id")
+	}
 	challenge := &Challenge{
-		ID:       fmt.Sprintf("%s_%s", ChallengePrefix, crypto.SecureToken()),
+		ID:       id,
 		FactorID: factor.ID,
 	}
 	return challenge, nil
 }
 
-func FindChallengeByChallengeID(tx *storage.Connection, challengeID string) (*Challenge, error) {
+func FindChallengeByChallengeID(tx *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
 	challenge, err := findChallenge(tx, "id = ?", challengeID)
 	if err != nil {
 		return nil, ChallengeNotFoundError{}
@@ -39,7 +42,7 @@ func FindChallengeByChallengeID(tx *storage.Connection, challengeID string) (*Ch
 	return challenge, nil
 }
 
-func FindChallengesByFactorID(tx *storage.Connection, factorID string) ([]*Challenge, error) {
+func FindChallengesByFactorID(tx *storage.Connection, factorID uuid.UUID) ([]*Challenge, error) {
 	challenges := []*Challenge{}
 	if err := tx.Q().Where("factor_id = ?", factorID).All(&challenges); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {

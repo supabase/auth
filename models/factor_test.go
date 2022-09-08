@@ -51,7 +51,7 @@ func (ts *FactorTestSuite) TestFindFactorByFriendlyName() {
 
 func (ts *FactorTestSuite) TestFindFactorByFactorID() {
 	f := ts.createFactor()
-	n, err := FindFactorByFactorID(ts.db, f.ID)
+	n, err := FindFactorByFactorID(ts.db, f.ID.String())
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), f.ID, n.ID)
 }
@@ -63,7 +63,7 @@ func (ts *FactorTestSuite) createFactor() *Factor {
 	err = ts.db.Create(user)
 	require.NoError(ts.T(), err)
 
-	factor, err := NewFactor(user, "asimplename", "factor-which-shall-not-be-named", "totp", "disabled", "topsecret")
+	factor, err := NewFactor(user, "asimplename", "totp", "disabled", "topsecret")
 	require.NoError(ts.T(), err)
 
 	err = ts.db.Create(factor)
@@ -76,7 +76,7 @@ func (ts *FactorTestSuite) TestUpdateStatus() {
 	u, err := NewUser("", "", "", "", nil)
 	require.NoError(ts.T(), err)
 
-	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "some-secret", FactorUnverifiedState, "")
+	f, err := NewFactor(u, "A1B2C3", "some-secret", FactorUnverifiedState, "")
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), f.UpdateStatus(ts.db, newFactorStatus))
 	require.Equal(ts.T(), newFactorStatus, f.Status)
@@ -87,7 +87,7 @@ func (ts *FactorTestSuite) TestUpdateFriendlyName() {
 	u, err := NewUser("", "", "", "", nil)
 	require.NoError(ts.T(), err)
 
-	f, err := NewFactor(u, "A1B2C3", "testfactor-id", "some-secret", FactorUnverifiedState, "")
+	f, err := NewFactor(u, "A1B2C3", "some-secret", FactorUnverifiedState, "")
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), f.UpdateFriendlyName(ts.db, newSimpleName))
 	require.Equal(ts.T(), newSimpleName, f.FriendlyName)

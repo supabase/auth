@@ -227,7 +227,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, "")
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, uuid.Nil)
 		if terr != nil {
 			return terr
 		}
@@ -516,7 +516,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuthIDGrant, "")
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuthIDGrant, uuid.Nil)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
@@ -568,7 +568,7 @@ func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time
 	return token.SignedString([]byte(secret))
 }
 
-func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod, factorID string) (*AccessTokenResponse, error) {
+func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod string, factorID uuid.UUID) (*AccessTokenResponse, error) {
 	config := a.config
 	isMFASignInMethod := signInMethod == models.TOTP
 	now := time.Now()
