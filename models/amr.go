@@ -42,8 +42,3 @@ func AddClaimToSession(tx *storage.Connection, session *Session, signInMethod st
 	return tx.Create(claim)
 }
 
-// Finds all Sessions associated to a factor and deletes them
-func DeleteClaimsByFactorID(tx *storage.Connection, factorID string, claimType string) error {
-	return errors.New("Unimplemented")
-	// Join on sessions and calims  Find all fclaims assoicated with a given TOTP factor
-}

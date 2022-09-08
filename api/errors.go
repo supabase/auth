@@ -120,10 +120,6 @@ func tooManyRequestsError(fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusTooManyRequests, fmtString, args...)
 }
 
-func expiredChallengeError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusUnauthorized, fmtString, args...)
-}
-
 // HTTPError is an error with a message and an HTTP status code.
 type HTTPError struct {
 	Code            int    `json:"code"`

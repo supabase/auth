@@ -8,14 +8,14 @@ END $$;
 
 -- auth.mfa_factors definition
 CREATE TABLE IF NOT EXISTS auth.mfa_factors(
-       id VARCHAR(255) NOT NULL,
+       id text NOT NULL,
        user_id uuid NOT NULL,
-       friendly_name VARCHAR(255) NULL,
+       friendly_name text NULL,
        factor_type factor_type NOT NULL,
        status factor_status NOT NULL,
        created_at timestamptz NOT NULL,
        updated_at timestamptz NOT NULL,
-       secret_key VARCHAR(255) NOT NULL,
+       secret_key text NOT NULL,
        UNIQUE(user_id, friendly_name),
        CONSTRAINT mfa_factors_pkey PRIMARY KEY(id),
        CONSTRAINT mfa_factors_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
@@ -24,8 +24,8 @@ comment on table auth.mfa_factors is 'Auth: stores metadata about factors';
 
 -- auth.mfa_challenges definition
 CREATE TABLE IF NOT EXISTS auth.mfa_challenges(
-       id VARCHAR(255) NOT NULL,
-       factor_id VARCHAR(255) NOT NULL,
+       id text NOT NULL,
+       factor_id text NOT NULL,
        created_at timestamptz NOT NULL,
        verified_at timestamptz  NULL,
        CONSTRAINT mfa_challenges_pkey PRIMARY KEY (id),
@@ -33,17 +33,6 @@ CREATE TABLE IF NOT EXISTS auth.mfa_challenges(
 );
 comment on table auth.mfa_challenges is 'Auth: stores metadata about challenge requests made';
 
--- auth.mfa_recovery_codes definition
-CREATE TABLE IF NOT EXISTS auth.mfa_recovery_codes(
-	id uuid NOT NULL,
-       user_id uuid NOT NULL,
-       recovery_code VARCHAR(32) NOT NULL,
-       created_at timestamptz NOT NULL,
-       used_at timestamptz NULL,
-       CONSTRAINT mfa_recovery_codes_user_id_recovery_code_pkey UNIQUE(user_id, recovery_code),
-       CONSTRAINT mfa_recovery_codes_user_id_fkey FOREIGN KEY(user_id) REFERENCES auth.users(id) ON DELETE CASCADE
-);
-comment on table auth.mfa_recovery_codes is 'Auth: stores recovery codes for Multi Factor Authentication';
 
 -- Add factor_id to sessions
 ALTER TABLE auth.sessions ADD COLUMN IF NOT EXISTS factor_id text NULL;

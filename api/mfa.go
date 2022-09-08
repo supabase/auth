@@ -210,7 +210,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		return expiredChallengeError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
+		return badRequestError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
 	}
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if err = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{

@@ -214,7 +214,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Client-IP", "X-Client-Info", audHeaderName, useCookieHeader},
 		AllowCredentials: true,
-		Debug:            true,
 	})
 
 	api.handler = corsHandler.Handler(chi.ServerBaseContext(ctx, r))
