@@ -147,7 +147,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			"Invalid: Valid code and expired challenge",
 			false,
 			true,
-			http.StatusUnauthorized,
+			http.StatusBadRequest,
 		},
 		{
 			"Invalid: Invalid code and valid challenge ",
