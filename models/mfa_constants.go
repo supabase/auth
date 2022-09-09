@@ -1,6 +1,5 @@
 package models
 
-
 const OAuth = "oauth"
 const OAuthIDGrant = "oauth_id"
 const PasswordGrant = "password"

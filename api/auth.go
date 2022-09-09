@@ -34,14 +34,6 @@ func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (con
 	return ctx, err
 }
 
-func (a *API) require1FA(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	token, _ := a.extractBearerToken(r)
-	claims := getClaims(r.Context())
-	if !(claims.AuthenticatorAssuranceLevel == "aal1") {
-		return nil, unauthorizedError("User not allowed, 1FA required")
-	}
-	return a.parseJWTClaims(token, r, w)
-}
 
 func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	// Find the administrative user

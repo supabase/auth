@@ -40,7 +40,7 @@ type VerifyFactorParams struct {
 
 type ChallengeFactorResponse struct {
 	ID        uuid.UUID `json:"id"`
-	ExpiresAt int64    `json:"expires_at"`
+	ExpiresAt int64     `json:"expires_at"`
 }
 
 type VerifyFactorResponse struct {
@@ -124,7 +124,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
 			QRCode: fmt.Sprintf("data:img/svg+xml;utf-8,%v", &buf),
-			Secret: factor.SecretKey,
+			Secret: factor.TOTPSecret,
 			URI:    key.URL(),
 		},
 	})
@@ -192,7 +192,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Challenge has already been verified")
 	}
 
-	valid := totp.Validate(params.Code, factor.SecretKey)
+	valid := totp.Validate(params.Code, factor.TOTPSecret)
 	if !valid {
 		return unauthorizedError("Invalid TOTP code entered")
 	}
@@ -274,8 +274,8 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	// 	return badRequestError("session is not available")
 	// }
 
-	valid := totp.Validate(params.Code, factor.SecretKey)
-	if valid != true {
+	valid := totp.Validate(params.Code, factor.TOTPSecret)
+	if !valid {
 		return unauthorizedError("Invalid code entered")
 	}
 

@@ -22,7 +22,7 @@ type Factor struct {
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 	Status       string    `json:"status" db:"status"`
 	FriendlyName string    `json:"friendly_name" db:"friendly_name"`
-	SecretKey    string    `json:"-" db:"secret_key"`
+	TOTPSecret string    `json:"-" db:"totp_secret"`
 	FactorType   string    `json:"factor_type" db:"factor_type"`
 }
 
@@ -31,7 +31,7 @@ func (Factor) TableName() string {
 	return tableName
 }
 
-func NewFactor(user *User, friendlyName, factorType, status, secretKey string) (*Factor, error) {
+func NewFactor(user *User, friendlyName, factorType, status, totpSecret string) (*Factor, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -41,7 +41,7 @@ func NewFactor(user *User, friendlyName, factorType, status, secretKey string) (
 		ID:           id,
 		Status:       status,
 		FriendlyName: friendlyName,
-		SecretKey:    secretKey,
+		TOTPSecret:    totpSecret,
 		FactorType:   factorType,
 	}
 	return factor, nil

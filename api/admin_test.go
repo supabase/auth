@@ -565,8 +565,6 @@ func (ts *AdminTestSuite) TestAdminUserGetFactors() {
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
-
-
 func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
