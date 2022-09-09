@@ -1,6 +1,5 @@
 package models
 
-const DefaultQRSize = 3
 
 const OAuth = "oauth"
 const OAuthIDGrant = "oauth_id"

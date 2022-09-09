@@ -40,7 +40,7 @@ type VerifyFactorParams struct {
 
 type ChallengeFactorResponse struct {
 	ID        uuid.UUID `json:"id"`
-	ExpiresAt string    `json:"expires_at"`
+	ExpiresAt int64    `json:"expires_at"`
 }
 
 type VerifyFactorResponse struct {
@@ -56,6 +56,7 @@ type UnenrollFactorParams struct {
 }
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
+	const DefaultQRSize = 3
 	ctx := r.Context()
 	user := getUser(ctx)
 
@@ -92,7 +93,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	var buf bytes.Buffer
 	s := svg.New(&buf)
 	qrCode, _ := qr.Encode(key.String(), qr.M, qr.Auto)
-	qs := goqrsvg.NewQrSVG(qrCode, models.DefaultQRSize)
+	qs := goqrsvg.NewQrSVG(qrCode, DefaultQRSize)
 	qs.StartQrSVG(s)
 	err = qs.WriteQrSVG(s)
 	if err != nil {
@@ -160,7 +161,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	expiryTime := creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration))
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
-		ExpiresAt: fmt.Sprintf("%v", expiryTime.Unix()),
+		ExpiresAt: expiryTime.Unix(),
 	})
 }
 
