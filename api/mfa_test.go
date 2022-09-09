@@ -257,7 +257,6 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			require.NoError(ts.T(), err)
 			testEmail := emailValue.(string)
 			testDomain := strings.Split(testEmail, "@")[1]
-			// Set factor secret
 			key, err := totp.Generate(totp.GenerateOpts{
 				Issuer:      testDomain,
 				AccountName: testEmail,

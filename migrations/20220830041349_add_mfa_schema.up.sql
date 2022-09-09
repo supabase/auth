@@ -2,6 +2,7 @@
 do $$ begin
     create type factor_type as enum('totp', 'webauthn');
     create type factor_status as enum('disabled', 'unverified', 'verified');
+    create type aal_level as enum('aal1', 'aal2', 'aal3');
 exception
     when duplicate_object then null;
 end $$;
@@ -35,8 +36,8 @@ comment on table auth.mfa_challenges is 'auth: stores metadata about challenge r
 
 
 -- add factor_id to sessions
-alter table auth.sessions add column if not exists factor_id text null;
-alter table auth.sessions add column if not exists aal integer null;
+alter table auth.sessions add column if not exists factor_id uuid null;
+alter table auth.sessions add column if not exists aal aal_level null;
 
 -- add factor_id and amr claims to session
 create table if not exists auth.mfa_amr_claims(

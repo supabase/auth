@@ -233,7 +233,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
 			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
-		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, 2); terr != nil {
+		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, "aal2"); terr != nil {
 			return internalServerError("Failed to update sessions. %s", terr)
 		}
 		return nil

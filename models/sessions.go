@@ -10,6 +10,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+const AAL1 = "aal1"
+const AAL2 = "aal2"
+const AAL3 = "aal3"
+
 type Session struct {
 	ID        uuid.UUID  `json:"-" db:"id"`
 	UserID    uuid.UUID  `json:"user_id" db:"user_id"`
@@ -17,7 +21,7 @@ type Session struct {
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
 	FactorID  uuid.UUID  `json:"factor_id" db:"factor_id"`
 	AMRClaims []AMRClaim `json:"amr_claims" has_many:"amr_claims"`
-	AAL       int        `json:"aal" db:"aal"`
+	AAL       string        `json:"aal" db:"aal"`
 }
 
 func (Session) TableName() string {
@@ -35,7 +39,7 @@ func NewSession(user *User, factorID uuid.UUID) (*Session, error) {
 		ID:       id,
 		UserID:   user.ID,
 		FactorID: factorID,
-		AAL:      1,
+		AAL:      AAL1,
 	}
 	return session, nil
 }
@@ -66,7 +70,7 @@ func InvalidateOtherFactorAssociatedSessions(tx *storage.Connection, currentSess
 	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND factor_id = ? AND session_id != ?", userID, factorID, currentSessionID).Exec()
 }
 
-func InvalidateSessionsWithAALLessThan(tx *storage.Connection, userID uuid.UUID, level int) error {
+func InvalidateSessionsWithAALLessThan(tx *storage.Connection, userID uuid.UUID, level string) error {
 	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND aal < ?", userID, level).Exec()
 }
 
