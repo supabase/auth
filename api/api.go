@@ -195,7 +195,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 						r.Route("/{factor_id}", func(r *router) {
 							r.Use(api.loadFactor)
 							r.Delete("/", api.adminUserDeleteFactor)
-							r.Get("/", api.adminUserGetFactor)
 							r.Post("/", api.adminUserUpdateFactor)
 						})
 					})

@@ -412,12 +412,6 @@ func (a *API) adminUserGetFactors(w http.ResponseWriter, r *http.Request) error 
 	return sendJSON(w, http.StatusOK, factors)
 }
 
-// Returns information about a single factor
-func (a *API) adminUserGetFactor(w http.ResponseWriter, r *http.Request) error {
-	factor := getFactor(r.Context())
-	return sendJSON(w, http.StatusOK, factor)
-}
-
 // adminUserUpdate updates a single factor object
 func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()

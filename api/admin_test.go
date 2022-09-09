@@ -565,25 +565,7 @@ func (ts *AdminTestSuite) TestAdminUserGetFactors() {
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
-// TestAdminUserGetFactor tests API /admin/user/<user_id>/factors/<factor_id>
-func (ts *AdminTestSuite) TestAdminUserGetFactor() {
-	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
-	require.NoError(ts.T(), err, "Error making new user")
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	f, err := models.NewFactor(u, "testSimpleName", "totp", models.FactorUnverifiedState, "secretkey")
-	require.NoError(ts.T(), err, "Error creating test factor model")
-	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
-
-	// Setup request
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/users/%s/factor/%s/", u.ID, f.ID), nil)
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
-
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-}
 
 func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
