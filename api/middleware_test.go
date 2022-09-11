@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -89,7 +89,7 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 		afterCtx, err := ts.API.verifyCaptcha(w, req)
 		require.NoError(ts.T(), err)
 
-		body, err := ioutil.ReadAll(req.Body)
+		body, err := io.ReadAll(req.Body)
 		require.NoError(ts.T(), err)
 
 		// re-initialize buffer

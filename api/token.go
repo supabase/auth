@@ -445,7 +445,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				if terr != nil {
 					return terr
 				}
-				if identity, terr = a.createNewIdentity(tx, user, params.Provider, claims); terr != nil {
+				if _, terr = a.createNewIdentity(tx, user, params.Provider, claims); terr != nil {
 					return terr
 				}
 			} else {

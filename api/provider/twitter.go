@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 
@@ -84,7 +84,7 @@ func (t TwitterProvider) FetchUserData(ctx context.Context, tok *oauth.AccessTok
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return &UserProvidedData{}, fmt.Errorf("a %v error occurred with retrieving user from twitter", resp.StatusCode)
 	}
-	bits, err := ioutil.ReadAll(resp.Body)
+	bits, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}

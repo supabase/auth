@@ -20,7 +20,7 @@ import (
 
 var (
 	// indicates that a user should be redirected due to an error
-	redirectWithQueryError = errors.New("redirect user")
+	errRedirectWithQuery = errors.New("redirect user")
 )
 
 const (
@@ -426,13 +426,13 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(redirectWithQueryError)
+			return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(errRedirectWithQuery)
 		}
 		return nil, internalServerError("Database error finding user from email link").WithInternalError(err)
 	}
 
 	if user.IsBanned() {
-		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
+		return nil, unauthorizedError("Error confirming user").WithInternalError(errRedirectWithQuery)
 	}
 
 	var isExpired bool
@@ -446,7 +446,7 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 	}
 
 	if isExpired {
-		return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(redirectWithQueryError)
+		return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(errRedirectWithQuery)
 	}
 	return user, nil
 }
@@ -489,13 +489,13 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, notFoundError(err.Error()).WithInternalError(redirectWithQueryError)
+			return nil, notFoundError(err.Error()).WithInternalError(errRedirectWithQuery)
 		}
 		return nil, internalServerError("Database error finding user").WithInternalError(err)
 	}
 
 	if user.IsBanned() {
-		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
+		return nil, unauthorizedError("Error confirming user").WithInternalError(errRedirectWithQuery)
 	}
 
 	var isValid bool
@@ -536,7 +536,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	}
 
 	if !isValid || err != nil {
-		return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(redirectWithQueryError)
+		return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(errRedirectWithQuery)
 	}
 	return user, nil
 }
