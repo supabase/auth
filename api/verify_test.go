@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -274,7 +274,7 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
 
-			b, err := ioutil.ReadAll(w.Body)
+			b, err := io.ReadAll(w.Body)
 			require.NoError(ts.T(), err)
 			var resp ResponseBody
 			err = json.Unmarshal(b, &resp)

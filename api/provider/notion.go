@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/netlify/gotrue/conf"
@@ -88,7 +88,7 @@ func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 		return nil, fmt.Errorf("a %v error occurred with retrieving user from notion", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
