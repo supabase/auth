@@ -30,6 +30,7 @@ type TOTPObject struct {
 
 type EnrollFactorResponse struct {
 	ID   uuid.UUID `json:"id"`
+	Type string `json:"type"`
 	TOTP TOTPObject
 }
 
@@ -121,9 +122,10 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	// TODO(Joel):Escape the characters accordingly so that it can be copied
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID: factor.ID,
+		Type: models.TOTP,
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
-			QRCode: fmt.Sprintf("data:img/svg+xml;utf-8,%v", &buf),
+			QRCode: buf.String(),
 			Secret: factor.TOTPSecret,
 			URI:    key.URL(),
 		},
@@ -249,14 +251,12 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 }
 
-// TODO: Test case: Create two Sessions with two separate factors
 // Unenroll one, the other session should be deleted
 func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
 	user := getUser(ctx)
 	factor := getFactor(ctx)
-	// session := getSession(ctx)
 
 	params := &UnenrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -270,9 +270,6 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	} else if !MFAEnabled {
 		return forbiddenError("You do not have a verified factor enrolled")
 	}
-	// if session == nil {
-	// 	return badRequestError("session is not available")
-	// }
 
 	valid := totp.Validate(params.Code, factor.TOTPSecret)
 	if !valid {
