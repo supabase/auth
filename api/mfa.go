@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"github.com/aaronarduino/goqrsvg"
 	"github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
@@ -30,7 +29,7 @@ type TOTPObject struct {
 
 type EnrollFactorResponse struct {
 	ID   uuid.UUID `json:"id"`
-	Type string `json:"type"`
+	Type string    `json:"type"`
 	TOTP TOTPObject
 }
 
@@ -45,11 +44,11 @@ type ChallengeFactorResponse struct {
 }
 
 type VerifyFactorResponse struct {
-	Success string `json:"success"`
+	Success bool `json:"success"`
 }
 
 type UnenrollFactorResponse struct {
-	Success string `json:"success"`
+	Success bool `json:"success"`
 }
 
 type UnenrollFactorParams struct {
@@ -121,7 +120,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	// TODO(Joel):Escape the characters accordingly so that it can be copied
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
-		ID: factor.ID,
+		ID:   factor.ID,
 		Type: models.TOTP,
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
@@ -246,12 +245,11 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
 
 	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
-		Success: fmt.Sprintf("%v", valid),
+		Success: valid,
 	})
 
 }
 
-// Unenroll one, the other session should be deleted
 func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
@@ -296,6 +294,6 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{
-		Success: fmt.Sprintf("%v", valid),
+		Success: valid,
 	})
 }

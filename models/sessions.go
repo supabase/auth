@@ -21,7 +21,7 @@ type Session struct {
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
 	FactorID  uuid.UUID  `json:"factor_id" db:"factor_id"`
 	AMRClaims []AMRClaim `json:"amr_claims" has_many:"amr_claims"`
-	AAL       string        `json:"aal" db:"aal"`
+	AAL       string     `json:"aal" db:"aal"`
 }
 
 func (Session) TableName() string {

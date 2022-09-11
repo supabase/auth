@@ -221,7 +221,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			data := VerifyFactorResponse{}
 			if v.expectedHTTPCode == http.StatusOK {
 				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-				require.Equal(ts.T(), data.Success, "true")
+				require.Equal(ts.T(), data.Success, true)
 			}
 			if !v.validChallenge {
 				_, err := models.FindChallengeByChallengeID(ts.API.db, c.ID)

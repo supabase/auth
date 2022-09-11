@@ -22,7 +22,7 @@ type Factor struct {
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 	Status       string    `json:"status" db:"status"`
 	FriendlyName string    `json:"friendly_name" db:"friendly_name"`
-	TOTPSecret string    `json:"-" db:"totp_secret"`
+	TOTPSecret   string    `json:"-" db:"totp_secret"`
 	FactorType   string    `json:"factor_type" db:"factor_type"`
 }
 
@@ -41,7 +41,7 @@ func NewFactor(user *User, friendlyName, factorType, status, totpSecret string) 
 		ID:           id,
 		Status:       status,
 		FriendlyName: friendlyName,
-		TOTPSecret:    totpSecret,
+		TOTPSecret:   totpSecret,
 		FactorType:   factorType,
 	}
 	return factor, nil

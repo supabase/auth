@@ -3,8 +3,8 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
