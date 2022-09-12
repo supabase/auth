@@ -113,7 +113,7 @@ func (p *IdTokenGrantParams) getVerifierFromClientIDandIssuer(ctx context.Contex
 	var err error
 	provider, err = oidc.NewProvider(ctx, p.Issuer)
 	if err != nil {
-		return nil, fmt.Errorf("Issuer %s doesn't support the id_token grant flow", p.Issuer)
+		return nil, fmt.Errorf("issuer %s doesn't support the id_token grant flow", p.Issuer)
 	}
 	return provider.Verifier(&oidc.Config{ClientID: p.ClientID}), nil
 }

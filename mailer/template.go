@@ -64,7 +64,7 @@ func (m TemplateMailer) ValidateEmail(email string) error {
 
 // InviteMail sends a invite mail to a new user
 func (m *TemplateMailer) InviteMail(user *models.User, otp, referrerURL string) error {
-	globalConfig, err := conf.LoadGlobal(configFile)
+	globalConfig, _ := conf.LoadGlobal(configFile)
 
 	redirectParam := ""
 	if len(referrerURL) > 0 {
