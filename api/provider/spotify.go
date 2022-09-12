@@ -65,7 +65,7 @@ func NewSpotifyProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 }
 
 func (g spotifyProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(oauth2.NoContext, code)
+	return g.Exchange(context.Background(), code)
 }
 
 func (g spotifyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {

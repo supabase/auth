@@ -121,11 +121,11 @@ func (p *IdTokenGrantParams) getVerifierFromClientIDandIssuer(ctx context.Contex
 func getEmailVerified(v interface{}) bool {
 	var emailVerified bool
 	var err error
-	switch v.(type) {
+	switch v := v.(type) {
 	case string:
-		emailVerified, err = strconv.ParseBool(v.(string))
+		emailVerified, err = strconv.ParseBool(v)
 	case bool:
-		emailVerified = v.(bool)
+		emailVerified = v
 	default:
 		emailVerified = false
 	}
