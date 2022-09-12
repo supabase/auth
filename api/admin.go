@@ -55,9 +55,13 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 }
 
 func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	factorID := chi.URLParam(r, "factor_id")
+	factorID, err := uuid.FromString(chi.URLParam(r, "factor_id"))
+	if err != nil {
+		return nil, badRequestError("factor_id must be an UUID")
+	}
 
 	logger.LogEntrySetField(r, "factor_id", factorID)
+
 	f, err := models.FindFactorByFactorID(a.db, factorID)
 	if err != nil {
 		if models.IsNotFoundError(err) {

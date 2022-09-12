@@ -257,6 +257,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
 	factor := getFactor(ctx)
+	session := getSession(ctx)
 
 	params := &UnenrollFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
@@ -281,14 +282,15 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if err = models.NewAuditLogEntry(r, tx, user, models.UnenrollFactorAction, r.RemoteAddr, map[string]interface{}{
-			"user_id":   user.ID,
-			"factor_id": factor.ID,
+			"user_id":    user.ID,
+			"factor_id":  factor.ID,
+			"session_id": session.ID,
 		}); err != nil {
 			return err
 		}
-		// if err = models.InvalidateOtherFactorAssociatedSessions(tx, session.ID, user.ID, factor.ID); err != nil {
-		// 	return err
-		// }
+		if err = models.InvalidateOtherFactorAssociatedSessions(tx, session.ID, user.ID, factor.ID); err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {

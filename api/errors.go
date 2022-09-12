@@ -20,7 +20,6 @@ var (
 	UserExistsError   error = errors.New("user already exists")
 	// MFA Related errors
 	MFANotEnabledMsg = "MFA not enabled"
-
 )
 
 var oauthErrorMap = map[int]string{

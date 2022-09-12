@@ -51,7 +51,7 @@ func (ts *FactorTestSuite) TestFindFactorByFriendlyName() {
 
 func (ts *FactorTestSuite) TestFindFactorByFactorID() {
 	f := ts.createFactor()
-	n, err := FindFactorByFactorID(ts.db, f.ID.String())
+	n, err := FindFactorByFactorID(ts.db, f.ID)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), f.ID, n.ID)
 }

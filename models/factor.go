@@ -59,7 +59,7 @@ func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	return factors, nil
 }
 
-func FindFactorByFactorID(tx *storage.Connection, factorID string) (*Factor, error) {
+func FindFactorByFactorID(tx *storage.Connection, factorID uuid.UUID) (*Factor, error) {
 	factor, err := findFactor(tx, "id = ?", factorID)
 	if err != nil {
 		return nil, FactorNotFoundError{}
