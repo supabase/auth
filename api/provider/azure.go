@@ -56,7 +56,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 }
 
 func (g azureProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(oauth2.NoContext, code)
+	return g.Exchange(context.Background(), code)
 }
 
 func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -66,7 +66,7 @@ func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 	}
 
 	if u.Email == "" {
-		return nil, errors.New("Unable to find email with Azure provider")
+		return nil, errors.New("unable to find email with Azure provider")
 	}
 
 	return &UserProvidedData{

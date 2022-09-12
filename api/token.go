@@ -113,7 +113,7 @@ func (p *IdTokenGrantParams) getVerifierFromClientIDandIssuer(ctx context.Contex
 	var err error
 	provider, err = oidc.NewProvider(ctx, p.Issuer)
 	if err != nil {
-		return nil, fmt.Errorf("Issuer %s doesn't support the id_token grant flow", p.Issuer)
+		return nil, fmt.Errorf("issuer %s doesn't support the id_token grant flow", p.Issuer)
 	}
 	return provider.Verifier(&oidc.Config{ClientID: p.ClientID}), nil
 }
@@ -121,11 +121,11 @@ func (p *IdTokenGrantParams) getVerifierFromClientIDandIssuer(ctx context.Contex
 func getEmailVerified(v interface{}) bool {
 	var emailVerified bool
 	var err error
-	switch v.(type) {
+	switch v := v.(type) {
 	case string:
-		emailVerified, err = strconv.ParseBool(v.(string))
+		emailVerified, err = strconv.ParseBool(v)
 	case bool:
-		emailVerified = v.(bool)
+		emailVerified = v
 	default:
 		emailVerified = false
 	}
@@ -597,7 +597,7 @@ func (a *API) setCookieTokens(config *conf.GlobalConfiguration, token *AccessTok
 
 func (a *API) setCookieToken(config *conf.GlobalConfiguration, name string, tokenString string, session bool, w http.ResponseWriter) error {
 	if name == "" {
-		return errors.New("Failed to set cookie, invalid name")
+		return errors.New("failed to set cookie, invalid name")
 	}
 	cookieName := config.Cookie.Key + "-" + name
 	exp := time.Second * time.Duration(config.Cookie.Duration)

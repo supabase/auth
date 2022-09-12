@@ -70,8 +70,8 @@ func (ts *AdminTestSuite) TestAdminUsers() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	assert.Equal(ts.T(), "</admin/users?page=0>; rel=\"last\"", w.HeaderMap.Get("Link"))
-	assert.Equal(ts.T(), "0", w.HeaderMap.Get("X-Total-Count"))
+	assert.Equal(ts.T(), "</admin/users?page=0>; rel=\"last\"", w.Header().Get("Link"))
+	assert.Equal(ts.T(), "0", w.Header().Get("X-Total-Count"))
 }
 
 // TestAdminUsers tests API /admin/users route
@@ -93,8 +93,8 @@ func (ts *AdminTestSuite) TestAdminUsers_Pagination() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	assert.Equal(ts.T(), "</admin/users?page=2&per_page=1>; rel=\"next\", </admin/users?page=2&per_page=1>; rel=\"last\"", w.HeaderMap.Get("Link"))
-	assert.Equal(ts.T(), "2", w.HeaderMap.Get("X-Total-Count"))
+	assert.Equal(ts.T(), "</admin/users?page=2&per_page=1>; rel=\"next\", </admin/users?page=2&per_page=1>; rel=\"last\"", w.Header().Get("Link"))
+	assert.Equal(ts.T(), "2", w.Header().Get("X-Total-Count"))
 
 	data := make(map[string]interface{})
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))

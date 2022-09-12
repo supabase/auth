@@ -86,7 +86,7 @@ func (p AppleProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 		oauth2.SetAuthURLParam("client_id", p.ClientID),
 		oauth2.SetAuthURLParam("secret", p.ClientSecret),
 	}
-	return p.Exchange(oauth2.NoContext, code, opts...)
+	return p.Exchange(context.Background(), code, opts...)
 }
 
 func (p AppleProvider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption) string {

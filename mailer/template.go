@@ -64,7 +64,7 @@ func (m TemplateMailer) ValidateEmail(email string) error {
 
 // InviteMail sends a invite mail to a new user
 func (m *TemplateMailer) InviteMail(user *models.User, otp, referrerURL string) error {
-	globalConfig, err := conf.LoadGlobal(configFile)
+	globalConfig, _ := conf.LoadGlobal(configFile)
 
 	redirectParam := ""
 	if len(referrerURL) > 0 {
@@ -300,6 +300,9 @@ func (m TemplateMailer) Send(user *models.User, subject, body string, data map[s
 // GetEmailActionLink returns a magiclink, recovery or invite link based on the actionType passed.
 func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referrerURL string) (string, error) {
 	globalConfig, err := conf.LoadGlobal(configFile)
+	if err != nil {
+		return "", err
+	}
 
 	redirectParam := ""
 	if len(referrerURL) > 0 {
@@ -321,7 +324,7 @@ func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referr
 	case "email_change_new":
 		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.EmailChange, "token="+user.EmailChangeTokenNew+"&type=email_change"+redirectParam)
 	default:
-		return "", fmt.Errorf("Invalid email action link type: %s", actionType)
+		return "", fmt.Errorf("invalid email action link type: %s", actionType)
 	}
 	if err != nil {
 		return "", err
