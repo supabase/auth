@@ -62,7 +62,7 @@ func NewKeycloakProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 }
 
 func (g keycloakProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(oauth2.NoContext, code)
+	return g.Exchange(context.Background(), code)
 }
 
 func (g keycloakProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {

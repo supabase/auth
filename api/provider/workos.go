@@ -80,7 +80,7 @@ func (g workosProvider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption)
 }
 
 func (g workosProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(oauth2.NoContext, code)
+	return g.Exchange(context.Background(), code)
 }
 
 func (g workosProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {

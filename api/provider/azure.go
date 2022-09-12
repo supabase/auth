@@ -56,7 +56,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 }
 
 func (g azureProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(oauth2.NoContext, code)
+	return g.Exchange(context.Background(), code)
 }
 
 func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
