@@ -300,6 +300,9 @@ func (m TemplateMailer) Send(user *models.User, subject, body string, data map[s
 // GetEmailActionLink returns a magiclink, recovery or invite link based on the actionType passed.
 func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referrerURL string) (string, error) {
 	globalConfig, err := conf.LoadGlobal(configFile)
+	if err != nil {
+		return "", err
+	}
 
 	redirectParam := ""
 	if len(referrerURL) > 0 {

@@ -88,7 +88,7 @@ func (t TwitterProvider) FetchUserData(ctx context.Context, tok *oauth.AccessTok
 	if err != nil {
 		return nil, err
 	}
-	err = json.NewDecoder(bytes.NewReader(bits)).Decode(&u)
+	_ = json.NewDecoder(bytes.NewReader(bits)).Decode(&u)
 
 	if u.Email == "" {
 		return nil, errors.New("unable to find email with Twitter provider")
