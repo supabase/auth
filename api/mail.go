@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	MaxFrequencyLimitError error = errors.New("Frequency limit reached")
+	MaxFrequencyLimitError error = errors.New("frequency limit reached")
 )
 
 type GenerateLinkParams struct {

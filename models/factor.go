@@ -11,7 +11,7 @@ import (
 const FactorUnverifiedState = "unverified"
 const FactorVerifiedState = "verified"
 
-const TOTP = "totp"
+const TOTP = "TOTP"
 const Webauthn = "webauthn"
 
 type Factor struct {

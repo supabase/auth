@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -89,7 +89,7 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 		signature := r.Header.Get("x-webhook-signature")
 		p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
 		claims := new(jwt.StandardClaims)
-		token, err := p.ParseWithClaims(signature, claims, func(token *jwt.Token) (interface{}, error) {
+		token, _ := p.ParseWithClaims(signature, claims, func(token *jwt.Token) (interface{}, error) {
 			return []byte(ts.Config.Webhook.Secret), nil
 		})
 		assert.True(token.Valid)
@@ -100,7 +100,7 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 		// verify the contents
 
 		defer squash(r.Body.Close)
-		raw, err := ioutil.ReadAll(r.Body)
+		raw, err := io.ReadAll(r.Body)
 		require.NoError(err)
 		data := map[string]interface{}{}
 		require.NoError(json.Unmarshal(raw, &data))

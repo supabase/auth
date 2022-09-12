@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -21,7 +20,7 @@ import (
 
 var (
 	// indicates that a user should be redirected due to an error
-	redirectWithQueryError = errors.New("redirect user")
+	errRedirectWithQuery = errors.New("redirect user")
 )
 
 const (
@@ -78,9 +77,10 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
 
 	var (
-		user  *models.User
-		err   error
-		token *AccessTokenResponse
+		user        *models.User
+		grantParams models.GrantParams
+		err         error
+		token       *AccessTokenResponse
 	)
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -122,7 +122,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.EmailVerification, uuid.Nil)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.EmailVerification, grantParams)
 		if terr != nil {
 			return terr
 		}
@@ -183,8 +183,9 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var (
-		user  *models.User
-		token *AccessTokenResponse
+		user        *models.User
+		grantParams models.GrantParams
+		token       *AccessTokenResponse
 	)
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -218,7 +219,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.SMSOrGeneratedLink, uuid.Nil)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.SMSOrGeneratedLink, grantParams)
 		if terr != nil {
 			return terr
 		}
@@ -425,13 +426,13 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(redirectWithQueryError)
+			return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(errRedirectWithQuery)
 		}
 		return nil, internalServerError("Database error finding user from email link").WithInternalError(err)
 	}
 
 	if user.IsBanned() {
-		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
+		return nil, unauthorizedError("Error confirming user").WithInternalError(errRedirectWithQuery)
 	}
 
 	var isExpired bool
@@ -445,7 +446,7 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 	}
 
 	if isExpired {
-		return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(redirectWithQueryError)
+		return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(errRedirectWithQuery)
 	}
 	return user, nil
 }
@@ -488,13 +489,13 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, notFoundError(err.Error()).WithInternalError(redirectWithQueryError)
+			return nil, notFoundError(err.Error()).WithInternalError(errRedirectWithQuery)
 		}
 		return nil, internalServerError("Database error finding user").WithInternalError(err)
 	}
 
 	if user.IsBanned() {
-		return nil, unauthorizedError("Error confirming user").WithInternalError(redirectWithQueryError)
+		return nil, unauthorizedError("Error confirming user").WithInternalError(errRedirectWithQuery)
 	}
 
 	var isValid bool
@@ -535,7 +536,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	}
 
 	if !isValid || err != nil {
-		return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(redirectWithQueryError)
+		return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(errRedirectWithQuery)
 	}
 	return user, nil
 }

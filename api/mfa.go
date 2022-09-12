@@ -227,7 +227,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 		}
-		token, terr := a.issueRefreshToken(ctx, tx, user, models.TOTP, factor.ID)
+		token, terr := a.issueRefreshToken(ctx, tx, user, models.TOTP, models.GrantParams{
+			FactorID: factor.ID,
+		})
 		if terr != nil {
 			return terr
 		}

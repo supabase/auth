@@ -71,8 +71,8 @@ func (ts *AuditTestSuite) TestAuditGet() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	assert.Equal(ts.T(), "</admin/audit?page=1>; rel=\"last\"", w.HeaderMap.Get("Link"))
-	assert.Equal(ts.T(), "1", w.HeaderMap.Get("X-Total-Count"))
+	assert.Equal(ts.T(), "</admin/audit?page=1>; rel=\"last\"", w.Header().Get("Link"))
+	assert.Equal(ts.T(), "1", w.Header().Get("X-Total-Count"))
 
 	logs := []models.AuditLogEntry{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&logs))

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 
@@ -65,7 +65,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return badRequestError("Could not parse metadata: %v", err)
 			}
-			r.Body = ioutil.NopCloser(strings.NewReader(string(newBodyContent)))
+			r.Body = io.NopCloser(strings.NewReader(string(newBodyContent)))
 			r.ContentLength = int64(len(string(newBodyContent)))
 
 			fakeResponse := &responseStub{}
@@ -82,7 +82,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 				if err != nil {
 					return badRequestError("Could not parse metadata: %v", err)
 				}
-				r.Body = ioutil.NopCloser(bytes.NewReader(metadata))
+				r.Body = io.NopCloser(bytes.NewReader(metadata))
 				return a.MagicLink(w, r)
 			}
 			// otherwise confirmation email already contains 'magic link'

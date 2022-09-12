@@ -17,9 +17,10 @@ import (
 var (
 	DuplicateEmailMsg       = "A user with this email address has already been registered"
 	DuplicatePhoneMsg       = "A user with this phone number has already been registered"
-	UserExistsError   error = errors.New("User already exists")
+	UserExistsError   error = errors.New("user already exists")
 	// MFA Related errors
 	MFANotEnabledMsg = "MFA not enabled"
+
 )
 
 var oauthErrorMap = map[int]string{

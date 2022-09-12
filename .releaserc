@@ -2,7 +2,7 @@
   "branches": [
     "master",
     {
-        "name": "mfa",
+        "name": "mfa_v1",
         "prerelease": true
     },
     {

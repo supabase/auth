@@ -70,8 +70,8 @@ func (ts *AdminTestSuite) TestAdminUsers() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	assert.Equal(ts.T(), "</admin/users?page=0>; rel=\"last\"", w.HeaderMap.Get("Link"))
-	assert.Equal(ts.T(), "0", w.HeaderMap.Get("X-Total-Count"))
+	assert.Equal(ts.T(), "</admin/users?page=0>; rel=\"last\"", w.Header().Get("Link"))
+	assert.Equal(ts.T(), "0", w.Header().Get("X-Total-Count"))
 }
 
 // TestAdminUsers tests API /admin/users route
@@ -93,8 +93,8 @@ func (ts *AdminTestSuite) TestAdminUsers_Pagination() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	assert.Equal(ts.T(), "</admin/users?page=2&per_page=1>; rel=\"next\", </admin/users?page=2&per_page=1>; rel=\"last\"", w.HeaderMap.Get("Link"))
-	assert.Equal(ts.T(), "2", w.HeaderMap.Get("X-Total-Count"))
+	assert.Equal(ts.T(), "</admin/users?page=2&per_page=1>; rel=\"next\", </admin/users?page=2&per_page=1>; rel=\"last\"", w.Header().Get("Link"))
+	assert.Equal(ts.T(), "2", w.Header().Get("X-Total-Count"))
 
 	data := make(map[string]interface{})
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
@@ -526,7 +526,7 @@ func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	f, err := models.NewFactor(u, "testSimpleName", "totp", models.FactorVerifiedState, "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", models.TOTP, models.FactorVerifiedState, "secretkey")
 
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
@@ -551,7 +551,7 @@ func (ts *AdminTestSuite) TestAdminUserGetFactors() {
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	f, err := models.NewFactor(u, "testSimpleName", "totp", models.FactorUnverifiedState, "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", models.TOTP, models.FactorUnverifiedState, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 
@@ -570,7 +570,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	f, err := models.NewFactor(u, "testSimpleName", "totp", models.FactorUnverifiedState, "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", models.TOTP, models.FactorUnverifiedState, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 
@@ -590,7 +590,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 			"Update factor type",
 			map[string]interface{}{
 				"friendly_name": "john",
-				"factor_type":   "totp",
+				"factor_type":   models.TOTP,
 				"factor_status": "unverified",
 			},
 			http.StatusOK,

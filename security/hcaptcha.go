@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -62,7 +62,7 @@ func VerifyRequest(r *http.Request, secretKey string) (VerificationResult, error
 		return SuccessfullyVerified, nil
 	}
 	res := GotrueRequest{}
-	bodyBytes, err := ioutil.ReadAll(r.Body)
+	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		return UserRequestFailed, err
 	}
@@ -71,7 +71,7 @@ func VerifyRequest(r *http.Request, secretKey string) (VerificationResult, error
 	}
 
 	// re-init body so downstream route handlers don't get borked
-	r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	jsonDecoder := json.NewDecoder(bytes.NewBuffer(bodyBytes))
 	err = jsonDecoder.Decode(&res)
