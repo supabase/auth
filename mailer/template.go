@@ -321,7 +321,7 @@ func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referr
 	case "email_change_new":
 		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.EmailChange, "token="+user.EmailChangeTokenNew+"&type=email_change"+redirectParam)
 	default:
-		return "", fmt.Errorf("Invalid email action link type: %s", actionType)
+		return "", fmt.Errorf("invalid email action link type: %s", actionType)
 	}
 	if err != nil {
 		return "", err

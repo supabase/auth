@@ -47,14 +47,13 @@ func migrate(cmd *cobra.Command, args []string) {
 		}
 		if level != logrus.DebugLevel {
 			var noopLogger = func(lvl logging.Level, s string, args ...interface{}) {
-				return
 			}
 			// Hide pop migration logging
 			pop.SetLogger(noopLogger)
 		}
 	}
 
-	u, err := url.Parse(globalConfig.DB.URL)
+	u, _ := url.Parse(globalConfig.DB.URL)
 	processedUrl := globalConfig.DB.URL
 	if len(u.Query()) != 0 {
 		processedUrl = fmt.Sprintf("%s&application_name=gotrue_migrations", processedUrl)
