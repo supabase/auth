@@ -174,6 +174,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 				Issuer:      testDomain,
 				AccountName: testEmail,
 			})
+			require.NoError(ts.T(), err)
 			sharedSecret := key.Secret()
 			factors, err := models.FindFactorsByUser(ts.API.db, u)
 			f := factors[0]
@@ -261,8 +262,10 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 				Issuer:      testDomain,
 				AccountName: testEmail,
 			})
+			require.NoError(ts.T(), err)
 			sharedSecret := key.Secret()
 			factors, err := models.FindFactorsByUser(ts.API.db, u)
+			require.NoError(ts.T(), err)
 			f := factors[0]
 			f.TOTPSecret = sharedSecret
 			if v.IsFactorVerified {
