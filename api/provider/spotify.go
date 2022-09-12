@@ -75,7 +75,7 @@ func (g spotifyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 	}
 
 	if u.Email == "" {
-		return nil, errors.New("Unable to find email with Spotify provider")
+		return nil, errors.New("unable to find email with Spotify provider")
 	}
 
 	var avatarURL string

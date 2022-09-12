@@ -14,7 +14,7 @@ func (s *NullString) Scan(value interface{}) error {
 	}
 	strVal, ok := value.(string)
 	if !ok {
-		return errors.New("Column is not a string")
+		return errors.New("column is not a string")
 	}
 	*s = NullString(strVal)
 	return nil

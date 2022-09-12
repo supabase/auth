@@ -72,7 +72,7 @@ func (g discordProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 	}
 
 	if u.Email == "" {
-		return nil, errors.New("Unable to find email with Discord provider")
+		return nil, errors.New("unable to find email with Discord provider")
 	}
 
 	var avatarURL string

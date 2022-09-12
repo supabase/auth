@@ -113,7 +113,7 @@ func (g githubProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	}
 
 	if len(data.Emails) <= 0 {
-		return nil, errors.New("Unable to find email with GitHub provider")
+		return nil, errors.New("unable to find email with GitHub provider")
 	}
 
 	return data, nil

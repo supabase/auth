@@ -93,7 +93,7 @@ func (g gitlabProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	}
 
 	if len(data.Emails) <= 0 {
-		return nil, errors.New("Unable to find email with GitLab provider")
+		return nil, errors.New("unable to find email with GitLab provider")
 	}
 
 	data.Metadata = &Claims{

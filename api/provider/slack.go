@@ -69,7 +69,7 @@ func (g slackProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 	}
 
 	if u.Email == "" {
-		return nil, errors.New("Unable to find email with Slack provider")
+		return nil, errors.New("unable to find email with Slack provider")
 	}
 
 	return &UserProvidedData{

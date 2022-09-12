@@ -66,7 +66,7 @@ func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 	}
 
 	if u.Email == "" {
-		return nil, errors.New("Unable to find email with Azure provider")
+		return nil, errors.New("unable to find email with Azure provider")
 	}
 
 	return &UserProvidedData{

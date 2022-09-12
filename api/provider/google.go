@@ -81,7 +81,7 @@ func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	}
 
 	if len(data.Emails) <= 0 {
-		return nil, errors.New("Unable to find email with Google provider")
+		return nil, errors.New("unable to find email with Google provider")
 	}
 
 	data.Metadata = &Claims{

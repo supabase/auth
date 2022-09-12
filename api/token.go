@@ -597,7 +597,7 @@ func (a *API) setCookieTokens(config *conf.GlobalConfiguration, token *AccessTok
 
 func (a *API) setCookieToken(config *conf.GlobalConfiguration, name string, tokenString string, session bool, w http.ResponseWriter) error {
 	if name == "" {
-		return errors.New("Failed to set cookie, invalid name")
+		return errors.New("failed to set cookie, invalid name")
 	}
 	cookieName := config.Cookie.Key + "-" + name
 	exp := time.Second * time.Duration(config.Cookie.Duration)
