@@ -20,7 +20,7 @@ features and capabilities.
 
 Create a `.env` file to store your own custom env vars. See [`example.env`](example.env)
 
-1. Start the local postgres database in a postgres container: `./hack/postgresd.sh`
+1. Start the local postgres database in a postgres container: `docker-compose -f docker-compose-dev.yml up postgres`
 2. Build the gotrue binary: `make build` . You should see an output like this:
 
 ```
