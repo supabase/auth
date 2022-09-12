@@ -3,6 +3,7 @@ package sms_provider
 import (
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 )
 
 var defaultTimeout time.Duration = time.Second * 10
+var client HttpClient
 
 func init() {
 	timeoutStr := os.Getenv("GOTRUE_INTERNAL_HTTP_TIMEOUT")
@@ -20,8 +22,14 @@ func init() {
 			defaultTimeout = timeout
 		}
 	}
+	client = &http.Client{
+		Timeout: defaultTimeout,
+	}
 }
 
+type HttpClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
 type SmsProvider interface {
 	SendSms(phone, message string) error
 }

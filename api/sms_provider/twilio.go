@@ -61,8 +61,6 @@ func (t *TwilioProvider) SendSms(phone string, message string) error {
 		"From":    {t.Config.MessageServiceSid},
 		"Body":    {message},
 	}
-
-	client := &http.Client{Timeout: defaultTimeout}
 	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
 	if err != nil {
 		return err
