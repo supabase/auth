@@ -64,7 +64,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			"john",
 			models.TOTP,
 			"",
-			http.StatusUnprocessableEntity,
+			http.StatusOK,
 		},
 		{
 			"Invalid factor type",

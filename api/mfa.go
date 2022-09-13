@@ -12,6 +12,7 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/pquerna/otp/totp"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -59,8 +60,10 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	const DefaultQRSize = 3
 	ctx := r.Context()
 	user := getUser(ctx)
+	config := a.config
 
 	params := &EnrollFactorParams{}
+	issuer := ""
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
 	if err != nil {
@@ -68,11 +71,18 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	factorType := params.FactorType
 	if factorType != models.TOTP {
-		return unprocessableEntityError("FactorType needs to be TOTP")
+		return unprocessableEntityError("factorType needs to be TOTP")
 	}
 	if params.Issuer == "" {
-		return unprocessableEntityError("Issuer is required")
+		u, err := url.Parse(config.SiteURL)
+		if err != nil {
+			return internalServerError("site url is improperly formatted")
+		}
+		issuer = u.Host
+	} else {
+		issuer = params.Issuer
 	}
+
 	// Read from DB for certainty
 	factors, err := models.FindVerifiedFactorsByUser(a.db, user)
 	if err != nil {
@@ -84,7 +94,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      params.Issuer,
+		Issuer:      issuer,
 		AccountName: user.GetEmail(),
 	})
 	if err != nil {
