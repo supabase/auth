@@ -166,7 +166,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-// TODO: Test Case: Create two sessions, one signed in regularly and the other with TOTP.
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()

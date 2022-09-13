@@ -538,7 +538,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string, oldClaims *GoTrueClaims, signInMethod string) (string, error) {
+func calculateAALFromClaims(oldClaims *GoTrueClaims, signInMethod string) ([]AMREntry, string) {
 	amr := []AMREntry{}
 	aal := "aal1"
 	if oldClaims != nil && oldClaims.AuthenticationMethodReference != nil {
@@ -547,10 +547,16 @@ func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time
 	entry := AMREntry{Method: signInMethod, Timestamp: time.Now()}
 	amr = append(amr, entry)
 	aal = calculateAAL(amr)
+	return amr, aal
+}
+
+func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string, oldClaims *GoTrueClaims, signInMethod string) (string, error) {
+	amr, aal := calculateAALFromClaims(oldClaims, signInMethod)
 	sid := ""
 	if sessionId != nil {
 		sid = sessionId.String()
 	}
+
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
@@ -598,11 +604,14 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		if terr != nil {
 			return terr
 		}
-
 		if isMFASignInMethod {
 			if err := session.UpdateAssociatedFactor(tx, grantParams.FactorID); err != nil {
 				return err
 			}
+		}
+		_, aal := calculateAALFromClaims(currentClaims, signInMethod)
+		if err := session.UpdateAAL(tx, aal); err != nil {
+			return err
 		}
 
 		tokenString, terr = generateAccessToken(user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, currentClaims, signInMethod)

@@ -99,3 +99,8 @@ func (s *Session) UpdateAssociatedFactor(tx *storage.Connection, factorID uuid.U
 	return tx.Update(s)
 
 }
+
+func (s *Session) UpdateAAL(tx *storage.Connection, aal string) error {
+	s.AAL = aal
+	return tx.Update(s)
+}

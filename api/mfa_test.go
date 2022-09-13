@@ -52,7 +52,6 @@ func (ts *MFATestSuite) SetupTest() {
 }
 
 func (ts *MFATestSuite) TestEnrollFactor() {
-	// TODO(Joel): Check that only one factor can be enrolled
 	var cases = []struct {
 		desc         string
 		FriendlyName string
@@ -185,6 +184,9 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			f.TOTPSecret = sharedSecret
 			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
+			s2, err := models.NewSession(u, f.ID)
+			require.NoError(ts.T(), err, "Error creating test session")
+			require.NoError(ts.T(), ts.API.db.Create(s2), "Error saving test session")
 
 			// Make a challenge
 			c, err := models.NewChallenge(f)
@@ -227,12 +229,14 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			if v.expectedHTTPCode == http.StatusOK {
 				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 				require.Equal(ts.T(), data.Success, true)
+				_, err = models.FindSessionById(ts.API.db, s2.ID)
+				require.EqualError(ts.T(), err, models.SessionNotFoundError{}.Error())
+				// Check that session is downgraded
 			}
 			if !v.validChallenge {
 				_, err := models.FindChallengeByChallengeID(ts.API.db, c.ID)
 				require.EqualError(ts.T(), err, models.ChallengeNotFoundError{}.Error())
 			}
-			// Check the JWT to see if AAL is appropriate
 		})
 	}
 }
@@ -316,7 +320,6 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			if v.IsFactorVerified && v.CreateAdditionalSession {
 				_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
 				require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
-				// Additional session created should be purged
 				_, err = models.FindSessionById(ts.API.db, s2.ID)
 				require.EqualError(ts.T(), err, models.SessionNotFoundError{}.Error())
 			}
