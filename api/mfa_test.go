@@ -245,12 +245,6 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 		ExpectedHTTPCode        int
 	}{
 		{
-			"Unverified Factor",
-			false,
-			false,
-			http.StatusForbidden,
-		},
-		{
 			"Verified Factor",
 			true,
 			true,

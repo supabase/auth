@@ -48,7 +48,6 @@ type VerifyFactorResponse struct {
 }
 
 type UnenrollFactorResponse struct {
-	Success bool `json:"success"`
 }
 
 type UnenrollFactorParams struct {
@@ -270,16 +269,12 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return badRequestError(err.Error())
 	}
-	MFAEnabled, err := models.IsMFAEnabled(a.db, user)
-	if err != nil {
-		return err
-	} else if !MFAEnabled {
-		return forbiddenError("You do not have a verified factor enrolled")
-	}
 
-	valid := totp.Validate(params.Code, factor.TOTPSecret)
-	if !valid {
-		return unauthorizedError("Invalid code entered")
+	if factor.Status == models.FactorVerifiedState {
+		valid := totp.Validate(params.Code, factor.TOTPSecret)
+		if !valid {
+			return unauthorizedError("Invalid code entered")
+		}
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -302,7 +297,5 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{
-		Success: valid,
-	})
+	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{})
 }
