@@ -31,7 +31,7 @@ const (
 	TokenRevokedAction              AuditAction = "token_revoked"
 	TokenRefreshedAction            AuditAction = "token_refreshed"
 	GenerateRecoveryCodesAction     AuditAction = "generate_recovery_codes"
-	EnrollFactorAction              AuditAction = "factor_enrolled"
+	EnrollFactorAction              AuditAction = "factor_in_progress"
 	UnenrollFactorAction            AuditAction = "factor_unenrolled"
 	CreateChallengeAction           AuditAction = "challenge_created"
 	VerifyFactorAction              AuditAction = "verification_attempted"

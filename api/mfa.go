@@ -128,7 +128,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return terr
 	}
 
-	// TODO(Joel):Escape the characters accordingly so that it can be copied
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:   factor.ID,
 		Type: models.TOTP,
