@@ -224,11 +224,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), v.expectedHTTPCode, w.Code)
 
-			// Check response
-			data := VerifyFactorResponse{}
 			if v.expectedHTTPCode == http.StatusOK {
-				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-				require.Equal(ts.T(), data.Success, true)
 				_, err = models.FindSessionById(ts.API.db, s2.ID)
 				require.EqualError(ts.T(), err, models.SessionNotFoundError{}.Error())
 				// Check that session is downgraded

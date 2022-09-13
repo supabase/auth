@@ -45,7 +45,6 @@ type ChallengeFactorResponse struct {
 }
 
 type VerifyFactorResponse struct {
-	Success bool `json:"success"`
 }
 
 type UnenrollFactorResponse struct {
@@ -254,9 +253,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
 
-	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
-		Success: valid,
-	})
+	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{})
 
 }
 

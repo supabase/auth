@@ -87,17 +87,6 @@ func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Fac
 	return obj, nil
 }
 
-func FindFactorByChallengeID(tx *storage.Connection, challengeID uuid.UUID) (*Factor, error) {
-	factor := &Factor{}
-	if err := tx.Q().Join("mfa_challenges", "mfa_factors.ID = mfa_challenges.factor_id").Where("mfa_challenges.id= ?", challengeID).First(factor); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, FactorNotFoundError{}
-		}
-		return nil, errors.Wrap(err, "error finding factor")
-	}
-	return factor, nil
-}
-
 func FindVerifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	factors := []*Factor{}
 	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorVerifiedState).All(&factors); err != nil {

@@ -25,18 +25,6 @@ func TestFactor(t *testing.T) {
 	defer ts.db.Close()
 	suite.Run(t, ts)
 }
-func (ts *FactorTestSuite) TestFindFactorByChallengeID() {
-	factor := ts.createFactor()
-	challenge, err := NewChallenge(factor)
-	require.NoError(ts.T(), err)
-
-	err = ts.db.Create(challenge)
-	require.NoError(ts.T(), err)
-
-	n, err := FindFactorByChallengeID(ts.db, challenge.ID)
-	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), factor.ID, n.ID)
-}
 
 func (ts *FactorTestSuite) SetupTest() {
 	TruncateAll(ts.db)
