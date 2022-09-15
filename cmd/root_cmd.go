@@ -13,8 +13,8 @@ var configFile = ""
 var rootCmd = cobra.Command{
 	Use: "gotrue",
 	Run: func(cmd *cobra.Command, args []string) {
-		migrate(&migrateCmd, args)
-		execWithConfig(cmd, serve)
+		migrate(cmd, args)
+		serve(cmd.Context())
 	},
 }
 
@@ -41,10 +41,6 @@ func loadGlobalConfig() *conf.GlobalConfiguration {
 	}
 
 	return config
-}
-
-func execWithConfig(cmd *cobra.Command, fn func(config *conf.GlobalConfiguration)) {
-	fn(loadGlobalConfig())
 }
 
 func execWithConfigAndArgs(cmd *cobra.Command, fn func(config *conf.GlobalConfiguration, args []string), args []string) {
