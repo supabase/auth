@@ -259,15 +259,9 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		return nil, err
 	}
 
-	if err := ConfigureLogging(&config.Logging); err != nil {
-		return nil, err
-	}
-
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-
-	ConfigureTracing(&config.Tracing)
 
 	return config, nil
 }
