@@ -3,16 +3,17 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
+	"time"
+
 	"github.com/aaronarduino/goqrsvg"
-	"github.com/ajstarks/svgo"
+	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pquerna/otp/totp"
-	"net/http"
-	"time"
 )
 
 type EnrollFactorParams struct {
@@ -212,23 +213,25 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return badRequestError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
 	}
+	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if err = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
+		var terr error
+		if terr = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":    factor.ID,
 			"challenge_id": challenge.ID,
-		}); err != nil {
+		}); terr != nil {
 			return err
 		}
-		if err = challenge.Verify(tx); err != nil {
+		if terr = challenge.Verify(tx); terr != nil {
 			return err
 		}
 		if factor.Status != models.FactorVerifiedState {
-			if err = factor.UpdateStatus(tx, models.FactorVerifiedState); err != nil {
-				return err
+			if terr = factor.UpdateStatus(tx, models.FactorVerifiedState); terr != nil {
+				return terr
 			}
 		}
-		token, terr := a.issueRefreshToken(ctx, tx, user, models.TOTP, models.GrantParams{
-			FactorID: factor.ID,
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.TOTP, models.GrantParams{
+			FactorID: &factor.ID,
 		})
 		if terr != nil {
 			return terr
@@ -246,9 +249,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
 
-	return sendJSON(w, http.StatusOK, &VerifyFactorResponse{
-		Success: valid,
-	})
+	return sendJSON(w, http.StatusOK, token)
 
 }
 
