@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+	"fmt"
 )
 
 type EnrollFactorParams struct {
@@ -131,7 +132,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		Type: models.TOTP,
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
-			QRCode: buf.String(),
+			QRCode: fmt.Sprintf("data:image/svg+xml;utf-8,%v", buf.String()),
 			Secret: factor.TOTPSecret,
 			URI:    key.URL(),
 		},

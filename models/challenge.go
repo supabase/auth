@@ -13,7 +13,6 @@ type Challenge struct {
 	FactorID   uuid.UUID  `json:"factor_id" db:"factor_id"`
 	CreatedAt  time.Time  `json:"created_at" db:"created_at"`
 	VerifiedAt *time.Time `json:"verified_at" db:"verified_at"`
-	// TODO(Joel): Change to appropriate IP Address type
 	IPAddress string `json:"ip_address" db:"ip_address"`
 }
 
@@ -32,6 +31,8 @@ func NewChallenge(factor *Factor) (*Challenge, error) {
 	challenge := &Challenge{
 		ID:       id,
 		FactorID: factor.ID,
+		// TODO(Joel): Modify to pass in IP address)
+		IPAddress: "127.0.0.1",
 	}
 	return challenge, nil
 }
