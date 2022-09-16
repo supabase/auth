@@ -3,11 +3,9 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/netlify/gotrue/utilities"
 	"github.com/spf13/cobra"
 )
-
-// Version is the SHA of the git commit from which this binary was built.
-var Version string
 
 var versionCmd = cobra.Command{
 	Run: showVersion,
@@ -15,5 +13,5 @@ var versionCmd = cobra.Command{
 }
 
 func showVersion(cmd *cobra.Command, args []string) {
-	fmt.Println(Version)
+	fmt.Println(utilities.Version)
 }

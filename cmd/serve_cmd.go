@@ -7,6 +7,7 @@ import (
 	"github.com/netlify/gotrue/api"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
+	"github.com/netlify/gotrue/utilities"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
@@ -26,7 +27,7 @@ func serve(config *conf.GlobalConfiguration) {
 	}
 	defer db.Close()
 
-	api := api.NewAPIWithVersion(context.Background(), config, db, Version)
+	api := api.NewAPIWithVersion(context.Background(), config, db, utilities.Version)
 
 	l := fmt.Sprintf("%v:%v", config.API.Host, config.API.Port)
 	logrus.Infof("GoTrue API started on: %s", l)
