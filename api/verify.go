@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
 )
@@ -345,7 +345,7 @@ func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Conn
 func (a *API) prepErrorRedirectURL(err *HTTPError, r *http.Request, rurl string) string {
 	q := url.Values{}
 
-	log := logger.GetLogEntry(r)
+	log := observability.GetLogEntry(r)
 	log.Error(err.Message)
 
 	if str, ok := oauthErrorMap[err.Code]; ok {
