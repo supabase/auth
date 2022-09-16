@@ -7,7 +7,7 @@ import (
 
 	"github.com/mrjones/oauth"
 	"github.com/netlify/gotrue/api/provider"
-	"github.com/netlify/gotrue/logger"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sirupsen/logrus"
 )
@@ -68,7 +68,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		return nil, badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
 	}
 
-	log := logger.GetLogEntry(r)
+	log := observability.GetLogEntry(r)
 	log.WithFields(logrus.Fields{
 		"provider": providerType,
 		"code":     oauthCode,

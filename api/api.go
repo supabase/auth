@@ -14,8 +14,8 @@ import (
 	"github.com/didip/tollbooth/v5/limiter"
 	"github.com/go-chi/chi"
 	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/mailer"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
 	"github.com/rs/cors"
 	"github.com/sebest/xff"
@@ -101,7 +101,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	api.deprecationNotices(ctx)
 
 	xffmw, _ := xff.Default()
-	logger := logger.NewStructuredLogger(logrus.StandardLogger())
+	logger := observability.NewStructuredLogger(logrus.StandardLogger())
 
 	r := newRouter()
 	r.UseBypass(xffmw.Handler)

@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/netlify/gotrue/api/sms_provider"
-	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
 )
 
@@ -55,7 +55,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	user := getUser(ctx)
-	log := logger.GetLogEntry(r)
+	log := observability.GetLogEntry(r)
 	log.Debugf("Checking params for token %v", params)
 
 	err = db.Transaction(func(tx *storage.Connection) error {
