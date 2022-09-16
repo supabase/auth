@@ -2,6 +2,7 @@ package sms_provider
 
 import (
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
@@ -74,18 +75,62 @@ func (ts *SmsProviderTestSuite) TestTwilioSendSms() {
 		"Body":    {message},
 	}
 
-	gock.New(twilioProvider.APIPath).Post("").
-		MatchHeader("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(twilioProvider.Config.AccountSid+":"+twilioProvider.Config.AuthToken))).
-		MatchType("url").BodyString(body.Encode()).
-		Reply(200).JSON(SmsStatus{
-		To:     "+" + phone,
-		From:   twilioProvider.Config.MessageServiceSid,
-		Status: "sent",
-		Body:   message,
-	})
+	cases := []struct {
+		Desc           string
+		TwilioResponse *gock.Response
+		ExpectedError  error
+	}{
+		{
+			Desc: "Successfully sent sms",
+			TwilioResponse: gock.New(twilioProvider.APIPath).Post("").
+				MatchHeader("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(twilioProvider.Config.AccountSid+":"+twilioProvider.Config.AuthToken))).
+				MatchType("url").BodyString(body.Encode()).
+				Reply(200).JSON(SmsStatus{
+				To:     "+" + phone,
+				From:   twilioProvider.Config.MessageServiceSid,
+				Status: "sent",
+				Body:   message,
+			}),
+			ExpectedError: nil,
+		},
+		{
+			Desc: "Sms status is failed / undelivered",
+			TwilioResponse: gock.New(twilioProvider.APIPath).Post("").
+				MatchHeader("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(twilioProvider.Config.AccountSid+":"+twilioProvider.Config.AuthToken))).
+				MatchType("url").BodyString(body.Encode()).
+				Reply(200).JSON(SmsStatus{
+				ErrorMessage: "failed to send sms",
+				ErrorCode:    "401",
+				Status:       "failed",
+			}),
+			ExpectedError: fmt.Errorf("twilio error: %v %v", "failed to send sms", "401"),
+		},
+		{
+			Desc: "Non-2xx status code returned",
+			TwilioResponse: gock.New(twilioProvider.APIPath).Post("").
+				MatchHeader("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(twilioProvider.Config.AccountSid+":"+twilioProvider.Config.AuthToken))).
+				MatchType("url").BodyString(body.Encode()).
+				Reply(500).JSON(twilioErrResponse{
+				Code:     500,
+				Message:  "Internal server error",
+				MoreInfo: "error",
+				Status:   500,
+			}),
+			ExpectedError: &twilioErrResponse{
+				Code:     500,
+				Message:  "Internal server error",
+				MoreInfo: "error",
+				Status:   500,
+			},
+		},
+	}
 
-	err = twilioProvider.SendSms(phone, message)
-	require.NoError(ts.T(), err)
+	for _, c := range cases {
+		ts.Run(c.Desc, func() {
+			err = twilioProvider.SendSms(phone, message)
+			require.Equal(ts.T(), c.ExpectedError, err)
+		})
+	}
 }
 
 func (ts *SmsProviderTestSuite) TestMessagebirdSendSms() {
