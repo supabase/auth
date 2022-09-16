@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/observability"
 )
 
 var configFile = ""
@@ -25,20 +26,27 @@ func RootCommand() *cobra.Command {
 	return &rootCmd
 }
 
-func execWithConfig(cmd *cobra.Command, fn func(config *conf.GlobalConfiguration)) {
+func loadGlobalConfig() *conf.GlobalConfiguration {
 	config, err := conf.LoadGlobal(configFile)
 	if err != nil {
 		logrus.Fatalf("Failed to load configuration: %+v", err)
 	}
 
-	fn(config)
+	if err := observability.ConfigureLogging(&config.Logging); err != nil {
+		logrus.WithError(err).Error("unable to configure logging")
+	}
+
+	if err := observability.ConfigureTracing(&config.Tracing); err != nil {
+		logrus.WithError(err).Error("unable to configure tracing")
+	}
+
+	return config
+}
+
+func execWithConfig(cmd *cobra.Command, fn func(config *conf.GlobalConfiguration)) {
+	fn(loadGlobalConfig())
 }
 
 func execWithConfigAndArgs(cmd *cobra.Command, fn func(config *conf.GlobalConfiguration, args []string), args []string) {
-	config, err := conf.LoadGlobal(configFile)
-	if err != nil {
-		logrus.Fatalf("Failed to load configuration: %+v", err)
-	}
-
-	fn(config, args)
+	fn(loadGlobalConfig(), args)
 }

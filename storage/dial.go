@@ -57,7 +57,7 @@ func getExcludedColumns(model interface{}, includeColumns ...string) ([]string, 
 	sm := &pop.Model{Value: model}
 	st := reflect.TypeOf(model)
 	if st.Kind() == reflect.Ptr {
-		st = st.Elem()
+		_ = st.Elem()
 	}
 
 	// get all columns and remove included to get excluded set

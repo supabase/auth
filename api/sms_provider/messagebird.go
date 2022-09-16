@@ -93,7 +93,7 @@ func (t *MessagebirdProvider) SendSms(phone string, message string) error {
 	}
 
 	if resp.Recipients.TotalSentCount == 0 {
-		return fmt.Errorf("Messagebird error: total sent count is 0")
+		return fmt.Errorf("messagebird error: total sent count is 0")
 	}
 
 	return nil

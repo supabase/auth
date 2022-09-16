@@ -89,7 +89,7 @@ func (t *TwilioProvider) SendSms(phone string, message string) error {
 	}
 
 	if resp.Status == "failed" || resp.Status == "undelivered" {
-		return fmt.Errorf("Twilio error: %v %v", resp.ErrorMessage, resp.ErrorCode)
+		return fmt.Errorf("twilio error: %v %v", resp.ErrorMessage, resp.ErrorCode)
 	}
 
 	return nil

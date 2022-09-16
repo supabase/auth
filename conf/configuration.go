@@ -29,9 +29,9 @@ type EmailProviderConfiguration struct {
 
 // DBConfiguration holds all the database related configuration.
 type DBConfiguration struct {
-	Driver string `json:"driver" required:"true"`
-	URL    string `json:"url" envconfig:"DATABASE_URL" required:"true"`
-
+	Driver    string `json:"driver" required:"true"`
+	URL       string `json:"url" envconfig:"DATABASE_URL" required:"true"`
+	Namespace string `json:"namespace" envconfig:"DB_NAMESPACE" default:"auth"`
 	// MaxPoolSize defaults to 0 (unlimited).
 	MaxPoolSize    int    `json:"max_pool_size" split_words:"true"`
 	MigrationsPath string `json:"migrations_path" split_words:"true" default:"./migrations"`
@@ -259,15 +259,9 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		return nil, err
 	}
 
-	if err := ConfigureLogging(&config.Logging); err != nil {
-		return nil, err
-	}
-
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-
-	ConfigureTracing(&config.Tracing)
 
 	return config, nil
 }
@@ -385,62 +379,62 @@ func (c *GlobalConfiguration) Validate() error {
 
 func (o *OAuthProviderConfiguration) Validate() error {
 	if !o.Enabled {
-		return errors.New("Provider is not enabled")
+		return errors.New("provider is not enabled")
 	}
 	if o.ClientID == "" {
-		return errors.New("Missing Oauth client ID")
+		return errors.New("missing Oauth client ID")
 	}
 	if o.Secret == "" {
-		return errors.New("Missing Oauth secret")
+		return errors.New("missing Oauth secret")
 	}
 	if o.RedirectURI == "" {
-		return errors.New("Missing redirect URI")
+		return errors.New("missing redirect URI")
 	}
 	return nil
 }
 
 func (t *TwilioProviderConfiguration) Validate() error {
 	if t.AccountSid == "" {
-		return errors.New("Missing Twilio account SID")
+		return errors.New("missing Twilio account SID")
 	}
 	if t.AuthToken == "" {
-		return errors.New("Missing Twilio auth token")
+		return errors.New("missing Twilio auth token")
 	}
 	if t.MessageServiceSid == "" {
-		return errors.New("Missing Twilio message service SID or Twilio phone number")
+		return errors.New("missing Twilio message service SID or Twilio phone number")
 	}
 	return nil
 }
 
 func (t *MessagebirdProviderConfiguration) Validate() error {
 	if t.AccessKey == "" {
-		return errors.New("Missing Messagebird access key")
+		return errors.New("missing Messagebird access key")
 	}
 	if t.Originator == "" {
-		return errors.New("Missing Messagebird originator")
+		return errors.New("missing Messagebird originator")
 	}
 	return nil
 }
 
 func (t *TextlocalProviderConfiguration) Validate() error {
 	if t.ApiKey == "" {
-		return errors.New("Missing Textlocal API key")
+		return errors.New("missing Textlocal API key")
 	}
 	if t.Sender == "" {
-		return errors.New("Missing Textlocal sender")
+		return errors.New("missing Textlocal sender")
 	}
 	return nil
 }
 
 func (t *VonageProviderConfiguration) Validate() error {
 	if t.ApiKey == "" {
-		return errors.New("Missing Vonage API key")
+		return errors.New("missing Vonage API key")
 	}
 	if t.ApiSecret == "" {
-		return errors.New("Missing Vonage API secret")
+		return errors.New("missing Vonage API secret")
 	}
 	if t.From == "" {
-		return errors.New("Missing Vonage 'from' parameter")
+		return errors.New("missing Vonage 'from' parameter")
 	}
 	return nil
 }

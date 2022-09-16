@@ -72,11 +72,11 @@ func (t *TextlocalProvider) SendSms(phone string, message string) error {
 	}
 
 	if len(resp.Errors) > 0 {
-		return errors.New("Textlocal error: Internal Error")
+		return errors.New("textlocal error: Internal Error")
 	}
 
 	if resp.Status != "success" {
-		return fmt.Errorf("Textlocal error: %v (code: %v)", resp.Errors[0].Message, resp.Errors[0].Code)
+		return fmt.Errorf("textlocal error: %v (code: %v)", resp.Errors[0].Message, resp.Errors[0].Code)
 	}
 
 	return nil
