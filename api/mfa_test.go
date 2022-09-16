@@ -46,7 +46,7 @@ func (ts *MFATestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 	// Create corresponding sessoin
-	s, err := models.NewSession(u, f.ID)
+	s, err := models.NewSession(u, &f.ID)
 	require.NoError(ts.T(), err, "Error creating test session")
 	require.NoError(ts.T(), ts.API.db.Create(s), "Error saving test session")
 }
@@ -184,7 +184,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			f.TOTPSecret = sharedSecret
 			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
-			s2, err := models.NewSession(u, f.ID)
+			s2, err := models.NewSession(u, &f.ID)
 			require.NoError(ts.T(), err, "Error creating test session")
 			require.NoError(ts.T(), ts.API.db.Create(s2), "Error saving test session")
 
@@ -263,7 +263,7 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 				factors, err := models.FindFactorsByUser(ts.API.db, u)
 				require.NoError(ts.T(), err, "error finding factors")
 				f := factors[0]
-				s2, err = models.NewSession(u, f.ID)
+				s2, err = models.NewSession(u, &f.ID)
 				require.NoError(ts.T(), err, "Error creating test session")
 				require.NoError(ts.T(), ts.API.db.Create(s2), "Error saving test session")
 

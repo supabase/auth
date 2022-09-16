@@ -10,16 +10,33 @@ import (
 	"github.com/pkg/errors"
 )
 
-const AAL1 = "aal1"
-const AAL2 = "aal2"
-const AAL3 = "aal3"
+type AuthenticatorAssuranceLevel int
+
+const (
+	AAL1 AuthenticatorAssuranceLevel = iota
+	AAL2
+	AAL3
+)
+
+func (aal AuthenticatorAssuranceLevel) String() string {
+	switch aal {
+	case AAL1:
+		return "aal1"
+	case AAL2:
+		return "aal2"
+	case AAL3:
+		return "aal3"
+	default:
+		return ""
+	}
+}
 
 type Session struct {
 	ID        uuid.UUID  `json:"-" db:"id"`
 	UserID    uuid.UUID  `json:"user_id" db:"user_id"`
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
-	FactorID  uuid.UUID  `json:"factor_id" db:"factor_id"`
+	FactorID  *uuid.UUID `json:"factor_id" db:"factor_id"`
 	AMRClaims []AMRClaim `json:"amr_claims" has_many:"amr_claims"`
 	AAL       string     `json:"aal" db:"aal"`
 }
@@ -29,7 +46,7 @@ func (Session) TableName() string {
 	return tableName
 }
 
-func NewSession(user *User, factorID uuid.UUID) (*Session, error) {
+func NewSession(user *User, factorID *uuid.UUID) (*Session, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique session id")
@@ -39,12 +56,12 @@ func NewSession(user *User, factorID uuid.UUID) (*Session, error) {
 		ID:       id,
 		UserID:   user.ID,
 		FactorID: factorID,
-		AAL:      AAL1,
+		AAL:      AAL1.String(),
 	}
 	return session, nil
 }
 
-func CreateSession(tx *storage.Connection, user *User, factorID uuid.UUID) (*Session, error) {
+func CreateSession(tx *storage.Connection, user *User, factorID *uuid.UUID) (*Session, error) {
 	session, err := NewSession(user, factorID)
 	if err != nil {
 		return nil, err
@@ -94,8 +111,9 @@ func LogoutSession(tx *storage.Connection, sessionId uuid.UUID) error {
 	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE id = ?", sessionId).Exec()
 }
 
-func (s *Session) UpdateAssociatedFactor(tx *storage.Connection, factorID uuid.UUID) error {
+func (s *Session) UpdateAssociatedFactor(tx *storage.Connection, factorID *uuid.UUID) error {
 	s.FactorID = factorID
+	s.AAL = AAL2.String()
 	return tx.Update(s)
 
 }
