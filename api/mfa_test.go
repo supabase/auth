@@ -190,7 +190,8 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), ts.API.db.Create(s2), "Error saving test session")
 
 			// Make a challenge
-			c, err := models.NewChallenge(f)
+			testIPAddress := "127.0.0.1"
+			c, err := models.NewChallenge(f, testIPAddress)
 			require.NoError(ts.T(), err, "Error creating test Challenge model")
 			require.NoError(ts.T(), ts.API.db.Create(c), "Error saving new test challenge")
 			if !v.validChallenge {

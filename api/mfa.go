@@ -14,6 +14,7 @@ import (
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
+	"github.com/netlify/gotrue/utilities"
 	"github.com/pquerna/otp/totp"
 	"net/url"
 )
@@ -146,7 +147,8 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 	user := getUser(ctx)
 	factor := getFactor(ctx)
-	challenge, err := models.NewChallenge(factor)
+	ipAddress := utilities.GetIPAddress(r)
+	challenge, err := models.NewChallenge(factor, ipAddress)
 	if err != nil {
 		return internalServerError("Database error creating challenge").WithInternalError(err)
 	}
@@ -198,7 +200,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if challenge.VerifiedAt != nil {
-		return badRequestError("Challenge has already been verified")
+		return badRequestError("Challenge is not valid")
 	}
 
 	valid := totp.Validate(params.Code, factor.TOTPSecret)

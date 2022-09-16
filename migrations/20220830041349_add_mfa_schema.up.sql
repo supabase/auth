@@ -30,7 +30,7 @@ create table if not exists auth.mfa_challenges(
        factor_id uuid not null,
        created_at timestamptz not null,
        verified_at timestamptz  null,
-       ip_address  inet null,
+       ip_address  inet not null,
        constraint mfa_challenges_pkey primary key (id),
        constraint mfa_challenges_auth_factor_id_fkey foreign key (factor_id) references auth.mfa_factors(id) on delete cascade
 );

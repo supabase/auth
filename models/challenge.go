@@ -23,7 +23,7 @@ func (Challenge) TableName() string {
 
 const ChallengePrefix = "challenge"
 
-func NewChallenge(factor *Factor) (*Challenge, error) {
+func NewChallenge(factor *Factor, ipAddress string) (*Challenge, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -32,7 +32,7 @@ func NewChallenge(factor *Factor) (*Challenge, error) {
 		ID:       id,
 		FactorID: factor.ID,
 		// TODO(Joel): Modify to pass in IP address)
-		IPAddress: "127.0.0.1",
+		IPAddress: ipAddress,
 	}
 	return challenge, nil
 }
@@ -43,17 +43,6 @@ func FindChallengeByChallengeID(tx *storage.Connection, challengeID uuid.UUID) (
 		return nil, ChallengeNotFoundError{}
 	}
 	return challenge, nil
-}
-
-func FindChallengesByFactorID(tx *storage.Connection, factorID uuid.UUID) ([]*Challenge, error) {
-	challenges := []*Challenge{}
-	if err := tx.Q().Where("factor_id = ?", factorID).All(&challenges); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return challenges, nil
-		}
-		return nil, errors.Wrap(err, "Error finding MFA Challenges for factor")
-	}
-	return challenges, nil
 }
 
 // Update the verification timestamp
