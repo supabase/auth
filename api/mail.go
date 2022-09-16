@@ -32,6 +32,7 @@ type GenerateLinkParams struct {
 
 func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	config := a.config
 	mailer := a.Mailer(ctx)
 	adminUser := getAdminUser(ctx)
@@ -52,7 +53,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(a.db, params.Email, aud)
+	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			if params.Type == magicLinkVerification {
@@ -77,7 +78,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	hashedToken := fmt.Sprintf("%x", sha256.Sum224([]byte(params.Email+otp)))
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
 		case magicLinkVerification, recoveryVerification:

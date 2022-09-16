@@ -40,6 +40,7 @@ func (a *API) UserGet(w http.ResponseWriter, r *http.Request) error {
 // UserUpdate updates fields on a user
 func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	config := a.config
 
 	params := &UserUpdateParams{}
@@ -57,7 +58,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	log := logger.GetLogEntry(r)
 	log.Debugf("Checking params for token %v", params)
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if params.Password != nil {
 			if len(*params.Password) < config.PasswordMinLength {

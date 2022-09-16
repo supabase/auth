@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"net/url"
 	"reflect"
 
@@ -51,6 +52,12 @@ func (c *Connection) Transaction(fn func(*Connection) error) error {
 		})
 	}
 	return fn(c)
+}
+
+// WithContext returns a new connection with an updated context. This is
+// typically used for tracing as the context contains trace span information.
+func (c *Connection) WithContext(ctx context.Context) *Connection {
+	return &Connection{c.Connection.WithContext(ctx)}
 }
 
 func getExcludedColumns(model interface{}, includeColumns ...string) ([]string, error) {

@@ -70,6 +70,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 
 func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	config := a.config
 	params := &VerifyParams{}
 	params.Token = r.FormValue("token")
@@ -83,7 +84,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		token       *AccessTokenResponse
 	)
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if params.Token == "" {
 			return badRequestError("Verify requires a token")
@@ -158,6 +159,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 
 func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	config := a.config
 	params := &VerifyParams{}
 
@@ -188,7 +190,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		token       *AccessTokenResponse
 	)
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		aud := a.requestAud(ctx, r)
 		user, terr = a.verifyUserAndToken(ctx, tx, params, aud)

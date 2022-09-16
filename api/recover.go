@@ -17,6 +17,7 @@ type RecoverParams struct {
 // Recover sends a recovery email
 func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	config := a.config
 	params := &RecoverParams{}
 
@@ -39,7 +40,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	if err := a.validateEmail(ctx, params.Email); err != nil {
 		return err
 	}
-	user, err = models.FindUserByEmailAndAudience(a.db, params.Email, aud)
+	user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -48,7 +49,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Unable to process request").WithInternalError(err)
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}

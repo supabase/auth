@@ -22,6 +22,7 @@ type MagicLinkParams struct {
 // MagicLink sends a recovery email
 func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	config := a.config
 
 	if !config.External.Email.Enabled {
@@ -47,7 +48,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(a.db, params.Email, aud)
+	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			// User doesn't exist, sign them up with temporary password
@@ -95,7 +96,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
