@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"fmt"
 	"github.com/aaronarduino/goqrsvg"
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
@@ -15,7 +16,6 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/pquerna/otp/totp"
 	"net/url"
-	"fmt"
 )
 
 type EnrollFactorParams struct {

@@ -442,7 +442,7 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 		}
 		if params.FactorStatus != "" {
 			if !isValidFactorStatus(params.FactorStatus) {
-				return errors.New("Factor Status should be one of the valid factor states: verified, unverified or disabled")
+				return errors.New("factor Status should be one of the valid factor states: verified, unverified or disabled")
 			}
 			if terr := factor.UpdateStatus(tx, params.FactorStatus); terr != nil {
 				return terr
@@ -458,6 +458,9 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
 
 	return sendJSON(w, http.StatusOK, factor)
 }

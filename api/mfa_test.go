@@ -168,6 +168,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	for _, v := range cases {
 		ts.Run(v.desc, func() {
 			u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
 			emailValue, err := u.Email.Value()
 			require.NoError(ts.T(), err)
 			testEmail := emailValue.(string)

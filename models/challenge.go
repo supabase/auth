@@ -13,7 +13,7 @@ type Challenge struct {
 	FactorID   uuid.UUID  `json:"factor_id" db:"factor_id"`
 	CreatedAt  time.Time  `json:"created_at" db:"created_at"`
 	VerifiedAt *time.Time `json:"verified_at" db:"verified_at"`
-	IPAddress string `json:"ip_address" db:"ip_address"`
+	IPAddress  string     `json:"ip_address" db:"ip_address"`
 }
 
 func (Challenge) TableName() string {
