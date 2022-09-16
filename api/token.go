@@ -154,6 +154,8 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 
 // ResourceOwnerPasswordGrant implements the password grant type flow
 func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	db := a.db.WithContext(ctx)
+
 	params := &PasswordGrantParams{}
 
 	body, err := getBodyBytes(r)
@@ -179,14 +181,14 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		if !config.External.Email.Enabled {
 			return badRequestError("Email logins are disabled")
 		}
-		user, err = models.FindUserByEmailAndAudience(a.db, params.Email, aud)
+		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 	} else if params.Phone != "" {
 		provider = "phone"
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone logins are disabled")
 		}
 		params.Phone = a.formatPhoneNumber(params.Phone)
-		user, err = models.FindUserByPhoneAndAudience(a.db, params.Phone, aud)
+		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
 	} else {
 		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
@@ -209,7 +211,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	}
 
 	var token *AccessTokenResponse
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": provider,
@@ -239,6 +241,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 
 // RefreshTokenGrant implements the refresh_token grant type flow
 func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	db := a.db.WithContext(ctx)
 	config := a.config
 
 	params := &RefreshTokenGrantParams{}
@@ -256,7 +259,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return oauthError("invalid_request", "refresh_token required")
 	}
 
-	user, token, err := models.FindUserWithRefreshToken(a.db, params.RefreshToken)
+	user, token, err := models.FindUserWithRefreshToken(db, params.RefreshToken)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return oauthError("invalid_grant", "Invalid Refresh Token")
@@ -271,7 +274,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	var newToken *models.RefreshToken
 	if token.Revoked {
 		a.clearCookieTokens(config, w)
-		err = a.db.Transaction(func(tx *storage.Connection) error {
+		err = db.Transaction(func(tx *storage.Connection) error {
 			validToken, terr := models.GetValidChildToken(tx, token)
 			if terr != nil {
 				if errors.Is(terr, models.RefreshTokenNotFoundError{}) {
@@ -296,7 +299,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		if newToken == nil {
 			if config.Security.RefreshTokenRotationEnabled {
 				// Revoke all tokens in token family
-				err = a.db.Transaction(func(tx *storage.Connection) error {
+				err = db.Transaction(func(tx *storage.Connection) error {
 					var terr error
 					if terr = models.RevokeTokenFamily(tx, token); terr != nil {
 						return terr
@@ -314,7 +317,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	var tokenString string
 	var newTokenResponse *AccessTokenResponse
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = models.NewAuditLogEntry(r, tx, user, models.TokenRefreshedAction, "", nil); terr != nil {
 			return terr
@@ -354,6 +357,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 // IdTokenGrant implements the id_token grant type flow
 func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	db := a.db.WithContext(ctx)
 	config := a.config
 
 	params := &IdTokenGrantParams{}
@@ -423,7 +427,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	var user *models.User
 	var grantParams models.GrantParams
 	var token *AccessTokenResponse
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		var identity *models.Identity
 

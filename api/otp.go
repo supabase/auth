@@ -65,6 +65,7 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 // SmsOtp sends the user an otp via sms
 func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	config := a.config
 
 	if !config.External.Phone.Enabled {
@@ -93,7 +94,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 
 	aud := a.requestAud(ctx, r)
 
-	user, uerr := models.FindUserByPhoneAndAudience(a.db, params.Phone, aud)
+	user, uerr := models.FindUserByPhoneAndAudience(db, params.Phone, aud)
 	if uerr != nil {
 		// if user does not exists, sign up the user
 		if models.IsNotFoundError(uerr) {
@@ -140,7 +141,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding user").WithInternalError(uerr)
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		if err := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); err != nil {
 			return err
 		}
@@ -162,6 +163,9 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) (bool, error) {
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+
 	if !params.CreateUser {
 		ctx := r.Context()
 		aud := a.requestAud(ctx, r)
@@ -170,13 +174,13 @@ func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) (bool, error)
 			if err := a.validateEmail(ctx, params.Email); err != nil {
 				return false, err
 			}
-			_, err = models.FindUserByEmailAndAudience(a.db, params.Email, aud)
+			_, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 		} else if params.Phone != "" {
 			params.Phone, err = a.validatePhone(params.Phone)
 			if err != nil {
 				return false, err
 			}
-			_, err = models.FindUserByPhoneAndAudience(a.db, params.Phone, aud)
+			_, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
 		}
 
 		if err != nil && models.IsNotFoundError(err) {

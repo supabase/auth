@@ -29,6 +29,7 @@ type SignupParams struct {
 func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
+	db := a.db.WithContext(ctx)
 
 	if config.DisableSignup {
 		return forbiddenError("Signups not allowed for this instance")
@@ -75,7 +76,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err := a.validateEmail(ctx, params.Email); err != nil {
 			return err
 		}
-		user, err = models.FindUserByEmailAndAudience(a.db, params.Email, params.Aud)
+		user, err = models.FindUserByEmailAndAudience(db, params.Email, params.Aud)
 	case "phone":
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone signups are disabled")
@@ -84,7 +85,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		user, err = models.FindUserByPhoneAndAudience(a.db, params.Phone, params.Aud)
+		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, params.Aud)
 	default:
 		return invalidSignupError(config)
 	}
@@ -93,7 +94,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if user != nil {
 			if (params.Provider == "email" && user.IsConfirmed()) || (params.Provider == "phone" && user.IsPhoneConfirmed()) {
@@ -182,7 +183,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			return tooManyRequestsError("For security purposes, you can only request this once every minute")
 		}
 		if errors.Is(err, UserExistsError) {
-			err = a.db.Transaction(func(tx *storage.Connection) error {
+			err = db.Transaction(func(tx *storage.Connection) error {
 				if terr := models.NewAuditLogEntry(r, tx, user, models.UserRepeatedSignUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
@@ -208,7 +209,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	// handles case where Mailer.Autoconfirm is true or Phone.Autoconfirm is true
 	if user.IsConfirmed() || user.IsPhoneConfirmed() {
 		var token *AccessTokenResponse
-		err = a.db.Transaction(func(tx *storage.Connection) error {
+		err = db.Transaction(func(tx *storage.Connection) error {
 			var terr error
 			if terr = models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 				"provider": params.Provider,

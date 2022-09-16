@@ -80,7 +80,9 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request, w http.ResponseWrit
 }
 
 func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, error) {
+	db := a.db.WithContext(ctx)
 	claims := getClaims(ctx)
+
 	if claims == nil {
 		return ctx, errors.New("invalid token")
 	}
@@ -95,7 +97,7 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 		if err != nil {
 			return ctx, err
 		}
-		user, err = models.FindUserByID(a.db, userId)
+		user, err = models.FindUserByID(db, userId)
 		if err != nil {
 			return ctx, err
 		}
@@ -108,7 +110,7 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 		if err != nil {
 			return ctx, err
 		}
-		session, err = models.FindSessionById(a.db, sessionId)
+		session, err = models.FindSessionById(db, sessionId)
 		if err != nil && !models.IsNotFoundError(err) {
 			return ctx, err
 		}
