@@ -186,6 +186,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 	params := &VerifyFactorParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
+	currentIP := utilities.GetIPAddress(r)
 	err = jsonDecoder.Decode(params)
 	if err != nil {
 		return badRequestError("Please check the params passed into VerifyFactor: %v", err)
@@ -199,7 +200,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
 
-	if challenge.VerifiedAt != nil {
+	if challenge.VerifiedAt != nil || challenge.IPAddress != currentIP {
 		return badRequestError("Challenge is not valid")
 	}
 

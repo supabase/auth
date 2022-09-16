@@ -15,6 +15,7 @@ import (
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/netlify/gotrue/utilities"
 )
 
 type MFATestSuite struct {
@@ -189,40 +190,41 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), err, "Error creating test session")
 			require.NoError(ts.T(), ts.API.db.Create(s2), "Error saving test session")
 
+			user, err := models.FindUserByEmailAndAudience(ts.API.db, testEmail, ts.Config.JWT.Aud)
+			ts.Require().NoError(err)
 			// Make a challenge
-			testIPAddress := "127.0.0.1"
+			var buffer bytes.Buffer
+			token, err := generateAccessToken(user, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
+			require.NoError(ts.T(), err)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor/%s/verify", user.ID, f.ID), &buffer)
+			testIPAddress := utilities.GetIPAddress(req)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			c, err := models.NewChallenge(f, testIPAddress)
 			require.NoError(ts.T(), err, "Error creating test Challenge model")
 			require.NoError(ts.T(), ts.API.db.Create(c), "Error saving new test challenge")
 			if !v.validChallenge {
 				// Set challenge creation so that it has expired in present time.
 				newCreatedAt := time.Now().UTC().Add(-1 * time.Second * time.Duration(ts.Config.MFA.ChallengeExpiryDuration+1))
-				// created_at is managed by buffalo(ORM) needs to be raw query toe be updated
+				// created_at is managed by buffalo(ORM) needs to be raw query to be updated
 				err := ts.API.db.RawQuery("UPDATE auth.mfa_challenges SET created_at = ? WHERE factor_id = ?", newCreatedAt, f.ID).Exec()
 				require.NoError(ts.T(), err, "Error updating new test challenge")
 			}
 
-			// Verify the user
-			user, err := models.FindUserByEmailAndAudience(ts.API.db, testEmail, ts.Config.JWT.Aud)
-			ts.Require().NoError(err)
+
 			code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
 			if !v.validCode {
 				// Use an inaccurate time, resulting in an invalid code(usually)
 				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC().Add(-1*time.Minute*time.Duration(1)))
 			}
 			require.NoError(ts.T(), err)
-			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 				"challenge_id": c.ID,
 				"code":         code,
 			}))
 
-			token, err := generateAccessToken(user, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
-			require.NoError(ts.T(), err)
 
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor/%s/verify", user.ID, f.ID), &buffer)
-			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), v.expectedHTTPCode, w.Code)
 

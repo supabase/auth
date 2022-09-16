@@ -31,7 +31,6 @@ func NewChallenge(factor *Factor, ipAddress string) (*Challenge, error) {
 	challenge := &Challenge{
 		ID:       id,
 		FactorID: factor.ID,
-		// TODO(Joel): Modify to pass in IP address)
 		IPAddress: ipAddress,
 	}
 	return challenge, nil
