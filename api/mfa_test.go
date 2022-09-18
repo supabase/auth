@@ -196,10 +196,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 
 			user, err := models.FindUserByEmailAndAudience(ts.API.db, testEmail, ts.Config.JWT.Aud)
 			ts.Require().NoError(err)
-			// Make a challenge
 			var buffer bytes.Buffer
-			// testSessionId, err := uuid.FromString("a2926050-8f09-43bd-9af5-f24d0f9e1b7d")
-			// require.NoError(ts.T(), err)
 
 			token, err := generateAccessToken(user, r.SessionId, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, models.PasswordGrant)
 			require.NoError(ts.T(), err)
