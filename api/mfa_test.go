@@ -174,6 +174,10 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), err)
 			testEmail := emailValue.(string)
 			testDomain := strings.Split(testEmail, "@")[1]
+
+			r, err := models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
+			require.NoError(ts.T(), err)
+
 			// set factor secret
 			key, err := totp.Generate(totp.GenerateOpts{
 				Issuer:      testDomain,
@@ -194,7 +198,10 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			ts.Require().NoError(err)
 			// Make a challenge
 			var buffer bytes.Buffer
-			token, err := generateAccessToken(user, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
+			// testSessionId, err := uuid.FromString("a2926050-8f09-43bd-9af5-f24d0f9e1b7d")
+			// require.NoError(ts.T(), err)
+
+			token, err := generateAccessToken(user, r.SessionId, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, models.PasswordGrant)
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()

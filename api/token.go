@@ -580,7 +580,6 @@ func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time
 func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod string, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 
 	config := a.config
-	isMFASignInMethod := signInMethod == models.TOTP
 	now := time.Now()
 	user.LastSignInAt = &now
 
@@ -604,15 +603,6 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		if terr != nil {
 			return terr
 		}
-		if isMFASignInMethod {
-			if err := session.UpdateAssociatedFactor(tx, grantParams.FactorID); err != nil {
-				return err
-			}
-		}
-		_, aal := calculateAALFromClaims(currentClaims, signInMethod)
-		if err := session.UpdateAAL(tx, aal); err != nil {
-			return err
-		}
 
 		tokenString, terr = generateAccessToken(user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, currentClaims, signInMethod)
 		if terr != nil {
@@ -628,6 +618,57 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		Token:        tokenString,
 		TokenType:    "bearer",
 		ExpiresIn:    config.JWT.Exp,
+		RefreshToken: refreshToken.Token,
+		User:         user,
+	}, nil
+}
+
+func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Connection,  user *models.User, signInMethod string, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+	config := a.config
+	var tokenString string
+	var refreshToken *models.RefreshToken
+	currentClaims := getClaims(ctx)
+	err := conn.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		sessionId, err := uuid.FromString(currentClaims.SessionId)
+		if err != nil {
+			return internalServerError("Cannot read SessionId claim as UUID")
+		}
+		refreshToken, terr = models.FindTokenBySessionID(tx, &sessionId)
+		if terr != nil {
+			return internalServerError("Database error granting user").WithInternalError(terr)
+		}
+
+		session, terr := models.FindSessionById(tx, sessionId)
+		if terr != nil {
+			return terr
+		}
+		terr = models.AddClaimToSession(tx, session, signInMethod)
+		if terr != nil {
+			return terr
+		}
+
+		_, aal := calculateAALFromClaims(currentClaims, signInMethod)
+		if err := session.UpdateAAL(tx, aal); err != nil {
+			return err
+		}
+		if err := session.UpdateAssociatedFactor(tx, grantParams.FactorID); err != nil {
+			return err
+		}
+
+		tokenString, terr = generateAccessToken(user, &sessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, currentClaims, signInMethod)
+		if terr != nil {
+			return internalServerError("error generating jwt token").WithInternalError(terr)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &AccessTokenResponse{
+		Token:        tokenString,
+		TokenType:    "bearer",
+		ExpiresIn:    int(currentClaims.StandardClaims.ExpiresAt),
 		RefreshToken: refreshToken.Token,
 		User:         user,
 	}, nil
