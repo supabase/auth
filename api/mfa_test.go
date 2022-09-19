@@ -316,8 +316,8 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			if v.IsFactorVerified && v.CreateAdditionalSession {
 				_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
 				require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
-				_, err = models.FindSessionById(ts.API.db, s2.ID)
-				require.EqualError(ts.T(), err, models.SessionNotFoundError{}.Error())
+				session, _ := models.FindSessionById(ts.API.db, s2.ID)
+				require.Equal(ts.T(), "aal1", session.AAL)
 			}
 		})
 	}

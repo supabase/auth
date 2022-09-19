@@ -94,8 +94,8 @@ func FindSessionByUserID(tx *storage.Connection, userId uuid.UUID) (*Session, er
 	return session, nil
 }
 
-func InvalidateOtherFactorAssociatedSessions(tx *storage.Connection, currentSessionID, userID, factorID uuid.UUID) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND factor_id = ? AND id != ?", userID, factorID, currentSessionID).Exec()
+func UpdateOtherFactorAssociatedSessions(tx *storage.Connection, currentSessionID, userID, factorID uuid.UUID, aal string) error {
+	return tx.RawQuery("UPDATE "+(&pop.Model{Value: Session{}}).TableName()+" set aal = ? WHERE user_id = ? AND factor_id = ? AND id != ?", aal, userID, factorID, currentSessionID).Exec()
 }
 
 func InvalidateSessionsWithAALLessThan(tx *storage.Connection, userID uuid.UUID, level string) error {
