@@ -73,6 +73,8 @@ func (ts *MFATestSuite) SetupTest() {
 }
 
 func (ts *MFATestSuite) TestEnrollFactor() {
+	testFriendlyName := "bob"
+	alternativeFriendlyName := "john"
 	var cases = []struct {
 		desc         string
 		FriendlyName string
@@ -82,14 +84,14 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 	}{
 		{
 			"TOTP: No issuer",
-			"john",
+			alternativeFriendlyName,
 			models.TOTP.String(),
 			"",
 			http.StatusOK,
 		},
 		{
 			"Invalid factor type",
-			"bob",
+			testFriendlyName,
 			"",
 			ts.TestDomain,
 			http.StatusUnprocessableEntity,
@@ -97,7 +99,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 
 		{
 			"TOTP: Factor has friendly name",
-			"bob",
+			testFriendlyName,
 			models.TOTP.String(),
 			ts.TestDomain,
 			http.StatusOK,
@@ -159,7 +161,6 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
-// TODO: Check behavior that downgrades all other sessions
 func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	cases := []struct {
 		desc             string
@@ -200,9 +201,9 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			f.TOTPSecret = sharedSecret
 			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
-			s2, err := models.NewSession(u, &f.ID)
+			secondarySession, err := models.NewSession(u, &f.ID)
 			require.NoError(ts.T(), err, "Error creating test session")
-			require.NoError(ts.T(), ts.API.db.Create(s2), "Error saving test session")
+			require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
 			user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
 			ts.Require().NoError(err)
@@ -241,9 +242,8 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.Equal(ts.T(), v.expectedHTTPCode, w.Code)
 
 			if v.expectedHTTPCode == http.StatusOK {
-				_, err = models.FindSessionById(ts.API.db, s2.ID)
+				_, err = models.FindSessionById(ts.API.db, secondarySession.ID)
 				require.EqualError(ts.T(), err, models.SessionNotFoundError{}.Error())
-				// Check that session is downgraded
 			}
 			if !v.validChallenge {
 				_, err := models.FindChallengeByChallengeID(ts.API.db, c.ID)
@@ -274,14 +274,14 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			require.NoError(ts.T(), err)
 			s, err := models.FindSessionByUserID(ts.API.db, u.ID)
 			require.NoError(ts.T(), err)
-			var s2 *models.Session
+			var secondarySession *models.Session
 			if v.CreateAdditionalSession {
 				factors, err := models.FindFactorsByUser(ts.API.db, u)
 				require.NoError(ts.T(), err, "error finding factors")
 				f := factors[0]
-				s2, err = models.NewSession(u, &f.ID)
+				secondarySession, err = models.NewSession(u, &f.ID)
 				require.NoError(ts.T(), err, "Error creating test session")
-				require.NoError(ts.T(), ts.API.db.Create(s2), "Error saving test session")
+				require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
 			}
 
@@ -316,8 +316,8 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			if v.IsFactorVerified && v.CreateAdditionalSession {
 				_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
 				require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
-				session, _ := models.FindSessionById(ts.API.db, s2.ID)
-				require.Equal(ts.T(), "aal1", session.AAL)
+				session, _ := models.FindSessionById(ts.API.db, secondarySession.ID)
+				require.Equal(ts.T(), models.AAL1.String(), session.AAL)
 			}
 		})
 	}
