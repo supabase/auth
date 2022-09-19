@@ -265,8 +265,8 @@ func getBodyBytes(req *http.Request) ([]byte, error) {
 func calculateAAL(amr []AMREntry) string {
 	for _, amrEntry := range amr {
 		if amrEntry.Method == models.TOTP {
-			return "aal2"
+			return models.AAL2.String()
 		}
 	}
-	return "aal1"
+	return models.AAL1.String()
 }

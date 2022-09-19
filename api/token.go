@@ -55,8 +55,8 @@ type RefreshTokenGrantParams struct {
 
 // AMREntry represents a method that a user has logged in together with the corresponding time
 type AMREntry struct {
-	Method    string    `json:"method"`
-	Timestamp time.Time `json:"timestamp"`
+	Method    string `json:"method"`
+	Timestamp int64  `json:"timestamp"`
 }
 
 // IdTokenGrantParams are the parameters the IdTokenGrant method accepts
@@ -540,13 +540,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 func calculateAALFromClaims(oldClaims *GoTrueClaims, signInMethod string) ([]AMREntry, string) {
 	amr := []AMREntry{}
-	aal := "aal1"
 	if oldClaims != nil && oldClaims.AuthenticationMethodReference != nil {
 		amr = oldClaims.AuthenticationMethodReference
 	}
-	entry := AMREntry{Method: signInMethod, Timestamp: time.Now()}
+	entry := AMREntry{Method: signInMethod, Timestamp: time.Now().Unix()}
 	amr = append(amr, entry)
-	aal = calculateAAL(amr)
+	aal := calculateAAL(amr)
 	return amr, aal
 }
 

@@ -249,7 +249,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
 			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
-		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, "aal2"); terr != nil {
+		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
 			return internalServerError("Failed to update sessions. %s", terr)
 		}
 		return nil
@@ -295,7 +295,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		}); err != nil {
 			return err
 		}
-		if err = models.UpdateOtherFactorAssociatedSessions(tx, session.ID, user.ID, factor.ID, "aal1"); err != nil {
+		if err = models.UpdateOtherFactorAssociatedSessions(tx, session.ID, user.ID, factor.ID, models.AAL1.String()); err != nil {
 			return err
 		}
 		return nil
