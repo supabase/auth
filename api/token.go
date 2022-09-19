@@ -228,7 +228,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant.String(), grantParams)
 		if terr != nil {
 			return terr
 		}
@@ -518,7 +518,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuthIDGrant, grantParams)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuthIDGrant.String(), grantParams)
 
 		if terr != nil {
 			return oauthError("server_error", terr.Error())

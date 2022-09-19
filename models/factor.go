@@ -15,6 +15,36 @@ const FactorVerifiedState = "verified"
 const TOTP = "TOTP"
 const Webauthn = "webauthn"
 
+type SignInMethods int
+
+const (
+	OAuth SignInMethods = iota
+	OAuthIDGrant
+	PasswordGrant
+	AutoConfirmSignup
+	EmailVerification
+	SMSOrGeneratedLink
+)
+
+func (signInMethod SignInMethods) String() string {
+	switch signInMethod {
+	case OAuth:
+		return "oauth"
+	case OAuthIDGrant:
+		return "oauth_id"
+	case PasswordGrant:
+		return "password"
+	case AutoConfirmSignup:
+		return "autoconfirm"
+	case EmailVerification:
+		return "email_verification"
+	case SMSOrGeneratedLink:
+		return "sms_or_generated_link"
+	default:
+		return ""
+	}
+}
+
 type Factor struct {
 	ID           uuid.UUID `json:"id" db:"id"`
 	User         User      `json:"-" belongs_to:"user"`

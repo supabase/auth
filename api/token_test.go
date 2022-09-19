@@ -242,7 +242,7 @@ func (ts *TokenTestSuite) TestAALCalculationDoesNotDuplicateClaims() {
 	oldClaims := &GoTrueClaims{
 		AuthenticatorAssuranceLevel: models.AAL1.String(),
 		AuthenticationMethodReference: []AMREntry{
-			{Method: models.PasswordGrant, Timestamp: currentTime},
+			{Method: models.PasswordGrant.String(), Timestamp: currentTime},
 			{Method: models.TOTP,
 				Timestamp: currentTime,
 			},

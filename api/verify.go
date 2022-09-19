@@ -122,7 +122,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.EmailVerification, grantParams)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.EmailVerification.String(), grantParams)
 		if terr != nil {
 			return terr
 		}
@@ -219,7 +219,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.SMSOrGeneratedLink, grantParams)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.SMSOrGeneratedLink.String(), grantParams)
 		if terr != nil {
 			return terr
 		}

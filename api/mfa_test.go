@@ -198,7 +198,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			ts.Require().NoError(err)
 			var buffer bytes.Buffer
 
-			token, err := generateAccessToken(user, r.SessionId, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, models.PasswordGrant)
+			token, err := generateAccessToken(user, r.SessionId, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, models.PasswordGrant.String())
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
