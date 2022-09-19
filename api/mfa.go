@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"fmt"
+	"net/url"
+
 	"github.com/aaronarduino/goqrsvg"
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
@@ -16,7 +18,6 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/utilities"
 	"github.com/pquerna/otp/totp"
-	"net/url"
 )
 
 type EnrollFactorParams struct {
@@ -87,11 +88,11 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	// Read from DB for certainty
 	factors, err := models.FindVerifiedFactorsByUser(a.db, user)
 	if err != nil {
-		return internalServerError("Error validating number of factors in system")
+		return internalServerError("error validating number of factors in system").WithInternalError(err)
 	}
 	// Remove this at v2
 	if len(factors) >= 1 {
-		return forbiddenError("Only one factor can be enrolled at a time, please unenroll to continue")
+		return forbiddenError("only one factor can be enrolled at a time, please unenroll to continue")
 	}
 
 	key, err := totp.Generate(totp.GenerateOpts{
@@ -99,22 +100,21 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		AccountName: user.GetEmail(),
 	})
 	if err != nil {
-		return internalServerError("Error generating QR Code secret key").WithInternalError(err)
+		return internalServerError("error generating QR Code secret key").WithInternalError(err)
 	}
 	var buf bytes.Buffer
 	s := svg.New(&buf)
 	qrCode, _ := qr.Encode(key.String(), qr.M, qr.Auto)
 	qs := goqrsvg.NewQrSVG(qrCode, DefaultQRSize)
 	qs.StartQrSVG(s)
-	err = qs.WriteQrSVG(s)
-	if err != nil {
-		return internalServerError("Error writing to QR Code").WithInternalError(err)
+	if err = qs.WriteQrSVG(s); err != nil {
+		return internalServerError("error writing to QR Code").WithInternalError(err)
 	}
 	s.End()
 
 	factor, terr := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorUnverifiedState, key.Secret())
 	if terr != nil {
-		return internalServerError("Database error creating factor").WithInternalError(err)
+		return internalServerError("database error creating factor").WithInternalError(err)
 	}
 	terr = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr = tx.Create(factor); terr != nil {

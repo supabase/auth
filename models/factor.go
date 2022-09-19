@@ -2,10 +2,11 @@ package models
 
 import (
 	"database/sql"
+	"time"
+
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
-	"time"
 )
 
 const FactorUnverifiedState = "unverified"
@@ -16,7 +17,8 @@ const Webauthn = "webauthn"
 
 type Factor struct {
 	ID           uuid.UUID `json:"id" db:"id"`
-	UserID       uuid.UUID `json:"user_id" db:"user_id"`
+	User         User      `json:"-" belongs_to:"user"`
+	UserID       uuid.UUID `json:"-" db:"user_id"`
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 	Status       string    `json:"status" db:"status"`
