@@ -17,11 +17,12 @@ create table if not exists auth.mfa_factors(
        created_at timestamptz not null,
        updated_at timestamptz not null,
        totp_secret text null,
-       unique(user_id, friendly_name),
        constraint mfa_factors_pkey primary key(id),
        constraint mfa_factors_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade
 );
 comment on table auth.mfa_factors is 'auth: stores metadata about factors';
+
+create unique index mfa_factors_user_friendly_name_unique on mfa_factors (friendly_name, user_id) where trim(friendly_name) <> '';
 
 -- auth.mfa_challenges definition
 create table if not exists auth.mfa_challenges(
@@ -29,7 +30,7 @@ create table if not exists auth.mfa_challenges(
        factor_id uuid not null,
        created_at timestamptz not null,
        verified_at timestamptz  null,
-       ip_address  inet null,
+       ip_address  inet not null,
        constraint mfa_challenges_pkey primary key (id),
        constraint mfa_challenges_auth_factor_id_fkey foreign key (factor_id) references auth.mfa_factors(id) on delete cascade
 );
