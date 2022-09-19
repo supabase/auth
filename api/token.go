@@ -543,8 +543,19 @@ func calculateAALFromClaims(oldClaims *GoTrueClaims, signInMethod string) ([]AMR
 	if oldClaims != nil && oldClaims.AuthenticationMethodReference != nil {
 		amr = oldClaims.AuthenticationMethodReference
 	}
-	entry := AMREntry{Method: signInMethod, Timestamp: time.Now().Unix()}
-	amr = append(amr, entry)
+	var entryExists bool
+	entryExists = false
+	for index, entry := range amr {
+		if entry.Method == signInMethod {
+			amr[index].Timestamp = time.Now().Unix()
+			entryExists = true
+			break
+		}
+	}
+	if !entryExists {
+		entry := AMREntry{Method: signInMethod, Timestamp: time.Now().Unix()}
+		amr = append(amr, entry)
+	}
 	aal := calculateAAL(amr)
 	return amr, aal
 }
