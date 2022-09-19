@@ -243,19 +243,19 @@ func (ts *TokenTestSuite) TestAALCalculationDoesNotDuplicateClaims() {
 		AuthenticatorAssuranceLevel: models.AAL1.String(),
 		AuthenticationMethodReference: []AMREntry{
 			{Method: models.PasswordGrant.String(), Timestamp: currentTime},
-			{Method: models.TOTP,
+			{Method: models.TOTP.String(),
 				Timestamp: currentTime,
 			},
 		},
 	}
-	amr, aal := calculateAALFromClaims(oldClaims, models.TOTP)
+	amr, aal := calculateAALFromClaims(oldClaims, models.TOTP.String())
 	expectedLength := len(oldClaims.AuthenticationMethodReference)
 	require.Equal(ts.T(), models.AAL2.String(), aal)
 	require.Equal(ts.T(), expectedLength, len(amr))
 	var found bool
 	found = false
 	for _, claim := range amr {
-		if claim.Method == models.TOTP {
+		if claim.Method == models.TOTP.String() {
 			found = true
 			require.True(ts.T(), claim.Timestamp > currentTime, "timestamp not updated")
 		}

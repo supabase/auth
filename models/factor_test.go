@@ -51,7 +51,7 @@ func (ts *FactorTestSuite) createFactor() *Factor {
 	err = ts.db.Create(user)
 	require.NoError(ts.T(), err)
 
-	factor, err := NewFactor(user, "asimplename", TOTP, FactorUnverifiedState, "topsecret")
+	factor, err := NewFactor(user, "asimplename", TOTP.String(), FactorUnverifiedState, "topsecret")
 	require.NoError(ts.T(), err)
 
 	err = ts.db.Create(factor)

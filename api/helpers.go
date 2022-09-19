@@ -264,7 +264,7 @@ func getBodyBytes(req *http.Request) ([]byte, error) {
 // Computes AAL based on list of AMR entries.
 func calculateAAL(amr []AMREntry) string {
 	for _, amrEntry := range amr {
-		if amrEntry.Method == models.TOTP {
+		if amrEntry.Method == models.TOTP.String() {
 			return models.AAL2.String()
 		}
 	}

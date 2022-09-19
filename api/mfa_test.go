@@ -43,7 +43,7 @@ func (ts *MFATestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 	// Create Factor
-	f, err := models.NewFactor(u, "test_factor", models.TOTP, models.FactorUnverifiedState, "secretkey")
+	f, err := models.NewFactor(u, "test_factor", models.TOTP.String(), models.FactorUnverifiedState, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 	// Create corresponding sessoin
@@ -63,7 +63,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		{
 			"TOTP: No issuer",
 			"john",
-			models.TOTP,
+			models.TOTP.String(),
 			"",
 			http.StatusOK,
 		},
@@ -78,14 +78,14 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		{
 			"TOTP: Factor has friendly name",
 			"bob",
-			models.TOTP,
+			models.TOTP.String(),
 			"supabase.com",
 			http.StatusOK,
 		},
 		{
 			"TOTP: Enrolling without friendly name",
 			"",
-			models.TOTP,
+			models.TOTP.String(),
 			"supabase.com",
 			http.StatusOK,
 		},

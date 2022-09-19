@@ -12,9 +12,6 @@ import (
 const FactorUnverifiedState = "unverified"
 const FactorVerifiedState = "verified"
 
-const TOTP = "TOTP"
-const Webauthn = "webauthn"
-
 type SignInMethods int
 
 const (
@@ -24,6 +21,7 @@ const (
 	AutoConfirmSignup
 	EmailVerification
 	SMSOrGeneratedLink
+	TOTP
 )
 
 func (signInMethod SignInMethods) String() string {
@@ -40,6 +38,8 @@ func (signInMethod SignInMethods) String() string {
 		return "email_verification"
 	case SMSOrGeneratedLink:
 		return "sms_or_generated_link"
+	case TOTP:
+		return "TOTP"
 	default:
 		return ""
 	}

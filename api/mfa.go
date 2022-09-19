@@ -72,7 +72,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError(err.Error())
 	}
 	factorType := params.FactorType
-	if factorType != models.TOTP {
+	if factorType != models.TOTP.String() {
 		return unprocessableEntityError("factorType needs to be TOTP")
 	}
 	if params.Issuer == "" {
@@ -131,7 +131,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:   factor.ID,
-		Type: models.TOTP,
+		Type: models.TOTP.String(),
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
 			QRCode: fmt.Sprintf("data:image/svg+xml;utf-8,%v", buf.String()),
@@ -240,7 +240,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 		}
-		token, terr = a.updateMFASessionAndClaims(ctx, tx, user, models.TOTP, models.GrantParams{
+		token, terr = a.updateMFASessionAndClaims(ctx, tx, user, models.TOTP.String(), models.GrantParams{
 			FactorID: &factor.ID,
 		})
 		if terr != nil {

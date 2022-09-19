@@ -435,7 +435,7 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 				return terr
 			}
 		}
-		if params.FactorType != "" && !(params.FactorType == models.TOTP || params.FactorType == models.Webauthn) {
+		if params.FactorType != "" && params.FactorType != models.TOTP.String() {
 			if terr := factor.UpdateFactorType(tx, params.FactorType); terr != nil {
 				return terr
 			}
