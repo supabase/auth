@@ -48,12 +48,6 @@ type ChallengeFactorResponse struct {
 	ExpiresAt int64     `json:"expires_at"`
 }
 
-type VerifyFactorResponse struct {
-}
-
-type UnenrollFactorResponse struct {
-}
-
 type UnenrollFactorParams struct {
 	Code string `json:"code"`
 }
@@ -304,5 +298,5 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{})
+	return sendJSON(w, http.StatusOK, make(map[string]string))
 }
