@@ -139,9 +139,8 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 				StandardClaims: jwt.StandardClaims{
 					Subject: u.ID.String(),
 				},
-				Role:                          "authenticated",
-				SessionId:                     s.ID.String(),
-				AuthenticationMethodReference: []AMREntry{},
+				Role:      "authenticated",
+				SessionId: s.ID.String(),
 			},
 			ExpectedError:   nil,
 			ExpectedUser:    u,
