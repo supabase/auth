@@ -128,3 +128,8 @@ func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) err
 	f.FactorType = factorType
 	return tx.UpdateOnly(f, "factor_type", "updated_at")
 }
+
+func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {
+	return updateFactorAssociatedSessions(tx, f.UserID, f.ID, AAL1.String())
+
+}

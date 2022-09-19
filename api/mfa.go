@@ -295,7 +295,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		}); err != nil {
 			return err
 		}
-		if err = models.UpdateFactorAssociatedSessions(tx, user.ID, factor.ID, models.AAL1.String()); err != nil {
+		if err = factor.DowngradeSessionsToAAL1(tx); err != nil {
 			return err
 		}
 		return nil
