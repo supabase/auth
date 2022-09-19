@@ -37,7 +37,7 @@ type Session struct {
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
 	FactorID  *uuid.UUID `json:"factor_id" db:"factor_id"`
-	AMRClaims []AMRClaim `json:"amr_claims" has_many:"amr_claims"`
+	AMRClaims []AMRClaim `json:"amr_claims,omitempty" has_many:"amr_claims"`
 	AAL       string     `json:"aal" db:"aal"`
 }
 
@@ -53,10 +53,11 @@ func NewSession(user *User, factorID *uuid.UUID) (*Session, error) {
 	}
 
 	session := &Session{
-		ID:       id,
-		UserID:   user.ID,
-		FactorID: factorID,
-		AAL:      AAL1.String(),
+		ID:        id,
+		UserID:    user.ID,
+		FactorID:  factorID,
+		AAL:       AAL1.String(),
+		AMRClaims: []AMRClaim{},
 	}
 	return session, nil
 }
@@ -94,8 +95,8 @@ func FindSessionByUserID(tx *storage.Connection, userId uuid.UUID) (*Session, er
 	return session, nil
 }
 
-func UpdateOtherFactorAssociatedSessions(tx *storage.Connection, currentSessionID, userID, factorID uuid.UUID, aal string) error {
-	return tx.RawQuery("UPDATE "+(&pop.Model{Value: Session{}}).TableName()+" set aal = ? WHERE user_id = ? AND factor_id = ? AND id != ?", aal, userID, factorID, currentSessionID).Exec()
+func UpdateFactorAssociatedSessions(tx *storage.Connection, userID, factorID uuid.UUID, aal string) error {
+	return tx.RawQuery("UPDATE "+(&pop.Model{Value: Session{}}).TableName()+" set aal = ? WHERE user_id = ? AND factor_id = ?", aal, userID, factorID).Exec()
 }
 
 func InvalidateSessionsWithAALLessThan(tx *storage.Connection, userID uuid.UUID, level string) error {
