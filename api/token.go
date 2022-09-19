@@ -657,12 +657,8 @@ func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Conne
 		if terr != nil {
 			return terr
 		}
-
 		_, aal := calculateAALFromClaims(currentClaims, signInMethod)
-		if err := session.UpdateAAL(tx, aal); err != nil {
-			return err
-		}
-		if err := session.UpdateAssociatedFactor(tx, grantParams.FactorID); err != nil {
+		if err := session.UpdateAssociatedFactorAndAAL(tx, grantParams.FactorID, aal); err != nil {
 			return err
 		}
 
@@ -678,7 +674,7 @@ func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Conne
 	return &AccessTokenResponse{
 		Token:        tokenString,
 		TokenType:    "bearer",
-		ExpiresIn:    int(currentClaims.StandardClaims.ExpiresAt),
+		ExpiresIn:    int(currentClaims.StandardClaims.ExpiresAt - time.Now().Unix()),
 		RefreshToken: refreshToken.Token,
 		User:         user,
 	}, nil
