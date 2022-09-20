@@ -120,7 +120,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			user, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			ts.Require().NoError(err)
 
-			token, err := generateAccessToken(user, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
+			token, err := generateAccessToken(ts.API.db, user, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
@@ -149,7 +149,7 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 	f, err := models.FindFactorByFriendlyName(ts.API.db, "test_factor")
 	require.NoError(ts.T(), err)
 
-	token, err := generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
+	token, err := generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err, "Error generating access token")
 
 	var buffer bytes.Buffer
@@ -210,7 +210,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			ts.Require().NoError(err)
 			var buffer bytes.Buffer
 
-			token, err := generateAccessToken(user, r.SessionId, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, models.PasswordGrant.String())
+			token, err := generateAccessToken(ts.API.db, user, r.SessionId, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
@@ -299,7 +299,7 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 
 			var buffer bytes.Buffer
 
-			token, err := generateAccessToken(u, &s.ID, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
+			token, err := generateAccessToken(ts.API.db, u, &s.ID, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
 
 			code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
