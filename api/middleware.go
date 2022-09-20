@@ -131,6 +131,9 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 		// skip captcha validation if authorization header contains an admin role
 		return ctx, nil
 	}
+	if shouldIgnore := isIgnoreCaptchaRoute(req); shouldIgnore {
+		return ctx, nil
+	}
 	if config.Security.Captcha.Provider != "hcaptcha" {
 		logrus.WithField("provider", config.Security.Captcha.Provider).Warn("Unsupported captcha provider")
 		return nil, internalServerError("server misconfigured")
@@ -154,4 +157,12 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 		return nil, internalServerError("")
 	}
 	return ctx, nil
+}
+
+func isIgnoreCaptchaRoute(req *http.Request) bool {
+	// captcha shouldn't be enabled on requests to refresh the token
+	if req.URL.Path == "/token" && req.FormValue("grant_type") == "refresh_token" {
+		return true
+	}
+	return false
 }
