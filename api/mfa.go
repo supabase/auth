@@ -198,11 +198,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Challenge is not valid")
 	}
 
-	valid := totp.Validate(params.Code, factor.TOTPSecret)
-	if !valid {
-		return unauthorizedError("Invalid TOTP code entered")
-	}
-
 	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
 	if hasExpired {
 		err := a.db.Transaction(func(tx *storage.Connection) error {
@@ -217,6 +212,11 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return badRequestError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
 	}
+
+	if valid := totp.Validate(params.Code, factor.TOTPSecret); !valid {
+		return unauthorizedError("Invalid TOTP code entered")
+	}
+
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
