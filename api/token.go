@@ -632,7 +632,6 @@ func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Conne
 		if terr != nil {
 			return terr
 		}
-		// TODO(Joel): Refactor this to be a single function
 		aal, _ := session.CalculateAALAndAMR()
 		if err := session.UpdateAssociatedFactorAndAAL(tx, grantParams.FactorID, aal); err != nil {
 			return err

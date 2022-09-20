@@ -237,32 +237,6 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
 	}
 }
 
-// func (ts *TokenTestSuite) TestAALCalculationDoesNotDuplicateClaims() {
-// 	currentTime := time.Now().Unix() - 100000
-// 	oldClaims := &GoTrueClaims{
-// 		AuthenticatorAssuranceLevel: models.AAL1.String(),
-// 		AuthenticationMethodReference: []AMREntry{
-// 			{Method: models.PasswordGrant.String(), Timestamp: currentTime},
-// 			{Method: models.TOTP.String(),
-// 				Timestamp: currentTime,
-// 			},
-// 		},
-// 	}
-// 	amr, aal := calculateAALFromClaims(oldClaims, models.TOTP.String())
-// 	expectedLength := len(oldClaims.AuthenticationMethodReference)
-// 	require.Equal(ts.T(), models.AAL2.String(), aal)
-// 	require.Equal(ts.T(), expectedLength, len(amr))
-// 	var found bool
-// 	found = false
-// 	for _, claim := range amr {
-// 		if claim.Method == models.TOTP.String() {
-// 			found = true
-// 			require.True(ts.T(), claim.Timestamp > currentTime, "timestamp not updated")
-// 		}
-// 	}
-// 	require.True(ts.T(), found, "Element was not found")
-// }
-
 func (ts *TokenTestSuite) createBannedUser() *models.User {
 	u, err := models.NewUser("", "banned@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
