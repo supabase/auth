@@ -20,7 +20,7 @@ const (
 	PasswordGrant
 	AutoConfirmSignup
 	EmailVerification
-	SMSOrGeneratedLink
+	SMSOrEmailOTP
 	TOTP
 )
 
@@ -36,8 +36,8 @@ func (signInMethod SignInMethods) String() string {
 		return "autoconfirm"
 	case EmailVerification:
 		return "email_verification"
-	case SMSOrGeneratedLink:
-		return "sms_or_generated_link"
+	case SMSOrEmailOTP:
+		return "sms_or_email_otp"
 	case TOTP:
 		return "TOTP"
 	default:

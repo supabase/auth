@@ -565,7 +565,6 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 }
 
 func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod string, grantParams models.GrantParams) (*AccessTokenResponse, error) {
-
 	config := a.config
 	now := time.Now()
 	user.LastSignInAt = &now
@@ -610,6 +609,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 }
 
 func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod string, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+	// TODO(Joel): Refactor this
 	config := a.config
 	var tokenString string
 	var refreshToken *models.RefreshToken
