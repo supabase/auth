@@ -1,6 +1,6 @@
 .PHONY: all build deps dev-deps image migrate test vet sec format unused
 CHECK_FILES?=./...
-FLAGS?=-ldflags "-X github.com/netlify/gotrue/utilities.Version=`git describe --tags`"
+FLAGS?=-ldflags "-X github.com/netlify/gotrue/utilities.Version=`git describe --tags`" -buildvcs=false
 DEV_DOCKER_COMPOSE:=docker-compose-dev.yml
 
 help: ## Show this help.
