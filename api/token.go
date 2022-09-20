@@ -639,10 +639,9 @@ func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Conne
 	var refreshToken *models.RefreshToken
 	currentClaims := getClaims(ctx)
 	err := conn.Transaction(func(tx *storage.Connection) error {
-		var terr error
-		sessionId, err := uuid.FromString(currentClaims.SessionId)
-		if err != nil {
-			return internalServerError("Cannot read SessionId claim as UUID")
+		sessionId, terr := uuid.FromString(currentClaims.SessionId)
+		if terr != nil {
+			return internalServerError("Cannot read SessionId claim as UUID").WithInternalError(terr)
 		}
 		refreshToken, terr = models.FindTokenBySessionID(tx, &sessionId)
 		if terr != nil {
