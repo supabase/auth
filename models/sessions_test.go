@@ -6,6 +6,7 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"time"
 )
 
 type SessionsTestSuite struct {
@@ -34,7 +35,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	err = AddClaimToSession(ts.db, session, PasswordGrant.String())
 	require.NoError(ts.T(), err)
 
-	// firstClaimAddedTime := time.Now().Unix()
+	firstClaimAddedTime := time.Now().Unix()
 	err = AddClaimToSession(ts.db, session, TOTP.String())
 	require.NoError(ts.T(), err)
 
@@ -50,6 +51,13 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 
 	require.Equal(ts.T(), AAL2.String(), aal)
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
-	// require.True(ts.T(), firstClaimAddedTime <)
+	found := false
+	for _, claim := range session.AMRClaims {
+		if claim.SignInMethod == TOTP.String() {
+			require.True(ts.T(), firstClaimAddedTime < claim.UpdatedAt.Unix())
+			found = true
+		}
+	}
+	require.True(ts.T(), found)
 
 }
