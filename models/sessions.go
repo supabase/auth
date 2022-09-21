@@ -127,10 +127,10 @@ func (s *Session) UpdateAssociatedFactorAndAAL(tx *storage.Connection, factorID 
 func (s *Session) CalculateAALAndAMR() (aal string, amr []AMREntry) {
 	amr, aal = []AMREntry{}, AAL1.String()
 	for _, claim := range s.AMRClaims {
-		if claim.SignInMethod == TOTP.String() {
+		if claim.AuthenticationMethod == TOTP.String() {
 			aal = AAL2.String()
 		}
-		amr = append(amr, AMREntry{Method: claim.SignInMethod, Timestamp: claim.UpdatedAt.Unix()})
+		amr = append(amr, AMREntry{Method: claim.AuthenticationMethod, Timestamp: claim.UpdatedAt.Unix()})
 
 	}
 	return aal, amr

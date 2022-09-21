@@ -46,8 +46,8 @@ create table if not exists auth.mfa_amr_claims(
     session_id uuid not null,
     created_at timestamptz not null,
     updated_at timestamptz not null,
-    sign_in_method text not null,
-    constraint mfa_amr_claims_session_id_sign_in_method_pkey unique(session_id, sign_in_method),
+    authentication_method text not null,
+    constraint mfa_amr_claims_session_id_authentication_method_pkey unique(session_id, authentication_method),
     constraint mfa_amr_claims_session_id_fkey foreign key(session_id) references auth.sessions(id) on delete cascade
 );
 comment on table auth.mfa_amr_claims is 'auth: stores authenticator method reference claims for multi factor authentication';

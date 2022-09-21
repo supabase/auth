@@ -12,10 +12,10 @@ import (
 const FactorUnverifiedState = "unverified"
 const FactorVerifiedState = "verified"
 
-type SignInMethods int
+type AuthenticationMethod int
 
 const (
-	OAuth SignInMethods = iota
+	OAuth AuthenticationMethod = iota
 	OAuthIDGrant
 	PasswordGrant
 	AutoConfirmSignup
@@ -24,8 +24,8 @@ const (
 	TOTP
 )
 
-func (signInMethod SignInMethods) String() string {
-	switch signInMethod {
+func (authMethod AuthenticationMethod) String() string {
+	switch authMethod {
 	case OAuth:
 		return "oauth"
 	case OAuthIDGrant:
