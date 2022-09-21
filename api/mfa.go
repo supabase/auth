@@ -214,7 +214,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if valid := totp.Validate(params.Code, factor.TOTPSecret); !valid {
-		return unauthorizedError("Invalid TOTP code entered")
+		return badRequestError("Invalid TOTP code entered")
 	}
 
 	var token *AccessTokenResponse
