@@ -30,6 +30,15 @@ type GenerateLinkParams struct {
 	RedirectTo string                 `json:"redirect_to"`
 }
 
+type GenerateLinkResponse struct {
+	models.User
+	ActionLink       string `json:"action_link"`
+	EmailOtp         string `json:"email_otp"`
+	HashedToken      string `json:"hashed_token"`
+	VerificationType string `json:"verification_type"`
+	RedirectTo       string `json:"redirect_to"`
+}
+
 func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -186,19 +195,14 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	resp := make(map[string]interface{})
-	u, err := json.Marshal(user)
-	if err != nil {
-		return internalServerError("User serialization error").WithInternalError(err)
+	resp := GenerateLinkResponse{
+		User:             *user,
+		ActionLink:       url,
+		EmailOtp:         otp,
+		HashedToken:      hashedToken,
+		VerificationType: params.Type,
+		RedirectTo:       referrer,
 	}
-	if err = json.Unmarshal(u, &resp); err != nil {
-		return internalServerError("User serialization error").WithInternalError(err)
-	}
-	resp["action_link"] = url
-	resp["email_otp"] = otp
-	resp["hashed_token"] = hashedToken
-	resp["verification_type"] = params.Type
-	resp["redirect_to"] = referrer
 
 	return sendJSON(w, http.StatusOK, resp)
 }
