@@ -60,7 +60,7 @@
         "operationId": "admin-get-user",
         "parameters": [
           {
-            "description": "the user's id",
+            "description": "The user's id",
             "name": "user_id",
             "in": "path",
             "required": true
@@ -88,7 +88,7 @@
         "operationId": "admin-update-user",
         "parameters": [
           {
-            "description": "the user's id",
+            "description": "The user's id",
             "name": "user_id",
             "in": "path",
             "required": true
@@ -116,7 +116,7 @@
         "operationId": "admin-delete-user",
         "parameters": [
           {
-            "description": "the user's id",
+            "description": "The user's id",
             "name": "user_id",
             "in": "path",
             "required": true
@@ -1283,6 +1283,13 @@
       "schema": {
         "$ref": "#/definitions/User"
       }
+    }
+  },
+  "securityDefinitions": {
+    "bearer": {
+      "type": "apiKey",
+      "name": "Authentication",
+      "in": "header"
     }
   }
 }
