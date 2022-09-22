@@ -53,7 +53,7 @@ type JWTConfiguration struct {
 
 type APIConfiguration struct {
 	Host            string
-	Port            int `envconfig:"PORT" default:"8081"`
+	Port            string `envconfig:"PORT" default:"8081"`
 	Endpoint        string
 	RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
 	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
