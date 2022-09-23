@@ -49,7 +49,7 @@ func (ts *MFATestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 	// Create Factor
-	f, err := models.NewFactor(u, "test_factor", models.TOTP.String(), models.FactorUnverifiedState, "secretkey")
+	f, err := models.NewFactor(u, "test_factor", models.TOTP, models.FactorUnverifiedState, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 	// Create corresponding sessoin

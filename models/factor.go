@@ -45,6 +45,23 @@ func (authMethod AuthenticationMethod) String() string {
 	}
 }
 
+var (
+	authenticationMethodMap = map[string]AuthenticationMethod{
+		"oauth":              OAuth,
+		"oauth_id":           OAuthIDGrant,
+		"password":           PasswordGrant,
+		"autoconfirm":        AutoConfirmSignup,
+		"email_verification": EmailVerification,
+		"sms_or_email_otp":   SMSOrEmailOTP,
+		"TOTP":               TOTP,
+	}
+)
+
+func ParseAuthenticationMethod(str string) (AuthenticationMethod, bool) {
+	auth, ok := authenticationMethodMap[str]
+	return auth, ok
+}
+
 type Factor struct {
 	ID           uuid.UUID `json:"id" db:"id"`
 	User         User      `json:"-" belongs_to:"user"`
@@ -62,7 +79,7 @@ func (Factor) TableName() string {
 	return tableName
 }
 
-func NewFactor(user *User, friendlyName, factorType, status, totpSecret string) (*Factor, error) {
+func NewFactor(user *User, friendlyName string, factorType AuthenticationMethod, status, totpSecret string) (*Factor, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -73,7 +90,7 @@ func NewFactor(user *User, friendlyName, factorType, status, totpSecret string) 
 		Status:       status,
 		FriendlyName: friendlyName,
 		TOTPSecret:   totpSecret,
-		FactorType:   factorType,
+		FactorType:   factorType.String(),
 	}
 	return factor, nil
 }

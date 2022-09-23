@@ -65,10 +65,11 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return badRequestError(err.Error())
 	}
-	factorType := params.FactorType
-	if factorType != models.TOTP.String() {
+	factorType, validAuthType := models.ParseAuthenticationMethod(params.FactorType)
+	if !validAuthType {
 		return unprocessableEntityError("factorType needs to be TOTP")
 	}
+
 	if params.Issuer == "" {
 		u, err := url.Parse(config.SiteURL)
 		if err != nil {
@@ -106,7 +107,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	s.End()
 
-	factor, terr := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorUnverifiedState, key.Secret())
+	factor, terr := models.NewFactor(user, params.FriendlyName, factorType, models.FactorUnverifiedState, key.Secret())
 	if terr != nil {
 		return internalServerError("database error creating factor").WithInternalError(err)
 	}
