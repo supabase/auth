@@ -604,6 +604,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		if terr != nil {
 			return terr
 		}
+
 		if isMFASignInMethod {
 			if err := session.UpdateAssociatedFactor(tx, grantParams.FactorID); err != nil {
 				return err

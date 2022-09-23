@@ -53,10 +53,11 @@ func NewSession(user *User, factorID *uuid.UUID) (*Session, error) {
 	}
 
 	session := &Session{
-		ID:       id,
-		UserID:   user.ID,
-		FactorID: factorID,
-		AAL:      AAL1.String(),
+		ID:        id,
+		UserID:    user.ID,
+		FactorID:  factorID,
+		AAL:       AAL1.String(),
+		AMRClaims: []AMRClaim{},
 	}
 	return session, nil
 }
