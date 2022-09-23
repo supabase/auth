@@ -45,7 +45,6 @@ func (authMethod AuthenticationMethod) String() string {
 	}
 }
 
-
 type Factor struct {
 	ID           uuid.UUID `json:"id" db:"id"`
 	User         User      `json:"-" belongs_to:"user"`
