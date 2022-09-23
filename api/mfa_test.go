@@ -15,6 +15,7 @@ import (
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/utilities"
 	"github.com/pquerna/otp"
+
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
