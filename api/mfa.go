@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"fmt"
+	"net/url"
+
 	"github.com/aaronarduino/goqrsvg"
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
@@ -16,7 +18,6 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/utilities"
 	"github.com/pquerna/otp/totp"
-	"net/url"
 )
 
 type EnrollFactorParams struct {
@@ -45,12 +46,6 @@ type VerifyFactorParams struct {
 type ChallengeFactorResponse struct {
 	ID        uuid.UUID `json:"id"`
 	ExpiresAt int64     `json:"expires_at"`
-}
-
-type VerifyFactorResponse struct {
-}
-
-type UnenrollFactorResponse struct {
 }
 
 type UnenrollFactorParams struct {
@@ -87,11 +82,11 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	// Read from DB for certainty
 	factors, err := models.FindVerifiedFactorsByUser(a.db, user)
 	if err != nil {
-		return internalServerError("Error validating number of factors in system")
+		return internalServerError("error validating number of factors in system").WithInternalError(err)
 	}
 	// Remove this at v2
 	if len(factors) >= 1 {
-		return forbiddenError("Only one factor can be enrolled at a time, please unenroll to continue")
+		return forbiddenError("only one factor can be enrolled at a time, please unenroll to continue")
 	}
 
 	key, err := totp.Generate(totp.GenerateOpts{
@@ -99,22 +94,21 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		AccountName: user.GetEmail(),
 	})
 	if err != nil {
-		return internalServerError("Error generating QR Code secret key").WithInternalError(err)
+		return internalServerError("error generating QR Code secret key").WithInternalError(err)
 	}
 	var buf bytes.Buffer
 	s := svg.New(&buf)
 	qrCode, _ := qr.Encode(key.String(), qr.M, qr.Auto)
 	qs := goqrsvg.NewQrSVG(qrCode, DefaultQRSize)
 	qs.StartQrSVG(s)
-	err = qs.WriteQrSVG(s)
-	if err != nil {
-		return internalServerError("Error writing to QR Code").WithInternalError(err)
+	if err = qs.WriteQrSVG(s); err != nil {
+		return internalServerError("error writing to QR Code").WithInternalError(err)
 	}
 	s.End()
 
 	factor, terr := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorUnverifiedState, key.Secret())
 	if terr != nil {
-		return internalServerError("Database error creating factor").WithInternalError(err)
+		return internalServerError("database error creating factor").WithInternalError(err)
 	}
 	terr = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr = tx.Create(factor); terr != nil {
@@ -204,11 +198,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Challenge is not valid")
 	}
 
-	valid := totp.Validate(params.Code, factor.TOTPSecret)
-	if !valid {
-		return unauthorizedError("Invalid TOTP code entered")
-	}
-
 	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
 	if hasExpired {
 		err := a.db.Transaction(func(tx *storage.Connection) error {
@@ -223,6 +212,11 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return badRequestError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
 	}
+
+	if valid := totp.Validate(params.Code, factor.TOTPSecret); !valid {
+		return badRequestError("Invalid TOTP code entered")
+	}
+
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -249,7 +243,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
 			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
-		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, "aal2"); terr != nil {
+		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
 			return internalServerError("Failed to update sessions. %s", terr)
 		}
 		return nil
@@ -304,5 +298,5 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{})
+	return sendJSON(w, http.StatusOK, make(map[string]string))
 }

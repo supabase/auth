@@ -12,7 +12,6 @@ const FactorUnverifiedState = "unverified"
 const FactorVerifiedState = "verified"
 
 const TOTP = "TOTP"
-const Webauthn = "webauthn"
 
 type Factor struct {
 	ID           uuid.UUID `json:"id" db:"id"`
