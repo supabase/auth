@@ -12,10 +12,10 @@ import (
 
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/utilities"
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/netlify/gotrue/utilities"
 )
 
 type MFATestSuite struct {
@@ -212,6 +212,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 				require.NoError(ts.T(), err, "Error updating new test challenge")
 			}
 
+
 			code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
 			if !v.validCode {
 				// Use an inaccurate time, resulting in an invalid code(usually)
@@ -222,6 +223,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 				"challenge_id": c.ID,
 				"code":         code,
 			}))
+
 
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), v.expectedHTTPCode, w.Code)
