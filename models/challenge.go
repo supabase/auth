@@ -12,7 +12,7 @@ type Challenge struct {
 	ID         uuid.UUID  `json:"challenge_id" db:"id"`
 	FactorID   uuid.UUID  `json:"factor_id" db:"factor_id"`
 	CreatedAt  time.Time  `json:"created_at" db:"created_at"`
-	VerifiedAt *time.Time `json:"verified_at" db:"verified_at"`
+	VerifiedAt *time.Time `json:"verified_at,omitempty" db:"verified_at"`
 	IPAddress  string     `json:"ip_address" db:"ip_address"`
 }
 
@@ -29,8 +29,8 @@ func NewChallenge(factor *Factor, ipAddress string) (*Challenge, error) {
 		return nil, errors.Wrap(err, "Error generating unique id")
 	}
 	challenge := &Challenge{
-		ID:       id,
-		FactorID: factor.ID,
+		ID:        id,
+		FactorID:  factor.ID,
 		IPAddress: ipAddress,
 	}
 	return challenge, nil

@@ -48,12 +48,6 @@ type ChallengeFactorResponse struct {
 	ExpiresAt int64     `json:"expires_at"`
 }
 
-type VerifyFactorResponse struct {
-}
-
-type UnenrollFactorResponse struct {
-}
-
 type UnenrollFactorParams struct {
 	Code string `json:"code"`
 }
@@ -204,11 +198,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Challenge is not valid")
 	}
 
-	valid := totp.Validate(params.Code, factor.TOTPSecret)
-	if !valid {
-		return unauthorizedError("Invalid TOTP code entered")
-	}
-
 	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
 	if hasExpired {
 		err := a.db.Transaction(func(tx *storage.Connection) error {
@@ -223,6 +212,11 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return badRequestError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
 	}
+
+	if valid := totp.Validate(params.Code, factor.TOTPSecret); !valid {
+		return badRequestError("Invalid TOTP code entered")
+	}
+
 	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -249,7 +243,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
 			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
-		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, "aal2"); terr != nil {
+		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
 			return internalServerError("Failed to update sessions. %s", terr)
 		}
 		return nil
@@ -304,5 +298,5 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{})
+	return sendJSON(w, http.StatusOK, make(map[string]string))
 }
