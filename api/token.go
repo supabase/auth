@@ -609,7 +609,6 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 }
 
 func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod string, grantParams models.GrantParams) (*AccessTokenResponse, error) {
-	// TODO(Joel): Refactor this
 	config := a.config
 	var tokenString string
 	var refreshToken *models.RefreshToken
@@ -629,6 +628,10 @@ func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Conne
 			return terr
 		}
 		terr = models.AddClaimToSession(tx, session, authenticationMethod)
+		if terr != nil {
+			return terr
+		}
+		session, terr = models.FindSessionById(tx, sessionId)
 		if terr != nil {
 			return terr
 		}

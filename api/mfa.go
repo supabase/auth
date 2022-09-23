@@ -234,6 +234,10 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 		}
+		user, terr = models.FindUserByID(tx, user.ID)
+		if terr != nil {
+			return terr
+		}
 		token, terr = a.updateMFASessionAndClaims(ctx, tx, user, models.TOTP.String(), models.GrantParams{
 			FactorID: &factor.ID,
 		})
