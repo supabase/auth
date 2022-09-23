@@ -32,11 +32,11 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	session, err := CreateSession(ts.db, u, &uuid.Nil)
 	require.NoError(ts.T(), err)
 
-	err = AddClaimToSession(ts.db, session, PasswordGrant.String())
+	err = AddClaimToSession(ts.db, session, PasswordGrant)
 	require.NoError(ts.T(), err)
 
 	firstClaimAddedTime := time.Now().Unix()
-	err = AddClaimToSession(ts.db, session, TOTP.String())
+	err = AddClaimToSession(ts.db, session, TOTP)
 	require.NoError(ts.T(), err)
 
 	aal, amr := session.CalculateAALAndAMR()
@@ -44,7 +44,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	require.Equal(ts.T(), AAL2.String(), aal)
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
 
-	err = AddClaimToSession(ts.db, session, TOTP.String())
+	err = AddClaimToSession(ts.db, session, TOTP)
 	require.NoError(ts.T(), err)
 
 	aal, amr = session.CalculateAALAndAMR()

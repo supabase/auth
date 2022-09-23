@@ -222,7 +222,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant.String(), grantParams)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
 		if terr != nil {
 			return terr
 		}
@@ -512,7 +512,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuthIDGrant.String(), grantParams)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuthIDGrant, grantParams)
 
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
@@ -564,7 +564,7 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 	return token.SignedString([]byte(secret))
 }
 
-func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod string, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 	config := a.config
 	now := time.Now()
 	user.LastSignInAt = &now
@@ -608,7 +608,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 	}, nil
 }
 
-func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod string, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 	config := a.config
 	var tokenString string
 	var refreshToken *models.RefreshToken
