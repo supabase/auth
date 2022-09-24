@@ -55,7 +55,11 @@ type JWTConfiguration struct {
 // MFAConfiguration holds all the MFA related Configuration
 type MFAConfiguration struct {
 	ChallengeExpiryDuration float64 `json:"challenge_expiry_duration" default:"300" split_words:"true"`
+	RateLimitChallenge      float64 `split_words:"true" default:"15"`
+ 	RateLimitEnroll         float64 `split_words:"true" default:"10"`
+ 	RateLimitVerify         float64 `split_words:"true" default:"10"`
 }
+
 type APIConfiguration struct {
 	Host            string
 	Port            int `envconfig:"PORT" default:"8081"`
