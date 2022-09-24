@@ -1,3 +1,4 @@
+//lint:file-ignore U1000 ignore go-swagger template
 package docs
 
 import "github.com/netlify/gotrue/api"
