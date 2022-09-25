@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"context"
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
@@ -19,6 +20,8 @@ import (
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/jackc/pgx/v4"
+
 )
 
 type MFATestSuite struct {
@@ -324,5 +327,121 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			}
 		})
 	}
+
+}
+
+
+// Integration Tests
+// func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
+// 	// Sign In
+	// Enroll Factor
+	// Create Challenge
+	// Verify
+	// Refresh
+// }
+
+
+// func (ts *MFATestSuite) TestSessionsDowngradedOnUnenroll() {
+// 	//signUpandVerify
+
+// }
+
+func(ts *MFATestSuite) TestAAL1SessionsDeletedOnVerify() {
+	signUpAndVerify(ts)
+
+}
+
+func signUpAndVerify(ts *MFATestSuite) {
+	// signUp
+	var buffer bytes.Buffer
+
+	encode := func() {
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email":    "test1@example.com",
+			"password": "test123",
+		}))
+	}
+
+	encode()
+
+
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	ts.API.config.Mailer.Autoconfirm = true
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	data := AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+	tok := enrollAndVerify(ts, data.User, data.Token)
+	// TODO(Joel): Refactor this
+	ctx, err := ts.API.parseJWTClaims(tok, req, w)
+	require.NoError(ts.T(), err)
+	ctx, err = ts.API.maybeLoadUserOrSession(ctx)
+	require.Equal(ts.T(), models.AAL2.String(), getSession(ctx).AAL)
+
+}
+
+func enrollAndVerify(ts *MFATestSuite, user *models.User, token string)(tok string) {
+	var buffer bytes.Buffer
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor/", user.ID), &buffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": "john", "factor_type": models.TOTP.String(), "issuer": ts.TestDomain}))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	enrollResp := EnrollFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
+	factorID := enrollResp.ID
+
+	// Challenge
+	var challengeBuffer bytes.Buffer
+	x := httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/user/%s/factor/%s/challenge", user.ID, factorID), &challengeBuffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+	ts.API.handler.ServeHTTP(x, req)
+	require.Equal(ts.T(), http.StatusOK, x.Code)
+	challengeResp := EnrollFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(x.Body).Decode(&challengeResp))
+	challengeID := challengeResp.ID
+
+	// Verify
+	var verifyBuffer bytes.Buffer
+	y := httptest.NewRecorder()
+
+	// TODO(Joel): Lookg for alternative methods
+	conn, err := pgx.Connect(context.Background(), ts.API.db.URL())
+	require.NoError(ts.T(), err)
+
+	defer conn.Close(context.Background())
+
+	var totpSecret string
+	err = conn.QueryRow(context.Background(), "select totp_secret from mfa_factors where id=$1", factorID).Scan(&totpSecret)
+	require.NoError(ts.T(), err)
+
+	code, err := totp.GenerateCode(totpSecret, time.Now().UTC())
+	require.NoError(ts.T(), err)
+
+	require.NoError(ts.T(), json.NewEncoder(&verifyBuffer).Encode(map[string]interface{}{
+				"challenge_id": challengeID,
+				"code":         code,
+			}))
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor/%s/verify", user.ID, factorID), &verifyBuffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+
+
+
+	ts.API.handler.ServeHTTP(y, req)
+	require.Equal(ts.T(), http.StatusOK, y.Code)
+	verifyResp := &AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(y.Body).Decode(&verifyResp))
+	return verifyResp.Token
 
 }
