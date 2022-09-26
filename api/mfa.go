@@ -80,13 +80,26 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Read from DB for certainty
-	factors, err := models.FindVerifiedFactorsByUser(a.db, user)
+	factors, err := models.FindFactorsByUser(a.db, user)
 	if err != nil {
 		return internalServerError("error validating number of factors in system").WithInternalError(err)
 	}
-	// Remove this at v2
-	if len(factors) >= 1 {
-		return forbiddenError("only one factor can be enrolled at a time, please unenroll to continue")
+
+	if len(factors) >= int(config.MFA.MaxEnrolledFactors) {
+		return forbiddenError("Too many enrolled factors exceeds the allowed value, please unenroll to continue")
+	}
+	numVerifiedFactors := 0
+
+	// TODO: Remove this at v2
+	for _, factor := range factors {
+		if factor.Status == models.FactorVerifiedState {
+			numVerifiedFactors += 1
+		}
+
+	}
+	if numVerifiedFactors >= 1 {
+		return forbiddenError("number of enrolled factors exceeds the allowed value, please unenroll to continue")
+
 	}
 
 	key, err := totp.Generate(totp.GenerateOpts{
