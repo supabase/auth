@@ -163,11 +163,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Route("/{user_id}", func(r *router) {
 				r.Use(api.loadUser)
 				r.Route("/factor", func(r *router) {
-					r.With(api.limitHandler(
-						tollbooth.NewLimiter(api.config.MFA.RateLimitEnroll/(60*5), &limiter.ExpirableOptions{
-							DefaultExpirationTTL: time.Hour,
-						}).SetBurst(30),
-					)).Post("/", api.EnrollFactor)
+					r.Post("/", api.EnrollFactor)
 					r.With(api.requireAuthentication).Route("/{factor_id}", func(r *router) {
 						r.Use(api.loadFactor)
 
