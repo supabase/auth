@@ -8,7 +8,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	ddtrace_ext "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/ext"
-	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/opentracer"
+	ddopentracer "gopkg.in/DataDog/dd-trace-go.v1/ddtrace/opentracer"
 )
 
 type tracingResponseWriter struct {
@@ -25,12 +25,12 @@ func (trw *tracingResponseWriter) WriteHeader(code int) {
 	trw.ResponseWriter.WriteHeader(code)
 }
 
-func tracer(next http.Handler) http.Handler {
+func opentracer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientContext, _ := opentracing.GlobalTracer().Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(r.Header))
 		span, traceCtx := opentracing.StartSpanFromContext(r.Context(), "http.handler",
 			ext.RPCServerOption(clientContext),
-			opentracer.SpanType(ddtrace_ext.AppTypeWeb),
+			ddopentracer.SpanType(ddtrace_ext.AppTypeWeb),
 		)
 		defer span.Finish()
 

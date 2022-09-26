@@ -1,11 +1,12 @@
 package cmd
 
 import (
-	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
+	"context"
 
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/observability"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 )
 
 var configFile = ""
@@ -26,7 +27,11 @@ func RootCommand() *cobra.Command {
 	return &rootCmd
 }
 
-func loadGlobalConfig() *conf.GlobalConfiguration {
+func loadGlobalConfig(ctx context.Context) *conf.GlobalConfiguration {
+	if ctx == nil {
+		panic("context must not be nil")
+	}
+
 	config, err := conf.LoadGlobal(configFile)
 	if err != nil {
 		logrus.Fatalf("Failed to load configuration: %+v", err)
@@ -36,13 +41,17 @@ func loadGlobalConfig() *conf.GlobalConfiguration {
 		logrus.WithError(err).Error("unable to configure logging")
 	}
 
-	if err := observability.ConfigureTracing(&config.Tracing); err != nil {
+	if err := observability.ConfigureTracing(ctx, &config.Tracing); err != nil {
 		logrus.WithError(err).Error("unable to configure tracing")
+	}
+
+	if err := observability.ConfigureMetrics(ctx, &config.Metrics); err != nil {
+		logrus.WithError(err).Error("unable to configure metrics")
 	}
 
 	return config
 }
 
 func execWithConfigAndArgs(cmd *cobra.Command, fn func(config *conf.GlobalConfiguration, args []string), args []string) {
-	fn(loadGlobalConfig(), args)
+	fn(loadGlobalConfig(cmd.Context()), args)
 }

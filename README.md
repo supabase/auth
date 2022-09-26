@@ -288,37 +288,108 @@ Controls what log levels are output. Choose from `panic`, `fatal`, `error`, `war
 
 If you wish logs to be written to a file, set `log_file` to a valid file path.
 
-### Opentracing
+### Observability
 
-Currently, only the Datadog tracer is supported.
+GoTrue has basic observability built in. It is able to export
+[OpenTelemetry](https://opentelemetry.io) metrics and traces to a collector.
 
-```properties
-GOTRUE_TRACING_ENABLED=true
-GOTRUE_TRACING_HOST=127.0.0.1
-GOTRUE_TRACING_PORT=8126
-GOTRUE_TRACING_TAGS="tag1:value1,tag2:value2"
-GOTRUE_SERVICE_NAME="gotrue"
+#### Tracing
+
+To enable tracing configure these variables:
+
+`GOTRUE_TRACING_ENABLED` - `boolean`
+
+`GOTRUE_TRACING_EXPORTER` - `string` only `opentracing` (deprecated) and
+`opentelemetry` supported
+
+Make sure you also configure the [OpenTelemetry
+Exporter](https://opentelemetry.io/docs/reference/specification/protocol/exporter/)
+configuration for your collector or service.
+
+For example, if you use
+[Honeycomb.io](https://docs.honeycomb.io/getting-data-in/opentelemetry/go-distro/#using-opentelemetry-without-the-honeycomb-distribution)
+you should set these standard OpenTelemetry OTLP variables:
+
+```
+OTEL_SERVICE_NAME=gotrue
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io:443
+OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=<API-KEY>,x-honeycomb-dataset=gotrue"
 ```
 
-`TRACING_ENABLED` - `bool`
+#### Metrics
 
-Whether tracing is enabled or not. Defaults to `false`.
+To enable metrics configure these variables:
 
-`TRACING_HOST` - `bool`
+`GOTRUE_METRICS_ENABLED` - `boolean`
 
-The tracing destination.
+`GOTRUE_METRICS_EXPORTER` - `string` only `opentelemetry` and `prometheus`
+supported
 
-`TRACING_PORT` - `bool`
+Make sure you also configure the [OpenTelemetry
+Exporter](https://opentelemetry.io/docs/reference/specification/protocol/exporter/)
+configuration for your collector or service.
 
-The port for the tracing host.
+If you use the `prometheus` exporter, the server host and port can be
+configured using these standard OpenTelemetry variables:
 
-`TRACING_TAGS` - `string`
+`OTEL_EXPORTER_PROMETHEUS_HOST` - IP address, default `0.0.0.0`
 
-A comma separated list of key:value pairs. These key value pairs will be added as tags to all opentracing spans.
+`OTEL_EXPORTER_PROMETHEUS_PORT` - port number, default `9100`
 
-`SERVICE_NAME` - `string`
+The metrics are exported on the `/` path on the server.
 
-The name to use for the service.
+If you use the `opentelemetry` exporter, the metrics are pushed to the
+collector.
+
+For example, if you use
+[Honeycomb.io](https://docs.honeycomb.io/getting-data-in/opentelemetry/go-distro/#using-opentelemetry-without-the-honeycomb-distribution)
+you should set these standard OpenTelemetry OTLP variables:
+
+```
+OTEL_SERVICE_NAME=gotrue
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io:443
+OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=<API-KEY>,x-honeycomb-dataset=gotrue"
+```
+
+Note that Honeycomb.io requires a paid plan to ingest metrics.
+
+If you need to debug an issue with traces or metrics not being pushed, you can
+set `DEBUG=true` to get more insights from the OpenTelemetry SDK.
+
+#### Custom resource attributes
+
+When using the OpenTelemetry tracing or metrics exporter you can define custom
+resource attributes using the [standard `OTEL_RESOURCE_ATTRIBUTES` environment
+variable](https://opentelemetry.io/docs/reference/specification/resource/sdk/#specifying-resource-information-via-an-environment-variable).
+
+A default attribute `gotrue.version` is provided containing the build version.
+
+#### Tracing HTTP routes
+
+All HTTP calls to the GoTrue API are traced. Routes use the parametrized
+version of the route, and the values for the route parameters can be found as
+the `http.route.params.<route-key>` span attribute.
+
+For example, the following request:
+
+```
+GET /admin/users/4acde936-82dc-4552-b851-831fb8ce0927/
+```
+
+will be traced as:
+
+```
+http.method = GET
+http.route = /admin/users/{user_id}
+http.route.params.user_id = 4acde936-82dc-4552-b851-831fb8ce0927
+```
+
+#### Go runtime and HTTP metrics
+
+All of the Go runtime metrics are exposed. Some HTTP metrics are also collected
+by default.
 
 ### JSON Web Tokens (JWT)
 

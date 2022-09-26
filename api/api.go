@@ -62,10 +62,20 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	logger := observability.NewStructuredLogger(logrus.StandardLogger())
 
 	r := newRouter()
-	r.UseBypass(xffmw.Handler)
 	r.Use(addRequestID(globalConfig))
+
+	if globalConfig.Tracing.Enabled {
+		switch globalConfig.Tracing.Exporter {
+		case conf.OpenTelemetryTracing:
+			r.UseBypass(observability.RequestTracing())
+
+		case conf.OpenTracing:
+			r.UseBypass(opentracer)
+		}
+	}
+
+	r.UseBypass(xffmw.Handler)
 	r.Use(recoverer)
-	r.UseBypass(tracer)
 
 	r.Get("/health", api.HealthCheck)
 
