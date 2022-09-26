@@ -331,11 +331,11 @@ Exporter](https://opentelemetry.io/docs/reference/specification/protocol/exporte
 configuration for your collector or service.
 
 If you use the `prometheus` exporter, the server host and port can be
-configured using these variables:
+configured using these standard OpenTelemetry variables:
 
-`GOTRUE_METRICS_PROMETHEUS_LISTEN_HOST` - IP address, default `0.0.0.0`
+`OTEL_EXPORTER_PROMETHEUS_HOST` - IP address, default `0.0.0.0`
 
-`GOTRUE_METRICS_PROMETHEUS_LISTEN_PORT` - port number, default `9100`
+`OTEL_EXPORTER_PROMETHEUS_PORT` - port number, default `9100`
 
 The metrics are exported on the `/` path on the server.
 
