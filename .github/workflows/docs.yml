@@ -15,10 +15,10 @@ on:
       runs-on: ubuntu-20.04
       steps:
         - name: Generate Swagger UI
-        uses: Legion2/swagger-ui-action@v1
-        with:
-          output: swagger-ui
-          spec-file: swagger.json
+          uses: Legion2/swagger-ui-action@v1
+          with:
+            output: swagger-ui
+            spec-file: swagger.json
 
         - name: Deploy to GitHub Pages
           uses: peaceiris/actions-gh-pages@v3
