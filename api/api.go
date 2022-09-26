@@ -168,11 +168,11 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 						r.Use(api.loadFactor)
 
 						r.With(api.limitHandler(
-							tollbooth.NewLimiter(api.config.MFA.RateLimitVerify/(60*5), &limiter.ExpirableOptions{
+							tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/(60*5), &limiter.ExpirableOptions{
 								DefaultExpirationTTL: time.Hour,
 							}).SetBurst(30))).Post("/verify", api.VerifyFactor)
 						r.With(api.limitHandler(
-							tollbooth.NewLimiter(api.config.MFA.RateLimitChallenge/(60*5), &limiter.ExpirableOptions{
+							tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/(60*5), &limiter.ExpirableOptions{
 								DefaultExpirationTTL: time.Hour,
 							}).SetBurst(30))).Post("/challenge", api.ChallengeFactor)
 						r.Delete("/", api.UnenrollFactor)

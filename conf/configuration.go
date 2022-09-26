@@ -54,10 +54,9 @@ type JWTConfiguration struct {
 
 // MFAConfiguration holds all the MFA related Configuration
 type MFAConfiguration struct {
-	ChallengeExpiryDuration float64 `json:"challenge_expiry_duration" default:"300" split_words:"true"`
-	RateLimitChallenge      float64 `split_words:"true" default:"15"`
-	RateLimitVerify         float64 `split_words:"true" default:"10"`
-	MaxEnrolledFactors      float64 `split_words:"true" default:"10"`
+	ChallengeExpiryDuration     float64 `json:"challenge_expiry_duration" default:"300" split_words:"true"`
+	RateLimitChallengeAndVerify float64 `split_words:"true" default:"15"`
+	MaxEnrolledFactors          float64 `split_words:"true" default:"10"`
 }
 
 type APIConfiguration struct {
