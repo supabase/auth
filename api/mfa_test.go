@@ -332,27 +332,36 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 
 
 // Integration Tests
-// func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
-// 	// Sign In
-	// Enroll Factor
-	// Create Challenge
-	// Verify
-	// Refresh
-// }
+func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
+	token := signUpAndVerify(ts)
+			ts.Config.Security.RefreshTokenRotationEnabled = true
+	var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"refresh_token": token.RefreshToken,
+			}))
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	data := &AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	requireAALLevel(ts, data, req, w, models.AAL2)
+}
 
 
-// func (ts *MFATestSuite) TestSessionsDowngradedOnUnenroll() {
-// 	//signUpandVerify
+func (ts *MFATestSuite) TestSessionsDowngradedOnUnenroll() {
 
-// }
-
-func(ts *MFATestSuite) TestAAL1SessionsDeletedOnVerify() {
-	signUpAndVerify(ts)
 
 }
 
-func signUpAndVerify(ts *MFATestSuite) {
-	// signUp
+func(ts *MFATestSuite) TestAAL1SessionsDeletedOnVerify() {
+	// signUpAndVerify(ts)
+
+}
+
+func signUpAndVerify(ts *MFATestSuite)(verifyResp *AccessTokenResponse) {
 	var buffer bytes.Buffer
 
 	encode := func() {
@@ -364,8 +373,6 @@ func signUpAndVerify(ts *MFATestSuite) {
 
 	encode()
 
-
-
 	// Setup request
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/signup", &buffer)
 	req.Header.Set("Content-Type", "application/json")
@@ -376,16 +383,14 @@ func signUpAndVerify(ts *MFATestSuite) {
 	data := AccessTokenResponse{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 
-	tok := enrollAndVerify(ts, data.User, data.Token)
-	// TODO(Joel): Refactor this
-	ctx, err := ts.API.parseJWTClaims(tok, req, w)
-	require.NoError(ts.T(), err)
-	ctx, err = ts.API.maybeLoadUserOrSession(ctx)
-	require.Equal(ts.T(), models.AAL2.String(), getSession(ctx).AAL)
+	verifyResp = enrollAndVerify(ts, data.User, data.Token)
+	requireAALLevel(ts, verifyResp, req, w, models.AAL2)
+
+	return verifyResp
 
 }
 
-func enrollAndVerify(ts *MFATestSuite, user *models.User, token string)(tok string) {
+func enrollAndVerify(ts *MFATestSuite, user *models.User, token string)(verifyResp *AccessTokenResponse) {
 	var buffer bytes.Buffer
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor/", user.ID), &buffer)
@@ -415,7 +420,6 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string)(tok stri
 	var verifyBuffer bytes.Buffer
 	y := httptest.NewRecorder()
 
-	// TODO(Joel): Lookg for alternative methods
 	conn, err := pgx.Connect(context.Background(), ts.API.db.URL())
 	require.NoError(ts.T(), err)
 
@@ -440,8 +444,15 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string)(tok stri
 
 	ts.API.handler.ServeHTTP(y, req)
 	require.Equal(ts.T(), http.StatusOK, y.Code)
-	verifyResp := &AccessTokenResponse{}
+	verifyResp = &AccessTokenResponse{}
 	require.NoError(ts.T(), json.NewDecoder(y.Body).Decode(&verifyResp))
-	return verifyResp.Token
+	return verifyResp
 
+}
+
+func requireAALLevel(ts *MFATestSuite, accessTokenResp *AccessTokenResponse, req *http.Request, w *httptest.ResponseRecorder, level models.AuthenticatorAssuranceLevel) {
+	ctx, err := ts.API.parseJWTClaims(accessTokenResp.Token, req, w)
+	require.NoError(ts.T(), err)
+	ctx, err = ts.API.maybeLoadUserOrSession(ctx)
+	require.Equal(ts.T(), level.String(), getSession(ctx).AAL)
 }
