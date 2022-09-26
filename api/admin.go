@@ -16,7 +16,7 @@ import (
 	"github.com/sethvargo/go-password/password"
 )
 
-type adminUserParams struct {
+type AdminUserParams struct {
 	Aud          string                 `json:"aud"`
 	Role         string                 `json:"role"`
 	Email        string                 `json:"email"`
@@ -27,6 +27,11 @@ type adminUserParams struct {
 	UserMetaData map[string]interface{} `json:"user_metadata"`
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	BanDuration  string                 `json:"ban_duration"`
+}
+
+type AdminListUsersResponse struct {
+	Users []*models.User `json:"users"`
+	Aud   string         `json:"aud"`
 }
 
 func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context, error) {
@@ -51,8 +56,8 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 	return withUser(ctx, u), nil
 }
 
-func (a *API) getAdminParams(r *http.Request) (*adminUserParams, error) {
-	params := adminUserParams{}
+func (a *API) getAdminParams(r *http.Request) (*AdminUserParams, error) {
+	params := AdminUserParams{}
 
 	body, err := getBodyBytes(r)
 	if err != nil {
@@ -90,9 +95,9 @@ func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 	}
 	addPaginationHeaders(w, r, pageParams)
 
-	return sendJSON(w, http.StatusOK, map[string]interface{}{
-		"users": users,
-		"aud":   aud,
+	return sendJSON(w, http.StatusOK, AdminListUsersResponse{
+		Users: users,
+		Aud:   aud,
 	})
 }
 

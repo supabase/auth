@@ -169,12 +169,18 @@ func NewAPIFromConfigFile(filename string, version string) (*API, *conf.GlobalCo
 	return NewAPIWithVersion(context.Background(), config, db, version), config, nil
 }
 
+type HealthCheckResponse struct {
+	Version     string `json:"version"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
 // HealthCheck endpoint indicates if the gotrue api service is available
 func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) error {
-	return sendJSON(w, http.StatusOK, map[string]string{
-		"version":     a.version,
-		"name":        "GoTrue",
-		"description": "GoTrue is a user registration and authentication API",
+	return sendJSON(w, http.StatusOK, HealthCheckResponse{
+		Version:     a.version,
+		Name:        "GoTrue",
+		Description: "GoTrue is a user registration and authentication API",
 	})
 }
 
