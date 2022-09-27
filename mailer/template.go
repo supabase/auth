@@ -256,6 +256,7 @@ func (m *TemplateMailer) MagicLinkMail(user *models.User, otp, referrerURL strin
 		"ConfirmationURL": url,
 		"Email":           user.Email,
 		"Token":           otp,
+		"HashedToken":     user.RecoveryToken,
 		"Data":            user.UserMetaData,
 	}
 
