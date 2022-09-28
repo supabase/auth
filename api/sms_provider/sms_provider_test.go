@@ -51,6 +51,11 @@ func TestSmsProvider(t *testing.T) {
 					ApiKey: "test_api_key",
 					Sender: "test_sender",
 				},
+				Gateway: conf.GatewayProviderConfiguration{
+					Url: "http://example.com",
+					Sender: "test_sender",
+					BearerToken: "test_bearer_token",
+				},
 			},
 		},
 	}
@@ -213,4 +218,52 @@ func (ts *SmsProviderTestSuite) TestTextLocalSendSms() {
 
 	err = textlocalProvider.SendSms(phone, message)
 	require.NoError(ts.T(), err)
+}
+
+func (ts *SmsProviderTestSuite) TestGatewaySendSms() {
+	defer gock.Off()
+	provider, err := NewGatewayProvider(ts.Config.Sms.Gateway)
+	require.NoError(ts.T(), err)
+
+	gatewayProvider, ok := provider.(*GatewayProvider)
+	require.Equal(ts.T(), true, ok)
+
+	phone := "123456789"
+	message := "This is the sms code: 123456"
+
+	body := map[string]string{
+		"recipient": phone,
+		"body":      message,
+		"sender":    gatewayProvider.Config.Sender,
+	}
+
+	cases := []struct {
+		Desc           string
+		GatewayResponse *gock.Response
+		ExpectedError  error
+	}{
+		{
+			Desc: "Successfully sent sms",
+			GatewayResponse: gock.New(gatewayProvider.Config.Url).Post("").
+				MatchHeader("Authorization", "Bearer "+gatewayProvider.Config.BearerToken).
+				MatchType("json").JSON(body).
+				Reply(200),
+			ExpectedError: nil,
+		},
+		{
+			Desc: "Non-2xx status code returned",
+			GatewayResponse: gock.New(gatewayProvider.Config.Url).Post("").
+				MatchHeader("Authorization", "Bearer "+gatewayProvider.Config.BearerToken).
+				MatchType("json").JSON(body).
+				Reply(500),
+			ExpectedError: fmt.Errorf("Unexpected response while calling the SMS gateway: %v", 500),
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.Desc, func() {
+			err = gatewayProvider.SendSms(phone, message)
+			require.Equal(ts.T(), c.ExpectedError, err)
+		})
+	}
 }
