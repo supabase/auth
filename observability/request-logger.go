@@ -1,4 +1,4 @@
-package api
+package observability
 
 import (
 	"fmt"
@@ -6,10 +6,11 @@ import (
 	"time"
 
 	chimiddleware "github.com/go-chi/chi/middleware"
+	"github.com/netlify/gotrue/utilities"
 	"github.com/sirupsen/logrus"
 )
 
-func newStructuredLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
+func NewStructuredLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
 	return chimiddleware.RequestLogger(&structuredLogger{logger})
 }
 
@@ -23,12 +24,13 @@ func (l *structuredLogger) NewLogEntry(r *http.Request) chimiddleware.LogEntry {
 		"component":   "api",
 		"method":      r.Method,
 		"path":        r.URL.Path,
-		"remote_addr": r.RemoteAddr,
+		"remote_addr": utilities.GetIPAddress(r),
 		"referer":     r.Referer(),
+		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 	}
 
-	if reqID := getRequestID(r.Context()); reqID != "" {
-		logFields["request_id"] = reqID
+	if reqID := r.Context().Value("request_id"); reqID != nil {
+		logFields["request_id"] = reqID.(string)
 	}
 
 	entry.Logger = entry.Logger.WithFields(logFields)
@@ -56,7 +58,7 @@ func (l *structuredLoggerEntry) Panic(v interface{}, stack []byte) {
 	}).Panic("unhandled request panic")
 }
 
-func getLogEntry(r *http.Request) logrus.FieldLogger {
+func GetLogEntry(r *http.Request) logrus.FieldLogger {
 	entry, _ := chimiddleware.GetLogEntry(r).(*structuredLoggerEntry)
 	if entry == nil {
 		return logrus.NewEntry(logrus.StandardLogger())
@@ -64,7 +66,7 @@ func getLogEntry(r *http.Request) logrus.FieldLogger {
 	return entry.Logger
 }
 
-func logEntrySetField(r *http.Request, key string, value interface{}) logrus.FieldLogger {
+func LogEntrySetField(r *http.Request, key string, value interface{}) logrus.FieldLogger {
 	if entry, ok := r.Context().Value(chimiddleware.LogEntryCtxKey).(*structuredLoggerEntry); ok {
 		entry.Logger = entry.Logger.WithField(key, value)
 		return entry.Logger
@@ -72,7 +74,7 @@ func logEntrySetField(r *http.Request, key string, value interface{}) logrus.Fie
 	return nil
 }
 
-func logEntrySetFields(r *http.Request, fields logrus.Fields) logrus.FieldLogger {
+func LogEntrySetFields(r *http.Request, fields logrus.Fields) logrus.FieldLogger {
 	if entry, ok := r.Context().Value(chimiddleware.LogEntryCtxKey).(*structuredLoggerEntry); ok {
 		entry.Logger = entry.Logger.WithFields(fields)
 		return entry.Logger

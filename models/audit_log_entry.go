@@ -3,9 +3,11 @@ package models
 import (
 	"bytes"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -35,7 +37,7 @@ const (
 	user    auditLogType = "user"
 )
 
-var actionLogTypeMap = map[AuditAction]auditLogType{
+var ActionLogTypeMap = map[AuditAction]auditLogType{
 	LoginAction:                     account,
 	LogoutAction:                    account,
 	InviteAcceptedAction:            account,
@@ -52,11 +54,12 @@ var actionLogTypeMap = map[AuditAction]auditLogType{
 
 // AuditLogEntry is the database model for audit log entries.
 type AuditLogEntry struct {
-	InstanceID uuid.UUID `json:"-" db:"instance_id"`
-	ID         uuid.UUID `json:"id" db:"id"`
-	Payload    JSONMap   `json:"payload" db:"payload"`
-	CreatedAt  time.Time `json:"created_at" db:"created_at"`
-	IPAddress  string    `json:"ip_address" db:"ip_address"`
+	ID        uuid.UUID `json:"id" db:"id"`
+	Payload   JSONMap   `json:"payload" db:"payload"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	IPAddress string    `json:"ip_address" db:"ip_address"`
+
+	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 }
 
 func (AuditLogEntry) TableName() string {
@@ -64,7 +67,7 @@ func (AuditLogEntry) TableName() string {
 	return tableName
 }
 
-func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User, action AuditAction, ipAddress string, traits map[string]interface{}) error {
+func NewAuditLogEntry(r *http.Request, tx *storage.Connection, actor *User, action AuditAction, ipAddress string, traits map[string]interface{}) error {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return errors.Wrap(err, "Error generating unique id")
@@ -76,18 +79,21 @@ func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User,
 		username = actor.GetPhone()
 	}
 
+	payload := map[string]interface{}{
+		"actor_id":       actor.ID,
+		"actor_username": username,
+		"action":         action,
+		"log_type":       ActionLogTypeMap[action],
+	}
 	l := AuditLogEntry{
-		InstanceID: instanceID,
-		ID:         id,
-		Payload: JSONMap{
-			"timestamp":      time.Now().UTC().Format(time.RFC3339),
-			"actor_id":       actor.ID,
-			"actor_username": username,
-			"action":         action,
-			"log_type":       actionLogTypeMap[action],
-		},
+		ID:        id,
+		Payload:   JSONMap(payload),
 		IPAddress: ipAddress,
 	}
+
+	observability.LogEntrySetFields(r, logrus.Fields{
+		"auth_event": logrus.Fields(payload),
+	})
 
 	if name, ok := actor.UserMetaData["full_name"]; ok {
 		l.Payload["actor_name"] = name
@@ -101,12 +107,11 @@ func NewAuditLogEntry(tx *storage.Connection, instanceID uuid.UUID, actor *User,
 		return errors.Wrap(err, "Database error creating audit log entry")
 	}
 
-	logrus.Infof("{\"actor_id\": %v, \"action\": %v, \"timestamp\": %v, \"log_type\": %v, \"ip_address\": %v}", actor.ID, action, l.Payload["timestamp"], actionLogTypeMap[action], ipAddress)
 	return nil
 }
 
-func FindAuditLogEntries(tx *storage.Connection, instanceID uuid.UUID, filterColumns []string, filterValue string, pageParams *Pagination) ([]*AuditLogEntry, error) {
-	q := tx.Q().Order("created_at desc").Where("instance_id = ?", instanceID)
+func FindAuditLogEntries(tx *storage.Connection, filterColumns []string, filterValue string, pageParams *Pagination) ([]*AuditLogEntry, error) {
+	q := tx.Q().Order("created_at desc").Where("instance_id = ?", uuid.Nil)
 
 	if len(filterColumns) > 0 && filterValue != "" {
 		lf := "%" + filterValue + "%"

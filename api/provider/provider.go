@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -126,9 +126,9 @@ func makeRequest(ctx context.Context, tok *oauth2.Token, g *oauth2.Config, url s
 	}
 	defer res.Body.Close()
 
-	bodyBytes, _ := ioutil.ReadAll(res.Body)
+	bodyBytes, _ := io.ReadAll(res.Body)
 	defer res.Body.Close()
-	res.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	res.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
 		return httpError(res.StatusCode, string(bodyBytes))

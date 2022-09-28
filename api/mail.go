@@ -18,30 +18,43 @@ import (
 )
 
 var (
-	MaxFrequencyLimitError error = errors.New("Frequency limit reached")
-	configFile                   = ""
+	MaxFrequencyLimitError error = errors.New("frequency limit reached")
 )
 
 type GenerateLinkParams struct {
 	Type       string                 `json:"type"`
 	Email      string                 `json:"email"`
+	NewEmail   string                 `json:"new_email"`
 	Password   string                 `json:"password"`
 	Data       map[string]interface{} `json:"data"`
 	RedirectTo string                 `json:"redirect_to"`
 }
 
+type GenerateLinkResponse struct {
+	models.User
+	ActionLink       string `json:"action_link"`
+	EmailOtp         string `json:"email_otp"`
+	HashedToken      string `json:"hashed_token"`
+	VerificationType string `json:"verification_type"`
+	RedirectTo       string `json:"redirect_to"`
+}
+
 func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	db := a.db.WithContext(ctx)
+	config := a.config
 	mailer := a.Mailer(ctx)
-	instanceID := getInstanceID(ctx)
 	adminUser := getAdminUser(ctx)
 
 	params := &GenerateLinkParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
 
-	if err := jsonDecoder.Decode(params); err != nil {
-		return badRequestError("Could not read body: %v", err)
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
+		return badRequestError("Could not parse JSON: %v", err)
 	}
 
 	if err := a.validateEmail(ctx, params.Email); err != nil {
@@ -49,16 +62,16 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			if params.Type == "magiclink" {
-				params.Type = "signup"
+			if params.Type == magicLinkVerification {
+				params.Type = signupVerification
 				params.Password, err = password.Generate(64, 10, 0, false, true)
 				if err != nil {
 					return internalServerError("error creating user").WithInternalError(err)
 				}
-			} else if params.Type == "recovery" {
+			} else if params.Type == recoveryVerification || params.Type == "email_change_current" || params.Type == "email_change_new" {
 				return notFoundError(err.Error())
 			}
 		} else {
@@ -74,17 +87,17 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	hashedToken := fmt.Sprintf("%x", sha256.Sum224([]byte(params.Email+otp)))
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
-		case "magiclink", "recovery":
-			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
+		case magicLinkVerification, recoveryVerification:
+			if terr = models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
 			}
 			user.RecoveryToken = hashedToken
 			user.RecoverySentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
-		case "invite":
+		case inviteVerification:
 			if user != nil {
 				if user.IsConfirmed() {
 					return unprocessableEntityError(DuplicateEmailMsg)
@@ -101,7 +114,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			}
-			if terr = models.NewAuditLogEntry(tx, instanceID, adminUser, models.UserInvitedAction, "", map[string]interface{}{
+			if terr = models.NewAuditLogEntry(r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
 				"user_id":    user.ID,
 				"user_email": user.Email,
 			}); terr != nil {
@@ -111,7 +124,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			user.ConfirmationSentAt = &now
 			user.InvitedAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at", "invited_at"), "Database error updating user for invite")
-		case "signup":
+		case signupVerification:
 			if user != nil {
 				if user.IsConfirmed() {
 					return unprocessableEntityError(DuplicateEmailMsg)
@@ -141,6 +154,28 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			user.ConfirmationToken = hashedToken
 			user.ConfirmationSentAt = &now
 			terr = errors.Wrap(tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at"), "Database error updating user for confirmation")
+		case "email_change_current", "email_change_new":
+			if !config.Mailer.SecureEmailChangeEnabled && params.Type == "email_change_current" {
+				return unprocessableEntityError("Enable secure email change to generate link for current email")
+			}
+			if terr := a.validateEmail(ctx, params.NewEmail); terr != nil {
+				return unprocessableEntityError("The new email address provided is invalid")
+			}
+			if exists, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud); terr != nil {
+				return internalServerError("Database error checking email").WithInternalError(terr)
+			} else if exists {
+				return unprocessableEntityError(DuplicateEmailMsg)
+			}
+			now := time.Now()
+			user.EmailChangeSentAt = &now
+			user.EmailChange = params.NewEmail
+			user.EmailChangeConfirmStatus = zeroConfirmation
+			if params.Type == "email_change_current" {
+				user.EmailChangeTokenCurrent = hashedToken
+			} else if params.Type == "email_change_new" {
+				user.EmailChangeTokenNew = fmt.Sprintf("%x", sha256.Sum224([]byte(params.NewEmail+otp)))
+			}
+			terr = errors.Wrap(tx.UpdateOnly(user, "email_change_token_current", "email_change_token_new", "email_change", "email_change_sent_at", "email_change_confirm_status"), "Database error updating user for email change")
 		default:
 			return badRequestError("Invalid email action link type requested: %v", params.Type)
 		}
@@ -160,19 +195,14 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	resp := make(map[string]interface{})
-	u, err := json.Marshal(user)
-	if err != nil {
-		return internalServerError("User serialization error").WithInternalError(err)
+	resp := GenerateLinkResponse{
+		User:             *user,
+		ActionLink:       url,
+		EmailOtp:         otp,
+		HashedToken:      hashedToken,
+		VerificationType: params.Type,
+		RedirectTo:       referrer,
 	}
-	if err = json.Unmarshal(u, &resp); err != nil {
-		return internalServerError("User serialization error").WithInternalError(err)
-	}
-	resp["action_link"] = url
-	resp["email_otp"] = otp
-	resp["hashed_token"] = hashedToken
-	resp["verification_type"] = params.Type
-	resp["redirect_to"] = referrer
 
 	return sendJSON(w, http.StatusOK, resp)
 }
@@ -283,7 +313,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(tx *storage.Connection, config *conf.Configuration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int) error {
+func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int) error {
 	var err error
 	otpNew, err := crypto.GenerateOtp(otpLength)
 	if err != nil {

@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/assert"
@@ -23,9 +22,7 @@ import (
 type PhoneTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.Configuration
-
-	instanceID uuid.UUID
+	Config *conf.GlobalConfiguration
 }
 
 type TestSmsProvider struct {
@@ -37,13 +34,12 @@ func (t *TestSmsProvider) SendSms(phone string, message string) error {
 }
 
 func TestPhone(t *testing.T) {
-	api, config, instanceID, err := setupAPIForTestForInstance()
+	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	ts := &PhoneTestSuite{
-		API:        api,
-		Config:     config,
-		instanceID: instanceID,
+		API:    api,
+		Config: config,
 	}
 	defer api.db.Close()
 
@@ -54,7 +50,7 @@ func (ts *PhoneTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
 	// Create user
-	u, err := models.NewUser(ts.instanceID, "123456789", "", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("123456789", "", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }
@@ -70,10 +66,9 @@ func (ts *PhoneTestSuite) TestFormatPhoneNumber() {
 }
 
 func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
-	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "123456789", ts.Config.JWT.Aud)
+	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	ctx, err := WithInstanceConfig(context.Background(), ts.Config, ts.instanceID)
-	require.NoError(ts.T(), err)
+	ctx := context.Background()
 	cases := []struct {
 		desc     string
 		otpType  string
@@ -105,7 +100,7 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 		ts.Run(c.desc, func() {
 			err = ts.API.sendPhoneConfirmation(ctx, ts.API.db, u, "123456789", c.otpType, &TestSmsProvider{})
 			require.Equal(ts.T(), c.expected, err)
-			u, err = models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "123456789", ts.Config.JWT.Aud)
+			u, err = models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
 			switch c.otpType {
@@ -125,13 +120,13 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 }
 
 func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
-	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "123456789", ts.Config.JWT.Aud)
+	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	now := time.Now()
 	u.PhoneConfirmedAt = &now
 	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	token, err := generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
 
 	cases := []struct {

@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 
@@ -19,7 +19,7 @@ const (
 	defaultTwitterAPIBase = "api.twitter.com"
 	requestURL            = "/oauth/request_token"
 	authenticateURL       = "/oauth/authenticate"
-	tokenURL              = "/oauth/access_token"
+	tokenURL              = "/oauth/access_token" //#nosec G101 -- Not a secret value.
 	endpointProfile       = "/1.1/account/verify_credentials.json"
 )
 
@@ -84,14 +84,14 @@ func (t TwitterProvider) FetchUserData(ctx context.Context, tok *oauth.AccessTok
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return &UserProvidedData{}, fmt.Errorf("a %v error occurred with retrieving user from twitter", resp.StatusCode)
 	}
-	bits, err := ioutil.ReadAll(resp.Body)
+	bits, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
-	err = json.NewDecoder(bytes.NewReader(bits)).Decode(&u)
+	_ = json.NewDecoder(bytes.NewReader(bits)).Decode(&u)
 
 	if u.Email == "" {
-		return nil, errors.New("Unable to find email with Twitter provider")
+		return nil, errors.New("unable to find email with Twitter provider")
 	}
 
 	data := &UserProvidedData{

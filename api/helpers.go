@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptrace"
@@ -13,7 +15,6 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -49,39 +50,16 @@ func sendJSON(w http.ResponseWriter, status int, obj interface{}) error {
 	return err
 }
 
-func getUserFromClaims(ctx context.Context, conn *storage.Connection) (*models.User, error) {
-	claims := getClaims(ctx)
-	if claims == nil {
-		return nil, errors.New("Invalid token")
-	}
-
-	if claims.Subject == "" {
-		return nil, errors.New("Invalid claim: id")
-	}
-
-	// System User
-	instanceID := getInstanceID(ctx)
-
-	if claims.Subject == models.SystemUserUUID.String() || claims.Subject == models.SystemUserID {
-		return models.NewSystemUser(instanceID, claims.Audience), nil
-	}
-	userID, err := uuid.FromString(claims.Subject)
-	if err != nil {
-		return nil, errors.New("Invalid user ID")
-	}
-	return models.FindUserByInstanceIDAndID(conn, instanceID, userID)
-}
-
 func (a *API) isAdmin(ctx context.Context, u *models.User, aud string) bool {
-	config := a.getConfig(ctx)
+	config := a.config
 	if aud == "" {
 		aud = config.JWT.Aud
 	}
-	return u.IsSuperAdmin || (aud == u.Aud && u.HasRole(config.JWT.AdminGroupName))
+	return aud == u.Aud && u.HasRole(config.JWT.AdminGroupName)
 }
 
 func (a *API) requestAud(ctx context.Context, r *http.Request) string {
-	config := a.getConfig(ctx)
+	config := a.config
 	// First check for an audience in the header
 	if aud := r.Header.Get(audHeaderName); aud != "" {
 		return aud
@@ -111,7 +89,7 @@ func getRedirectTo(r *http.Request) (reqref string) {
 	return
 }
 
-func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
+func isRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bool {
 	if redirectURL == "" {
 		return false
 	}
@@ -140,8 +118,7 @@ func isRedirectURLValid(config *conf.Configuration, redirectURL string) bool {
 }
 
 func (a *API) getReferrer(r *http.Request) string {
-	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	// try get redirect url from query or post data first
 	reqref := getRedirectTo(r)
@@ -160,8 +137,7 @@ func (a *API) getReferrer(r *http.Request) string {
 
 // getRedirectURLOrReferrer ensures any redirect URL is from a safe origin
 func (a *API) getRedirectURLOrReferrer(r *http.Request, reqref string) string {
-	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 
 	// if redirect url fails - try fill by extra variant
 	if isRedirectURLValid(config, reqref) {
@@ -198,24 +174,6 @@ func isPrivateIP(ip net.IP) bool {
 		}
 	}
 	return false
-}
-
-func removeLocalhostFromPrivateIPBlock() *net.IPNet {
-	_, localhost, _ := net.ParseCIDR("127.0.0.0/8")
-
-	var localhostIndex int
-	for i := 0; i < len(privateIPBlocks); i++ {
-		if privateIPBlocks[i] == localhost {
-			localhostIndex = i
-		}
-	}
-	privateIPBlocks = append(privateIPBlocks[:localhostIndex], privateIPBlocks[localhostIndex+1:]...)
-
-	return localhost
-}
-
-func unshiftPrivateIPBlock(address *net.IPNet) {
-	privateIPBlocks = append([]*net.IPNet{address}, privateIPBlocks...)
 }
 
 type noLocalTransport struct {
@@ -281,4 +239,23 @@ func isStringInSlice(checkValue string, list []string) bool {
 		}
 	}
 	return false
+}
+
+// getBodyBytes returns a byte array of the request's Body.
+func getBodyBytes(req *http.Request) ([]byte, error) {
+	if req.Body == nil || req.Body == http.NoBody {
+		return nil, nil
+	}
+
+	originalBody := req.Body
+	defer originalBody.Close()
+
+	buf, err := io.ReadAll(originalBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Body = io.NopCloser(bytes.NewReader(buf))
+
+	return buf, nil
 }

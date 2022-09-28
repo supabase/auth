@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/storage"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/mocktracer"
 	"github.com/stretchr/testify/assert"
@@ -14,29 +14,32 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type TracerTestSuite struct {
+type OpenTracerTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.Configuration
-
-	instanceID uuid.UUID
+	Config *conf.GlobalConfiguration
 }
 
-func TestTracer(t *testing.T) {
-	api, config, instanceID, err := setupAPIForTestForInstance()
+func TestOpenTracer(t *testing.T) {
+	api, config, err := setupAPIForTestWithCallback(func(config *conf.GlobalConfiguration, conn *storage.Connection) {
+		if config != nil {
+			config.Tracing.Enabled = true
+			config.Tracing.Exporter = conf.OpenTracing
+		}
+	})
+
 	require.NoError(t, err)
 
-	ts := &TracerTestSuite{
-		API:        api,
-		Config:     config,
-		instanceID: instanceID,
+	ts := &OpenTracerTestSuite{
+		API:    api,
+		Config: config,
 	}
 	defer api.db.Close()
 
 	suite.Run(t, ts)
 }
 
-func (ts *TracerTestSuite) TestTracer_Spans() {
+func (ts *OpenTracerTestSuite) TestOpenTracer_Spans() {
 	mt := mocktracer.New()
 	opentracing.SetGlobalTracer(mt)
 

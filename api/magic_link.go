@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 
@@ -15,20 +15,20 @@ import (
 
 // MagicLinkParams holds the parameters for a magic link request
 type MagicLinkParams struct {
-	Email    string                 `json:"email"`
-	Metadata map[string]interface{} `json:"metadata"`
+	Email string                 `json:"email"`
+	Data  map[string]interface{} `json:"metadata"`
 }
 
 // MagicLink sends a recovery email
 func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	db := a.db.WithContext(ctx)
+	config := a.config
 
 	if !config.External.Email.Enabled {
 		return badRequestError("Email logins are disabled")
 	}
 
-	instanceID := getInstanceID(ctx)
 	params := &MagicLinkParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
@@ -36,8 +36,8 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
-	if params.Metadata == nil {
-		params.Metadata = make(map[string]interface{})
+	if params.Data == nil {
+		params.Data = make(map[string]interface{})
 	}
 
 	if params.Email == "" {
@@ -48,7 +48,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			// User doesn't exist, sign them up with temporary password
@@ -60,13 +60,13 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			signUpParams := &SignupParams{
 				Email:    params.Email,
 				Password: password,
-				Data:     params.Metadata,
+				Data:     params.Data,
 			}
 			newBodyContent, err := json.Marshal(signUpParams)
 			if err != nil {
 				return badRequestError("Could not parse metadata: %v", err)
 			}
-			r.Body = ioutil.NopCloser(strings.NewReader(string(newBodyContent)))
+			r.Body = io.NopCloser(strings.NewReader(string(newBodyContent)))
 			r.ContentLength = int64(len(string(newBodyContent)))
 
 			fakeResponse := &responseStub{}
@@ -77,13 +77,13 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 				}
 				newBodyContent := &SignupParams{
 					Email: params.Email,
-					Data:  params.Metadata,
+					Data:  params.Data,
 				}
 				metadata, err := json.Marshal(newBodyContent)
 				if err != nil {
 					return badRequestError("Could not parse metadata: %v", err)
 				}
-				r.Body = ioutil.NopCloser(bytes.NewReader(metadata))
+				r.Body = io.NopCloser(bytes.NewReader(metadata))
 				return a.MagicLink(w, r)
 			}
 			// otherwise confirmation email already contains 'magic link'
@@ -96,8 +96,8 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
+	err = db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
 

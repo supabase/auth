@@ -2,7 +2,6 @@ package mailer
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/badoux/checkmail"
 	"github.com/netlify/gotrue/conf"
@@ -16,11 +15,9 @@ type MailClient interface {
 // TemplateMailer will send mail and use templates from the site for easy mail styling
 type TemplateMailer struct {
 	SiteURL string
-	Config  *conf.Configuration
+	Config  *conf.GlobalConfiguration
 	Mailer  MailClient
 }
-
-var configFile = ""
 
 const defaultInviteMail = `<h2>You have been invited</h2>
 
@@ -65,14 +62,12 @@ func (m TemplateMailer) ValidateEmail(email string) error {
 
 // InviteMail sends a invite mail to a new user
 func (m *TemplateMailer) InviteMail(user *models.User, otp, referrerURL string) error {
-	globalConfig, err := conf.LoadGlobal(configFile)
-
 	redirectParam := ""
 	if len(referrerURL) > 0 {
 		redirectParam = "&redirect_to=" + referrerURL
 	}
 
-	url, err := getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Invite, "token="+user.ConfirmationToken+"&type=invite"+redirectParam)
+	url, err := getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Invite, "token="+user.ConfirmationToken+"&type=invite"+redirectParam)
 	if err != nil {
 		return err
 	}
@@ -95,15 +90,11 @@ func (m *TemplateMailer) InviteMail(user *models.User, otp, referrerURL string) 
 
 // ConfirmationMail sends a signup confirmation mail to a new user
 func (m *TemplateMailer) ConfirmationMail(user *models.User, otp, referrerURL string) error {
-	globalConfig, err := conf.LoadGlobal(configFile)
-	if err != nil {
-		return err
-	}
 	redirectParam := ""
 	if len(referrerURL) > 0 {
 		redirectParam = "&redirect_to=" + referrerURL
 	}
-	url, err := getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Confirmation, "token="+user.ConfirmationToken+"&type=signup"+redirectParam)
+	url, err := getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Confirmation, "token="+user.ConfirmationToken+"&type=signup"+redirectParam)
 	if err != nil {
 		return err
 	}
@@ -172,11 +163,6 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 		})
 	}
 
-	globalConfig, err := conf.LoadGlobal(configFile)
-	if err != nil {
-		return err
-	}
-
 	redirectParam := ""
 	if len(referrerURL) > 0 {
 		redirectParam = "&redirect_to=" + referrerURL
@@ -185,7 +171,7 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 	for _, email := range emails {
 		url, err := getSiteURL(
 			referrerURL,
-			globalConfig.API.ExternalURL,
+			m.Config.API.ExternalURL,
 			m.Config.Mailer.URLPaths.EmailChange,
 			"token="+email.TokenHash+"&type=email_change"+redirectParam,
 		)
@@ -223,17 +209,12 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 
 // RecoveryMail sends a password recovery mail
 func (m *TemplateMailer) RecoveryMail(user *models.User, otp, referrerURL string) error {
-	globalConfig, err := conf.LoadGlobal(configFile)
-	if err != nil {
-		return err
-	}
-
 	redirectParam := ""
 	if len(referrerURL) > 0 {
 		redirectParam = "&redirect_to=" + referrerURL
 	}
 
-	url, err := getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=recovery"+redirectParam)
+	url, err := getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=recovery"+redirectParam)
 	if err != nil {
 		return err
 	}
@@ -256,17 +237,12 @@ func (m *TemplateMailer) RecoveryMail(user *models.User, otp, referrerURL string
 
 // MagicLinkMail sends a login link mail
 func (m *TemplateMailer) MagicLinkMail(user *models.User, otp, referrerURL string) error {
-	globalConfig, err := conf.LoadGlobal(configFile)
-	if err != nil {
-		return err
-	}
-
 	redirectParam := ""
 	if len(referrerURL) > 0 {
 		redirectParam = "&redirect_to=" + referrerURL
 	}
 
-	url, err := getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=magiclink"+redirectParam)
+	url, err := getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=magiclink"+redirectParam)
 	if err != nil {
 		return err
 	}
@@ -300,7 +276,7 @@ func (m TemplateMailer) Send(user *models.User, subject, body string, data map[s
 
 // GetEmailActionLink returns a magiclink, recovery or invite link based on the actionType passed.
 func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referrerURL string) (string, error) {
-	globalConfig, err := conf.LoadGlobal(configFile)
+	var err error
 
 	redirectParam := ""
 	if len(referrerURL) > 0 {
@@ -310,34 +286,22 @@ func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referr
 	var url string
 	switch actionType {
 	case "magiclink":
-		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=magiclink"+redirectParam)
+		url, err = getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=magiclink"+redirectParam)
 	case "recovery":
-		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=recovery"+redirectParam)
+		url, err = getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=recovery"+redirectParam)
 	case "invite":
-		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Invite, "token="+user.ConfirmationToken+"&type=invite"+redirectParam)
+		url, err = getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Invite, "token="+user.ConfirmationToken+"&type=invite"+redirectParam)
 	case "signup":
-		url, err = getSiteURL(referrerURL, globalConfig.API.ExternalURL, m.Config.Mailer.URLPaths.Confirmation, "token="+user.ConfirmationToken+"&type=signup"+redirectParam)
+		url, err = getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Confirmation, "token="+user.ConfirmationToken+"&type=signup"+redirectParam)
+	case "email_change_current":
+		url, err = getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.EmailChange, "token="+user.EmailChangeTokenCurrent+"&type=email_change"+redirectParam)
+	case "email_change_new":
+		url, err = getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.EmailChange, "token="+user.EmailChangeTokenNew+"&type=email_change"+redirectParam)
 	default:
-		return "", fmt.Errorf("Invalid email action link type: %s", actionType)
+		return "", fmt.Errorf("invalid email action link type: %s", actionType)
 	}
-
 	if err != nil {
 		return "", err
 	}
-
 	return url, nil
-}
-
-// formatEmailOtp separates the otp into chunks of 5 with "-" as the separator
-func formatEmailOtp(otp string) string {
-	chunkSize := 5
-	var chunks []string
-	for i := 0; i < len(otp); i += chunkSize {
-		if i+chunkSize >= len(otp) {
-			chunks = append(chunks, otp[i:])
-		} else {
-			chunks = append(chunks, otp[i:i+chunkSize])
-		}
-	}
-	return strings.Join(chunks, "-")
 }

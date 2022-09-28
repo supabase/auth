@@ -72,12 +72,12 @@ func (t *VonageProvider) SendSms(phone string, message string) error {
 	}
 
 	if len(resp.Messages) <= 0 {
-		return errors.New("Vonage error: Internal Error")
+		return errors.New("vonage error: Internal Error")
 	}
 
 	// A status of zero indicates success; a non-zero value means something went wrong.
 	if resp.Messages[0].Status != "0" {
-		return fmt.Errorf("Vonage error: %v (status: %v)", resp.Messages[0].ErrorText, resp.Messages[0].Status)
+		return fmt.Errorf("vonage error: %v (status: %v)", resp.Messages[0].ErrorText, resp.Messages[0].Status)
 	}
 
 	return nil

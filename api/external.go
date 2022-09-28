@@ -15,6 +15,7 @@ import (
 	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/utilities"
 	"github.com/sirupsen/logrus"
@@ -37,7 +38,8 @@ type ExternalSignupParams struct {
 // ExternalProviderRedirect redirects the request to the corresponding oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	db := a.db.WithContext(ctx)
+	config := a.config
 
 	query := r.URL.Query()
 	providerType := query.Get("provider")
@@ -50,7 +52,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 
 	inviteToken := query.Get("invite_token")
 	if inviteToken != "" {
-		_, userErr := models.FindUserByConfirmationToken(a.db, inviteToken)
+		_, userErr := models.FindUserByConfirmationToken(db, inviteToken)
 		if userErr != nil {
 			if models.IsNotFoundError(userErr) {
 				return notFoundError(userErr.Error())
@@ -60,7 +62,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	}
 
 	redirectURL := a.getRedirectURLOrReferrer(r, query.Get("redirect_to"))
-	log := getLogEntry(r)
+	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
@@ -69,8 +71,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 				ExpiresAt: time.Now().Add(5 * time.Minute).Unix(),
 			},
 			SiteURL:    config.SiteURL,
-			InstanceID: getInstanceID(ctx).String(),
-			NetlifyID:  getNetlifyID(ctx),
+			InstanceID: uuid.Nil.String(),
 		},
 		Provider:    providerType,
 		InviteToken: inviteToken,
@@ -105,42 +106,40 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
-	instanceID := getInstanceID(ctx)
+	db := a.db.WithContext(ctx)
+	config := a.config
 
 	providerType := getExternalProviderType(ctx)
 	var userData *provider.UserProvidedData
-	var providerToken string
-	if providerType == "saml" {
-		samlUserData, err := a.samlCallback(ctx, r)
-		if err != nil {
-			return err
-		}
-		userData = samlUserData
-	} else if providerType == "twitter" {
+	var providerAccessToken string
+	var providerRefreshToken string
+	var grantParams models.GrantParams
+
+	if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
 		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)
 		if err != nil {
 			return err
 		}
 		userData = oAuthResponseData.userData
-		providerToken = oAuthResponseData.token
+		providerAccessToken = oAuthResponseData.token
 	} else {
 		oAuthResponseData, err := a.oAuthCallback(ctx, r, providerType)
 		if err != nil {
 			return err
 		}
 		userData = oAuthResponseData.userData
-		providerToken = oAuthResponseData.token
+		providerAccessToken = oAuthResponseData.token
+		providerRefreshToken = oAuthResponseData.refreshToken
 	}
 
 	var user *models.User
 	var token *AccessTokenResponse
-	err := a.db.Transaction(func(tx *storage.Connection) error {
+	err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		inviteToken := getInviteToken(ctx)
 		if inviteToken != "" {
-			if user, terr = a.processInvite(ctx, tx, userData, instanceID, inviteToken, providerType); terr != nil {
+			if user, terr = a.processInvite(r, ctx, tx, userData, inviteToken, providerType); terr != nil {
 				return terr
 			}
 		} else {
@@ -158,7 +157,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			// check if identity exists
 			if identity, terr = models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType); terr != nil {
 				if models.IsNotFoundError(terr) {
-					user, emailData, terr = a.getUserByVerifiedEmail(tx, config, userData.Emails, instanceID, aud)
+					user, emailData, terr = a.getUserByVerifiedEmail(tx, config, userData.Emails, aud)
 					if terr != nil && !models.IsNotFoundError(terr) {
 						return internalServerError("Error checking for existing users").WithInternalError(terr)
 					}
@@ -255,12 +254,12 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 					return nil
 				}
 
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
+				if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": providerType,
 				}); terr != nil {
 					return terr
 				}
-				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
+				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
 					return terr
 				}
 
@@ -269,18 +268,18 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 					return internalServerError("Error updating user").WithInternalError(terr)
 				}
 			} else {
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
+				if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 					"provider": providerType,
 				}); terr != nil {
 					return terr
 				}
-				if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+				if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 					return terr
 				}
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
@@ -293,7 +292,12 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	rurl := a.getExternalRedirectURL(r)
 	if token != nil {
 		q := url.Values{}
-		q.Set("provider_token", providerToken)
+		q.Set("provider_token", providerAccessToken)
+		// Because not all providers give out a refresh token
+		// See corresponding OAuth2 spec: <https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1>
+		if providerRefreshToken != "" {
+			q.Set("provider_refresh_token", providerRefreshToken)
+		}
 		q.Set("access_token", token.Token)
 		q.Set("token_type", token.TokenType)
 		q.Set("expires_in", strconv.Itoa(token.ExpiresIn))
@@ -311,8 +315,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
-func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, instanceID uuid.UUID, inviteToken, providerType string) (*models.User, error) {
-	config := a.getConfig(ctx)
+func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, inviteToken, providerType string) (*models.User, error) {
+	config := a.config
 	user, err := models.FindUserByConfirmationToken(tx, inviteToken)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -323,10 +327,10 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 
 	var emailData *provider.Email
 	var emails []string
-	for _, e := range userData.Emails {
+	for i, e := range userData.Emails {
 		emails = append(emails, e.Email)
 		if user.GetEmail() == e.Email {
-			emailData = &e
+			emailData = &userData.Emails[i]
 			break
 		}
 	}
@@ -357,12 +361,12 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 		return nil, internalServerError("Database error updating user").WithInternalError(err)
 	}
 
-	if err := models.NewAuditLogEntry(tx, instanceID, user, models.InviteAcceptedAction, "", map[string]interface{}{
+	if err := models.NewAuditLogEntry(r, tx, user, models.InviteAcceptedAction, "", map[string]interface{}{
 		"provider": providerType,
 	}); err != nil {
 		return nil, err
 	}
-	if err := triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); err != nil {
+	if err := triggerEventHooks(ctx, tx, SignupEvent, user, config); err != nil {
 		return nil, err
 	}
 
@@ -374,7 +378,7 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 }
 
 func (a *API) loadExternalState(ctx context.Context, state string) (context.Context, error) {
-	config := a.getConfig(ctx)
+	config := a.config
 	claims := ExternalProviderClaims{}
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
@@ -396,7 +400,7 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 
 // Provider returns a Provider interface for the given name.
 func (a *API) Provider(ctx context.Context, name string, scopes string, query *url.Values) (provider.Provider, error) {
-	config := a.getConfig(ctx)
+	config := a.config
 	name = strings.ToLower(name)
 
 	switch name {
@@ -432,8 +436,6 @@ func (a *API) Provider(ctx context.Context, name string, scopes string, query *u
 		return provider.NewTwitterProvider(config.External.Twitter, scopes)
 	case "workos":
 		return provider.NewWorkOSProvider(config.External.WorkOS, query)
-	case "saml":
-		return provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
 	case "zoom":
 		return provider.NewZoomProvider(config.External.Zoom)
 	default:
@@ -443,7 +445,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string, query *u
 
 func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	log := getLogEntry(r)
+	log := observability.GetLogEntry(r)
 	errorID := getRequestID(ctx)
 	err := handler(w, r)
 	if err != nil {
@@ -494,7 +496,7 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger) *url
 
 func (a *API) getExternalRedirectURL(r *http.Request) string {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 	if config.External.RedirectURL != "" {
 		return config.External.RedirectURL
 	}
@@ -525,14 +527,14 @@ func (a *API) createNewIdentity(conn *storage.Connection, user *models.User, pro
 }
 
 // getUserByVerifiedEmail checks if one of the verified emails already belongs to a user
-func (a *API) getUserByVerifiedEmail(tx *storage.Connection, config *conf.Configuration, emails []provider.Email, instanceID uuid.UUID, aud string) (*models.User, provider.Email, error) {
+func (a *API) getUserByVerifiedEmail(tx *storage.Connection, config *conf.GlobalConfiguration, emails []provider.Email, aud string) (*models.User, provider.Email, error) {
 	var user *models.User
 	var emailData provider.Email
 	var err error
 
 	for _, e := range emails {
 		if e.Verified || config.Mailer.Autoconfirm {
-			user, err = models.FindUserByEmailAndAudience(tx, instanceID, e.Email, aud)
+			user, err = models.FindUserByEmailAndAudience(tx, e.Email, aud)
 			if err != nil && !models.IsNotFoundError(err) {
 				return user, emailData, err
 			}

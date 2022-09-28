@@ -3,20 +3,28 @@ package models
 // IsNotFoundError returns whether an error represents a "not found" error.
 func IsNotFoundError(err error) bool {
 	switch err.(type) {
-	case UserNotFoundError:
+	case UserNotFoundError, *UserNotFoundError:
 		return true
-	case ConfirmationTokenNotFoundError:
+	case SessionNotFoundError, *SessionNotFoundError:
 		return true
-	case RefreshTokenNotFoundError:
+	case ConfirmationTokenNotFoundError, *ConfirmationTokenNotFoundError:
 		return true
-	case InstanceNotFoundError:
+	case RefreshTokenNotFoundError, *RefreshTokenNotFoundError:
 		return true
-	case TotpSecretNotFoundError:
+	case InstanceNotFoundError, *InstanceNotFoundError:
 		return true
-	case IdentityNotFoundError:
+	case TotpSecretNotFoundError, *TotpSecretNotFoundError:
+		return true
+	case IdentityNotFoundError, *IdentityNotFoundError:
 		return true
 	}
 	return false
+}
+
+type SessionNotFoundError struct{}
+
+func (e SessionNotFoundError) Error() string {
+	return "Session not found"
 }
 
 // UserNotFoundError represents when a user is not found.

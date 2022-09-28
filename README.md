@@ -1,30 +1,164 @@
-# GoTrue - User management for APIs
+# GoTrue - Authentication and User Management by Supabase
 
-GoTrue is a small open-source API written in golang, that can act as a self-standing
-API service for handling user registration and authentication for JAM projects.
+[![Coverage Status](https://coveralls.io/repos/github/supabase/gotrue/badge.svg?branch=master)](https://coveralls.io/github/supabase/gotrue?branch=master)
 
-It's based on OAuth2 and JWT and will handle user signup, authentication and custom
-user data.
+GoTrue is a user management and authentication server written in Go that powers
+[Supabase](https://supabase.com)'s features such as:
+
+- Issuing JWTs
+- Row Level Security with PostgREST
+- User management
+- Sign in with email, password, magic link, phone number
+- Sign in with external providers (Google, Apple, Facebook, Discord, ...)
+
+It is originally based on the excellent
+[GoTrue](https://github.com/netlify/gotrue) codebase by
+[Netlify](https://netlify.com), however both have diverged significantly in
+features and capabilities.
 
 ## Quick Start
 
 Create a `.env` file to store your own custom env vars. See [`example.env`](example.env)
 
-1. Start the local postgres database in a postgres container: `./hack/postgresd.sh` 
+1. Start the local postgres database in a postgres container: `docker-compose -f docker-compose-dev.yml up postgres`
 2. Build the gotrue binary: `make build` . You should see an output like this:
+
 ```
 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`"
 GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`" -o gotrue-arm64
 ```
+
 3. Execute the gotrue binary: `./gotrue`
 
-### If you have docker installed...
+### If you have docker installed
+
 Create a `.env.docker` file to store your own custom env vars. See [`example.docker.env`](example.docker.env)
 
 1. `make build`
 2. `make dev`
 3. `docker ps` should show 2 docker containers (`gotrue_postgresql` and `gotrue_gotrue`)
-4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that gotrue is running. 
+4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that gotrue is running.
+
+## Running in production
+
+Running an authentication server in production is not an easy feat. We
+recommend using [Supabase Auth](https://supabase.com/auth) which gets regular
+security updates.
+
+Otherwise, please make sure you setup a process to promptly update to the
+latest version. You can do that by following this repository, specifically the
+[Releases](https://github.com/supabase/gotrue/releases) and [Security
+Advisories](https://github.com/supabase/gotrue/security/advisories) sections.
+
+### Backward compatibility
+
+GoTrue uses the [Semantic Versioning](https://semver.org) scheme. Here are some
+further clarifications on backward compatibility guarantees:
+
+**Go API compatibility**
+
+GoTrue is not meant to be used as a Go library. There are no guarantees on
+backward API compatibility when used this way regardless which version number
+changes.
+
+**Patch**
+
+Changes to the patch version guarantees backward compatibility with:
+
+- Database objects (tables, columns, indexes, functions).
+- REST API
+- JWT structure
+- Configuration
+
+Guaranteed examples:
+
+- A column won't change its type.
+- A table won't change its primary key.
+- An index will not be removed.
+- A uniqueness constraint will not be removed.
+- A REST API will not be removed.
+- Parameters to REST APIs will work equivalently as before (or better, if a bug
+  has been fixed).
+- Configuration will not change.
+
+Not guaranteed examples:
+
+- A table may add new columns.
+- Columns in a table may be reordered.
+- Non-unique constraints may be removed (database level checks, null, default
+  values).
+- JWT may add new properties.
+
+**Minor**
+
+Changes to minor version guarantees backward compatibility with:
+
+- REST API
+- JWT structure
+- Configuration
+
+Exceptions to these guarantees will be made only when serious security issues
+are found that can't be remedied in any other way.
+
+Guaranteed examples:
+
+- Existing APIs may be deprecated but continue working for the next few minor
+  version releases.
+- Configuration changes may become deprecated but continue working for the next
+  few minor version releases.
+- Already issued JWTs will be accepted, but new JWTs may be with a different
+  structure (but usually similar).
+
+Not guaranteed examples:
+
+- Removal of JWT fields after a deprecation notice.
+- Removal of certain APIs after a deprecation notice.
+- Removal of sign-in with external providers, after a deprecation notice.
+- Deletion, truncation, significant schema changes to tables, indexes, views,
+  functions.
+
+We aim to provide a deprecation notice in execution logs for at least two major
+version releases or two weeks if multiple releases go out. Compatibility will
+be guaranteed while the notice is live.
+
+**Major**
+
+Changes to the major version do not guarantee any backward compatibility with
+previous versions.
+
+### Inherited features
+
+Certain inherited features from the Netlify codebase are not supported by
+Supabase and they may be removed without prior notice in the future. This is a
+comprehensive list of those features:
+
+1. Multi-tenancy via the `instances` table i.e. `GOTRUE_MULTI_INSTANCE_MODE`
+   configuration parameter.
+2. System user (zero UUID user).
+3. Super admin via the `is_super_admin` column.
+4. SAML sign-in provider via the `GOTRUE_SAML_ENABLED` configuration
+   parameter. (A different implementation for SAML may appear in the future
+   which will be supported.)
+5. Support for MySQL based databases. (Only Postgres is supported.)
+6. Group information in JWTs via `GOTRUE_JWT_ADMIN_GROUP_NAME` and other
+   configuration fields.
+7. Symmetrics JWTs. In the future it is very likely that GoTrue will begin
+   issuing asymmetric JWTs (subject to configuration), so do not rely on the
+   assumption that only HS256 signed JWTs will be issued long term.
+
+Note that this is not an exhaustive list and it may change.
+
+### Best practices when self-hosting
+
+These are some best practices to follow when self-hosting to ensure backward
+compatibility with GoTrue:
+
+1. Do not modify the schema managed by GoTrue. You can see all of the
+   migrations in the `migrations` directory.
+2. Do not rely on schema and structure of data in the database. Always use
+   GoTrue APIs and JWTs to infer information about users.
+3. Always run GoTrue behind a TLS-capable proxy such as a load balancer, CDN,
+   nginx or other similar software.
 
 ## Configuration
 
@@ -82,9 +216,10 @@ If refresh token rotation is enabled, gotrue will automatically detect malicious
 
 `GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL` - `string`
 
-This setting is only applicable if `GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` is enabled. The reuse interval for a refresh token allows for exchanging the refresh token multiple times during the interval to support concurrency or offline issues. During the reuse interval, gotrue will not consider using a revoked token as a malicious attempt and will simply return the child refresh token. 
+This setting is only applicable if `GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` is enabled. The reuse interval for a refresh token allows for exchanging the refresh token multiple times during the interval to support concurrency or offline issues. During the reuse interval, gotrue will not consider using a revoked token as a malicious attempt and will simply return the child refresh token.
 
-Only the previous revoked token can be reused. Using an old refresh token way before the current valid refresh token will trigger the reuse detection. 
+Only the previous revoked token can be reused. Using an old refresh token way before the current valid refresh token will trigger the reuse detection.
+
 ### API
 
 ```properties
@@ -111,13 +246,13 @@ If you wish to inherit a request ID from the incoming request, specify the name 
 ### Database
 
 ```properties
-GOTRUE_DB_DRIVER=mysql
+GOTRUE_DB_DRIVER=postgres
 DATABASE_URL=root@localhost/gotrue
 ```
 
 `DB_DRIVER` - `string` **required**
 
-Chooses what dialect of database you want. Must be `mysql`.
+Chooses what dialect of database you want. Must be `postgres`.
 
 `DATABASE_URL` (no prefix) / `DB_DATABASE_URL` - `string` **required**
 
@@ -153,37 +288,108 @@ Controls what log levels are output. Choose from `panic`, `fatal`, `error`, `war
 
 If you wish logs to be written to a file, set `log_file` to a valid file path.
 
-### Opentracing
+### Observability
 
-Currently, only the Datadog tracer is supported.
+GoTrue has basic observability built in. It is able to export
+[OpenTelemetry](https://opentelemetry.io) metrics and traces to a collector.
 
-```properties
-GOTRUE_TRACING_ENABLED=true
-GOTRUE_TRACING_HOST=127.0.0.1
-GOTRUE_TRACING_PORT=8126
-GOTRUE_TRACING_TAGS="tag1:value1,tag2:value2"
-GOTRUE_SERVICE_NAME="gotrue"
+#### Tracing
+
+To enable tracing configure these variables:
+
+`GOTRUE_TRACING_ENABLED` - `boolean`
+
+`GOTRUE_TRACING_EXPORTER` - `string` only `opentracing` (deprecated) and
+`opentelemetry` supported
+
+Make sure you also configure the [OpenTelemetry
+Exporter](https://opentelemetry.io/docs/reference/specification/protocol/exporter/)
+configuration for your collector or service.
+
+For example, if you use
+[Honeycomb.io](https://docs.honeycomb.io/getting-data-in/opentelemetry/go-distro/#using-opentelemetry-without-the-honeycomb-distribution)
+you should set these standard OpenTelemetry OTLP variables:
+
+```
+OTEL_SERVICE_NAME=gotrue
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io:443
+OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=<API-KEY>,x-honeycomb-dataset=gotrue"
 ```
 
-`TRACING_ENABLED` - `bool`
+#### Metrics
 
-Whether tracing is enabled or not. Defaults to `false`.
+To enable metrics configure these variables:
 
-`TRACING_HOST` - `bool`
+`GOTRUE_METRICS_ENABLED` - `boolean`
 
-The tracing destination.
+`GOTRUE_METRICS_EXPORTER` - `string` only `opentelemetry` and `prometheus`
+supported
 
-`TRACING_PORT` - `bool`
+Make sure you also configure the [OpenTelemetry
+Exporter](https://opentelemetry.io/docs/reference/specification/protocol/exporter/)
+configuration for your collector or service.
 
-The port for the tracing host.
+If you use the `prometheus` exporter, the server host and port can be
+configured using these standard OpenTelemetry variables:
 
-`TRACING_TAGS` - `string`
+`OTEL_EXPORTER_PROMETHEUS_HOST` - IP address, default `0.0.0.0`
 
-A comma separated list of key:value pairs. These key value pairs will be added as tags to all opentracing spans.
+`OTEL_EXPORTER_PROMETHEUS_PORT` - port number, default `9100`
 
-`SERVICE_NAME` - `string`
+The metrics are exported on the `/` path on the server.
 
-The name to use for the service.
+If you use the `opentelemetry` exporter, the metrics are pushed to the
+collector.
+
+For example, if you use
+[Honeycomb.io](https://docs.honeycomb.io/getting-data-in/opentelemetry/go-distro/#using-opentelemetry-without-the-honeycomb-distribution)
+you should set these standard OpenTelemetry OTLP variables:
+
+```
+OTEL_SERVICE_NAME=gotrue
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io:443
+OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=<API-KEY>,x-honeycomb-dataset=gotrue"
+```
+
+Note that Honeycomb.io requires a paid plan to ingest metrics.
+
+If you need to debug an issue with traces or metrics not being pushed, you can
+set `DEBUG=true` to get more insights from the OpenTelemetry SDK.
+
+#### Custom resource attributes
+
+When using the OpenTelemetry tracing or metrics exporter you can define custom
+resource attributes using the [standard `OTEL_RESOURCE_ATTRIBUTES` environment
+variable](https://opentelemetry.io/docs/reference/specification/resource/sdk/#specifying-resource-information-via-an-environment-variable).
+
+A default attribute `gotrue.version` is provided containing the build version.
+
+#### Tracing HTTP routes
+
+All HTTP calls to the GoTrue API are traced. Routes use the parametrized
+version of the route, and the values for the route parameters can be found as
+the `http.route.params.<route-key>` span attribute.
+
+For example, the following request:
+
+```
+GET /admin/users/4acde936-82dc-4552-b851-831fb8ce0927/
+```
+
+will be traced as:
+
+```
+http.method = GET
+http.route = /admin/users/{user_id}
+http.route.params.user_id = 4acde936-82dc-4552-b851-831fb8ce0927
+```
+
+#### Go runtime and HTTP metrics
+
+All of the Go runtime metrics are exposed. Some HTTP metrics are also collected
+by default.
 
 ### JSON Web Tokens (JWT)
 
@@ -254,6 +460,7 @@ To try out external authentication with Apple locally, you will need to do the f
 
 1. Remap localhost to \<my_custom_dns \> in your `/etc/hosts` config.
 2. Configure gotrue to serve HTTPS traffic over localhost by replacing `ListenAndServe` in [api.go](api/api.go) with:
+
    ```
       func (a *API) ListenAndServe(hostAndPort string) {
         log := logrus.WithField("component", "api")
@@ -278,6 +485,7 @@ To try out external authentication with Apple locally, you will need to do the f
         }
     }
    ```
+
 3. Generate the crt and key file. See [here](https://www.freecodecamp.org/news/how-to-get-https-working-on-your-local-development-environment-in-5-minutes-7af615770eec/) for more information.
 4. Generate the `GOTRUE_EXTERNAL_APPLE_SECRET` by following this [post](https://medium.com/identity-beyond-borders/how-to-configure-sign-in-with-apple-77c61e336003)!
 
@@ -493,6 +701,7 @@ Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/req
 - `SMS_TWILIO_MESSAGE_SERVICE_SID` - can be set to your twilio sender mobile number
 
 Or Messagebird credentials, which can be obtained in the [Dashboard](https://dashboard.messagebird.com/en/developers/access):
+
 - `SMS_MESSAGEBIRD_ACCESS_KEY` - your Messagebird access key
 - `SMS_MESSAGEBIRD_ORIGINATOR` - SMS sender (your Messagebird phone number with + or company name)
 
@@ -560,7 +769,7 @@ Returns the publicly available settings for this gotrue instance.
     "spotify": true,
     "twitch": true,
     "twitter": true,
-    "workos": true,
+    "workos": true
   },
   "disable_signup": false,
   "autoconfirm": false
@@ -593,7 +802,7 @@ body:
 
 ### **POST /admin/generate_link**
 
-Returns the corresponding email action link based on the type specified.
+Returns the corresponding email action link based on the type specified. Among other things, the response also contains the query params of the action link as separate JSON fields for convenience (along with the email OTP from which the corresponding token is generated).
 
 ```js
 headers:
@@ -619,6 +828,10 @@ Returns
 ```js
 {
   "action_link": "http://localhost:9999/verify?token=TOKEN&type=TYPE&redirect_to=REDIRECT_URL",
+  "email_otp": "EMAIL_OTP",
+  "hashed_token": "TOKEN",
+  "verification_type": "TYPE",
+  "redirect_to": "REDIRECT_URL",
   ...
 }
 ```
@@ -672,6 +885,7 @@ Returns:
 ```
 
 if AUTOCONFIRM is enabled and the sign up is a duplicate, then the endpoint will return:
+
 ```
 {
   "code":400,
@@ -954,12 +1168,12 @@ Returns:
 }
 ```
 
-If `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` is enabled, the user will need to reauthenticate first. 
+If `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` is enabled, the user will need to reauthenticate first.
 
 ```json
 {
   "password": "new-password",
-  "nonce": "123456",
+  "nonce": "123456"
 }
 ```
 
@@ -994,7 +1208,7 @@ scopes=<optional additional scopes depending on the provider (email and name are
 
 Redirects to provider and then to `/callback`
 
-For apple specific setup see: https://github.com/supabase/gotrue#apple-oauth
+For apple specific setup see: <https://github.com/supabase/gotrue#apple-oauth>
 
 ### **GET /callback**
 

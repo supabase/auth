@@ -61,7 +61,7 @@ func NewGoogleProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 }
 
 func (g googleProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(oauth2.NoContext, code)
+	return g.Exchange(context.Background(), code)
 }
 
 func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -81,7 +81,7 @@ func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	}
 
 	if len(data.Emails) <= 0 {
-		return nil, errors.New("Unable to find email with Google provider")
+		return nil, errors.New("unable to find email with Google provider")
 	}
 
 	data.Metadata = &Claims{

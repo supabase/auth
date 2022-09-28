@@ -3,15 +3,19 @@ name: Test
 on:
   pull_request:
   push:
-    branches: [master]
+    branches:
+      - master
+      - mfa_v1
+      - saml
+      - zerosessionidfix
     tags: ['*']
 
 jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.17.x]
-    runs-on: ubuntu-18.04
+        go-version: [1.18.x]
+    runs-on: ubuntu-20.04
     services:
       postgres:
         image: postgres:13
@@ -33,11 +37,36 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - name: Checkout code
         uses: actions/checkout@v2
-      - name: Formatting checks
-        run: if [ ! -z $(gofmt -l .) ]; then echo 'Make sure to run "gofmt -s -w ." before commit!' && exit 1; fi
+        with:
+          skip-unshallow: "true"
+      - name: Check gofmt
+        run: |
+          set -x
+
+          if [ ! -z $(gofmt -l .) ]
+          then
+            echo 'Make sure to run "gofmt -s -w ." before commit!' && exit 1
+          fi
+      - name: Check go vet
+        run: |
+          set -x
+          go vet ./...
+      - name: Run static check
+        run: |
+          set -x
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          make static
+      - name: Check gosec
+        run: |
+          set -x
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          make sec
       - name: Init Database
         run: psql -f hack/init_postgres.sql postgresql://postgres:root@localhost:5432/postgres
       - name: Run migrations
         run: make migrate_dev
       - name: Lint and test
         run: make test
+      - uses: shogo82148/actions-goveralls@v1
+        with:
+          path-to-profile: coverage.out

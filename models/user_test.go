@@ -3,16 +3,20 @@ package models
 import (
 	"testing"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const modelsTestConfig = "../hack/test.env"
+
+func init() {
+	PasswordHashCost = bcrypt.MinCost
+}
 
 type UserTestSuite struct {
 	suite.Suite
@@ -39,7 +43,7 @@ func TestUser(t *testing.T) {
 }
 
 func (ts *UserTestSuite) TestUpdateAppMetadata() {
-	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
+	u, err := NewUser("", "", "", "", nil)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), u.UpdateAppMetaData(ts.db, make(map[string]interface{})))
 
@@ -58,7 +62,7 @@ func (ts *UserTestSuite) TestUpdateAppMetadata() {
 }
 
 func (ts *UserTestSuite) TestUpdateUserMetadata() {
-	u, err := NewUser(uuid.Nil, "", "", "", "", nil)
+	u, err := NewUser("", "", "", "", nil)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), u.UpdateUserMetaData(ts.db, make(map[string]interface{})))
 
@@ -87,18 +91,18 @@ func (ts *UserTestSuite) TestFindUserByConfirmationToken() {
 func (ts *UserTestSuite) TestFindUserByEmailAndAudience() {
 	u := ts.createUser()
 
-	n, err := FindUserByEmailAndAudience(ts.db, u.InstanceID, u.GetEmail(), "test")
+	n, err := FindUserByEmailAndAudience(ts.db, u.GetEmail(), "test")
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), u.ID, n.ID)
 
-	_, err = FindUserByEmailAndAudience(ts.db, u.InstanceID, u.GetEmail(), "invalid")
+	_, err = FindUserByEmailAndAudience(ts.db, u.GetEmail(), "invalid")
 	require.EqualError(ts.T(), err, UserNotFoundError{}.Error())
 }
 
 func (ts *UserTestSuite) TestFindUsersInAudience() {
 	u := ts.createUser()
 
-	n, err := FindUsersInAudience(ts.db, u.InstanceID, u.Aud, nil, nil, "")
+	n, err := FindUsersInAudience(ts.db, u.Aud, nil, nil, "")
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), n, 1)
 
@@ -106,7 +110,7 @@ func (ts *UserTestSuite) TestFindUsersInAudience() {
 		Page:    1,
 		PerPage: 50,
 	}
-	n, err = FindUsersInAudience(ts.db, u.InstanceID, u.Aud, &p, nil, "")
+	n, err = FindUsersInAudience(ts.db, u.Aud, &p, nil, "")
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), n, 1)
 	assert.Equal(ts.T(), uint64(1), p.Count)
@@ -116,7 +120,7 @@ func (ts *UserTestSuite) TestFindUsersInAudience() {
 			{Name: "created_at", Dir: Descending},
 		},
 	}
-	n, err = FindUsersInAudience(ts.db, u.InstanceID, u.Aud, nil, sp, "")
+	n, err = FindUsersInAudience(ts.db, u.Aud, nil, sp, "")
 	require.NoError(ts.T(), err)
 	require.Len(ts.T(), n, 1)
 }
@@ -125,14 +129,6 @@ func (ts *UserTestSuite) TestFindUserByID() {
 	u := ts.createUser()
 
 	n, err := FindUserByID(ts.db, u.ID)
-	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), u.ID, n.ID)
-}
-
-func (ts *UserTestSuite) TestFindUserByInstanceIDAndID() {
-	u := ts.createUser()
-
-	n, err := FindUserByInstanceIDAndID(ts.db, u.InstanceID, u.ID)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), u.ID, n.ID)
 }
@@ -152,7 +148,7 @@ func (ts *UserTestSuite) TestFindUserByRecoveryToken() {
 
 func (ts *UserTestSuite) TestFindUserWithRefreshToken() {
 	u := ts.createUser()
-	r, err := GrantAuthenticatedUser(ts.db, u)
+	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
 	require.NoError(ts.T(), err)
 
 	n, nr, err := FindUserWithRefreshToken(ts.db, r.Token)
@@ -162,21 +158,21 @@ func (ts *UserTestSuite) TestFindUserWithRefreshToken() {
 }
 
 func (ts *UserTestSuite) TestIsDuplicatedEmail() {
-	u := ts.createUserWithEmail("david.calavera@netlify.com")
+	_ = ts.createUserWithEmail("david.calavera@netlify.com")
 
-	e, err := IsDuplicatedEmail(ts.db, u.InstanceID, "david.calavera@netlify.com", "test")
+	e, err := IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "test")
 	require.NoError(ts.T(), err)
 	require.True(ts.T(), e, "expected email to be duplicated")
 
-	e, err = IsDuplicatedEmail(ts.db, u.InstanceID, "davidcalavera@netlify.com", "test")
+	e, err = IsDuplicatedEmail(ts.db, "davidcalavera@netlify.com", "test")
 	require.NoError(ts.T(), err)
 	require.False(ts.T(), e, "expected email to not be duplicated")
 
-	e, err = IsDuplicatedEmail(ts.db, u.InstanceID, "david@netlify.com", "test")
+	e, err = IsDuplicatedEmail(ts.db, "david@netlify.com", "test")
 	require.NoError(ts.T(), err)
 	require.False(ts.T(), e, "expected same email to not be duplicated")
 
-	e, err = IsDuplicatedEmail(ts.db, u.InstanceID, "david.calavera@netlify.com", "other-aud")
+	e, err = IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "other-aud")
 	require.NoError(ts.T(), err)
 	require.False(ts.T(), e, "expected same email to not be duplicated")
 }
@@ -186,7 +182,7 @@ func (ts *UserTestSuite) createUser() *User {
 }
 
 func (ts *UserTestSuite) createUserWithEmail(email string) *User {
-	user, err := NewUser(uuid.Nil, "", email, "secret", "test", nil)
+	user, err := NewUser("", email, "secret", "test", nil)
 	require.NoError(ts.T(), err)
 
 	err = ts.db.Create(user)
@@ -196,10 +192,7 @@ func (ts *UserTestSuite) createUserWithEmail(email string) *User {
 }
 
 func (ts *UserTestSuite) TestRemoveUnconfirmedIdentities() {
-	uid, err := uuid.NewV4()
-	require.NoError(ts.T(), err)
-
-	user, err := NewUser(uid, "+29382983298", "someone@example.com", "abcdefgh", "test", nil)
+	user, err := NewUser("+29382983298", "someone@example.com", "abcdefgh", "authenticated", nil)
 	require.NoError(ts.T(), err)
 
 	user.AppMetaData = map[string]interface{}{

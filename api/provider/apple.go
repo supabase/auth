@@ -20,13 +20,13 @@ import (
 const (
 	defaultAppleAPIBase = "appleid.apple.com"
 	authEndpoint        = "/auth/authorize"
-	tokenEndpoint       = "/auth/token"
+	tokenEndpoint       = "/auth/token" //#nosec G101 -- Not a secret value.
 
 	scopeEmail = "email"
 	scopeName  = "name"
 
 	appleAudOrIss                  = "https://appleid.apple.com"
-	idTokenVerificationKeyEndpoint = "/auth/keys"
+	idTokenVerificationKeyEndpoint = "/auth/keys" //#nosec G101 -- Not a secret value.
 )
 
 // AppleProvider stores the custom config for apple provider
@@ -86,7 +86,7 @@ func (p AppleProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 		oauth2.SetAuthURLParam("client_id", p.ClientID),
 		oauth2.SetAuthURLParam("secret", p.ClientSecret),
 	}
-	return p.Exchange(oauth2.NoContext, code, opts...)
+	return p.Exchange(context.Background(), code, opts...)
 }
 
 func (p AppleProvider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption) string {

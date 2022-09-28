@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netlify/gotrue/utilities"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -56,25 +57,24 @@ func init() {
 }
 
 func VerifyRequest(r *http.Request, secretKey string) (VerificationResult, error) {
-	if r.FormValue("grant_type") == "refresh_token" {
-		// captcha shouldn't be enabled on requests to refresh the token
-		return SuccessfullyVerified, nil
-	}
 	res := GotrueRequest{}
-	bodyBytes, err := ioutil.ReadAll(r.Body)
+	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		return UserRequestFailed, err
 	}
-	r.Body.Close()
+	if err := r.Body.Close(); err != nil {
+		return UserRequestFailed, err
+	}
+
 	// re-init body so downstream route handlers don't get borked
-	r.Body = ioutil.NopCloser(bytes.NewBuffer(bodyBytes))
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	jsonDecoder := json.NewDecoder(bytes.NewBuffer(bodyBytes))
 	err = jsonDecoder.Decode(&res)
 	if err != nil || strings.TrimSpace(res.Security.Token) == "" {
 		return UserRequestFailed, errors.Wrap(err, "couldn't decode captcha info")
 	}
-	clientIP := strings.Split(r.RemoteAddr, ":")[0]
+	clientIP := utilities.GetIPAddress(r)
 	return verifyCaptchaCode(res.Security.Token, secretKey, clientIP)
 }
 

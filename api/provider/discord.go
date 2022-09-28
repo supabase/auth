@@ -62,7 +62,7 @@ func NewDiscordProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 }
 
 func (g discordProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(oauth2.NoContext, code)
+	return g.Exchange(context.Background(), code)
 }
 
 func (g discordProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -72,7 +72,7 @@ func (g discordProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 	}
 
 	if u.Email == "" {
-		return nil, errors.New("Unable to find email with Discord provider")
+		return nil, errors.New("unable to find email with Discord provider")
 	}
 
 	var avatarURL string

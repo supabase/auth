@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
@@ -22,20 +21,18 @@ type AdminTestSuite struct {
 	suite.Suite
 	User   *models.User
 	API    *API
-	Config *conf.Configuration
+	Config *conf.GlobalConfiguration
 
-	token      string
-	instanceID uuid.UUID
+	token string
 }
 
 func TestAdmin(t *testing.T) {
-	api, config, instanceID, err := setupAPIForTestForInstance()
+	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	ts := &AdminTestSuite{
-		API:        api,
-		Config:     config,
-		instanceID: instanceID,
+		API:    api,
+		Config: config,
 	}
 	defer api.db.Close()
 
@@ -45,41 +42,12 @@ func TestAdmin(t *testing.T) {
 func (ts *AdminTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 	ts.Config.External.Email.Enabled = true
-	ts.token = ts.makeSuperAdmin("")
-}
-
-func (ts *AdminTestSuite) makeSuperAdmin(email string) string {
-	u, err := models.NewUser(ts.instanceID, "9123456", email, "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test User"})
-	require.NoError(ts.T(), err, "Error making new user")
-
-	u.Role = "supabase_admin"
-
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	require.NoError(ts.T(), err, "Error generating access token")
-
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
-	_, err = p.Parse(token, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
-	require.NoError(ts.T(), err, "Error parsing token")
-
-	return token
-}
-
-func (ts *AdminTestSuite) makeSystemUser() string {
-	u := models.NewSystemUser(uuid.Nil, ts.Config.JWT.Aud)
-	u.Role = "service_role"
-
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	require.NoError(ts.T(), err, "Error generating access token")
-
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
-	_, err = p.Parse(token, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
-	require.NoError(ts.T(), err, "Error parsing token")
-
-	return token
+	claims := &GoTrueClaims{
+		Role: "supabase_admin",
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))
+	require.NoError(ts.T(), err, "Error generating admin jwt")
+	ts.token = token
 }
 
 // TestAdminUsersUnauthorized tests API /admin/users route without authentication
@@ -102,17 +70,17 @@ func (ts *AdminTestSuite) TestAdminUsers() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	assert.Equal(ts.T(), "</admin/users?page=0>; rel=\"last\"", w.HeaderMap.Get("Link"))
-	assert.Equal(ts.T(), "0", w.HeaderMap.Get("X-Total-Count"))
+	assert.Equal(ts.T(), "</admin/users?page=0>; rel=\"last\"", w.Header().Get("Link"))
+	assert.Equal(ts.T(), "0", w.Header().Get("X-Total-Count"))
 }
 
 // TestAdminUsers tests API /admin/users route
 func (ts *AdminTestSuite) TestAdminUsers_Pagination() {
-	u, err := models.NewUser(ts.instanceID, "12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	u, err = models.NewUser(ts.instanceID, "987654321", "test2@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err = models.NewUser("987654321", "test2@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -125,8 +93,8 @@ func (ts *AdminTestSuite) TestAdminUsers_Pagination() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	assert.Equal(ts.T(), "</admin/users?page=2&per_page=1>; rel=\"next\", </admin/users?page=2&per_page=1>; rel=\"last\"", w.HeaderMap.Get("Link"))
-	assert.Equal(ts.T(), "2", w.HeaderMap.Get("X-Total-Count"))
+	assert.Equal(ts.T(), "</admin/users?page=2&per_page=1>; rel=\"next\", </admin/users?page=2&per_page=1>; rel=\"last\"", w.Header().Get("Link"))
+	assert.Equal(ts.T(), "2", w.Header().Get("X-Total-Count"))
 
 	data := make(map[string]interface{})
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
@@ -137,13 +105,13 @@ func (ts *AdminTestSuite) TestAdminUsers_Pagination() {
 
 // TestAdminUsers tests API /admin/users route
 func (ts *AdminTestSuite) TestAdminUsers_SortAsc() {
-	u, err := models.NewUser(ts.instanceID, "", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	u.CreatedAt = time.Now().Add(-time.Minute)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	// if the created_at times are the same, then the sort order is not guaranteed
-	time.Sleep(1 * time.Second)
-	u, err = models.NewUser(ts.instanceID, "", "test2@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err = models.NewUser("", "test2@example.com", "test", ts.Config.JWT.Aud, nil)
+	u.CreatedAt = time.Now()
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -172,13 +140,13 @@ func (ts *AdminTestSuite) TestAdminUsers_SortAsc() {
 
 // TestAdminUsers tests API /admin/users route
 func (ts *AdminTestSuite) TestAdminUsers_SortDesc() {
-	u, err := models.NewUser(ts.instanceID, "12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	u.CreatedAt = time.Now().Add(-time.Minute)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	// if the created_at times are the same, then the sort order is not guaranteed
-	time.Sleep(1 * time.Second)
-	u, err = models.NewUser(ts.instanceID, "987654321", "test2@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err = models.NewUser("987654321", "test2@example.com", "test", ts.Config.JWT.Aud, nil)
+	u.CreatedAt = time.Now()
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -204,7 +172,7 @@ func (ts *AdminTestSuite) TestAdminUsers_SortDesc() {
 
 // TestAdminUsers tests API /admin/users route
 func (ts *AdminTestSuite) TestAdminUsers_FilterEmail() {
-	u, err := models.NewUser(ts.instanceID, "", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -229,11 +197,11 @@ func (ts *AdminTestSuite) TestAdminUsers_FilterEmail() {
 
 // TestAdminUsers tests API /admin/users route
 func (ts *AdminTestSuite) TestAdminUsers_FilterName() {
-	u, err := models.NewUser(ts.instanceID, "", "test1@example.com", "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test User"})
+	u, err := models.NewUser("", "test1@example.com", "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test User"})
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	u, err = models.NewUser(ts.instanceID, "", "test2@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err = models.NewUser("", "test2@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -339,7 +307,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			assert.Equal(ts.T(), "email", data.AppMetaData["provider"])
 			assert.Equal(ts.T(), []interface{}{"email"}, data.AppMetaData["providers"])
 
-			u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, data.GetEmail(), ts.Config.JWT.Aud)
+			u, err := models.FindUserByEmailAndAudience(ts.API.db, data.GetEmail(), ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
 			var expectedPassword string
@@ -354,7 +322,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 
 // TestAdminUserGet tests API /admin/user route (GET)
 func (ts *AdminTestSuite) TestAdminUserGet() {
-	u, err := models.NewUser(ts.instanceID, "12345678", "test1@example.com", "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test Get User"})
+	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test Get User"})
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -380,7 +348,7 @@ func (ts *AdminTestSuite) TestAdminUserGet() {
 
 // TestAdminUserUpdate tests API /admin/user route (UPDATE)
 func (ts *AdminTestSuite) TestAdminUserUpdate() {
-	u, err := models.NewUser(ts.instanceID, "12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -419,54 +387,8 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 	assert.NotNil(ts.T(), data.BannedUntil)
 }
 
-// TestAdminUserUpdate tests API /admin/user route (UPDATE) as system user
-func (ts *AdminTestSuite) TestAdminUserUpdateAsSystemUser() {
-	u, err := models.NewUser(ts.instanceID, "12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
-	require.NoError(ts.T(), err, "Error making new user")
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
-
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"role": "testing",
-		"app_metadata": map[string]interface{}{
-			"roles": []string{"writer", "editor"},
-		},
-		"user_metadata": map[string]interface{}{
-			"name": "David",
-		},
-	}))
-
-	// Setup request
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
-
-	token := ts.makeSystemUser()
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-
-	data := make(map[string]interface{})
-	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-
-	assert.Equal(ts.T(), data["role"], "testing")
-
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.instanceID, "test1@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), u.Role, "testing")
-	require.NotNil(ts.T(), u.UserMetaData)
-	require.Contains(ts.T(), u.UserMetaData, "name")
-	assert.Equal(ts.T(), u.UserMetaData["name"], "David")
-	require.NotNil(ts.T(), u.AppMetaData)
-	require.Contains(ts.T(), u.AppMetaData, "roles")
-	assert.Len(ts.T(), u.AppMetaData["roles"], 2)
-	assert.Contains(ts.T(), u.AppMetaData["roles"], "writer")
-	assert.Contains(ts.T(), u.AppMetaData["roles"], "editor")
-}
-
 func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
-	u, err := models.NewUser(ts.instanceID, "12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -489,7 +411,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
 }
 
 func (ts *AdminTestSuite) TestAdminUserUpdateBannedUntilFailed() {
-	u, err := models.NewUser(ts.instanceID, "", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -513,7 +435,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdateBannedUntilFailed() {
 
 // TestAdminUserDelete tests API /admin/user route (DELETE)
 func (ts *AdminTestSuite) TestAdminUserDelete() {
-	u, err := models.NewUser(ts.instanceID, "123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
@@ -530,13 +452,13 @@ func (ts *AdminTestSuite) TestAdminUserDelete() {
 func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 	var cases = []struct {
 		desc         string
-		customConfig *conf.Configuration
+		customConfig *conf.GlobalConfiguration
 		userData     map[string]interface{}
 		expected     int
 	}{
 		{
 			"Email Signups Disabled",
-			&conf.Configuration{
+			&conf.GlobalConfiguration{
 				JWT: ts.Config.JWT,
 				External: conf.ProviderConfiguration{
 					Email: conf.EmailProviderConfiguration{
@@ -552,7 +474,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 		},
 		{
 			"Phone Signups Disabled",
-			&conf.Configuration{
+			&conf.GlobalConfiguration{
 				JWT: ts.Config.JWT,
 				External: conf.ProviderConfiguration{
 					Phone: conf.PhoneProviderConfiguration{
@@ -568,7 +490,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 		},
 		{
 			"All Signups Disabled",
-			&conf.Configuration{
+			&conf.GlobalConfiguration{
 				JWT:           ts.Config.JWT,
 				DisableSignup: true,
 			},

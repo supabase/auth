@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
@@ -18,22 +17,10 @@ const InvalidNonceMessage = "Nonce has expired or is invalid"
 // Reauthenticate sends a reauthentication otp to either the user's email or phone
 func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
-	instanceID := getInstanceID(ctx)
+	db := a.db.WithContext(ctx)
+	config := a.config
 
-	claims := getClaims(ctx)
-	userID, err := uuid.FromString(claims.Subject)
-	if err != nil {
-		return badRequestError("Could not read User ID claim")
-	}
-	user, err := models.FindUserByID(a.db, userID)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return notFoundError(err.Error())
-		}
-		return internalServerError("Database error finding user").WithInternalError(err)
-	}
-
+	user := getUser(ctx)
 	email, phone := user.GetEmail(), user.GetPhone()
 
 	if email == "" && phone == "" {
@@ -50,8 +37,8 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserReauthenticateAction, "", nil); terr != nil {
+	err := db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.NewAuditLogEntry(r, tx, user, models.UserReauthenticateAction, "", nil); terr != nil {
 			return terr
 		}
 		if email != "" {
@@ -77,7 +64,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 }
 
 // verifyReauthentication checks if the nonce provided is valid
-func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.Configuration, user *models.User) error {
+func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.GlobalConfiguration, user *models.User) error {
 	if user.ReauthenticationToken == "" || user.ReauthenticationSentAt == nil {
 		return badRequestError(InvalidNonceMessage)
 	}

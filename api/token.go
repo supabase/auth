@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/metering"
@@ -26,6 +27,7 @@ type GoTrueClaims struct {
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	UserMetaData map[string]interface{} `json:"user_metadata"`
 	Role         string                 `json:"role"`
+	SessionId    string                 `json:"session_id,omitempty"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -58,23 +60,10 @@ type IdTokenGrantParams struct {
 	Issuer   string `json:"issuer"`
 }
 
-type tokenType string
-
-const (
-	confirmationToken       tokenType = "confirmation_token"
-	recoveryToken           tokenType = "recovery_token"
-	emailChangeTokenNew     tokenType = "email_change_token_new"
-	emailChangeTokenCurrent tokenType = "email_change_token_current"
-	reauthenticationToken   tokenType = "reauthentication_token"
-)
-
 const useCookieHeader = "x-use-cookie"
-const useSessionCookie = "session"
 const InvalidLoginMessage = "Invalid login credentials"
 
-func (p *IdTokenGrantParams) getVerifier(ctx context.Context) (*oidc.IDTokenVerifier, error) {
-	config := getConfig(ctx)
-
+func (p *IdTokenGrantParams) getVerifier(ctx context.Context, config *conf.GlobalConfiguration) (*oidc.IDTokenVerifier, error) {
 	var provider *oidc.Provider
 	var err error
 	var oAuthProvider conf.OAuthProviderConfiguration
@@ -124,7 +113,7 @@ func (p *IdTokenGrantParams) getVerifierFromClientIDandIssuer(ctx context.Contex
 	var err error
 	provider, err = oidc.NewProvider(ctx, p.Issuer)
 	if err != nil {
-		return nil, fmt.Errorf("Issuer %s doesn't support the id_token grant flow", p.Issuer)
+		return nil, fmt.Errorf("issuer %s doesn't support the id_token grant flow", p.Issuer)
 	}
 	return provider.Verifier(&oidc.Config{ClientID: p.ClientID}), nil
 }
@@ -132,11 +121,11 @@ func (p *IdTokenGrantParams) getVerifierFromClientIDandIssuer(ctx context.Contex
 func getEmailVerified(v interface{}) bool {
 	var emailVerified bool
 	var err error
-	switch v.(type) {
+	switch v := v.(type) {
 	case string:
-		emailVerified, err = strconv.ParseBool(v.(string))
+		emailVerified, err = strconv.ParseBool(v)
 	case bool:
-		emailVerified = v.(bool)
+		emailVerified = v
 	default:
 		emailVerified = false
 	}
@@ -165,36 +154,41 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 
 // ResourceOwnerPasswordGrant implements the password grant type flow
 func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	db := a.db.WithContext(ctx)
+
 	params := &PasswordGrantParams{}
 
-	jsonDecoder := json.NewDecoder(r.Body)
-	if err := jsonDecoder.Decode(params); err != nil {
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read password grant params: %v", err)
 	}
 
 	aud := a.requestAud(ctx, r)
-	instanceID := getInstanceID(ctx)
-	config := a.getConfig(ctx)
+	config := a.config
 
 	if params.Email != "" && params.Phone != "" {
 		return unprocessableEntityError("Only an email address or phone number should be provided on login.")
 	}
 	var user *models.User
+	var grantParams models.GrantParams
 	var provider string
-	var err error
 	if params.Email != "" {
 		provider = "email"
 		if !config.External.Email.Enabled {
 			return badRequestError("Email logins are disabled")
 		}
-		user, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 	} else if params.Phone != "" {
 		provider = "phone"
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone logins are disabled")
 		}
 		params.Phone = a.formatPhoneNumber(params.Phone)
-		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, aud)
+		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
 	} else {
 		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
@@ -217,18 +211,18 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	}
 
 	var token *AccessTokenResponse
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
+		if terr = models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": provider,
 		}); terr != nil {
 			return terr
 		}
-		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 		if terr != nil {
 			return terr
 		}
@@ -241,19 +235,23 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	if err != nil {
 		return err
 	}
-	metering.RecordLogin("password", user.ID, instanceID)
+	metering.RecordLogin("password", user.ID)
 	return sendJSON(w, http.StatusOK, token)
 }
 
 // RefreshTokenGrant implements the refresh_token grant type flow
 func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	config := a.getConfig(ctx)
-	instanceID := getInstanceID(ctx)
+	db := a.db.WithContext(ctx)
+	config := a.config
 
 	params := &RefreshTokenGrantParams{}
 
-	jsonDecoder := json.NewDecoder(r.Body)
-	if err := jsonDecoder.Decode(params); err != nil {
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read refresh token grant params: %v", err)
 	}
 
@@ -261,7 +259,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return oauthError("invalid_request", "refresh_token required")
 	}
 
-	user, token, err := models.FindUserWithRefreshToken(a.db, params.RefreshToken)
+	user, token, err := models.FindUserWithRefreshToken(db, params.RefreshToken)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return oauthError("invalid_grant", "Invalid Refresh Token")
@@ -276,7 +274,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	var newToken *models.RefreshToken
 	if token.Revoked {
 		a.clearCookieTokens(config, w)
-		err = a.db.Transaction(func(tx *storage.Connection) error {
+		err = db.Transaction(func(tx *storage.Connection) error {
 			validToken, terr := models.GetValidChildToken(tx, token)
 			if terr != nil {
 				if errors.Is(terr, models.RefreshTokenNotFoundError{}) {
@@ -301,7 +299,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		if newToken == nil {
 			if config.Security.RefreshTokenRotationEnabled {
 				// Revoke all tokens in token family
-				err = a.db.Transaction(func(tx *storage.Connection) error {
+				err = db.Transaction(func(tx *storage.Connection) error {
 					var terr error
 					if terr = models.RevokeTokenFamily(tx, token); terr != nil {
 						return terr
@@ -319,20 +317,20 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	var tokenString string
 	var newTokenResponse *AccessTokenResponse
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(tx, instanceID, user, models.TokenRefreshedAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, user, models.TokenRefreshedAction, "", nil); terr != nil {
 			return terr
 		}
 
 		if newToken == nil {
-			newToken, terr = models.GrantRefreshTokenSwap(tx, user, token)
+			newToken, terr = models.GrantRefreshTokenSwap(r, tx, user, token)
 			if terr != nil {
 				return internalServerError(terr.Error())
 			}
 		}
 
-		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessToken(user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -353,19 +351,23 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	if err != nil {
 		return err
 	}
-	metering.RecordLogin("token", user.ID, instanceID)
+	metering.RecordLogin("token", user.ID)
 	return sendJSON(w, http.StatusOK, newTokenResponse)
 }
 
 // IdTokenGrant implements the id_token grant type flow
 func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	config := a.getConfig(ctx)
-	instanceID := getInstanceID(ctx)
+	db := a.db.WithContext(ctx)
+	config := a.config
 
 	params := &IdTokenGrantParams{}
 
-	jsonDecoder := json.NewDecoder(r.Body)
-	if err := jsonDecoder.Decode(params); err != nil {
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read id token grant params: %v", err)
 	}
 
@@ -378,9 +380,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	var verifier *oidc.IDTokenVerifier
-	var err error
 	if params.Provider != "" {
-		verifier, err = params.getVerifier(ctx)
+		verifier, err = params.getVerifier(ctx, a.config)
 	} else if params.ClientID != "" && params.Issuer != "" {
 		verifier, err = params.getVerifierFromClientIDandIssuer(ctx)
 	} else {
@@ -424,8 +425,9 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	var user *models.User
+	var grantParams models.GrantParams
 	var token *AccessTokenResponse
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		var identity *models.Identity
 
@@ -447,7 +449,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				if terr != nil {
 					return terr
 				}
-				if identity, terr = a.createNewIdentity(tx, user, params.Provider, claims); terr != nil {
+				if _, terr = a.createNewIdentity(tx, user, params.Provider, claims); terr != nil {
 					return terr
 				}
 			} else {
@@ -488,13 +490,13 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				return unauthorizedError("Error unverified email")
 			}
 
-			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, "", map[string]interface{}{
+			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr
 			}
 
-			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
+			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
 				return terr
 			}
 
@@ -502,17 +504,17 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				return internalServerError("Error updating user").WithInternalError(terr)
 			}
 		} else {
-			if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, "", map[string]interface{}{
+			if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr
 			}
-			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 				return terr
 			}
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
+		token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
@@ -527,11 +529,15 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return internalServerError("Failed to set JWT cookie. %s", err)
 	}
 
-	metering.RecordLogin("id_token", user.ID, instanceID)
+	metering.RecordLogin("id_token", user.ID)
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func generateAccessToken(user *models.User, expiresIn time.Duration, secret string) (string, error) {
+func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string) (string, error) {
+	sid := ""
+	if sessionId != nil {
+		sid = sessionId.String()
+	}
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
@@ -543,14 +549,15 @@ func generateAccessToken(user *models.User, expiresIn time.Duration, secret stri
 		AppMetaData:  user.AppMetaData,
 		UserMetaData: user.UserMetaData,
 		Role:         user.Role,
+		SessionId:    sid,
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(secret))
 }
 
-func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User) (*AccessTokenResponse, error) {
-	config := a.getConfig(ctx)
+func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+	config := a.config
 
 	now := time.Now()
 	user.LastSignInAt = &now
@@ -560,12 +567,12 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		refreshToken, terr = models.GrantAuthenticatedUser(tx, user)
+		refreshToken, terr = models.GrantAuthenticatedUser(tx, user, grantParams)
 		if terr != nil {
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		tokenString, terr = generateAccessToken(user, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessToken(user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -585,16 +592,16 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 }
 
 // setCookieTokens sets the access_token & refresh_token in the cookies
-func (a *API) setCookieTokens(config *conf.Configuration, token *AccessTokenResponse, session bool, w http.ResponseWriter) error {
+func (a *API) setCookieTokens(config *conf.GlobalConfiguration, token *AccessTokenResponse, session bool, w http.ResponseWriter) error {
 	// don't need to catch error here since we always set the cookie name
 	_ = a.setCookieToken(config, "access-token", token.Token, session, w)
 	_ = a.setCookieToken(config, "refresh-token", token.RefreshToken, session, w)
 	return nil
 }
 
-func (a *API) setCookieToken(config *conf.Configuration, name string, tokenString string, session bool, w http.ResponseWriter) error {
+func (a *API) setCookieToken(config *conf.GlobalConfiguration, name string, tokenString string, session bool, w http.ResponseWriter) error {
 	if name == "" {
-		return errors.New("Failed to set cookie, invalid name")
+		return errors.New("failed to set cookie, invalid name")
 	}
 	cookieName := config.Cookie.Key + "-" + name
 	exp := time.Second * time.Duration(config.Cookie.Duration)
@@ -615,12 +622,12 @@ func (a *API) setCookieToken(config *conf.Configuration, name string, tokenStrin
 	return nil
 }
 
-func (a *API) clearCookieTokens(config *conf.Configuration, w http.ResponseWriter) {
+func (a *API) clearCookieTokens(config *conf.GlobalConfiguration, w http.ResponseWriter) {
 	a.clearCookieToken(config, "access-token", w)
 	a.clearCookieToken(config, "refresh-token", w)
 }
 
-func (a *API) clearCookieToken(config *conf.Configuration, name string, w http.ResponseWriter) {
+func (a *API) clearCookieToken(config *conf.GlobalConfiguration, name string, w http.ResponseWriter) {
 	cookieName := config.Cookie.Key
 	if name != "" {
 		cookieName += "-" + name
