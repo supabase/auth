@@ -324,5 +324,13 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 		return nil, err
 	}
 
+	// sometimes there may be triggers in the database that will modify the
+	// user data as it is being inserted. thus we load the user object
+	// again to fetch those changes.
+	err = conn.Eager().Load(user)
+	if err != nil {
+		return nil, internalServerError("Database error loading user after sign-up").WithInternalError(err)
+	}
+
 	return user, nil
 }
