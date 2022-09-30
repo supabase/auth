@@ -171,7 +171,8 @@ func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) (bool, error)
 		aud := a.requestAud(ctx, r)
 		var err error
 		if params.Email != "" {
-			if err := a.validateEmail(ctx, params.Email); err != nil {
+			params.Email, err = a.validateEmail(ctx, params.Email)
+			if err != nil {
 				return false, err
 			}
 			_, err = models.FindUserByEmailAndAudience(db, params.Email, aud)

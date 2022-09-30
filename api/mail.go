@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/netlify/gotrue/conf"
@@ -57,7 +58,8 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not parse JSON: %v", err)
 	}
 
-	if err := a.validateEmail(ctx, params.Email); err != nil {
+	params.Email, err = a.validateEmail(ctx, params.Email)
+	if err != nil {
 		return err
 	}
 
@@ -158,7 +160,8 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if !config.Mailer.SecureEmailChangeEnabled && params.Type == "email_change_current" {
 				return unprocessableEntityError("Enable secure email change to generate link for current email")
 			}
-			if terr := a.validateEmail(ctx, params.NewEmail); terr != nil {
+			params.NewEmail, terr = a.validateEmail(ctx, params.NewEmail)
+			if terr != nil {
 				return unprocessableEntityError("The new email address provided is invalid")
 			}
 			if exists, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud); terr != nil {
@@ -350,13 +353,13 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfigu
 	), "Database error updating user for email change")
 }
 
-func (a *API) validateEmail(ctx context.Context, email string) error {
+func (a *API) validateEmail(ctx context.Context, email string) (string, error) {
 	if email == "" {
-		return unprocessableEntityError("An email address is required")
+		return "", unprocessableEntityError("An email address is required")
 	}
 	mailer := a.Mailer(ctx)
 	if err := mailer.ValidateEmail(email); err != nil {
-		return unprocessableEntityError("Unable to validate email address: " + err.Error())
+		return "", unprocessableEntityError("Unable to validate email address: " + err.Error())
 	}
-	return nil
+	return strings.ToLower(email), nil
 }

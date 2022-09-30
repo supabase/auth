@@ -98,7 +98,8 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Email != "" && params.Email != user.GetEmail() {
-			if terr = a.validateEmail(ctx, params.Email); terr != nil {
+			params.Email, terr = a.validateEmail(ctx, params.Email)
+			if terr != nil {
 				return terr
 			}
 
