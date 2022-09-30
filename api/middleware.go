@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/security"
 	"github.com/sirupsen/logrus"
 
@@ -49,11 +50,19 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		c := req.Context()
+
 		if limitHeader := a.config.RateLimitHeader; limitHeader != "" {
-			key := req.Header.Get(a.config.RateLimitHeader)
-			err := tollbooth.LimitByKeys(lmt, []string{key})
-			if err != nil {
-				return c, httpError(http.StatusTooManyRequests, "Rate limit exceeded")
+			key := req.Header.Get(limitHeader)
+
+			if key == "" {
+				log := observability.GetLogEntry(req)
+				log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
+				return c, nil
+			} else {
+				err := tollbooth.LimitByKeys(lmt, []string{key})
+				if err != nil {
+					return c, httpError(http.StatusTooManyRequests, "Rate limit exceeded")
+				}
 			}
 		}
 		return c, nil
