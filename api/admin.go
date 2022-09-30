@@ -120,6 +120,20 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	if params.Email != "" {
+		params.Email, err = a.validateEmail(ctx, params.Email)
+		if err != nil {
+			return err
+		}
+	}
+
+	if params.Phone != "" {
+		params.Phone, err = a.validatePhone(params.Phone)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if params.Role != "" {
 			if terr := user.SetRole(tx, params.Role); terr != nil {
