@@ -475,7 +475,8 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			return nil, badRequestError("Invalid sms verification type")
 		}
 	} else if isEmailOtpVerification(params) {
-		if err := a.validateEmail(ctx, params.Email); err != nil {
+		params.Email, err = a.validateEmail(ctx, params.Email)
+		if err != nil {
 			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}
 		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))

@@ -73,7 +73,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if !config.External.Email.Enabled {
 			return badRequestError("Email signups are disabled")
 		}
-		if err := a.validateEmail(ctx, params.Email); err != nil {
+		params.Email, err = a.validateEmail(ctx, params.Email)
+		if err != nil {
 			return err
 		}
 		user, err = models.FindUserByEmailAndAudience(db, params.Email, params.Aud)

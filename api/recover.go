@@ -37,7 +37,8 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	var user *models.User
 	aud := a.requestAud(ctx, r)
 
-	if err := a.validateEmail(ctx, params.Email); err != nil {
+	params.Email, err = a.validateEmail(ctx, params.Email)
+	if err != nil {
 		return err
 	}
 	user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)

@@ -31,7 +31,8 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read Invite params: %v", err)
 	}
 
-	if err := a.validateEmail(ctx, params.Email); err != nil {
+	params.Email, err = a.validateEmail(ctx, params.Email)
+	if err != nil {
 		return err
 	}
 
