@@ -18,9 +18,9 @@ create table if not exists {{ index .Options "Namespace" }}.mfa_factors(
        updated_at timestamptz not null,
        secret text null,
        constraint mfa_factors_pkey primary key(id),
-       constraint mfa_factors_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade
+       constraint mfa_factors_user_id_fkey foreign key (user_id) references {{ index .Options "Namespace" }}.users(id) on delete cascade
 );
-comment on table auth.mfa_factors is 'auth: stores metadata about factors';
+comment on table {{ index .Options "Namespace" }}.mfa_factors is 'auth: stores metadata about factors';
 
 create unique index mfa_factors_user_friendly_name_unique on mfa_factors (friendly_name, user_id) where trim(friendly_name) <> '';
 
@@ -32,9 +32,9 @@ create table if not exists {{ index .Options "Namespace" }}.mfa_challenges(
        verified_at timestamptz  null,
        ip_address  inet not null,
        constraint mfa_challenges_pkey primary key (id),
-       constraint mfa_challenges_auth_factor_id_fkey foreign key (factor_id) references auth.mfa_factors(id) on delete cascade
+       constraint mfa_challenges_auth_factor_id_fkey foreign key (factor_id) references {{ index .Options "Namespace" }}.mfa_factors(id) on delete cascade
 );
-comment on table auth.mfa_challenges is 'auth: stores metadata about challenge requests made';
+comment on table {{ index .Options "Namespace" }}.mfa_challenges is 'auth: stores metadata about challenge requests made';
 
 
 
@@ -46,6 +46,6 @@ create table if not exists {{ index .Options "Namespace" }}.mfa_amr_claims(
     updated_at timestamptz not null,
     sign_in_method text not null,
     constraint mfa_amr_claims_session_id_pkey unique(session_id, id),
-    constraint mfa_amr_claims_session_id_fkey foreign key(session_id) references auth.sessions(id) on delete cascade
+    constraint mfa_amr_claims_session_id_fkey foreign key(session_id) references {{ index .Options "Namespace" }}.sessions(id) on delete cascade
 );
 comment on table auth.mfa_amr_claims is 'auth: stores authenticator method reference claims for multi factor authentication';
