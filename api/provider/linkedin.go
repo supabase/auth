@@ -91,7 +91,7 @@ func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 }
 
 func (g linkedinProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+	return g.Exchange(oauth2.NoContext, code)
 }
 
 func GetName(name linkedinName) string {

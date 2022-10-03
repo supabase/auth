@@ -63,7 +63,7 @@ func NewGitlabProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 }
 
 func (g gitlabProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+	return g.Exchange(oauth2.NoContext, code)
 }
 
 func (g gitlabProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {

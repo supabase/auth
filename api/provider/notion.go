@@ -60,7 +60,7 @@ func NewNotionProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, erro
 }
 
 func (g notionProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+	return g.Exchange(oauth2.NoContext, code)
 }
 
 func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
