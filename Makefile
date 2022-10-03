@@ -9,7 +9,7 @@ help: ## Show this help.
 all: vet sec static build ## Run the tests and build the binary.
 
 build: deps ## Build the binary.
-	CGO_ENABLED=0 GOOS=linux go build $(FLAGS)
+	CGO_ENABLED=0 go build $(FLAGS)
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o gotrue-arm64
 
 dev-deps: ## Install developer dependencies
