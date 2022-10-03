@@ -11,7 +11,7 @@ import (
 const FactorUnverifiedState = "unverified"
 const FactorVerifiedState = "verified"
 
-const TOTP = "totp"
+const TOTP = "TOTP"
 const Webauthn = "webauthn"
 
 type Factor struct {
@@ -21,7 +21,7 @@ type Factor struct {
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 	Status       string    `json:"status" db:"status"`
 	FriendlyName string    `json:"friendly_name,omitempty" db:"friendly_name"`
-	Secret       string    `json:"-" db:"secret"`
+	TOTPSecret   string    `json:"-" db:"totp_secret"`
 	FactorType   string    `json:"factor_type" db:"factor_type"`
 }
 
@@ -30,7 +30,7 @@ func (Factor) TableName() string {
 	return tableName
 }
 
-func NewFactor(user *User, friendlyName, factorType, status, secret string) (*Factor, error) {
+func NewFactor(user *User, friendlyName, factorType, status, totpSecret string) (*Factor, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -40,7 +40,7 @@ func NewFactor(user *User, friendlyName, factorType, status, secret string) (*Fa
 		ID:           id,
 		Status:       status,
 		FriendlyName: friendlyName,
-		Secret:       secret,
+		TOTPSecret:   totpSecret,
 		FactorType:   factorType,
 	}
 	return factor, nil
