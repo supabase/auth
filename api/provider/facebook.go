@@ -85,7 +85,7 @@ func (p facebookProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 	}
 
 	if u.Email == "" {
-		return nil, errors.New("Unable to find email with Facebook provider")
+		return nil, errors.New("unable to find email with Facebook provider")
 	}
 
 	return &UserProvidedData{

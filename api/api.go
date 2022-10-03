@@ -2,20 +2,16 @@ package api
 
 import (
 	"context"
-	"errors"
 	"net/http"
-	"os"
-	"os/signal"
 	"regexp"
-	"syscall"
 	"time"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
 	"github.com/go-chi/chi"
 	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/mailer"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
 	"github.com/rs/cors"
 	"github.com/sebest/xff"
@@ -35,44 +31,6 @@ type API struct {
 	db      *storage.Connection
 	config  *conf.GlobalConfiguration
 	version string
-}
-
-// ListenAndServe starts the REST API
-func (a *API) ListenAndServe(hostAndPort string) {
-	log := logrus.WithField("component", "api")
-	server := &http.Server{
-		Addr:              hostAndPort,
-		Handler:           a.handler,
-		ReadHeaderTimeout: 2 * time.Second, // to mitigate a Slowloris attack
-	}
-
-	done := make(chan struct{})
-	defer close(done)
-	go func() {
-		waitForTermination(log, done)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		err := server.Shutdown(ctx)
-		if err != nil && !errors.Is(err, context.Canceled) && errors.Is(err, context.DeadlineExceeded) {
-			log.WithError(err).Error("Shutdown failed")
-		}
-	}()
-
-	if err := server.ListenAndServe(); err != http.ErrServerClosed {
-		log.WithError(err).Fatal("http server listen failed")
-	}
-}
-
-// WaitForShutdown blocks until the system signals termination or done has a value
-func waitForTermination(log logrus.FieldLogger, done <-chan struct{}) {
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
-	select {
-	case sig := <-signals:
-		log.Infof("Triggering shutdown from signal %s", sig)
-	case <-done:
-		log.Infof("Shutting down...")
-	}
 }
 
 // NewAPI instantiates a new REST API
@@ -101,13 +59,23 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	api.deprecationNotices(ctx)
 
 	xffmw, _ := xff.Default()
-	logger := logger.NewStructuredLogger(logrus.StandardLogger())
+	logger := observability.NewStructuredLogger(logrus.StandardLogger())
 
 	r := newRouter()
-	r.UseBypass(xffmw.Handler)
 	r.Use(addRequestID(globalConfig))
+
+	if globalConfig.Tracing.Enabled {
+		switch globalConfig.Tracing.Exporter {
+		case conf.OpenTelemetryTracing:
+			r.UseBypass(observability.RequestTracing())
+
+		case conf.OpenTracing:
+			r.UseBypass(opentracer)
+		}
+	}
+
+	r.UseBypass(xffmw.Handler)
 	r.Use(recoverer)
-	r.UseBypass(tracer)
 
 	r.Get("/health", api.HealthCheck)
 
@@ -211,12 +179,18 @@ func NewAPIFromConfigFile(filename string, version string) (*API, *conf.GlobalCo
 	return NewAPIWithVersion(context.Background(), config, db, version), config, nil
 }
 
+type HealthCheckResponse struct {
+	Version     string `json:"version"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
 // HealthCheck endpoint indicates if the gotrue api service is available
 func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) error {
-	return sendJSON(w, http.StatusOK, map[string]string{
-		"version":     a.version,
-		"name":        "GoTrue",
-		"description": "GoTrue is a user registration and authentication API",
+	return sendJSON(w, http.StatusOK, HealthCheckResponse{
+		Version:     a.version,
+		Name:        "GoTrue",
+		Description: "GoTrue is a user registration and authentication API",
 	})
 }
 

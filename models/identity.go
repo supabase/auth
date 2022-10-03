@@ -30,7 +30,7 @@ func (Identity) TableName() string {
 func NewIdentity(user *User, provider string, identityData map[string]interface{}) (*Identity, error) {
 	id, ok := identityData["sub"]
 	if !ok {
-		return nil, errors.New("Error missing provider id")
+		return nil, errors.New("error missing provider id")
 	}
 	now := time.Now()
 

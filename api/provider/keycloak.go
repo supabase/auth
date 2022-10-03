@@ -38,7 +38,7 @@ func NewKeycloakProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 	}
 
 	if ext.URL == "" {
-		return nil, errors.New("Unable to find URL for the Keycloak provider")
+		return nil, errors.New("unable to find URL for the Keycloak provider")
 	}
 
 	extURLlen := len(ext.URL)
@@ -73,7 +73,7 @@ func (g keycloakProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 	}
 
 	if u.Email == "" {
-		return nil, errors.New("Unable to find email with Keycloak provider")
+		return nil, errors.New("unable to find email with Keycloak provider")
 	}
 
 	return &UserProvidedData{

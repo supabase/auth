@@ -1,16 +1,16 @@
 .PHONY: all build deps dev-deps image migrate test vet sec format unused
 CHECK_FILES?=./...
-FLAGS?=-ldflags "-X github.com/netlify/gotrue/cmd.Version=`git describe --tags`"
+FLAGS?=-ldflags "-X github.com/netlify/gotrue/utilities.Version=`git describe --tags`" -buildvcs=false
 DEV_DOCKER_COMPOSE:=docker-compose-dev.yml
 
 help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {sub("\\\\n",sprintf("\n%22c"," "), $$2);printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-all: vet sec unused build ## Run the tests and build the binary.
+all: vet sec static build ## Run the tests and build the binary.
 
 build: deps ## Build the binary.
-	go build $(FLAGS)
-	GOOS=linux GOARCH=arm64 go build $(FLAGS) -o gotrue-arm64
+	CGO_ENABLED=0 GOOS=linux go build $(FLAGS)
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o gotrue-arm64
 
 dev-deps: ## Install developer dependencies
 	@go install github.com/gobuffalo/pop/soda@latest
@@ -45,6 +45,8 @@ unused: dev-deps # Look for unused code
 	
 	@echo "Code used only in _test.go (do move it in those files):"
 	staticcheck -checks U1000 -tests=false $(CHECK_FILES)
+static: dev-deps
+	staticcheck ./...
 
 dev: ## Run the development containers
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up

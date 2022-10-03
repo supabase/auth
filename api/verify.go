@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
 )
@@ -70,6 +70,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 
 func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	config := a.config
 	params := &VerifyParams{}
 	params.Token = r.FormValue("token")
@@ -83,7 +84,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		token       *AccessTokenResponse
 	)
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if params.Token == "" {
 			return badRequestError("Verify requires a token")
@@ -158,6 +159,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 
 func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	config := a.config
 	params := &VerifyParams{}
 
@@ -188,7 +190,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		token       *AccessTokenResponse
 	)
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		aud := a.requestAud(ctx, r)
 		user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
@@ -343,7 +345,7 @@ func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Conn
 func (a *API) prepErrorRedirectURL(err *HTTPError, r *http.Request, rurl string) string {
 	q := url.Values{}
 
-	log := logger.GetLogEntry(r)
+	log := observability.GetLogEntry(r)
 	log.Error(err.Message)
 
 	if str, ok := oauthErrorMap[err.Code]; ok {
@@ -473,7 +475,8 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			return nil, badRequestError("Invalid sms verification type")
 		}
 	} else if isEmailOtpVerification(params) {
-		if err := a.validateEmail(ctx, params.Email); err != nil {
+		params.Email, err = a.validateEmail(ctx, params.Email)
+		if err != nil {
 			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}
 		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))

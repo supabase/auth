@@ -98,7 +98,7 @@ func (g workosProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	}
 
 	if u.Email == "" {
-		return nil, errors.New("Unable to find email with WorkOS provider")
+		return nil, errors.New("unable to find email with WorkOS provider")
 	}
 
 	return &UserProvidedData{

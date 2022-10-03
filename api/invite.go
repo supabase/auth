@@ -17,6 +17,7 @@ type InviteParams struct {
 // Invite is the endpoint for inviting a new user
 func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	config := a.config
 	adminUser := getAdminUser(ctx)
 	params := &InviteParams{}
@@ -30,17 +31,18 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read Invite params: %v", err)
 	}
 
-	if err := a.validateEmail(ctx, params.Email); err != nil {
+	params.Email, err = a.validateEmail(ctx, params.Email)
+	if err != nil {
 		return err
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(a.db, params.Email, aud)
+	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil && !models.IsNotFoundError(err) {
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		if user != nil {
 			if user.IsConfirmed() {
 				return unprocessableEntityError(DuplicateEmailMsg)

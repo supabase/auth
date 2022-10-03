@@ -51,11 +51,11 @@ jobs:
         run: |
           set -x
           go vet ./...
-      - name: Check for unused code
+      - name: Run static check
         run: |
           set -x
           go install honnef.co/go/tools/cmd/staticcheck@latest
-          make unused
+          make static
       - name: Check gosec
         run: |
           set -x
