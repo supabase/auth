@@ -72,7 +72,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	factorType := params.FactorType
 	if factorType != models.TOTP {
-		return unprocessableEntityError("factorType needs to be TOTP")
+		return unprocessableEntityError("factorType needs to be totp")
 	}
 	if params.Issuer == "" {
 		u, err := url.Parse(config.SiteURL)
@@ -135,7 +135,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
 			QRCode: fmt.Sprintf("data:image/svg+xml;utf-8,%v", buf.String()),
-			Secret: factor.TOTPSecret,
+			Secret: factor.Secret,
 			URI:    key.URL(),
 		},
 	})
@@ -204,7 +204,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Challenge is not valid")
 	}
 
-	valid := totp.Validate(params.Code, factor.TOTPSecret)
+	valid := totp.Validate(params.Code, factor.Secret)
 	if !valid {
 		return unauthorizedError("Invalid TOTP code entered")
 	}
@@ -278,7 +278,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if factor.Status == models.FactorVerifiedState {
-		valid := totp.Validate(params.Code, factor.TOTPSecret)
+		valid := totp.Validate(params.Code, factor.Secret)
 		if !valid {
 			return unauthorizedError("Invalid code entered")
 		}

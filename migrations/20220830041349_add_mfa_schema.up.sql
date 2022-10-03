@@ -1,6 +1,6 @@
 -- see: https://stackoverflow.com/questions/7624919/check-if-a-user-defined-type-already-exists-in-postgresql/48382296#48382296
 do $$ begin
-    create type factor_type as enum('TOTP', 'webauthn');
+    create type factor_type as enum('totp', 'webauthn');
     create type factor_status as enum('disabled', 'unverified', 'verified');
     create type aal_level as enum('aal1', 'aal2', 'aal3');
 exception
@@ -16,7 +16,7 @@ create table if not exists auth.mfa_factors(
        status factor_status not null,
        created_at timestamptz not null,
        updated_at timestamptz not null,
-       totp_secret text null,
+       secret text null,
        constraint mfa_factors_pkey primary key(id),
        constraint mfa_factors_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade
 );
