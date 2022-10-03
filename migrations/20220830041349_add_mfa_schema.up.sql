@@ -8,7 +8,7 @@ exception
 end $$;
 
 -- auth.mfa_factors definition
-create table if not exists auth.mfa_factors(
+create table if not exists {{ index .Options "Namespace" }}.mfa_factors(
        id uuid not null,
        user_id uuid not null,
        friendly_name text null,
@@ -25,7 +25,7 @@ comment on table auth.mfa_factors is 'auth: stores metadata about factors';
 create unique index mfa_factors_user_friendly_name_unique on mfa_factors (friendly_name, user_id) where trim(friendly_name) <> '';
 
 -- auth.mfa_challenges definition
-create table if not exists auth.mfa_challenges(
+create table if not exists {{ index .Options "Namespace" }}.mfa_challenges(
        id uuid not null,
        factor_id uuid not null,
        created_at timestamptz not null,
@@ -37,8 +37,9 @@ create table if not exists auth.mfa_challenges(
 comment on table auth.mfa_challenges is 'auth: stores metadata about challenge requests made';
 
 
+
 -- add factor_id and amr claims to session
-create table if not exists auth.mfa_amr_claims(
+create table if not exists {{ index .Options "Namespace" }}.mfa_amr_claims(
     id uuid not null,
     session_id uuid not null,
     created_at timestamptz not null,
