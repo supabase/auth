@@ -237,10 +237,10 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			"factor_id":    factor.ID,
 			"challenge_id": challenge.ID,
 		}); terr != nil {
-			return err
+			return terr
 		}
 		if terr = challenge.Verify(tx); terr != nil {
-			return err
+			return terr
 		}
 		if factor.Status != models.FactorVerifiedState {
 			if terr = factor.UpdateStatus(tx, models.FactorVerifiedState); terr != nil {
@@ -292,18 +292,19 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if err = tx.Destroy(factor); err != nil {
+		var terr error
+		if terr := tx.Destroy(factor); terr != nil {
 			return err
 		}
-		if err = models.NewAuditLogEntry(r, tx, user, models.UnenrollFactorAction, r.RemoteAddr, map[string]interface{}{
+		if terr = models.NewAuditLogEntry(r, tx, user, models.UnenrollFactorAction, r.RemoteAddr, map[string]interface{}{
 			"user_id":    user.ID,
 			"factor_id":  factor.ID,
 			"session_id": session.ID,
-		}); err != nil {
-			return err
+		}); terr != nil {
+			return terr
 		}
-		if err = models.InvalidateOtherFactorAssociatedSessions(tx, session.ID, user.ID, factor.ID); err != nil {
-			return err
+		if terr = models.InvalidateOtherFactorAssociatedSessions(tx, session.ID, user.ID, factor.ID); terr != nil {
+			return terr
 		}
 		return nil
 	})
