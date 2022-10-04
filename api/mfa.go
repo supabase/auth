@@ -91,7 +91,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if len(factors) >= int(config.MFA.MaxEnrolledFactors) {
-		return forbiddenError("Too many enrolled factors exceeds the allowed value, please unenroll to continue")
+		return forbiddenError("Enrolled factors exceed allowed limit, unenroll to continue")
 	}
 	numVerifiedFactors := 0
 
@@ -103,7 +103,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	}
 	if numVerifiedFactors >= 1 {
-		return forbiddenError("number of enrolled factors exceeds the allowed value, please unenroll to continue")
+		return forbiddenError("number of enrolled factors exceeds the allowed value, unenroll to continue")
 
 	}
 
@@ -124,12 +124,12 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	s.End()
 
-	factor, terr := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, key.Secret())
-	if terr != nil {
+	factor, err := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, key.Secret())
+	if err != nil {
 		return internalServerError("database error creating factor").WithInternalError(err)
 	}
-	terr = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr = tx.Create(factor); terr != nil {
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := tx.Create(factor); terr != nil {
 			return terr
 		}
 		if terr := models.NewAuditLogEntry(r, tx, user, models.EnrollFactorAction, r.RemoteAddr, nil); terr != nil {
@@ -137,8 +137,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
-	if terr != nil {
-		return terr
+	if err != nil {
+		return err
 	}
 
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
@@ -165,7 +165,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error creating challenge").WithInternalError(err)
 	}
 
-	terr := a.db.Transaction(func(tx *storage.Connection) error {
+	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(challenge); terr != nil {
 			return terr
 		}
@@ -177,8 +177,8 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
-	if terr != nil {
-		return terr
+	if err != nil {
+		return err
 	}
 
 	creationTime := challenge.CreatedAt
@@ -232,7 +232,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		return badRequestError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
+		return badRequestError("%v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
 
 	if valid := totp.Validate(params.Code, factor.Secret); !valid {
