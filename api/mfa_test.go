@@ -48,7 +48,7 @@ func (ts *MFATestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 	// Create Factor
-	f, err := models.NewFactor(u, "test_factor", models.TOTP, models.FactorUnverifiedState, "secretkey")
+	f, err := models.NewFactor(u, "test_factor", models.TOTP, models.FactorStateUnverified, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 	// Create corresponding sessoin
@@ -133,7 +133,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			factors, err := models.FindFactorsByUser(ts.API.db, user)
 			ts.Require().NoError(err)
 			latestFactor := factors[len(factors)-1]
-			require.Equal(ts.T(), models.FactorUnverifiedState, latestFactor.Status)
+			require.Equal(ts.T(), models.FactorStateUnverified, latestFactor.Status)
 			if c.FriendlyName != "" && c.ExpectedCode == http.StatusOK {
 				require.Equal(ts.T(), c.FriendlyName, latestFactor.FriendlyName)
 			}
@@ -293,7 +293,7 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			sharedSecret := ts.TestOTPKey.Secret()
 			f.Secret = sharedSecret
 			if v.IsFactorVerified {
-				err = f.UpdateStatus(ts.API.db, models.FactorVerifiedState)
+				err = f.UpdateStatus(ts.API.db, models.FactorStateVerified)
 				require.NoError(ts.T(), err)
 			}
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")

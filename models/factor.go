@@ -9,8 +9,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-const FactorUnverifiedState = "unverified"
-const FactorVerifiedState = "verified"
+const FactorStateUnverified = "unverified"
+const FactorStateVerified = "verified"
 
 const TOTP = "totp"
 
@@ -122,7 +122,7 @@ func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Fac
 
 func FindVerifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	factors := []*Factor{}
-	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorVerifiedState).All(&factors); err != nil {
+	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorStateVerified).All(&factors); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return factors, nil
 		}

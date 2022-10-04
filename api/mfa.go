@@ -20,6 +20,8 @@ import (
 	"github.com/pquerna/otp/totp"
 )
 
+const DefaultQRSize = 3
+
 type EnrollFactorParams struct {
 	FriendlyName string `json:"friendly_name"`
 	FactorType   string `json:"factor_type"`
@@ -33,9 +35,9 @@ type TOTPObject struct {
 }
 
 type EnrollFactorResponse struct {
-	ID   uuid.UUID `json:"id"`
-	Type string    `json:"type"`
-	TOTP TOTPObject
+	ID   uuid.UUID  `json:"id"`
+	Type string     `json:"type"`
+	TOTP TOTPObject `json:"TOTP,omitempty"`
 }
 
 type VerifyFactorParams struct {
@@ -53,7 +55,6 @@ type UnenrollFactorParams struct {
 }
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
-	const DefaultQRSize = 3
 	ctx := r.Context()
 	user := getUser(ctx)
 	config := a.config
@@ -70,7 +71,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return unprocessableEntityError("factorType needs to be TOTP")
 	}
 	if params.Issuer == "" {
-		u, err := url.Parse(config.SiteURL)
+		u, err := url.ParseRequestURI(config.SiteURL)
 		if err != nil {
 			return internalServerError("site url is improperly formatted")
 		}
@@ -92,7 +93,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	// TODO: Remove this at v2
 	for _, factor := range factors {
-		if factor.Status == models.FactorVerifiedState {
+		if factor.Status == models.FactorStateVerified {
 			numVerifiedFactors += 1
 		}
 
@@ -119,7 +120,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	s.End()
 
-	factor, terr := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorUnverifiedState, key.Secret())
+	factor, terr := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, key.Secret())
 	if terr != nil {
 		return internalServerError("database error creating factor").WithInternalError(err)
 	}
@@ -196,7 +197,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	currentIP := utilities.GetIPAddress(r)
 	err = jsonDecoder.Decode(params)
 	if err != nil {
-		return badRequestError("Please check the params passed into VerifyFactor: %v", err)
+		return badRequestError("Invalid params for VerifyFactor: %v", err)
 	}
 
 	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
@@ -242,8 +243,8 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = challenge.Verify(tx); terr != nil {
 			return terr
 		}
-		if factor.Status != models.FactorVerifiedState {
-			if terr = factor.UpdateStatus(tx, models.FactorVerifiedState); terr != nil {
+		if factor.Status != models.FactorStateVerified {
+			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
 				return terr
 			}
 		}
@@ -284,7 +285,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError(err.Error())
 	}
 
-	if factor.Status == models.FactorVerifiedState {
+	if factor.Status == models.FactorStateVerified {
 		valid := totp.Validate(params.Code, factor.Secret)
 		if !valid {
 			return unauthorizedError("Invalid code entered")
