@@ -581,10 +581,10 @@ func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time
 	return token.SignedString([]byte(secret))
 }
 
-func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod string, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 
 	config := a.config
-	isMFASignInMethod := signInMethod == models.TOTP
+	isMFASignInMethod := signInMethod == models.TOTPSignIn
 	now := time.Now()
 	user.LastSignInAt = &now
 
@@ -614,12 +614,13 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 				return err
 			}
 		}
-		_, aal := calculateAALFromClaims(currentClaims, signInMethod)
+		// TODO(Joel): Refactor to use authenticationMethod once generateToken is refactored
+		_, aal := calculateAALFromClaims(currentClaims, signInMethod.String())
 		if err := session.UpdateAAL(tx, aal); err != nil {
 			return err
 		}
 
-		tokenString, terr = generateAccessToken(user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, currentClaims, signInMethod)
+		tokenString, terr = generateAccessToken(user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, currentClaims, signInMethod.String())
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}

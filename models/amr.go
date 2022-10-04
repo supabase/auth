@@ -1,10 +1,11 @@
 package models
 
 import (
+	"time"
+
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
-	"time"
 )
 
 type AMRClaim struct {
@@ -19,8 +20,8 @@ func (AMRClaim) TableName() string {
 	return tableName
 }
 
-func AddClaimToSession(tx *storage.Connection, session *Session, authenticationMethod string) error {
+func AddClaimToSession(tx *storage.Connection, session *Session, authenticationMethod AuthenticationMethod) error {
 	currentTime := time.Now()
 	return tx.RawQuery("INSERT INTO "+(&pop.Model{Value: AMRClaim{}}).TableName()+
-		"(session_id, created_at, updated_at, authentication_method) values(?, ?, ?, ?) "+"ON CONFLICT ON CONSTRAINT mfa_amr_claims_session_id_authentication_method_pkey "+"DO UPDATE SET updated_at = ?;", session.ID, currentTime, currentTime, authenticationMethod, currentTime).Exec()
+		"(session_id, created_at, updated_at, authentication_method) values(?, ?, ?, ?) "+"ON CONFLICT ON CONSTRAINT mfa_amr_claims_session_id_authentication_method_pkey "+"DO UPDATE SET updated_at = ?;", session.ID, currentTime, currentTime, authenticationMethod.String(), currentTime).Exec()
 }
