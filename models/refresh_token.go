@@ -102,7 +102,7 @@ func GetValidChildToken(tx *storage.Connection, token *RefreshToken) (*RefreshTo
 
 func FindTokenBySessionID(tx *storage.Connection, sessionId *uuid.UUID) (*RefreshToken, error) {
 	refreshToken := &RefreshToken{}
-	err := tx.Q().Where("session_id = ? and revoked = false", sessionId).Order("created_at asc").First(refreshToken)
+	err := tx.Q().Where("session_id = ?", sessionId).Order("created_at asc").First(refreshToken)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, RefreshTokenNotFoundError{}

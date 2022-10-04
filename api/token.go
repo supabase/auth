@@ -623,11 +623,6 @@ func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Conne
 		return nil, internalServerError("Cannot read SessionId claim as UUID").WithInternalError(err)
 	}
 	err = conn.Transaction(func(tx *storage.Connection) error {
-		_, terr := models.FindTokenBySessionID(tx, &sessionId)
-		if terr != nil {
-			return internalServerError("Database error granting user").WithInternalError(terr)
-		}
-
 		session, terr := models.FindSessionById(tx, sessionId)
 		if terr != nil {
 			return terr
