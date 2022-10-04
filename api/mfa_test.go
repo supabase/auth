@@ -147,6 +147,7 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 	require.NoError(ts.T(), err)
 
 	factors, err := models.FindFactorsByUser(ts.API.db, u)
+	require.NoError(ts.T(), err)
 	f := factors[0]
 
 	token, err := generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
