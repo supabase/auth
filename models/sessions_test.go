@@ -36,7 +36,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	require.NoError(ts.T(), err)
 
 	firstClaimAddedTime := time.Now().Unix()
-	err = AddClaimToSession(ts.db, session, TOTP)
+	err = AddClaimToSession(ts.db, session, TOTPSignIn)
 	require.NoError(ts.T(), err)
 
 	aal, amr := session.CalculateAALAndAMR()
@@ -44,7 +44,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	require.Equal(ts.T(), AAL2.String(), aal)
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
 
-	err = AddClaimToSession(ts.db, session, TOTP)
+	err = AddClaimToSession(ts.db, session, TOTPSignIn)
 	require.NoError(ts.T(), err)
 
 	aal, amr = session.CalculateAALAndAMR()
@@ -53,7 +53,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
 	found := false
 	for _, claim := range session.AMRClaims {
-		if claim.AuthenticationMethod == TOTP.String() {
+		if claim.AuthenticationMethod == TOTPSignIn.String() {
 			require.True(ts.T(), firstClaimAddedTime < claim.UpdatedAt.Unix())
 			found = true
 		}

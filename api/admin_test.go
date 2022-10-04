@@ -590,7 +590,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 			"Update factor type",
 			map[string]interface{}{
 				"friendly_name": "john",
-				"factor_type":   models.TOTP.String(),
+				"factor_type":   models.TOTP,
 				"factor_status": "unverified",
 			},
 			http.StatusOK,

@@ -1,10 +1,11 @@
 package models
 
 import (
+	"time"
+
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
-	"time"
 )
 
 type AMRClaim struct {

@@ -65,8 +65,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return badRequestError(err.Error())
 	}
-	factorType, validAuthType := models.ParseAuthenticationMethod(params.FactorType)
-	if !validAuthType {
+	factorType := params.FactorType
+	if factorType != models.TOTP {
 		return unprocessableEntityError("factorType needs to be TOTP")
 	}
 
@@ -81,13 +81,26 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Read from DB for certainty
-	factors, err := models.FindVerifiedFactorsByUser(a.db, user)
+	factors, err := models.FindFactorsByUser(a.db, user)
 	if err != nil {
 		return internalServerError("error validating number of factors in system").WithInternalError(err)
 	}
-	// Remove this at v2
-	if len(factors) >= 1 {
-		return forbiddenError("only one factor can be enrolled at a time, please unenroll to continue")
+
+	if len(factors) >= int(config.MFA.MaxEnrolledFactors) {
+		return forbiddenError("Too many enrolled factors exceeds the allowed value, please unenroll to continue")
+	}
+	numVerifiedFactors := 0
+
+	// TODO: Remove this at v2
+	for _, factor := range factors {
+		if factor.Status == models.FactorVerifiedState {
+			numVerifiedFactors += 1
+		}
+
+	}
+	if numVerifiedFactors >= 1 {
+		return forbiddenError("number of enrolled factors exceeds the allowed value, please unenroll to continue")
+
 	}
 
 	key, err := totp.Generate(totp.GenerateOpts{
@@ -126,11 +139,11 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:   factor.ID,
-		Type: models.TOTP.String(),
+		Type: models.TOTP,
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
 			QRCode: fmt.Sprintf("data:image/svg+xml;utf-8,%v", buf.String()),
-			Secret: factor.TOTPSecret,
+			Secret: factor.Secret,
 			URI:    key.URL(),
 		},
 	})
@@ -214,7 +227,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
 	}
 
-	if valid := totp.Validate(params.Code, factor.TOTPSecret); !valid {
+	if valid := totp.Validate(params.Code, factor.Secret); !valid {
 		return badRequestError("Invalid TOTP code entered")
 	}
 
@@ -225,10 +238,10 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			"factor_id":    factor.ID,
 			"challenge_id": challenge.ID,
 		}); terr != nil {
-			return err
+			return terr
 		}
 		if terr = challenge.Verify(tx); terr != nil {
-			return err
+			return terr
 		}
 		if factor.Status != models.FactorVerifiedState {
 			if terr = factor.UpdateStatus(tx, models.FactorVerifiedState); terr != nil {
@@ -239,7 +252,8 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		token, terr = a.updateMFASessionAndClaims(ctx, tx, user, models.TOTP, models.GrantParams{
+		token, terr = a.updateMFASessionAndClaims(ctx, tx, user, models.TOTPSignIn, models.GrantParams{
+
 			FactorID: &factor.ID,
 		})
 		if terr != nil {
@@ -277,25 +291,27 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if factor.Status == models.FactorVerifiedState {
-		valid := totp.Validate(params.Code, factor.TOTPSecret)
+		valid := totp.Validate(params.Code, factor.Secret)
 		if !valid {
 			return unauthorizedError("Invalid code entered")
 		}
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if err = tx.Destroy(factor); err != nil {
+		var terr error
+		if terr := tx.Destroy(factor); terr != nil {
 			return err
 		}
-		if err = models.NewAuditLogEntry(r, tx, user, models.UnenrollFactorAction, r.RemoteAddr, map[string]interface{}{
+		if terr = models.NewAuditLogEntry(r, tx, user, models.UnenrollFactorAction, r.RemoteAddr, map[string]interface{}{
 			"user_id":    user.ID,
 			"factor_id":  factor.ID,
 			"session_id": session.ID,
-		}); err != nil {
-			return err
+		}); terr != nil {
+			return terr
 		}
 		if err = factor.DowngradeSessionsToAAL1(tx); err != nil {
 			return err
+
 		}
 		return nil
 	})

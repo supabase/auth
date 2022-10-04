@@ -89,7 +89,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		{
 			"TOTP: No issuer",
 			alternativeFriendlyName,
-			models.TOTP.String(),
+			models.TOTP,
 			"",
 			http.StatusOK,
 		},
@@ -104,14 +104,14 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		{
 			"TOTP: Factor has friendly name",
 			testFriendlyName,
-			models.TOTP.String(),
+			models.TOTP,
 			ts.TestDomain,
 			http.StatusOK,
 		},
 		{
 			"TOTP: Enrolling without friendly name",
 			"",
-			models.TOTP.String(),
+			models.TOTP,
 			ts.TestDomain,
 			http.StatusOK,
 		},
@@ -202,7 +202,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			sharedSecret := ts.TestOTPKey.Secret()
 			factors, err := models.FindFactorsByUser(ts.API.db, u)
 			f := factors[0]
-			f.TOTPSecret = sharedSecret
+			f.Secret = sharedSecret
 			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
 			secondarySession, err := models.NewSession(u, &f.ID)
@@ -292,8 +292,9 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			factors, err := models.FindFactorsByUser(ts.API.db, u)
 			require.NoError(ts.T(), err)
 			f := factors[0]
+
 			sharedSecret := ts.TestOTPKey.Secret()
-			f.TOTPSecret = sharedSecret
+			f.Secret = sharedSecret
 			if v.IsFactorVerified {
 				err = f.UpdateStatus(ts.API.db, models.FactorVerifiedState)
 				require.NoError(ts.T(), err)
@@ -393,7 +394,7 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/user/%s/factor/", user.ID), &buffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Set("Content-Type", "application/json")
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": "john", "factor_type": models.TOTP.String(), "issuer": ts.TestDomain}))
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": "john", "factor_type": models.TOTP, "issuer": ts.TestDomain}))
 
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
@@ -423,7 +424,7 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 	defer conn.Close(context.Background())
 
 	var totpSecret string
-	err = conn.QueryRow(context.Background(), "select totp_secret from mfa_factors where id=$1", factorID).Scan(&totpSecret)
+	err = conn.QueryRow(context.Background(), "select secret from mfa_factors where id=$1", factorID).Scan(&totpSecret)
 	require.NoError(ts.T(), err)
 
 	code, err := totp.GenerateCode(totpSecret, time.Now().UTC())
