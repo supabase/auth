@@ -255,7 +255,6 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	}
 }
 
-// TODO(Joel): Add test case to unenroll unverified factor
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 	cases := []struct {
 		desc             string
@@ -324,5 +323,42 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			}
 		})
 	}
+
+}
+
+func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	s, err := models.FindSessionByUserID(ts.API.db, u.ID)
+	require.NoError(ts.T(), err)
+	var secondarySession *models.Session
+	factors, err := models.FindFactorsByUser(ts.API.db, u)
+	require.NoError(ts.T(), err, "error finding factors")
+	f := factors[0]
+	secondarySession, err = models.NewSession(u, &f.ID)
+	require.NoError(ts.T(), err, "Error creating test session")
+	require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
+
+	sharedSecret := ts.TestOTPKey.Secret()
+	f.Secret = sharedSecret
+
+	var buffer bytes.Buffer
+
+	token, err := generateAccessToken(u, &s.ID, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"factor_id": f.ID,
+	}))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/user/%s/factor/%s/", u.ID, f.ID), &buffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+	_, err = models.FindSessionById(ts.API.db, secondarySession.ID)
+	require.EqualError(ts.T(), err, models.SessionNotFoundError{}.Error())
 
 }
