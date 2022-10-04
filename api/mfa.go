@@ -300,7 +300,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr := tx.Destroy(factor); terr != nil {
-			return err
+			return terr
 		}
 		if terr = models.NewAuditLogEntry(r, tx, user, models.UnenrollFactorAction, r.RemoteAddr, map[string]interface{}{
 			"user_id":    user.ID,
@@ -309,9 +309,8 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		}); terr != nil {
 			return terr
 		}
-		if err = factor.DowngradeSessionsToAAL1(tx); err != nil {
-			return err
-
+		if terr = factor.DowngradeSessionsToAAL1(tx); terr != nil {
+			return terr
 		}
 		return nil
 	})
