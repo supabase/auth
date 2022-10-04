@@ -111,14 +111,14 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("error generating QR Code secret key").WithInternalError(err)
 	}
 	var buf bytes.Buffer
-	s := svg.New(&buf)
+	svgData := svg.New(&buf)
 	qrCode, _ := qr.Encode(key.String(), qr.M, qr.Auto)
 	qs := goqrsvg.NewQrSVG(qrCode, DefaultQRSize)
-	qs.StartQrSVG(s)
-	if err = qs.WriteQrSVG(s); err != nil {
+	qs.StartQrSVG(svgData)
+	if err = qs.WriteQrSVG(svgData); err != nil {
 		return internalServerError("error writing to QR Code").WithInternalError(err)
 	}
-	s.End()
+	svgData.End()
 
 	factor, terr := models.NewFactor(user, params.FriendlyName, factorType, models.FactorUnverifiedState, key.Secret())
 	if terr != nil {

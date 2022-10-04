@@ -141,6 +141,13 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			if c.FriendlyName != "" && c.ExpectedCode == http.StatusOK {
 				require.Equal(ts.T(), c.FriendlyName, latestFactor.FriendlyName)
 			}
+			if w.Code == http.StatusOK {
+				enrollResp := EnrollFactorResponse{}
+				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
+				qrCode := enrollResp.TOTP.QRCode
+				hasSVGStartAndEnd := strings.Contains(qrCode, "<svg") && strings.Contains(qrCode, "</svg>")
+				require.True(ts.T(), hasSVGStartAndEnd)
+			}
 		})
 	}
 
