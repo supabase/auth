@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - master
-      - mfa_v1
+      - mfa
       - saml
       - zerosessionidfix
     tags: ['*']
