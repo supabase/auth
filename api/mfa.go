@@ -299,7 +299,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if factor.Status == models.FactorStateVerified {
 		valid := totp.Validate(params.Code, factor.Secret)
 		if !valid {
-			return unauthorizedError("Invalid code entered")
+			return badRequestError("Invalid code entered")
 		}
 	}
 
