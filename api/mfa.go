@@ -93,7 +93,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	// TODO: Remove this at v2
 	for _, factor := range factors {
-		if factor.Status == models.FactorVerifiedState {
+		if factor.Status == models.FactorStateVerified {
 			numVerifiedFactors += 1
 		}
 
@@ -120,7 +120,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	s.End()
 
-	factor, terr := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorUnverifiedState, key.Secret())
+	factor, terr := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, key.Secret())
 	if terr != nil {
 		return internalServerError("database error creating factor").WithInternalError(err)
 	}
@@ -243,8 +243,8 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = challenge.Verify(tx); terr != nil {
 			return terr
 		}
-		if factor.Status != models.FactorVerifiedState {
-			if terr = factor.UpdateStatus(tx, models.FactorVerifiedState); terr != nil {
+		if factor.Status != models.FactorStateVerified {
+			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
 				return terr
 			}
 		}
@@ -285,7 +285,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError(err.Error())
 	}
 
-	if factor.Status == models.FactorVerifiedState {
+	if factor.Status == models.FactorStateVerified {
 		valid := totp.Validate(params.Code, factor.Secret)
 		if !valid {
 			return unauthorizedError("Invalid code entered")
