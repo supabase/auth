@@ -67,7 +67,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read verification params: %v", err)
+		return badRequestError("Could not read enroll params: %v", err)
 	}
 
 	factorType := params.FactorType
