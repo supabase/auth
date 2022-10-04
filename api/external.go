@@ -14,8 +14,8 @@ import (
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/utilities"
 	"github.com/sirupsen/logrus"
@@ -38,6 +38,7 @@ type ExternalSignupParams struct {
 // ExternalProviderRedirect redirects the request to the corresponding oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	config := a.config
 
 	query := r.URL.Query()
@@ -51,7 +52,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 
 	inviteToken := query.Get("invite_token")
 	if inviteToken != "" {
-		_, userErr := models.FindUserByConfirmationToken(a.db, inviteToken)
+		_, userErr := models.FindUserByConfirmationToken(db, inviteToken)
 		if userErr != nil {
 			if models.IsNotFoundError(userErr) {
 				return notFoundError(userErr.Error())
@@ -61,7 +62,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	}
 
 	redirectURL := a.getRedirectURLOrReferrer(r, query.Get("redirect_to"))
-	log := logger.GetLogEntry(r)
+	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
@@ -105,6 +106,7 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	config := a.config
 
 	providerType := getExternalProviderType(ctx)
@@ -133,7 +135,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	var user *models.User
 	var token *AccessTokenResponse
-	err := a.db.Transaction(func(tx *storage.Connection) error {
+	err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		inviteToken := getInviteToken(ctx)
 		if inviteToken != "" {
@@ -444,7 +446,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string, query *u
 
 func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	log := logger.GetLogEntry(r)
+	log := observability.GetLogEntry(r)
 	errorID := getRequestID(ctx)
 	err := handler(w, r)
 	if err != nil {

@@ -57,10 +57,6 @@ func init() {
 }
 
 func VerifyRequest(r *http.Request, secretKey string) (VerificationResult, error) {
-	if r.FormValue("grant_type") == "refresh_token" {
-		// captcha shouldn't be enabled on requests to refresh the token
-		return SuccessfullyVerified, nil
-	}
 	res := GotrueRequest{}
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {

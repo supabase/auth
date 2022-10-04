@@ -21,7 +21,7 @@ The following are some basic commands. A full and up to date list of commands ca
 
 Start the containers as described above in an attached state with log output.
 
-``` bash
+```bash
 make dev
 ```
 
@@ -29,7 +29,7 @@ make dev
 
 Start the containers with a fresh database and run the project's tests.
 
-``` bash
+```bash
 make docker-test
 ```
 
@@ -37,7 +37,7 @@ make docker-test
 
 Remove both containers and their volumes. This removes any data associated with the containers.
 
-``` bash
+```bash
 make docker-clean
 ```
 
@@ -45,7 +45,7 @@ make docker-clean
 
 Fully rebuild the containers without using any cached layers.
 
-``` bash
+```bash
 make docker-build
 ```
 
@@ -118,7 +118,11 @@ To complete installation, you will:
 2. To install the PostgreSQL Docker image, run:
 
 ```
-./hack/postgresd.sh
+# Builds the postgres image
+docker-compose -f docker-compose-dev.yml build postgres
+
+# Runs the postgres container
+docker-compose -f docker-compose-dev.yml up postgres
 ```
 
 You may see a message like:
@@ -433,7 +437,7 @@ The following commands should help in setting up a database and running the test
 
 ```sh
 # Runs the database in a docker container
-$ ./hack/postgresd.sh
+$ docker-compose -f docker-compose-dev.yml up postgres
 
 # Applies the migrations to the database (requires soda cli)
 $ make migrate_test
@@ -452,9 +456,9 @@ In these examples, we change the port from 5432 to 7432.
 > Note: This is not recommended, but if you do, please do not check in changes.
 
 ```
-// file: postgresd.sh
-docker run --name gotrue_postgresql
--p 7432:5432 \ 👈 set the first value to your external facing port
+// file: docker-compose-dev.yml
+ports:
+  - 7432:5432 \ 👈 set the first value to your external facing port
 ```
 
 The port you customize here can them be used in the subsequent configuration:
