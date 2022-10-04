@@ -304,6 +304,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			if !v.ValidCode {
 				// Use an inaccurate time, resulting in an invalid code(usually)
 				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC().Add(-1*time.Minute*time.Duration(1)))
+				require.NoError(ts.T(), err)
 			}
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 				"factor_id": f.ID,
