@@ -89,7 +89,7 @@ func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return factors, nil
 		}
-		return nil, errors.Wrap(err, "Error finding mfa factors")
+		return nil, errors.Wrap(err, "Database error when finding MFA factors associated to user")
 	}
 	return factors, nil
 }
@@ -108,7 +108,7 @@ func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Fac
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, FactorNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding factor")
+		return nil, errors.Wrap(err, "Database error finding factor")
 	}
 
 	return obj, nil
@@ -120,7 +120,7 @@ func FindVerifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, e
 		if errors.Cause(err) == sql.ErrNoRows {
 			return factors, nil
 		}
-		return nil, errors.Wrap(err, "Error finding verified mfa factors")
+		return nil, errors.Wrap(err, "Database error when finding verified MFA factors")
 	}
 	return factors, nil
 }
