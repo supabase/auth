@@ -657,7 +657,7 @@ func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Conne
 	return &AccessTokenResponse{
 		Token:        tokenString,
 		TokenType:    "bearer",
-		ExpiresIn:    int(currentClaims.StandardClaims.ExpiresAt - time.Now().Unix()),
+		ExpiresIn:    config.JWT.Exp,
 		RefreshToken: refreshToken.Token,
 		User:         user,
 	}, nil
