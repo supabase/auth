@@ -136,12 +136,12 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 						r.Use(api.loadFactor)
 
 						r.With(api.limitHandler(
-							tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/(60*5), &limiter.ExpirableOptions{
-								DefaultExpirationTTL: time.Hour,
+							tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
+								DefaultExpirationTTL: time.Minute,
 							}).SetBurst(30))).Post("/verify", api.VerifyFactor)
 						r.With(api.limitHandler(
-							tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/(60*5), &limiter.ExpirableOptions{
-								DefaultExpirationTTL: time.Hour,
+							tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
+								DefaultExpirationTTL: time.Minute,
 							}).SetBurst(30))).Post("/challenge", api.ChallengeFactor)
 						r.Delete("/", api.UnenrollFactor)
 
@@ -169,7 +169,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 						r.Route("/{factor_id}", func(r *router) {
 							r.Use(api.loadFactor)
 							r.Delete("/", api.adminUserDeleteFactor)
-							r.Post("/", api.adminUserUpdateFactor)
+							r.Put("/", api.adminUserUpdateFactor)
 						})
 					})
 
