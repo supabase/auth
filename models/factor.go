@@ -102,14 +102,6 @@ func FindFactorByFactorID(tx *storage.Connection, factorID uuid.UUID) (*Factor, 
 	return factor, nil
 }
 
-func FindFactorByFriendlyName(tx *storage.Connection, friendlyName string) (*Factor, error) {
-	factor, err := findFactor(tx, "friendly_name = ?", friendlyName)
-	if err != nil {
-		return nil, FactorNotFoundError{}
-	}
-	return factor, nil
-}
-
 func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Factor, error) {
 	obj := &Factor{}
 	if err := tx.Eager().Q().Where(query, args...).First(obj); err != nil {

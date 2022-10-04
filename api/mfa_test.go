@@ -146,8 +146,8 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	f, err := models.FindFactorByFriendlyName(ts.API.db, "test_factor")
-	require.NoError(ts.T(), err)
+	factors, err := models.FindFactorsByUser(ts.API.db, u)
+	f := factors[0]
 
 	token, err := generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
 	require.NoError(ts.T(), err, "Error generating access token")

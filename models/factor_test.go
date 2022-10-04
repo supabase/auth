@@ -30,13 +30,6 @@ func (ts *FactorTestSuite) SetupTest() {
 	TruncateAll(ts.db)
 }
 
-func (ts *FactorTestSuite) TestFindFactorByFriendlyName() {
-	f := ts.createFactor()
-	n, err := FindFactorByFriendlyName(ts.db, f.FriendlyName)
-	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), f.ID, n.ID)
-}
-
 func (ts *FactorTestSuite) TestFindFactorByFactorID() {
 	f := ts.createFactor()
 	n, err := FindFactorByFactorID(ts.db, f.ID)
