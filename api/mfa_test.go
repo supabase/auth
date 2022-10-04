@@ -194,26 +194,23 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	}
 	for _, v := range cases {
 		ts.Run(v.desc, func() {
-			u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+			// Authenticate users and set secret
+			user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
+			ts.Require().NoError(err)
+			var buffer bytes.Buffer
+			r, err := models.GrantAuthenticatedUser(ts.API.db, user, models.GrantParams{})
 			require.NoError(ts.T(), err)
-
-			r, err := models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
-
-			require.NoError(ts.T(), err)
-
 			sharedSecret := ts.TestOTPKey.Secret()
-			factors, err := models.FindFactorsByUser(ts.API.db, u)
+			factors, err := models.FindFactorsByUser(ts.API.db, user)
 			f := factors[0]
 			f.Secret = sharedSecret
 			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
-			secondarySession, err := models.NewSession(u, &f.ID)
+
+			// Create session to be invalidated
+			secondarySession, err := models.NewSession(user, &f.ID)
 			require.NoError(ts.T(), err, "Error creating test session")
 			require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
-
-			user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
-			ts.Require().NoError(err)
-			var buffer bytes.Buffer
 
 			token, err := generateAccessToken(ts.API.db, user, r.SessionId, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 
@@ -234,6 +231,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 				require.NoError(ts.T(), err, "Error updating new test challenge")
 			}
 
+			// Verify TOTP code
 			code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
 			if !v.validCode {
 				// Use an inaccurate time, resulting in an invalid code(usually)
@@ -249,10 +247,12 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.Equal(ts.T(), v.expectedHTTPCode, w.Code)
 
 			if v.expectedHTTPCode == http.StatusOK {
+				// Ensure alternate session has been deleted
 				_, err = models.FindSessionById(ts.API.db, secondarySession.ID)
 				require.EqualError(ts.T(), err, models.SessionNotFoundError{}.Error())
 			}
 			if !v.validChallenge {
+				// Ensure invalid challenges are deleted
 				_, err := models.FindChallengeByChallengeID(ts.API.db, c.ID)
 				require.EqualError(ts.T(), err, models.ChallengeNotFoundError{}.Error())
 			}
@@ -277,11 +277,14 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 	for _, v := range cases {
 
 		ts.Run(v.desc, func() {
+			// Create User
 			u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 			s, err := models.FindSessionByUserID(ts.API.db, u.ID)
 			require.NoError(ts.T(), err)
 			var secondarySession *models.Session
+
+			// Create Session to test behaviour which downgrades other sessions
 			if v.CreateAdditionalSession {
 				factors, err := models.FindFactorsByUser(ts.API.db, u)
 				require.NoError(ts.T(), err, "error finding factors")
@@ -309,6 +312,7 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			token, err := generateAccessToken(ts.API.db, u, &s.ID, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
 
+			// Generate code for verification
 			code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
 			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
@@ -321,6 +325,8 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), v.ExpectedHTTPCode, w.Code)
+
+			// Test that unenrolling verified factors should downgrade other sessions linked to the same factor
 			if v.IsFactorVerified && v.CreateAdditionalSession {
 				_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
 				require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
