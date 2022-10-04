@@ -31,13 +31,19 @@ func (aal AuthenticatorAssuranceLevel) String() string {
 	}
 }
 
+// AMREntry represents a method that a user has logged in together with the corresponding time
+type AMREntry struct {
+	Method    string `json:"method"`
+	Timestamp int64  `json:"timestamp"`
+}
+
 type Session struct {
 	ID        uuid.UUID  `json:"-" db:"id"`
 	UserID    uuid.UUID  `json:"user_id" db:"user_id"`
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
 	FactorID  *uuid.UUID `json:"factor_id" db:"factor_id"`
-	AMRClaims []AMRClaim `json:"amr_claims" has_many:"amr_claims"`
+	AMRClaims []AMRClaim `json:"amr_claims,omitempty" has_many:"amr_claims"`
 	AAL       string     `json:"aal" db:"aal"`
 }
 
@@ -114,7 +120,6 @@ func LogoutSession(tx *storage.Connection, sessionId uuid.UUID) error {
 
 func (s *Session) UpdateAssociatedFactor(tx *storage.Connection, factorID *uuid.UUID) error {
 	s.FactorID = factorID
-	s.AAL = AAL2.String()
 	return tx.Update(s)
 
 }
@@ -122,4 +127,16 @@ func (s *Session) UpdateAssociatedFactor(tx *storage.Connection, factorID *uuid.
 func (s *Session) UpdateAAL(tx *storage.Connection, aal string) error {
 	s.AAL = aal
 	return tx.Update(s)
+}
+
+func (s *Session) CalculateAALAndAMR() (aal string, amr []AMREntry) {
+	amr, aal = []AMREntry{}, AAL1.String()
+	for _, claim := range s.AMRClaims {
+		if claim.AuthenticationMethod == TOTPSignIn.String() {
+			aal = AAL2.String()
+		}
+		amr = append(amr, AMREntry{Method: claim.AuthenticationMethod, Timestamp: claim.UpdatedAt.Unix()})
+
+	}
+	return aal, amr
 }

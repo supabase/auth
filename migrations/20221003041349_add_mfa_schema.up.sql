@@ -39,6 +39,7 @@ comment on table {{ index .Options "Namespace" }}.mfa_challenges is 'auth: store
 
 
 -- add factor_id and amr claims to session
+
 create table if not exists {{ index .Options "Namespace" }}.mfa_amr_claims(
     session_id uuid not null,
     created_at timestamptz not null,
