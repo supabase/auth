@@ -79,7 +79,6 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 	return withFactor(r.Context(), f), nil
 }
 
-
 func (a *API) getAdminParams(r *http.Request) (*AdminUserParams, error) {
 	params := AdminUserParams{}
 
