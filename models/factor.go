@@ -12,7 +12,7 @@ import (
 const FactorUnverifiedState = "unverified"
 const FactorVerifiedState = "verified"
 
-const TOTP = "TOTP"
+const TOTP = "totp"
 
 type Factor struct {
 	ID           uuid.UUID `json:"id" db:"id"`
@@ -22,7 +22,7 @@ type Factor struct {
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 	Status       string    `json:"status" db:"status"`
 	FriendlyName string    `json:"friendly_name,omitempty" db:"friendly_name"`
-	Secret   string    `json:"-" db:"secret"`
+	Secret       string    `json:"-" db:"secret"`
 	FactorType   string    `json:"factor_type" db:"factor_type"`
 }
 
@@ -41,7 +41,7 @@ func NewFactor(user *User, friendlyName, factorType, status, secret string) (*Fa
 		ID:           id,
 		Status:       status,
 		FriendlyName: friendlyName,
-		Secret:   secret,
+		Secret:       secret,
 		FactorType:   factorType,
 	}
 	return factor, nil
