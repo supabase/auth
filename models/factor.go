@@ -9,8 +9,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-const FactorStateUnverified = "unverified"
-const FactorStateVerified = "verified"
+const (
+	FactorStateUnverified = "unverified"
+	FactorStateVerified   = "verified"
+)
 
 const TOTP = "totp"
 
@@ -131,19 +133,19 @@ func FindVerifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, e
 	return factors, nil
 }
 
-// Change the friendly name
+// UpdateFriendlyName changes the friendly name
 func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	f.FriendlyName = friendlyName
 	return tx.UpdateOnly(f, "friendly_name", "updated_at")
 }
 
-// Change the factor status
+// UpdateStatus modifies the factor status
 func (f *Factor) UpdateStatus(tx *storage.Connection, status string) error {
 	f.Status = status
 	return tx.UpdateOnly(f, "status", "updated_at")
 }
 
-// Checks if MFA is Enabled
+// IsMFAEnabled determines if user has met the conditions to activate MFA
 func IsMFAEnabled(tx *storage.Connection, user *User) (bool, error) {
 	factors, err := FindVerifiedFactorsByUser(tx, user)
 	if err != nil {
@@ -155,7 +157,7 @@ func IsMFAEnabled(tx *storage.Connection, user *User) (bool, error) {
 	return false, nil
 }
 
-// Change the factor type
+// UpdateFactorType modifies the factor type
 func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) error {
 	f.FactorType = factorType
 	return tx.UpdateOnly(f, "factor_type", "updated_at")
