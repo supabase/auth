@@ -361,14 +361,10 @@ func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
 func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenResponse) {
 	var buffer bytes.Buffer
 
-	encode := func() {
-		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-			"email":    email,
-			"password": password,
-		}))
-	}
-
-	encode()
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    email,
+		"password": password,
+	}))
 
 	// Setup request
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/signup", &buffer)
