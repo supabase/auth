@@ -640,6 +640,10 @@ func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Conne
 		if terr != nil {
 			return terr
 		}
+		refreshToken, terr = models.FindTokenBySessionID(tx, &session.ID)
+		if terr != nil {
+			return terr
+		}
 		aal, _ := session.CalculateAALAndAMR()
 		if err := session.UpdateAssociatedFactorAndAAL(tx, grantParams.FactorID, aal); err != nil {
 			return err
