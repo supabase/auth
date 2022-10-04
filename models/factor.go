@@ -46,23 +46,6 @@ func (authMethod AuthenticationMethod) String() string {
 	return ""
 }
 
-var (
-	authenticationMethodMap = map[string]AuthenticationMethod{
-		"oauth":              OAuth,
-		"oauth_id":           OAuthIDGrant,
-		"password":           PasswordGrant,
-		"autoconfirm":        AutoConfirmSignup,
-		"email_verification": EmailVerification,
-		"sms_or_email_otp":   SMSOrEmailOTP,
-		"TOTP":               TOTPSignIn,
-	}
-)
-
-func ParseAuthenticationMethod(str string) (AuthenticationMethod, bool) {
-	auth, ok := authenticationMethodMap[str]
-	return auth, ok
-}
-
 type Factor struct {
 	ID           uuid.UUID `json:"id" db:"id"`
 	User         User      `json:"-" belongs_to:"user"`
