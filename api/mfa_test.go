@@ -97,9 +97,9 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		{
 			"Invalid factor type",
 			testFriendlyName,
-			"",
+			"invalid_factor",
 			ts.TestDomain,
-			http.StatusUnprocessableEntity,
+			http.StatusBadRequest,
 		},
 
 		{

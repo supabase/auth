@@ -73,8 +73,8 @@ func NewFactor(user *User, friendlyName string, factorType string, status, secre
 		ID:           id,
 		Status:       status,
 		FriendlyName: friendlyName,
-		Secret:     secret,
-		FactorType: factorType,
+		Secret:       secret,
+		FactorType:   factorType,
 	}
 	return factor, nil
 }

@@ -67,7 +67,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	factorType := params.FactorType
 	if factorType != models.TOTP {
-		return unprocessableEntityError("factorType needs to be TOTP")
+		return badRequestError("factorType needs to be TOTP")
 	}
 
 	if params.Issuer == "" {
