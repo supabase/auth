@@ -18,6 +18,7 @@ import (
 	"github.com/pquerna/otp"
 
 	"github.com/jackc/pgx/v4"
+
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -197,6 +198,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), err)
 
 			r, err := models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
+
 			require.NoError(ts.T(), err)
 
 			sharedSecret := ts.TestOTPKey.Secret()
@@ -214,6 +216,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			var buffer bytes.Buffer
 
 			token, err := generateAccessToken(ts.API.db, user, r.SessionId, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
@@ -324,6 +327,7 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 				session, _ := models.FindSessionById(ts.API.db, secondarySession.ID)
 				require.Equal(ts.T(), models.AAL1.String(), session.AAL)
 				require.Equal(ts.T(), &uuid.Nil, session.FactorID)
+
 			}
 		})
 	}
