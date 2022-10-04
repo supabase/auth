@@ -450,12 +450,15 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			requestredirectURL:  "twitter://timeline",
 			expectedredirectURL: "twitter://timeline",
 		},
+		// previously the below example was not allowed and with good
+		// reason, however users do want flexibility in the redirect
+		// URL after the scheme, which is why the example is now corrected
 		{
 			desc:                "wildcard mobile deep link redirect url in allow list",
 			siteURL:             "http://test.dev:3000/#/",
-			uriAllowList:        []string{"com.mobile.*"},
-			requestredirectURL:  "com.mobile.app",
-			expectedredirectURL: "http://test.dev:3000/#/",
+			uriAllowList:        []string{"com.example.app://**"},
+			requestredirectURL:  "com.example.app://sign-in/v2",
+			expectedredirectURL: "com.example.app://sign-in/v2",
 		},
 		{
 			desc:                "redirect respects . separator",

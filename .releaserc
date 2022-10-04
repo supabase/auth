@@ -2,11 +2,7 @@
   "branches": [
     "master",
     {
-        "name": "mfa_v1",
-        "prerelease": true
-    },
-    {
-        "name": "zerosessionidfix",
+        "name": "mfa",
         "prerelease": true
     }
   ],

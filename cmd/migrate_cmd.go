@@ -7,7 +7,6 @@ import (
 
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gobuffalo/pop/v5/logging"
-	"github.com/netlify/gotrue/conf"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -20,10 +19,8 @@ var migrateCmd = cobra.Command{
 }
 
 func migrate(cmd *cobra.Command, args []string) {
-	globalConfig, err := conf.LoadGlobal(configFile)
-	if err != nil {
-		logrus.Fatalf("Failed to load configuration: %+v", err)
-	}
+	globalConfig := loadGlobalConfig(cmd.Context())
+
 	if globalConfig.DB.Driver == "" && globalConfig.DB.URL != "" {
 		u, err := url.Parse(globalConfig.DB.URL)
 		if err != nil {
@@ -66,6 +63,7 @@ func migrate(cmd *cobra.Command, args []string) {
 	}
 	deets.Options = map[string]string{
 		"migration_table_name": "schema_migrations",
+		"Namespace":            globalConfig.DB.Namespace,
 	}
 
 	db, err := pop.NewConnection(deets)

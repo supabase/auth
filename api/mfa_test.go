@@ -183,7 +183,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			sharedSecret := key.Secret()
 			factors, err := models.FindFactorsByUser(ts.API.db, u)
 			f := factors[0]
-			f.TOTPSecret = sharedSecret
+			f.Secret = sharedSecret
 			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
 			s2, err := models.NewSession(u, &f.ID)
@@ -284,7 +284,7 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			factors, err := models.FindFactorsByUser(ts.API.db, u)
 			require.NoError(ts.T(), err)
 			f := factors[0]
-			f.TOTPSecret = sharedSecret
+			f.Secret = sharedSecret
 			if v.IsFactorVerified {
 				err = f.UpdateStatus(ts.API.db, models.FactorVerifiedState)
 				require.NoError(ts.T(), err)

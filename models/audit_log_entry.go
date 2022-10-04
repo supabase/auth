@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/logger"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -111,7 +111,7 @@ func NewAuditLogEntry(r *http.Request, tx *storage.Connection, actor *User, acti
 		IPAddress: ipAddress,
 	}
 
-	logger.LogEntrySetFields(r, logrus.Fields{
+	observability.LogEntrySetFields(r, logrus.Fields{
 		"auth_event": logrus.Fields(payload),
 	})
 

@@ -142,7 +142,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
 			QRCode: fmt.Sprintf("data:image/svg+xml;utf-8,%v", buf.String()),
-			Secret: factor.TOTPSecret,
+			Secret: factor.Secret,
 			URI:    key.URL(),
 		},
 	})
@@ -226,7 +226,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("%v has expired, please verify against another challenge or create a new challenge.", challenge.ID)
 	}
 
-	if valid := totp.Validate(params.Code, factor.TOTPSecret); !valid {
+	if valid := totp.Validate(params.Code, factor.Secret); !valid {
 		return badRequestError("Invalid TOTP code entered")
 	}
 
@@ -285,7 +285,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if factor.Status == models.FactorVerifiedState {
-		valid := totp.Validate(params.Code, factor.TOTPSecret)
+		valid := totp.Validate(params.Code, factor.Secret)
 		if !valid {
 			return unauthorizedError("Invalid code entered")
 		}

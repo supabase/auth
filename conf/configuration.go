@@ -30,9 +30,9 @@ type EmailProviderConfiguration struct {
 
 // DBConfiguration holds all the database related configuration.
 type DBConfiguration struct {
-	Driver string `json:"driver" required:"true"`
-	URL    string `json:"url" envconfig:"DATABASE_URL" required:"true"`
-
+	Driver    string `json:"driver" required:"true"`
+	URL       string `json:"url" envconfig:"DATABASE_URL" required:"true"`
+	Namespace string `json:"namespace" envconfig:"DB_NAMESPACE" default:"auth"`
 	// MaxPoolSize defaults to 0 (unlimited).
 	MaxPoolSize    int    `json:"max_pool_size" split_words:"true"`
 	MigrationsPath string `json:"migrations_path" split_words:"true" default:"./migrations"`
@@ -61,7 +61,7 @@ type MFAConfiguration struct {
 
 type APIConfiguration struct {
 	Host            string
-	Port            int `envconfig:"PORT" default:"8081"`
+	Port            string `envconfig:"PORT" default:"8081"`
 	Endpoint        string
 	RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
 	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
@@ -88,6 +88,7 @@ type GlobalConfiguration struct {
 	Logging               LoggingConfig `envconfig:"LOG"`
 	OperatorToken         string        `split_words:"true" required:"false"`
 	Tracing               TracingConfig
+	Metrics               MetricsConfig
 	SMTP                  SMTPConfiguration
 	RateLimitHeader       string  `split_words:"true"`
 	RateLimitEmailSent    float64 `split_words:"true" default:"30"`
@@ -254,7 +255,6 @@ func (w *WebhookConfig) HasEvent(event string) bool {
 	return false
 }
 
-// LoadGlobal loads configuration from file and environment variables.
 func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 	if err := loadEnvironment(filename); err != nil {
 		return nil, err
@@ -269,15 +269,9 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		return nil, err
 	}
 
-	if err := ConfigureLogging(&config.Logging); err != nil {
-		return nil, err
-	}
-
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-
-	ConfigureTracing(&config.Tracing)
 
 	return config, nil
 }
@@ -384,6 +378,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.API,
 		&c.DB,
 		&c.Tracing,
+		&c.Metrics,
 		&c.SMTP,
 	}
 

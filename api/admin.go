@@ -10,13 +10,13 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/logger"
 	"github.com/netlify/gotrue/models"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
 )
 
-type adminUserParams struct {
+type AdminUserParams struct {
 	Aud          string                 `json:"aud"`
 	Role         string                 `json:"role"`
 	Email        string                 `json:"email"`
@@ -34,16 +34,23 @@ type adminUserUpdateFactorParams struct {
 	FactorType   string `json:"factor_type"`
 	FactorStatus string `json:"factor_status"`
 }
+type AdminListUsersResponse struct {
+	Users []*models.User `json:"users"`
+	Aud   string         `json:"aud"`
+}
 
 func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
 		return nil, badRequestError("user_id must be an UUID")
 	}
 
-	logger.LogEntrySetField(r, "user_id", userID)
+	observability.LogEntrySetField(r, "user_id", userID)
 
-	u, err := models.FindUserByID(a.db, userID)
+	u, err := models.FindUserByID(db, userID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return nil, notFoundError("User not found")
@@ -51,7 +58,7 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 		return nil, internalServerError("Database error loading user").WithInternalError(err)
 	}
 
-	return withUser(r.Context(), u), nil
+	return withUser(ctx, u), nil
 }
 
 func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Context, error) {
@@ -60,7 +67,7 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 		return nil, badRequestError("factor_id must be an UUID")
 	}
 
-	logger.LogEntrySetField(r, "factor_id", factorID)
+	observability.LogEntrySetField(r, "factor_id", factorID)
 
 	f, err := models.FindFactorByFactorID(a.db, factorID)
 	if err != nil {
@@ -72,8 +79,8 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 	return withFactor(r.Context(), f), nil
 }
 
-func (a *API) getAdminParams(r *http.Request) (*adminUserParams, error) {
-	params := adminUserParams{}
+func (a *API) getAdminParams(r *http.Request) (*AdminUserParams, error) {
+	params := AdminUserParams{}
 
 	body, err := getBodyBytes(r)
 	if err != nil {
@@ -90,6 +97,7 @@ func (a *API) getAdminParams(r *http.Request) (*adminUserParams, error) {
 // adminUsers responds with a list of all users in a given audience
 func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	aud := a.requestAud(ctx, r)
 
 	pageParams, err := paginate(r)
@@ -104,15 +112,15 @@ func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 
 	filter := r.URL.Query().Get("filter")
 
-	users, err := models.FindUsersInAudience(a.db, aud, pageParams, sortParams, filter)
+	users, err := models.FindUsersInAudience(db, aud, pageParams, sortParams, filter)
 	if err != nil {
 		return internalServerError("Database error finding users").WithInternalError(err)
 	}
 	addPaginationHeaders(w, r, pageParams)
 
-	return sendJSON(w, http.StatusOK, map[string]interface{}{
-		"users": users,
-		"aud":   aud,
+	return sendJSON(w, http.StatusOK, AdminListUsersResponse{
+		Users: users,
+		Aud:   aud,
 	})
 }
 
@@ -126,6 +134,7 @@ func (a *API) adminUserGet(w http.ResponseWriter, r *http.Request) error {
 // adminUserUpdate updates a single user object
 func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
 	params, err := a.getAdminParams(r)
@@ -134,7 +143,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		if params.Role != "" {
 			if terr := user.SetRole(tx, params.Role); terr != nil {
 				return terr
@@ -229,6 +238,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 // adminUserCreate creates a new user based on the provided data
 func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	config := a.config
 
 	adminUser := getAdminUser(ctx)
@@ -247,10 +257,11 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Email != "" {
-		if err := a.validateEmail(ctx, params.Email); err != nil {
+		params.Email, err = a.validateEmail(ctx, params.Email)
+		if err != nil {
 			return err
 		}
-		if exists, err := models.IsDuplicatedEmail(a.db, params.Email, aud); err != nil {
+		if exists, err := models.IsDuplicatedEmail(db, params.Email, aud); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
 		} else if exists {
 			return unprocessableEntityError("Email address already registered by another user")
@@ -262,7 +273,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if exists, err := models.IsDuplicatedPhone(a.db, params.Phone, aud); err != nil {
+		if exists, err := models.IsDuplicatedPhone(db, params.Phone, aud); err != nil {
 			return internalServerError("Database error checking phone").WithInternalError(err)
 		} else if exists {
 			return unprocessableEntityError("Phone number already registered by another user")
@@ -297,7 +308,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		user.BannedUntil = &t
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserSignedUpAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
@@ -352,10 +363,11 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 // adminUserDelete delete a user
 func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
 
-	err := a.db.Transaction(func(tx *storage.Connection) error {
+	err := db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserDeletedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,

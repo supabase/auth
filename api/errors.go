@@ -8,7 +8,7 @@ import (
 	"runtime/debug"
 
 	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/logger"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/utilities"
 	"github.com/pkg/errors"
 )
@@ -213,7 +213,7 @@ func recoverer(w http.ResponseWriter, r *http.Request) (context.Context, error) 
 	defer func() {
 		if rvr := recover(); rvr != nil {
 
-			logEntry := logger.GetLogEntry(r)
+			logEntry := observability.GetLogEntry(r)
 			if logEntry != nil {
 				logEntry.Panic(rvr, debug.Stack())
 			} else {
@@ -238,7 +238,7 @@ type ErrorCause interface {
 }
 
 func handleError(err error, w http.ResponseWriter, r *http.Request) {
-	log := logger.GetLogEntry(r)
+	log := observability.GetLogEntry(r)
 	errorID := getRequestID(r.Context())
 	switch e := err.(type) {
 	case *HTTPError:

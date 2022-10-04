@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
@@ -20,7 +19,6 @@ const (
 
 func init() {
 	models.PasswordHashCost = bcrypt.MinCost
-
 }
 
 // setupAPIForTest creates a new API to run tests with.
@@ -30,15 +28,23 @@ func setupAPIForTest() (*API, *conf.GlobalConfiguration, error) {
 	return setupAPIForTestWithCallback(nil)
 }
 
-func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *storage.Connection) (uuid.UUID, error)) (*API, *conf.GlobalConfiguration, error) {
+func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *storage.Connection)) (*API, *conf.GlobalConfiguration, error) {
 	config, err := conf.LoadGlobal(apiTestConfig)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	if cb != nil {
+		cb(config, nil)
+	}
+
 	conn, err := test.SetupDBConnection(config)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if cb != nil {
+		cb(nil, conn)
 	}
 
 	return NewAPIWithVersion(context.Background(), config, conn, apiTestVersion), config, nil

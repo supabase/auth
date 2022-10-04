@@ -1,42 +1,34 @@
 package conf
 
-import (
-	"fmt"
+type TracingExporter = string
 
-	"github.com/opentracing/opentracing-go"
-	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/opentracer"
-	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
+const (
+	OpenTelemetryTracing TracingExporter = "opentelemetry"
+	OpenTracing          TracingExporter = "opentracing"
 )
 
 type TracingConfig struct {
-	Enabled     bool `default:"false"`
-	Host        string
-	Port        string
+	Enabled  bool
+	Exporter TracingExporter `default:"opentelemetry"`
+
+	// ExporterProtocol is the OTEL_EXPORTER_OTLP_PROTOCOL env variable,
+	// only available when exporter is opentelemetry. See:
+	// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md
+	ExporterProtocol string `default:"http/protobuf" envconfig:"OTEL_EXPORTER_OTLP_PROTOCOL"`
+
+	// Host is the host of the OpenTracing collector.
+	Host string
+
+	// Port is the port of the OpenTracing collector.
+	Port string
+
+	// ServiceName is the service name to use with OpenTracing.
 	ServiceName string `default:"gotrue" split_words:"true"`
-	Tags        map[string]string
+
+	// Tags are the tags to associate with OpenTracing.
+	Tags map[string]string
 }
 
 func (tc *TracingConfig) Validate() error {
 	return nil
-}
-
-func (tc *TracingConfig) tracingAddr() string {
-	return fmt.Sprintf("%s:%s", tc.Host, tc.Port)
-}
-
-func ConfigureTracing(tc *TracingConfig) {
-	var t opentracing.Tracer = opentracing.NoopTracer{}
-	if tc.Enabled {
-		tracerOps := []tracer.StartOption{
-			tracer.WithServiceName(tc.ServiceName),
-			tracer.WithAgentAddr(tc.tracingAddr()),
-		}
-
-		for k, v := range tc.Tags {
-			tracerOps = append(tracerOps, tracer.WithGlobalTag(k, v))
-		}
-
-		t = opentracer.New(tracerOps...)
-	}
-	opentracing.SetGlobalTracer(t)
 }
