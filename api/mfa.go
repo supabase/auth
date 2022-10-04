@@ -61,11 +61,15 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	params := &EnrollFactorParams{}
 	issuer := ""
-	jsonDecoder := json.NewDecoder(r.Body)
-	err := jsonDecoder.Decode(params)
+	body, err := getBodyBytes(r)
 	if err != nil {
-		return badRequestError(err.Error())
+		return badRequestError("Could not read body").WithInternalError(err)
 	}
+
+	if err := json.Unmarshal(body, params); err != nil {
+		return badRequestError("Could not read verification params: %v", err)
+	}
+
 	factorType := params.FactorType
 	if factorType != models.TOTP {
 		return unprocessableEntityError("factorType needs to be TOTP")
@@ -193,11 +197,15 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 
 	params := &VerifyFactorParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
 	currentIP := utilities.GetIPAddress(r)
-	err = jsonDecoder.Decode(params)
+
+	body, err := getBodyBytes(r)
 	if err != nil {
-		return badRequestError("Invalid params for VerifyFactor: %v", err)
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
+		return badRequestError("Could not read verify params: %v", err)
 	}
 
 	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
@@ -279,10 +287,13 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	session := getSession(ctx)
 
 	params := &UnenrollFactorParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
-	err = jsonDecoder.Decode(params)
+	body, err := getBodyBytes(r)
 	if err != nil {
-		return badRequestError(err.Error())
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
+		return badRequestError("Could not read unenroll params: %v", err)
 	}
 
 	if factor.Status == models.FactorStateVerified {
