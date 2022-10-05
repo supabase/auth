@@ -449,7 +449,10 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 				return terr
 			}
 		}
-		if params.FactorType != "" && params.FactorType != models.TOTP {
+		if params.FactorType != "" {
+			if params.FactorType != models.TOTP {
+				return badRequestError("Factor Type not valid")
+			}
 			if terr := factor.UpdateFactorType(tx, params.FactorType); terr != nil {
 				return terr
 			}

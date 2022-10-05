@@ -132,7 +132,9 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr := tx.Create(factor); terr != nil {
 			return terr
 		}
-		if terr := models.NewAuditLogEntry(r, tx, user, models.EnrollFactorAction, r.RemoteAddr, nil); terr != nil {
+		if terr := models.NewAuditLogEntry(r, tx, user, models.EnrollFactorAction, r.RemoteAddr, map[string]interface{}{
+			"factor_id": factor.ID,
+		}); terr != nil {
 			return terr
 		}
 		return nil
@@ -309,9 +311,9 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		if terr = models.NewAuditLogEntry(r, tx, user, models.UnenrollFactorAction, r.RemoteAddr, map[string]interface{}{
-			"user_id":    user.ID,
-			"factor_id":  factor.ID,
-			"session_id": session.ID,
+			"factor_id":     factor.ID,
+			"factor_status": factor.Status,
+			"session_id":    session.ID,
 		}); terr != nil {
 			return terr
 		}
