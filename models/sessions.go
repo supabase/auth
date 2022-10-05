@@ -85,7 +85,7 @@ func FindSessionById(tx *storage.Connection, id uuid.UUID) (*Session, error) {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, SessionNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding user")
+		return nil, errors.Wrap(err, "error finding session")
 	}
 	return session, nil
 }
@@ -96,13 +96,13 @@ func FindSessionByUserID(tx *storage.Connection, userId uuid.UUID) (*Session, er
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, SessionNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding user")
+		return nil, errors.Wrap(err, "error finding session")
 	}
 	return session, nil
 }
 
-func InvalidateOtherFactorAssociatedSessions(tx *storage.Connection, currentSessionID, userID, factorID uuid.UUID) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE user_id = ? AND factor_id = ? AND id != ?", userID, factorID, currentSessionID).Exec()
+func updateFactorAssociatedSessions(tx *storage.Connection, userID, factorID uuid.UUID, aal string) error {
+	return tx.RawQuery("UPDATE "+(&pop.Model{Value: Session{}}).TableName()+" set aal = ?, factor_id = ? WHERE user_id = ? AND factor_id = ?", aal, uuid.Nil, userID, factorID).Exec()
 }
 
 func InvalidateSessionsWithAALLessThan(tx *storage.Connection, userID uuid.UUID, level string) error {
@@ -118,13 +118,8 @@ func LogoutSession(tx *storage.Connection, sessionId uuid.UUID) error {
 	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE id = ?", sessionId).Exec()
 }
 
-func (s *Session) UpdateAssociatedFactor(tx *storage.Connection, factorID *uuid.UUID) error {
+func (s *Session) UpdateAssociatedFactorAndAAL(tx *storage.Connection, factorID *uuid.UUID, aal string) error {
 	s.FactorID = factorID
-	return tx.Update(s)
-
-}
-
-func (s *Session) UpdateAAL(tx *storage.Connection, aal string) error {
 	s.AAL = aal
 	return tx.Update(s)
 }

@@ -44,9 +44,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "sms_or_email_otp"
 	case TOTPSignIn:
 		return "TOTP"
-	default:
-		return ""
 	}
+	return ""
 }
 
 type Factor struct {
@@ -66,7 +65,7 @@ func (Factor) TableName() string {
 	return tableName
 }
 
-func NewFactor(user *User, friendlyName, factorType, status, secret string) (*Factor, error) {
+func NewFactor(user *User, friendlyName string, factorType string, status, secret string) (*Factor, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -153,4 +152,9 @@ func IsMFAEnabled(tx *storage.Connection, user *User) (bool, error) {
 func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) error {
 	f.FactorType = factorType
 	return tx.UpdateOnly(f, "factor_type", "updated_at")
+}
+
+func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {
+	return updateFactorAssociatedSessions(tx, f.UserID, f.ID, AAL1.String())
+
 }

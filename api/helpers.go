@@ -253,14 +253,3 @@ func getBodyBytes(req *http.Request) ([]byte, error) {
 
 	return buf, nil
 }
-
-// See https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.1800-17.pdf.
-// Computes AAL based on list of AMR entries.
-func calculateAAL(amr []AMREntry) string {
-	for _, amrEntry := range amr {
-		if amrEntry.Method == models.TOTP {
-			return "aal2"
-		}
-	}
-	return "aal1"
-}

@@ -72,8 +72,9 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	factorType := params.FactorType
 	if factorType != models.TOTP {
-		return unprocessableEntityError("factorType needs to be TOTP")
+		return badRequestError("factorType needs to be TOTP")
 	}
+
 	if params.Issuer == "" {
 		u, err := url.ParseRequestURI(config.SiteURL)
 		if err != nil {
@@ -115,14 +116,14 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("error generating QR Code secret key").WithInternalError(err)
 	}
 	var buf bytes.Buffer
-	s := svg.New(&buf)
+	svgData := svg.New(&buf)
 	qrCode, _ := qr.Encode(key.String(), qr.M, qr.Auto)
 	qs := goqrsvg.NewQrSVG(qrCode, DefaultQRSize)
-	qs.StartQrSVG(s)
-	if err = qs.WriteQrSVG(s); err != nil {
+	qs.StartQrSVG(svgData)
+	if err = qs.WriteQrSVG(svgData); err != nil {
 		return internalServerError("error writing to QR Code").WithInternalError(err)
 	}
-	s.End()
+	svgData.End()
 
 	factor, err := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, key.Secret())
 	if err != nil {
@@ -258,7 +259,11 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 		}
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.TOTPSignIn, models.GrantParams{
+		user, terr = models.FindUserByID(tx, user.ID)
+		if terr != nil {
+			return terr
+		}
+		token, terr = a.updateMFASessionAndClaims(ctx, tx, user, models.TOTPSignIn, models.GrantParams{
 			FactorID: &factor.ID,
 		})
 		if terr != nil {
@@ -308,7 +313,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr := tx.Destroy(factor); terr != nil {
-			return err
+			return terr
 		}
 		if terr = models.NewAuditLogEntry(r, tx, user, models.UnenrollFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":     factor.ID,
@@ -317,7 +322,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		}); terr != nil {
 			return terr
 		}
-		if terr = models.InvalidateOtherFactorAssociatedSessions(tx, session.ID, user.ID, factor.ID); terr != nil {
+		if terr = factor.DowngradeSessionsToAAL1(tx); terr != nil {
 			return terr
 		}
 		return nil

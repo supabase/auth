@@ -28,7 +28,7 @@ type GoTrueClaims struct {
 	UserMetaData                  map[string]interface{} `json:"user_metadata"`
 	Role                          string                 `json:"role"`
 	AuthenticatorAssuranceLevel   string                 `json:"aal"`
-	AuthenticationMethodReference []AMREntry             `json:"amr"`
+	AuthenticationMethodReference []models.AMREntry      `json:"amr"`
 	SessionId                     string                 `json:"session_id,omitempty"`
 }
 
@@ -51,12 +51,6 @@ type PasswordGrantParams struct {
 // RefreshTokenGrantParams are the parameters the RefreshTokenGrant method accepts
 type RefreshTokenGrantParams struct {
 	RefreshToken string `json:"refresh_token"`
-}
-
-// AMREntry represents a method that a user has logged in together with the corresponding time
-type AMREntry struct {
-	Method    string    `json:"method"`
-	Timestamp time.Time `json:"timestamp"`
 }
 
 // IdTokenGrantParams are the parameters the IdTokenGrant method accepts
@@ -338,7 +332,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			}
 		}
 
-		tokenString, terr = generateAccessToken(user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, nil, "")
+		tokenString, terr = generateAccessToken(tx, user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -542,23 +536,16 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func calculateAALFromClaims(oldClaims *GoTrueClaims, signInMethod string) ([]AMREntry, string) {
-	amr := []AMREntry{}
-	aal := "aal1"
-	if oldClaims != nil && oldClaims.AuthenticationMethodReference != nil {
-		amr = oldClaims.AuthenticationMethodReference
-	}
-	entry := AMREntry{Method: signInMethod, Timestamp: time.Now()}
-	amr = append(amr, entry)
-	aal = calculateAAL(amr)
-	return amr, aal
-}
-
-func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string, oldClaims *GoTrueClaims, signInMethod string) (string, error) {
-	amr, aal := calculateAALFromClaims(oldClaims, signInMethod)
+func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string) (string, error) {
+	aal, amr := models.AAL1.String(), []models.AMREntry{}
 	sid := ""
 	if sessionId != nil {
 		sid = sessionId.String()
+		session, terr := models.FindSessionById(tx, *sessionId)
+		if terr != nil {
+			return "", terr
+		}
+		aal, amr = session.CalculateAALAndAMR()
 	}
 
 	claims := &GoTrueClaims{
@@ -581,16 +568,14 @@ func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time
 	return token.SignedString([]byte(secret))
 }
 
-func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, signInMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
-
+func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 	config := a.config
-	isMFASignInMethod := signInMethod == models.TOTPSignIn
+
 	now := time.Now()
 	user.LastSignInAt = &now
 
 	var tokenString string
 	var refreshToken *models.RefreshToken
-	currentClaims := getClaims(ctx)
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -604,23 +589,12 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		if terr != nil {
 			return terr
 		}
-		terr = models.AddClaimToSession(tx, session, signInMethod)
+		terr = models.AddClaimToSession(tx, session, authenticationMethod)
 		if terr != nil {
 			return terr
 		}
 
-		if isMFASignInMethod {
-			if err := session.UpdateAssociatedFactor(tx, grantParams.FactorID); err != nil {
-				return err
-			}
-		}
-		// TODO(Joel): Refactor to use authenticationMethod once generateToken is refactored
-		_, aal := calculateAALFromClaims(currentClaims, signInMethod.String())
-		if err := session.UpdateAAL(tx, aal); err != nil {
-			return err
-		}
-
-		tokenString, terr = generateAccessToken(user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret, currentClaims, signInMethod.String())
+		tokenString, terr = generateAccessToken(tx, user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -630,6 +604,56 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		return nil, err
 	}
 
+	return &AccessTokenResponse{
+		Token:        tokenString,
+		TokenType:    "bearer",
+		ExpiresIn:    config.JWT.Exp,
+		RefreshToken: refreshToken.Token,
+		User:         user,
+	}, nil
+}
+
+func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+	config := a.config
+	var tokenString string
+	var refreshToken *models.RefreshToken
+	currentClaims := getClaims(ctx)
+	sessionId, err := uuid.FromString(currentClaims.SessionId)
+	if err != nil {
+		return nil, internalServerError("Cannot read SessionId claim as UUID").WithInternalError(err)
+	}
+	err = conn.Transaction(func(tx *storage.Connection) error {
+		session, terr := models.FindSessionById(tx, sessionId)
+		if terr != nil {
+			return terr
+		}
+		terr = models.AddClaimToSession(tx, session, authenticationMethod)
+		if terr != nil {
+			return terr
+		}
+		session, terr = models.FindSessionById(tx, sessionId)
+		if terr != nil {
+			return terr
+		}
+		refreshToken, terr = models.FindTokenBySessionID(tx, &session.ID)
+		if terr != nil {
+			return terr
+		}
+		aal, _ := session.CalculateAALAndAMR()
+		if err := session.UpdateAssociatedFactorAndAAL(tx, grantParams.FactorID, aal); err != nil {
+			return err
+		}
+
+		tokenString, terr = generateAccessToken(tx, user, &sessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+
+		if terr != nil {
+			return internalServerError("error generating jwt token").WithInternalError(terr)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return &AccessTokenResponse{
 		Token:        tokenString,
 		TokenType:    "bearer",
