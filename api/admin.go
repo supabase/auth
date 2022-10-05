@@ -33,6 +33,7 @@ type adminUserUpdateFactorParams struct {
 	FriendlyName string `json:"friendly_name"`
 	FactorType   string `json:"factor_type"`
 }
+
 type AdminListUsersResponse struct {
 	Users []*models.User `json:"users"`
 	Aud   string         `json:"aud"`
