@@ -46,7 +46,6 @@ func (ts *RefreshTokenTestSuite) TestGrantAuthenticatedUser() {
 
 func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwap() {
 	u := ts.createUser()
-
 	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
 	require.NoError(ts.T(), err)
 
@@ -65,7 +64,6 @@ func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwap() {
 
 func (ts *RefreshTokenTestSuite) TestLogout() {
 	u := ts.createUser()
-
 	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
 	require.NoError(ts.T(), err)
 

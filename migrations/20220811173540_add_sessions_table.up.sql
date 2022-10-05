@@ -4,7 +4,6 @@ create table if not exists {{ index .Options "Namespace" }}.sessions (
     user_id uuid not null,
     created_at timestamptz null,
     updated_at timestamptz null,
-
     constraint sessions_pkey primary key (id),
     constraint sessions_user_id_fkey foreign key (user_id) references {{ index .Options "Namespace" }}.users(id) on delete cascade
 );
