@@ -526,7 +526,7 @@ func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	f, err := models.NewFactor(u, "testSimpleName", models.TOTP, models.FactorVerifiedState, "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", models.TOTP, models.FactorStateVerified, "secretkey")
 
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
@@ -551,7 +551,7 @@ func (ts *AdminTestSuite) TestAdminUserGetFactors() {
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	f, err := models.NewFactor(u, "testSimpleName", models.TOTP, models.FactorUnverifiedState, "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", models.TOTP, models.FactorStateUnverified, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 
@@ -570,14 +570,14 @@ func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
-	f, err := models.NewFactor(u, "testSimpleName", models.TOTP, models.FactorUnverifiedState, "secretkey")
+	f, err := models.NewFactor(u, "testSimpleName", models.TOTP, models.FactorStateUnverified, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 
 	var cases = []struct {
-		desc       string
-		factorData map[string]interface{}
-		expected   int
+		Desc         string
+		FactorData   map[string]interface{}
+		ExpectedCode int
 	}{
 		{
 			"Update Factor friendly name",
@@ -587,33 +587,32 @@ func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 			http.StatusOK,
 		},
 		{
-			"Update factor type",
+			"Update factor: valid factor type",
 			map[string]interface{}{
 				"friendly_name": "john",
 				"factor_type":   models.TOTP,
-				"factor_status": "unverified",
 			},
 			http.StatusOK,
 		},
 		{
-			"Update Factor Status",
+			"Update factor: invalid factor",
 			map[string]interface{}{
-				"factor_status": models.FactorVerifiedState,
+				"factor_type": "invalid_factor",
 			},
-			http.StatusOK,
+			http.StatusBadRequest,
 		},
 	}
 
 	// Initialize factor data
 	for _, c := range cases {
-		ts.Run(c.desc, func() {
+		ts.Run(c.Desc, func() {
 			var buffer bytes.Buffer
-			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.factorData))
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.FactorData))
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/admin/users/%s/factor/%s/", u.ID, f.ID), &buffer)
+			req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s/factor/%s/", u.ID, f.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 			ts.API.handler.ServeHTTP(w, req)
-			require.Equal(ts.T(), http.StatusOK, w.Code)
+			require.Equal(ts.T(), c.ExpectedCode, w.Code)
 		})
 	}
 

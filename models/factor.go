@@ -9,8 +9,10 @@ import (
 	"github.com/pkg/errors"
 )
 
-const FactorUnverifiedState = "unverified"
-const FactorVerifiedState = "verified"
+const (
+	FactorStateUnverified = "unverified"
+	FactorStateVerified   = "verified"
+)
 
 const TOTP = "totp"
 
@@ -86,7 +88,7 @@ func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return factors, nil
 		}
-		return nil, errors.Wrap(err, "Error finding mfa factors")
+		return nil, errors.Wrap(err, "Database error when finding MFA factors associated to user")
 	}
 	return factors, nil
 }
@@ -99,21 +101,13 @@ func FindFactorByFactorID(tx *storage.Connection, factorID uuid.UUID) (*Factor, 
 	return factor, nil
 }
 
-func FindFactorByFriendlyName(tx *storage.Connection, friendlyName string) (*Factor, error) {
-	factor, err := findFactor(tx, "friendly_name = ?", friendlyName)
-	if err != nil {
-		return nil, FactorNotFoundError{}
-	}
-	return factor, nil
-}
-
 func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Factor, error) {
 	obj := &Factor{}
 	if err := tx.Eager().Q().Where(query, args...).First(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, FactorNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding factor")
+		return nil, errors.Wrap(err, "Database error finding factor")
 	}
 
 	return obj, nil
@@ -121,28 +115,28 @@ func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Fac
 
 func FindVerifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	factors := []*Factor{}
-	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorVerifiedState).All(&factors); err != nil {
+	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorStateVerified).All(&factors); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return factors, nil
 		}
-		return nil, errors.Wrap(err, "Error finding verified mfa factors")
+		return nil, errors.Wrap(err, "Database error when finding verified MFA factors")
 	}
 	return factors, nil
 }
 
-// Change the friendly name
+// UpdateFriendlyName changes the friendly name
 func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	f.FriendlyName = friendlyName
 	return tx.UpdateOnly(f, "friendly_name", "updated_at")
 }
 
-// Change the factor status
+// UpdateStatus modifies the factor status
 func (f *Factor) UpdateStatus(tx *storage.Connection, status string) error {
 	f.Status = status
 	return tx.UpdateOnly(f, "status", "updated_at")
 }
 
-// Checks if MFA is Enabled
+// IsMFAEnabled determines if user has met the conditions to activate MFA
 func IsMFAEnabled(tx *storage.Connection, user *User) (bool, error) {
 	factors, err := FindVerifiedFactorsByUser(tx, user)
 	if err != nil {
@@ -154,7 +148,7 @@ func IsMFAEnabled(tx *storage.Connection, user *User) (bool, error) {
 	return false, nil
 }
 
-// Change the factor type
+// UpdateFactorType modifies the factor type
 func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) error {
 	f.FactorType = factorType
 	return tx.UpdateOnly(f, "factor_type", "updated_at")

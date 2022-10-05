@@ -52,7 +52,7 @@ func (ts *MFATestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 	// Create Factor
-	f, err := models.NewFactor(u, "test_factor", models.TOTP, models.FactorUnverifiedState, "secretkey")
+	f, err := models.NewFactor(u, "test_factor", models.TOTP, models.FactorStateUnverified, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 	// Create corresponding sessoin
@@ -137,7 +137,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			factors, err := models.FindFactorsByUser(ts.API.db, user)
 			ts.Require().NoError(err)
 			latestFactor := factors[len(factors)-1]
-			require.Equal(ts.T(), models.FactorUnverifiedState, latestFactor.Status)
+			require.Equal(ts.T(), models.FactorStateUnverified, latestFactor.Status)
 			if c.FriendlyName != "" && c.ExpectedCode == http.StatusOK {
 				require.Equal(ts.T(), c.FriendlyName, latestFactor.FriendlyName)
 			}
@@ -157,8 +157,9 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	f, err := models.FindFactorByFriendlyName(ts.API.db, "test_factor")
+	factors, err := models.FindFactorsByUser(ts.API.db, u)
 	require.NoError(ts.T(), err)
+	f := factors[0]
 
 	token, err := generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err, "Error generating access token")
@@ -267,16 +268,19 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	}
 }
 
-func (ts *MFATestSuite) TestUnenrollFactor() {
+func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 	cases := []struct {
-		desc                    string
-		IsFactorVerified        bool
-		CreateAdditionalSession bool
-		ExpectedHTTPCode        int
+		desc             string
+		ValidCode        bool
+		ExpectedHTTPCode int
 	}{
 		{
-			"Verified Factor",
-			true,
+			"Verified Factor: Invalid Code",
+			false,
+			http.StatusBadRequest,
+		},
+		{
+			"Verified Factor: Success",
 			true,
 			http.StatusOK,
 		},
@@ -303,15 +307,16 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			}
 
 			factors, err := models.FindFactorsByUser(ts.API.db, u)
-			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), err, "error finding factors")
 			f := factors[0]
+			secondarySession, err = models.NewSession(u, &f.ID)
+			require.NoError(ts.T(), err, "Error creating test session")
+			require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
 			sharedSecret := ts.TestOTPKey.Secret()
 			f.Secret = sharedSecret
-			if v.IsFactorVerified {
-				err = f.UpdateStatus(ts.API.db, models.FactorVerifiedState)
-				require.NoError(ts.T(), err)
-			}
+			err = f.UpdateStatus(ts.API.db, models.FactorStateVerified)
+			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
 
 			var buffer bytes.Buffer
@@ -322,6 +327,11 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			// Generate code for verification
 			code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
 			require.NoError(ts.T(), err)
+			if !v.ValidCode {
+				// Use an inaccurate time, resulting in an invalid code(usually)
+				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC().Add(-1*time.Minute*time.Duration(1)))
+				require.NoError(ts.T(), err)
+			}
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 				"factor_id": f.ID,
 				"code":      code,
@@ -333,8 +343,7 @@ func (ts *MFATestSuite) TestUnenrollFactor() {
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), v.ExpectedHTTPCode, w.Code)
 
-			// Test that unenrolling verified factors should downgrade other sessions linked to the same factor
-			if v.IsFactorVerified && v.CreateAdditionalSession {
+			if v.ExpectedHTTPCode == http.StatusOK {
 				_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
 				require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
 				session, _ := models.FindSessionById(ts.API.db, secondarySession.ID)
@@ -456,5 +465,41 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 	verifyResp = &AccessTokenResponse{}
 	require.NoError(ts.T(), json.NewDecoder(y.Body).Decode(&verifyResp))
 	return verifyResp
+}
+
+func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	s, err := models.FindSessionByUserID(ts.API.db, u.ID)
+	require.NoError(ts.T(), err)
+	var secondarySession *models.Session
+	factors, err := models.FindFactorsByUser(ts.API.db, u)
+	require.NoError(ts.T(), err, "error finding factors")
+	f := factors[0]
+	secondarySession, err = models.NewSession(u, &f.ID)
+	require.NoError(ts.T(), err, "Error creating test session")
+	require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
+
+	sharedSecret := ts.TestOTPKey.Secret()
+	f.Secret = sharedSecret
+
+	var buffer bytes.Buffer
+
+	token, err := generateAccessToken(u, &s.ID, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret, nil, "")
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"factor_id": f.ID,
+	}))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/user/%s/factor/%s/", u.ID, f.ID), &buffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+	_, err = models.FindSessionById(ts.API.db, secondarySession.ID)
+	require.EqualError(ts.T(), err, models.SessionNotFoundError{}.Error())
 
 }

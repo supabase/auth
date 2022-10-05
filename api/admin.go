@@ -32,7 +32,6 @@ type AdminUserParams struct {
 type adminUserUpdateFactorParams struct {
 	FriendlyName string `json:"friendly_name"`
 	FactorType   string `json:"factor_type"`
-	FactorStatus string `json:"factor_status"`
 }
 type AdminListUsersResponse struct {
 	Users []*models.User `json:"users"`
@@ -435,10 +434,13 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
 	params := &adminUserUpdateFactorParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
-	err := jsonDecoder.Decode(params)
+	body, err := getBodyBytes(r)
 	if err != nil {
-		return badRequestError("Please check the params passed into admin user update factor: %v", err)
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
+		return badRequestError("Could not read factor update params: %v", err)
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -447,16 +449,11 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 				return terr
 			}
 		}
-		if params.FactorType != "" && params.FactorType != models.TOTP {
+		if params.FactorType != "" {
+			if params.FactorType != models.TOTP {
+				return badRequestError("Factor Type not valid")
+			}
 			if terr := factor.UpdateFactorType(tx, params.FactorType); terr != nil {
-				return terr
-			}
-		}
-		if params.FactorStatus != "" {
-			if !isValidFactorStatus(params.FactorStatus) {
-				return errors.New("factor Status should be one of the valid factor states: verified, unverified or disabled")
-			}
-			if terr := factor.UpdateStatus(tx, params.FactorStatus); terr != nil {
 				return terr
 			}
 		}
@@ -475,8 +472,4 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	return sendJSON(w, http.StatusOK, factor)
-}
-
-func isValidFactorStatus(factorStatus string) bool {
-	return factorStatus == models.FactorVerifiedState || factorStatus == models.FactorUnverifiedState
 }
