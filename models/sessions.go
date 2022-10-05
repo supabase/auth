@@ -85,7 +85,7 @@ func FindSessionById(tx *storage.Connection, id uuid.UUID) (*Session, error) {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, SessionNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding user")
+		return nil, errors.Wrap(err, "error finding session")
 	}
 	return session, nil
 }
@@ -96,7 +96,7 @@ func FindSessionByUserID(tx *storage.Connection, userId uuid.UUID) (*Session, er
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, SessionNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding user")
+		return nil, errors.Wrap(err, "error finding session")
 	}
 	return session, nil
 }

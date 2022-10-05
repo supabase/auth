@@ -125,7 +125,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	svgData.End()
 
-
 	factor, err := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, key.Secret())
 	if err != nil {
 		return internalServerError("database error creating factor").WithInternalError(err)
