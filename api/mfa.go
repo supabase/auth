@@ -54,6 +54,10 @@ type UnenrollFactorParams struct {
 	Code string `json:"code"`
 }
 
+type UnenrollFactorResponse struct {
+	ID uuid.UUID `json:"id"`
+}
+
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
@@ -331,5 +335,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, make(map[string]string))
+	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{
+		ID: factor.ID,
+	})
 }
