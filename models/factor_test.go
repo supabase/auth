@@ -1,12 +1,14 @@
 package models
 
 import (
+	"testing"
+
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"testing"
 )
 
 type FactorTestSuite struct {
@@ -30,18 +32,13 @@ func (ts *FactorTestSuite) SetupTest() {
 	TruncateAll(ts.db)
 }
 
-func (ts *FactorTestSuite) TestFindFactorByFriendlyName() {
-	f := ts.createFactor()
-	n, err := FindFactorByFriendlyName(ts.db, f.FriendlyName)
-	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), f.ID, n.ID)
-}
-
 func (ts *FactorTestSuite) TestFindFactorByFactorID() {
 	f := ts.createFactor()
 	n, err := FindFactorByFactorID(ts.db, f.ID)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), f.ID, n.ID)
+	_, err = FindFactorByFactorID(ts.db, uuid.Nil)
+	require.EqualError(ts.T(), err, FactorNotFoundError{}.Error())
 }
 
 func (ts *FactorTestSuite) createFactor() *Factor {
@@ -64,7 +61,7 @@ func (ts *FactorTestSuite) TestUpdateStatus() {
 	u, err := NewUser("", "", "", "", nil)
 	require.NoError(ts.T(), err)
 
-	f, err := NewFactor(u, "A1B2C3", TOTP, FactorStateUnverified, "some-secret")
+	f, err := NewFactor(u, "", TOTP, FactorStateUnverified, "some-secret")
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), f.UpdateStatus(ts.db, newFactorStatus))
 	require.Equal(ts.T(), newFactorStatus, f.Status)

@@ -89,7 +89,7 @@ func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return factors, nil
 		}
-		return nil, errors.Wrap(err, "Error finding mfa factors")
+		return nil, errors.Wrap(err, "Database error when finding MFA factors associated to user")
 	}
 	return factors, nil
 }
@@ -102,21 +102,13 @@ func FindFactorByFactorID(tx *storage.Connection, factorID uuid.UUID) (*Factor, 
 	return factor, nil
 }
 
-func FindFactorByFriendlyName(tx *storage.Connection, friendlyName string) (*Factor, error) {
-	factor, err := findFactor(tx, "friendly_name = ?", friendlyName)
-	if err != nil {
-		return nil, FactorNotFoundError{}
-	}
-	return factor, nil
-}
-
 func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Factor, error) {
 	obj := &Factor{}
 	if err := tx.Eager().Q().Where(query, args...).First(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, FactorNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding factor")
+		return nil, errors.Wrap(err, "Database error finding factor")
 	}
 
 	return obj, nil
@@ -128,7 +120,7 @@ func FindVerifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, e
 		if errors.Cause(err) == sql.ErrNoRows {
 			return factors, nil
 		}
-		return nil, errors.Wrap(err, "Error finding verified mfa factors")
+		return nil, errors.Wrap(err, "Database error when finding verified MFA factors")
 	}
 	return factors, nil
 }
