@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -41,8 +42,9 @@ func TestMFA(t *testing.T) {
 		Config: config,
 	}
 	defer api.db.Close()
-
-	suite.Run(t, ts)
+	if os.Getenv("MFA_ENABLED") {
+		suite.Run(t, ts)
+	}
 }
 
 func (ts *MFATestSuite) SetupTest() {

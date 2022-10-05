@@ -6,6 +6,7 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"os"
 	"time"
 )
 
@@ -23,6 +24,21 @@ func (ts *SessionsTestSuite) SetupTest() {
 
 	err = ts.db.Create(user)
 	require.NoError(ts.T(), err)
+}
+
+func TestSession(t *testing.T) {
+	globalConfig, err := conf.LoadGlobal(modelsTestConfig)
+	require.NoError(t, err)
+	conn, err := test.SetupDBConnection(globalConfig)
+	require.NoError(t, err)
+	ts := &SessionsTestSuite{
+		db:     conn,
+		Config: config,
+	}
+	defer ts.db.Close()
+	if os.Getenv("MFA_ENABLED") {
+		suite.Run(t, ts)
+	}
 }
 
 func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
