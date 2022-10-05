@@ -575,9 +575,9 @@ func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 
 	var cases = []struct {
-		desc       string
-		factorData map[string]interface{}
-		expected   int
+		Desc         string
+		FactorData   map[string]interface{}
+		ExpectedCode int
 	}{
 		{
 			"Update Factor friendly name",
@@ -587,25 +587,32 @@ func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 			http.StatusOK,
 		},
 		{
-			"Update factor type",
+			"Update factor: valid factor type",
 			map[string]interface{}{
 				"friendly_name": "john",
 				"factor_type":   models.TOTP,
 			},
 			http.StatusOK,
 		},
+		{
+			"Update factor: invalid factor",
+			map[string]interface{}{
+				"factor_type": "invalid_factor",
+			},
+			http.StatusBadRequest,
+		},
 	}
 
 	// Initialize factor data
 	for _, c := range cases {
-		ts.Run(c.desc, func() {
+		ts.Run(c.Desc, func() {
 			var buffer bytes.Buffer
-			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.factorData))
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.FactorData))
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s/factor/%s/", u.ID, f.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 			ts.API.handler.ServeHTTP(w, req)
-			require.Equal(ts.T(), http.StatusOK, w.Code)
+			require.Equal(ts.T(), c.ExpectedCode, w.Code)
 		})
 	}
 
