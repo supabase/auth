@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+	"os"
 
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
@@ -522,6 +523,9 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 
 // TestAdminUserDeleteFactor tests API /admin/users/<user_id>/factor/<factor_id>/
 func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
+	if os.Getenv("MFA_ENABLED") {
+		return
+	}
 	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
@@ -547,6 +551,9 @@ func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 
 // TestAdminUserGetFactor tests API /admin/user/<user_id>/factors/
 func (ts *AdminTestSuite) TestAdminUserGetFactors() {
+	if os.Getenv("MFA_ENABLED") {
+		return
+	}
 	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
@@ -566,6 +573,9 @@ func (ts *AdminTestSuite) TestAdminUserGetFactors() {
 }
 
 func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
+	if os.Getenv("MFA_ENABLED") {
+		return
+	}
 	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
