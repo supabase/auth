@@ -174,7 +174,6 @@ type MailerConfiguration struct {
 
 type PhoneProviderConfiguration struct {
 	Enabled                 bool `json:"enabled" default:"false"`
-	ChallengeExpiryDuration int  `json:"challenge_expiry_duration" default:"300"`
 }
 
 type SmsProviderConfiguration struct {
