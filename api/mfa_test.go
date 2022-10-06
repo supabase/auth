@@ -42,7 +42,7 @@ func TestMFA(t *testing.T) {
 		Config: config,
 	}
 	defer api.db.Close()
-	if os.Getenv("MFA_ENABLED") {
+	if os.Getenv("MFA_ENABLED") == "true" {
 		suite.Run(t, ts)
 	}
 }

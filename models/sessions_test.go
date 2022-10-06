@@ -1,12 +1,14 @@
 package models
 
 import (
+	"os"
+	"testing"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"os"
+	"github.com/netlify/gotrue/storage/test"
 	"time"
 )
 
@@ -19,7 +21,7 @@ type SessionsTestSuite struct {
 func (ts *SessionsTestSuite) SetupTest() {
 	TruncateAll(ts.db)
 	email := "test@example.com"
-	user, err := NewUser("", email, "secret", "test", nil)
+	user, err := NewUser("", email, "secret", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err)
 
 	err = ts.db.Create(user)
@@ -33,10 +35,10 @@ func TestSession(t *testing.T) {
 	require.NoError(t, err)
 	ts := &SessionsTestSuite{
 		db:     conn,
-		Config: config,
+		Config: globalConfig,
 	}
 	defer ts.db.Close()
-	if os.Getenv("MFA_ENABLED") {
+	if os.Getenv("MFA_ENABLED") == "true" {
 		suite.Run(t, ts)
 	}
 }
