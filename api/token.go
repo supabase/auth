@@ -663,7 +663,8 @@ func (a *API) MFA_issueRefreshToken(ctx context.Context, conn *storage.Connectio
 			return terr
 		}
 
-		tokenString, terr = generateAccessToken(tx, user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		// TODO(Joel): Replace when feature flag is lifted
+		tokenString, terr = MFA_generateAccessToken(tx, user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -713,7 +714,8 @@ func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Conne
 			return err
 		}
 
-		tokenString, terr = generateAccessToken(tx, user, &sessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		// TODO(Joel): Replace when feature flag is lifted
+		tokenString, terr = MFA_generateAccessToken(tx, user, &sessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
