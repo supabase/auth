@@ -1,14 +1,13 @@
 package models
 
 import (
-	"os"
-	"testing"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
+	"github.com/netlify/gotrue/storage/test"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/netlify/gotrue/storage/test"
+	"testing"
 	"time"
 )
 
@@ -38,7 +37,7 @@ func TestSession(t *testing.T) {
 		Config: globalConfig,
 	}
 	defer ts.db.Close()
-	if os.Getenv("MFA_ENABLED") == "true" {
+	if globalConfig.MFA.Enabled {
 		suite.Run(t, ts)
 	}
 }
@@ -56,13 +55,17 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	firstClaimAddedTime := time.Now().Unix()
 	err = AddClaimToSession(ts.db, session, TOTPSignIn)
 	require.NoError(ts.T(), err)
+	session, err = FindSessionById(ts.db, session.ID)
+	require.NoError(ts.T(), err)
 
 	aal, amr := session.CalculateAALAndAMR()
-
 	require.Equal(ts.T(), AAL2.String(), aal)
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
 
 	err = AddClaimToSession(ts.db, session, TOTPSignIn)
+	require.NoError(ts.T(), err)
+
+	session, err = FindSessionById(ts.db, session.ID)
 	require.NoError(ts.T(), err)
 
 	aal, amr = session.CalculateAALAndAMR()

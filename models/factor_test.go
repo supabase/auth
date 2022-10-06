@@ -2,7 +2,6 @@ package models
 
 import (
 	"testing"
-	"os"
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
@@ -26,7 +25,7 @@ func TestFactor(t *testing.T) {
 		db: conn,
 	}
 	defer ts.db.Close()
-	if os.Getenv("MFA_ENABLED") != "true" {
+	if globalConfig.MFA.Enabled {
 		suite.Run(t, ts)
 	}
 }

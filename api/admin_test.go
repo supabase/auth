@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -523,7 +522,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 
 // TestAdminUserDeleteFactor tests API /admin/users/<user_id>/factor/<factor_id>/
 func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
-	if os.Getenv("MFA_ENABLED") != "true" {
+	if !ts.API.config.MFA.Enabled{
 		return
 	}
 	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
@@ -551,7 +550,7 @@ func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 
 // TestAdminUserGetFactor tests API /admin/user/<user_id>/factors/
 func (ts *AdminTestSuite) TestAdminUserGetFactors() {
-	if os.Getenv("MFA_ENABLED") != "true" {
+	if !ts.API.config.MFA.Enabled{
 		return
 	}
 	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
@@ -573,7 +572,7 @@ func (ts *AdminTestSuite) TestAdminUserGetFactors() {
 }
 
 func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
-	if os.Getenv("MFA_ENABLED") != "true" {
+	if !ts.API.config.MFA.Enabled{
 		return
 	}
 	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
