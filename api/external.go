@@ -278,8 +278,11 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				}
 			}
 		}
-
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+		if config.MFA.Enabled {
+			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+		} else {
+			token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
+		}
 
 		if terr != nil {
 			return oauthError("server_error", terr.Error())

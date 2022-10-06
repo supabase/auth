@@ -103,7 +103,13 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 	req.Header.Set("Content-Type", "application/json")
 
 	// Generate access token for request
-	token, err := generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	var token string
+	if ts.API.config.MFA.Enabled {
+		token, err = MFA_generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	} else {
+		token, err = generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+
+	}
 	require.NoError(ts.T(), err)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 

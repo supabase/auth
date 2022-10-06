@@ -48,7 +48,13 @@ func (ts *AuditTestSuite) makeSuperAdmin(email string) string {
 
 	u.Role = "supabase_admin"
 
-	token, err := generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	var token string
+	if ts.Config.MFA.Enabled {
+		token, err = MFA_generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	} else {
+		token, err = generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+
+	}
 	require.NoError(ts.T(), err, "Error generating access token")
 
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}

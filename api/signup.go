@@ -221,7 +221,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 
-			token, terr = a.issueRefreshToken(ctx, tx, user, models.AutoConfirmSignup, grantParams)
+			if config.MFA.Enabled {
+				token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.AutoConfirmSignup, grantParams)
+			} else {
+				token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
+			}
 
 			if terr != nil {
 				return terr

@@ -41,7 +41,12 @@ func (ts *LogoutTestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 
 	// generate access token to use for logout
-	t, err := generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	var t string
+	if ts.Config.MFA.Enabled {
+		t, err = MFA_generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	} else {
+		t, err = generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	}
 	require.NoError(ts.T(), err)
 	ts.token = t
 }
