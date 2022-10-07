@@ -53,7 +53,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	err = AddClaimToSession(ts.db, session, PasswordGrant)
 	require.NoError(ts.T(), err)
 
-	firstClaimAddedTime := time.Now().Unix()
+	firstClaimAddedTime := time.Now()
 	err = AddClaimToSession(ts.db, session, TOTPSignIn)
 	require.NoError(ts.T(), err)
 	session, err = FindSessionById(ts.db, session.ID)
@@ -76,7 +76,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	found := false
 	for _, claim := range session.AMRClaims {
 		if claim.AuthenticationMethod == TOTPSignIn.String() {
-			require.True(ts.T(), firstClaimAddedTime < claim.UpdatedAt.Unix())
+			require.True(ts.T(), firstClaimAddedTime.Before(claim.UpdatedAt))
 			found = true
 		}
 	}
