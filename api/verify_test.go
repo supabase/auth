@@ -543,36 +543,36 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 		payload *VerifyParams
 	}{
 		{
-			"Verify banned user on signup",
-			&VerifyParams{
+			desc: "Verify banned user on signup",
+			payload: &VerifyParams{
 				Type:  "signup",
 				Token: u.ConfirmationToken,
 			},
 		},
 		{
-			"Verify banned user on invite",
-			&VerifyParams{
+			desc: "Verify banned user on invite",
+			payload: &VerifyParams{
 				Type:  "invite",
 				Token: u.ConfirmationToken,
 			},
 		},
 		{
-			"Verify banned user on recover",
-			&VerifyParams{
+			desc: "Verify banned user on recover",
+			payload: &VerifyParams{
 				Type:  "recovery",
 				Token: u.RecoveryToken,
 			},
 		},
 		{
-			"Verify banned user on magiclink",
-			&VerifyParams{
+			desc: "Verify banned user on magiclink",
+			payload: &VerifyParams{
 				Type:  "magiclink",
 				Token: u.RecoveryToken,
 			},
 		},
 		{
-			"Verify banned user on email change",
-			&VerifyParams{
+			desc: "Verify banned user on email change",
+			payload: &VerifyParams{
 				Type:  "email_change",
 				Token: u.EmailChangeTokenCurrent,
 			},

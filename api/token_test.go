@@ -169,44 +169,44 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
 		expectedBody                map[string]interface{}
 	}{
 		{
-			"Valid refresh within reuse interval",
-			true,
-			30,
-			second.Token,
-			http.StatusOK,
-			map[string]interface{}{
+			desc:                        "Valid refresh within reuse interval",
+			refreshTokenRotationEnabled: true,
+			reuseInterval:               30,
+			refreshToken:                second.Token,
+			expectedCode:                http.StatusOK,
+			expectedBody: map[string]interface{}{
 				"refresh_token": third.Token,
 			},
 		},
 		{
-			"Invalid refresh, first token is not the previous revoked token",
-			true,
-			0,
-			first.Token,
-			http.StatusBadRequest,
-			map[string]interface{}{
+			desc:                        "Invalid refresh, first token is not the previous revoked token",
+			refreshTokenRotationEnabled: true,
+			reuseInterval:               0,
+			refreshToken:                first.Token,
+			expectedCode:                http.StatusBadRequest,
+			expectedBody: map[string]interface{}{
 				"error":             "invalid_grant",
 				"error_description": "Invalid Refresh Token",
 			},
 		},
 		{
-			"Invalid refresh, revoked third token",
-			true,
-			0,
-			second.Token,
-			http.StatusBadRequest,
-			map[string]interface{}{
+			desc:                        "Invalid refresh, revoked third token",
+			refreshTokenRotationEnabled: true,
+			reuseInterval:               0,
+			refreshToken:                second.Token,
+			expectedCode:                http.StatusBadRequest,
+			expectedBody: map[string]interface{}{
 				"error":             "invalid_grant",
 				"error_description": "Invalid Refresh Token",
 			},
 		},
 		{
-			"Invalid refresh, third token revoked by previous case",
-			true,
-			30,
-			third.Token,
-			http.StatusBadRequest,
-			map[string]interface{}{
+			desc:                        "Invalid refresh, third token revoked by previous case",
+			refreshTokenRotationEnabled: true,
+			reuseInterval:               30,
+			refreshToken:                third.Token,
+			expectedCode:                http.StatusBadRequest,
+			expectedBody: map[string]interface{}{
 				"error":             "invalid_grant",
 				"error_description": "Invalid Refresh Token",
 			},
