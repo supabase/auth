@@ -457,8 +457,8 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 		expected     int
 	}{
 		{
-			"Email Signups Disabled",
-			&conf.GlobalConfiguration{
+			desc: "Email Signups Disabled",
+			customConfig: &conf.GlobalConfiguration{
 				JWT: ts.Config.JWT,
 				External: conf.ProviderConfiguration{
 					Email: conf.EmailProviderConfiguration{
@@ -466,15 +466,15 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 					},
 				},
 			},
-			map[string]interface{}{
+			userData: map[string]interface{}{
 				"email":    "test1@example.com",
 				"password": "test1",
 			},
-			http.StatusOK,
+			expected: http.StatusOK,
 		},
 		{
-			"Phone Signups Disabled",
-			&conf.GlobalConfiguration{
+			desc: "Phone Signups Disabled",
+			customConfig: &conf.GlobalConfiguration{
 				JWT: ts.Config.JWT,
 				External: conf.ProviderConfiguration{
 					Phone: conf.PhoneProviderConfiguration{
@@ -482,23 +482,23 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 					},
 				},
 			},
-			map[string]interface{}{
+			userData: map[string]interface{}{
 				"phone":    "123456789",
 				"password": "test1",
 			},
-			http.StatusOK,
+			expected: http.StatusOK,
 		},
 		{
-			"All Signups Disabled",
-			&conf.GlobalConfiguration{
+			desc: "All Signups Disabled",
+			customConfig: &conf.GlobalConfiguration{
 				JWT:           ts.Config.JWT,
 				DisableSignup: true,
 			},
-			map[string]interface{}{
+			userData: map[string]interface{}{
 				"email":    "test2@example.com",
 				"password": "test2",
 			},
-			http.StatusOK,
+			expected: http.StatusOK,
 		},
 	}
 
@@ -580,26 +580,26 @@ func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 		ExpectedCode int
 	}{
 		{
-			"Update Factor friendly name",
-			map[string]interface{}{
+			Desc: "Update Factor friendly name",
+			FactorData: map[string]interface{}{
 				"friendly_name": "john",
 			},
-			http.StatusOK,
+			ExpectedCode: http.StatusOK,
 		},
 		{
-			"Update factor: valid factor type",
-			map[string]interface{}{
+			Desc: "Update factor: valid factor type",
+			FactorData: map[string]interface{}{
 				"friendly_name": "john",
 				"factor_type":   models.TOTP,
 			},
-			http.StatusOK,
+			ExpectedCode: http.StatusOK,
 		},
 		{
-			"Update factor: invalid factor",
-			map[string]interface{}{
+			Desc: "Update factor: invalid factor",
+			FactorData: map[string]interface{}{
 				"factor_type": "invalid_factor",
 			},
-			http.StatusBadRequest,
+			ExpectedCode: http.StatusBadRequest,
 		},
 	}
 
