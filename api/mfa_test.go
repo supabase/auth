@@ -82,45 +82,45 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 	alternativeFriendlyName := "john"
 	var cases = []struct {
 		desc         string
-		FriendlyName string
-		FactorType   string
-		Issuer       string
-		ExpectedCode int
+		friendlyName string
+		factorType   string
+		issuer       string
+		expectedCode int
 	}{
 		{
-			"TOTP: No issuer",
-			alternativeFriendlyName,
-			models.TOTP,
-			"",
-			http.StatusOK,
+			desc: "TOTP: No issuer",
+			friendlyName: alternativeFriendlyName,
+			factorType: models.TOTP,
+			issuer: "",
+			expectedCode: http.StatusOK,
 		},
 		{
-			"Invalid factor type",
-			testFriendlyName,
-			"invalid_factor",
-			ts.TestDomain,
-			http.StatusBadRequest,
+			desc: "Invalid factor type",
+			friendlyName: testFriendlyName,
+			factorType: "invalid_factor",
+			issuer: ts.TestDomain,
+			expectedCode: http.StatusBadRequest,
 		},
 
 		{
-			"TOTP: Factor has friendly name",
-			testFriendlyName,
-			models.TOTP,
-			ts.TestDomain,
-			http.StatusOK,
+			desc: "TOTP: Factor has friendly name",
+			friendlyName: testFriendlyName,
+			factorType: models.TOTP,
+			issuer: ts.TestDomain,
+			expectedCode: http.StatusOK,
 		},
 		{
-			"TOTP: Enrolling without friendly name",
-			"",
-			models.TOTP,
-			ts.TestDomain,
-			http.StatusOK,
+			desc: "TOTP: Enrolling without friendly name",
+			friendlyName: "",
+			factorType: models.TOTP,
+			issuer: ts.TestDomain,
+			expectedCode: http.StatusOK,
 		},
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			var buffer bytes.Buffer
-			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": c.FriendlyName, "factor_type": c.FactorType, "issuer": c.Issuer}))
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": c.friendlyName, "factor_type": c.factorType, "issuer": c.issuer}))
 			user, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			ts.Require().NoError(err)
 
@@ -132,14 +132,14 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			req.Header.Set("Content-Type", "application/json")
 			ts.API.handler.ServeHTTP(w, req)
-			require.Equal(ts.T(), c.ExpectedCode, w.Code)
+			require.Equal(ts.T(), c.expectedCode, w.Code)
 
 			factors, err := models.FindFactorsByUser(ts.API.db, user)
 			ts.Require().NoError(err)
 			latestFactor := factors[len(factors)-1]
 			require.Equal(ts.T(), models.FactorStateUnverified, latestFactor.Status)
-			if c.FriendlyName != "" && c.ExpectedCode == http.StatusOK {
-				require.Equal(ts.T(), c.FriendlyName, latestFactor.FriendlyName)
+			if c.friendlyName != "" && c.expectedCode == http.StatusOK {
+				require.Equal(ts.T(), c.friendlyName, latestFactor.FriendlyName)
 			}
 			if w.Code == http.StatusOK {
 				enrollResp := EnrollFactorResponse{}
@@ -182,22 +182,22 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 		expectedHTTPCode int
 	}{
 		{
-			"Invalid: Valid code and expired challenge",
-			false,
-			true,
-			http.StatusBadRequest,
+			desc: "Invalid: Valid code and expired challenge",
+			validChallenge:false,
+			validCode: true,
+			expectedHTTPCode: http.StatusBadRequest,
 		},
 		{
-			"Invalid: Invalid code and valid challenge ",
-			true,
-			false,
-			http.StatusBadRequest,
+			desc: "Invalid: Invalid code and valid challenge ",
+			validChallenge: true,
+			validCode: false,
+			expectedHTTPCode: http.StatusBadRequest,
 		},
 		{
-			"Valid /verify request",
-			true,
-			true,
-			http.StatusOK,
+			desc: "Valid /verify request",
+			validChallenge: true,
+			validCode: true,
+			expectedHTTPCode: http.StatusOK,
 		},
 	}
 	for _, v := range cases {
@@ -271,18 +271,18 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 	cases := []struct {
 		desc             string
-		ValidCode        bool
-		ExpectedHTTPCode int
+		validCode        bool
+		expectedHTTPCode int
 	}{
 		{
-			"Verified Factor: Invalid Code",
-			false,
-			http.StatusBadRequest,
+			desc: "Verified Factor: Invalid Code",
+			validCode: false,
+			expectedHTTPCode: http.StatusBadRequest,
 		},
 		{
-			"Verified Factor: Success",
-			true,
-			http.StatusOK,
+			desc: "Verified Factor: Success",
+			validCode: true,
+			expectedHTTPCode: http.StatusOK,
 		},
 	}
 	for _, v := range cases {
@@ -317,7 +317,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			// Generate code for verification
 			code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
 			require.NoError(ts.T(), err)
-			if !v.ValidCode {
+			if !v.validCode {
 				// Use an inaccurate time, resulting in an invalid code(usually)
 				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC().Add(-1*time.Minute*time.Duration(1)))
 				require.NoError(ts.T(), err)
@@ -331,9 +331,9 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/user/%s/factor/%s/", u.ID, f.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			ts.API.handler.ServeHTTP(w, req)
-			require.Equal(ts.T(), v.ExpectedHTTPCode, w.Code)
+			require.Equal(ts.T(), v.expectedHTTPCode, w.Code)
 
-			if v.ExpectedHTTPCode == http.StatusOK {
+			if v.expectedHTTPCode == http.StatusOK {
 				_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
 				require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
 				session, _ := models.FindSessionById(ts.API.db, secondarySession.ID)
@@ -347,7 +347,6 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 }
 
 func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
-
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	s, err := models.FindSessionByUserID(ts.API.db, u.ID)
