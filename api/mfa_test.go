@@ -88,32 +88,32 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		expectedCode int
 	}{
 		{
-			desc: "TOTP: No issuer",
+			desc:         "TOTP: No issuer",
 			friendlyName: alternativeFriendlyName,
-			factorType: models.TOTP,
-			issuer: "",
+			factorType:   models.TOTP,
+			issuer:       "",
 			expectedCode: http.StatusOK,
 		},
 		{
-			desc: "Invalid factor type",
+			desc:         "Invalid factor type",
 			friendlyName: testFriendlyName,
-			factorType: "invalid_factor",
-			issuer: ts.TestDomain,
+			factorType:   "invalid_factor",
+			issuer:       ts.TestDomain,
 			expectedCode: http.StatusBadRequest,
 		},
 
 		{
-			desc: "TOTP: Factor has friendly name",
+			desc:         "TOTP: Factor has friendly name",
 			friendlyName: testFriendlyName,
-			factorType: models.TOTP,
-			issuer: ts.TestDomain,
+			factorType:   models.TOTP,
+			issuer:       ts.TestDomain,
 			expectedCode: http.StatusOK,
 		},
 		{
-			desc: "TOTP: Enrolling without friendly name",
+			desc:         "TOTP: Enrolling without friendly name",
 			friendlyName: "",
-			factorType: models.TOTP,
-			issuer: ts.TestDomain,
+			factorType:   models.TOTP,
+			issuer:       ts.TestDomain,
 			expectedCode: http.StatusOK,
 		},
 	}
@@ -182,21 +182,21 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 		expectedHTTPCode int
 	}{
 		{
-			desc: "Invalid: Valid code and expired challenge",
-			validChallenge:false,
-			validCode: true,
+			desc:             "Invalid: Valid code and expired challenge",
+			validChallenge:   false,
+			validCode:        true,
 			expectedHTTPCode: http.StatusBadRequest,
 		},
 		{
-			desc: "Invalid: Invalid code and valid challenge ",
-			validChallenge: true,
-			validCode: false,
+			desc:             "Invalid: Invalid code and valid challenge ",
+			validChallenge:   true,
+			validCode:        false,
 			expectedHTTPCode: http.StatusBadRequest,
 		},
 		{
-			desc: "Valid /verify request",
-			validChallenge: true,
-			validCode: true,
+			desc:             "Valid /verify request",
+			validChallenge:   true,
+			validCode:        true,
 			expectedHTTPCode: http.StatusOK,
 		},
 	}
@@ -275,13 +275,13 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 		expectedHTTPCode int
 	}{
 		{
-			desc: "Verified Factor: Invalid Code",
-			validCode: false,
+			desc:             "Verified Factor: Invalid Code",
+			validCode:        false,
 			expectedHTTPCode: http.StatusBadRequest,
 		},
 		{
-			desc: "Verified Factor: Success",
-			validCode: true,
+			desc:             "Verified Factor: Success",
+			validCode:        true,
 			expectedHTTPCode: http.StatusOK,
 		},
 	}
