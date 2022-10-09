@@ -613,7 +613,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 	}, nil
 }
 
-func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+func (a *API) updateMFASessionAndClaims(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 	config := a.config
 	var tokenString string
 	var refreshToken *models.RefreshToken
@@ -635,7 +635,12 @@ func (a *API) updateMFASessionAndClaims(ctx context.Context, conn *storage.Conne
 		if terr != nil {
 			return terr
 		}
-		refreshToken, terr = models.FindTokenBySessionID(tx, &session.ID)
+		currentToken, terr := models.FindTokenBySessionID(tx, &session.ID)
+		if terr != nil {
+			return terr
+		}
+		// Swap to ensure current token is the latest one
+		refreshToken, terr = models.GrantRefreshTokenSwap(r, tx, user, currentToken)
 		if terr != nil {
 			return terr
 		}
