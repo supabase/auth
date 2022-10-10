@@ -92,7 +92,7 @@ func FindSessionById(tx *storage.Connection, id uuid.UUID) (*Session, error) {
 
 func FindSessionByUserID(tx *storage.Connection, userId uuid.UUID) (*Session, error) {
 	session := &Session{}
-	if err := tx.Eager().Q().Where("user_id = ?", userId).First(session); err != nil {
+	if err := tx.Eager().Q().Where("user_id = ?", userId).Order("created_at asc").First(session); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, SessionNotFoundError{}
 		}
