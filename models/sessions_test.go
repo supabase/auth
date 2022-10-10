@@ -1,9 +1,11 @@
 package models
 
 import (
+	"database/sql"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"time"
@@ -23,6 +25,17 @@ func (ts *SessionsTestSuite) SetupTest() {
 
 	err = ts.db.Create(user)
 	require.NoError(ts.T(), err)
+}
+
+func FindSessionByUserID(tx *storage.Connection, userId uuid.UUID) (*Session, error) {
+	session := &Session{}
+	if err := tx.Eager().Q().Where("user_id = ?", userId).Order("created_at asc").First(session); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SessionNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding session")
+	}
+	return session, nil
 }
 
 func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
