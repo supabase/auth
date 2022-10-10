@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
@@ -126,7 +127,14 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 
 	if token.SessionId == nil {
 		// Existing refresh tokens may have a null session_id if they were created before v2.15.3
-		session, err := CreateSession(tx, user, params.FactorID)
+		var session *Session
+		var err error
+		// TODO(Joel): Find better workaround
+		if os.Getenv("GOTRUE_MFA_ENABLED") == "true" {
+			session, err = MFA_CreateSession(tx, user, params.FactorID)
+		} else {
+			session, err = CreateSession(tx, user)
+		}
 		if err != nil {
 			return nil, errors.Wrap(err, "Error generated unique session id")
 		}

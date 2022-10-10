@@ -128,26 +128,29 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.With(api.requireAuthentication).Route("/user", func(r *router) {
 			r.Get("/", api.UserGet)
 			r.With(sharedLimiter).Put("/", api.UserUpdate)
-			r.Route("/{user_id}", func(r *router) {
-				r.Use(api.loadUser)
-				r.Route("/factor", func(r *router) {
-					r.Post("/", api.EnrollFactor)
-					r.Route("/{factor_id}", func(r *router) {
-						r.Use(api.loadFactor)
 
-						r.With(api.limitHandler(
-							tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
-								DefaultExpirationTTL: time.Minute,
-							}).SetBurst(30))).Post("/verify", api.VerifyFactor)
-						r.With(api.limitHandler(
-							tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
-								DefaultExpirationTTL: time.Minute,
-							}).SetBurst(30))).Post("/challenge", api.ChallengeFactor)
-						r.Delete("/", api.UnenrollFactor)
+			if api.config.MFA.Enabled {
+				r.Route("/{user_id}", func(r *router) {
+					r.Use(api.loadUser)
+					r.Route("/factor", func(r *router) {
+						r.Post("/", api.EnrollFactor)
+						r.Route("/{factor_id}", func(r *router) {
+							r.Use(api.loadFactor)
 
+							r.With(api.limitHandler(
+								tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
+									DefaultExpirationTTL: time.Minute,
+								}).SetBurst(30))).Post("/verify", api.VerifyFactor)
+							r.With(api.limitHandler(
+								tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
+									DefaultExpirationTTL: time.Minute,
+								}).SetBurst(30))).Post("/challenge", api.ChallengeFactor)
+							r.Delete("/", api.UnenrollFactor)
+
+						})
 					})
 				})
-			})
+			}
 
 		})
 
@@ -164,14 +167,16 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 				r.Route("/{user_id}", func(r *router) {
 					r.Use(api.loadUser)
-					r.Route("/factor", func(r *router) {
-						r.Get("/", api.adminUserGetFactors)
-						r.Route("/{factor_id}", func(r *router) {
-							r.Use(api.loadFactor)
-							r.Delete("/", api.adminUserDeleteFactor)
-							r.Put("/", api.adminUserUpdateFactor)
+					if api.config.MFA.Enabled {
+						r.Route("/factor", func(r *router) {
+							r.Get("/", api.adminUserGetFactors)
+							r.Route("/{factor_id}", func(r *router) {
+								r.Use(api.loadFactor)
+								r.Delete("/", api.adminUserDeleteFactor)
+								r.Put("/", api.adminUserUpdateFactor)
+							})
 						})
-					})
+					}
 
 					r.Get("/", api.adminUserGet)
 					r.Put("/", api.adminUserUpdate)

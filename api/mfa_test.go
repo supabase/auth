@@ -41,8 +41,9 @@ func TestMFA(t *testing.T) {
 		Config: config,
 	}
 	defer api.db.Close()
-
-	suite.Run(t, ts)
+	if config.MFA.Enabled {
+		suite.Run(t, ts)
+	}
 }
 
 func (ts *MFATestSuite) SetupTest() {
@@ -124,7 +125,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			user, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			ts.Require().NoError(err)
 
-			token, err := generateAccessToken(ts.API.db, user, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+			token, err := MFA_generateAccessToken(ts.API.db, user, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
@@ -161,7 +162,7 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 	require.NoError(ts.T(), err)
 	f := factors[0]
 
-	token, err := generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	token, err := MFA_generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err, "Error generating access token")
 
 	var buffer bytes.Buffer
@@ -220,7 +221,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), err, "Error creating test session")
 			require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
-			token, err := generateAccessToken(ts.API.db, user, r.SessionId, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+			token, err := MFA_generateAccessToken(ts.API.db, user, r.SessionId, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 
 			require.NoError(ts.T(), err)
 
@@ -311,7 +312,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 
 			var buffer bytes.Buffer
 
-			token, err := generateAccessToken(ts.API.db, u, &s.ID, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+			token, err := MFA_generateAccessToken(ts.API.db, u, &s.ID, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
 
 			// Generate code for verification
@@ -364,7 +365,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 
 	var buffer bytes.Buffer
 
-	token, err := generateAccessToken(ts.API.db, u, &s.ID, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	token, err := MFA_generateAccessToken(ts.API.db, u, &s.ID, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"factor_id": f.ID,
