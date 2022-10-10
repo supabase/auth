@@ -130,7 +130,7 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 		var session *Session
 		var err error
 		// TODO(Joel): Find better workaround
-		if os.Getenv("MFA_ENABLED") == "true" {
+		if os.Getenv("GOTRUE_MFA_ENABLED") == "true" {
 			session, err = MFA_CreateSession(tx, user, params.FactorID)
 		} else {
 			session, err = CreateSession(tx, user)
