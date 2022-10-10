@@ -613,7 +613,8 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 	}, nil
 }
 
-func (a *API) updateMFASessionAndClaims(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+	ctx := r.Context()
 	config := a.config
 	var tokenString string
 	var refreshToken *models.RefreshToken
@@ -622,7 +623,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, ctx context.Context, co
 	if err != nil {
 		return nil, internalServerError("Cannot read SessionId claim as UUID").WithInternalError(err)
 	}
-	err = conn.Transaction(func(tx *storage.Connection) error {
+	err = tx.Transaction(func(tx *storage.Connection) error {
 		session, terr := models.FindSessionById(tx, sessionId)
 		if terr != nil {
 			return terr
