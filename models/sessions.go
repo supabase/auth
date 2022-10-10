@@ -90,6 +90,17 @@ func FindSessionById(tx *storage.Connection, id uuid.UUID) (*Session, error) {
 	return session, nil
 }
 
+func FindSessionByUserID(tx *storage.Connection, userId uuid.UUID) (*Session, error) {
+	session := &Session{}
+	if err := tx.Eager().Q().Where("user_id = ?", userId).Order("created_at asc").First(session); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SessionNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding session")
+	}
+	return session, nil
+}
+
 func updateFactorAssociatedSessions(tx *storage.Connection, userID, factorID uuid.UUID, aal string) error {
 	return tx.RawQuery("UPDATE "+(&pop.Model{Value: Session{}}).TableName()+" set aal = ?, factor_id = ? WHERE user_id = ? AND factor_id = ?", aal, uuid.Nil, userID, factorID).Exec()
 }
