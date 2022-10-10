@@ -613,9 +613,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 	}, nil
 }
 
-func (a *API) updateMFASessionAndClaims(r *http.Request, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
-ctx := r.Context()
-conn := a.db
+func (a *API) updateMFASessionAndClaims(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 	config := a.config
 	var tokenString string
 	var refreshToken *models.RefreshToken
