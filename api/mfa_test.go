@@ -386,7 +386,9 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 
 // Integration Tests
 func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
-	token := signUpAndVerify(ts)
+	email := "test1@example.com"
+	password := "test123"
+	token := signUpAndVerify(ts, email, password)
 	ts.Config.Security.RefreshTokenRotationEnabled = true
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
@@ -406,6 +408,35 @@ func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
 	ctx, err = ts.API.maybeLoadUserOrSession(ctx)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), models.AAL2.String(), getSession(ctx).AAL)
+}
+
+// Performing MFA Verification followed by a sign in should return an AAL1 session and an AAL2 session
+func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
+	email := "test1@example.com"
+	password := "test123"
+	token := signUpAndVerify(ts, email, password)
+	ts.Config.Security.RefreshTokenRotationEnabled = true
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    email,
+		"password": password,
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	data := &AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	ctx, err := ts.API.parseJWTClaims(data.Token, req, w)
+	require.NoError(ts.T(), err)
+	ctx, err = ts.API.maybeLoadUserOrSession(ctx)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.AAL1.String(), getSession(ctx).AAL)
+	session, err := models.FindSessionByUserID(ts.API.db, token.User.ID)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), models.AAL2.String(), session.AAL)
 }
 
 func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenResponse) {
@@ -428,9 +459,8 @@ func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenRes
 	return data
 }
 
-func signUpAndVerify(ts *MFATestSuite) (verifyResp *AccessTokenResponse) {
-	email := "test1@example.com"
-	password := "test123"
+func signUpAndVerify(ts *MFATestSuite, email, password string) (verifyResp *AccessTokenResponse) {
+
 	signUpResp := signUp(ts, email, password)
 	verifyResp = enrollAndVerify(ts, signUpResp.User, signUpResp.Token)
 
