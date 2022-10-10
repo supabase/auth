@@ -47,15 +47,15 @@ func (ts *OtpTestSuite) TestOtp() {
 		}
 	}{
 		{
-			"Test Success Magiclink Otp",
-			OtpParams{
+			desc: "Test Success Magiclink Otp",
+			params: OtpParams{
 				Email:      "test@example.com",
 				CreateUser: true,
 				Data: map[string]interface{}{
 					"somedata": "metadata",
 				},
 			},
-			struct {
+			expected: struct {
 				code     int
 				response map[string]interface{}
 			}{
@@ -64,13 +64,13 @@ func (ts *OtpTestSuite) TestOtp() {
 			},
 		},
 		{
-			"Test Failure Pass Both Email & Phone",
-			OtpParams{
+			desc: "Test Failure Pass Both Email & Phone",
+			params: OtpParams{
 				Email:      "test@example.com",
 				Phone:      "123456789",
 				CreateUser: true,
 			},
-			struct {
+			expected: struct {
 				code     int
 				response map[string]interface{}
 			}{

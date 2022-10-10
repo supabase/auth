@@ -75,24 +75,24 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 		expected error
 	}{
 		{
-			"send confirmation otp",
-			phoneConfirmationOtp,
-			nil,
+			desc:     "send confirmation otp",
+			otpType:  phoneConfirmationOtp,
+			expected: nil,
 		},
 		{
-			"send phone_change otp",
-			phoneChangeVerification,
-			nil,
+			desc:     "send phone_change otp",
+			otpType:  phoneChangeVerification,
+			expected: nil,
 		},
 		{
-			"send recovery otp",
-			phoneReauthenticationOtp,
-			nil,
+			desc:     "send recovery otp",
+			otpType:  phoneReauthenticationOtp,
+			expected: nil,
 		},
 		{
-			"send invalid otp type ",
-			"invalid otp type",
-			internalServerError("invalid otp type"),
+			desc:     "send invalid otp type ",
+			otpType:  "invalid otp type",
+			expected: internalServerError("invalid otp type"),
 		},
 	}
 
@@ -138,52 +138,52 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 		expected map[string]interface{}
 	}{
 		{
-			"Signup",
-			"/signup",
-			http.MethodPost,
-			"",
-			map[string]string{
+			desc:     "Signup",
+			endpoint: "/signup",
+			method:   http.MethodPost,
+			header:   "",
+			body: map[string]string{
 				"phone":    "1234567890",
 				"password": "testpassword",
 			},
-			map[string]interface{}{
+			expected: map[string]interface{}{
 				"code":    http.StatusBadRequest,
 				"message": "Error sending confirmation sms:",
 			},
 		},
 		{
-			"Sms OTP",
-			"/otp",
-			http.MethodPost,
-			"",
-			map[string]string{
+			desc:     "Sms OTP",
+			endpoint: "/otp",
+			method:   http.MethodPost,
+			header:   "",
+			body: map[string]string{
 				"phone": "123456789",
 			},
-			map[string]interface{}{
+			expected: map[string]interface{}{
 				"code":    http.StatusBadRequest,
 				"message": "Error sending sms:",
 			},
 		},
 		{
-			"Phone change",
-			"/user",
-			http.MethodPut,
-			token,
-			map[string]string{
+			desc:     "Phone change",
+			endpoint: "/user",
+			method:   http.MethodPut,
+			header:   token,
+			body: map[string]string{
 				"phone": "111111111",
 			},
-			map[string]interface{}{
+			expected: map[string]interface{}{
 				"code":    http.StatusBadRequest,
 				"message": "Error sending sms:",
 			},
 		},
 		{
-			"Reauthenticate",
-			"/reauthenticate",
-			http.MethodGet,
-			"",
-			nil,
-			map[string]interface{}{
+			desc:     "Reauthenticate",
+			endpoint: "/reauthenticate",
+			method:   http.MethodGet,
+			header:   "",
+			body:     nil,
+			expected: map[string]interface{}{
 				"code":    http.StatusBadRequest,
 				"message": "Error sending sms:",
 			},
