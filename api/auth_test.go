@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -95,7 +94,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 				},
 				Role: "authenticated",
 			},
-			ExpectedError: errors.New("invalid claim: subject missing"),
+			ExpectedError: unauthorizedError("invalid claim: missing subject"),
 			ExpectedUser:  nil,
 		},
 		{
