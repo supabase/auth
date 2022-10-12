@@ -94,7 +94,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 				},
 				Role: "authenticated",
 			},
-			ExpectedError: unauthorizedError("invalid claim: missing subject"),
+			ExpectedError: unauthorizedError("invalid claim: missing sub claim"),
 			ExpectedUser:  nil,
 		},
 		{
@@ -107,6 +107,17 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 			},
 			ExpectedError: nil,
 			ExpectedUser:  u,
+		},
+		{
+			Desc: "Invalid Subject Claim",
+			UserJwtClaims: &GoTrueClaims{
+				StandardClaims: jwt.StandardClaims{
+					Subject: "invalid-subject-claim",
+				},
+				Role: "authenticated",
+			},
+			ExpectedError: badRequestError("invalid claim: sub claim must be a UUID"),
+			ExpectedUser:  nil,
 		},
 		{
 			Desc: "Empty Session ID Claim",
@@ -159,7 +170,11 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 			ctx, err := ts.API.parseJWTClaims(userJwt, req, w)
 			require.NoError(ts.T(), err)
 			ctx, err = ts.API.maybeLoadUserOrSession(ctx)
-			require.Equal(ts.T(), c.ExpectedError, err)
+			if c.ExpectedError != nil {
+				require.Equal(ts.T(), c.ExpectedError.Error(), err.Error())
+			} else {
+				require.Equal(ts.T(), c.ExpectedError, err)
+			}
 			require.Equal(ts.T(), c.ExpectedUser, getUser(ctx))
 			require.Equal(ts.T(), c.ExpectedSession, getSession(ctx))
 		})
