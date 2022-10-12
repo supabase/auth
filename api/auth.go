@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -73,7 +72,7 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request, w http.ResponseWrit
 	})
 	if err != nil {
 		a.clearCookieTokens(config, w)
-		return nil, unauthorizedError("Invalid token: %v", err)
+		return nil, unauthorizedError("invalid JWT: unable to parse or verify signature").WithInternalError(err)
 	}
 
 	return withToken(ctx, token), nil
@@ -84,18 +83,18 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 	claims := getClaims(ctx)
 
 	if claims == nil {
-		return ctx, errors.New("invalid token")
+		return ctx, unauthorizedError("invalid token: missing claims")
 	}
 
 	if claims.Subject == "" {
-		return nil, errors.New("invalid claim: subject missing")
+		return nil, unauthorizedError("invalid claim: missing sub claim")
 	}
 
 	var user *models.User
 	if claims.Subject != "" {
 		userId, err := uuid.FromString(claims.Subject)
 		if err != nil {
-			return ctx, err
+			return ctx, badRequestError("invalid claim: sub claim must be a UUID").WithInternalError(err)
 		}
 		user, err = models.FindUserByID(db, userId)
 		if err != nil {
