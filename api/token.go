@@ -716,7 +716,10 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return terr
 		}
 		aal, _ := session.CalculateAALAndAMR()
-		if err := session.UpdateAssociatedFactorAndAAL(tx, grantParams.FactorID, aal); err != nil {
+		if err := session.UpdateAssociatedFactor(tx, grantParams.FactorID); err != nil {
+			return err
+		}
+		if err := session.UpdateAssociatedAAL(tx, aal); err != nil {
 			return err
 		}
 

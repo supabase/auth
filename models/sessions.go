@@ -129,8 +129,12 @@ func LogoutSession(tx *storage.Connection, sessionId uuid.UUID) error {
 	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE id = ?", sessionId).Exec()
 }
 
-func (s *Session) UpdateAssociatedFactorAndAAL(tx *storage.Connection, factorID *uuid.UUID, aal string) error {
+func (s *Session) UpdateAssociatedFactor(tx *storage.Connection, factorID *uuid.UUID) error {
 	s.FactorID = factorID
+	return tx.Update(s)
+}
+
+func (s *Session) UpdateAssociatedAAL(tx *storage.Connection, aal string) error {
 	s.AAL = aal
 	return tx.Update(s)
 }
