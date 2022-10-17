@@ -523,7 +523,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			}
 		}
 		if config.MFA.Enabled {
-			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.OAuthIDGrant, grantParams)
+			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
 		} else {
 			token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 
