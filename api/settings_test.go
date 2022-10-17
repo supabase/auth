@@ -24,6 +24,8 @@ func TestSettings_DefaultProviders(t *testing.T) {
 	resp := Settings{}
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 
+	require.False(t, resp.MFAEnabled)
+
 	p := resp.ExternalProviders
 
 	require.False(t, p.Phone)
