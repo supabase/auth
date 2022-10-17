@@ -70,12 +70,12 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("invalid body")
+		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 
 	factorType := params.FactorType
 	if factorType != models.TOTP {
-		return badRequestError("factorType needs to be totp")
+		return badRequestError("factor_type needs to be totp")
 	}
 
 	if params.Issuer == "" {
@@ -211,7 +211,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("invalid body")
+		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 
 	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
@@ -303,7 +303,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("invalid body")
+		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 
 	if factor.Status == models.FactorStateVerified {
