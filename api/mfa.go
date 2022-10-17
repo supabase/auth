@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"fmt"
 	"net/url"
 
 	"github.com/aaronarduino/goqrsvg"
@@ -71,7 +70,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("invalid body", err)
+		return badRequestError("invalid body")
 	}
 
 	factorType := params.FactorType
@@ -212,7 +211,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("invalid body", err)
+		return badRequestError("invalid body")
 	}
 
 	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
@@ -304,13 +303,16 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("invalid body", err)
+		return badRequestError("invalid body")
 	}
 
 	if factor.Status == models.FactorStateVerified {
 		valid := totp.Validate(params.Code, factor.Secret)
 		if !valid {
 			return badRequestError("Invalid code entered")
+		}
+		if session.AAL != models.AAL2.String() {
+			return unauthorizedError("AAL2 required to unenroll verified factor")
 		}
 	}
 
