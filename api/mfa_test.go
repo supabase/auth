@@ -273,16 +273,25 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 	cases := []struct {
 		desc             string
 		validCode        bool
+		isAAL2           bool
 		expectedHTTPCode int
 	}{
 		{
 			desc:             "Verified Factor: Invalid Code",
 			validCode:        false,
+			isAAL2:           false,
 			expectedHTTPCode: http.StatusBadRequest,
 		},
 		{
-			desc:             "Verified Factor: Success",
+			desc:             "Verified Factor: Valid Code but AAL1",
 			validCode:        true,
+			isAAL2:           false,
+			expectedHTTPCode: http.StatusUnauthorized,
+		},
+		{
+			desc:             "Verified Factor: AAL2, Success",
+			validCode:        true,
+			isAAL2:           true,
 			expectedHTTPCode: http.StatusOK,
 		},
 	}
@@ -294,6 +303,9 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			require.NoError(ts.T(), err)
 			s, err := models.FindSessionByUserID(ts.API.db, u.ID)
 			require.NoError(ts.T(), err)
+			if v.isAAL2 {
+				s.UpdateAssociatedAAL(ts.API.db, models.AAL2.String())
+			}
 			var secondarySession *models.Session
 
 			// Create Session to test behaviour which downgrades other sessions

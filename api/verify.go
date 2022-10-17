@@ -124,7 +124,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if config.MFA.Enabled {
-			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.EmailVerification, grantParams)
+			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 		} else {
 			token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 		}
@@ -225,7 +225,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 		if config.MFA.Enabled {
-			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.SMSOrEmailOTP, grantParams)
+			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 		} else {
 			token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 

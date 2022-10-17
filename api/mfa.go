@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"fmt"
 	"net/url"
 
 	"github.com/aaronarduino/goqrsvg"
@@ -67,16 +66,16 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	issuer := ""
 	body, err := getBodyBytes(r)
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
+		return internalServerError("Could not read body").WithInternalError(err)
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read enroll params: %v", err)
+		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 
 	factorType := params.FactorType
 	if factorType != models.TOTP {
-		return badRequestError("factorType needs to be TOTP")
+		return badRequestError("factor_type needs to be totp")
 	}
 
 	if params.Issuer == "" {
@@ -153,7 +152,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		Type: models.TOTP,
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
-			QRCode: fmt.Sprintf("data:image/svg+xml;utf-8,%v", buf.String()),
+			QRCode: buf.String(),
 			Secret: factor.Secret,
 			URI:    key.URL(),
 		},
@@ -208,11 +207,11 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 	body, err := getBodyBytes(r)
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
+		return internalServerError("Could not read body").WithInternalError(err)
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read verify params: %v", err)
+		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 
 	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
@@ -224,7 +223,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if challenge.VerifiedAt != nil || challenge.IPAddress != currentIP {
-		return badRequestError("Challenge is not valid")
+		return badRequestError("Challenge and verify IP addresses mismatch")
 	}
 
 	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
@@ -300,17 +299,20 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	params := &UnenrollFactorParams{}
 	body, err := getBodyBytes(r)
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
+		return internalServerError("Could not read body").WithInternalError(err)
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read unenroll params: %v", err)
+		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 
 	if factor.Status == models.FactorStateVerified {
 		valid := totp.Validate(params.Code, factor.Secret)
 		if !valid {
 			return badRequestError("Invalid code entered")
+		}
+		if session.AAL != models.AAL2.String() {
+			return unauthorizedError("AAL2 required to unenroll verified factor")
 		}
 	}
 
