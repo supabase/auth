@@ -43,7 +43,7 @@ type Session struct {
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
 	FactorID  *uuid.UUID `json:"factor_id" db:"factor_id"`
-	AMRClaims []AMRClaim `json:"amr_claims,omitempty" has_many:"amr_claims"`
+	AMRClaims []AMRClaim `json:"amr,omitempty" has_many:"amr_claims"`
 	AAL       string     `json:"aal" db:"aal"`
 }
 
