@@ -49,10 +49,6 @@ type ChallengeFactorResponse struct {
 	ExpiresAt int64     `json:"expires_at"`
 }
 
-type UnenrollFactorParams struct {
-	Code string `json:"code"`
-}
-
 type UnenrollFactorResponse struct {
 	ID uuid.UUID `json:"id"`
 }
@@ -296,24 +292,8 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	factor := getFactor(ctx)
 	session := getSession(ctx)
 
-	params := &UnenrollFactorParams{}
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return internalServerError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
-	}
-
-	if factor.Status == models.FactorStateVerified {
-		valid := totp.Validate(params.Code, factor.Secret)
-		if !valid {
-			return badRequestError("Invalid code entered")
-		}
-		if session.AAL != models.AAL2.String() {
-			return unauthorizedError("AAL2 required to unenroll verified factor")
-		}
+	if factor.Status == models.FactorStateVerified && session.AAL != models.AAL2.String() {
+		return unauthorizedError("AAL2 required to unenroll verified factor")
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {

@@ -272,25 +272,16 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 	cases := []struct {
 		desc             string
-		validCode        bool
 		isAAL2           bool
 		expectedHTTPCode int
 	}{
 		{
-			desc:             "Verified Factor: Invalid Code",
-			validCode:        false,
-			isAAL2:           false,
-			expectedHTTPCode: http.StatusBadRequest,
-		},
-		{
-			desc:             "Verified Factor: Valid Code but AAL1",
-			validCode:        true,
+			desc:             "Verified Factor: AAL1",
 			isAAL2:           false,
 			expectedHTTPCode: http.StatusUnauthorized,
 		},
 		{
 			desc:             "Verified Factor: AAL2, Success",
-			validCode:        true,
 			isAAL2:           true,
 			expectedHTTPCode: http.StatusOK,
 		},
@@ -326,19 +317,6 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 
 			token, err := MFA_generateAccessToken(ts.API.db, u, &s.ID, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
-
-			// Generate code for verification
-			code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
-			require.NoError(ts.T(), err)
-			if !v.validCode {
-				// Use an inaccurate time, resulting in an invalid code(usually)
-				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC().Add(-1*time.Minute*time.Duration(1)))
-				require.NoError(ts.T(), err)
-			}
-			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-				"factor_id": f.ID,
-				"code":      code,
-			}))
 
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/factor/%s/", f.ID), &buffer)
