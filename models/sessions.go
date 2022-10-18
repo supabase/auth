@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"sort"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
@@ -35,6 +36,22 @@ func (aal AuthenticatorAssuranceLevel) String() string {
 type AMREntry struct {
 	Method    string `json:"method"`
 	Timestamp int64  `json:"timestamp"`
+}
+
+type sortAMREntries struct {
+	Array []AMREntry
+}
+
+func (s sortAMREntries) Len() int {
+	return len(s.Array)
+}
+
+func (s sortAMREntries) Less(i, j int) bool {
+	return s.Array[i].Timestamp < s.Array[j].Timestamp
+}
+
+func (s sortAMREntries) Swap(i, j int) {
+	s.Array[j], s.Array[i] = s.Array[i], s.Array[j]
 }
 
 type Session struct {
@@ -146,7 +163,19 @@ func (s *Session) CalculateAALAndAMR() (aal string, amr []AMREntry) {
 			aal = AAL2.String()
 		}
 		amr = append(amr, AMREntry{Method: claim.AuthenticationMethod, Timestamp: claim.UpdatedAt.Unix()})
-
 	}
+
+	// makes sure that the AMR claims are always ordered most-recent first
+
+	// sort in ascending order
+	sort.Sort(sortAMREntries{
+		Array: amr,
+	})
+
+	// now reverse for descending order
+	_ = sort.Reverse(sortAMREntries{
+		Array: amr,
+	})
+
 	return aal, amr
 }
