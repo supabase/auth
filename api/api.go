@@ -131,7 +131,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		})
 
 		if api.config.MFA.Enabled {
-			r.With(api.requireAuthentication).Route("/factor", func(r *router) {
+			r.With(api.requireAuthentication).Route("/factors", func(r *router) {
 				r.Post("/", api.EnrollFactor)
 				r.Route("/{factor_id}", func(r *router) {
 					r.Use(api.loadFactor)
@@ -164,7 +164,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 				r.Route("/{user_id}", func(r *router) {
 					r.Use(api.loadUser)
 					if api.config.MFA.Enabled {
-						r.Route("/factor", func(r *router) {
+						r.Route("/factors", func(r *router) {
 							r.Get("/", api.adminUserGetFactors)
 							r.Route("/{factor_id}", func(r *router) {
 								r.Use(api.loadFactor)

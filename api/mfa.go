@@ -36,7 +36,7 @@ type TOTPObject struct {
 type EnrollFactorResponse struct {
 	ID   uuid.UUID  `json:"id"`
 	Type string     `json:"type"`
-	TOTP TOTPObject `json:"TOTP,omitempty"`
+	TOTP TOTPObject `json:"totp,omitempty"`
 }
 
 type VerifyFactorParams struct {

@@ -129,7 +129,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, "/factor", &buffer)
+			req := httptest.NewRequest(http.MethodPost, "/factors", &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			req.Header.Set("Content-Type", "application/json")
 			ts.API.handler.ServeHTTP(w, req)
@@ -166,7 +166,7 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 	require.NoError(ts.T(), err, "Error generating access token")
 
 	var buffer bytes.Buffer
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factor/%s/challenge", f.ID), &buffer)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", f.ID), &buffer)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
@@ -226,7 +226,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factor/%s/verify", f.ID), &buffer)
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", f.ID), &buffer)
 			testIPAddress := utilities.GetIPAddress(req)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			c, err := models.NewChallenge(f, testIPAddress)
@@ -319,7 +319,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/factor/%s/", f.ID), &buffer)
+			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/factors/%s/", f.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), v.expectedHTTPCode, w.Code)
@@ -362,7 +362,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 	}))
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/factor/%s", f.ID), &buffer)
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/factors/%s", f.ID), &buffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
@@ -463,7 +463,7 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 	w := httptest.NewRecorder()
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": "john", "factor_type": models.TOTP, "issuer": ts.TestDomain}))
 
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/factor/", &buffer)
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/factors/", &buffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -476,7 +476,7 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 	// Challenge
 	var challengeBuffer bytes.Buffer
 	x := httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factor/%s/challenge", factorID), &challengeBuffer)
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &challengeBuffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Set("Content-Type", "application/json")
 	ts.API.handler.ServeHTTP(x, req)
@@ -505,7 +505,7 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 		"challenge_id": challengeID,
 		"code":         code,
 	}))
-	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factor/%s/verify", factorID), &verifyBuffer)
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factorID), &verifyBuffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Set("Content-Type", "application/json")
 
