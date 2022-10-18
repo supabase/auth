@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/gofrs/uuid"
@@ -78,4 +79,17 @@ func (ts *FactorTestSuite) TestUpdateFriendlyName() {
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), f.UpdateFriendlyName(ts.db, newSimpleName))
 	require.Equal(ts.T(), newSimpleName, f.FriendlyName)
+}
+
+func (ts *FactorTestSuite) TestEncodedFactorDoesNotLeakSecret() {
+	u, err := NewUser("", "", "", "", nil)
+	require.NoError(ts.T(), err)
+
+	f, err := NewFactor(u, "A1B2C3", TOTP, FactorStateUnverified, "some-secret")
+	require.NoError(ts.T(), err)
+	encodedFactor, err := json.Marshal(f)
+	require.NoError(ts.T(), err)
+	decodedFactor := Factor{}
+	json.Unmarshal(encodedFactor, &decodedFactor)
+	require.Equal(ts.T(), decodedFactor.Secret, "")
 }

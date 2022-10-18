@@ -569,6 +569,9 @@ func (ts *AdminTestSuite) TestAdminUserGetFactors() {
 
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
+	getFactorsResp := []*models.Factor{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getFactorsResp))
+	require.Equal(ts.T(), getFactorsResp[0].Secret, nil)
 }
 
 func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
