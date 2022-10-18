@@ -22,12 +22,14 @@ import (
 // GoTrueClaims is a struct thats used for JWT claims
 type GoTrueClaims struct {
 	jwt.StandardClaims
-	Email        string                 `json:"email"`
-	Phone        string                 `json:"phone"`
-	AppMetaData  map[string]interface{} `json:"app_metadata"`
-	UserMetaData map[string]interface{} `json:"user_metadata"`
-	Role         string                 `json:"role"`
-	SessionId    string                 `json:"session_id,omitempty"`
+	Email                         string                 `json:"email"`
+	Phone                         string                 `json:"phone"`
+	AppMetaData                   map[string]interface{} `json:"app_metadata"`
+	UserMetaData                  map[string]interface{} `json:"user_metadata"`
+	Role                          string                 `json:"role"`
+	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
+	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
+	SessionId                     string                 `json:"session_id,omitempty"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -221,8 +223,12 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 			return terr
 		}
+		if config.MFA.Enabled {
+			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
+		} else {
+			token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
+		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 		if terr != nil {
 			return terr
 		}
@@ -329,8 +335,11 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				return internalServerError(terr.Error())
 			}
 		}
-
-		tokenString, terr = generateAccessToken(user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		if config.MFA.Enabled {
+			tokenString, terr = MFA_generateAccessToken(tx, user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		} else {
+			tokenString, terr = generateAccessToken(user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		}
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -513,8 +522,13 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				return terr
 			}
 		}
+		if config.MFA.Enabled {
+			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+		} else {
+			token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
+		}
+
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
@@ -556,6 +570,38 @@ func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time
 	return token.SignedString([]byte(secret))
 }
 
+func MFA_generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string) (string, error) {
+	aal, amr := models.AAL1.String(), []models.AMREntry{}
+	sid := ""
+	if sessionId != nil {
+		sid = sessionId.String()
+		session, terr := models.FindSessionById(tx, *sessionId)
+		if terr != nil {
+			return "", terr
+		}
+		aal, amr = session.CalculateAALAndAMR()
+	}
+
+	claims := &GoTrueClaims{
+		StandardClaims: jwt.StandardClaims{
+			Subject:   user.ID.String(),
+			Audience:  user.Aud,
+			ExpiresAt: time.Now().Add(expiresIn).Unix(),
+		},
+		Email:                         user.GetEmail(),
+		Phone:                         user.GetPhone(),
+		AppMetaData:                   user.AppMetaData,
+		UserMetaData:                  user.UserMetaData,
+		Role:                          user.Role,
+		SessionId:                     sid,
+		AuthenticatorAssuranceLevel:   aal,
+		AuthenticationMethodReference: amr,
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
+}
+
 func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 	config := a.config
 
@@ -582,6 +628,112 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		return nil, err
 	}
 
+	return &AccessTokenResponse{
+		Token:        tokenString,
+		TokenType:    "bearer",
+		ExpiresIn:    config.JWT.Exp,
+		RefreshToken: refreshToken.Token,
+		User:         user,
+	}, nil
+}
+
+func (a *API) MFA_issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+	config := a.config
+
+	now := time.Now()
+	user.LastSignInAt = &now
+
+	var tokenString string
+	var refreshToken *models.RefreshToken
+
+	err := conn.Transaction(func(tx *storage.Connection) error {
+		var terr error
+
+		refreshToken, terr = models.GrantAuthenticatedUser(tx, user, grantParams)
+		if terr != nil {
+			return internalServerError("Database error granting user").WithInternalError(terr)
+		}
+
+		session, terr := models.FindSessionById(tx, *refreshToken.SessionId)
+		if terr != nil {
+			return terr
+		}
+		terr = models.AddClaimToSession(tx, session, authenticationMethod)
+		if terr != nil {
+			return terr
+		}
+
+		// TODO(Joel): Replace when feature flag is lifted
+		tokenString, terr = MFA_generateAccessToken(tx, user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		if terr != nil {
+			return internalServerError("error generating jwt token").WithInternalError(terr)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &AccessTokenResponse{
+		Token:        tokenString,
+		TokenType:    "bearer",
+		ExpiresIn:    config.JWT.Exp,
+		RefreshToken: refreshToken.Token,
+		User:         user,
+	}, nil
+}
+
+func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+	ctx := r.Context()
+	config := a.config
+	var tokenString string
+	var refreshToken *models.RefreshToken
+	currentClaims := getClaims(ctx)
+	sessionId, err := uuid.FromString(currentClaims.SessionId)
+	if err != nil {
+		return nil, internalServerError("Cannot read SessionId claim as UUID").WithInternalError(err)
+	}
+	err = tx.Transaction(func(tx *storage.Connection) error {
+		session, terr := models.FindSessionById(tx, sessionId)
+		if terr != nil {
+			return terr
+		}
+		terr = models.AddClaimToSession(tx, session, authenticationMethod)
+		if terr != nil {
+			return terr
+		}
+		session, terr = models.FindSessionById(tx, sessionId)
+		if terr != nil {
+			return terr
+		}
+		currentToken, terr := models.FindTokenBySessionID(tx, &session.ID)
+		if terr != nil {
+			return terr
+		}
+		// Swap to ensure current token is the latest one
+		refreshToken, terr = models.GrantRefreshTokenSwap(r, tx, user, currentToken)
+		if terr != nil {
+			return terr
+		}
+		aal, _ := session.CalculateAALAndAMR()
+		if err := session.UpdateAssociatedFactor(tx, grantParams.FactorID); err != nil {
+			return err
+		}
+		if err := session.UpdateAssociatedAAL(tx, aal); err != nil {
+			return err
+		}
+
+		// TODO(Joel): Replace when feature flag is lifted
+		tokenString, terr = MFA_generateAccessToken(tx, user, &sessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+
+		if terr != nil {
+			return internalServerError("error generating jwt token").WithInternalError(terr)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return &AccessTokenResponse{
 		Token:        tokenString,
 		TokenType:    "bearer",

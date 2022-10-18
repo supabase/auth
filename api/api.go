@@ -130,6 +130,26 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.With(sharedLimiter).Put("/", api.UserUpdate)
 		})
 
+		if api.config.MFA.Enabled {
+			r.With(api.requireAuthentication).Route("/factors", func(r *router) {
+				r.Post("/", api.EnrollFactor)
+				r.Route("/{factor_id}", func(r *router) {
+					r.Use(api.loadFactor)
+
+					r.With(api.limitHandler(
+						tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
+							DefaultExpirationTTL: time.Minute,
+						}).SetBurst(30))).Post("/verify", api.VerifyFactor)
+					r.With(api.limitHandler(
+						tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
+							DefaultExpirationTTL: time.Minute,
+						}).SetBurst(30))).Post("/challenge", api.ChallengeFactor)
+					r.Delete("/", api.UnenrollFactor)
+
+				})
+			})
+		}
+
 		r.Route("/admin", func(r *router) {
 			r.Use(api.requireAdminCredentials)
 
@@ -143,6 +163,16 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 				r.Route("/{user_id}", func(r *router) {
 					r.Use(api.loadUser)
+					if api.config.MFA.Enabled {
+						r.Route("/factors", func(r *router) {
+							r.Get("/", api.adminUserGetFactors)
+							r.Route("/{factor_id}", func(r *router) {
+								r.Use(api.loadFactor)
+								r.Delete("/", api.adminUserDeleteFactor)
+								r.Put("/", api.adminUserUpdateFactor)
+							})
+						})
+					}
 
 					r.Get("/", api.adminUserGet)
 					r.Put("/", api.adminUserUpdate)
@@ -156,7 +186,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 	corsHandler := cors.New(cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", audHeaderName, useCookieHeader},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Client-IP", "X-Client-Info", audHeaderName, useCookieHeader},
 		AllowCredentials: true,
 	})
 

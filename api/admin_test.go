@@ -519,3 +519,113 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 		})
 	}
 }
+
+// TestAdminUserDeleteFactor tests API /admin/users/<user_id>/factor/<factor_id>/
+func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
+	if !ts.API.config.MFA.Enabled {
+		return
+	}
+	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	f, err := models.NewFactor(u, "testSimpleName", models.TOTP, models.FactorStateVerified, "secretkey")
+
+	require.NoError(ts.T(), err, "Error creating test factor model")
+	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
+
+	// Setup request
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s/factor/%s/", u.ID, f.ID), nil)
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
+	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
+
+}
+
+// TestAdminUserGetFactor tests API /admin/user/<user_id>/factors/
+func (ts *AdminTestSuite) TestAdminUserGetFactors() {
+	if !ts.API.config.MFA.Enabled {
+		return
+	}
+	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	f, err := models.NewFactor(u, "testSimpleName", models.TOTP, models.FactorStateUnverified, "secretkey")
+	require.NoError(ts.T(), err, "Error creating test factor model")
+	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
+
+	// Setup request
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/users/%s/factor/", u.ID), nil)
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	getFactorsResp := []*models.Factor{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getFactorsResp))
+	require.Equal(ts.T(), getFactorsResp[0].Secret, nil)
+}
+
+func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
+	if !ts.API.config.MFA.Enabled {
+		return
+	}
+	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	f, err := models.NewFactor(u, "testSimpleName", models.TOTP, models.FactorStateUnverified, "secretkey")
+	require.NoError(ts.T(), err, "Error creating test factor model")
+	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
+
+	var cases = []struct {
+		Desc         string
+		FactorData   map[string]interface{}
+		ExpectedCode int
+	}{
+		{
+			Desc: "Update Factor friendly name",
+			FactorData: map[string]interface{}{
+				"friendly_name": "john",
+			},
+			ExpectedCode: http.StatusOK,
+		},
+		{
+			Desc: "Update factor: valid factor type",
+			FactorData: map[string]interface{}{
+				"friendly_name": "john",
+				"factor_type":   models.TOTP,
+			},
+			ExpectedCode: http.StatusOK,
+		},
+		{
+			Desc: "Update factor: invalid factor",
+			FactorData: map[string]interface{}{
+				"factor_type": "invalid_factor",
+			},
+			ExpectedCode: http.StatusBadRequest,
+		},
+	}
+
+	// Initialize factor data
+	for _, c := range cases {
+		ts.Run(c.Desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.FactorData))
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s/factor/%s/", u.ID, f.ID), &buffer)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), c.ExpectedCode, w.Code)
+		})
+	}
+
+}

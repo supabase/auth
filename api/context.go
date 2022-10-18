@@ -20,6 +20,7 @@ const (
 	signatureKey            = contextKey("signature")
 	externalProviderTypeKey = contextKey("external_provider_type")
 	userKey                 = contextKey("user")
+	factorKey               = contextKey("factor")
 	sessionKey              = contextKey("session")
 	externalReferrerKey     = contextKey("external_referrer")
 	functionHooksKey        = contextKey("function_hooks")
@@ -71,6 +72,11 @@ func withUser(ctx context.Context, u *models.User) context.Context {
 	return context.WithValue(ctx, userKey, u)
 }
 
+// with Factor adds the factor id to the context.
+func withFactor(ctx context.Context, f *models.Factor) context.Context {
+	return context.WithValue(ctx, factorKey, f)
+}
+
 // getUser reads the user from the context.
 func getUser(ctx context.Context) *models.User {
 	if ctx == nil {
@@ -81,6 +87,15 @@ func getUser(ctx context.Context) *models.User {
 		return nil
 	}
 	return obj.(*models.User)
+}
+
+// getFactor reads the factor id from the context
+func getFactor(ctx context.Context) *models.Factor {
+	obj := ctx.Value(factorKey)
+	if obj == nil {
+		return nil
+	}
+	return obj.(*models.Factor)
 }
 
 // withSession adds the session to the context.

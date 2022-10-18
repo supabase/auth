@@ -17,6 +17,10 @@ func IsNotFoundError(err error) bool {
 		return true
 	case IdentityNotFoundError, *IdentityNotFoundError:
 		return true
+	case ChallengeNotFoundError:
+		return true
+	case FactorNotFoundError:
+		return true
 	}
 	return false
 }
@@ -60,6 +64,20 @@ type InstanceNotFoundError struct{}
 
 func (e InstanceNotFoundError) Error() string {
 	return "Instance not found"
+}
+
+// FactorNotFoundError represents when a user is not found.
+type FactorNotFoundError struct{}
+
+func (e FactorNotFoundError) Error() string {
+	return "Factor not found"
+}
+
+// ChallengeNotFoundError represents when a user is not found.
+type ChallengeNotFoundError struct{}
+
+func (e ChallengeNotFoundError) Error() string {
+	return "Challenge not found"
 }
 
 type TotpSecretNotFoundError struct{}

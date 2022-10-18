@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
@@ -38,6 +39,7 @@ func (RefreshToken) TableName() string {
 // GrantParams is used to pass session-specific parameters when issuing a new
 // refresh token to authenticated users.
 type GrantParams struct {
+	FactorID *uuid.UUID
 }
 
 // GrantAuthenticatedUser creates a refresh token for the provided user.
@@ -58,6 +60,7 @@ func GrantRefreshTokenSwap(r *http.Request, tx *storage.Connection, user *User, 
 		if terr = tx.UpdateOnly(token, "revoked"); terr != nil {
 			return terr
 		}
+
 		newToken, terr = createRefreshToken(rtx, user, token, nil)
 		return terr
 	})
@@ -98,6 +101,18 @@ func GetValidChildToken(tx *storage.Connection, token *RefreshToken) (*RefreshTo
 	return refreshToken, nil
 }
 
+func FindTokenBySessionID(tx *storage.Connection, sessionId *uuid.UUID) (*RefreshToken, error) {
+	refreshToken := &RefreshToken{}
+	err := tx.Q().Where("session_id = ?", sessionId).Order("created_at asc").First(refreshToken)
+	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, RefreshTokenNotFoundError{}
+		}
+		return nil, err
+	}
+	return refreshToken, nil
+}
+
 func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshToken, params *GrantParams) (*RefreshToken, error) {
 	token := &RefreshToken{
 		UserID: user.ID,
@@ -107,11 +122,19 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 	if oldToken != nil {
 		token.Parent = storage.NullString(oldToken.Token)
 		token.SessionId = oldToken.SessionId
+
 	}
 
 	if token.SessionId == nil {
 		// Existing refresh tokens may have a null session_id if they were created before v2.15.3
-		session, err := CreateSession(tx, user)
+		var session *Session
+		var err error
+		// TODO(Joel): Find better workaround
+		if os.Getenv("GOTRUE_MFA_ENABLED") == "true" {
+			session, err = MFA_CreateSession(tx, user, params.FactorID)
+		} else {
+			session, err = CreateSession(tx, user)
+		}
 		if err != nil {
 			return nil, errors.Wrap(err, "Error generated unique session id")
 		}

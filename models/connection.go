@@ -40,6 +40,9 @@ func TruncateAll(conn *storage.Connection) error {
 			(&pop.Model{Value: RefreshToken{}}).TableName(),
 			(&pop.Model{Value: AuditLogEntry{}}).TableName(),
 			(&pop.Model{Value: Session{}}).TableName(),
+			(&pop.Model{Value: Factor{}}).TableName(),
+			(&pop.Model{Value: Challenge{}}).TableName(),
+			(&pop.Model{Value: AMRClaim{}}).TableName(),
 		}
 
 		for _, tableName := range tables {

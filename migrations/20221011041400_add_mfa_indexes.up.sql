@@ -6,3 +6,4 @@ alter table {{ index .Options "Namespace" }}.mfa_amr_claims
 
 create index if not exists user_id_created_at_idx on {{ index .Options "Namespace" }}.sessions (user_id, created_at);
 create index if not exists factor_id_created_at_idx on {{ index .Options "Namespace" }}.mfa_factors (user_id, created_at);
+

@@ -76,7 +76,13 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	s, err := models.CreateSession(ts.API.db, u)
+	var s *models.Session
+	if ts.Config.MFA.Enabled {
+		s, err = models.MFA_CreateSession(ts.API.db, u, &uuid.Nil)
+	} else {
+		s, err = models.CreateSession(ts.API.db, u)
+
+	}
 	require.NoError(ts.T(), err)
 
 	cases := []struct {

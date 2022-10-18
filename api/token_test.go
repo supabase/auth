@@ -153,6 +153,7 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
 	t := time.Now()
 	u.EmailConfirmedAt = &t
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving foo user")
+
 	first, err := models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
 	require.NoError(ts.T(), err)
 	second, err := models.GrantRefreshTokenSwap(&http.Request{}, ts.API.db, u, first)

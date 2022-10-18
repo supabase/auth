@@ -12,6 +12,7 @@ import (
 )
 
 const defaultMinPasswordLength int = 6
+const defaultChallengeExpiryDuration float64 = 300
 
 // OAuthProviderConfiguration holds all config related to external account providers.
 type OAuthProviderConfiguration struct {
@@ -49,6 +50,14 @@ type JWTConfiguration struct {
 	AdminGroupName   string   `json:"admin_group_name" split_words:"true"`
 	AdminRoles       []string `json:"admin_roles" split_words:"true"`
 	DefaultGroupName string   `json:"default_group_name" split_words:"true"`
+}
+
+// MFAConfiguration holds all the MFA related Configuration
+type MFAConfiguration struct {
+	Enabled                     bool    `default:"false"`
+	ChallengeExpiryDuration     float64 `json:"challenge_expiry_duration" default:"300" split_words:"true"`
+	RateLimitChallengeAndVerify float64 `split_words:"true" default:"15"`
+	MaxEnrolledFactors          float64 `split_words:"true" default:"10"`
 }
 
 type APIConfiguration struct {
@@ -97,6 +106,7 @@ type GlobalConfiguration struct {
 	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
 	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
 	Security          SecurityConfiguration    `json:"security"`
+	MFA               MFAConfiguration         `json:"MFA"`
 	Cookie            struct {
 		Key      string `json:"key"`
 		Domain   string `json:"domain"`
@@ -163,7 +173,7 @@ type MailerConfiguration struct {
 }
 
 type PhoneProviderConfiguration struct {
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled" default:"false"`
 }
 
 type SmsProviderConfiguration struct {
@@ -352,6 +362,9 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 
 	if config.PasswordMinLength < defaultMinPasswordLength {
 		config.PasswordMinLength = defaultMinPasswordLength
+	}
+	if config.MFA.ChallengeExpiryDuration < defaultChallengeExpiryDuration {
+		config.MFA.ChallengeExpiryDuration = defaultChallengeExpiryDuration
 	}
 
 	return nil

@@ -56,6 +56,7 @@ type User struct {
 	AppMetaData  JSONMap `json:"app_metadata" db:"raw_app_meta_data"`
 	UserMetaData JSONMap `json:"user_metadata" db:"raw_user_meta_data"`
 
+	Factors    []Factor   `json:"factors,omitempty" has_many:"factors"`
 	Identities []Identity `json:"identities" has_many:"identities"`
 
 	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
