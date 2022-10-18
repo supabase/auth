@@ -293,7 +293,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	session := getSession(ctx)
 
 	if factor.Status == models.FactorStateVerified && session.AAL != models.AAL2.String() {
-		return unauthorizedError("AAL2 required to unenroll verified factor")
+		return badRequestError("AAL2 required to unenroll verified factor")
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
