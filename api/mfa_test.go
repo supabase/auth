@@ -278,7 +278,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 		{
 			desc:             "Verified Factor: AAL1",
 			isAAL2:           false,
-			expectedHTTPCode: http.StatusUnauthorized,
+			expectedHTTPCode: http.StatusBadRequest,
 		},
 		{
 			desc:             "Verified Factor: AAL2, Success",
