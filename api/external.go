@@ -19,6 +19,7 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/utilities"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/oauth2"
 )
 
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
@@ -45,7 +46,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	providerType := query.Get("provider")
 	scopes := query.Get("scopes")
 
-	p, err := a.Provider(ctx, providerType, scopes, &query)
+	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
 		return badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
 	}
@@ -82,16 +83,27 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		return internalServerError("Error creating state").WithInternalError(err)
 	}
 
+	authUrlParams := make([]oauth2.AuthCodeOption, 0)
+	query.Del("scopes")
+	query.Del("provider")
+	for key := range query {
+		if key == "workos_provider" {
+			// See https://workos.com/docs/reference/sso/authorize/get
+			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("provider", query.Get(key)))
+		} else {
+			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam(key, query.Get(key)))
+		}
+	}
 	var authURL string
 	switch externalProvider := p.(type) {
 	case *provider.TwitterProvider:
-		authURL = externalProvider.AuthCodeURL(tokenString)
+		authURL = externalProvider.AuthCodeURL(tokenString, authUrlParams...)
 		err := storage.StoreInSession(providerType, externalProvider.Marshal(), r, w)
 		if err != nil {
 			return internalServerError("Error storing request token in session").WithInternalError(err)
 		}
 	default:
-		authURL = p.AuthCodeURL(tokenString)
+		authURL = p.AuthCodeURL(tokenString, authUrlParams...)
 	}
 
 	http.Redirect(w, r, authURL, http.StatusFound)
@@ -403,7 +415,7 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 }
 
 // Provider returns a Provider interface for the given name.
-func (a *API) Provider(ctx context.Context, name string, scopes string, query *url.Values) (provider.Provider, error) {
+func (a *API) Provider(ctx context.Context, name string, scopes string) (provider.Provider, error) {
 	config := a.config
 	name = strings.ToLower(name)
 
@@ -439,7 +451,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string, query *u
 	case "twitter":
 		return provider.NewTwitterProvider(config.External.Twitter, scopes)
 	case "workos":
-		return provider.NewWorkOSProvider(config.External.WorkOS, query)
+		return provider.NewWorkOSProvider(config.External.WorkOS)
 	case "zoom":
 		return provider.NewZoomProvider(config.External.Zoom)
 	default:
