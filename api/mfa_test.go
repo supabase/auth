@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/utilities"
@@ -329,7 +328,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 				require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
 				session, _ := models.FindSessionById(ts.API.db, secondarySession.ID)
 				require.Equal(ts.T(), models.AAL1.String(), session.AAL)
-				require.Equal(ts.T(), &uuid.Nil, session.FactorID)
+				require.Nil(ts.T(), session.FactorID)
 
 			}
 		})
@@ -370,7 +369,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
 	session, _ := models.FindSessionById(ts.API.db, secondarySession.ID)
 	require.Equal(ts.T(), models.AAL1.String(), session.AAL)
-	require.Equal(ts.T(), &uuid.Nil, session.FactorID)
+	require.Nil(ts.T(), session.FactorID)
 
 }
 

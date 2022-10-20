@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
@@ -34,7 +35,7 @@ func (authMethod AuthenticationMethod) String() string {
 	case OTP:
 		return "otp"
 	case TOTPSignIn:
-		return "mfa/totp"
+		return "totp"
 	}
 	return ""
 }
@@ -146,6 +147,15 @@ func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) err
 }
 
 func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {
+	sessions, err := FindSessionsByFactorID(tx, f.ID)
+	if err != nil {
+		return err
+	}
+	for _, session := range sessions {
+		if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: AMRClaim{}}).TableName()+" WHERE session_id = ? AND authentication_method = ?", session.ID, f.FactorType).Exec(); err != nil {
+			return err
+		}
+	}
 	return updateFactorAssociatedSessions(tx, f.UserID, f.ID, AAL1.String())
 
 }
