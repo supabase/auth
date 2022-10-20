@@ -1,15 +1,14 @@
 package models
 
 import (
-	"testing"
-	"time"
-
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"testing"
+	"time"
 )
 
 type SessionsTestSuite struct {
@@ -55,7 +54,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	require.NoError(ts.T(), err)
 
 	firstClaimAddedTime := time.Now()
-	err = AddClaimToSession(ts.db, session, TOTP)
+	err = AddClaimToSession(ts.db, session, TOTPSignIn)
 	require.NoError(ts.T(), err)
 	session, err = FindSessionById(ts.db, session.ID)
 	require.NoError(ts.T(), err)
@@ -64,7 +63,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	require.Equal(ts.T(), AAL2.String(), aal)
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
 
-	err = AddClaimToSession(ts.db, session, TOTP)
+	err = AddClaimToSession(ts.db, session, TOTPSignIn)
 	require.NoError(ts.T(), err)
 
 	session, err = FindSessionById(ts.db, session.ID)
@@ -76,7 +75,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
 	found := false
 	for _, claim := range session.AMRClaims {
-		if claim.AuthenticationMethod == TOTP {
+		if claim.AuthenticationMethod == TOTPSignIn.String() {
 			require.True(ts.T(), firstClaimAddedTime.Before(claim.UpdatedAt))
 			found = true
 		}

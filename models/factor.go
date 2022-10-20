@@ -15,14 +15,30 @@ const (
 	FactorStateVerified   = "verified"
 )
 
-type AuthenticationMethod string
+const TOTP = "totp"
+
+type AuthenticationMethod int
 
 const (
-	OAuth         AuthenticationMethod = "oauth"
-	PasswordGrant AuthenticationMethod = "password"
-	OTP           AuthenticationMethod = "otp"
-	TOTP          AuthenticationMethod = "totp"
+	OAuth AuthenticationMethod = iota
+	PasswordGrant
+	OTP
+	TOTPSignIn
 )
+
+func (authMethod AuthenticationMethod) String() string {
+	switch authMethod {
+	case OAuth:
+		return "oauth"
+	case PasswordGrant:
+		return "password"
+	case OTP:
+		return "otp"
+	case TOTPSignIn:
+		return "totp"
+	}
+	return ""
+}
 
 type Factor struct {
 	ID           uuid.UUID `json:"id" db:"id"`

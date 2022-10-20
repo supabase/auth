@@ -167,7 +167,7 @@ func (s *Session) UpdateAssociatedAAL(tx *storage.Connection, aal string) error 
 func (s *Session) CalculateAALAndAMR() (aal string, amr []AMREntry) {
 	amr, aal = []AMREntry{}, AAL1.String()
 	for _, claim := range s.AMRClaims {
-		if claim.AuthenticationMethod == TOTP {
+		if claim.AuthenticationMethod == TOTPSignIn.String() {
 			aal = AAL2.String()
 		}
 		amr = append(amr, AMREntry{Method: claim.AuthenticationMethod, Timestamp: claim.UpdatedAt.Unix()})

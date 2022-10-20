@@ -262,7 +262,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.TOTP, models.GrantParams{
+		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.TOTPSignIn, models.GrantParams{
 			FactorID: &factor.ID,
 		})
 		if terr != nil {
