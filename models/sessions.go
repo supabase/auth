@@ -129,6 +129,14 @@ func FindSessionByUserID(tx *storage.Connection, userId uuid.UUID) (*Session, er
 	return session, nil
 }
 
+func FindSessionsByFactorID(tx *storage.Connection, factorID uuid.UUID) ([]*Session, error) {
+	sessions := []*Session{}
+	if err := tx.Q().Where("factor_id = ?", factorID).All(&sessions); err != nil {
+		return nil, err
+	}
+	return sessions, nil
+}
+
 func updateFactorAssociatedSessions(tx *storage.Connection, userID, factorID uuid.UUID, aal string) error {
 	return tx.RawQuery("UPDATE "+(&pop.Model{Value: Session{}}).TableName()+" set aal = ?, factor_id = ? WHERE user_id = ? AND factor_id = ?", aal, nil, userID, factorID).Exec()
 }
