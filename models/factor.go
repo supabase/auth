@@ -19,9 +19,9 @@ type AuthenticationMethod string
 
 const (
 	OAuth         AuthenticationMethod = "oauth"
-	PasswordGrant                      = "password"
-	OTP                                = "otp"
-	TOTP                               = "totp"
+	PasswordGrant AuthenticationMethod = "password"
+	OTP           AuthenticationMethod = "otp"
+	TOTP          AuthenticationMethod = "totp"
 )
 
 type Factor struct {
