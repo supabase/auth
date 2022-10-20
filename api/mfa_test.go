@@ -90,7 +90,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		{
 			desc:         "TOTP: No issuer",
 			friendlyName: alternativeFriendlyName,
-			factorType:   models.TOTP,
+			factorType:   models.TOTP.String(),
 			issuer:       "",
 			expectedCode: http.StatusOK,
 		},
@@ -105,14 +105,14 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		{
 			desc:         "TOTP: Factor has friendly name",
 			friendlyName: testFriendlyName,
-			factorType:   models.TOTP,
+			factorType:   models.TOTP.String(),
 			issuer:       ts.TestDomain,
 			expectedCode: http.StatusOK,
 		},
 		{
 			desc:         "TOTP: Enrolling without friendly name",
 			friendlyName: "",
-			factorType:   models.TOTP,
+			factorType:   models.TOTP.String(),
 			issuer:       ts.TestDomain,
 			expectedCode: http.StatusOK,
 		},
@@ -460,7 +460,7 @@ func signUpAndVerify(ts *MFATestSuite, email, password string) (verifyResp *Acce
 func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyResp *AccessTokenResponse) {
 	var buffer bytes.Buffer
 	w := httptest.NewRecorder()
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": "john", "factor_type": models.TOTP, "issuer": ts.TestDomain}))
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": "john", "factor_type": models.TOTP.String(), "issuer": ts.TestDomain}))
 
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/factors/", &buffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
