@@ -22,9 +22,9 @@ import (
 const DefaultQRSize = 3
 
 type EnrollFactorParams struct {
-	FriendlyName string `json:"friendly_name"`
-	FactorType   string `json:"factor_type"`
-	Issuer       string `json:"issuer"`
+	FriendlyName string                      `json:"friendly_name"`
+	FactorType   models.AuthenticationMethod `json:"factor_type"`
+	Issuer       string                      `json:"issuer"`
 }
 
 type TOTPObject struct {
@@ -145,7 +145,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:   factor.ID,
-		Type: models.TOTP,
+		Type: models.TOTP.String(),
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
 			QRCode: buf.String(),
@@ -262,7 +262,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.TOTPSignIn, models.GrantParams{
+		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.TOTP, models.GrantParams{
 			FactorID: &factor.ID,
 		})
 		if terr != nil {

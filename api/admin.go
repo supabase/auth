@@ -30,8 +30,8 @@ type AdminUserParams struct {
 }
 
 type adminUserUpdateFactorParams struct {
-	FriendlyName string `json:"friendly_name"`
-	FactorType   string `json:"factor_type"`
+	FriendlyName string                      `json:"friendly_name"`
+	FactorType   models.AuthenticationMethod `json:"factor_type"`
 }
 
 type AdminListUsersResponse struct {
@@ -464,7 +464,7 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 				return terr
 			}
 		}
-		if params.FactorType != "" {
+		if params.FactorType.String() != "" {
 			if params.FactorType != models.TOTP {
 				return badRequestError("Factor Type not valid")
 			}

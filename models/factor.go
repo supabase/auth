@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
@@ -15,15 +16,13 @@ const (
 	FactorStateVerified   = "verified"
 )
 
-const TOTP = "totp"
-
 type AuthenticationMethod int
 
 const (
 	OAuth AuthenticationMethod = iota
 	PasswordGrant
 	OTP
-	TOTPSignIn
+	TOTP
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -34,10 +33,24 @@ func (authMethod AuthenticationMethod) String() string {
 		return "password"
 	case OTP:
 		return "otp"
-	case TOTPSignIn:
+	case TOTP:
 		return "totp"
 	}
 	return ""
+}
+
+func (factorType *AuthenticationMethod) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	switch s {
+	case "totp":
+		*factorType = TOTP
+	default:
+		return errors.New("invalid factor type")
+	}
+	return nil
 }
 
 type Factor struct {
@@ -57,7 +70,7 @@ func (Factor) TableName() string {
 	return tableName
 }
 
-func NewFactor(user *User, friendlyName string, factorType string, status, secret string) (*Factor, error) {
+func NewFactor(user *User, friendlyName string, factorType AuthenticationMethod, status, secret string) (*Factor, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -68,7 +81,7 @@ func NewFactor(user *User, friendlyName string, factorType string, status, secre
 		Status:       status,
 		FriendlyName: friendlyName,
 		Secret:       secret,
-		FactorType:   factorType,
+		FactorType:   factorType.String(),
 	}
 	return factor, nil
 }
@@ -141,8 +154,8 @@ func IsMFAEnabled(tx *storage.Connection, user *User) (bool, error) {
 }
 
 // UpdateFactorType modifies the factor type
-func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) error {
-	f.FactorType = factorType
+func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType AuthenticationMethod) error {
+	f.FactorType = factorType.String()
 	return tx.UpdateOnly(f, "factor_type", "updated_at")
 }
 
