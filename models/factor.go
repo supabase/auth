@@ -35,7 +35,7 @@ func (authMethod AuthenticationMethod) String() string {
 	case OTP:
 		return "otp"
 	case TOTPSignIn:
-		return "mfa/totp"
+		return "totp"
 	}
 	return ""
 }
@@ -152,7 +152,7 @@ func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {
 		return err
 	}
 	for _, session := range sessions {
-		if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: AMRClaim{}}).TableName()+" WHERE session_id = ? AND authentication_method like '%totp%'", session.ID).Exec(); err != nil {
+		if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: AMRClaim{}}).TableName()+" WHERE session_id = ? AND authentication_method = ?", session.ID, f.FactorType).Exec(); err != nil {
 			return err
 		}
 	}
