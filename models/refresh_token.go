@@ -72,7 +72,7 @@ func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
 	var err error
 	tablename := (&pop.Model{Value: RefreshToken{}}).TableName()
 	if token.SessionId != nil {
-		err = tx.RawQuery(`update `+tablename+` set revoked = true where session_id = ?;`, token.SessionId).Exec()
+		err = tx.RawQuery(`update `+tablename+` set revoked = true where session_id = ? and revoked = false;`, token.SessionId).Exec()
 	} else {
 		err = tx.RawQuery(`
 		with recursive token_family as (
