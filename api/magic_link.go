@@ -16,7 +16,7 @@ import (
 // MagicLinkParams holds the parameters for a magic link request
 type MagicLinkParams struct {
 	Email string                 `json:"email"`
-	Data  map[string]interface{} `json:"metadata"`
+	Data  map[string]interface{} `json:"data"`
 }
 
 // MagicLink sends a recovery email
