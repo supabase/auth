@@ -5,11 +5,10 @@ import (
 	"testing"
 
 	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/models"
+	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -18,7 +17,7 @@ const (
 )
 
 func init() {
-	models.PasswordHashCost = bcrypt.MinCost
+	crypto.PasswordHashCost = crypto.QuickHashCost
 }
 
 // setupAPIForTest creates a new API to run tests with.

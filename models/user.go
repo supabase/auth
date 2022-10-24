@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -8,12 +9,10 @@ import (
 
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
-	"golang.org/x/crypto/bcrypt"
 )
-
-var PasswordHashCost = bcrypt.DefaultCost
 
 // User respresents a registered user with email/password authentication
 type User struct {
@@ -72,7 +71,7 @@ func NewUser(phone, email, password, aud string, userData map[string]interface{}
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
 	}
-	pw, err := hashPassword(password)
+	pw, err := crypto.GenerateFromPassword(context.Background(), password)
 	if err != nil {
 		return nil, err
 	}
@@ -221,18 +220,9 @@ func (u *User) SetPhone(tx *storage.Connection, phone string) error {
 	return tx.UpdateOnly(u, "phone")
 }
 
-// hashPassword generates a hashed password from a plaintext string
-func hashPassword(password string) (string, error) {
-	pw, err := bcrypt.GenerateFromPassword([]byte(password), PasswordHashCost)
-	if err != nil {
-		return "", err
-	}
-	return string(pw), nil
-}
-
 // UpdatePassword updates the user's password
 func (u *User) UpdatePassword(tx *storage.Connection, password string) error {
-	pw, err := hashPassword(password)
+	pw, err := crypto.GenerateFromPassword(context.Background(), password)
 	if err != nil {
 		return err
 	}
@@ -248,7 +238,7 @@ func (u *User) UpdatePhone(tx *storage.Connection, phone string) error {
 
 // Authenticate a user from a password
 func (u *User) Authenticate(password string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(u.EncryptedPassword), []byte(password))
+	err := crypto.CompareHashAndPassword(context.Background(), u.EncryptedPassword, password)
 	return err == nil
 }
 

@@ -4,18 +4,18 @@ import (
 	"testing"
 
 	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/crypto/bcrypt"
 )
 
 const modelsTestConfig = "../hack/test.env"
 
 func init() {
-	PasswordHashCost = bcrypt.MinCost
+	crypto.PasswordHashCost = crypto.QuickHashCost
 }
 
 type UserTestSuite struct {
