@@ -9,6 +9,7 @@ import (
 	"github.com/gobwas/glob"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/sirupsen/logrus"
 )
 
 const defaultMinPasswordLength int = 6
@@ -112,6 +113,7 @@ type GlobalConfiguration struct {
 		Domain   string `json:"domain"`
 		Duration int    `json:"duration"`
 	} `json:"cookies"`
+	SAML SAMLConfiguration `json:"saml"`
 }
 
 // EmailContentConfiguration holds the configuration for emails, both subjects and template URLs.
@@ -273,6 +275,16 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		return nil, err
 	}
 
+	if config.SAML.Enabled {
+		logrus.Warn("WARNING: SAML is an incomplete feature and should not be enabled for production use!")
+
+		if err := config.SAML.PopulateFields(config.API.ExternalURL); err != nil {
+			return nil, err
+		}
+	} else {
+		config.SAML.PrivateKey = ""
+	}
+
 	return config, nil
 }
 
@@ -380,6 +392,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Tracing,
 		&c.Metrics,
 		&c.SMTP,
+		&c.SAML,
 	}
 
 	for _, validatable := range validatables {
