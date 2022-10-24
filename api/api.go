@@ -64,14 +64,18 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	r := newRouter()
 	r.Use(addRequestID(globalConfig))
 
+	// request tracing should be added only when tracing or metrics is
+	// enabled
 	if globalConfig.Tracing.Enabled {
 		switch globalConfig.Tracing.Exporter {
-		case conf.OpenTelemetryTracing:
-			r.UseBypass(observability.RequestTracing())
-
 		case conf.OpenTracing:
 			r.UseBypass(opentracer)
+
+		default:
+			r.UseBypass(observability.RequestTracing())
 		}
+	} else if globalConfig.Metrics.Enabled {
+		r.UseBypass(observability.RequestTracing())
 	}
 
 	r.UseBypass(xffmw.Handler)
