@@ -2,7 +2,6 @@ package models
 
 import (
 	"database/sql"
-	"fmt"
 	"strings"
 	"time"
 
@@ -362,12 +361,6 @@ func FindUserByRecoveryToken(tx *storage.Connection, token string) (*User, error
 // FindUserByEmailChangeToken finds a user with the matching email change token.
 func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, error) {
 	return findUser(tx, "email_change_token_current = ? or email_change_token_new = ?", token, token)
-}
-
-// FindUserByTokenAndTokenType finds a user with the matching token and token type.
-func FindUserByTokenAndTokenType(tx *storage.Connection, token string, tokenType string) (*User, error) {
-	query := fmt.Sprintf("%v = ?", tokenType)
-	return findUser(tx, query, token)
 }
 
 // FindUserWithRefreshToken finds a user from the provided refresh token.
