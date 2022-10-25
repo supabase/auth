@@ -70,9 +70,13 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	factorType := params.FactorType
+	if factorType == "recovery_code" {
+		return a.EnrollRecoveryCode(w, r)
+	}
 	if factorType != models.TOTP {
 		return badRequestError("factor_type needs to be totp")
 	}
+
 
 	if params.Issuer == "" {
 		u, err := url.ParseRequestURI(config.SiteURL)
@@ -154,6 +158,29 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		},
 	})
 }
+
+func (a *API) EnrollRecoveryCode(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := getUser(ctx)
+	var codes []*models.RecoveryCode
+	terr := a.db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		codes, terr = models.GenerateBatchOfRecoveryCodes(tx, user)
+		if terr != nil {
+			return terr
+		}
+		if terr := models.NewAuditLogEntry(r, tx, user, models.GenerateRecoveryCodesAction, r.RemoteAddr, nil); terr != nil {
+			return terr
+		}
+		return nil
+
+	})
+	if terr != nil {
+		return internalServerError("error generating recovery codes").WithInternalError(terr)
+	}
+	return sendJSON(w, http.StatusOK, codes)
+}
+
 
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
