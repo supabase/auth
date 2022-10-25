@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	metricglobal "go.opentelemetry.io/otel/metric/global"
+	metricinstrument "go.opentelemetry.io/otel/metric/instrument"
 	basicmetriccontroller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
 	exportmetricaggregation "go.opentelemetry.io/otel/sdk/metric/export/aggregation"
 	basicmetricprocessor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
@@ -178,6 +179,27 @@ func ConfigureMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
 			logrus.WithError(err).Error("unable to start OpenTelemetry Go runtime metrics collection")
 		} else {
 			logrus.Info("Go runtime metrics collection started")
+		}
+
+		meter := metricglobal.Meter("gotrue")
+		running, err := meter.AsyncInt64().Gauge(
+			"gotrue_running",
+			metricinstrument.WithDescription("Whether GoTrue is running (always 1)"),
+		)
+		if err != nil {
+			logrus.WithError(err).Error("unable to get gotrue.gotrue_running gague metric")
+			return
+		}
+
+		if err := meter.RegisterCallback(
+			[]metricinstrument.Asynchronous{
+				running,
+			},
+			func(ctx context.Context) {
+				running.Observe(ctx, 1)
+			},
+		); err != nil {
+			logrus.WithError(err).Error("unable to register gotrue.running gague metric")
 		}
 	})
 
