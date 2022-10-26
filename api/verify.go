@@ -150,13 +150,11 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	rurl := params.RedirectTo
 	if token != nil {
 		q := url.Values{}
-		q.Set("access_token", token.Token)
-		q.Set("token_type", token.TokenType)
-		q.Set("expires_in", strconv.Itoa(token.ExpiresIn))
-		q.Set("refresh_token", token.RefreshToken)
 		q.Set("type", params.Type)
-		rurl += "#" + q.Encode()
+
+		rurl = token.AsRedirectURL(rurl, q)
 	}
+
 	http.Redirect(w, r, rurl, http.StatusSeeOther)
 	return nil
 }
