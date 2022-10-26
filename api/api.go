@@ -158,6 +158,13 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Route("/sso", func(r *router) {
 				r.Route("/saml", func(r *router) {
 					r.Get("/metadata", api.SAMLMetadata)
+
+					r.With(api.limitHandler(
+						// Allow requests at the specified rate per 5 minutes.
+						tollbooth.NewLimiter(api.config.SAML.RateLimitAssertion/(60*5), &limiter.ExpirableOptions{
+							DefaultExpirationTTL: time.Hour,
+						}).SetBurst(30),
+					)).Post("/acs", api.SAMLACS)
 				})
 			})
 		}

@@ -232,3 +232,17 @@ func FindAllSAMLProviders(tx *storage.Connection) ([]SSOProvider, error) {
 
 	return providers, nil
 }
+
+func FindSAMLRelayStateByID(tx *storage.Connection, id uuid.UUID) (*SAMLRelayState, error) {
+	var state SAMLRelayState
+
+	if err := tx.Eager().Q().Where("id = ?", id).First(&state); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SAMLRelayStateNotFoundError{}
+		}
+
+		return nil, errors.Wrap(err, "error loading SAML Relay State")
+	}
+
+	return &state, nil
+}

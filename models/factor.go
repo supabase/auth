@@ -24,6 +24,7 @@ const (
 	PasswordGrant
 	OTP
 	TOTPSignIn
+	SSOSAML
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -36,6 +37,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "otp"
 	case TOTPSignIn:
 		return "totp"
+	case SSOSAML:
+		return "sso/saml"
 	}
 	return ""
 }
