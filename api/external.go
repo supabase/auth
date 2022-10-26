@@ -518,21 +518,14 @@ func (a *API) getExternalRedirectURL(r *http.Request) string {
 	return config.SiteURL
 }
 
-func (a *API) createNewIdentity(conn *storage.Connection, user *models.User, providerType string, identityData map[string]interface{}) (*models.Identity, error) {
+func (a *API) createNewIdentity(tx *storage.Connection, user *models.User, providerType string, identityData map[string]interface{}) (*models.Identity, error) {
 	identity, err := models.NewIdentity(user, providerType, identityData)
 	if err != nil {
 		return nil, err
 	}
 
-	err = conn.Transaction(func(tx *storage.Connection) error {
-		if terr := tx.Create(identity); terr != nil {
-			return internalServerError("Error creating identity").WithInternalError(terr)
-		}
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
+	if terr := tx.Create(identity); terr != nil {
+		return nil, internalServerError("Error creating identity").WithInternalError(terr)
 	}
 
 	return identity, nil
