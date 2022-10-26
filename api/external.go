@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -314,11 +313,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if providerRefreshToken != "" {
 			q.Set("provider_refresh_token", providerRefreshToken)
 		}
-		q.Set("access_token", token.Token)
-		q.Set("token_type", token.TokenType)
-		q.Set("expires_in", strconv.Itoa(token.ExpiresIn))
-		q.Set("refresh_token", token.RefreshToken)
-		rurl += "#" + q.Encode()
+
+		rurl = token.AsRedirectURL(rurl, q)
 
 		if err := a.setCookieTokens(config, token, false, w); err != nil {
 			return internalServerError("Failed to set JWT cookie. %s", err)

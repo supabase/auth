@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -39,6 +40,17 @@ type AccessTokenResponse struct {
 	ExpiresIn    int          `json:"expires_in"`
 	RefreshToken string       `json:"refresh_token"`
 	User         *models.User `json:"user"`
+}
+
+// AsRedirectURL encodes the AccessTokenResponse as a redirect URL that
+// includes the access token response data in a URL fragment.
+func (r *AccessTokenResponse) AsRedirectURL(redirectURL string, extraParams url.Values) string {
+	extraParams.Set("access_token", r.Token)
+	extraParams.Set("token_type", r.TokenType)
+	extraParams.Set("expires_in", strconv.Itoa(r.ExpiresIn))
+	extraParams.Set("refresh_token", r.RefreshToken)
+
+	return redirectURL + "#" + extraParams.Encode()
 }
 
 // PasswordGrantParams are the parameters the ResourceOwnerPasswordGrant method accepts
