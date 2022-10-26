@@ -116,6 +116,9 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
+// errReturnNil is a hack that signals internalExternalProviderCallback to return nil
+var errReturnNil = errors.New("createAccountFromExternalIdentity: return nil in internalExternalProviderCallback")
+
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -155,139 +158,12 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				return terr
 			}
 		} else {
-			aud := a.requestAud(ctx, r)
-			var emailData provider.Email
-			var identityData map[string]interface{}
-			if userData.Metadata != nil {
-				identityData, terr = userData.Metadata.ToMap()
-				if terr != nil {
-					return terr
-				}
-			}
-
-			var identity *models.Identity
-			// check if identity exists
-			if identity, terr = models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType); terr != nil {
-				if models.IsNotFoundError(terr) {
-					user, emailData, terr = a.getUserByVerifiedEmail(tx, config, userData.Emails, aud)
-					if terr != nil && !models.IsNotFoundError(terr) {
-						return internalServerError("Error checking for existing users").WithInternalError(terr)
-					}
-					if user != nil {
-						if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
-							return terr
-						}
-						if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
-							return terr
-						}
-					} else {
-						if config.DisableSignup {
-							return forbiddenError("Signups not allowed for this instance")
-						}
-
-						// prefer primary email for new signups
-						emailData = userData.Emails[0]
-						for _, e := range userData.Emails {
-							if e.Primary {
-								emailData = e
-								break
-							}
-						}
-
-						params := &SignupParams{
-							Provider: providerType,
-							Email:    emailData.Email,
-							Aud:      aud,
-							Data:     identityData,
-						}
-
-						user, terr = a.signupNewUser(ctx, tx, params)
-						if terr != nil {
-							return terr
-						}
-
-						if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
-							return terr
-						}
-					}
-				} else {
-					return terr
-				}
-			}
-
-			if identity != nil && user == nil {
-				// get user associated with identity
-				user, terr = models.FindUserByID(tx, identity.UserID)
-				if terr != nil {
-					return terr
-				}
-				identity.IdentityData = identityData
-				if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
-					return terr
-				}
-				// email & verified status might have changed if identity's email changed
-				emailData = provider.Email{
-					Email:    userData.Metadata.Email,
-					Verified: userData.Metadata.EmailVerified,
-				}
-				if terr = user.UpdateUserMetaData(tx, identityData); terr != nil {
-					return terr
-				}
-				if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
-					return terr
-				}
-			}
-
-			if user.IsBanned() {
-				return unauthorizedError("User is unauthorized")
-			}
-
-			// an account with a previously unconfirmed email + password
-			// combination or phone may exist. so now that there is an
-			// OAuth identity bound to this user, and since they have not
-			// confirmed their email or phone, they are unaware that a
-			// potentially malicious door exists into their account; thus
-			// the password and phone needs to be removed.
-			if terr = user.RemoveUnconfirmedIdentities(tx); terr != nil {
-				return internalServerError("Error updating user").WithInternalError(terr)
-			}
-
-			if !user.IsConfirmed() {
-				if !emailData.Verified && !config.Mailer.Autoconfirm {
-					mailer := a.Mailer(ctx)
-					referrer := a.getReferrer(r)
-					if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {
-						if errors.Is(terr, MaxFrequencyLimitError) {
-							return tooManyRequestsError("For security purposes, you can only request this once every minute")
-						}
-						return internalServerError("Error sending confirmation mail").WithInternalError(terr)
-					}
-					// email must be verified to issue a token
+			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, user); terr != nil {
+				if errors.Is(terr, errReturnNil) {
 					return nil
 				}
 
-				if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
-					"provider": providerType,
-				}); terr != nil {
-					return terr
-				}
-				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
-					return terr
-				}
-
-				// fall through to auto-confirm and issue token
-				if terr = user.Confirm(tx); terr != nil {
-					return internalServerError("Error updating user").WithInternalError(terr)
-				}
-			} else {
-				if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
-					"provider": providerType,
-				}); terr != nil {
-					return terr
-				}
-				if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
-					return terr
-				}
+				return terr
 			}
 		}
 		if config.MFA.Enabled {
@@ -329,6 +205,150 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	http.Redirect(w, r, rurl, http.StatusFound)
 	return nil
+}
+
+func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string, user *models.User) (*models.User, error) {
+	ctx := r.Context()
+	aud := a.requestAud(ctx, r)
+	config := a.config
+
+	var terr error
+
+	var emailData provider.Email
+	var identityData map[string]interface{}
+	if userData.Metadata != nil {
+		identityData, terr = userData.Metadata.ToMap()
+		if terr != nil {
+			return nil, terr
+		}
+	}
+
+	var identity *models.Identity
+	// check if identity exists
+	if identity, terr = models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType); terr != nil {
+		if models.IsNotFoundError(terr) {
+			user, emailData, terr = a.getUserByVerifiedEmail(tx, config, userData.Emails, aud)
+			if terr != nil && !models.IsNotFoundError(terr) {
+				return nil, internalServerError("Error checking for existing users").WithInternalError(terr)
+			}
+			if user != nil {
+				if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+					return nil, terr
+				}
+				if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
+					return nil, terr
+				}
+			} else {
+				if config.DisableSignup {
+					return nil, forbiddenError("Signups not allowed for this instance")
+				}
+
+				// prefer primary email for new signups
+				emailData = userData.Emails[0]
+				for _, e := range userData.Emails {
+					if e.Primary {
+						emailData = e
+						break
+					}
+				}
+
+				params := &SignupParams{
+					Provider: providerType,
+					Email:    emailData.Email,
+					Aud:      aud,
+					Data:     identityData,
+				}
+
+				user, terr = a.signupNewUser(ctx, tx, params)
+				if terr != nil {
+					return nil, terr
+				}
+
+				if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+					return nil, terr
+				}
+			}
+		} else {
+			return nil, terr
+		}
+	}
+
+	if identity != nil && user == nil {
+		// get user associated with identity
+		user, terr = models.FindUserByID(tx, identity.UserID)
+		if terr != nil {
+			return nil, terr
+		}
+		identity.IdentityData = identityData
+		if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
+			return nil, terr
+		}
+		// email & verified status might have changed if identity's email changed
+		emailData = provider.Email{
+			Email:    userData.Metadata.Email,
+			Verified: userData.Metadata.EmailVerified,
+		}
+		if terr = user.UpdateUserMetaData(tx, identityData); terr != nil {
+			return nil, terr
+		}
+		if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
+			return nil, terr
+		}
+	}
+
+	if user.IsBanned() {
+		return nil, unauthorizedError("User is unauthorized")
+	}
+
+	// an account with a previously unconfirmed email + password
+	// combination or phone may exist. so now that there is an
+	// OAuth identity bound to this user, and since they have not
+	// confirmed their email or phone, they are unaware that a
+	// potentially malicious door exists into their account; thus
+	// the password and phone needs to be removed.
+	if terr = user.RemoveUnconfirmedIdentities(tx); terr != nil {
+		return nil, internalServerError("Error updating user").WithInternalError(terr)
+	}
+
+	if !user.IsConfirmed() {
+		if !emailData.Verified && !config.Mailer.Autoconfirm {
+			mailer := a.Mailer(ctx)
+			referrer := a.getReferrer(r)
+			if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {
+				if errors.Is(terr, MaxFrequencyLimitError) {
+					return nil, tooManyRequestsError("For security purposes, you can only request this once every minute")
+				}
+				return nil, internalServerError("Error sending confirmation mail").WithInternalError(terr)
+			}
+			// email must be verified to issue a token
+			return nil, errReturnNil
+		}
+
+		if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+			"provider": providerType,
+		}); terr != nil {
+			return nil, terr
+		}
+		if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
+			return nil, terr
+		}
+
+		// fall through to auto-confirm and issue token
+		if terr = user.Confirm(tx); terr != nil {
+			return nil, internalServerError("Error updating user").WithInternalError(terr)
+		}
+	} else {
+		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+			"provider": providerType,
+		}); terr != nil {
+			return nil, terr
+		}
+		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
+			return nil, terr
+		}
+	}
+
+	return user, nil
 }
 
 func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, inviteToken, providerType string) (*models.User, error) {
