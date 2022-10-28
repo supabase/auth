@@ -154,6 +154,14 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			})
 		}
 
+		if api.config.SAML.Enabled {
+			r.Route("/sso", func(r *router) {
+				r.Route("/saml", func(r *router) {
+					r.Get("/metadata", api.SAMLMetadata)
+				})
+			})
+		}
+
 		r.Route("/admin", func(r *router) {
 			r.Use(api.requireAdminCredentials)
 
