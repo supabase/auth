@@ -97,7 +97,7 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 			return ctx, badRequestError("invalid claim: sub claim must be a UUID").WithInternalError(err)
 		}
 		user, err = models.FindUserByID(db, userId)
-		if err != nil {
+		if err != nil && !models.IsNotFoundError(err) {
 			return ctx, err
 		}
 		ctx = withUser(ctx, user)
