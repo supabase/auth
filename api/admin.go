@@ -136,6 +136,9 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	user := getUser(ctx)
+	if user == nil {
+		return badRequestError("user doesn't exist")
+	}
 	adminUser := getAdminUser(ctx)
 	params, err := a.getAdminParams(r)
 	config := a.config
@@ -379,6 +382,9 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	user := getUser(ctx)
+	if user == nil {
+		return badRequestError("user doesn't exist")
+	}
 	adminUser := getAdminUser(ctx)
 
 	err := db.Transaction(func(tx *storage.Connection) error {
@@ -405,6 +411,9 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
+	if user == nil {
+		return badRequestError("user doesn't exist")
+	}
 	factor := getFactor(ctx)
 
 	MFAEnabled, err := models.IsMFAEnabled(a.db, user)
@@ -435,6 +444,9 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 func (a *API) adminUserGetFactors(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
+	if user == nil {
+		return badRequestError("user doesn't exist")
+	}
 	factors, terr := models.FindFactorsByUser(a.db, user)
 	if terr != nil {
 		return terr
@@ -447,6 +459,9 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 	ctx := r.Context()
 	factor := getFactor(ctx)
 	user := getUser(ctx)
+	if user == nil {
+		return badRequestError("user doesn't exist")
+	}
 	adminUser := getAdminUser(ctx)
 	params := &adminUserUpdateFactorParams{}
 	body, err := getBodyBytes(r)

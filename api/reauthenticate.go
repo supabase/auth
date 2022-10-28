@@ -21,6 +21,9 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 
 	user := getUser(ctx)
+	if user == nil {
+		return badRequestError("invalid user jwt")
+	}
 	email, phone := user.GetEmail(), user.GetPhone()
 
 	if email == "" && phone == "" {
