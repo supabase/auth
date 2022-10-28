@@ -56,9 +56,6 @@ type UnenrollFactorResponse struct {
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
-	if user == nil {
-		return badRequestError("invalid user jwt")
-	}
 	config := a.config
 
 	params := &EnrollFactorParams{}
@@ -163,9 +160,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 
 	user := getUser(ctx)
-	if user == nil {
-		return badRequestError("invalid user jwt")
-	}
 	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
 	challenge, err := models.NewChallenge(factor, ipAddress)
@@ -201,9 +195,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
 	user := getUser(ctx)
-	if user == nil {
-		return badRequestError("invalid user jwt")
-	}
 	factor := getFactor(ctx)
 	config := a.config
 
@@ -298,14 +289,8 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
 	user := getUser(ctx)
-	if user == nil {
-		return badRequestError("invalid user jwt")
-	}
 	factor := getFactor(ctx)
 	session := getSession(ctx)
-	if session == nil {
-		return badRequestError("invalid session")
-	}
 
 	if factor.Status == models.FactorStateVerified && session.AAL != models.AAL2.String() {
 		return badRequestError("AAL2 required to unenroll verified factor")

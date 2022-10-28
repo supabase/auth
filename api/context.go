@@ -77,7 +77,7 @@ func withFactor(ctx context.Context, f *models.Factor) context.Context {
 	return context.WithValue(ctx, factorKey, f)
 }
 
-// getUser reads the user from the context. The user in the context can be nil.
+// getUser reads the user from the context.
 func getUser(ctx context.Context) *models.User {
 	if ctx == nil {
 		return nil
@@ -103,7 +103,7 @@ func withSession(ctx context.Context, s *models.Session) context.Context {
 	return context.WithValue(ctx, sessionKey, s)
 }
 
-// getSession reads the session from the context. The session in the context can be nil.
+// getSession reads the session from the context.
 func getSession(ctx context.Context) *models.Session {
 	if ctx == nil {
 		return nil

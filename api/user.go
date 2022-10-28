@@ -34,9 +34,6 @@ func (a *API) UserGet(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	user := getUser(ctx)
-	if user == nil {
-		return badRequestError("invalid user jwt")
-	}
 	return sendJSON(w, http.StatusOK, user)
 }
 
@@ -58,9 +55,6 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	user := getUser(ctx)
-	if user == nil {
-		return badRequestError("invalid user jwt")
-	}
 	log := observability.GetLogEntry(r)
 	log.Debugf("Checking params for token %v", params)
 
