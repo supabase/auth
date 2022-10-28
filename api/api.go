@@ -156,6 +156,8 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		if api.config.SAML.Enabled {
 			r.Route("/sso", func(r *router) {
+				r.Post("/", api.SingleSignOn)
+
 				r.Route("/saml", func(r *router) {
 					r.Get("/metadata", api.SAMLMetadata)
 
