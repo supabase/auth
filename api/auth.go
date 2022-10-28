@@ -72,7 +72,7 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request, w http.ResponseWrit
 	})
 	if err != nil {
 		a.clearCookieTokens(config, w)
-		return nil, unauthorizedError("invalid JWT: unable to parse or verify signature").WithInternalError(err)
+		return nil, unauthorizedError("invalid JWT: unable to parse or verify signature, %v", err)
 	}
 
 	return withToken(ctx, token), nil
