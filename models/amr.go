@@ -14,7 +14,7 @@ type AMRClaim struct {
 	SessionID            uuid.UUID `json:"session_id" db:"session_id"`
 	CreatedAt            time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt            time.Time `json:"updated_at" db:"updated_at"`
-	AuthenticationMethod string    `json:"authentication_method" db:"authentication_method"`
+	AuthenticationMethod *string   `json:"authentication_method" db:"authentication_method"`
 }
 
 func (AMRClaim) TableName() string {

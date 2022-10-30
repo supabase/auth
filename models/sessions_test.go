@@ -75,7 +75,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
 	found := false
 	for _, claim := range session.AMRClaims {
-		if claim.AuthenticationMethod == TOTPSignIn.String() {
+		if *claim.AuthenticationMethod == TOTPSignIn.String() {
 			require.True(ts.T(), firstClaimAddedTime.Before(claim.UpdatedAt))
 			found = true
 		}
