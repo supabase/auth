@@ -33,3 +33,10 @@ func AddClaimToSession(tx *storage.Connection, session *Session, authenticationM
 			ON CONFLICT ON CONSTRAINT mfa_amr_claims_session_id_authentication_method_pkey
 			DO UPDATE SET updated_at = ?;`, id, session.ID, currentTime, currentTime, authenticationMethod.String(), currentTime).Exec()
 }
+
+func (a *AMRClaim) GetAuthenticationMethod() string {
+	if a.AuthenticationMethod == nil {
+		return ""
+	}
+	return *(a.AuthenticationMethod)
+}

@@ -172,7 +172,7 @@ func (s *Session) CalculateAALAndAMR() (aal string, amr []AMREntry) {
 		if *claim.AuthenticationMethod == TOTPSignIn.String() {
 			aal = AAL2.String()
 		}
-		amr = append(amr, AMREntry{Method: *claim.AuthenticationMethod, Timestamp: claim.UpdatedAt.Unix()})
+		amr = append(amr, AMREntry{Method: claim.GetAuthenticationMethod(), Timestamp: claim.UpdatedAt.Unix()})
 	}
 
 	// makes sure that the AMR claims are always ordered most-recent first
