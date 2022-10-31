@@ -425,7 +425,7 @@ func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
 	require.Equal(ts.T(), models.AAL1.String(), getSession(ctx).GetAAL())
 	session, err := models.FindSessionByUserID(ts.API.db, token.User.ID)
 	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), models.AAL2.String(), *session.AAL)
+	require.Equal(ts.T(), models.AAL2.String(), session.GetAAL())
 }
 
 func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenResponse) {
