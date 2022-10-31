@@ -74,6 +74,7 @@ func NewSession(user *User, factorID *uuid.UUID) (*Session, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique session id")
 	}
+
 	defaultAAL := AAL1.String()
 
 	session := &Session{
@@ -187,4 +188,11 @@ func (s *Session) CalculateAALAndAMR() (aal string, amr []AMREntry) {
 	})
 
 	return aal, amr
+}
+
+func (s *Session) GetAAL() string {
+	if s.AAL == nil {
+		return ""
+	}
+	return *(s.AAL)
 }
