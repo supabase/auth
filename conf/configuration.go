@@ -214,9 +214,10 @@ type VonageProviderConfiguration struct {
 }
 
 type CaptchaConfiguration struct {
-	Enabled  bool   `json:"enabled" default:"false"`
-	Provider string `json:"provider" default:"hcaptcha"`
-	Secret   string `json:"provider_secret"`
+	Enabled  bool     `json:"enabled" default:"false"`
+	Provider string   `json:"provider" default:"hcaptcha"`
+	Secret   string   `json:"provider_secret"`
+	Routes   []string `json:"routes"`
 }
 
 type SecurityConfiguration struct {
@@ -377,6 +378,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	}
 	if config.MFA.ChallengeExpiryDuration < defaultChallengeExpiryDuration {
 		config.MFA.ChallengeExpiryDuration = defaultChallengeExpiryDuration
+	}
+
+	if config.Security.Captcha.Routes == nil || len(config.Security.Captcha.Routes) == 0 {
+		config.Security.Captcha.Routes = []string{"/signup", "/recover", "/magiclink", "/otp", "/token", "/verify"}
 	}
 
 	return nil
