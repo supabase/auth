@@ -69,7 +69,7 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	}
 }
 
-func (a *API) limitEmailSentHandler() middlewareHandler {
+func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 	// limit per hour
 	freq := a.config.RateLimitEmailSent / (60 * 60)
 	lmt := tollbooth.NewLimiter(freq, &limiter.ExpirableOptions{
@@ -78,26 +78,32 @@ func (a *API) limitEmailSentHandler() middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		c := req.Context()
 		config := a.config
-		if config.External.Email.Enabled && !config.Mailer.Autoconfirm {
+		if (config.External.Email.Enabled && !config.Mailer.Autoconfirm) || (config.External.Phone.Enabled) {
 			if req.Method == "PUT" || req.Method == "POST" {
-				res := make(map[string]interface{})
-
 				bodyBytes, err := getBodyBytes(req)
 				if err != nil {
 					return c, internalServerError("Error invalid request body").WithInternalError(err)
 				}
 
-				if err := json.Unmarshal(bodyBytes, &res); err != nil {
+				var requestBody struct {
+					Email string `json:"email"`
+					Phone string `json:"phone"`
+				}
+
+				if err := json.Unmarshal(bodyBytes, &requestBody); err != nil {
 					return c, badRequestError("Error invalid request body").WithInternalError(err)
 				}
 
-				if _, ok := res["email"]; !ok {
-					// email not in POST body
-					return c, nil
+				if requestBody.Email != "" {
+					if err := tollbooth.LimitByKeys(lmt, []string{"email_functions"}); err != nil {
+						return c, httpError(http.StatusTooManyRequests, "Rate limit exceeded")
+					}
 				}
 
-				if err := tollbooth.LimitByKeys(lmt, []string{"email_functions"}); err != nil {
-					return c, httpError(http.StatusTooManyRequests, "Rate limit exceeded")
+				if requestBody.Phone != "" {
+					if err := tollbooth.LimitByKeys(lmt, []string{"phone_functions"}); err != nil {
+						return c, httpError(http.StatusTooManyRequests, "Rate limit exceeded")
+					}
 				}
 			}
 		}
