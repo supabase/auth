@@ -193,6 +193,23 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			})
 
 			r.Post("/generate_link", api.GenerateLink)
+
+			if api.config.SAML.Enabled {
+				r.Route("/sso", func(r *router) {
+					r.Route("/providers", func(r *router) {
+						r.Get("/", api.adminSSOProvidersList)
+						r.Post("/", api.adminSSOProvidersCreate)
+
+						r.Route("/{idp_id}", func(r *router) {
+							r.Use(api.loadSSOProvider)
+
+							r.Get("/", api.adminSSOProvidersGet)
+							r.Put("/", api.adminSSOProvidersUpdate)
+							r.Delete("/", api.adminSSOProvidersDelete)
+						})
+					})
+				})
+			}
 		})
 	})
 

@@ -17,9 +17,13 @@ func IsNotFoundError(err error) bool {
 		return true
 	case IdentityNotFoundError, *IdentityNotFoundError:
 		return true
-	case ChallengeNotFoundError:
+	case ChallengeNotFoundError, *ChallengeNotFoundError:
 		return true
-	case FactorNotFoundError:
+	case FactorNotFoundError, *FactorNotFoundError:
+		return true
+	case SSOProviderNotFoundError, *SSOProviderNotFoundError:
+		return true
+	case SAMLRelayStateNotFoundError, *SAMLRelayStateNotFoundError:
 		return true
 	}
 	return false
@@ -84,4 +88,20 @@ type TotpSecretNotFoundError struct{}
 
 func (e TotpSecretNotFoundError) Error() string {
 	return "Totp Secret not found"
+}
+
+// SSOProviderNotFoundError represents an error when a SSO Provider can't be
+// found.
+type SSOProviderNotFoundError struct{}
+
+func (e SSOProviderNotFoundError) Error() string {
+	return "SSO Identity Provider not found"
+}
+
+// SAMLRelayStateNotFoundError represents an error when a SAML relay state
+// can't be found.
+type SAMLRelayStateNotFoundError struct{}
+
+func (e SAMLRelayStateNotFoundError) Error() string {
+	return "SAML RelayState not found"
 }
