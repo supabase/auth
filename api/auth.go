@@ -33,7 +33,7 @@ func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (con
 	return ctx, err
 }
 
-func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.Request) (context.Context, error) {
+func (a *API) requireAdmin(ctx context.Context, r *http.Request) (context.Context, error) {
 	// Find the administrative user
 	claims := getClaims(ctx)
 	if claims == nil {
