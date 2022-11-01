@@ -327,7 +327,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 				_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
 				require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
 				session, _ := models.FindSessionById(ts.API.db, secondarySession.ID)
-				require.Equal(ts.T(), models.AAL1.String(), session.AAL)
+				require.Equal(ts.T(), models.AAL1.String(), session.GetAAL())
 				require.Nil(ts.T(), session.FactorID)
 
 			}
@@ -368,7 +368,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
 	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
 	session, _ := models.FindSessionById(ts.API.db, secondarySession.ID)
-	require.Equal(ts.T(), models.AAL1.String(), session.AAL)
+	require.Equal(ts.T(), models.AAL1.String(), session.GetAAL())
 	require.Nil(ts.T(), session.FactorID)
 
 }
@@ -396,7 +396,7 @@ func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
 	require.NoError(ts.T(), err)
 	ctx, err = ts.API.maybeLoadUserOrSession(ctx)
 	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), models.AAL2.String(), getSession(ctx).AAL)
+	require.Equal(ts.T(), models.AAL2.String(), getSession(ctx).GetAAL())
 }
 
 // Performing MFA Verification followed by a sign in should return an AAL1 session and an AAL2 session
@@ -422,10 +422,10 @@ func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
 	require.NoError(ts.T(), err)
 	ctx, err = ts.API.maybeLoadUserOrSession(ctx)
 	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), models.AAL1.String(), getSession(ctx).AAL)
+	require.Equal(ts.T(), models.AAL1.String(), getSession(ctx).GetAAL())
 	session, err := models.FindSessionByUserID(ts.API.db, token.User.ID)
 	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), models.AAL2.String(), session.AAL)
+	require.Equal(ts.T(), models.AAL2.String(), session.GetAAL())
 }
 
 func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenResponse) {

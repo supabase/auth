@@ -14,7 +14,7 @@ type AMRClaim struct {
 	SessionID            uuid.UUID `json:"session_id" db:"session_id"`
 	CreatedAt            time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt            time.Time `json:"updated_at" db:"updated_at"`
-	AuthenticationMethod string    `json:"authentication_method" db:"authentication_method"`
+	AuthenticationMethod *string   `json:"authentication_method" db:"authentication_method"`
 }
 
 func (AMRClaim) TableName() string {
@@ -32,4 +32,11 @@ func AddClaimToSession(tx *storage.Connection, session *Session, authenticationM
 		`(id, session_id, created_at, updated_at, authentication_method) values (?, ?, ?, ?, ?)
 			ON CONFLICT ON CONSTRAINT mfa_amr_claims_session_id_authentication_method_pkey
 			DO UPDATE SET updated_at = ?;`, id, session.ID, currentTime, currentTime, authenticationMethod.String(), currentTime).Exec()
+}
+
+func (a *AMRClaim) GetAuthenticationMethod() string {
+	if a.AuthenticationMethod == nil {
+		return ""
+	}
+	return *(a.AuthenticationMethod)
 }
