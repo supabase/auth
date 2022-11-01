@@ -93,6 +93,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 	r.Route("/", func(r *router) {
 		r.UseBypass(logger)
+		r.Use(api.verifyCaptcha)
 
 		r.Get("/settings", api.Settings)
 
@@ -100,18 +101,18 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		sharedLimiter := api.limitEmailSentHandler()
 		r.With(sharedLimiter).With(api.requireAdminCredentials).Post("/invite", api.Invite)
-		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/signup", api.Signup)
-		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
-		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
+		r.With(sharedLimiter).Post("/signup", api.Signup)
+		r.With(sharedLimiter).With(api.requireEmailProvider).Post("/recover", api.Recover)
+		r.With(sharedLimiter).Post("/magiclink", api.MagicLink)
 
-		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
+		r.With(sharedLimiter).Post("/otp", api.Otp)
 
 		r.With(api.limitHandler(
 			// Allow requests at the specified rate per 5 minutes.
 			tollbooth.NewLimiter(api.config.RateLimitTokenRefresh/(60*5), &limiter.ExpirableOptions{
 				DefaultExpirationTTL: time.Hour,
 			}).SetBurst(30),
-		)).With(api.verifyCaptcha).Post("/token", api.Token)
+		)).Post("/token", api.Token)
 
 		r.With(api.limitHandler(
 			// Allow requests at the specified rate per 5 minutes.
@@ -120,7 +121,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			}).SetBurst(30),
 		)).Route("/verify", func(r *router) {
 			r.Get("/", api.Verify)
-			r.With(api.verifyCaptcha).Post("/", api.Verify)
+			r.Post("/", api.Verify)
 		})
 
 		r.With(api.requireAuthentication).Post("/logout", api.Logout)
