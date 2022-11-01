@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/security"
 	"github.com/sirupsen/logrus"
@@ -130,17 +131,48 @@ func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (co
 	return ctx, nil
 }
 
+// hasBypassCaptchaHeader checks if the request contains a "X-CAPTCHA-BYPASS" header
+func (a *API) hasBypassCaptchaHeader(req *http.Request) (bool, error) {
+	captchaHeader := req.Header.Get("X-CAPTCHA-BYPASS")
+	if captchaHeader == "" {
+		return false, nil
+	}
+	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+	token, err := p.ParseWithClaims(captchaHeader, &GoTrueClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(a.config.JWT.Secret), nil
+	})
+	if err != nil {
+		return false, err
+	}
+	claims := token.Claims.(*GoTrueClaims)
+	if claims.Role != "captcha" {
+		return false, nil
+	}
+	return true, nil
+}
+
 func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	config := a.config
 	if !config.Security.Captcha.Enabled {
 		return ctx, nil
 	}
-	if _, err := a.requireAdminCredentials(w, req); err == nil {
-		// skip captcha validation if authorization header contains an admin role
+	hasBypassHeader, err := a.hasBypassCaptchaHeader(req)
+	if err != nil {
+		return nil, unauthorizedError("invalid jwt: unable to parse or verify signature for X-CAPTCHA-BYPASS").WithInternalError(err)
+	}
+	if !hasBypassHeader {
+		if _, err := a.requireAdminCredentials(w, req); err == nil {
+			if !strings.HasPrefix(req.URL.Path, "/admin") {
+				// TODO: we check if the admin JWT is still present for backward compatibility
+				// skip captcha validation if authorization header contains an admin role and it's not an admin route
+				return ctx, nil
+			}
+		}
+	} else {
 		return ctx, nil
 	}
-	if shouldIgnore := isIgnoreCaptchaRoute(req); shouldIgnore {
+	if shouldEnforce := a.shouldEnforceCaptchaRoutes(req, config); !shouldEnforce {
 		return ctx, nil
 	}
 	if config.Security.Captcha.Provider != "hcaptcha" {
@@ -168,10 +200,15 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 	return ctx, nil
 }
 
-func isIgnoreCaptchaRoute(req *http.Request) bool {
+func (a *API) shouldEnforceCaptchaRoutes(req *http.Request, config *conf.GlobalConfiguration) bool {
 	// captcha shouldn't be enabled on requests to refresh the token
 	if req.URL.Path == "/token" && req.FormValue("grant_type") == "refresh_token" {
-		return true
+		return false
+	}
+	for _, route := range config.Security.Captcha.Routes {
+		if req.URL.Path == route {
+			return true
+		}
 	}
 	return false
 }
