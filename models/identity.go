@@ -26,6 +26,163 @@ func (Identity) TableName() string {
 	return tableName
 }
 
+// GetAccountLinkingDomain returns a string that describes the account linking
+// domain. An account linking domain describes a set of Identity entities that
+// _should_ generally fall under the same User entity. It's just a runtime
+// string, and is not typically persisted in the database. This value can vary
+// across time.
+func GetAccountLinkingDomain(provider string) string {
+	if strings.HasPrefix(provider, "sso:") {
+		// when the provider ID is a SSO provider, then the linking
+		// domain is the provider itself i.e. there can only be one
+		// user + identity per identity provider
+		return provider
+	}
+
+	// otherwise, the linking domain is the default linking domain that
+	// links all accounts
+	return "default"
+}
+
+type AccountLinkingDecision = int
+
+const (
+	AccountExists AccountLinkingDecision = iota
+	CreateAccount
+	LinkAccount
+	MultipleAccounts
+)
+
+type AccountLinkingResult struct {
+	Decision AccountLinkingDecision
+
+	User       *User
+	Identities []*Identity
+
+	LinkingDomain string
+}
+
+// DetermineAccountLinking uses the provided data and database state to compute a decision on whether:
+// - A new User should be created (CreateAccount)
+// - A new Identity should be created (LinkAccount) with a UserID pointing to an existing user account
+// - Nothing should be done (AccountExists)
+// - It's not possible to decide due to data inconsistency (MultipleAccounts) and the caller should decide
+//
+// Errors signal failure in processing only, like database access errors.
+func DetermineAccountLinking(tx *storage.Connection, provider, sub, email, phone string) (AccountLinkingResult, error) {
+	var similarIdentities []*Identity
+
+	if terr := tx.Q().Eager().Where("provider = ? and id = ?", provider, sub).All(&similarIdentities); terr != nil {
+		return AccountLinkingResult{}, terr
+	}
+
+	if len(similarIdentities) == 1 {
+		// identity and user already exist
+		identity := similarIdentities[0]
+
+		var user *User
+		if terr := tx.Q().Eager().Where("id = ?", identity.UserID).First(&user); terr != nil {
+			return AccountLinkingResult{}, terr
+		}
+
+		return AccountLinkingResult{
+			Decision:      AccountExists,
+			User:          user,
+			Identities:    similarIdentities,
+			LinkingDomain: GetAccountLinkingDomain(provider),
+		}, nil
+	}
+
+	// identity and user not immediately identifiable, look for similar identities based on email or phone
+
+	if email != "" {
+		var emailIdentities []*Identity
+
+		if terr := tx.Q().Eager().Where("email = ?", strings.ToLower(email)).All(&emailIdentities); terr != nil {
+			return AccountLinkingResult{}, terr
+		}
+
+		similarIdentities = append(similarIdentities, emailIdentities...)
+	}
+
+	if phone != "" {
+		var phoneIdentities []*Identity
+
+		if terr := tx.Q().Eager().Where("phone = ?", phone).All(&phoneIdentities); terr != nil {
+			return AccountLinkingResult{}, terr
+		}
+
+		similarIdentities = append(similarIdentities, phoneIdentities...)
+	}
+
+	if len(similarIdentities) == 0 {
+		// there are no similar identities, clearly we have to create a new account
+
+		return AccountLinkingResult{
+			Decision:      CreateAccount,
+			LinkingDomain: GetAccountLinkingDomain(provider),
+		}, nil
+	}
+
+	// there are some similar identities, we now need to proceed in
+	// identifying whether this supposed new identity should be assigned to
+	// an existing user or to create a new user, according to the automatic
+	// linking rules
+
+	// this is the linking domain for the new identity
+	linkingDomain := GetAccountLinkingDomain(provider)
+
+	var linkingIdentities []*Identity
+
+	// now let's see if there are any existing and similar identities in
+	// the same linking domain
+	for _, identity := range similarIdentities {
+		if GetAccountLinkingDomain(identity.Provider) == linkingDomain {
+			linkingIdentities = append(linkingIdentities, identity)
+		}
+	}
+
+	if len(linkingIdentities) == 0 {
+		// there are no identities in the linking domain, we have to
+		// create a new identity and new user
+		return AccountLinkingResult{
+			Decision:      CreateAccount,
+			LinkingDomain: linkingDomain,
+		}, nil
+	}
+
+	// there is at least one identity in the linking domain let's do a
+	// sanity check to see if all of the identities in the domain share the
+	// same user ID
+
+	for _, identity := range linkingIdentities {
+		if identity.UserID != linkingIdentities[0].UserID {
+			// ok this linking domain has more than one user account
+			// caller should decide what to do
+
+			return AccountLinkingResult{
+				Decision:   MultipleAccounts,
+				Identities: linkingIdentities,
+			}, nil
+		}
+	}
+
+	// there's only one user ID in this linking domain, we can go on and
+	// create a new identity and link it to the existing account
+
+	var user *User
+	if terr := tx.Q().Eager().Where("id = ?", linkingIdentities[0].UserID).First(&user); terr != nil {
+		return AccountLinkingResult{}, terr
+	}
+
+	return AccountLinkingResult{
+		Decision:      LinkAccount,
+		User:          user,
+		Identities:    linkingIdentities,
+		LinkingDomain: linkingDomain,
+	}, nil
+}
+
 // NewIdentity returns an identity associated to the user's id.
 func NewIdentity(user *User, provider string, identityData map[string]interface{}) (*Identity, error) {
 	id, ok := identityData["sub"]
