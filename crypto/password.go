@@ -84,13 +84,13 @@ func CompareHashAndPassword(ctx context.Context, hash, password string) error {
 // password, using PasswordHashCost. Context can be used to cancel the hashing
 // if the algorithm supports it.
 func GenerateFromPassword(ctx context.Context, password string) (string, error) {
-	hashCost := bcrypt.DefaultCost
+        var hashCost int
 
 	switch PasswordHashCost {
 	case QuickHashCost:
 		hashCost = bcrypt.MinCost
 
-	case DefaultHashCost:
+        default:
 		hashCost = bcrypt.DefaultCost
 	}
 
