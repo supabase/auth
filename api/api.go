@@ -156,7 +156,12 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		if api.config.SAML.Enabled {
 			r.Route("/sso", func(r *router) {
-				r.Post("/", api.SingleSignOn)
+				r.With(api.limitHandler(
+					// Allow requests at the specified rate per 5 minutes.
+					tollbooth.NewLimiter(api.config.RateLimitSso/(60*5), &limiter.ExpirableOptions{
+						DefaultExpirationTTL: time.Hour,
+					}).SetBurst(30),
+				)).With(api.verifyCaptcha).Post("/", api.SingleSignOn)
 
 				r.Route("/saml", func(r *router) {
 					r.Get("/metadata", api.SAMLMetadata)

@@ -522,12 +522,16 @@ func (ts *SSOTestSuite) TestSingleSignOn() {
 		Request map[string]interface{}
 	}{
 		{
+			// creates a SAML provider (EXAMPLE-A)
+			// does not have a domain mapping
 			Request: map[string]interface{}{
 				"type":         "saml",
 				"metadata_xml": validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-A"),
 			},
 		},
 		{
+			// creates a SAML provider (EXAMPLE-B)
+			// does have a domain mapping on example.com
 			Request: map[string]interface{}{
 				"type": "saml",
 				"domains": []string{
@@ -566,6 +570,8 @@ func (ts *SSOTestSuite) TestSingleSignOn() {
 		URL     string
 	}{
 		{
+			// call /sso with provider_id (EXAMPLE-A)
+			// should be successful and redirect to the EXAMPLE-A SSO URL
 			Request: map[string]interface{}{
 				"provider_id": providers[0].ID,
 			},
@@ -573,6 +579,8 @@ func (ts *SSOTestSuite) TestSingleSignOn() {
 			URL:  "https://accounts.google.com/o/saml2?idpid=EXAMPLE-A",
 		},
 		{
+			// call /sso with domain=example.com (provider=EXAMPLE-B)
+			// should be successful and redirect to the EXAMPLE-B SSO URL
 			Request: map[string]interface{}{
 				"domain": "example.com",
 			},
@@ -580,12 +588,16 @@ func (ts *SSOTestSuite) TestSingleSignOn() {
 			URL:  "https://accounts.google.com/o/saml2?idpid=EXAMPLE-B",
 		},
 		{
+			// call /sso with domain=example.org (no such provider)
+			// should be unsuccessful with 404
 			Request: map[string]interface{}{
 				"domain": "example.org",
 			},
 			Code: http.StatusNotFound,
 		},
 		{
+			// call /sso with a provider_id=<random-uuid> (no such provider)
+			// should be unsuccessful with 404
 			Request: map[string]interface{}{
 				"provider_id": "14d906bf-9bd5-4734-b7d1-3904e240610e",
 			},

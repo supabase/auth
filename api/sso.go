@@ -17,14 +17,17 @@ type SingleSignOnParams struct {
 	RedirectTo string    `json:"redirect_to"`
 }
 
-func (p *SingleSignOnParams) validate() error {
-	if p.ProviderID == uuid.Nil && p.Domain == "" {
-		return badRequestError("Only provider_id or domain supported")
-	} else if p.ProviderID != uuid.Nil && p.Domain != "" {
-		return badRequestError("A provider_id or domain needs to be provided")
+func (p *SingleSignOnParams) validate() (bool, error) {
+	hasProviderID := p.ProviderID != uuid.Nil
+	hasDomain := p.Domain != ""
+
+	if hasProviderID && hasDomain {
+		return hasProviderID, badRequestError("Only one of provider_id or domain supported")
+	} else if !hasProviderID && !hasDomain {
+		return hasProviderID, badRequestError("A provider_id or domain needs to be provided")
 	}
 
-	return nil
+	return hasProviderID, nil
 }
 
 // SingleSignOn handles the single-sign-on flow for a provided SSO domain or provider.
@@ -43,31 +46,28 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Unable to parse request body as JSON").WithInternalError(err)
 	}
 
-	if err := params.validate(); err != nil {
+	hasProviderID := false
+
+	if hasProviderID, err = params.validate(); err != nil {
 		return err
 	}
 
 	var ssoProvider *models.SSOProvider
 
-	if params.ProviderID != uuid.Nil {
+	if hasProviderID {
 		ssoProvider, err = models.FindSSOProviderByID(db, params.ProviderID)
 		if models.IsNotFoundError(err) {
 			return notFoundError("No such SSO provider")
 		} else if err != nil {
 			return internalServerError("Unable to find SSO provider by ID").WithInternalError(err)
 		}
-	} else if params.Domain != "" {
+	} else {
 		ssoProvider, err = models.FindSSOProviderByDomain(db, params.Domain)
 		if models.IsNotFoundError(err) {
 			return notFoundError("No SSO provider assigned for this domain")
 		} else if err != nil {
 			return internalServerError("Unable to find SSO provider by domain").WithInternalError(err)
 		}
-	}
-
-	if ssoProvider == nil {
-		// impossible condition since #validate() should have handled this case
-		return internalServerError("Unable to find SSO provider")
 	}
 
 	entityDescriptor, err := ssoProvider.SAMLProvider.EntityDescriptor()
