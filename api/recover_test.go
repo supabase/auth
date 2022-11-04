@@ -63,6 +63,7 @@ func (ts *RecoverTestSuite) SetupTest() {
 		EmailVerified: true,
 		ProviderId:    "oauth-sub",
 	}).ToMap()
+	require.NoError(ts.T(), err)
 
 	oauthIdentity, err := ts.API.createNewIdentity(ts.API.db, u, "email", oauthClaims)
 	require.NoError(ts.T(), err, "Error creating test identity for test user model")
