@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	jwt "github.com/golang-jwt/jwt"
@@ -512,6 +513,140 @@ func (ts *SSOTestSuite) TestAdminDeleteSSOProvider() {
 		ts.API.handler.ServeHTTP(w, req)
 
 		require.Equal(ts.T(), http.StatusNotFound, w.Code)
+	}
+}
+
+func (ts *SSOTestSuite) TestSingleSignOn() {
+	providers := []struct {
+		ID      string
+		Request map[string]interface{}
+	}{
+		{
+			// creates a SAML provider (EXAMPLE-A)
+			// does not have a domain mapping
+			Request: map[string]interface{}{
+				"type":         "saml",
+				"metadata_xml": validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-A"),
+			},
+		},
+		{
+			// creates a SAML provider (EXAMPLE-B)
+			// does have a domain mapping on example.com
+			Request: map[string]interface{}{
+				"type": "saml",
+				"domains": []string{
+					"example.com",
+				},
+				"metadata_xml": validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-B"),
+			},
+		},
+	}
+
+	for i, example := range providers {
+		body, err := json.Marshal(example.Request)
+		require.NoError(ts.T(), err)
+
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/admin/sso/providers", bytes.NewBuffer(body))
+		req.Header.Set("Authorization", "Bearer "+ts.AdminJWT)
+		w := httptest.NewRecorder()
+
+		ts.API.handler.ServeHTTP(w, req)
+
+		response, err := io.ReadAll(w.Body)
+		require.NoError(ts.T(), err)
+
+		var payload struct {
+			ID string `json:"id"`
+		}
+
+		require.NoError(ts.T(), json.Unmarshal(response, &payload))
+
+		providers[i].ID = payload.ID
+	}
+
+	examples := []struct {
+		Code    int
+		Request map[string]interface{}
+		URL     string
+	}{
+		{
+			// call /sso with provider_id (EXAMPLE-A)
+			// should be successful and redirect to the EXAMPLE-A SSO URL
+			Request: map[string]interface{}{
+				"provider_id": providers[0].ID,
+			},
+			Code: http.StatusSeeOther,
+			URL:  "https://accounts.google.com/o/saml2?idpid=EXAMPLE-A",
+		},
+		{
+			// call /sso with domain=example.com (provider=EXAMPLE-B)
+			// should be successful and redirect to the EXAMPLE-B SSO URL
+			Request: map[string]interface{}{
+				"domain": "example.com",
+			},
+			Code: http.StatusSeeOther,
+			URL:  "https://accounts.google.com/o/saml2?idpid=EXAMPLE-B",
+		},
+		{
+			// call /sso with domain=example.org (no such provider)
+			// should be unsuccessful with 404
+			Request: map[string]interface{}{
+				"domain": "example.org",
+			},
+			Code: http.StatusNotFound,
+		},
+		{
+			// call /sso with a provider_id=<random-uuid> (no such provider)
+			// should be unsuccessful with 404
+			Request: map[string]interface{}{
+				"provider_id": "14d906bf-9bd5-4734-b7d1-3904e240610e",
+			},
+			Code: http.StatusNotFound,
+		},
+	}
+
+	for _, example := range examples {
+		body, err := json.Marshal(example.Request)
+		require.NoError(ts.T(), err)
+
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/sso", bytes.NewBuffer(body))
+		// no authorization header intentional, this is a login endpoint
+		w := httptest.NewRecorder()
+
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), w.Code, example.Code)
+
+		if example.Code != http.StatusSeeOther {
+			continue
+		}
+
+		locationURL, err := url.ParseRequestURI(w.Header().Get("Location"))
+
+		require.NoError(ts.T(), err)
+
+		locationQuery, err := url.ParseQuery(locationURL.RawQuery)
+
+		require.NoError(ts.T(), err)
+
+		samlQueryParams := []string{
+			"SAMLRequest",
+			"RelayState",
+			"SigAlg",
+			"Signature",
+		}
+
+		for _, param := range samlQueryParams {
+			require.True(ts.T(), locationQuery.Has(param))
+		}
+
+		for _, param := range samlQueryParams {
+			locationQuery.Del(param)
+		}
+
+		locationURL.RawQuery = locationQuery.Encode()
+
+		require.Equal(ts.T(), locationURL.String(), example.URL)
 	}
 }
 
