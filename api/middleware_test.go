@@ -115,33 +115,14 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 		expectedMsg  string
 	}{
 		{
-			"Unsupported provider",
-			&conf.CaptchaConfiguration{
-				Enabled:  true,
-				Provider: "test",
-			},
-			http.StatusInternalServerError,
-			"server misconfigured",
-		},
-		{
-			"Missing secret",
-			&conf.CaptchaConfiguration{
-				Enabled:  true,
-				Provider: "hcaptcha",
-				Secret:   "",
-			},
-			http.StatusInternalServerError,
-			"server misconfigured",
-		},
-		{
 			"Captcha validation failed",
 			&conf.CaptchaConfiguration{
 				Enabled:  true,
 				Provider: "hcaptcha",
 				Secret:   "test",
 			},
-			http.StatusInternalServerError,
-			"request validation failure",
+			http.StatusBadRequest,
+			"hCaptcha protection: request disallowed (not-using-dummy-secret)",
 		},
 	}
 	for _, c := range cases {

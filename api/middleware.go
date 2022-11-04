@@ -9,7 +9,6 @@ import (
 
 	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/security"
-	"github.com/sirupsen/logrus"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
@@ -139,6 +138,7 @@ func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (co
 func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	config := a.config
+
 	if !config.Security.Captcha.Enabled {
 		return ctx, nil
 	}
@@ -149,28 +149,17 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 	if shouldIgnore := isIgnoreCaptchaRoute(req); shouldIgnore {
 		return ctx, nil
 	}
-	if config.Security.Captcha.Provider != "hcaptcha" {
-		logrus.WithField("provider", config.Security.Captcha.Provider).Warn("Unsupported captcha provider")
-		return nil, internalServerError("server misconfigured")
-	}
-	secret := strings.TrimSpace(config.Security.Captcha.Secret)
-	if secret == "" {
-		return nil, internalServerError("server misconfigured")
+
+	verificationResult, err := security.VerifyRequest(req, strings.TrimSpace(config.Security.Captcha.Secret))
+	if err != nil {
+		return nil, internalServerError("hCaptcha verification process failed").WithInternalError(err)
 	}
 
-	verificationResult, err := security.VerifyRequest(req, secret)
-	if err != nil {
-		logrus.WithField("err", err).Infof("failed to validate result")
-		return nil, internalServerError("request validation failure")
+	if !verificationResult.Success {
+		return nil, badRequestError("hCaptcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
+
 	}
-	if verificationResult == security.VerificationProcessFailure {
-		return nil, internalServerError("request validation failure")
-	} else if verificationResult == security.UserRequestFailed {
-		return nil, badRequestError("request disallowed")
-	}
-	if verificationResult != security.SuccessfullyVerified {
-		return nil, internalServerError("")
-	}
+
 	return ctx, nil
 }
 

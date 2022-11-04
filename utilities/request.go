@@ -1,6 +1,8 @@
 package utilities
 
 import (
+	"bytes"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -32,4 +34,23 @@ func GetIPAddress(r *http.Request) string {
 	}
 
 	return ip
+}
+
+// GetBodyBytes reads the whole request body properly into a byte array.
+func GetBodyBytes(req *http.Request) ([]byte, error) {
+	if req.Body == nil || req.Body == http.NoBody {
+		return nil, nil
+	}
+
+	originalBody := req.Body
+	defer originalBody.Close()
+
+	buf, err := io.ReadAll(originalBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Body = io.NopCloser(bytes.NewReader(buf))
+
+	return buf, nil
 }
