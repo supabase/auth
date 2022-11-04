@@ -45,6 +45,14 @@ func (ts *VerifyTestSuite) SetupTest() {
 	u, err := models.NewUser("12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+
+	// Create corresponding identity
+	i, err := ts.API.createNewIdentity(ts.API.db, u, "email", map[string]interface{}{
+		"sub":   u.ID.String(),
+		"email": u.GetEmail(),
+	})
+	require.NoError(ts.T(), err, "Error creating test identity for test user model")
+	require.NotNil(ts.T(), i)
 }
 
 func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
