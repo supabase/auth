@@ -120,7 +120,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			}).SetBurst(30),
 		)).Route("/verify", func(r *router) {
 			r.Get("/", api.Verify)
-			r.With(api.verifyCaptcha).Post("/", api.Verify)
+			r.Post("/", api.Verify)
 		})
 
 		r.With(api.requireAuthentication).Post("/logout", api.Logout)
