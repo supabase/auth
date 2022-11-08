@@ -11,4 +11,4 @@ docker run --name gotrue_postgresql \
 	-e POSTGRES_DB=postgres \
 	--volume postgres_data:/var/lib/postgresql/data \
 	--volume "$(pwd)"/hack/init_postgres.sql:/docker-entrypoint-initdb.d/init.sql \
-	-d postgres:13
+	-d postgres:14
