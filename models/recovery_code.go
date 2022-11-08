@@ -93,9 +93,13 @@ func GenerateBatchOfRecoveryCodes(tx *storage.Connection, user *User) ([]*Recove
 
 	for i := 0; i <= NumRecoveryCodes; i++ {
 		rc, err := NewRecoveryCode(user, crypto.SecureToken(RecoveryCodeLength))
+		if err != nil {
+			return nil, err
+		}
 		if err = tx.Create(rc); err != nil {
 			return nil, errors.Wrap(err, "error creating recovery code")
 		}
+
 		recoveryCodes = append(recoveryCodes, rc)
 	}
 	return recoveryCodes, nil

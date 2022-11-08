@@ -39,6 +39,7 @@ func TestRecoveryCode(t *testing.T) {
 func (ts *RecoveryCodeTestSuite) TestFindValidRecoveryCodesByUser() {
 	var expectedRecoveryCodes []string
 	user, err := NewUser("", "", "", "", nil)
+	require.NoError(ts.T(), err)
 	err = ts.db.Create(user)
 	require.NoError(ts.T(), err)
 	for i := 0; i <= NumRecoveryCodes; i++ {
@@ -65,7 +66,9 @@ func (ts *RecoveryCodeTestSuite) createRecoveryCode(u *User) *RecoveryCode {
 // Create Recovery Code
 func (ts *RecoveryCodeTestSuite) TestConsumedRecoveryCodesAreNotValid() {
 	user, err := NewUser("", "", "", "", nil)
+	require.NoError(ts.T(), err)
 	err = ts.db.Create(user)
+	require.NoError(ts.T(), err)
 	rc := ts.createRecoveryCode(user)
 	isRCValid, err := IsRecoveryCodeValid(ts.db, user, rc.RecoveryCode)
 	require.NoError(ts.T(), err)
@@ -73,5 +76,6 @@ func (ts *RecoveryCodeTestSuite) TestConsumedRecoveryCodesAreNotValid() {
 	err = rc.Consume(ts.db)
 	require.NoError(ts.T(), err)
 	isRCValid, err = IsRecoveryCodeValid(ts.db, user, rc.RecoveryCode)
+	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), false, isRCValid)
 }
