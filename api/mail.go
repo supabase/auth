@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/structs"
+	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/mailer"
@@ -115,7 +117,10 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return terr
 				}
-				identity, terr := a.createNewIdentity(tx, user, "email", map[string]interface{}{"sub": user.ID.String()})
+				identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+					Subject: user.ID.String(),
+					Email:   user.GetEmail(),
+				}))
 				if terr != nil {
 					return terr
 				}
@@ -157,7 +162,10 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return terr
 				}
-				identity, terr := a.createNewIdentity(tx, user, "email", map[string]interface{}{"sub": user.ID.String()})
+				identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+					Subject: user.ID.String(),
+					Email:   user.GetEmail(),
+				}))
 				if terr != nil {
 					return terr
 				}
