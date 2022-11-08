@@ -328,10 +328,24 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return badRequestError("%v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
+
+	var method models.AuthenticationMethod
 	if factor.FactorType == models.Recovery {
-		// Look for recovery codes associated with factor and consume it
-		// TODO: Mark the login as a recovery code login
+		method = models.RecoveryCodeSignIn
+		// Look for the associated codes for a factor and consume the one that matches
+		// if rc_factor == unverified:
+		//     recovery_code.Consume() -> not really needed but depends on UX
+		//     factor.UpdateStatus(verifiedState)
+		//     return Empty response
+		// else if rc_factor == verified:
+		//     recovery_code.consume()
+		//     a, terr = update_session_and_claims()
+		//     invalidate_session()
+		//     return token_response
+		//
+
 	} else if factor.FactorType == models.TOTP {
+		method = models.TOTPSignIn
 		if valid := totp.Validate(params.Code, factor.Secret); !valid {
 			return badRequestError("Invalid TOTP code entered")
 		}
@@ -358,7 +372,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.TOTPSignIn, models.GrantParams{
+		token, terr = a.updateMFASessionAndClaims(r, tx, user, method, models.GrantParams{
 			FactorID: &factor.ID,
 		})
 		if terr != nil {

@@ -26,6 +26,7 @@ const (
 	OTP
 	TOTPSignIn
 	SSOSAML
+	RecoveryCodeSignIn
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -40,6 +41,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "totp"
 	case SSOSAML:
 		return "sso/saml"
+	case RecoveryCodeSignIn:
+		return "Recovery"
 	}
 	return ""
 }
