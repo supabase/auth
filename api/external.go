@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/api/provider"
@@ -213,10 +214,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	var emailData provider.Email
 	var identityData map[string]interface{}
 	if userData.Metadata != nil {
-		identityData, terr = userData.Metadata.ToMap()
-		if terr != nil {
-			return nil, terr
-		}
+		identityData = structs.Map(userData.Metadata)
 	}
 
 	var identity *models.Identity
@@ -373,10 +371,7 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 
 	var identityData map[string]interface{}
 	if userData.Metadata != nil {
-		identityData, err = userData.Metadata.ToMap()
-		if err != nil {
-			return nil, internalServerError("Error serialising user metadata").WithInternalError(err)
-		}
+		identityData = structs.Map(userData.Metadata)
 	}
 	if _, err := a.createNewIdentity(tx, user, providerType, identityData); err != nil {
 		return nil, err

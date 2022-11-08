@@ -65,20 +65,6 @@ type Claims struct {
 	UserNameKey string `json:"user_name,omitempty"`
 }
 
-// ToMap converts the Claims struct to a map[string]interface{}
-func (c *Claims) ToMap() (map[string]interface{}, error) {
-	m := make(map[string]interface{})
-	cBytes, err := json.Marshal(c)
-	if err != nil {
-		return nil, err
-	}
-	err = json.Unmarshal(cBytes, &m)
-	if err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
 // Email is a struct that provides information on whether an email is verified or is the primary email address
 type Email struct {
 	Email    string
