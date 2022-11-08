@@ -61,7 +61,7 @@ type Session struct {
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
 	FactorID  *uuid.UUID `json:"factor_id" db:"factor_id"`
 	AMRClaims []AMRClaim `json:"amr,omitempty" has_many:"amr_claims"`
-	AAL       string     `json:"aal" db:"aal"`
+	AAL       *string    `json:"aal" db:"aal"`
 }
 
 func (Session) TableName() string {
@@ -75,11 +75,13 @@ func NewSession(user *User, factorID *uuid.UUID) (*Session, error) {
 		return nil, errors.Wrap(err, "Error generating unique session id")
 	}
 
+	defaultAAL := AAL1.String()
+
 	session := &Session{
 		ID:        id,
 		UserID:    user.ID,
 		FactorID:  factorID,
-		AAL:       AAL1.String(),
+		AAL:       &defaultAAL,
 		AMRClaims: []AMRClaim{},
 	}
 	return session, nil
@@ -160,17 +162,17 @@ func (s *Session) UpdateAssociatedFactor(tx *storage.Connection, factorID *uuid.
 }
 
 func (s *Session) UpdateAssociatedAAL(tx *storage.Connection, aal string) error {
-	s.AAL = aal
+	s.AAL = &aal
 	return tx.Update(s)
 }
 
 func (s *Session) CalculateAALAndAMR() (aal string, amr []AMREntry) {
 	amr, aal = []AMREntry{}, AAL1.String()
 	for _, claim := range s.AMRClaims {
-		if claim.AuthenticationMethod == TOTPSignIn.String() {
+		if *claim.AuthenticationMethod == TOTPSignIn.String() {
 			aal = AAL2.String()
 		}
-		amr = append(amr, AMREntry{Method: claim.AuthenticationMethod, Timestamp: claim.UpdatedAt.Unix()})
+		amr = append(amr, AMREntry{Method: claim.GetAuthenticationMethod(), Timestamp: claim.UpdatedAt.Unix()})
 	}
 
 	// makes sure that the AMR claims are always ordered most-recent first
@@ -186,4 +188,11 @@ func (s *Session) CalculateAALAndAMR() (aal string, amr []AMREntry) {
 	})
 
 	return aal, amr
+}
+
+func (s *Session) GetAAL() string {
+	if s.AAL == nil {
+		return ""
+	}
+	return *(s.AAL)
 }

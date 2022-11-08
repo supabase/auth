@@ -20,6 +20,8 @@ type SAMLConfiguration struct {
 	RSAPrivateKey *rsa.PrivateKey   `json:"-"`
 	RSAPublicKey  *rsa.PublicKey    `json:"-"`
 	Certificate   *x509.Certificate `json:"-"`
+
+	RateLimitAssertion float64 `default:"15" split_words:"true"`
 }
 
 func (c *SAMLConfiguration) Validate() error {

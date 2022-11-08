@@ -98,7 +98,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		r.Get("/authorize", api.ExternalProviderRedirect)
 
-		sharedLimiter := api.limitEmailSentHandler()
+		sharedLimiter := api.limitEmailOrPhoneSentHandler()
 		r.With(sharedLimiter).With(api.requireAdminCredentials).Post("/invite", api.Invite)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/signup", api.Signup)
 		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
@@ -154,6 +154,28 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			})
 		}
 
+		if api.config.SAML.Enabled {
+			r.Route("/sso", func(r *router) {
+				r.With(api.limitHandler(
+					// Allow requests at the specified rate per 5 minutes.
+					tollbooth.NewLimiter(api.config.RateLimitSso/(60*5), &limiter.ExpirableOptions{
+						DefaultExpirationTTL: time.Hour,
+					}).SetBurst(30),
+				)).With(api.verifyCaptcha).Post("/", api.SingleSignOn)
+
+				r.Route("/saml", func(r *router) {
+					r.Get("/metadata", api.SAMLMetadata)
+
+					r.With(api.limitHandler(
+						// Allow requests at the specified rate per 5 minutes.
+						tollbooth.NewLimiter(api.config.SAML.RateLimitAssertion/(60*5), &limiter.ExpirableOptions{
+							DefaultExpirationTTL: time.Hour,
+						}).SetBurst(30),
+					)).Post("/acs", api.SAMLACS)
+				})
+			})
+		}
+
 		r.Route("/admin", func(r *router) {
 			r.Use(api.requireAdminCredentials)
 
@@ -185,6 +207,23 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			})
 
 			r.Post("/generate_link", api.GenerateLink)
+
+			if api.config.SAML.Enabled {
+				r.Route("/sso", func(r *router) {
+					r.Route("/providers", func(r *router) {
+						r.Get("/", api.adminSSOProvidersList)
+						r.Post("/", api.adminSSOProvidersCreate)
+
+						r.Route("/{idp_id}", func(r *router) {
+							r.Use(api.loadSSOProvider)
+
+							r.Get("/", api.adminSSOProvidersGet)
+							r.Put("/", api.adminSSOProvidersUpdate)
+							r.Delete("/", api.adminSSOProvidersDelete)
+						})
+					})
+				})
+			}
 		})
 	})
 

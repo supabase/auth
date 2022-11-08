@@ -115,6 +115,11 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return terr
 				}
+				identity, terr := a.createNewIdentity(tx, user, "email", map[string]interface{}{"sub": user.ID.String()})
+				if terr != nil {
+					return terr
+				}
+				user.Identities = []models.Identity{*identity}
 			}
 			if terr = models.NewAuditLogEntry(r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
 				"user_id":    user.ID,
@@ -152,6 +157,11 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return terr
 				}
+				identity, terr := a.createNewIdentity(tx, user, "email", map[string]interface{}{"sub": user.ID.String()})
+				if terr != nil {
+					return terr
+				}
+				user.Identities = []models.Identity{*identity}
 			}
 			user.ConfirmationToken = hashedToken
 			user.ConfirmationSentAt = &now

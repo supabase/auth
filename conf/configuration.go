@@ -2,8 +2,10 @@ package conf
 
 import (
 	"errors"
+	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gobwas/glob"
@@ -96,6 +98,7 @@ type GlobalConfiguration struct {
 	RateLimitEmailSent    float64 `split_words:"true" default:"30"`
 	RateLimitVerify       float64 `split_words:"true" default:"30"`
 	RateLimitTokenRefresh float64 `split_words:"true" default:"30"`
+	RateLimitSso          float64 `split_words:"true" default:"30"`
 
 	SiteURL           string   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList      []string `json:"uri_allow_list" split_words:"true"`
@@ -219,11 +222,33 @@ type CaptchaConfiguration struct {
 	Secret   string `json:"provider_secret"`
 }
 
+func (c *CaptchaConfiguration) Validate() error {
+	if !c.Enabled {
+		return nil
+	}
+
+	if c.Provider != "hcaptcha" {
+		return fmt.Errorf("unsupported captcha provider: %s", c.Provider)
+	}
+
+	c.Secret = strings.TrimSpace(c.Secret)
+
+	if c.Secret == "" {
+		return errors.New("hcaptcha provider secret is empty")
+	}
+
+	return nil
+}
+
 type SecurityConfiguration struct {
 	Captcha                               CaptchaConfiguration `json:"captcha"`
 	RefreshTokenRotationEnabled           bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
 	RefreshTokenReuseInterval             int                  `json:"refresh_token_reuse_interval" split_words:"true"`
 	UpdatePasswordRequireReauthentication bool                 `json:"update_password_require_reauthentication" split_words:"true"`
+}
+
+func (c *SecurityConfiguration) Validate() error {
+	return c.Captcha.Validate()
 }
 
 func loadEnvironment(filename string) error {
@@ -393,6 +418,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Metrics,
 		&c.SMTP,
 		&c.SAML,
+		&c.Security,
 	}
 
 	for _, validatable := range validatables {
