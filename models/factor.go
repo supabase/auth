@@ -16,6 +16,7 @@ const (
 )
 
 const TOTP = "totp"
+const Recovery = "recovery_code"
 
 type AuthenticationMethod int
 

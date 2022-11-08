@@ -52,6 +52,11 @@ type ChallengeFactorResponse struct {
 type UnenrollFactorResponse struct {
 	ID uuid.UUID `json:"id"`
 }
+type EnrollRecoveryCodesResponse struct {
+	ID    uuid.UUID `json:"id"`
+	Type  string    `json:"type"`
+	Codes []string  `json:"recovery_codes"`
+}
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -70,13 +75,13 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	factorType := params.FactorType
-	if factorType == "recovery_code" {
+
+	if factorType != models.TOTP && factorType != models.Recovery {
+		return badRequestError("factor_type needs to be totp or recovery")
+	}
+	if factorType == models.Recovery {
 		return a.EnrollRecoveryCode(w, r)
 	}
-	if factorType != models.TOTP {
-		return badRequestError("factor_type needs to be totp")
-	}
-
 
 	if params.Issuer == "" {
 		u, err := url.ParseRequestURI(config.SiteURL)
@@ -162,25 +167,85 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 func (a *API) EnrollRecoveryCode(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
+	config := a.config
+	params := &EnrollFactorParams{}
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return internalServerError("Could not read body").WithInternalError(err)
+	}
+	if err := json.Unmarshal(body, params); err != nil {
+		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
+	}
+	// Read from DB for certainty
+	factors, err := models.FindFactorsByUser(a.db, user)
+	if err != nil {
+		return internalServerError("error validating number of factors in system").WithInternalError(err)
+	}
+
+	if len(factors) >= int(config.MFA.MaxEnrolledFactors) {
+		return forbiddenError("Enrolled factors exceed allowed limit, unenroll to continue")
+	}
+	numVerifiedFactors := 0
+	numRecoveryFactors := 0
+
+	// TODO: Remove this at v2
+	for _, factor := range factors {
+		if factor.Status == models.FactorStateVerified {
+			numVerifiedFactors += 1
+		}
+		if factor.FactorType == models.Recovery {
+			numRecoveryFactors += 1
+		}
+
+	}
+	if numVerifiedFactors >= 1 {
+		return forbiddenError("number of enrolled factors exceeds the allowed value, unenroll to continue")
+
+	}
+	if numRecoveryFactors >= 1 {
+		return forbiddenError("can only have one recovery factor, please unenroll recovery factor to continue")
+	}
+
+	factor, err := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, "")
+	if err != nil {
+		return internalServerError("database error creating factor").WithInternalError(err)
+	}
 	var codes []*models.RecoveryCode
 	terr := a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
+		if terr := tx.Create(factor); terr != nil {
+			return terr
+		}
+		// TODO: Associate recovery codes with factor
 		codes, terr = models.GenerateBatchOfRecoveryCodes(tx, user)
 		if terr != nil {
 			return terr
 		}
-		if terr := models.NewAuditLogEntry(r, tx, user, models.GenerateRecoveryCodesAction, r.RemoteAddr, nil); terr != nil {
+
+		if terr := models.NewAuditLogEntry(r, tx, user, models.GenerateRecoveryCodesAction, r.RemoteAddr, map[string]interface{}{
+			"factor_id": factor.ID,
+		}); terr != nil {
 			return terr
 		}
+
 		return nil
 
 	})
 	if terr != nil {
 		return internalServerError("error generating recovery codes").WithInternalError(terr)
 	}
-	return sendJSON(w, http.StatusOK, codes)
-}
+	var recoveryAsString []string
+	for _, recoveryCode := range codes {
+		recoveryAsString = append(recoveryAsString, recoveryCode.RecoveryCode)
+	}
 
+	// Associate recovery codes with a factor
+	return sendJSON(w, http.StatusOK, &EnrollRecoveryCodesResponse{
+		ID:    factor.ID,
+		Type:  models.Recovery,
+		Codes: recoveryAsString,
+	})
+}
 
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -263,9 +328,13 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return badRequestError("%v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
-
-	if valid := totp.Validate(params.Code, factor.Secret); !valid {
-		return badRequestError("Invalid TOTP code entered")
+	if factor.FactorType == models.Recovery {
+		// Look for recovery codes associated with factor and consume it
+		// TODO: Mark the login as a recovery code login
+	} else if factor.FactorType == models.TOTP {
+		if valid := totp.Validate(params.Code, factor.Secret); !valid {
+			return badRequestError("Invalid TOTP code entered")
+		}
 	}
 
 	var token *AccessTokenResponse
