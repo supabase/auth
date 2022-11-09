@@ -91,6 +91,7 @@ func (m *TemplateMailer) InviteMail(user *models.User, otp, referrerURL string) 
 		"ConfirmationURL": url,
 		"Email":           user.Email,
 		"Token":           otp,
+		"TokenHash":       user.ConfirmationToken,
 		"Data":            user.UserMetaData,
 	}
 
@@ -116,6 +117,7 @@ func (m *TemplateMailer) ConfirmationMail(user *models.User, otp, referrerURL st
 		"ConfirmationURL": url,
 		"Email":           user.Email,
 		"Token":           otp,
+		"TokenHash":       user.ConfirmationToken,
 		"Data":            user.UserMetaData,
 	}
 
@@ -189,13 +191,14 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 		if err != nil {
 			return err
 		}
-		go func(address, token, template string) {
+		go func(address, token, tokenHash, template string) {
 			data := map[string]interface{}{
 				"SiteURL":         m.Config.SiteURL,
 				"ConfirmationURL": url,
 				"Email":           user.GetEmail(),
 				"NewEmail":        user.EmailChange,
 				"Token":           token,
+				"TokenHash":       tokenHash,
 				"Data":            user.UserMetaData,
 			}
 			errors <- m.Mailer.Mail(
@@ -205,7 +208,7 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 				defaultEmailChangeMail,
 				data,
 			)
-		}(email.Address, email.Otp, email.Template)
+		}(email.Address, email.Otp, email.TokenHash, email.Template)
 	}
 
 	for i := 0; i < len(emails); i++ {
@@ -231,6 +234,7 @@ func (m *TemplateMailer) RecoveryMail(user *models.User, otp, referrerURL string
 		"ConfirmationURL": url,
 		"Email":           user.Email,
 		"Token":           otp,
+		"TokenHash":       user.RecoveryToken,
 		"Data":            user.UserMetaData,
 	}
 
@@ -256,7 +260,7 @@ func (m *TemplateMailer) MagicLinkMail(user *models.User, otp, referrerURL strin
 		"ConfirmationURL": url,
 		"Email":           user.Email,
 		"Token":           otp,
-		"HashedToken":     user.RecoveryToken,
+		"TokenHash":       user.RecoveryToken,
 		"Data":            user.UserMetaData,
 	}
 
