@@ -3,10 +3,12 @@ package conf
 import (
 	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/big"
+	"net"
 	"net/url"
 	"time"
 )
@@ -73,6 +75,12 @@ func (c *SAMLConfiguration) PopulateFields(externalURL string) error {
 		return fmt.Errorf("saml: unable to parse external URL for SAML, check API_EXTERNAL_URL: %w", err)
 	}
 
+	host := ""
+	host, _, err = net.SplitHostPort(parsedURL.Host)
+	if err != nil {
+		host = parsedURL.Host
+	}
+
 	// SAML does not care much about the contents of the certificate, it
 	// only uses it as a vessel for the public key; therefore we set these
 	// fixed values.
@@ -84,11 +92,14 @@ func (c *SAMLConfiguration) PopulateFields(externalURL string) error {
 		SerialNumber: big.NewInt(0),
 		IsCA:         false,
 		DNSNames: []string{
-			"_samlsp." + parsedURL.Host,
+			"_samlsp." + host,
 		},
 		KeyUsage:  x509.KeyUsageDigitalSignature,
 		NotBefore: time.UnixMilli(0).UTC(),
 		NotAfter:  time.UnixMilli(0).UTC().AddDate(200, 0, 0),
+		Subject: pkix.Name{
+			CommonName: "SAML 2.0 Certificate for " + host,
+		},
 	}
 
 	certDer, err := x509.CreateCertificate(nil, certTemplate, certTemplate, c.RSAPublicKey, c.RSAPrivateKey)
