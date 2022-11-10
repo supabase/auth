@@ -257,8 +257,9 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 		provider.SAMLProvider.MetadataURL = &params.MetadataURL
 	}
 
-	for _, domain := range params.Domains {
+	provider.SAMLProvider.AttributeMapping = params.AttributeMapping
 
+	for _, domain := range params.Domains {
 		existingProvider, err := models.FindSSOProviderByDomain(a.db, domain)
 		if err != nil && !models.IsNotFoundError(err) {
 			return err
@@ -381,6 +382,11 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 	modified = modified || len(createDomains) > 0
 
 	provider.SSODomains = updatedDomains
+
+	if !provider.SAMLProvider.AttributeMapping.Equal(&params.AttributeMapping) {
+		modified = true
+		provider.SAMLProvider.AttributeMapping = params.AttributeMapping
+	}
 
 	if modified {
 		if err := a.db.Transaction(func(tx *storage.Connection) error {

@@ -182,6 +182,20 @@ func (ts *SSOTestSuite) TestAdminCreateSSOProvider() {
 			},
 		},
 		{
+			StatusCode: http.StatusCreated,
+			Request: map[string]interface{}{
+				"type":         "saml",
+				"metadata_xml": validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-WITH-ATTRIBUTE-MAPPING"),
+				"attribute_mapping": map[string]interface{}{
+					"keys": map[string]interface{}{
+						"username": map[string]interface{}{
+							"name": "mail",
+						},
+					},
+				},
+			},
+		},
+		{
 			StatusCode: http.StatusBadRequest,
 			Request: map[string]interface{}{
 				"type":         "saml",
@@ -409,6 +423,19 @@ func (ts *SSOTestSuite) TestAdminUpdateSSOProvider() {
 				"domains": []string{
 					"example.com",
 					"example.org",
+				},
+			},
+		},
+		{
+			ID:     providers[1].ID,
+			Status: http.StatusOK,
+			Request: map[string]interface{}{
+				"attribute_mapping": map[string]interface{}{
+					"keys": map[string]interface{}{
+						"username": map[string]interface{}{
+							"name": "mail",
+						},
+					},
 				},
 			},
 		},
