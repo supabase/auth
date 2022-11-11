@@ -55,6 +55,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	user := getUser(ctx)
+	session := getSession(ctx)
 	log := observability.GetLogEntry(r)
 	log.Debugf("Checking params for token %v", params)
 
@@ -65,10 +66,12 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				return invalidPasswordLengthError(config)
 			}
 
+			isPasswordUpdated := false
 			if !config.Security.UpdatePasswordRequireReauthentication {
 				if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
 					return internalServerError("Error during password storage").WithInternalError(terr)
 				}
+				isPasswordUpdated = true
 			} else if params.Nonce == "" {
 				return unauthorizedError("Password update requires reauthentication.")
 			} else {
@@ -77,6 +80,23 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				}
 				if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
 					return internalServerError("Error during password storage").WithInternalError(terr)
+				}
+				isPasswordUpdated = true
+			}
+
+			if isPasswordUpdated {
+				if terr := models.NewAuditLogEntry(r, tx, user, models.UserUpdatePasswordAction, "", nil); terr != nil {
+					return terr
+				}
+				if session != nil {
+					if terr = models.LogoutAllExceptMe(tx, session.ID, user.ID); terr != nil {
+						return terr
+					}
+				} else {
+					// logout all sessions if session id is missing
+					if terr = models.Logout(tx, user.ID); terr != nil {
+						return terr
+					}
 				}
 			}
 		}

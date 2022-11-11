@@ -29,6 +29,7 @@ const (
 	UserReauthenticateAction        AuditAction = "user_reauthenticate_requested"
 	UserConfirmationRequestedAction AuditAction = "user_confirmation_requested"
 	UserRepeatedSignUpAction        AuditAction = "user_repeated_signup"
+	UserUpdatePasswordAction        AuditAction = "user_updated_password"
 	TokenRevokedAction              AuditAction = "token_revoked"
 	TokenRefreshedAction            AuditAction = "token_refreshed"
 	GenerateRecoveryCodesAction     AuditAction = "generate_recovery_codes"
@@ -63,6 +64,7 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	UserRecoveryDeniedAction:        user,
 	UserConfirmationRequestedAction: user,
 	UserRepeatedSignUpAction:        user,
+	UserUpdatePasswordAction:        user,
 	GenerateRecoveryCodesAction:     user,
 	EnrollFactorAction:              factor,
 	UnenrollFactorAction:            factor,
