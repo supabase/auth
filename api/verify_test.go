@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fatih/structs"
+	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/assert"
@@ -47,10 +49,10 @@ func (ts *VerifyTestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 
 	// Create corresponding identity
-	i, err := ts.API.createNewIdentity(ts.API.db, u, "email", map[string]interface{}{
-		"sub":   u.ID.String(),
-		"email": u.GetEmail(),
-	})
+	i, err := ts.API.createNewIdentity(ts.API.db, u, "email", structs.Map(provider.Claims{
+		Subject: u.ID.String(),
+		Email:   u.GetEmail(),
+	}))
 	require.NoError(ts.T(), err, "Error creating test identity for test user model")
 	require.NotNil(ts.T(), i)
 }

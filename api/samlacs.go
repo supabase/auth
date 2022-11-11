@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/crewjam/saml"
+	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/models"
@@ -197,10 +198,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	providerClaims.Email = email
 	providerClaims.EmailVerified = true
 
-	providerClaimsMap, err := providerClaims.ToMap()
-	if err != nil {
-		return internalServerError("Parsed provider claims could not be turned into a map").WithInternalError(err)
-	}
+	providerClaimsMap := structs.Map(providerClaims)
 
 	// remove all of the parsed claims, so that the rest can go into CustomClaims
 	for key := range providerClaimsMap {

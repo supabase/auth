@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
@@ -44,10 +45,10 @@ func (ts *RecoverTestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 
 	// Create corresponding identity
-	i, err := ts.API.createNewIdentity(ts.API.db, u, "email", map[string]interface{}{
-		"sub":   u.ID.String(),
-		"email": u.GetEmail(),
-	})
+	i, err := ts.API.createNewIdentity(ts.API.db, u, "email", structs.Map(provider.Claims{
+		Subject: u.ID.String(),
+		Email:   u.GetEmail(),
+	}))
 	require.NoError(ts.T(), err, "Error creating test identity for test user model")
 	require.NotNil(ts.T(), i)
 
@@ -57,13 +58,12 @@ func (ts *RecoverTestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.API.db.Create(oauthUser), "Error saving new test ")
 
 	// Create corresponding oauth identity
-	oauthClaims, err := (&provider.Claims{
+	oauthClaims := structs.Map(provider.Claims{
 		Subject:       "oauth-sub",
 		Email:         "testoauth@example.com",
 		EmailVerified: true,
 		ProviderId:    "oauth-sub",
-	}).ToMap()
-	require.NoError(ts.T(), err)
+	})
 
 	oauthIdentity, err := ts.API.createNewIdentity(ts.API.db, u, "email", oauthClaims)
 	require.NoError(ts.T(), err, "Error creating test identity for test user model")

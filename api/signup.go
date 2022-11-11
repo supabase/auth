@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
@@ -110,7 +112,10 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
-			identity, terr := a.createNewIdentity(tx, user, params.Provider, map[string]interface{}{"sub": user.ID.String()})
+			identity, terr := a.createNewIdentity(tx, user, params.Provider, structs.Map(provider.Claims{
+				Subject: user.ID.String(),
+				Email:   user.GetEmail(),
+			}))
 			if terr != nil {
 				return terr
 			}
