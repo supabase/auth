@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"net/url"
 	"reflect"
+	"time"
 
 	"github.com/XSAM/otelsql"
 	"github.com/gobuffalo/pop/v5"
@@ -54,11 +55,24 @@ func Dial(config *conf.GlobalConfiguration) (*Connection, error) {
 		}
 	}
 
+	options := make(map[string]string)
+
+	if config.DB.HealthCheckPeriod != time.Duration(0) {
+		options["pool_health_check_period"] = config.DB.HealthCheckPeriod.String()
+	}
+
+	if config.DB.ConnMaxIdleTime != time.Duration(0) {
+		options["pool_max_conn_idle_time"] = config.DB.ConnMaxIdleTime.String()
+	}
+
 	db, err := pop.NewConnection(&pop.ConnectionDetails{
-		Dialect: config.DB.Driver,
-		Driver:  driver,
-		URL:     config.DB.URL,
-		Pool:    config.DB.MaxPoolSize,
+		Dialect:         config.DB.Driver,
+		Driver:          driver,
+		URL:             config.DB.URL,
+		Pool:            config.DB.MaxPoolSize,
+		IdlePool:        config.DB.MaxIdlePoolSize,
+		ConnMaxLifetime: config.DB.ConnMaxLifetime,
+		Options:         options,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "opening database connection")
