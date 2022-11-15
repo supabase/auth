@@ -276,16 +276,28 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return oauthError("invalid_request", "refresh_token required")
 	}
 
-	user, token, err := models.FindUserWithRefreshToken(db, params.RefreshToken)
+	user, token, session, err := models.FindUserWithRefreshToken(db, params.RefreshToken)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return oauthError("invalid_grant", "Invalid Refresh Token")
+			return oauthError("invalid_grant", "Invalid Refresh Token: Refresh Token Not Found")
 		}
 		return internalServerError(err.Error())
 	}
 
 	if user.IsBanned() {
-		return oauthError("invalid_grant", "Invalid Refresh Token")
+		return oauthError("invalid_grant", "Invalid Refresh Token: User Banned")
+	}
+
+	if session != nil {
+		var notAfter time.Time
+
+		if session.NotAfter != nil {
+			notAfter = *session.NotAfter
+		}
+
+		if !notAfter.IsZero() && time.Now().UTC().After(notAfter) {
+			return oauthError("invalid_grant", "Invalid Refresh Token: Session Expired")
+		}
 	}
 
 	var newToken *models.RefreshToken
@@ -555,7 +567,7 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 	sid := ""
 	if sessionId != nil {
 		sid = sessionId.String()
-		session, terr := models.FindSessionById(tx, *sessionId)
+		session, terr := models.FindSessionByID(tx, *sessionId)
 		if terr != nil {
 			return "", terr
 		}
@@ -599,7 +611,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		session, terr := models.FindSessionById(tx, *refreshToken.SessionId)
+		session, terr := models.FindSessionByID(tx, *refreshToken.SessionId)
 		if terr != nil {
 			return terr
 		}
@@ -639,7 +651,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		return nil, internalServerError("Cannot read SessionId claim as UUID").WithInternalError(err)
 	}
 	err = tx.Transaction(func(tx *storage.Connection) error {
-		session, terr := models.FindSessionById(tx, sessionId)
+		session, terr := models.FindSessionByID(tx, sessionId)
 		if terr != nil {
 			return terr
 		}
@@ -647,7 +659,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		if terr != nil {
 			return terr
 		}
-		session, terr = models.FindSessionById(tx, sessionId)
+		session, terr = models.FindSessionByID(tx, sessionId)
 		if terr != nil {
 			return terr
 		}

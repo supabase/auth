@@ -22,6 +22,7 @@ type TokenTestSuite struct {
 	Config *conf.GlobalConfiguration
 
 	RefreshToken *models.RefreshToken
+	User         *models.User
 }
 
 func TestToken(t *testing.T) {
@@ -50,6 +51,7 @@ func (ts *TokenTestSuite) SetupTest() {
 	u.BannedUntil = nil
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 
+	ts.User = u
 	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
 	require.NoError(ts.T(), err, "Error creating refresh token")
 }
@@ -250,4 +252,50 @@ func (ts *TokenTestSuite) createBannedUser() *models.User {
 	require.NoError(ts.T(), err, "Error creating refresh token")
 
 	return u
+}
+
+func (ts *TokenTestSuite) TestTokenRefreshWithExpiredSession() {
+	var err error
+
+	now := time.Now().UTC().Add(-1 * time.Second)
+
+	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, ts.User, models.GrantParams{
+		SessionNotAfter: &now,
+	})
+	require.NoError(ts.T(), err, "Error creating refresh token")
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"refresh_token": ts.RefreshToken.Token,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+}
+
+func (ts *TokenTestSuite) TestTokenRefreshWithUnexpiredSession() {
+	var err error
+
+	now := time.Now().UTC().Add(1 * time.Second)
+
+	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, ts.User, models.GrantParams{
+		SessionNotAfter: &now,
+	})
+	require.NoError(ts.T(), err, "Error creating refresh token")
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"refresh_token": ts.RefreshToken.Token,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
 }

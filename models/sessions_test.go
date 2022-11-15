@@ -1,7 +1,6 @@
 package models
 
 import (
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
@@ -44,8 +43,10 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	totalDistinctClaims := 2
 	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	session, err := CreateSession(ts.db, u, &uuid.Nil)
+	session, err := NewSession()
 	require.NoError(ts.T(), err)
+	session.UserID = u.ID
+	require.NoError(ts.T(), ts.db.Create(session))
 
 	err = AddClaimToSession(ts.db, session, PasswordGrant)
 	require.NoError(ts.T(), err)
@@ -53,7 +54,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	firstClaimAddedTime := time.Now()
 	err = AddClaimToSession(ts.db, session, TOTPSignIn)
 	require.NoError(ts.T(), err)
-	session, err = FindSessionById(ts.db, session.ID)
+	session, err = FindSessionByID(ts.db, session.ID)
 	require.NoError(ts.T(), err)
 
 	aal, amr := session.CalculateAALAndAMR()
@@ -63,7 +64,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	err = AddClaimToSession(ts.db, session, TOTPSignIn)
 	require.NoError(ts.T(), err)
 
-	session, err = FindSessionById(ts.db, session.ID)
+	session, err = FindSessionByID(ts.db, session.ID)
 	require.NoError(ts.T(), err)
 
 	aal, amr = session.CalculateAALAndAMR()

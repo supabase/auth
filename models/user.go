@@ -354,21 +354,38 @@ func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, er
 }
 
 // FindUserWithRefreshToken finds a user from the provided refresh token.
-func FindUserWithRefreshToken(tx *storage.Connection, token string) (*User, *RefreshToken, error) {
+func FindUserWithRefreshToken(tx *storage.Connection, token string) (*User, *RefreshToken, *Session, error) {
 	refreshToken := &RefreshToken{}
 	if err := tx.Where("token = ?", token).First(refreshToken); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, nil, RefreshTokenNotFoundError{}
+			return nil, nil, nil, RefreshTokenNotFoundError{}
 		}
-		return nil, nil, errors.Wrap(err, "error finding refresh token")
+		return nil, nil, nil, errors.Wrap(err, "error finding refresh token")
 	}
 
-	user, err := findUser(tx, "id = ?", refreshToken.UserID)
+	user, err := FindUserByID(tx, refreshToken.UserID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return user, refreshToken, nil
+	var session *Session
+
+	if refreshToken.SessionId != nil {
+		sessionId := *refreshToken.SessionId
+
+		if sessionId != uuid.Nil {
+			session, err = FindSessionByID(tx, sessionId)
+			if err != nil {
+				if !IsNotFoundError(err) {
+					return nil, nil, nil, errors.Wrap(err, "error finding session from refresh token")
+				}
+
+				// otherwise, there's no session for this refresh token
+			}
+		}
+	}
+
+	return user, refreshToken, session, nil
 }
 
 // FindUsersInAudience finds users with the matching audience.
