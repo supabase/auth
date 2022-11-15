@@ -42,7 +42,7 @@ func (authMethod AuthenticationMethod) String() string {
 	case SSOSAML:
 		return "sso/saml"
 	case RecoveryCodeSignIn:
-		return "Recovery"
+		return "recovery"
 	}
 	return ""
 }
