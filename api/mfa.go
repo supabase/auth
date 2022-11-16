@@ -337,7 +337,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 			if factor.Status == models.FactorStateVerified {
-				terr = recoveryCode.Consume()
+				terr = recoveryCode.Consume(tx)
 				if terr != nil {
 					return terr
 				}
@@ -355,11 +355,11 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 				}
 
 			} else if factor.Status != models.FactorStateVerified {
-				terr = recoveryCode.Consume()
+				terr = recoveryCode.Consume(tx)
 				if terr != nil {
 					return terr
 				}
-				if terr = factor.UpdateStatus(models.FactorStateVerified); terr != nil {
+				if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
 					return terr
 				}
 				return sendJSON(w, http.StatusOK, make(map[string]string))

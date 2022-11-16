@@ -118,7 +118,7 @@ func GenerateBatchOfRecoveryCodes(tx *storage.Connection, user *User) ([]*Recove
 }
 
 func ValidateRecoveryCode(tx *storage.Connection, user *User, recoveryCode string) error {
-	rc, terr := IsRecoveryCodeValid(tx, user, recoveryCode)
+	rc, terr := FindMatchingRecoveryCode(tx, user, recoveryCode)
 	if terr != nil {
 		return terr
 	}
