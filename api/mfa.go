@@ -216,7 +216,6 @@ func (a *API) EnrollRecoveryCode(w http.ResponseWriter, r *http.Request) error {
 		if terr := tx.Create(factor); terr != nil {
 			return terr
 		}
-		// TODO: Associate recovery codes with factor
 		codes, terr = models.GenerateBatchOfRecoveryCodes(tx, user)
 		if terr != nil {
 			return terr
@@ -332,17 +331,34 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var method models.AuthenticationMethod
 	if factor.FactorType == models.Recovery {
 		method = models.RecoveryCodeSignIn
-		// Look for the associated codes for a factor and consume the one that matches
-		// if rc_factor == unverified:
-		//     recovery_code.Consume() -> not really needed but depends on UX
-		//     factor.UpdateStatus(verifiedState)
-		//     return Empty response
-		// else if rc_factor == verified:
-		//     recovery_code.consume()
-		//     a, terr = update_session_and_claims()
-		//     invalidate_session()
-		//     return token_response
-		//
+		// use models.IsRecoveryCodeValid to get rc
+		// condition below should be if rc != nil & ... for both branches
+		if factor.Status == models.FactorStateVerified {
+			// recoveryCode.Consume()
+			// Update session + claims and invalidate session
+			// token, terr = a.updateMFASessionAndClaims(r, tx, user, method, models.GrantParams{
+			// 	FactorID: &factor.ID,
+			// })
+			// if terr != nil {
+			// 	return terr
+			// }
+			// if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+			// 	return internalServerError("Failed to set JWT cookie. %s", terr)
+			// }
+			// if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
+			// 	return internalServerError("Failed to update sessions. %s", terr)
+			// }
+			// return nil
+
+			//     return token_response
+
+		} else if factor.Status != models.FactorStateVerified {
+			//     recovery_code.Consume() -> not really needed but depends on UX
+			// if err := factor.UpdateStatus(models.FactorStateVerified); err != nil {
+
+			// }
+			return sendJSON(w, http.StatusOK, make(map[string]string))
+		}
 
 	} else if factor.FactorType == models.TOTP {
 		method = models.TOTPSignIn

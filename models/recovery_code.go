@@ -11,6 +11,7 @@ import (
 
 type RecoveryCode struct {
 	ID           uuid.UUID  `json:"-" db:"id"`
+	FactorID     uuid.UUID  `json:"-" db:"factor_id"`
 	UserID       uuid.UUID  `json:"user_id" db:"user_id"`
 	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
 	RecoveryCode string     `json:"recovery_code" db:"recovery_code"`
@@ -27,13 +28,14 @@ func (RecoveryCode) TableName() string {
 }
 
 // Returns a new recovery code associated with the user
-func NewRecoveryCode(user *User, recoveryCode string) (*RecoveryCode, error) {
+func NewRecoveryCode(user *User, recoveryFactorID uuid.UUID, recoveryCode string) (*RecoveryCode, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
 	}
 	code := &RecoveryCode{
 		ID:           id,
+		FactorID:     recoveryFactorID,
 		UserID:       user.ID,
 		RecoveryCode: recoveryCode,
 	}
@@ -44,7 +46,13 @@ func NewRecoveryCode(user *User, recoveryCode string) (*RecoveryCode, error) {
 // FindValidRecoveryCodes returns all valid recovery codes associated to a user
 func FindValidRecoveryCodesByUser(tx *storage.Connection, user *User) ([]*RecoveryCode, error) {
 	recoveryCodes := []*RecoveryCode{}
-	if err := tx.Q().Where("user_id = ? AND used_at IS NOT NULL", user.ID).All(&recoveryCodes); err != nil {
+
+	recoveryFactor, err := user.RecoveryFactor()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Q().Where("user_id = ? AND factor_id = ? AND used_at IS NOT NULL", user.ID, recoveryFactor.ID).All(&recoveryCodes); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return recoveryCodes, nil
 		}
@@ -90,9 +98,13 @@ func GenerateBatchOfRecoveryCodes(tx *storage.Connection, user *User) ([]*Recove
 	if err := InvalidateRecoveryCodesForUser(tx, user); err != nil {
 		return nil, err
 	}
+	recoveryFactor, err := user.RecoveryFactor()
+	if err != nil {
+		return nil, err
+	}
 
 	for i := 0; i <= NumRecoveryCodes; i++ {
-		rc, err := NewRecoveryCode(user, crypto.SecureToken(RecoveryCodeLength))
+		rc, err := NewRecoveryCode(user, recoveryFactor.ID, crypto.SecureToken(RecoveryCodeLength))
 		if err != nil {
 			return nil, err
 		}

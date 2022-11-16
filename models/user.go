@@ -525,3 +525,20 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection) error {
 
 	return nil
 }
+
+func (u *User) RecoveryFactor() (*Factor, error) {
+	recoveryFactor := &Factor{}
+	factorCount := 0
+	for _, factor := range u.Factors {
+		if factor.FactorType == Recovery {
+			recoveryFactor = &factor
+			factorCount += 1
+		}
+	}
+	if factorCount >= 1 {
+		return nil, errors.New("users has more than one recovery factor")
+	} else if factorCount == 0 {
+		return nil, errors.New("recovery factor not found")
+	}
+	return recoveryFactor, nil
+}
