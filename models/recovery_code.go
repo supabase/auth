@@ -62,11 +62,11 @@ func FindValidRecoveryCodesByUser(tx *storage.Connection, user *User) ([]*Recove
 }
 
 // Validate recovery code
-func IsRecoveryCodeValid(tx *storage.Connection, user *User, recoveryCode string) (*RecoveryCode, error) {
+func FindMatchingRecoveryCode(tx *storage.Connection, user *User, recoveryCode string) (*RecoveryCode, error) {
 	rc := &RecoveryCode{}
 	if err := tx.Q().Where("user_id = ? AND used_at is null AND recovery_code = ? AND verified_at is not null", user.ID, recoveryCode).First(&rc); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, nil
+			return rc, errors.New("no matching recovery code")
 		}
 		return nil, nil
 	}

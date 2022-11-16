@@ -249,7 +249,6 @@ func (a *API) EnrollRecoveryCode(w http.ResponseWriter, r *http.Request) error {
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
-
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
@@ -327,38 +326,48 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return badRequestError("%v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
+	var token *AccessTokenResponse
 
 	var method models.AuthenticationMethod
 	if factor.FactorType == models.Recovery {
-		method = models.RecoveryCodeSignIn
-		// use models.IsRecoveryCodeValid to get rc
-		// condition below should be if rc != nil & ... for both branches
-		if factor.Status == models.FactorStateVerified {
-			// recoveryCode.Consume()
-			// Update session + claims and invalidate session
-			// token, terr = a.updateMFASessionAndClaims(r, tx, user, method, models.GrantParams{
-			// 	FactorID: &factor.ID,
-			// })
-			// if terr != nil {
-			// 	return terr
-			// }
-			// if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-			// 	return internalServerError("Failed to set JWT cookie. %s", terr)
-			// }
-			// if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
-			// 	return internalServerError("Failed to update sessions. %s", terr)
-			// }
-			// return nil
+		err = a.db.Transaction(func(tx *storage.Connection) error {
+			method = models.RecoveryCodeSignIn
+			recoveryCode, terr := models.FindMatchingRecoveryCode(tx, user, params.Code)
+			if terr != nil {
+				return terr
+			}
+			if factor.Status == models.FactorStateVerified {
+				terr = recoveryCode.Consume()
+				if terr != nil {
+					return terr
+				}
+				token, terr := a.updateMFASessionAndClaims(r, tx, user, method, models.GrantParams{
+					FactorID: &factor.ID,
+				})
+				if terr != nil {
+					return terr
+				}
+				if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+					return internalServerError("Failed to set JWT cookie. %s", terr)
+				}
+				if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
+					return internalServerError("Failed to update sessions. %s", terr)
+				}
 
-			//     return token_response
-
-		} else if factor.Status != models.FactorStateVerified {
-			//     recovery_code.Consume() -> not really needed but depends on UX
-			// if err := factor.UpdateStatus(models.FactorStateVerified); err != nil {
-
-			// }
-			return sendJSON(w, http.StatusOK, make(map[string]string))
-		}
+			} else if factor.Status != models.FactorStateVerified {
+				terr = recoveryCode.Consume()
+				if terr != nil {
+					return terr
+				}
+				if terr = factor.UpdateStatus(models.FactorStateVerified); terr != nil {
+					return terr
+				}
+				return sendJSON(w, http.StatusOK, make(map[string]string))
+			}
+			return nil
+		})
+		metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
+		return sendJSON(w, http.StatusOK, token)
 
 	} else if factor.FactorType == models.TOTP {
 		method = models.TOTPSignIn
@@ -367,7 +376,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	var token *AccessTokenResponse
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
