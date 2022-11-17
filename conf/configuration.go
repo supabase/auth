@@ -37,8 +37,12 @@ type DBConfiguration struct {
 	URL       string `json:"url" envconfig:"DATABASE_URL" required:"true"`
 	Namespace string `json:"namespace" envconfig:"DB_NAMESPACE" default:"auth"`
 	// MaxPoolSize defaults to 0 (unlimited).
-	MaxPoolSize    int    `json:"max_pool_size" split_words:"true"`
-	MigrationsPath string `json:"migrations_path" split_words:"true" default:"./migrations"`
+	MaxPoolSize       int           `json:"max_pool_size" split_words:"true"`
+	MaxIdlePoolSize   int           `json:"max_idle_pool_size" split_words:"true"`
+	ConnMaxLifetime   time.Duration `json:"conn_max_lifetime,omitempty" split_words:"true"`
+	ConnMaxIdleTime   time.Duration `json:"conn_max_idle_time,omitempty" split_words:"true"`
+	HealthCheckPeriod time.Duration `json:"health_check_period" split_words:"true"`
+	MigrationsPath    string        `json:"migrations_path" split_words:"true" default:"./migrations"`
 }
 
 func (c *DBConfiguration) Validate() error {
