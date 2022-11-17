@@ -61,7 +61,7 @@ func GrantRefreshTokenSwap(r *http.Request, tx *storage.Connection, user *User, 
 			return terr
 		}
 
-		newToken, terr = createRefreshToken(rtx, user, token, nil)
+		newToken, terr = createRefreshToken(rtx, user, token, &GrantParams{})
 		return terr
 	})
 	return newToken, err
