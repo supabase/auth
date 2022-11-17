@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"strings"
 
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
@@ -237,4 +238,30 @@ func isStringInSlice(checkValue string, list []string) bool {
 // getBodyBytes returns a byte array of the request's Body.
 func getBodyBytes(req *http.Request) ([]byte, error) {
 	return utilities.GetBodyBytes(req)
+}
+
+// checkPasswordMeetsRequirements checks that the given password meets the configured minimum password
+// length and complexity requirements. Returns an appropriate error if the password fails, nil otherwise.
+func checkPasswordMeetsRequirements(config *conf.GlobalConfiguration, password string) *HTTPError {
+	if len(password) < config.PasswordMinLength {
+		return unprocessableEntityError("Password should be at least %d characters", config.PasswordMinLength)
+	}
+
+	charsets := []struct {
+		characters string
+		enabled    bool
+	}{
+		{"abcdefghijklmnopqrstuvwxyz", config.PasswordComplexity.RequireLowercase},
+		{"ABCDEFGHIJKLMNOPQRSTUVWXYZ", config.PasswordComplexity.RequireUppercase},
+		{"0123456789", config.PasswordComplexity.RequireNumber},
+		{"!@#$%^&*()_+-=[]{}|'", config.PasswordComplexity.RequireSpecial},
+	}
+
+	for _, set := range charsets {
+		if set.enabled && !strings.ContainsAny(password, set.characters) {
+			return unprocessableEntityError("Password must contain at least one character from the set: %s", set.characters)
+		}
+	}
+
+	return nil
 }

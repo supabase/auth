@@ -210,6 +210,15 @@ Rate limit the number of emails sent per hr on the following endpoints: `/signup
 
 Minimum password length, defaults to 6.
 
+`GOTRUE_PASSWORD_COMPLEXITY_REQUIRE_LOWERCASE` - `bool`
+`GOTRUE_PASSWORD_COMPLEXITY_REQUIRE_UPPERCASE` - `bool`
+`GOTRUE_PASSWORD_COMPLEXITY_REQUIRE_NUMBER` - `bool`
+`GOTRUE_PASSWORD_COMPLEXITY_REQUIRE_SPECIAL` - `bool`
+
+Require certain character classes in passwords. Lowercase requires at least one lowercase latin character (a-z),
+uppercase requires at least one uppercase latin character (A-Z), number requires at least one digit (0-9) and special
+requires at least one character from `! @ # $ % ^ & * ( ) _ + - = [ ] { } | '`. All default to false.
+
 `GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` - `bool`
 
 If refresh token rotation is enabled, gotrue will automatically detect malicious attempts to reuse a revoked refresh token. When a malicious attempt is detected, gotrue immediately revokes all tokens that descended from the offending token.

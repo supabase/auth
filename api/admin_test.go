@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	jwt "github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/assert"
@@ -387,7 +387,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 	assert.NotNil(ts.T(), data.BannedUntil)
 }
 
-func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
+func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed_MinimumLength() {
 	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
@@ -398,6 +398,30 @@ func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 			"password": "",
+		}))
+
+		// Setup request
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPut, updateEndpoint, &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
+	})
+}
+
+func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed_Complexity() {
+	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	var updateEndpoint = fmt.Sprintf("/admin/users/%s", u.ID)
+	ts.Config.PasswordComplexity.RequireUppercase = true
+	ts.Config.PasswordComplexity.RequireLowercase = true
+	ts.Run("Password doesn't meet complexity requirements", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"password": "abcd1234!!!",
 		}))
 
 		// Setup request

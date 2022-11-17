@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -177,8 +176,8 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Password != nil {
-			if len(*params.Password) < config.PasswordMinLength {
-				return invalidPasswordLengthError(config)
+			if terr := checkPasswordMeetsRequirements(config, *params.Password); terr != nil {
+				return terr
 			}
 
 			if terr := user.UpdatePassword(tx, *params.Password); terr != nil {
@@ -237,7 +236,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
-		if errors.Is(err, invalidPasswordLengthError(config)) {
+		if _, ok := err.(*HTTPError); ok {
 			return err
 		}
 		if strings.Contains(err.Error(), "Invalid format for ban_duration") {

@@ -148,8 +148,8 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 				if params.Password == "" {
 					return unprocessableEntityError("Signup requires a valid password")
 				}
-				if len(params.Password) < config.PasswordMinLength {
-					return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", config.PasswordMinLength))
+				if err := checkPasswordMeetsRequirements(config, params.Password); err != nil {
+					return err
 				}
 				signupParams := &SignupParams{
 					Email:    params.Email,

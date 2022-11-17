@@ -67,6 +67,14 @@ type MFAConfiguration struct {
 	MaxEnrolledFactors          float64 `split_words:"true" default:"10"`
 }
 
+// PasswordComplexityConfiguration holds settings for enforcing password complexity
+type PasswordComplexityConfiguration struct {
+	RequireUppercase bool `split_words:"true" default:"false"`
+	RequireLowercase bool `split_words:"true" default:"false"`
+	RequireNumber    bool `split_words:"true" default:"false"`
+	RequireSpecial   bool `split_words:"true" default:"false"`
+}
+
 type APIConfiguration struct {
 	Host            string
 	Port            string `envconfig:"PORT" default:"8081"`
@@ -104,18 +112,19 @@ type GlobalConfiguration struct {
 	RateLimitTokenRefresh float64 `split_words:"true" default:"30"`
 	RateLimitSso          float64 `split_words:"true" default:"30"`
 
-	SiteURL           string   `json:"site_url" split_words:"true" required:"true"`
-	URIAllowList      []string `json:"uri_allow_list" split_words:"true"`
-	URIAllowListMap   map[string]glob.Glob
-	PasswordMinLength int                      `json:"password_min_length" split_words:"true"`
-	JWT               JWTConfiguration         `json:"jwt"`
-	Mailer            MailerConfiguration      `json:"mailer"`
-	Sms               SmsProviderConfiguration `json:"sms"`
-	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
-	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
-	Security          SecurityConfiguration    `json:"security"`
-	MFA               MFAConfiguration         `json:"MFA"`
-	Cookie            struct {
+	SiteURL            string   `json:"site_url" split_words:"true" required:"true"`
+	URIAllowList       []string `json:"uri_allow_list" split_words:"true"`
+	URIAllowListMap    map[string]glob.Glob
+	PasswordMinLength  int                             `json:"password_min_length" split_words:"true"`
+	PasswordComplexity PasswordComplexityConfiguration `json:"password_complexity" split_words:"true"`
+	JWT                JWTConfiguration                `json:"jwt"`
+	Mailer             MailerConfiguration             `json:"mailer"`
+	Sms                SmsProviderConfiguration        `json:"sms"`
+	DisableSignup      bool                            `json:"disable_signup" split_words:"true"`
+	Webhook            WebhookConfig                   `json:"webhook" split_words:"true"`
+	Security           SecurityConfiguration           `json:"security"`
+	MFA                MFAConfiguration                `json:"MFA"`
+	Cookie             struct {
 		Key      string `json:"key"`
 		Domain   string `json:"domain"`
 		Duration int    `json:"duration"`

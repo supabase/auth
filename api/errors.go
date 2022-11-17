@@ -63,10 +63,6 @@ func (e *OAuthError) Cause() error {
 	return e
 }
 
-func invalidPasswordLengthError(config *conf.GlobalConfiguration) *HTTPError {
-	return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", config.PasswordMinLength))
-}
-
 func invalidSignupError(config *conf.GlobalConfiguration) *HTTPError {
 	var msg string
 	if config.External.Email.Enabled && config.External.Phone.Enabled {

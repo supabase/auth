@@ -209,6 +209,13 @@ func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 func (ts *UserTestSuite) TestUserUpdatePassword() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
+	ts.Config.PasswordComplexity.RequireUppercase = true
+	ts.Config.PasswordComplexity.RequireSpecial = true
+
+	defer func() {
+		ts.Config.PasswordComplexity.RequireUppercase = false
+		ts.Config.PasswordComplexity.RequireSpecial = false
+	}()
 
 	type expected struct {
 		code            int
@@ -223,8 +230,8 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 		expected                expected
 	}{
 		{
-			desc:                    "Valid password length",
-			newPassword:             "newpassword",
+			desc:                    "Valid password length and complexity",
+			newPassword:             "NewPa$$word",
 			nonce:                   "",
 			requireReauthentication: false,
 			expected:                expected{code: http.StatusOK, isAuthenticated: true},
@@ -237,15 +244,22 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			expected:                expected{code: http.StatusUnprocessableEntity, isAuthenticated: false},
 		},
 		{
+			desc:                    "Invalid password complexity",
+			newPassword:             "newpassword",
+			nonce:                   "",
+			requireReauthentication: false,
+			expected:                expected{code: http.StatusUnprocessableEntity, isAuthenticated: false},
+		},
+		{
 			desc:                    "No reauthentication provided",
-			newPassword:             "newpassword123",
+			newPassword:             "NewPa$$word123",
 			nonce:                   "",
 			requireReauthentication: true,
 			expected:                expected{code: http.StatusUnauthorized, isAuthenticated: false},
 		},
 		{
 			desc:                    "Invalid nonce",
-			newPassword:             "newpassword123",
+			newPassword:             "NewPa$$word123",
 			nonce:                   "123456",
 			requireReauthentication: true,
 			expected:                expected{code: http.StatusBadRequest, isAuthenticated: false},
