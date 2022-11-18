@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fatih/structs"
-	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/assert"
@@ -43,31 +41,6 @@ func (ts *RecoverTestSuite) SetupTest() {
 	u, err := models.NewUser("", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
-
-	// Create corresponding identity
-	i, err := ts.API.createNewIdentity(ts.API.db, u, "email", structs.Map(provider.Claims{
-		Subject: u.ID.String(),
-		Email:   u.GetEmail(),
-	}))
-	require.NoError(ts.T(), err, "Error creating test identity for test user model")
-	require.NotNil(ts.T(), i)
-
-	// Create oauth user
-	oauthUser, err := models.NewUser("", "testoauth@example.com", "", ts.Config.JWT.Aud, nil)
-	require.NoError(ts.T(), err, "Error creating test oauth user model")
-	require.NoError(ts.T(), ts.API.db.Create(oauthUser), "Error saving new test ")
-
-	// Create corresponding oauth identity
-	oauthClaims := structs.Map(provider.Claims{
-		Subject:       "oauth-sub",
-		Email:         "testoauth@example.com",
-		EmailVerified: true,
-		ProviderId:    "oauth-sub",
-	})
-
-	oauthIdentity, err := ts.API.createNewIdentity(ts.API.db, u, "email", oauthClaims)
-	require.NoError(ts.T(), err, "Error creating test identity for test user model")
-	require.NotNil(ts.T(), oauthIdentity)
 }
 
 func (ts *RecoverTestSuite) TestRecover_FirstRecovery() {
@@ -177,31 +150,4 @@ func (ts *RecoverTestSuite) TestRecover_NoSideChannelLeak() {
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
-}
-
-func (ts *RecoverTestSuite) TestRecover_NotAllowedIfNoEmailIdentity() {
-	oauthUserEmail := "testoauth@example.com"
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, oauthUserEmail, ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	require.NotNil(ts.T(), u)
-
-	// Request body
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"email": u.GetEmail(),
-	}))
-
-	// Setup request
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/recover", &buffer)
-	req.Header.Set("Content-Type", "application/json")
-
-	// Setup response recorder
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusOK, w.Code)
-
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, oauthUserEmail, ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	require.Nil(ts.T(), u.RecoverySentAt)
-	require.Equal(ts.T(), "", u.RecoveryToken)
 }
