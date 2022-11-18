@@ -54,24 +54,6 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
-		identities, terr := models.FindIdentitiesByUser(tx, user)
-		if terr != nil {
-			return terr
-		}
-		hasEmailProvider := false
-		for _, identity := range identities {
-			if identity.Provider == "email" {
-				hasEmailProvider = true
-				break
-			}
-		}
-		if !hasEmailProvider {
-			if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryDeniedAction, "", nil); terr != nil {
-				return terr
-			}
-			// don't send a recovery email if the user doesn't have an email identity
-			return nil
-		}
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
 		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength)
