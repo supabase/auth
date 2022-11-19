@@ -270,29 +270,85 @@ func (u *User) UpdateLastSignInAt(tx *storage.Connection) error {
 
 // ConfirmEmailChange confirm the change of email for a user
 func (u *User) ConfirmEmailChange(tx *storage.Connection, status int) error {
-	u.Email = storage.NullString(u.EmailChange)
+	email := u.EmailChange
+
+	u.Email = storage.NullString(email)
 	u.EmailChange = ""
 	u.EmailChangeTokenCurrent = ""
 	u.EmailChangeTokenNew = ""
 	u.EmailChangeConfirmStatus = status
-	return tx.UpdateOnly(
+
+	if err := tx.UpdateOnly(
 		u,
 		"email",
 		"email_change",
 		"email_change_token_current",
 		"email_change_token_new",
 		"email_change_confirm_status",
-	)
+	); err != nil {
+		return err
+	}
+
+	identity, err := FindIdentityByIdAndProvider(tx, u.ID.String(), "email")
+	if err != nil {
+		if IsNotFoundError(err) {
+			// no email identity, not an error
+			return nil
+		}
+
+		return err
+	}
+
+	if _, ok := identity.IdentityData["email"]; ok {
+		identity.IdentityData["email"] = email
+	}
+
+	if err := tx.UpdateOnly(identity, "identity_data"); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // ConfirmPhoneChange confirms the change of phone for a user
 func (u *User) ConfirmPhoneChange(tx *storage.Connection) error {
-	u.Phone = storage.NullString(u.PhoneChange)
+	now := time.Now()
+	phone := u.PhoneChange
+
+	u.Phone = storage.NullString(phone)
 	u.PhoneChange = ""
 	u.PhoneChangeToken = ""
-	now := time.Now()
 	u.PhoneConfirmedAt = &now
-	return tx.UpdateOnly(u, "phone", "phone_change", "phone_change_token", "phone_confirmed_at")
+
+	if err := tx.UpdateOnly(
+		u,
+		"phone",
+		"phone_change",
+		"phone_change_token",
+		"phone_confirmed_at",
+	); err != nil {
+		return err
+	}
+
+	identity, err := FindIdentityByIdAndProvider(tx, u.ID.String(), "phone")
+	if err != nil {
+		if IsNotFoundError(err) {
+			// no phone identity, not an error
+			return nil
+		}
+
+		return err
+	}
+
+	if _, ok := identity.IdentityData["phone"]; ok {
+		identity.IdentityData["phone"] = phone
+	}
+
+	if err := tx.UpdateOnly(identity, "identity_data"); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Recover resets the recovery token
