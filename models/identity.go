@@ -56,6 +56,10 @@ func (i *Identity) BeforeUpdate(tx *pop.Connection) error {
 	return nil
 }
 
+func (i *Identity) IsForSSOProvider() bool {
+	return strings.HasPrefix(i.Provider, "sso:")
+}
+
 // FindIdentityById searches for an identity with the matching provider_id and provider given.
 func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider string) (*Identity, error) {
 	identity := &Identity{}

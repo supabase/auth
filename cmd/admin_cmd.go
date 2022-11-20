@@ -73,7 +73,7 @@ func adminCreateUser(config *conf.GlobalConfiguration, args []string) {
 	defer db.Close()
 
 	aud := getAudience(config)
-	if exists, err := models.IsDuplicatedEmail(db, args[0], aud); exists {
+	if user, err := models.IsDuplicatedEmail(db, args[0], aud); user != nil {
 		logrus.Fatalf("Error creating new user: user already exists")
 	} else if err != nil {
 		logrus.Fatalf("Error checking user email: %+v", err)

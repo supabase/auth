@@ -452,15 +452,43 @@ func FindUserByPhoneChangeAndAudience(tx *storage.Connection, phone, aud string)
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and audience.
-func IsDuplicatedEmail(tx *storage.Connection, email, aud string) (bool, error) {
-	_, err := FindUserByEmailAndAudience(tx, email, aud)
-	if err != nil {
-		if IsNotFoundError(err) {
-			return false, nil
+func IsDuplicatedEmail(tx *storage.Connection, email, aud string) (*User, error) {
+	var identities []Identity
+
+	if err := tx.Eager().Q().Where("email = ?", strings.ToLower(email)).All(&identities); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, nil
 		}
-		return false, err
+
+		return nil, errors.Wrap(err, "unable to find identity by email for duplicates")
 	}
-	return true, nil
+
+	userIDs := make(map[string]uuid.UUID)
+	for _, identity := range identities {
+		if !identity.IsForSSOProvider() {
+			userIDs[identity.UserID.String()] = identity.UserID
+		}
+	}
+
+	for _, userID := range userIDs {
+		user, err := FindUserByID(tx, userID)
+		if err != nil && !IsNotFoundError(err) {
+			return nil, errors.Wrap(err, "unable to find user from email identity for duplicates")
+		}
+
+		if user.Aud == aud {
+			return user, nil
+		}
+	}
+
+	// out of an abundance of caution, if nothing was found via the
+	// identities table we also do a final check on the users table
+	user, err := FindUserByEmailAndAudience(tx, email, aud)
+	if err != nil && !IsNotFoundError(err) {
+		return nil, errors.Wrap(err, "unable to find user email addres for duplicates")
+	}
+
+	return user, nil
 }
 
 // IsDuplicatedPhone checks if the phone number already exists in the users table
