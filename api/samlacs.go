@@ -242,7 +242,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		var user *models.User
 
-		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, "sso:"+ssoProvider.ID.String(), user); terr != nil {
+		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, "sso:"+ssoProvider.ID.String()); terr != nil {
 			return terr
 		}
 
