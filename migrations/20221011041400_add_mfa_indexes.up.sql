@@ -20,7 +20,7 @@ $$ language 'plpgsql'
 alter table {{ index .Options "Namespace" }}.mfa_amr_claims
   add column if not exists id uuid not null;
 
-create_constraint_if_not_exists("auth.mfa_amr_claims", "amr_id_pk", "ALTER TABLE auth.mfa_amr_claims add constraint amr_id_pk primary key(id)");
+select create_constraint_if_not_exists("auth.mfa_amr_claims", "amr_id_pk", "alter table auth.mfa_amr_claims add constraint amr_id_pk primary key(id)");
 alter table {{ index .Options "Namespace" }}.mfa_amr_claims add constraint if not exists amr_id_pk primary key(id);
 
 create index if not exists user_id_created_at_idx on {{ index .Options "Namespace" }}.sessions (user_id, created_at);
