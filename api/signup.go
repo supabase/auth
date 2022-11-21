@@ -106,7 +106,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 			// do not update the user because we can't be sure of their claimed identity
 		} else {
-			user, terr = a.signupNewUser(ctx, tx, params)
+			user, terr = a.signupNewUser(ctx, tx, params, false /* <- duplicateEmails */)
 			if terr != nil {
 				return terr
 			}
@@ -279,7 +279,7 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 	return u, nil
 }
 
-func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, params *SignupParams) (*models.User, error) {
+func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, params *SignupParams, isSSOUser bool) (*models.User, error) {
 	config := a.config
 
 	var user *models.User
@@ -293,6 +293,8 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 		// handles external provider case
 		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
 	}
+
+	user.IsSSOUser = isSSOUser
 
 	if err != nil {
 		return nil, internalServerError("Database error creating user").WithInternalError(err)

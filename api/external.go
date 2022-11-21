@@ -269,7 +269,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			Data:     identityData,
 		}
 
-		user, terr = a.signupNewUser(ctx, tx, params)
+		user, terr = a.signupNewUser(ctx, tx, params, false /* <-duplicateEmail */)
 		if terr != nil {
 			return nil, terr
 		}
