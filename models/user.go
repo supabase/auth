@@ -538,7 +538,7 @@ func (u *User) RecoveryFactor() (*Factor, error) {
 	if factorCount >= 1 {
 		return nil, errors.New("users has more than one recovery factor")
 	} else if factorCount == 0 {
-		return nil, errors.New("recovery factor not found")
+		return recoveryFactor, nil
 	}
 	return recoveryFactor, nil
 }

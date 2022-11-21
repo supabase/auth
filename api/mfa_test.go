@@ -116,6 +116,13 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			issuer:       ts.TestDomain,
 			expectedCode: http.StatusOK,
 		},
+		{
+			desc:         "Recovery Code: Enroll",
+			friendlyName: "",
+			factorType:   models.Recovery,
+			issuer:       ts.TestDomain,
+			expectedCode: http.StatusOK,
+		},
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
@@ -266,6 +273,10 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			}
 		})
 	}
+}
+
+func (ts *MFATestSuite) TestVerifyRecoveryCode() {
+
 }
 
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {

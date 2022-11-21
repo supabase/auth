@@ -12,7 +12,6 @@ import (
 type RecoveryCode struct {
 	ID           uuid.UUID  `json:"-" db:"id"`
 	FactorID     uuid.UUID  `json:"-" db:"factor_id"`
-	UserID       uuid.UUID  `json:"user_id" db:"user_id"`
 	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
 	RecoveryCode string     `json:"recovery_code" db:"recovery_code"`
 	VerifiedAt   *time.Time `json:"verified_at" db:"verified_at"`
@@ -36,7 +35,6 @@ func NewRecoveryCode(user *User, recoveryFactorID uuid.UUID, recoveryCode string
 	code := &RecoveryCode{
 		ID:           id,
 		FactorID:     recoveryFactorID,
-		UserID:       user.ID,
 		RecoveryCode: recoveryCode,
 	}
 
@@ -50,6 +48,9 @@ func FindValidRecoveryCodesByUser(tx *storage.Connection, user *User) ([]*Recove
 	recoveryFactor, err := user.RecoveryFactor()
 	if err != nil {
 		return nil, err
+	}
+	if recoveryFactor == nil {
+		return nil, errors.New("recovery factor not found")
 	}
 
 	if err := tx.Q().Where("user_id = ? AND factor_id = ? AND used_at IS NOT NULL", user.ID, recoveryFactor.ID).All(&recoveryCodes); err != nil {
@@ -95,6 +96,7 @@ func InvalidateRecoveryCodesForUser(tx *storage.Connection, user *User) error {
 
 func GenerateBatchOfRecoveryCodes(tx *storage.Connection, user *User) ([]*RecoveryCode, error) {
 	recoveryCodes := []*RecoveryCode{}
+
 	if err := InvalidateRecoveryCodesForUser(tx, user); err != nil {
 		return nil, err
 	}
