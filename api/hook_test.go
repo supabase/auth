@@ -179,20 +179,4 @@ func TestHookTimeout(t *testing.T) {
 	assert.Equal(t, 3, callCount)
 }
 
-func TestHookNoServer(t *testing.T) {
-	config := &conf.WebhookConfig{
-		URL:        "http://somewhere.something.com",
-		Retries:    1,
-		TimeoutSec: 1,
-	}
-	w := Webhook{
-		WebhookConfig: config,
-	}
-	_, err := w.trigger()
-	require.Error(t, err)
-	herr, ok := err.(*HTTPError)
-	require.True(t, ok)
-	assert.Equal(t, http.StatusBadGateway, herr.Code)
-}
-
 func squash(f func() error) { _ = f }

@@ -104,9 +104,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return UserExistsError
 			}
 
-			if err := user.UpdateUserMetaData(tx, params.Data); err != nil {
-				return internalServerError("Database error updating user").WithInternalError(err)
-			}
+			// do not update the user because we can't be sure of their claimed identity
 		} else {
 			user, terr = a.signupNewUser(ctx, tx, params)
 			if terr != nil {
