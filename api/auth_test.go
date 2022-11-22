@@ -76,12 +76,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 	require.NoError(ts.T(), err)
 
 	var s *models.Session
-	if ts.Config.MFA.Enabled {
-		s, err = models.MFA_CreateSession(ts.API.db, u, &uuid.Nil)
-	} else {
-		s, err = models.CreateSession(ts.API.db, u)
-
-	}
+	s, err = models.CreateSession(ts.API.db, u, &uuid.Nil)
 	require.NoError(ts.T(), err)
 
 	cases := []struct {

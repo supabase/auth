@@ -134,25 +134,23 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.With(sharedLimiter).Put("/", api.UserUpdate)
 		})
 
-		if api.config.MFA.Enabled {
-			r.With(api.requireAuthentication).Route("/factors", func(r *router) {
-				r.Post("/", api.EnrollFactor)
-				r.Route("/{factor_id}", func(r *router) {
-					r.Use(api.loadFactor)
+		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
+			r.Post("/", api.EnrollFactor)
+			r.Route("/{factor_id}", func(r *router) {
+				r.Use(api.loadFactor)
 
-					r.With(api.limitHandler(
-						tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
-							DefaultExpirationTTL: time.Minute,
-						}).SetBurst(30))).Post("/verify", api.VerifyFactor)
-					r.With(api.limitHandler(
-						tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
-							DefaultExpirationTTL: time.Minute,
-						}).SetBurst(30))).Post("/challenge", api.ChallengeFactor)
-					r.Delete("/", api.UnenrollFactor)
+				r.With(api.limitHandler(
+					tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
+						DefaultExpirationTTL: time.Minute,
+					}).SetBurst(30))).Post("/verify", api.VerifyFactor)
+				r.With(api.limitHandler(
+					tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
+						DefaultExpirationTTL: time.Minute,
+					}).SetBurst(30))).Post("/challenge", api.ChallengeFactor)
+				r.Delete("/", api.UnenrollFactor)
 
-				})
 			})
-		}
+		})
 
 		if api.config.SAML.Enabled {
 			r.Route("/sso", func(r *router) {

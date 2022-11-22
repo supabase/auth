@@ -223,12 +223,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 				return terr
 			}
-
-			if config.MFA.Enabled {
-				token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
-			} else {
-				token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
-			}
+			token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
 
 			if terr != nil {
 				return terr

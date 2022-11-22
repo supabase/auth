@@ -37,17 +37,14 @@ func TestSession(t *testing.T) {
 		Config: globalConfig,
 	}
 	defer ts.db.Close()
-	if globalConfig.MFA.Enabled {
-		suite.Run(t, ts)
-	}
+	suite.Run(t, ts)
 }
 
 func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	totalDistinctClaims := 2
 	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	// TODO(Joel): Replace with CreateSession once MFA feature flag is lifted
-	session, err := MFA_CreateSession(ts.db, u, &uuid.Nil)
+	session, err := CreateSession(ts.db, u, &uuid.Nil)
 	require.NoError(ts.T(), err)
 
 	err = AddClaimToSession(ts.db, session, PasswordGrant)
