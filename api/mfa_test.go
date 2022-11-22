@@ -392,7 +392,7 @@ func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
 	data := &AccessTokenResponse{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 
-	ctx, err := ts.API.parseJWTClaims(data.Token, req, w)
+	ctx, err := ts.API.parseJWTClaims(data.Token, req)
 	require.NoError(ts.T(), err)
 	ctx, err = ts.API.maybeLoadUserOrSession(ctx)
 	require.NoError(ts.T(), err)
@@ -418,7 +418,7 @@ func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
 
 	data := &AccessTokenResponse{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-	ctx, err := ts.API.parseJWTClaims(data.Token, req, w)
+	ctx, err := ts.API.parseJWTClaims(data.Token, req)
 	require.NoError(ts.T(), err)
 	ctx, err = ts.API.maybeLoadUserOrSession(ctx)
 	require.NoError(ts.T(), err)

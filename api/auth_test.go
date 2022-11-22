@@ -63,8 +63,7 @@ func (ts *AuthTestSuite) TestParseJWTClaims() {
 
 	req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
 	req.Header.Set("Authorization", "Bearer "+userJwt)
-	w := httptest.NewRecorder()
-	ctx, err := ts.API.parseJWTClaims(userJwt, req, w)
+	ctx, err := ts.API.parseJWTClaims(userJwt, req)
 	require.NoError(ts.T(), err)
 
 	// check if token is stored in context
@@ -172,8 +171,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 			req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
 			req.Header.Set("Authorization", "Bearer "+userJwt)
 
-			w := httptest.NewRecorder()
-			ctx, err := ts.API.parseJWTClaims(userJwt, req, w)
+			ctx, err := ts.API.parseJWTClaims(userJwt, req)
 			require.NoError(ts.T(), err)
 			ctx, err = ts.API.maybeLoadUserOrSession(ctx)
 			if c.ExpectedError != nil {

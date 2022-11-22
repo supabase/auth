@@ -21,13 +21,15 @@ func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (con
 		return nil, err
 	}
 
-	ctx, err := a.parseJWTClaims(token, r, w)
+	ctx, err := a.parseJWTClaims(token, r)
 	if err != nil {
+		a.clearCookieTokens(config, w)
 		return ctx, err
 	}
 
 	ctx, err = a.maybeLoadUserOrSession(ctx)
 	if err != nil {
+		a.clearCookieTokens(config, w)
 		return ctx, err
 	}
 	return ctx, err
@@ -62,7 +64,7 @@ func (a *API) extractBearerToken(r *http.Request) (string, error) {
 	return matches[1], nil
 }
 
-func (a *API) parseJWTClaims(bearer string, r *http.Request, w http.ResponseWriter) (context.Context, error) {
+func (a *API) parseJWTClaims(bearer string, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 	config := a.config
 
@@ -71,7 +73,6 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request, w http.ResponseWrit
 		return []byte(config.JWT.Secret), nil
 	})
 	if err != nil {
-		a.clearCookieTokens(config, w)
 		return nil, unauthorizedError("invalid JWT: unable to parse or verify signature, %v", err)
 	}
 
