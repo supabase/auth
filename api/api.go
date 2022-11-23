@@ -187,16 +187,14 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 				r.Route("/{user_id}", func(r *router) {
 					r.Use(api.loadUser)
-					if api.config.MFA.Enabled {
-						r.Route("/factors", func(r *router) {
-							r.Get("/", api.adminUserGetFactors)
-							r.Route("/{factor_id}", func(r *router) {
-								r.Use(api.loadFactor)
-								r.Delete("/", api.adminUserDeleteFactor)
-								r.Put("/", api.adminUserUpdateFactor)
-							})
+					r.Route("/factors", func(r *router) {
+						r.Get("/", api.adminUserGetFactors)
+						r.Route("/{factor_id}", func(r *router) {
+							r.Use(api.loadFactor)
+							r.Delete("/", api.adminUserDeleteFactor)
+							r.Put("/", api.adminUserUpdateFactor)
 						})
-					}
+					})
 
 					r.Get("/", api.adminUserGet)
 					r.Put("/", api.adminUserUpdate)
