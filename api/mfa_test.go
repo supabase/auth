@@ -77,7 +77,7 @@ func (ts *MFATestSuite) SetupTest() {
 
 }
 
-func (ts *MFATestSuite) TestEnrollFactor() {
+func (ts *MFATestSuite) TestEnrollTOTPFactor() {
 	testFriendlyName := "bob"
 	alternativeFriendlyName := "john"
 	var cases = []struct {
@@ -116,13 +116,6 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			issuer:       ts.TestDomain,
 			expectedCode: http.StatusOK,
 		},
-		{
-			desc:         "Recovery Code: Enroll",
-			friendlyName: "",
-			factorType:   models.Recovery,
-			issuer:       ts.TestDomain,
-			expectedCode: http.StatusOK,
-		},
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
@@ -158,6 +151,32 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		})
 	}
 
+}
+
+func (ts *MFATestSuite) TestEnrollRecoveryCode() {
+	var buffer bytes.Buffer
+	testFriendlyName := "myFriendlyName"
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": testFriendlyName, "factor_type": models.Recovery}))
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	ts.Require().NoError(err)
+
+	token, err := MFA_generateAccessToken(ts.API.db, user, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	require.NoError(ts.T(), err)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/factors", &buffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	factors, err := models.FindFactorsByUser(ts.API.db, user)
+	ts.Require().NoError(err)
+	latestFactor := factors[len(factors)-1]
+	require.Equal(ts.T(), models.FactorStateUnverified, latestFactor.Status)
+	require.Equal(ts.T(), testFriendlyName, latestFactor.FriendlyName)
+	enrollResp := EnrollFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
 }
 
 func (ts *MFATestSuite) TestChallengeFactor() {
