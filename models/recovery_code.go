@@ -14,7 +14,6 @@ type RecoveryCode struct {
 	FactorID     uuid.UUID  `json:"-" db:"factor_id"`
 	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
 	RecoveryCode string     `json:"recovery_code" db:"recovery_code"`
-	VerifiedAt   *time.Time `json:"verified_at" db:"verified_at"`
 	UsedAt       *time.Time `json:"-" db:"used_at"`
 }
 
@@ -45,7 +44,7 @@ func NewRecoveryCode(user *User, recoveryFactorID uuid.UUID, recoveryCode string
 func FindValidRecoveryCodesByFactor(tx *storage.Connection, factor *Factor) ([]*RecoveryCode, error) {
 	recoveryCodes := []*RecoveryCode{}
 
-	if err := tx.Q().Where("factor_id = ? AND used_at IS NOT NULL", factor.ID).All(&recoveryCodes); err != nil {
+	if err := tx.Q().Where("factor_id = ? AND used_at is null", factor.ID).All(&recoveryCodes); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return recoveryCodes, nil
 		}
@@ -55,18 +54,11 @@ func FindValidRecoveryCodesByFactor(tx *storage.Connection, factor *Factor) ([]*
 }
 
 // Validate recovery code
-func FindMatchingRecoveryCode(tx *storage.Connection, user *User, recoveryCode string) (*RecoveryCode, error) {
+func FindMatchingRecoveryCode(tx *storage.Connection, factor *Factor, recoveryCode string) (*RecoveryCode, error) {
+	// TODO(Joel): Find way to guard against factor not being recovery factor
+	// TODO(Joel): Find way to guard against factors being unverified
 	rc := &RecoveryCode{}
-
-	recoveryFactor, err := user.RecoveryFactor()
-	if err != nil {
-		return nil, err
-	}
-	if recoveryFactor == nil {
-		return nil, errors.New("user does not have recovery factor")
-	}
-
-	if err := tx.Q().Where("factor_id = ? AND used_at is null AND recovery_code = ? AND verified_at is not null", recoveryFactor.ID, recoveryCode).First(&rc); err != nil {
+	if err := tx.Q().Where("factor_id = ? AND recovery_code = ? AND used_at is  null", factor.ID, recoveryCode).First(rc); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return rc, errors.New("no matching recovery code")
 		}
@@ -100,7 +92,7 @@ func GenerateBatchOfRecoveryCodes(tx *storage.Connection, user *User, factor *Fa
 		return nil, errors.New("recovery factor required to generate codes")
 	}
 	recoveryCodes := []*RecoveryCode{}
-	// TODO(Joel): Convert this into invalidate recovery code for factor
+	// TODO(Joel): Validate all recovery codes for user from DB and invalidate
 	if err := InvalidateRecoveryCodesForFactor(tx, factor); err != nil {
 		return nil, err
 	}
@@ -117,20 +109,4 @@ func GenerateBatchOfRecoveryCodes(tx *storage.Connection, user *User, factor *Fa
 		recoveryCodes = append(recoveryCodes, rc)
 	}
 	return recoveryCodes, nil
-}
-
-func ValidateRecoveryCode(tx *storage.Connection, user *User, recoveryCode string) error {
-	rc, terr := FindMatchingRecoveryCode(tx, user, recoveryCode)
-	if terr != nil {
-		return terr
-	}
-	if rc.RecoveryCode == recoveryCode {
-		terr = rc.Consume(tx)
-		if terr != nil {
-			return terr
-		}
-		return nil
-	}
-	return errors.New("Invalid code entered")
-
 }

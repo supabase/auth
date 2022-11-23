@@ -294,10 +294,6 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	}
 }
 
-func (ts *MFATestSuite) TestVerifyRecoveryCode() {
-
-}
-
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 	cases := []struct {
 		desc             string
@@ -543,4 +539,60 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 	verifyResp = &AccessTokenResponse{}
 	require.NoError(ts.T(), json.NewDecoder(y.Body).Decode(&verifyResp))
 	return verifyResp
+}
+
+func (ts *MFATestSuite) TestVerifyRecoveryCode() {
+	// TODO(Joel): Figure how to merge with above to reduce duplication
+	email := "test1@example.com"
+	password := "test123"
+	signUpResp := signUp(ts, email, password)
+
+	token := signUpResp.Token
+
+	var buffer bytes.Buffer
+	w := httptest.NewRecorder()
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": "john", "factor_type": models.Recovery, "issuer": ts.TestDomain}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/factors/", &buffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	enrollResp := EnrollRecoveryCodesResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
+	factorID := enrollResp.ID
+	code := enrollResp.Codes[0]
+
+	// Challenge
+	var challengeBuffer bytes.Buffer
+	x := httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &challengeBuffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+	ts.API.handler.ServeHTTP(x, req)
+	require.Equal(ts.T(), http.StatusOK, x.Code)
+	challengeResp := ChallengeFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(x.Body).Decode(&challengeResp))
+	challengeID := challengeResp.ID
+
+	// Verify
+	var verifyBuffer bytes.Buffer
+	y := httptest.NewRecorder()
+
+	require.NoError(ts.T(), json.NewEncoder(&verifyBuffer).Encode(map[string]interface{}{
+		"challenge_id": challengeID,
+		"code":         code,
+	}))
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factorID), &verifyBuffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+
+	ts.API.handler.ServeHTTP(y, req)
+	require.Equal(ts.T(), http.StatusOK, y.Code)
+
+}
+
+func (ts *MFATestSuite) TestLoginWithRecoveryCode() {
+
 }

@@ -12,7 +12,6 @@ create table if not exists {{ index .Options "Namespace" }}.mfa_recovery_codes(
        recovery_code varchar(32) not null,
        created_at timestamptz not null,
        used_at timestamptz null,
-       verified_at timestamptz null,
        constraint mfa_recovery_codes_pkey primary key(id),
        constraint mfa_recovery_codes_factor_id_fkey foreign key(factor_id) references {{ index .Options "Namespace" }}.mfa_factors(id) on delete cascade
 );

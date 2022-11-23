@@ -333,10 +333,11 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	if factor.FactorType == models.Recovery {
 		err = a.db.Transaction(func(tx *storage.Connection) error {
 			method = models.RecoveryCodeSignIn
-			recoveryCode, terr := models.FindMatchingRecoveryCode(tx, user, params.Code)
+			recoveryCode, terr := models.FindMatchingRecoveryCode(tx, factor, params.Code)
 			if terr != nil {
 				return terr
 			}
+			// TODO(Joel): Should return if recovery code not there
 			if factor.Status == models.FactorStateVerified {
 				terr = recoveryCode.Consume(tx)
 				if terr != nil {
@@ -367,6 +368,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			}
 			return nil
 		})
+		if err != nil {
+			return err
+		}
 		metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
 		return sendJSON(w, http.StatusOK, token)
 
