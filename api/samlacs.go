@@ -238,11 +238,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		if config.MFA.Enabled {
-			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.SSOSAML, models.GrantParams{})
-		} else {
-			token, terr = a.issueRefreshToken(ctx, tx, user, models.GrantParams{})
-		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.SSOSAML, models.GrantParams{})
 
 		if terr != nil {
 			return internalServerError("Unable to issue refresh token from SAML Assertion").WithInternalError(terr)

@@ -88,18 +88,7 @@ func NewSession(user *User, factorID *uuid.UUID) (*Session, error) {
 	return session, nil
 }
 
-func CreateSession(tx *storage.Connection, user *User) (*Session, error) {
-	session, err := NewSession(user, &uuid.Nil)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Create(session); err != nil {
-		return nil, errors.Wrap(err, "error creating session")
-	}
-	return session, nil
-}
-
-func MFA_CreateSession(tx *storage.Connection, user *User, factorID *uuid.UUID) (*Session, error) {
+func CreateSession(tx *storage.Connection, user *User, factorID *uuid.UUID) (*Session, error) {
 	session, err := NewSession(user, factorID)
 	if err != nil {
 		return nil, err

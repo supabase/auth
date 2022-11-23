@@ -280,12 +280,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
 	var token string
-	if ts.API.config.MFA.Enabled {
-		token, err = MFA_generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	} else {
-		token, err = generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-
-	}
+	token, err = generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
 
 	// request for reauthentication nonce

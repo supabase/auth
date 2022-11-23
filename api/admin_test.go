@@ -520,7 +520,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 	}
 }
 
-// TestAdminUserDeleteFactor tests API /admin/users/<user_id>/factor/<factor_id>/
+// TestAdminUserDeleteFactor tests API /admin/users/<user_id>/factors/<factor_id>/
 func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
@@ -533,7 +533,7 @@ func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 
 	// Setup request
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s/factor/%s/", u.ID, f.ID), nil)
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s/factors/%s/", u.ID, f.ID), nil)
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 
@@ -557,7 +557,7 @@ func (ts *AdminTestSuite) TestAdminUserGetFactors() {
 
 	// Setup request
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/users/%s/factor/", u.ID), nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/users/%s/factors/", u.ID), nil)
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 
@@ -565,7 +565,7 @@ func (ts *AdminTestSuite) TestAdminUserGetFactors() {
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 	getFactorsResp := []*models.Factor{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&getFactorsResp))
-	require.Equal(ts.T(), getFactorsResp[0].Secret, nil)
+	require.Equal(ts.T(), getFactorsResp[0].Secret, "")
 }
 
 func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
@@ -612,7 +612,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.FactorData))
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s/factor/%s/", u.ID, f.ID), &buffer)
+			req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s/factors/%s/", u.ID, f.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), c.ExpectedCode, w.Code)
