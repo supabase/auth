@@ -26,9 +26,7 @@ func TestFactor(t *testing.T) {
 		db: conn,
 	}
 	defer ts.db.Close()
-	if globalConfig.MFA.Enabled {
-		suite.Run(t, ts)
-	}
+	suite.Run(t, ts)
 }
 
 func (ts *FactorTestSuite) SetupTest() {

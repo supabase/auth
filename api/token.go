@@ -238,11 +238,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 			return terr
 		}
-		if config.MFA.Enabled {
-			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
-		} else {
-			token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
-		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
 
 		if terr != nil {
 			return terr
@@ -350,11 +346,8 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				return internalServerError(terr.Error())
 			}
 		}
-		if config.MFA.Enabled {
-			tokenString, terr = MFA_generateAccessToken(tx, user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
-		} else {
-			tokenString, terr = generateAccessToken(user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
-		}
+		tokenString, terr = generateAccessToken(tx, user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -537,12 +530,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				return terr
 			}
 		}
-		if config.MFA.Enabled {
-			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
-		} else {
-			token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
-
-		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
 
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
@@ -562,30 +550,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func generateAccessToken(user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string) (string, error) {
-	sid := ""
-	if sessionId != nil {
-		sid = sessionId.String()
-	}
-	claims := &GoTrueClaims{
-		StandardClaims: jwt.StandardClaims{
-			Subject:   user.ID.String(),
-			Audience:  user.Aud,
-			ExpiresAt: time.Now().Add(expiresIn).Unix(),
-		},
-		Email:        user.GetEmail(),
-		Phone:        user.GetPhone(),
-		AppMetaData:  user.AppMetaData,
-		UserMetaData: user.UserMetaData,
-		Role:         user.Role,
-		SessionId:    sid,
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(secret))
-}
-
-func MFA_generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string) (string, error) {
+func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string) (string, error) {
 	aal, amr := models.AAL1.String(), []models.AMREntry{}
 	sid := ""
 	if sessionId != nil {
@@ -617,42 +582,7 @@ func MFA_generateAccessToken(tx *storage.Connection, user *models.User, sessionI
 	return token.SignedString([]byte(secret))
 }
 
-func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, grantParams models.GrantParams) (*AccessTokenResponse, error) {
-	config := a.config
-
-	now := time.Now()
-	user.LastSignInAt = &now
-
-	var tokenString string
-	var refreshToken *models.RefreshToken
-
-	err := conn.Transaction(func(tx *storage.Connection) error {
-		var terr error
-		refreshToken, terr = models.GrantAuthenticatedUser(tx, user, grantParams)
-		if terr != nil {
-			return internalServerError("Database error granting user").WithInternalError(terr)
-		}
-
-		tokenString, terr = generateAccessToken(user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
-		if terr != nil {
-			return internalServerError("error generating jwt token").WithInternalError(terr)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &AccessTokenResponse{
-		Token:        tokenString,
-		TokenType:    "bearer",
-		ExpiresIn:    config.JWT.Exp,
-		RefreshToken: refreshToken.Token,
-		User:         user,
-	}, nil
-}
-
-func (a *API) MFA_issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 	config := a.config
 
 	now := time.Now()
@@ -679,7 +609,7 @@ func (a *API) MFA_issueRefreshToken(ctx context.Context, conn *storage.Connectio
 		}
 
 		// TODO(Joel): Replace when feature flag is lifted
-		tokenString, terr = MFA_generateAccessToken(tx, user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessToken(tx, user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -738,8 +668,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return err
 		}
 
-		// TODO(Joel): Replace when feature flag is lifted
-		tokenString, terr = MFA_generateAccessToken(tx, user, &sessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, terr = generateAccessToken(tx, user, &sessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
