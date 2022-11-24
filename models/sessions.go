@@ -70,7 +70,7 @@ func (Session) TableName() string {
 	return tableName
 }
 
-func NewSession(user *User, factorID *uuid.UUID) (*Session, error) {
+func NewSession() (*Session, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique session id")
@@ -79,27 +79,14 @@ func NewSession(user *User, factorID *uuid.UUID) (*Session, error) {
 	defaultAAL := AAL1.String()
 
 	session := &Session{
-		ID:        id,
-		UserID:    user.ID,
-		FactorID:  factorID,
-		AAL:       &defaultAAL,
-		AMRClaims: []AMRClaim{},
+		ID:  id,
+		AAL: &defaultAAL,
 	}
+
 	return session, nil
 }
 
-func CreateSession(tx *storage.Connection, user *User, factorID *uuid.UUID) (*Session, error) {
-	session, err := NewSession(user, factorID)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Create(session); err != nil {
-		return nil, errors.Wrap(err, "error creating session")
-	}
-	return session, nil
-}
-
-func FindSessionById(tx *storage.Connection, id uuid.UUID) (*Session, error) {
+func FindSessionByID(tx *storage.Connection, id uuid.UUID) (*Session, error) {
 	session := &Session{}
 	if err := tx.Eager().Q().Where("id = ?", id).First(session); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {

@@ -75,9 +75,12 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	var s *models.Session
-	s, err = models.CreateSession(ts.API.db, u, &uuid.Nil)
+	s, err := models.NewSession()
 	require.NoError(ts.T(), err)
+	s.UserID = u.ID
+	require.NoError(ts.T(), ts.API.db.Create(s))
+
+	require.NoError(ts.T(), ts.API.db.Load(s))
 
 	cases := []struct {
 		Desc            string

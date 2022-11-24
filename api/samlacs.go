@@ -228,6 +228,14 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	// refreshTokenParams.NotBefore = assertion.NotBefore()
 	// refreshTokenParams.NotAfter = assertion.NotAfter()
 
+	notAfter := assertion.NotAfter()
+
+	var grantParams models.GrantParams
+
+	if !notAfter.IsZero() {
+		grantParams.SessionNotAfter = &notAfter
+	}
+
 	var token *AccessTokenResponse
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
@@ -238,7 +246,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.SSOSAML, models.GrantParams{})
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.SSOSAML, grantParams)
 
 		if terr != nil {
 			return internalServerError("Unable to issue refresh token from SAML Assertion").WithInternalError(terr)

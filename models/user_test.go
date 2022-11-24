@@ -151,10 +151,12 @@ func (ts *UserTestSuite) TestFindUserWithRefreshToken() {
 	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
 	require.NoError(ts.T(), err)
 
-	n, nr, err := FindUserWithRefreshToken(ts.db, r.Token)
+	n, nr, s, err := FindUserWithRefreshToken(ts.db, r.Token)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), r.ID, nr.ID)
 	require.Equal(ts.T(), u.ID, n.ID)
+	require.NotNil(ts.T(), s)
+	require.Equal(ts.T(), *r.SessionId, s.ID)
 }
 
 func (ts *UserTestSuite) TestIsDuplicatedEmail() {
