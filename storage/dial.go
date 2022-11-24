@@ -9,7 +9,6 @@ import (
 
 	"github.com/XSAM/otelsql"
 	"github.com/gobuffalo/pop/v5"
-	"github.com/gobuffalo/pop/v5/columns"
 	"github.com/jmoiron/sqlx"
 	"github.com/netlify/gotrue/conf"
 	"github.com/pkg/errors"
@@ -125,31 +124,4 @@ func (c *Connection) Transaction(fn func(*Connection) error) error {
 // typically used for tracing as the context contains trace span information.
 func (c *Connection) WithContext(ctx context.Context) *Connection {
 	return &Connection{c.Connection.WithContext(ctx)}
-}
-
-func getExcludedColumns(model interface{}, includeColumns ...string) ([]string, error) {
-	sm := &pop.Model{Value: model}
-	st := reflect.TypeOf(model)
-	if st.Kind() == reflect.Ptr {
-		_ = st.Elem()
-	}
-
-	// get all columns and remove included to get excluded set
-	cols := columns.ForStructWithAlias(model, sm.TableName(), sm.As, sm.IDField())
-	for _, f := range includeColumns {
-		if _, ok := cols.Cols[f]; !ok {
-			return nil, errors.Errorf("Invalid column name %s", f)
-		}
-		cols.Remove(f)
-	}
-
-	xcols := make([]string, len(cols.Cols))
-	for n := range cols.Cols {
-		// gobuffalo updates the updated_at column automatically
-		if n == "updated_at" {
-			continue
-		}
-		xcols = append(xcols, n)
-	}
-	return xcols, nil
 }
