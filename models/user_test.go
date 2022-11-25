@@ -164,19 +164,19 @@ func (ts *UserTestSuite) TestIsDuplicatedEmail() {
 
 	e, err := IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "test")
 	require.NoError(ts.T(), err)
-	require.True(ts.T(), e, "expected email to be duplicated")
+	require.NotNil(ts.T(), e, "expected email to be duplicated")
 
 	e, err = IsDuplicatedEmail(ts.db, "davidcalavera@netlify.com", "test")
 	require.NoError(ts.T(), err)
-	require.False(ts.T(), e, "expected email to not be duplicated")
+	require.Nil(ts.T(), e, "expected email to not be duplicated")
 
 	e, err = IsDuplicatedEmail(ts.db, "david@netlify.com", "test")
 	require.NoError(ts.T(), err)
-	require.False(ts.T(), e, "expected same email to not be duplicated")
+	require.Nil(ts.T(), e, "expected same email to not be duplicated")
 
 	e, err = IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "other-aud")
 	require.NoError(ts.T(), err)
-	require.False(ts.T(), e, "expected same email to not be duplicated")
+	require.Nil(ts.T(), e, "expected same email to not be duplicated")
 }
 
 func (ts *UserTestSuite) createUser() *User {
@@ -186,9 +186,14 @@ func (ts *UserTestSuite) createUser() *User {
 func (ts *UserTestSuite) createUserWithEmail(email string) *User {
 	user, err := NewUser("", email, "secret", "test", nil)
 	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(user))
 
-	err = ts.db.Create(user)
+	identity, err := NewIdentity(user, "email", map[string]interface{}{
+		"sub":   user.ID.String(),
+		"email": email,
+	})
 	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(identity))
 
 	return user
 }

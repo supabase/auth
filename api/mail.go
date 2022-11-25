@@ -182,9 +182,9 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return unprocessableEntityError("The new email address provided is invalid")
 			}
-			if exists, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud); terr != nil {
+			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud); terr != nil {
 				return internalServerError("Database error checking email").WithInternalError(terr)
-			} else if exists {
+			} else if duplicateUser != nil {
 				return unprocessableEntityError(DuplicateEmailMsg)
 			}
 			now := time.Now()

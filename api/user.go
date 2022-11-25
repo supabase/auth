@@ -123,10 +123,10 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 
-			var exists bool
-			if exists, terr = models.IsDuplicatedEmail(tx, params.Email, user.Aud); terr != nil {
+			var duplicateUser *models.User
+			if duplicateUser, terr = models.IsDuplicatedEmail(tx, params.Email, user.Aud); terr != nil {
 				return internalServerError("Database error checking email").WithInternalError(terr)
-			} else if exists {
+			} else if duplicateUser != nil {
 				return unprocessableEntityError(DuplicateEmailMsg)
 			}
 
