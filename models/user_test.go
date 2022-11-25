@@ -245,3 +245,59 @@ func (ts *UserTestSuite) TestRemoveUnconfirmedIdentities() {
 	require.Equal(ts.T(), user.AppMetaData["provider"], "phone")
 	require.Equal(ts.T(), user.AppMetaData["providers"], []string{"phone", "twitter"})
 }
+
+func (ts *UserTestSuite) TestConfirmEmailChange() {
+	user, err := NewUser("", "test@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(user))
+
+	identity, err := NewIdentity(user, "email", map[string]interface{}{
+		"sub":   user.ID.String(),
+		"email": "test@example.com",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(identity))
+
+	user.EmailChange = "new@example.com"
+	require.NoError(ts.T(), ts.db.UpdateOnly(user, "email_change"))
+
+	require.NoError(ts.T(), user.ConfirmEmailChange(ts.db, 0))
+
+	require.NoError(ts.T(), ts.db.Eager().Load(user))
+	identity, err = FindIdentityByIdAndProvider(ts.db, user.ID.String(), "email")
+	require.NoError(ts.T(), err)
+
+	require.Equal(ts.T(), user.Email, storage.NullString("new@example.com"))
+	require.Equal(ts.T(), user.EmailChange, "")
+
+	require.NotNil(ts.T(), identity.IdentityData)
+	require.Equal(ts.T(), identity.IdentityData["email"], "new@example.com")
+}
+
+func (ts *UserTestSuite) TestConfirmPhoneChange() {
+	user, err := NewUser("123456789", "", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(user))
+
+	identity, err := NewIdentity(user, "phone", map[string]interface{}{
+		"sub":   user.ID.String(),
+		"phone": "123456789",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(identity))
+
+	user.PhoneChange = "987654321"
+	require.NoError(ts.T(), ts.db.UpdateOnly(user, "phone_change"))
+
+	require.NoError(ts.T(), user.ConfirmPhoneChange(ts.db))
+
+	require.NoError(ts.T(), ts.db.Eager().Load(user))
+	identity, err = FindIdentityByIdAndProvider(ts.db, user.ID.String(), "phone")
+	require.NoError(ts.T(), err)
+
+	require.Equal(ts.T(), user.Phone, storage.NullString("987654321"))
+	require.Equal(ts.T(), user.PhoneChange, "")
+
+	require.NotNil(ts.T(), identity.IdentityData)
+	require.Equal(ts.T(), identity.IdentityData["phone"], "987654321")
+}
