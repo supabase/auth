@@ -52,6 +52,13 @@ func (ts *ExternalTestSuite) createUser(providerId string, email string, name st
 	ts.Require().NoError(err, "Error making new user")
 	ts.Require().NoError(ts.API.db.Create(u), "Error creating user")
 
+	i, err := models.NewIdentity(u, "email", map[string]interface{}{
+		"sub":   u.ID.String(),
+		"email": email,
+	})
+	ts.Require().NoError(err)
+	ts.Require().NoError(ts.API.db.Create(i), "Error creating identity")
+
 	return u, err
 }
 
