@@ -17,12 +17,14 @@ import (
 type User struct {
 	ID uuid.UUID `json:"id" db:"id"`
 
-	Aud               string             `json:"aud" db:"aud"`
-	Role              string             `json:"role" db:"role"`
-	Email             storage.NullString `json:"email" db:"email"`
-	EncryptedPassword string             `json:"-" db:"encrypted_password"`
-	EmailConfirmedAt  *time.Time         `json:"email_confirmed_at,omitempty" db:"email_confirmed_at"`
-	InvitedAt         *time.Time         `json:"invited_at,omitempty" db:"invited_at"`
+	Aud       string             `json:"aud" db:"aud"`
+	Role      string             `json:"role" db:"role"`
+	Email     storage.NullString `json:"email" db:"email"`
+	IsSSOUser bool               `json:"-" db:"is_sso_user"`
+
+	EncryptedPassword string     `json:"-" db:"encrypted_password"`
+	EmailConfirmedAt  *time.Time `json:"email_confirmed_at,omitempty" db:"email_confirmed_at"`
+	InvitedAt         *time.Time `json:"invited_at,omitempty" db:"invited_at"`
 
 	Phone            storage.NullString `json:"phone" db:"phone"`
 	PhoneConfirmedAt *time.Time         `json:"phone_confirmed_at,omitempty" db:"phone_confirmed_at"`
@@ -377,7 +379,7 @@ func findUser(tx *storage.Connection, query string, args ...interface{}) (*User,
 
 // FindUserByConfirmationToken finds users with the matching confirmation token.
 func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, error) {
-	user, err := findUser(tx, "confirmation_token = ?", token)
+	user, err := findUser(tx, "confirmation_token = ? and is_sso_user = false", token)
 	if err != nil {
 		return nil, ConfirmationTokenNotFoundError{}
 	}
@@ -386,12 +388,12 @@ func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, e
 
 // FindUserByEmailAndAudience finds a user with the matching email and audience.
 func FindUserByEmailAndAudience(tx *storage.Connection, email, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and LOWER(email) = ? and aud = ?", uuid.Nil, strings.ToLower(email), aud)
+	return findUser(tx, "instance_id = ? and LOWER(email) = ? and aud = ? and is_sso_user = false", uuid.Nil, strings.ToLower(email), aud)
 }
 
 // FindUserByPhoneAndAudience finds a user with the matching email and audience.
 func FindUserByPhoneAndAudience(tx *storage.Connection, phone, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and phone = ? and aud = ?", uuid.Nil, phone, aud)
+	return findUser(tx, "instance_id = ? and phone = ? and aud = ? and is_sso_user = false", uuid.Nil, phone, aud)
 }
 
 // FindUserByID finds a user matching the provided ID.
@@ -401,12 +403,12 @@ func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
 
 // FindUserByRecoveryToken finds a user with the matching recovery token.
 func FindUserByRecoveryToken(tx *storage.Connection, token string) (*User, error) {
-	return findUser(tx, "recovery_token = ?", token)
+	return findUser(tx, "recovery_token = ? and is_sso_user = false", token)
 }
 
 // FindUserByEmailChangeToken finds a user with the matching email change token.
 func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, error) {
-	return findUser(tx, "email_change_token_current = ? or email_change_token_new = ?", token, token)
+	return findUser(tx, "is_sso_user = false and (email_change_token_current = ? or email_change_token_new = ?)", token, token)
 }
 
 // FindUserWithRefreshToken finds a user from the provided refresh token.
@@ -476,7 +478,7 @@ func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Paginat
 func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
 	return findUser(
 		tx,
-		"instance_id = ? and LOWER(email) = ? and email_change_token_current = ? and aud = ?",
+		"instance_id = ? and LOWER(email) = ? and email_change_token_current = ? and aud = ? and is_sso_user = false",
 		uuid.Nil, strings.ToLower(email), token, aud,
 	)
 }
@@ -485,7 +487,7 @@ func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, toke
 func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
 	return findUser(
 		tx,
-		"instance_id = ? and LOWER(email_change) = ? and email_change_token_new = ? and aud = ?",
+		"instance_id = ? and LOWER(email_change) = ? and email_change_token_new = ? and aud = ? and is_sso_user = false",
 		uuid.Nil, strings.ToLower(email), token, aud,
 	)
 }
@@ -504,7 +506,7 @@ func FindUserForEmailChange(tx *storage.Connection, email, token, aud string, se
 
 // FindUserByPhoneChangeAndAudience finds a user with the matching phone change and audience.
 func FindUserByPhoneChangeAndAudience(tx *storage.Connection, phone, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ?", uuid.Nil, phone, aud)
+	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ? and is_sso_user = false", uuid.Nil, phone, aud)
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and audience.

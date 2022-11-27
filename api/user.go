@@ -59,6 +59,12 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	log := observability.GetLogEntry(r)
 	log.Debugf("Checking params for token %v", params)
 
+	if user.IsSSOUser {
+		if (params.Password != nil && *params.Password != "") || params.Email != "" || params.Phone != "" || params.Nonce != "" {
+			return unprocessableEntityError("Updating email, phone, password of a SSO account only possible via SSO")
+		}
+	}
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if params.Password != nil {
