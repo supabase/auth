@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/crewjam/saml"
-	"github.com/crewjam/saml/samlsp"
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/provider"
