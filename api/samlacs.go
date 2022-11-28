@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/crewjam/saml"
+	"github.com/crewjam/saml/samlsp"
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/api/provider"
@@ -148,7 +149,22 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	// TODO: fetch new metadata if possible when validUntil < time.Now() or cacheDuration
+	if (!idpMetadata.ValidUntil.IsZero() && idpMetadata.ValidUntil.Before(time.Now())) || ssoProvider.SAMLProvider.UpdatedAt.Add(idpMetadata.CacheDuration).Before(time.Now()) {
+		if *ssoProvider.SAMLProvider.MetadataURL != "" {
+			rawMetadata, err := fetchSAMLMetadata(ctx, *ssoProvider.SAMLProvider.MetadataURL)
+			if err != nil {
+				return err
+			}
+			// TODO: figure out way Update metadata without breaking abstraction or opening a txn
+			idpMetadata, err = samlsp.ParseMetadata(rawMetadata)
+			if err != nil {
+				return err
+			}
+		}
+		logentry := log.WithField("sso_provider_id", ssoProvider.ID.String())
+		logentry.Warn("Metadata could not be retrieved. Continuing with existing metadata")
+
+	}
 
 	serviceProvider := a.getSAMLServiceProvider(idpMetadata, initiatedBy == "idp")
 	spAssertion, err := serviceProvider.ParseResponse(r, requestIds)
