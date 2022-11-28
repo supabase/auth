@@ -156,7 +156,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				// Fail silently but raise warning and continue with existing metadata
 				logentry := log.WithField("sso_provider_id", ssoProvider.ID.String())
-				logentry = log.WithField("saml_provider_metadata", ssoProvider.SAMLProvider.MetadataXML)
+				logentry = logentry.WithField("saml_provider_metadata", ssoProvider.SAMLProvider.MetadataXML)
 				logentry.Warn("Metadata could not be retrieved. Continuing with existing metadata")
 			}
 			ssoProvider.SAMLProvider.MetadataXML = string(rawMetadata)
