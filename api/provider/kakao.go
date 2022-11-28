@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
 	"github.com/netlify/gotrue/conf"
@@ -33,7 +32,6 @@ type kakaoUser struct {
 }
 
 func (p kakaoProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	fmt.Printf("GetOAuthToken: %v\n", code)
 	return p.Exchange(context.Background(), code)
 }
 
