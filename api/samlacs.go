@@ -149,20 +149,20 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	var samlMetadataModified bool
+	samlMetadataModified = false
 	if (!idpMetadata.ValidUntil.IsZero() && idpMetadata.ValidUntil.Before(time.Now())) || ssoProvider.SAMLProvider.UpdatedAt.Add(idpMetadata.CacheDuration).Before(time.Now()) {
 		if *ssoProvider.SAMLProvider.MetadataURL != "" {
 			rawMetadata, err := fetchSAMLMetadata(ctx, *ssoProvider.SAMLProvider.MetadataURL)
 			if err != nil {
-				return err
+				// Fail silently but raise warning and continue with existing metadata
+				logentry := log.WithField("sso_provider_id", ssoProvider.ID.String())
+				logentry = log.WithField("saml_provider_metadata", ssoProvider.SAMLProvider.MetadataXML)
+				logentry.Warn("Metadata could not be retrieved. Continuing with existing metadata")
 			}
-			// TODO: figure out way Update metadata without breaking abstraction or opening a txn
-			idpMetadata, err = samlsp.ParseMetadata(rawMetadata)
-			if err != nil {
-				return err
-			}
+			ssoProvider.SAMLProvider.MetadataXML = string(rawMetadata)
+			samlMetadataModified = true
 		}
-		logentry := log.WithField("sso_provider_id", ssoProvider.ID.String())
-		logentry.Warn("Metadata could not be retrieved. Continuing with existing metadata")
 
 	}
 
@@ -257,6 +257,12 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		var user *models.User
+
+		if samlMetadataModified {
+			if terr = tx.Update(ssoProvider.SAMLProvider); terr != nil {
+				return terr
+			}
+		}
 
 		// accounts potentially created via SAML can contain non-unique email addresses in the auth.users table
 		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, "sso:"+ssoProvider.ID.String()); terr != nil {
