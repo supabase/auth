@@ -40,6 +40,7 @@ func (RefreshToken) TableName() string {
 type GrantParams struct {
 	FactorID *uuid.UUID
 
+	ProviderID      *string
 	SessionNotAfter *time.Time
 }
 
@@ -140,6 +141,10 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 
 		if params.SessionNotAfter != nil {
 			session.NotAfter = params.SessionNotAfter
+		}
+
+		if params.ProviderID != nil {
+			session.ProviderID = params.ProviderID
 		}
 
 		if err := tx.Create(session); err != nil {

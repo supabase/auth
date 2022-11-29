@@ -147,6 +147,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		providerRefreshToken = oAuthResponseData.refreshToken
 	}
 
+	grantParams.ProviderID = &providerType
+
 	var user *models.User
 	var token *AccessTokenResponse
 	err := db.Transaction(func(tx *storage.Connection) error {

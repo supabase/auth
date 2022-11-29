@@ -232,6 +232,9 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 
 	var grantParams models.GrantParams
 
+	providerID := "sso:" + ssoProvider.ID.String()
+	grantParams.ProviderID = &providerID
+
 	if !notAfter.IsZero() {
 		grantParams.SessionNotAfter = &notAfter
 	}

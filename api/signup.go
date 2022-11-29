@@ -70,6 +70,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	var grantParams models.GrantParams
 	params.Aud = a.requestAud(ctx, r)
 
+	grantParams.ProviderID = &params.Provider
+
 	switch params.Provider {
 	case "email":
 		if !config.External.Email.Enabled {

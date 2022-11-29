@@ -82,6 +82,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		grantParams models.GrantParams
 		err         error
 		token       *AccessTokenResponse
+		providerID  string
 	)
 
 	err = db.Transaction(func(tx *storage.Connection) error {
@@ -104,10 +105,13 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 
 		switch params.Type {
 		case signupVerification, inviteVerification:
+			providerID = "email"
 			user, terr = a.signupVerify(r, ctx, tx, user)
 		case recoveryVerification, magicLinkVerification:
+			providerID = "email"
 			user, terr = a.recoverVerify(r, ctx, tx, user)
 		case emailChangeVerification:
+			providerID = "email"
 			user, terr = a.emailChangeVerify(r, ctx, tx, params, user)
 			if user == nil && terr == nil {
 				// when double confirmation is required
@@ -121,6 +125,10 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 
 		if terr != nil {
 			return terr
+		}
+
+		if providerID != "" {
+			grantParams.ProviderID = &providerID
 		}
 
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
@@ -187,6 +195,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		user        *models.User
 		grantParams models.GrantParams
 		token       *AccessTokenResponse
+		providerID  string
 	)
 
 	err = db.Transaction(func(tx *storage.Connection) error {
@@ -199,10 +208,13 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 
 		switch params.Type {
 		case signupVerification, inviteVerification:
+			providerID = "email"
 			user, terr = a.signupVerify(r, ctx, tx, user)
 		case recoveryVerification, magicLinkVerification:
+			providerID = "email"
 			user, terr = a.recoverVerify(r, ctx, tx, user)
 		case emailChangeVerification:
+			providerID = "email"
 			user, terr = a.emailChangeVerify(r, ctx, tx, params, user)
 			if user == nil && terr == nil {
 				return sendJSON(w, http.StatusOK, map[string]string{
@@ -211,6 +223,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 				})
 			}
 		case smsVerification, phoneChangeVerification:
+			providerID = "phone"
 			user, terr = a.smsVerify(r, ctx, tx, user, params.Type)
 		default:
 			return unprocessableEntityError("Unsupported verification type")
@@ -219,6 +232,11 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
+
+		if providerID != "" {
+			grantParams.ProviderID = &providerID
+		}
+
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 		if terr != nil {
 			return terr
