@@ -571,7 +571,10 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 		if terr != nil {
 			return "", terr
 		}
-		aal, amr = session.CalculateAALAndAMR()
+		aal, amr, terr = session.CalculateAALAndAMR(tx)
+		if terr != nil {
+			return "", terr
+		}
 	}
 
 	claims := &GoTrueClaims{
@@ -672,7 +675,11 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		if terr != nil {
 			return terr
 		}
-		aal, _ := session.CalculateAALAndAMR()
+		aal, _, terr := session.CalculateAALAndAMR(tx)
+		if terr != nil {
+			return terr
+		}
+
 		if err := session.UpdateAssociatedFactor(tx, grantParams.FactorID); err != nil {
 			return err
 		}
