@@ -51,8 +51,11 @@ func (p kakaoProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 			},
 		},
 		Metadata: &Claims{
-			Issuer:            p.APIHost,
-			Subject:           strconv.Itoa(u.ID),
+			Issuer:        p.APIHost,
+			Subject:       strconv.Itoa(u.ID),
+			Email:         u.Account.Email,
+			EmailVerified: u.Account.EmailVerified && u.Account.EmailValid,
+
 			Name:              u.Account.Profile.Name,
 			PreferredUsername: u.Account.Profile.Name,
 
