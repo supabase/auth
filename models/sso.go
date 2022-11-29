@@ -128,7 +128,6 @@ func (p SAMLProvider) EntityDescriptor() (*saml.EntityDescriptor, error) {
 	return samlsp.ParseMetadata([]byte(p.MetadataXML))
 }
 
-
 type SSODomain struct {
 	ID uuid.UUID `db:"id" json:"-"`
 
