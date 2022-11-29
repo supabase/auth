@@ -474,7 +474,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 					Data:     claims,
 				}
 
-				user, terr = a.signupNewUser(ctx, tx, signupParams)
+				user, terr = a.signupNewUser(ctx, tx, signupParams, false /* <- duplicateEmails */)
 				if terr != nil {
 					return terr
 				}
