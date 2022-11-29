@@ -31,6 +31,12 @@ func (a *API) samlDestroyRelayState(ctx context.Context, relayState *models.SAML
 	})
 }
 
+func IsMetadataStale(idpMetadata *saml.EntityDescriptor, samlProvider models.SAMLProvider) bool {
+	hasIDPMetadataExpired := !idpMetadata.ValidUntil.IsZero() && idpMetadata.ValidUntil.Before(time.Now())
+	hasCacheDurationExceeded := samlProvider.UpdatedAt.Add(idpMetadata.CacheDuration).Before(time.Now())
+	return hasIDPMetadataExpired || hasCacheDurationExceeded
+}
+
 // SAMLACS implements the main Assertion Consumer Service endpoint behavior.
 func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -150,13 +156,14 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 
 	var samlMetadataModified bool
 	samlMetadataModified = false
-	if (!idpMetadata.ValidUntil.IsZero() && idpMetadata.ValidUntil.Before(time.Now())) || ssoProvider.SAMLProvider.UpdatedAt.Add(idpMetadata.CacheDuration).Before(time.Now()) {
+	if IsMetadataStale(idpMetadata, ssoProvider.SAMLProvider) {
 		if *ssoProvider.SAMLProvider.MetadataURL != "" {
 			rawMetadata, err := fetchSAMLMetadata(ctx, *ssoProvider.SAMLProvider.MetadataURL)
 			if err != nil {
 				// Fail silently but raise warning and continue with existing metadata
 				logentry := log.WithField("sso_provider_id", ssoProvider.ID.String())
 				logentry = logentry.WithField("saml_provider_metadata", ssoProvider.SAMLProvider.MetadataXML)
+				logentry = logentry.WithField("error", err)
 				logentry.Warn("Metadata could not be retrieved. Continuing with existing metadata")
 			} else {
 				ssoProvider.SAMLProvider.MetadataXML = string(rawMetadata)

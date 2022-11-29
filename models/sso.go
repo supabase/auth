@@ -128,6 +128,12 @@ func (p SAMLProvider) EntityDescriptor() (*saml.EntityDescriptor, error) {
 	return samlsp.ParseMetadata([]byte(p.MetadataXML))
 }
 
+func IsMetadataStale(idpMetadata *saml.EntityDescriptor, samlProvider SAMLProvider) bool {
+	hasIDPMetadataExpired := !idpMetadata.ValidUntil.IsZero() && idpMetadata.ValidUntil.Before(time.Now())
+	hasCacheDurationExceeded := samlProvider.UpdatedAt.Add(idpMetadata.CacheDuration).Before(time.Now())
+	return hasIDPMetadataExpired || hasCacheDurationExceeded
+}
+
 type SSODomain struct {
 	ID uuid.UUID `db:"id" json:"-"`
 
