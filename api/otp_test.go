@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/assert"
@@ -18,19 +17,16 @@ import (
 type OtpTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.Configuration
-
-	instanceID uuid.UUID
+	Config *conf.GlobalConfiguration
 }
 
 func TestOtp(t *testing.T) {
-	api, config, instanceID, err := setupAPIForTestForInstance()
+	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	ts := &OtpTestSuite{
-		API:        api,
-		Config:     config,
-		instanceID: instanceID,
+		API:    api,
+		Config: config,
 	}
 	defer api.db.Close()
 
@@ -51,12 +47,15 @@ func (ts *OtpTestSuite) TestOtp() {
 		}
 	}{
 		{
-			"Test Success Magiclink Otp",
-			OtpParams{
+			desc: "Test Success Magiclink Otp",
+			params: OtpParams{
 				Email:      "test@example.com",
 				CreateUser: true,
+				Data: map[string]interface{}{
+					"somedata": "metadata",
+				},
 			},
-			struct {
+			expected: struct {
 				code     int
 				response map[string]interface{}
 			}{
@@ -65,13 +64,13 @@ func (ts *OtpTestSuite) TestOtp() {
 			},
 		},
 		{
-			"Test Failure Pass Both Email & Phone",
-			OtpParams{
+			desc: "Test Failure Pass Both Email & Phone",
+			params: OtpParams{
 				Email:      "test@example.com",
 				Phone:      "123456789",
 				CreateUser: true,
 			},
-			struct {
+			expected: struct {
 				code     int
 				response map[string]interface{}
 			}{

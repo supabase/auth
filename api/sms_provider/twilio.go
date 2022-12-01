@@ -61,7 +61,6 @@ func (t *TwilioProvider) SendSms(phone string, message string) error {
 		"From":    {t.Config.MessageServiceSid},
 		"Body":    {message},
 	}
-
 	client := &http.Client{Timeout: defaultTimeout}
 	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
 	if err != nil {
@@ -73,7 +72,7 @@ func (t *TwilioProvider) SendSms(phone string, message string) error {
 	if err != nil {
 		return err
 	}
-	if res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusForbidden {
+	if res.StatusCode/100 != 2 {
 		resp := &twilioErrResponse{}
 		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
 			return err
@@ -90,7 +89,7 @@ func (t *TwilioProvider) SendSms(phone string, message string) error {
 	}
 
 	if resp.Status == "failed" || resp.Status == "undelivered" {
-		return fmt.Errorf("Twilio error: %v %v", resp.ErrorMessage, resp.ErrorCode)
+		return fmt.Errorf("twilio error: %v %v", resp.ErrorMessage, resp.ErrorCode)
 	}
 
 	return nil

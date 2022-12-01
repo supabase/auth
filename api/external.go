@@ -6,18 +6,19 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/api/provider"
-	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/utilities"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/oauth2"
 )
 
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
@@ -37,20 +38,21 @@ type ExternalSignupParams struct {
 // ExternalProviderRedirect redirects the request to the corresponding oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	db := a.db.WithContext(ctx)
+	config := a.config
 
 	query := r.URL.Query()
 	providerType := query.Get("provider")
 	scopes := query.Get("scopes")
 
-	p, err := a.Provider(ctx, providerType, scopes, &query)
+	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
 		return badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
 	}
 
 	inviteToken := query.Get("invite_token")
 	if inviteToken != "" {
-		_, userErr := models.FindUserByConfirmationToken(a.db, inviteToken)
+		_, userErr := models.FindUserByConfirmationToken(db, inviteToken)
 		if userErr != nil {
 			if models.IsNotFoundError(userErr) {
 				return notFoundError(userErr.Error())
@@ -60,7 +62,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	}
 
 	redirectURL := a.getRedirectURLOrReferrer(r, query.Get("redirect_to"))
-	log := getLogEntry(r)
+	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
@@ -69,8 +71,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 				ExpiresAt: time.Now().Add(5 * time.Minute).Unix(),
 			},
 			SiteURL:    config.SiteURL,
-			InstanceID: getInstanceID(ctx).String(),
-			NetlifyID:  getNetlifyID(ctx),
+			InstanceID: uuid.Nil.String(),
 		},
 		Provider:    providerType,
 		InviteToken: inviteToken,
@@ -81,16 +82,27 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		return internalServerError("Error creating state").WithInternalError(err)
 	}
 
+	authUrlParams := make([]oauth2.AuthCodeOption, 0)
+	query.Del("scopes")
+	query.Del("provider")
+	for key := range query {
+		if key == "workos_provider" {
+			// See https://workos.com/docs/reference/sso/authorize/get
+			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("provider", query.Get(key)))
+		} else {
+			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam(key, query.Get(key)))
+		}
+	}
 	var authURL string
 	switch externalProvider := p.(type) {
 	case *provider.TwitterProvider:
-		authURL = externalProvider.AuthCodeURL(tokenString)
+		authURL = externalProvider.AuthCodeURL(tokenString, authUrlParams...)
 		err := storage.StoreInSession(providerType, externalProvider.Marshal(), r, w)
 		if err != nil {
 			return internalServerError("Error storing request token in session").WithInternalError(err)
 		}
 	default:
-		authURL = p.AuthCodeURL(tokenString)
+		authURL = p.AuthCodeURL(tokenString, authUrlParams...)
 	}
 
 	http.Redirect(w, r, authURL, http.StatusFound)
@@ -103,174 +115,58 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
+// errReturnNil is a hack that signals internalExternalProviderCallback to return nil
+var errReturnNil = errors.New("createAccountFromExternalIdentity: return nil in internalExternalProviderCallback")
+
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
-	instanceID := getInstanceID(ctx)
+	db := a.db.WithContext(ctx)
+	config := a.config
 
 	providerType := getExternalProviderType(ctx)
 	var userData *provider.UserProvidedData
-	var providerToken string
-	if providerType == "saml" {
-		samlUserData, err := a.samlCallback(ctx, r)
-		if err != nil {
-			return err
-		}
-		userData = samlUserData
-	} else if providerType == "twitter" {
+	var providerAccessToken string
+	var providerRefreshToken string
+	var grantParams models.GrantParams
+
+	if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
 		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)
 		if err != nil {
 			return err
 		}
 		userData = oAuthResponseData.userData
-		providerToken = oAuthResponseData.token
+		providerAccessToken = oAuthResponseData.token
 	} else {
 		oAuthResponseData, err := a.oAuthCallback(ctx, r, providerType)
 		if err != nil {
 			return err
 		}
 		userData = oAuthResponseData.userData
-		providerToken = oAuthResponseData.token
+		providerAccessToken = oAuthResponseData.token
+		providerRefreshToken = oAuthResponseData.refreshToken
 	}
 
 	var user *models.User
 	var token *AccessTokenResponse
-	err := a.db.Transaction(func(tx *storage.Connection) error {
+	err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		inviteToken := getInviteToken(ctx)
 		if inviteToken != "" {
-			if user, terr = a.processInvite(ctx, tx, userData, instanceID, inviteToken, providerType); terr != nil {
+			if user, terr = a.processInvite(r, ctx, tx, userData, inviteToken, providerType); terr != nil {
 				return terr
 			}
 		} else {
-			aud := a.requestAud(ctx, r)
-			var emailData provider.Email
-			var identityData map[string]interface{}
-			if userData.Metadata != nil {
-				identityData, terr = userData.Metadata.ToMap()
-				if terr != nil {
-					return terr
-				}
-			}
-
-			var identity *models.Identity
-			// check if identity exists
-			if identity, terr = models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType); terr != nil {
-				if models.IsNotFoundError(terr) {
-					user, emailData, terr = a.getUserByVerifiedEmail(tx, config, userData.Emails, instanceID, aud)
-					if terr != nil && !models.IsNotFoundError(terr) {
-						return internalServerError("Error checking for existing users").WithInternalError(terr)
-					}
-					if user != nil {
-						if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
-							return terr
-						}
-						if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
-							return terr
-						}
-					} else {
-						if config.DisableSignup {
-							return forbiddenError("Signups not allowed for this instance")
-						}
-
-						// prefer primary email for new signups
-						emailData = userData.Emails[0]
-						for _, e := range userData.Emails {
-							if e.Primary {
-								emailData = e
-								break
-							}
-						}
-
-						params := &SignupParams{
-							Provider: providerType,
-							Email:    emailData.Email,
-							Aud:      aud,
-							Data:     identityData,
-						}
-
-						user, terr = a.signupNewUser(ctx, tx, params)
-						if terr != nil {
-							return terr
-						}
-
-						if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
-							return terr
-						}
-					}
-				} else {
-					return terr
-				}
-			}
-
-			if identity != nil && user == nil {
-				// get user associated with identity
-				user, terr = models.FindUserByID(tx, identity.UserID)
-				if terr != nil {
-					return terr
-				}
-				identity.IdentityData = identityData
-				if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
-					return terr
-				}
-				// email & verified status might have changed if identity's email changed
-				emailData = provider.Email{
-					Email:    userData.Metadata.Email,
-					Verified: userData.Metadata.EmailVerified,
-				}
-				if terr = user.UpdateUserMetaData(tx, identityData); terr != nil {
-					return terr
-				}
-				if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
-					return terr
-				}
-			}
-
-			if user.IsBanned() {
-				return unauthorizedError("User is unauthorized")
-			}
-
-			if !user.IsConfirmed() {
-				if !emailData.Verified && !config.Mailer.Autoconfirm {
-					mailer := a.Mailer(ctx)
-					referrer := a.getReferrer(r)
-					if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
-						if errors.Is(terr, MaxFrequencyLimitError) {
-							return tooManyRequestsError("For security purposes, you can only request this once every minute")
-						}
-						return internalServerError("Error sending confirmation mail").WithInternalError(terr)
-					}
-					// email must be verified to issue a token
+			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
+				if errors.Is(terr, errReturnNil) {
 					return nil
 				}
 
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
-					"provider": providerType,
-				}); terr != nil {
-					return terr
-				}
-				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
-					return terr
-				}
-
-				// fall through to auto-confirm and issue token
-				if terr = user.Confirm(tx); terr != nil {
-					return internalServerError("Error updating user").WithInternalError(terr)
-				}
-			} else {
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, map[string]interface{}{
-					"provider": providerType,
-				}); terr != nil {
-					return terr
-				}
-				if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
-					return terr
-				}
+				return terr
 			}
 		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
 
-		token, terr = a.issueRefreshToken(ctx, tx, user)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
@@ -283,12 +179,14 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	rurl := a.getExternalRedirectURL(r)
 	if token != nil {
 		q := url.Values{}
-		q.Set("provider_token", providerToken)
-		q.Set("access_token", token.Token)
-		q.Set("token_type", token.TokenType)
-		q.Set("expires_in", strconv.Itoa(token.ExpiresIn))
-		q.Set("refresh_token", token.RefreshToken)
-		rurl += "#" + q.Encode()
+		q.Set("provider_token", providerAccessToken)
+		// Because not all providers give out a refresh token
+		// See corresponding OAuth2 spec: <https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1>
+		if providerRefreshToken != "" {
+			q.Set("provider_refresh_token", providerRefreshToken)
+		}
+
+		rurl = token.AsRedirectURL(rurl, q)
 
 		if err := a.setCookieTokens(config, token, false, w); err != nil {
 			return internalServerError("Failed to set JWT cookie. %s", err)
@@ -301,8 +199,169 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
-func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, instanceID uuid.UUID, inviteToken, providerType string) (*models.User, error) {
-	config := a.getConfig(ctx)
+func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
+	ctx := r.Context()
+	aud := a.requestAud(ctx, r)
+	config := a.config
+
+	var terr error
+
+	var user *models.User
+	var identity *models.Identity
+
+	var emailData provider.Email
+	var identityData map[string]interface{}
+	if userData.Metadata != nil {
+		identityData = structs.Map(userData.Metadata)
+	}
+
+	var emails []string
+
+	for _, email := range userData.Emails {
+		if email.Verified || config.Mailer.Autoconfirm {
+			emails = append(emails, email.Email)
+		}
+	}
+
+	decision, terr := models.DetermineAccountLinking(tx, providerType, userData.Metadata.Subject, emails)
+	if terr != nil {
+		return nil, terr
+	}
+
+	switch decision.Decision {
+	case models.LinkAccount:
+		user = decision.User
+
+		emailData = userData.Emails[0]
+		for _, e := range userData.Emails {
+			if e.Primary || e.Verified {
+				emailData = e
+				break
+			}
+		}
+
+		if _, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+			return nil, terr
+		}
+
+		if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
+			return nil, terr
+		}
+
+	case models.CreateAccount:
+		if config.DisableSignup {
+			return nil, forbiddenError("Signups not allowed for this instance")
+		}
+
+		// prefer primary email for new signups
+		emailData = userData.Emails[0]
+		for _, e := range userData.Emails {
+			if e.Primary {
+				emailData = e
+				break
+			}
+		}
+
+		params := &SignupParams{
+			Provider: providerType,
+			Email:    emailData.Email,
+			Aud:      aud,
+			Data:     identityData,
+		}
+
+		user, terr = a.signupNewUser(ctx, tx, params, false /* <-duplicateEmail */)
+		if terr != nil {
+			return nil, terr
+		}
+
+		if _, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+			return nil, terr
+		}
+
+	case models.AccountExists:
+		user = decision.User
+		identity = decision.Identities[0]
+
+		identity.IdentityData = identityData
+		if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
+			return nil, terr
+		}
+		// email & verified status might have changed if identity's email changed
+		emailData = provider.Email{
+			Email:    userData.Metadata.Email,
+			Verified: userData.Metadata.EmailVerified,
+		}
+		if terr = user.UpdateUserMetaData(tx, identityData); terr != nil {
+			return nil, terr
+		}
+		if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
+			return nil, terr
+		}
+
+	case models.MultipleAccounts:
+		return nil, internalServerError(fmt.Sprintf("Multiple accounts with the same email address in the same linking domain detected: %v", decision.LinkingDomain))
+
+	default:
+		return nil, internalServerError(fmt.Sprintf("Unknown automatic linking decision: %v", decision.Decision))
+	}
+
+	if user.IsBanned() {
+		return nil, unauthorizedError("User is unauthorized")
+	}
+
+	// an account with a previously unconfirmed email + password
+	// combination or phone may exist. so now that there is an
+	// OAuth identity bound to this user, and since they have not
+	// confirmed their email or phone, they are unaware that a
+	// potentially malicious door exists into their account; thus
+	// the password and phone needs to be removed.
+	if terr = user.RemoveUnconfirmedIdentities(tx); terr != nil {
+		return nil, internalServerError("Error updating user").WithInternalError(terr)
+	}
+
+	if !user.IsConfirmed() {
+		if !emailData.Verified && !config.Mailer.Autoconfirm {
+			mailer := a.Mailer(ctx)
+			referrer := a.getReferrer(r)
+			if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {
+				if errors.Is(terr, MaxFrequencyLimitError) {
+					return nil, tooManyRequestsError("For security purposes, you can only request this once every minute")
+				}
+				return nil, internalServerError("Error sending confirmation mail").WithInternalError(terr)
+			}
+			// email must be verified to issue a token
+			return nil, errReturnNil
+		}
+
+		if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+			"provider": providerType,
+		}); terr != nil {
+			return nil, terr
+		}
+		if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
+			return nil, terr
+		}
+
+		// fall through to auto-confirm and issue token
+		if terr = user.Confirm(tx); terr != nil {
+			return nil, internalServerError("Error updating user").WithInternalError(terr)
+		}
+	} else {
+		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+			"provider": providerType,
+		}); terr != nil {
+			return nil, terr
+		}
+		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
+			return nil, terr
+		}
+	}
+
+	return user, nil
+}
+
+func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, inviteToken, providerType string) (*models.User, error) {
+	config := a.config
 	user, err := models.FindUserByConfirmationToken(tx, inviteToken)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -313,10 +372,10 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 
 	var emailData *provider.Email
 	var emails []string
-	for _, e := range userData.Emails {
+	for i, e := range userData.Emails {
 		emails = append(emails, e.Email)
 		if user.GetEmail() == e.Email {
-			emailData = &e
+			emailData = &userData.Emails[i]
 			break
 		}
 	}
@@ -327,10 +386,7 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 
 	var identityData map[string]interface{}
 	if userData.Metadata != nil {
-		identityData, err = userData.Metadata.ToMap()
-		if err != nil {
-			return nil, internalServerError("Error serialising user metadata").WithInternalError(err)
-		}
+		identityData = structs.Map(userData.Metadata)
 	}
 	if _, err := a.createNewIdentity(tx, user, providerType, identityData); err != nil {
 		return nil, err
@@ -347,12 +403,12 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 		return nil, internalServerError("Database error updating user").WithInternalError(err)
 	}
 
-	if err := models.NewAuditLogEntry(tx, instanceID, user, models.InviteAcceptedAction, map[string]interface{}{
+	if err := models.NewAuditLogEntry(r, tx, user, models.InviteAcceptedAction, "", map[string]interface{}{
 		"provider": providerType,
 	}); err != nil {
 		return nil, err
 	}
-	if err := triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); err != nil {
+	if err := triggerEventHooks(ctx, tx, SignupEvent, user, config); err != nil {
 		return nil, err
 	}
 
@@ -364,7 +420,7 @@ func (a *API) processInvite(ctx context.Context, tx *storage.Connection, userDat
 }
 
 func (a *API) loadExternalState(ctx context.Context, state string) (context.Context, error) {
-	config := a.getConfig(ctx)
+	config := a.config
 	claims := ExternalProviderClaims{}
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
@@ -385,8 +441,8 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 }
 
 // Provider returns a Provider interface for the given name.
-func (a *API) Provider(ctx context.Context, name string, scopes string, query *url.Values) (provider.Provider, error) {
-	config := a.getConfig(ctx)
+func (a *API) Provider(ctx context.Context, name string, scopes string) (provider.Provider, error) {
+	config := a.config
 	name = strings.ToLower(name)
 
 	switch name {
@@ -421,9 +477,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string, query *u
 	case "twitter":
 		return provider.NewTwitterProvider(config.External.Twitter, scopes)
 	case "workos":
-		return provider.NewWorkOSProvider(config.External.WorkOS, query)
-	case "saml":
-		return provider.NewSamlProvider(config.External.Saml, a.db, getInstanceID(ctx))
+		return provider.NewWorkOSProvider(config.External.WorkOS)
 	case "zoom":
 		return provider.NewZoomProvider(config.External.Zoom)
 	default:
@@ -433,7 +487,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string, query *u
 
 func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	log := getLogEntry(r)
+	log := observability.GetLogEntry(r)
 	errorID := getRequestID(ctx)
 	err := handler(w, r)
 	if err != nil {
@@ -484,7 +538,7 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger) *url
 
 func (a *API) getExternalRedirectURL(r *http.Request) string {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
 	if config.External.RedirectURL != "" {
 		return config.External.RedirectURL
 	}
@@ -494,43 +548,15 @@ func (a *API) getExternalRedirectURL(r *http.Request) string {
 	return config.SiteURL
 }
 
-func (a *API) createNewIdentity(conn *storage.Connection, user *models.User, providerType string, identityData map[string]interface{}) (*models.Identity, error) {
+func (a *API) createNewIdentity(tx *storage.Connection, user *models.User, providerType string, identityData map[string]interface{}) (*models.Identity, error) {
 	identity, err := models.NewIdentity(user, providerType, identityData)
 	if err != nil {
 		return nil, err
 	}
 
-	err = conn.Transaction(func(tx *storage.Connection) error {
-		if terr := tx.Create(identity); terr != nil {
-			return internalServerError("Error creating identity").WithInternalError(terr)
-		}
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
+	if terr := tx.Create(identity); terr != nil {
+		return nil, internalServerError("Error creating identity").WithInternalError(terr)
 	}
 
 	return identity, nil
-}
-
-// getUserByVerifiedEmail checks if one of the verified emails already belongs to a user
-func (a *API) getUserByVerifiedEmail(tx *storage.Connection, config *conf.Configuration, emails []provider.Email, instanceID uuid.UUID, aud string) (*models.User, provider.Email, error) {
-	var user *models.User
-	var emailData provider.Email
-	var err error
-
-	for _, e := range emails {
-		if e.Verified || config.Mailer.Autoconfirm {
-			user, err = models.FindUserByEmailAndAudience(tx, instanceID, e.Email, aud)
-			if err != nil && !models.IsNotFoundError(err) {
-				return user, emailData, err
-			}
-			if user != nil {
-				emailData = e
-				break
-			}
-		}
-	}
-	return user, emailData, err
 }

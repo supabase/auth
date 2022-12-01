@@ -1,12 +1,12 @@
 package cmd
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gobuffalo/pop/v5/logging"
-	"github.com/netlify/gotrue/conf"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -19,10 +19,8 @@ var migrateCmd = cobra.Command{
 }
 
 func migrate(cmd *cobra.Command, args []string) {
-	globalConfig, err := conf.LoadGlobal(configFile)
-	if err != nil {
-		logrus.Fatalf("Failed to load configuration: %+v", err)
-	}
+	globalConfig := loadGlobalConfig(cmd.Context())
+
 	if globalConfig.DB.Driver == "" && globalConfig.DB.URL != "" {
 		u, err := url.Parse(globalConfig.DB.URL)
 		if err != nil {
@@ -31,7 +29,7 @@ func migrate(cmd *cobra.Command, args []string) {
 		globalConfig.DB.Driver = u.Scheme
 	}
 
-	log := logrus.New()
+	log := logrus.StandardLogger()
 
 	pop.Debug = false
 	if globalConfig.Logging.Level != "" {
@@ -46,19 +44,26 @@ func migrate(cmd *cobra.Command, args []string) {
 		}
 		if level != logrus.DebugLevel {
 			var noopLogger = func(lvl logging.Level, s string, args ...interface{}) {
-				return
 			}
 			// Hide pop migration logging
 			pop.SetLogger(noopLogger)
 		}
 	}
 
+	u, _ := url.Parse(globalConfig.DB.URL)
+	processedUrl := globalConfig.DB.URL
+	if len(u.Query()) != 0 {
+		processedUrl = fmt.Sprintf("%s&application_name=gotrue_migrations", processedUrl)
+	} else {
+		processedUrl = fmt.Sprintf("%s?application_name=gotrue_migrations", processedUrl)
+	}
 	deets := &pop.ConnectionDetails{
 		Dialect: globalConfig.DB.Driver,
-		URL:     globalConfig.DB.URL,
+		URL:     processedUrl,
 	}
 	deets.Options = map[string]string{
 		"migration_table_name": "schema_migrations",
+		"Namespace":            globalConfig.DB.Namespace,
 	}
 
 	db, err := pop.NewConnection(deets)

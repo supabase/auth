@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/assert"
@@ -23,9 +22,7 @@ import (
 type PhoneTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.Configuration
-
-	instanceID uuid.UUID
+	Config *conf.GlobalConfiguration
 }
 
 type TestSmsProvider struct {
@@ -37,13 +34,12 @@ func (t *TestSmsProvider) SendSms(phone string, message string) error {
 }
 
 func TestPhone(t *testing.T) {
-	api, config, instanceID, err := setupAPIForTestForInstance()
+	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
 	ts := &PhoneTestSuite{
-		API:        api,
-		Config:     config,
-		instanceID: instanceID,
+		API:    api,
+		Config: config,
 	}
 	defer api.db.Close()
 
@@ -54,8 +50,7 @@ func (ts *PhoneTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
 	// Create user
-	u, err := models.NewUser(ts.instanceID, "", "password", ts.Config.JWT.Aud, nil)
-	u.Phone = "123456789"
+	u, err := models.NewUser("123456789", "", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }
@@ -71,34 +66,33 @@ func (ts *PhoneTestSuite) TestFormatPhoneNumber() {
 }
 
 func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
-	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "123456789", ts.Config.JWT.Aud)
+	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	ctx, err := WithInstanceConfig(context.Background(), ts.Config, ts.instanceID)
-	require.NoError(ts.T(), err)
+	ctx := context.Background()
 	cases := []struct {
 		desc     string
 		otpType  string
 		expected error
 	}{
 		{
-			"send confirmation otp",
-			phoneConfirmationOtp,
-			nil,
+			desc:     "send confirmation otp",
+			otpType:  phoneConfirmationOtp,
+			expected: nil,
 		},
 		{
-			"send phone_change otp",
-			phoneChangeVerification,
-			nil,
+			desc:     "send phone_change otp",
+			otpType:  phoneChangeVerification,
+			expected: nil,
 		},
 		{
-			"send recovery otp",
-			phoneReauthenticationOtp,
-			nil,
+			desc:     "send recovery otp",
+			otpType:  phoneReauthenticationOtp,
+			expected: nil,
 		},
 		{
-			"send invalid otp type ",
-			"invalid otp type",
-			internalServerError("invalid otp type"),
+			desc:     "send invalid otp type ",
+			otpType:  "invalid otp type",
+			expected: internalServerError("invalid otp type"),
 		},
 	}
 
@@ -106,7 +100,7 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 		ts.Run(c.desc, func() {
 			err = ts.API.sendPhoneConfirmation(ctx, ts.API.db, u, "123456789", c.otpType, &TestSmsProvider{})
 			require.Equal(ts.T(), c.expected, err)
-			u, err = models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "123456789", ts.Config.JWT.Aud)
+			u, err = models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
 			switch c.otpType {
@@ -126,13 +120,14 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 }
 
 func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
-	u, err := models.FindUserByPhoneAndAudience(ts.API.db, ts.instanceID, "123456789", ts.Config.JWT.Aud)
+	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	now := time.Now()
 	u.PhoneConfirmedAt = &now
 	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
-	token, err := generateAccessToken(u, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	var token string
+	token, err = generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
 
 	cases := []struct {
@@ -144,52 +139,52 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 		expected map[string]interface{}
 	}{
 		{
-			"Signup",
-			"/signup",
-			http.MethodPost,
-			"",
-			map[string]string{
+			desc:     "Signup",
+			endpoint: "/signup",
+			method:   http.MethodPost,
+			header:   "",
+			body: map[string]string{
 				"phone":    "1234567890",
 				"password": "testpassword",
 			},
-			map[string]interface{}{
+			expected: map[string]interface{}{
 				"code":    http.StatusBadRequest,
 				"message": "Error sending confirmation sms:",
 			},
 		},
 		{
-			"Sms OTP",
-			"/otp",
-			http.MethodPost,
-			"",
-			map[string]string{
+			desc:     "Sms OTP",
+			endpoint: "/otp",
+			method:   http.MethodPost,
+			header:   "",
+			body: map[string]string{
 				"phone": "123456789",
 			},
-			map[string]interface{}{
+			expected: map[string]interface{}{
 				"code":    http.StatusBadRequest,
 				"message": "Error sending sms:",
 			},
 		},
 		{
-			"Phone change",
-			"/user",
-			http.MethodPut,
-			token,
-			map[string]string{
+			desc:     "Phone change",
+			endpoint: "/user",
+			method:   http.MethodPut,
+			header:   token,
+			body: map[string]string{
 				"phone": "111111111",
 			},
-			map[string]interface{}{
+			expected: map[string]interface{}{
 				"code":    http.StatusBadRequest,
 				"message": "Error sending sms:",
 			},
 		},
 		{
-			"Reauthenticate",
-			"/reauthenticate",
-			http.MethodGet,
-			"",
-			nil,
-			map[string]interface{}{
+			desc:     "Reauthenticate",
+			endpoint: "/reauthenticate",
+			method:   http.MethodGet,
+			header:   "",
+			body:     nil,
+			expected: map[string]interface{}{
 				"code":    http.StatusBadRequest,
 				"message": "Error sending sms:",
 			},

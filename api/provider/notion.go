@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/netlify/gotrue/conf"
@@ -60,7 +60,7 @@ func NewNotionProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, erro
 }
 
 func (g notionProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(oauth2.NoContext, code)
+	return g.Exchange(context.Background(), code)
 }
 
 func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -79,18 +79,23 @@ func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 
 	client := &http.Client{Timeout: defaultTimeout}
 	resp, err := client.Do(req)
-
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("a %v error occurred with retrieving user from notion", resp.StatusCode)
 	}
 
-	body, _ := ioutil.ReadAll(resp.Body)
-	json.Unmarshal(body, &u)
-	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(body, &u)
+	if err != nil {
+		return nil, err
+	}
 
 	if u.Bot.Owner.User.Person.Email == "" {
 		return nil, errors.New("unable to find email with notion provider")

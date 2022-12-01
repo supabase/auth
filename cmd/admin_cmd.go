@@ -1,18 +1,18 @@
 package cmd
 
 import (
+	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
-	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-var autoconfirm, isSuperAdmin, isAdmin bool
-var audience, instanceID string
+var autoconfirm, isAdmin bool
+var audience string
 
-func getAudience(c *conf.Configuration) string {
+func getAudience(c *conf.GlobalConfiguration) string {
 	if audience == "" {
 		return c.JWT.Aud
 	}
@@ -27,10 +27,8 @@ func adminCmd() *cobra.Command {
 
 	adminCmd.AddCommand(&adminCreateUserCmd, &adminDeleteUserCmd)
 	adminCmd.PersistentFlags().StringVarP(&audience, "aud", "a", "", "Set the new user's audience")
-	adminCmd.PersistentFlags().StringVarP(&instanceID, "instance_id", "i", "", "Set the instance ID to interact with")
 
 	adminCreateUserCmd.Flags().BoolVar(&autoconfirm, "confirm", false, "Automatically confirm user without sending an email")
-	adminCreateUserCmd.Flags().BoolVar(&isSuperAdmin, "superadmin", false, "Create user with superadmin privileges")
 	adminCreateUserCmd.Flags().BoolVar(&isAdmin, "admin", false, "Create user with admin privileges")
 
 	return adminCmd
@@ -67,27 +65,24 @@ var adminEditRoleCmd = cobra.Command{
 	},
 }
 
-func adminCreateUser(globalConfig *conf.GlobalConfiguration, config *conf.Configuration, args []string) {
-	iid := uuid.Must(uuid.FromString(instanceID))
-
-	db, err := storage.Dial(globalConfig)
+func adminCreateUser(config *conf.GlobalConfiguration, args []string) {
+	db, err := storage.Dial(config)
 	if err != nil {
 		logrus.Fatalf("Error opening database: %+v", err)
 	}
 	defer db.Close()
 
 	aud := getAudience(config)
-	if exists, err := models.IsDuplicatedEmail(db, iid, args[0], aud); exists {
+	if user, err := models.IsDuplicatedEmail(db, args[0], aud); user != nil {
 		logrus.Fatalf("Error creating new user: user already exists")
 	} else if err != nil {
 		logrus.Fatalf("Error checking user email: %+v", err)
 	}
 
-	user, err := models.NewUser(iid, args[0], args[1], aud, nil)
+	user, err := models.NewUser("", args[0], args[1], aud, nil)
 	if err != nil {
 		logrus.Fatalf("Error creating new user: %+v", err)
 	}
-	user.IsSuperAdmin = isSuperAdmin
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -119,19 +114,17 @@ func adminCreateUser(globalConfig *conf.GlobalConfiguration, config *conf.Config
 	logrus.Infof("Created user: %s", args[0])
 }
 
-func adminDeleteUser(globalConfig *conf.GlobalConfiguration, config *conf.Configuration, args []string) {
-	iid := uuid.Must(uuid.FromString(instanceID))
-
-	db, err := storage.Dial(globalConfig)
+func adminDeleteUser(config *conf.GlobalConfiguration, args []string) {
+	db, err := storage.Dial(config)
 	if err != nil {
 		logrus.Fatalf("Error opening database: %+v", err)
 	}
 	defer db.Close()
 
-	user, err := models.FindUserByEmailAndAudience(db, iid, args[0], getAudience(config))
+	user, err := models.FindUserByEmailAndAudience(db, args[0], getAudience(config))
 	if err != nil {
 		userID := uuid.Must(uuid.FromString(args[0]))
-		user, err = models.FindUserByInstanceIDAndID(db, iid, userID)
+		user, err = models.FindUserByID(db, userID)
 		if err != nil {
 			logrus.Fatalf("Error finding user (%s): %+v", userID, err)
 		}
@@ -144,25 +137,21 @@ func adminDeleteUser(globalConfig *conf.GlobalConfiguration, config *conf.Config
 	logrus.Infof("Removed user: %s", args[0])
 }
 
-func adminEditRole(globalConfig *conf.GlobalConfiguration, config *conf.Configuration, args []string) {
-	iid := uuid.Must(uuid.FromString(instanceID))
-
-	db, err := storage.Dial(globalConfig)
+func adminEditRole(config *conf.GlobalConfiguration, args []string) {
+	db, err := storage.Dial(config)
 	if err != nil {
 		logrus.Fatalf("Error opening database: %+v", err)
 	}
 	defer db.Close()
 
-	user, err := models.FindUserByEmailAndAudience(db, iid, args[0], getAudience(config))
+	user, err := models.FindUserByEmailAndAudience(db, args[0], getAudience(config))
 	if err != nil {
 		userID := uuid.Must(uuid.FromString(args[0]))
-		user, err = models.FindUserByInstanceIDAndID(db, iid, userID)
+		user, err = models.FindUserByID(db, userID)
 		if err != nil {
 			logrus.Fatalf("Error finding user (%s): %+v", userID, err)
 		}
 	}
-
-	user.IsSuperAdmin = isSuperAdmin
 
 	if len(args) > 0 {
 		user.Role = args[0]

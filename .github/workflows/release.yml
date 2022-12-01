@@ -1,128 +1,65 @@
 name: Build and Release on Push to Master
 
 on:
+  workflow_dispatch:
+
   workflow_run:
     workflows: [Test]
     types: [completed]
-    branches: [master]
+    branches:
+      - master
+      - mfa
+      - zerosessionidfix
 
 jobs:
   release:
-    strategy:
-      matrix:
-        node: ["16"]
-
     outputs:
-      status: ${{ steps.pre-release.outputs.release != steps.post-release.outputs.release }}
+      status: ${{ steps.semantic.outputs.new_release_published }}
+      version: ${{ steps.semantic.outputs.new_release_version }}
 
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - uses: actions/checkout@v2
-
-      - id: pre-release
-        uses: pozetroninc/github-action-get-latest-release@master
-        with:
-          owner: supabase
-          repo: gotrue
-          excludes: prerelease, draft
-
-      - name: Set up Node
-        uses: actions/setup-node@v2
-        with:
-          node-version: ${{ matrix.node }}
-
+      - uses: actions/checkout@v3
       - name: Release on GitHub
-        id: github-release
-        run: npx semantic-release -p        \
-          @semantic-release/commit-analyzer \
-          @semantic-release/github         \
-          @semantic-release/release-notes-generator
+        id: semantic
+        uses: cycjimmy/semantic-release-action@v3
+        with:
+          semantic_version: 18
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - id: post-release
-        uses: pozetroninc/github-action-get-latest-release@master
-        with:
-          owner: supabase
-          repo: gotrue
-          excludes: prerelease, draft
-
   deploy:
     needs: release
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     if: success() && needs.release.outputs.status == 'true'
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
-          go-version: "^1.17.0" # The Go version to download (if necessary) and use.
+          go-version: "^1.19.0" # The Go version to download (if necessary) and use.
 
       - run: make deps
-
       - run: make all
-
-      - id: releases
-        uses: pozetroninc/github-action-get-latest-release@master
-        with:
-          owner: supabase
-          repo: gotrue
-          excludes: prerelease, draft
-
-      - run: tar -czvf gotrue-${{ steps.releases.outputs.release }}-x86.tar.gz gotrue migrations/
+      - run: tar -czvf gotrue-v${{ needs.release.outputs.version }}-x86.tar.gz gotrue migrations/
       - run: mv gotrue-arm64 gotrue
-      - run: tar -czvf gotrue-${{ steps.releases.outputs.release }}-arm64.tar.gz gotrue migrations/
+      - run: tar -czvf gotrue-v${{ needs.release.outputs.version }}-arm64.tar.gz gotrue migrations/
 
       - uses: AButler/upload-release-assets@v2.0
         with:
-          files: "gotrue-${{ steps.releases.outputs.release }}*.tar.gz"
-          release-tag: ${{ steps.releases.outputs.release }}
+          files: "gotrue-v${{ needs.release.outputs.version }}*.tar.gz"
+          release-tag: v${{ needs.release.outputs.version }}
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to ECR account - staging
-        uses: docker/login-action@v1
-        with:
-          registry: 436098097459.dkr.ecr.us-east-1.amazonaws.com
-          username: ${{ secrets.DEV_ACCESS_KEY_ID }}
-          password: ${{ secrets.DEV_SECRET_ACCESS_KEY }}
-
-      - name: Login to ECR account - prod
-        uses: docker/login-action@v1
-        with:
-          registry: 646182064048.dkr.ecr.us-east-1.amazonaws.com
-          username: ${{ secrets.PROD_ACCESS_KEY_ID }}
-          password: ${{ secrets.PROD_SECRET_ACCESS_KEY }}
-
-      - name: Upload image to ECR
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          push: true
-          tags: |
-            436098097459.dkr.ecr.us-east-1.amazonaws.com/gotrue:${{ steps.releases.outputs.release }}
-            646182064048.dkr.ecr.us-east-1.amazonaws.com/gotrue:${{ steps.releases.outputs.release }}
-
-      - uses: docker/setup-qemu-action@v1
-        with:
-          platforms: amd64,arm64
-
-      - uses: docker/setup-buildx-action@v1
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Upload image to Docker Hub
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            supabase/gotrue:latest
-            supabase/gotrue:${{ steps.releases.outputs.release }}
+  publish:
+    needs:
+      - release
+    if: success() && needs.release.outputs.status == 'true'
+    # Call publish explicitly because events from actions cannot trigger more actions
+    uses: ./.github/workflows/publish.yml
+    with:
+      version: v${{ needs.release.outputs.version }}
+    secrets: inherit

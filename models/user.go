@@ -1,33 +1,30 @@
 package models
 
 import (
+	"context"
 	"database/sql"
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
-	"golang.org/x/crypto/bcrypt"
 )
-
-const SystemUserID = "0"
-
-var SystemUserUUID = uuid.Nil
 
 // User respresents a registered user with email/password authentication
 type User struct {
-	InstanceID uuid.UUID `json:"-" db:"instance_id"`
-	ID         uuid.UUID `json:"id" db:"id"`
+	ID uuid.UUID `json:"id" db:"id"`
 
-	Aud               string             `json:"aud" db:"aud"`
-	Role              string             `json:"role" db:"role"`
-	Email             storage.NullString `json:"email" db:"email"`
-	EncryptedPassword string             `json:"-" db:"encrypted_password"`
-	EmailConfirmedAt  *time.Time         `json:"email_confirmed_at,omitempty" db:"email_confirmed_at"`
-	InvitedAt         *time.Time         `json:"invited_at,omitempty" db:"invited_at"`
+	Aud       string             `json:"aud" db:"aud"`
+	Role      string             `json:"role" db:"role"`
+	Email     storage.NullString `json:"email" db:"email"`
+	IsSSOUser bool               `json:"-" db:"is_sso_user"`
+
+	EncryptedPassword string     `json:"-" db:"encrypted_password"`
+	EmailConfirmedAt  *time.Time `json:"email_confirmed_at,omitempty" db:"email_confirmed_at"`
+	InvitedAt         *time.Time `json:"invited_at,omitempty" db:"invited_at"`
 
 	Phone            storage.NullString `json:"phone" db:"phone"`
 	PhoneConfirmedAt *time.Time         `json:"phone_confirmed_at,omitempty" db:"phone_confirmed_at"`
@@ -59,23 +56,24 @@ type User struct {
 	AppMetaData  JSONMap `json:"app_metadata" db:"raw_app_meta_data"`
 	UserMetaData JSONMap `json:"user_metadata" db:"raw_user_meta_data"`
 
-	IsSuperAdmin bool       `json:"-" db:"is_super_admin"`
-	Identities   []Identity `json:"identities" has_many:"identities"`
+	Factors    []Factor   `json:"factors,omitempty" has_many:"factors"`
+	Identities []Identity `json:"identities" has_many:"identities"`
 
 	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
 	BannedUntil *time.Time `json:"banned_until,omitempty" db:"banned_until"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
+
+	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 }
 
 // NewUser initializes a new user from an email, password and user data.
-// TODO: Refactor NewUser to take in phone as an arg
-func NewUser(instanceID uuid.UUID, email, password, aud string, userData map[string]interface{}) (*User, error) {
+func NewUser(phone, email, password, aud string, userData map[string]interface{}) (*User, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
 	}
-	pw, err := hashPassword(password)
+	pw, err := crypto.GenerateFromPassword(context.Background(), password)
 	if err != nil {
 		return nil, err
 	}
@@ -83,24 +81,14 @@ func NewUser(instanceID uuid.UUID, email, password, aud string, userData map[str
 		userData = make(map[string]interface{})
 	}
 	user := &User{
-		InstanceID:        instanceID,
 		ID:                id,
 		Aud:               aud,
 		Email:             storage.NullString(strings.ToLower(email)),
+		Phone:             storage.NullString(phone),
 		UserMetaData:      userData,
 		EncryptedPassword: pw,
 	}
 	return user, nil
-}
-
-// NewSystemUser returns a user with the id as SystemUserUUID
-func NewSystemUser(instanceID uuid.UUID, aud string) *User {
-	return &User{
-		InstanceID:   instanceID,
-		ID:           SystemUserUUID,
-		Aud:          aud,
-		IsSuperAdmin: true,
-	}
 }
 
 // TableName overrides the table name used by pop
@@ -109,26 +97,8 @@ func (User) TableName() string {
 	return tableName
 }
 
-// BeforeCreate is invoked before a create operation is ran
-func (u *User) BeforeCreate(tx *pop.Connection) error {
-	return u.BeforeUpdate(tx)
-}
-
-// BeforeUpdate is invoked before an update operation is ran
-func (u *User) BeforeUpdate(tx *pop.Connection) error {
-	if u.ID == SystemUserUUID {
-		return errors.New("Cannot persist system user")
-	}
-
-	return nil
-}
-
 // BeforeSave is invoked before the user is saved to the database
 func (u *User) BeforeSave(tx *pop.Connection) error {
-	if u.ID == SystemUserUUID {
-		return errors.New("Cannot persist system user")
-	}
-
 	if u.EmailConfirmedAt != nil && u.EmailConfirmedAt.IsZero() {
 		u.EmailConfirmedAt = nil
 	}
@@ -252,18 +222,9 @@ func (u *User) SetPhone(tx *storage.Connection, phone string) error {
 	return tx.UpdateOnly(u, "phone")
 }
 
-// hashPassword generates a hashed password from a plaintext string
-func hashPassword(password string) (string, error) {
-	pw, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return "", err
-	}
-	return string(pw), nil
-}
-
 // UpdatePassword updates the user's password
 func (u *User) UpdatePassword(tx *storage.Connection, password string) error {
-	pw, err := hashPassword(password)
+	pw, err := crypto.GenerateFromPassword(context.Background(), password)
 	if err != nil {
 		return err
 	}
@@ -279,7 +240,7 @@ func (u *User) UpdatePhone(tx *storage.Connection, phone string) error {
 
 // Authenticate a user from a password
 func (u *User) Authenticate(password string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(u.EncryptedPassword), []byte(password))
+	err := crypto.CompareHashAndPassword(context.Background(), u.EncryptedPassword, password)
 	return err == nil
 }
 
@@ -312,29 +273,85 @@ func (u *User) UpdateLastSignInAt(tx *storage.Connection) error {
 
 // ConfirmEmailChange confirm the change of email for a user
 func (u *User) ConfirmEmailChange(tx *storage.Connection, status int) error {
-	u.Email = storage.NullString(u.EmailChange)
+	email := u.EmailChange
+
+	u.Email = storage.NullString(email)
 	u.EmailChange = ""
 	u.EmailChangeTokenCurrent = ""
 	u.EmailChangeTokenNew = ""
 	u.EmailChangeConfirmStatus = status
-	return tx.UpdateOnly(
+
+	if err := tx.UpdateOnly(
 		u,
 		"email",
 		"email_change",
 		"email_change_token_current",
 		"email_change_token_new",
 		"email_change_confirm_status",
-	)
+	); err != nil {
+		return err
+	}
+
+	identity, err := FindIdentityByIdAndProvider(tx, u.ID.String(), "email")
+	if err != nil {
+		if IsNotFoundError(err) {
+			// no email identity, not an error
+			return nil
+		}
+
+		return err
+	}
+
+	if _, ok := identity.IdentityData["email"]; ok {
+		identity.IdentityData["email"] = email
+	}
+
+	if err := tx.UpdateOnly(identity, "identity_data"); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // ConfirmPhoneChange confirms the change of phone for a user
 func (u *User) ConfirmPhoneChange(tx *storage.Connection) error {
-	u.Phone = storage.NullString(u.PhoneChange)
+	now := time.Now()
+	phone := u.PhoneChange
+
+	u.Phone = storage.NullString(phone)
 	u.PhoneChange = ""
 	u.PhoneChangeToken = ""
-	now := time.Now()
 	u.PhoneConfirmedAt = &now
-	return tx.UpdateOnly(u, "phone", "phone_change", "phone_change_token", "phone_confirmed_at")
+
+	if err := tx.UpdateOnly(
+		u,
+		"phone",
+		"phone_change",
+		"phone_change_token",
+		"phone_confirmed_at",
+	); err != nil {
+		return err
+	}
+
+	identity, err := FindIdentityByIdAndProvider(tx, u.ID.String(), "phone")
+	if err != nil {
+		if IsNotFoundError(err) {
+			// no phone identity, not an error
+			return nil
+		}
+
+		return err
+	}
+
+	if _, ok := identity.IdentityData["phone"]; ok {
+		identity.IdentityData["phone"] = phone
+	}
+
+	if err := tx.UpdateOnly(identity, "identity_data"); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Recover resets the recovery token
@@ -344,8 +361,8 @@ func (u *User) Recover(tx *storage.Connection) error {
 }
 
 // CountOtherUsers counts how many other users exist besides the one provided
-func CountOtherUsers(tx *storage.Connection, instanceID, id uuid.UUID) (int, error) {
-	userCount, err := tx.Q().Where("instance_id = ? and id != ?", instanceID, id).Count(&User{})
+func CountOtherUsers(tx *storage.Connection, id uuid.UUID) (int, error) {
+	userCount, err := tx.Q().Where("instance_id = ? and id != ?", uuid.Nil, id).Count(&User{})
 	return userCount, errors.Wrap(err, "error finding registered users")
 }
 
@@ -363,7 +380,7 @@ func findUser(tx *storage.Connection, query string, args ...interface{}) (*User,
 
 // FindUserByConfirmationToken finds users with the matching confirmation token.
 func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, error) {
-	user, err := findUser(tx, "confirmation_token = ?", token)
+	user, err := findUser(tx, "confirmation_token = ? and is_sso_user = false", token)
 	if err != nil {
 		return nil, ConfirmationTokenNotFoundError{}
 	}
@@ -371,63 +388,69 @@ func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, e
 }
 
 // FindUserByEmailAndAudience finds a user with the matching email and audience.
-func FindUserByEmailAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and LOWER(email) = ? and aud = ?", instanceID, strings.ToLower(email), aud)
+func FindUserByEmailAndAudience(tx *storage.Connection, email, aud string) (*User, error) {
+	return findUser(tx, "instance_id = ? and LOWER(email) = ? and aud = ? and is_sso_user = false", uuid.Nil, strings.ToLower(email), aud)
 }
 
 // FindUserByPhoneAndAudience finds a user with the matching email and audience.
-func FindUserByPhoneAndAudience(tx *storage.Connection, instanceID uuid.UUID, phone, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and phone = ? and aud = ?", instanceID, phone, aud)
+func FindUserByPhoneAndAudience(tx *storage.Connection, phone, aud string) (*User, error) {
+	return findUser(tx, "instance_id = ? and phone = ? and aud = ? and is_sso_user = false", uuid.Nil, phone, aud)
 }
 
 // FindUserByID finds a user matching the provided ID.
 func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
-	return findUser(tx, "id = ?", id)
-}
-
-// FindUserByInstanceIDAndID finds a user matching the provided ID.
-func FindUserByInstanceIDAndID(tx *storage.Connection, instanceID, id uuid.UUID) (*User, error) {
-	return findUser(tx, "instance_id = ? and id = ?", instanceID, id)
+	return findUser(tx, "instance_id = ? and id = ?", uuid.Nil, id)
 }
 
 // FindUserByRecoveryToken finds a user with the matching recovery token.
 func FindUserByRecoveryToken(tx *storage.Connection, token string) (*User, error) {
-	return findUser(tx, "recovery_token = ?", token)
+	return findUser(tx, "recovery_token = ? and is_sso_user = false", token)
 }
 
 // FindUserByEmailChangeToken finds a user with the matching email change token.
 func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, error) {
-	return findUser(tx, "email_change_token_current = ? or email_change_token_new = ?", token, token)
-}
-
-// FindUserByTokenAndTokenType finds a user with the matching token and token type.
-func FindUserByTokenAndTokenType(tx *storage.Connection, token string, tokenType string) (*User, error) {
-	query := fmt.Sprintf("%v = ?", tokenType)
-	return findUser(tx, query, token)
+	return findUser(tx, "is_sso_user = false and (email_change_token_current = ? or email_change_token_new = ?)", token, token)
 }
 
 // FindUserWithRefreshToken finds a user from the provided refresh token.
-func FindUserWithRefreshToken(tx *storage.Connection, token string) (*User, *RefreshToken, error) {
+func FindUserWithRefreshToken(tx *storage.Connection, token string) (*User, *RefreshToken, *Session, error) {
 	refreshToken := &RefreshToken{}
 	if err := tx.Where("token = ?", token).First(refreshToken); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, nil, RefreshTokenNotFoundError{}
+			return nil, nil, nil, RefreshTokenNotFoundError{}
 		}
-		return nil, nil, errors.Wrap(err, "error finding refresh token")
+		return nil, nil, nil, errors.Wrap(err, "error finding refresh token")
 	}
 
-	user, err := findUser(tx, "id = ?", refreshToken.UserID)
+	user, err := FindUserByID(tx, refreshToken.UserID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return user, refreshToken, nil
+	var session *Session
+
+	if refreshToken.SessionId != nil {
+		sessionId := *refreshToken.SessionId
+
+		if sessionId != uuid.Nil {
+			session, err = FindSessionByID(tx, sessionId)
+			if err != nil {
+				if !IsNotFoundError(err) {
+					return nil, nil, nil, errors.Wrap(err, "error finding session from refresh token")
+				}
+
+				// otherwise, there's no session for this refresh token
+			}
+		}
+	}
+
+	return user, refreshToken, session, nil
 }
 
 // FindUsersInAudience finds users with the matching audience.
-func FindUsersInAudience(tx *storage.Connection, instanceID uuid.UUID, aud string, pageParams *Pagination, sortParams *SortParams, filter string) ([]*User, error) {
+func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Pagination, sortParams *SortParams, filter string) ([]*User, error) {
 	users := []*User{}
-	q := tx.Q().Where("instance_id = ? and aud = ?", instanceID, aud)
+	q := tx.Q().Where("instance_id = ? and aud = ?", uuid.Nil, aud)
 
 	if filter != "" {
 		lf := "%" + filter + "%"
@@ -453,55 +476,83 @@ func FindUsersInAudience(tx *storage.Connection, instanceID uuid.UUID, aud strin
 }
 
 // FindUserByEmailChangeCurrentAndAudience finds a user with the matching email change and audience.
-func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string) (*User, error) {
+func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
 	return findUser(
 		tx,
-		"instance_id = ? and LOWER(email) = ? and email_change_token_current = ? and aud = ?",
-		instanceID, strings.ToLower(email), token, aud,
+		"instance_id = ? and LOWER(email) = ? and email_change_token_current = ? and aud = ? and is_sso_user = false",
+		uuid.Nil, strings.ToLower(email), token, aud,
 	)
 }
 
 // FindUserByEmailChangeNewAndAudience finds a user with the matching email change and audience.
-func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string) (*User, error) {
+func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
 	return findUser(
 		tx,
-		"instance_id = ? and LOWER(email_change) = ? and email_change_token_new = ? and aud = ?",
-		instanceID, strings.ToLower(email), token, aud,
+		"instance_id = ? and LOWER(email_change) = ? and email_change_token_new = ? and aud = ? and is_sso_user = false",
+		uuid.Nil, strings.ToLower(email), token, aud,
 	)
 }
 
 // FindUserForEmailChange finds a user requesting for an email change
-func FindUserForEmailChange(tx *storage.Connection, instanceID uuid.UUID, email, token, aud string, secureEmailChangeEnabled bool) (*User, error) {
+func FindUserForEmailChange(tx *storage.Connection, email, token, aud string, secureEmailChangeEnabled bool) (*User, error) {
 	if secureEmailChangeEnabled {
-		if user, err := FindUserByEmailChangeCurrentAndAudience(tx, instanceID, email, token, aud); err == nil {
+		if user, err := FindUserByEmailChangeCurrentAndAudience(tx, email, token, aud); err == nil {
 			return user, err
 		} else if !IsNotFoundError(err) {
 			return nil, err
 		}
 	}
-	return FindUserByEmailChangeNewAndAudience(tx, instanceID, email, token, aud)
+	return FindUserByEmailChangeNewAndAudience(tx, email, token, aud)
 }
 
 // FindUserByPhoneChangeAndAudience finds a user with the matching phone change and audience.
-func FindUserByPhoneChangeAndAudience(tx *storage.Connection, instanceID uuid.UUID, phone, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ?", instanceID, phone, aud)
+func FindUserByPhoneChangeAndAudience(tx *storage.Connection, phone, aud string) (*User, error) {
+	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ? and is_sso_user = false", uuid.Nil, phone, aud)
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and audience.
-func IsDuplicatedEmail(tx *storage.Connection, instanceID uuid.UUID, email, aud string) (bool, error) {
-	_, err := FindUserByEmailAndAudience(tx, instanceID, email, aud)
-	if err != nil {
-		if IsNotFoundError(err) {
-			return false, nil
+func IsDuplicatedEmail(tx *storage.Connection, email, aud string) (*User, error) {
+	var identities []Identity
+
+	if err := tx.Eager().Q().Where("email = ?", strings.ToLower(email)).All(&identities); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, nil
 		}
-		return false, err
+
+		return nil, errors.Wrap(err, "unable to find identity by email for duplicates")
 	}
-	return true, nil
+
+	userIDs := make(map[string]uuid.UUID)
+	for _, identity := range identities {
+		if !identity.IsForSSOProvider() {
+			userIDs[identity.UserID.String()] = identity.UserID
+		}
+	}
+
+	for _, userID := range userIDs {
+		user, err := FindUserByID(tx, userID)
+		if err != nil && !IsNotFoundError(err) {
+			return nil, errors.Wrap(err, "unable to find user from email identity for duplicates")
+		}
+
+		if user.Aud == aud {
+			return user, nil
+		}
+	}
+
+	// out of an abundance of caution, if nothing was found via the
+	// identities table we also do a final check on the users table
+	user, err := FindUserByEmailAndAudience(tx, email, aud)
+	if err != nil && !IsNotFoundError(err) {
+		return nil, errors.Wrap(err, "unable to find user email addres for duplicates")
+	}
+
+	return user, nil
 }
 
 // IsDuplicatedPhone checks if the phone number already exists in the users table
-func IsDuplicatedPhone(tx *storage.Connection, instanceID uuid.UUID, phone, aud string) (bool, error) {
-	_, err := FindUserByPhoneAndAudience(tx, instanceID, phone, aud)
+func IsDuplicatedPhone(tx *storage.Connection, phone, aud string) (bool, error) {
+	_, err := FindUserByPhoneAndAudience(tx, phone, aud)
 	if err != nil {
 		if IsNotFoundError(err) {
 			return false, nil
@@ -521,5 +572,60 @@ func (u *User) IsBanned() bool {
 
 func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
 	return tx.UpdateOnly(u, "banned_until")
+}
 
+// RemoveUnconfirmedIdentities removes potentially malicious unconfirmed identities from a user (if any)
+func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection) error {
+	if u.IsConfirmed() {
+		return nil
+	}
+
+	u.EncryptedPassword = ""
+
+	if terr := tx.UpdateOnly(u, "encrypted_password"); terr != nil {
+		return terr
+	}
+
+	if providersList, ok := u.AppMetaData["providers"].([]string); ok {
+		// user has "providers" metadata, and the "email" provider
+		// should be removed from it
+
+		var confirmedProviders []string
+
+		for _, provider := range providersList {
+			if provider != "email" {
+				confirmedProviders = append(confirmedProviders, provider)
+			}
+		}
+
+		u.AppMetaData["providers"] = confirmedProviders
+
+		if len(confirmedProviders) > 0 {
+			u.AppMetaData["provider"] = confirmedProviders[0]
+		} else {
+			u.AppMetaData["provider"] = nil
+		}
+
+		if terr := u.UpdateAppMetaData(tx, u.AppMetaData); terr != nil {
+			return terr
+		}
+	}
+
+	// finally, remove any identity with the "email" provider
+
+	var confirmedProviders []Identity
+
+	for i, identity := range u.Identities {
+		if identity.Provider == "email" {
+			if terr := tx.Destroy(&u.Identities[i]); terr != nil {
+				return terr
+			}
+		} else {
+			confirmedProviders = append(confirmedProviders, identity)
+		}
+	}
+
+	u.Identities = confirmedProviders
+
+	return nil
 }

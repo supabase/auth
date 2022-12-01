@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
@@ -28,16 +30,21 @@ type SignupParams struct {
 // Signup is the endpoint for registering a new user
 func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	config := a.config
+	db := a.db.WithContext(ctx)
 
 	if config.DisableSignup {
 		return forbiddenError("Signups not allowed for this instance")
 	}
 
 	params := &SignupParams{}
-	jsonDecoder := json.NewDecoder(r.Body)
-	err := jsonDecoder.Decode(params)
+
+	body, err := getBodyBytes(r)
 	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read Signup params: %v", err)
 	}
 
@@ -60,7 +67,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var user *models.User
-	instanceID := getInstanceID(ctx)
+	var grantParams models.GrantParams
 	params.Aud = a.requestAud(ctx, r)
 
 	switch params.Provider {
@@ -68,10 +75,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if !config.External.Email.Enabled {
 			return badRequestError("Email signups are disabled")
 		}
-		if err := a.validateEmail(ctx, params.Email); err != nil {
+		params.Email, err = a.validateEmail(ctx, params.Email)
+		if err != nil {
 			return err
 		}
-		user, err = models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, params.Aud)
+		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud)
 	case "phone":
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone signups are disabled")
@@ -80,7 +88,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		user, err = models.FindUserByPhoneAndAudience(a.db, instanceID, params.Phone, params.Aud)
+		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, params.Aud)
 	default:
 		return invalidSignupError(config)
 	}
@@ -89,22 +97,23 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if user != nil {
 			if (params.Provider == "email" && user.IsConfirmed()) || (params.Provider == "phone" && user.IsPhoneConfirmed()) {
 				return UserExistsError
 			}
 
-			if err := user.UpdateUserMetaData(tx, params.Data); err != nil {
-				return internalServerError("Database error updating user").WithInternalError(err)
-			}
+			// do not update the user because we can't be sure of their claimed identity
 		} else {
-			user, terr = a.signupNewUser(ctx, tx, params)
+			user, terr = a.signupNewUser(ctx, tx, params, false /* <- duplicateEmails */)
 			if terr != nil {
 				return terr
 			}
-			identity, terr := a.createNewIdentity(tx, user, params.Provider, map[string]interface{}{"sub": user.ID.String()})
+			identity, terr := a.createNewIdentity(tx, user, params.Provider, structs.Map(provider.Claims{
+				Subject: user.ID.String(),
+				Email:   user.GetEmail(),
+			}))
 			if terr != nil {
 				return terr
 			}
@@ -113,12 +122,12 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 		if params.Provider == "email" && !user.IsConfirmed() {
 			if config.Mailer.Autoconfirm {
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
+				if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
 				}
-				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
+				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
 					return terr
 				}
 				if terr = user.Confirm(tx); terr != nil {
@@ -127,12 +136,12 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			} else {
 				mailer := a.Mailer(ctx)
 				referrer := a.getReferrer(r)
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserConfirmationRequestedAction, map[string]interface{}{
+				if terr = models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
 				}
-				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer); terr != nil {
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {
 						now := time.Now()
 						left := user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency).Sub(now) / time.Second
@@ -143,19 +152,19 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			}
 		} else if params.Provider == "phone" && !user.IsPhoneConfirmed() {
 			if config.Sms.Autoconfirm {
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserSignedUpAction, map[string]interface{}{
+				if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
 				}
-				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, instanceID, config); terr != nil {
+				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
 					return terr
 				}
 				if terr = user.ConfirmPhone(tx); terr != nil {
 					return internalServerError("Database error updating user").WithInternalError(terr)
 				}
 			} else {
-				if terr = models.NewAuditLogEntry(tx, instanceID, user, models.UserConfirmationRequestedAction, map[string]interface{}{
+				if terr = models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -178,8 +187,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			return tooManyRequestsError("For security purposes, you can only request this once every minute")
 		}
 		if errors.Is(err, UserExistsError) {
-			err = a.db.Transaction(func(tx *storage.Connection) error {
-				if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRepeatedSignUpAction, map[string]interface{}{
+			err = db.Transaction(func(tx *storage.Connection) error {
+				if terr := models.NewAuditLogEntry(r, tx, user, models.UserRepeatedSignUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
@@ -204,18 +213,18 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	// handles case where Mailer.Autoconfirm is true or Phone.Autoconfirm is true
 	if user.IsConfirmed() || user.IsPhoneConfirmed() {
 		var token *AccessTokenResponse
-		err = a.db.Transaction(func(tx *storage.Connection) error {
+		err = db.Transaction(func(tx *storage.Connection) error {
 			var terr error
-			if terr = models.NewAuditLogEntry(tx, instanceID, user, models.LoginAction, map[string]interface{}{
+			if terr = models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
 				return terr
 			}
-			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, instanceID, config); terr != nil {
+			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 				return terr
 			}
+			token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
 
-			token, terr = a.issueRefreshToken(ctx, tx, user)
 			if terr != nil {
 				return terr
 			}
@@ -228,7 +237,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		metering.RecordLogin("password", user.ID, instanceID)
+		metering.RecordLogin("password", user.ID)
 		return sendJSON(w, http.StatusOK, token)
 	}
 
@@ -270,22 +279,22 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 	return u, nil
 }
 
-func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, params *SignupParams) (*models.User, error) {
-	instanceID := getInstanceID(ctx)
-	config := a.getConfig(ctx)
+func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, params *SignupParams, isSSOUser bool) (*models.User, error) {
+	config := a.config
 
 	var user *models.User
 	var err error
 	switch params.Provider {
 	case "email":
-		user, err = models.NewUser(instanceID, params.Email, params.Password, params.Aud, params.Data)
+		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
 	case "phone":
-		user, err = models.NewUser(instanceID, "", params.Password, params.Aud, params.Data)
-		user.Phone = storage.NullString(params.Phone)
+		user, err = models.NewUser(params.Phone, "", params.Password, params.Aud, params.Data)
 	default:
 		// handles external provider case
-		user, err = models.NewUser(instanceID, params.Email, params.Password, params.Aud, params.Data)
+		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
 	}
+
+	user.IsSSOUser = isSSOUser
 
 	if err != nil {
 		return nil, internalServerError("Database error creating user").WithInternalError(err)
@@ -312,13 +321,21 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 		if terr = user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
 			return internalServerError("Database error updating user").WithInternalError(terr)
 		}
-		if terr = triggerEventHooks(ctx, tx, ValidateEvent, user, instanceID, config); terr != nil {
+		if terr = triggerEventHooks(ctx, tx, ValidateEvent, user, config); terr != nil {
 			return terr
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// sometimes there may be triggers in the database that will modify the
+	// user data as it is being inserted. thus we load the user object
+	// again to fetch those changes.
+	err = conn.Eager().Load(user)
+	if err != nil {
+		return nil, internalServerError("Database error loading user after sign-up").WithInternalError(err)
 	}
 
 	return user, nil

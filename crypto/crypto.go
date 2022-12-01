@@ -13,8 +13,12 @@ import (
 )
 
 // SecureToken creates a new random token
-func SecureToken() string {
-	b := make([]byte, 16)
+func SecureToken(options ...int) string {
+	length := 16
+	if len(options) > 0 {
+		length = options[0]
+	}
+	b := make([]byte, length)
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {
 		panic(err.Error()) // rand should never fail
 	}
@@ -28,6 +32,7 @@ func GenerateOtp(digits int) (string, error) {
 	if err != nil {
 		return "", errors.WithMessage(err, "Error generating otp")
 	}
+	// adds a variable zero-padding to the left to ensure otp is uniformly random
 	expr := "%0" + strconv.Itoa(digits) + "v"
 	otp := fmt.Sprintf(expr, val.String())
 	return otp, nil
@@ -44,12 +49,6 @@ func generateOtpFromCharset(length int, charset string) (string, error) {
 		b[i] = charset[val.Int64()]
 	}
 	return string(b), nil
-}
-
-// GenerateEmailOtp generates a random n-length alphabetical otp
-func GenerateEmailOtp(length int) (string, error) {
-	const charset = "abcdefghijklmnopqrstuvwxyz"
-	return generateOtpFromCharset(length, charset)
 }
 
 // GenerateNanoId generates a random n-length alphanumeric otp

@@ -7,14 +7,16 @@ import (
 
 	"github.com/mrjones/oauth"
 	"github.com/netlify/gotrue/api/provider"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
 	"github.com/sirupsen/logrus"
 )
 
 // OAuthProviderData contains the userData and token returned by the oauth provider
 type OAuthProviderData struct {
-	userData *provider.UserProvidedData
-	token    string
+	userData     *provider.UserProvidedData
+	token        string
+	refreshToken string
 }
 
 // loadOAuthState parses the `state` query parameter as a JWS payload,
@@ -66,7 +68,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		return nil, badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
 	}
 
-	log := getLogEntry(r)
+	log := observability.GetLogEntry(r)
 	log.WithFields(logrus.Fields{
 		"provider": providerType,
 		"code":     oauthCode,
@@ -95,8 +97,9 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 	}
 
 	return &OAuthProviderData{
-		userData: userData,
-		token:    token.AccessToken,
+		userData:     userData,
+		token:        token.AccessToken,
+		refreshToken: token.RefreshToken,
 	}, nil
 }
 
@@ -133,15 +136,16 @@ func (a *API) oAuth1Callback(ctx context.Context, r *http.Request, providerType 
 	}
 
 	return &OAuthProviderData{
-		userData: userData,
-		token:    accessToken.Token,
+		userData:     userData,
+		token:        accessToken.Token,
+		refreshToken: "",
 	}, nil
 
 }
 
 // OAuthProvider returns the corresponding oauth provider as an OAuthProvider interface
 func (a *API) OAuthProvider(ctx context.Context, name string) (provider.OAuthProvider, error) {
-	providerCandidate, err := a.Provider(ctx, name, "", nil)
+	providerCandidate, err := a.Provider(ctx, name, "")
 	if err != nil {
 		return nil, err
 	}

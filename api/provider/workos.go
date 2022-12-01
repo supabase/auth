@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"errors"
-	"net/url"
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
@@ -17,8 +16,7 @@ const (
 
 type workosProvider struct {
 	*oauth2.Config
-	APIPath         string
-	AuthCodeOptions []oauth2.AuthCodeOption
+	APIPath string
 }
 
 // See https://workos.com/docs/reference/sso/profile.
@@ -36,28 +34,11 @@ type workosUser struct {
 }
 
 // NewWorkOSProvider creates a WorkOS account provider.
-func NewWorkOSProvider(ext conf.OAuthProviderConfiguration, query *url.Values) (OAuthProvider, error) {
+func NewWorkOSProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
 	apiPath := chooseHost(ext.URL, defaultWorkOSAPIBase)
-
-	// Attach custom query parameters to the WorkOS authorization URL.
-	// See https://workos.com/docs/reference/sso/authorize/get.
-	var authCodeOptions []oauth2.AuthCodeOption
-	if query != nil {
-		if connection := query.Get("connection"); connection != "" {
-			authCodeOptions = append(authCodeOptions, oauth2.SetAuthURLParam("connection", connection))
-		} else if organization := query.Get("organization"); organization != "" {
-			authCodeOptions = append(authCodeOptions, oauth2.SetAuthURLParam("organization", organization))
-		} else if provider := query.Get("workos_provider"); provider != "" {
-			authCodeOptions = append(authCodeOptions, oauth2.SetAuthURLParam("provider", provider))
-		}
-
-		if login_hint := query.Get("login_hint"); login_hint != "" {
-			authCodeOptions = append(authCodeOptions, oauth2.SetAuthURLParam("login_hint", login_hint))
-		}
-	}
 
 	return &workosProvider{
 		Config: &oauth2.Config{
@@ -69,18 +50,12 @@ func NewWorkOSProvider(ext conf.OAuthProviderConfiguration, query *url.Values) (
 			},
 			RedirectURL: ext.RedirectURI,
 		},
-		APIPath:         apiPath,
-		AuthCodeOptions: authCodeOptions,
+		APIPath: apiPath,
 	}, nil
 }
 
-func (g workosProvider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption) string {
-	opts := append(args, g.AuthCodeOptions...)
-	return g.Config.AuthCodeURL(state, opts...)
-}
-
 func (g workosProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(oauth2.NoContext, code)
+	return g.Exchange(context.Background(), code)
 }
 
 func (g workosProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -98,7 +73,7 @@ func (g workosProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	}
 
 	if u.Email == "" {
-		return nil, errors.New("Unable to find email with WorkOS provider")
+		return nil, errors.New("unable to find email with WorkOS provider")
 	}
 
 	return &UserProvidedData{

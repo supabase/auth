@@ -8,6 +8,7 @@ import (
 	"runtime/debug"
 
 	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/utilities"
 	"github.com/pkg/errors"
 )
@@ -16,7 +17,7 @@ import (
 var (
 	DuplicateEmailMsg       = "A user with this email address has already been registered"
 	DuplicatePhoneMsg       = "A user with this phone number has already been registered"
-	UserExistsError   error = errors.New("User already exists")
+	UserExistsError   error = errors.New("user already exists")
 )
 
 var oauthErrorMap = map[int]string{
@@ -62,11 +63,11 @@ func (e *OAuthError) Cause() error {
 	return e
 }
 
-func invalidPasswordLengthError(config *conf.Configuration) *HTTPError {
+func invalidPasswordLengthError(config *conf.GlobalConfiguration) *HTTPError {
 	return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", config.PasswordMinLength))
 }
 
-func invalidSignupError(config *conf.Configuration) *HTTPError {
+func invalidSignupError(config *conf.GlobalConfiguration) *HTTPError {
 	var msg string
 	if config.External.Email.Enabled && config.External.Phone.Enabled {
 		msg = "To signup, please provide your email or phone number"
@@ -95,10 +96,6 @@ func internalServerError(fmtString string, args ...interface{}) *HTTPError {
 
 func notFoundError(fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusNotFound, fmtString, args...)
-}
-
-func acceptedTokenError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusAccepted, fmtString, args...)
 }
 
 func expiredTokenError(fmtString string, args ...interface{}) *HTTPError {
@@ -214,7 +211,7 @@ func recoverer(w http.ResponseWriter, r *http.Request) (context.Context, error) 
 	defer func() {
 		if rvr := recover(); rvr != nil {
 
-			logEntry := getLogEntry(r)
+			logEntry := observability.GetLogEntry(r)
 			if logEntry != nil {
 				logEntry.Panic(rvr, debug.Stack())
 			} else {
@@ -239,7 +236,7 @@ type ErrorCause interface {
 }
 
 func handleError(err error, w http.ResponseWriter, r *http.Request) {
-	log := getLogEntry(r)
+	log := observability.GetLogEntry(r)
 	errorID := getRequestID(r.Context())
 	switch e := err.(type) {
 	case *HTTPError:

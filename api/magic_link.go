@@ -1,9 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 
@@ -14,19 +15,20 @@ import (
 
 // MagicLinkParams holds the parameters for a magic link request
 type MagicLinkParams struct {
-	Email string `json:"email"`
+	Email string                 `json:"email"`
+	Data  map[string]interface{} `json:"data"`
 }
 
 // MagicLink sends a recovery email
 func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	config := a.getConfig(ctx)
+	db := a.db.WithContext(ctx)
+	config := a.config
 
 	if !config.External.Email.Enabled {
 		return badRequestError("Email logins are disabled")
 	}
 
-	instanceID := getInstanceID(ctx)
 	params := &MagicLinkParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
@@ -34,15 +36,20 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
+	if params.Data == nil {
+		params.Data = make(map[string]interface{})
+	}
+
 	if params.Email == "" {
 		return unprocessableEntityError("Password recovery requires an email")
 	}
-	if err := a.validateEmail(ctx, params.Email); err != nil {
+	params.Email, err = a.validateEmail(ctx, params.Email)
+	if err != nil {
 		return err
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(a.db, instanceID, params.Email, aud)
+	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			// User doesn't exist, sign them up with temporary password
@@ -50,9 +57,18 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				internalServerError("error creating user").WithInternalError(err)
 			}
-			newBodyContent := `{"email":"` + params.Email + `","password":"` + password + `"}`
-			r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
-			r.ContentLength = int64(len(newBodyContent))
+
+			signUpParams := &SignupParams{
+				Email:    params.Email,
+				Password: password,
+				Data:     params.Data,
+			}
+			newBodyContent, err := json.Marshal(signUpParams)
+			if err != nil {
+				return badRequestError("Could not parse metadata: %v", err)
+			}
+			r.Body = io.NopCloser(strings.NewReader(string(newBodyContent)))
+			r.ContentLength = int64(len(string(newBodyContent)))
 
 			fakeResponse := &responseStub{}
 			if config.Mailer.Autoconfirm {
@@ -60,9 +76,15 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 				if err := a.Signup(fakeResponse, r); err != nil {
 					return err
 				}
-				newBodyContent := `{"email":"` + params.Email + `"}`
-				r.Body = ioutil.NopCloser(strings.NewReader(newBodyContent))
-				r.ContentLength = int64(len(newBodyContent))
+				newBodyContent := &SignupParams{
+					Email: params.Email,
+					Data:  params.Data,
+				}
+				metadata, err := json.Marshal(newBodyContent)
+				if err != nil {
+					return badRequestError("Could not parse metadata: %v", err)
+				}
+				r.Body = io.NopCloser(bytes.NewReader(metadata))
 				return a.MagicLink(w, r)
 			}
 			// otherwise confirmation email already contains 'magic link'
@@ -75,14 +97,14 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(tx, instanceID, user, models.UserRecoveryRequestedAction, nil); terr != nil {
+	err = db.Transaction(func(tx *storage.Connection) error {
+		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
 
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
-		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer)
+		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {

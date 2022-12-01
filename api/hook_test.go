@@ -3,19 +3,24 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// withFunctionHooks adds the provided function hooks to the context.
+func withFunctionHooks(ctx context.Context, hooks map[string][]string) context.Context {
+	return context.WithValue(ctx, functionHooksKey, hooks)
+}
 
 func TestSignupHookSendInstanceID(t *testing.T) {
 	globalConfig, err := conf.LoadGlobal(apiTestConfig)
@@ -24,22 +29,20 @@ func TestSignupHookSendInstanceID(t *testing.T) {
 	conn, err := test.SetupDBConnection(globalConfig)
 	require.NoError(t, err)
 
-	iid := uuid.Must(uuid.NewV4())
-	user, err := models.NewUser(iid, "test@truth.com", "thisisapassword", "", nil)
+	user, err := models.NewUser("81234567", "test@truth.com", "thisisapassword", "", nil)
 	require.NoError(t, err)
 
 	var callCount int
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		defer squash(r.Body.Close)
-		raw, err := ioutil.ReadAll(r.Body)
+		raw, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 
 		data := map[string]interface{}{}
 		require.NoError(t, json.Unmarshal(raw, &data))
 
 		assert.Len(t, data, 3)
-		assert.Equal(t, iid.String(), data["instance_id"])
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer svr.Close()
@@ -48,14 +51,14 @@ func TestSignupHookSendInstanceID(t *testing.T) {
 	localhost := removeLocalhostFromPrivateIPBlock()
 	defer unshiftPrivateIPBlock(localhost)
 
-	config := &conf.Configuration{
+	config := &conf.GlobalConfiguration{
 		Webhook: conf.WebhookConfig{
 			URL:    svr.URL,
 			Events: []string{SignupEvent},
 		},
 	}
 
-	require.NoError(t, triggerEventHooks(context.Background(), conn, SignupEvent, user, iid, config))
+	require.NoError(t, triggerEventHooks(context.Background(), conn, SignupEvent, user, config))
 
 	assert.Equal(t, 1, callCount)
 }
@@ -67,22 +70,20 @@ func TestSignupHookFromClaims(t *testing.T) {
 	conn, err := test.SetupDBConnection(globalConfig)
 	require.NoError(t, err)
 
-	iid := uuid.Must(uuid.NewV4())
-	user, err := models.NewUser(iid, "test@truth.com", "thisisapassword", "", nil)
+	user, err := models.NewUser("", "test@truth.com", "thisisapassword", "", nil)
 	require.NoError(t, err)
 
 	var callCount int
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		defer squash(r.Body.Close)
-		raw, err := ioutil.ReadAll(r.Body)
+		raw, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 
 		data := map[string]interface{}{}
 		require.NoError(t, json.Unmarshal(raw, &data))
 
 		assert.Len(t, data, 3)
-		assert.Equal(t, iid.String(), data["instance_id"])
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer svr.Close()
@@ -91,7 +92,7 @@ func TestSignupHookFromClaims(t *testing.T) {
 	localhost := removeLocalhostFromPrivateIPBlock()
 	defer unshiftPrivateIPBlock(localhost)
 
-	config := &conf.Configuration{
+	config := &conf.GlobalConfiguration{
 		Webhook: conf.WebhookConfig{
 			Events: []string{"signup"},
 		},
@@ -99,10 +100,10 @@ func TestSignupHookFromClaims(t *testing.T) {
 
 	ctx := context.Background()
 	ctx = withFunctionHooks(ctx, map[string][]string{
-		"signup": []string{svr.URL},
+		"signup": {svr.URL},
 	})
 
-	require.NoError(t, triggerEventHooks(ctx, conn, SignupEvent, user, iid, config))
+	require.NoError(t, triggerEventHooks(ctx, conn, SignupEvent, user, config))
 
 	assert.Equal(t, 1, callCount)
 }
@@ -142,21 +143,28 @@ func TestHookRetry(t *testing.T) {
 }
 
 func TestHookTimeout(t *testing.T) {
+	realTimeout := defaultTimeout
+	defer func() {
+		defaultTimeout = realTimeout
+	}()
+	defaultTimeout = time.Millisecond * 10
+
+	var mu sync.Mutex
 	var callCount int
 	svr := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		callCount++
-		<-time.After(2 * time.Second)
+		mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
 	}))
-	defer svr.Close()
 
 	// Allowing connection to localhost for the tests only
 	localhost := removeLocalhostFromPrivateIPBlock()
 	defer unshiftPrivateIPBlock(localhost)
 
 	config := &conf.WebhookConfig{
-		URL:        svr.URL,
-		Retries:    3,
-		TimeoutSec: 1,
+		URL:     svr.URL,
+		Retries: 3,
 	}
 	w := Webhook{
 		WebhookConfig: config,
@@ -167,23 +175,8 @@ func TestHookTimeout(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, http.StatusGatewayTimeout, herr.Code)
 
+	svr.Close()
 	assert.Equal(t, 3, callCount)
-}
-
-func TestHookNoServer(t *testing.T) {
-	config := &conf.WebhookConfig{
-		URL:        "http://somewhere.something.com",
-		Retries:    1,
-		TimeoutSec: 1,
-	}
-	w := Webhook{
-		WebhookConfig: config,
-	}
-	_, err := w.trigger()
-	require.Error(t, err)
-	herr, ok := err.(*HTTPError)
-	require.True(t, ok)
-	assert.Equal(t, http.StatusBadGateway, herr.Code)
 }
 
 func squash(f func() error) { _ = f }

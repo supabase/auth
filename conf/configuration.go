@@ -1,18 +1,21 @@
 package conf
 
 import (
-	"database/sql/driver"
-	"encoding/json"
 	"errors"
+	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gobwas/glob"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/sirupsen/logrus"
 )
 
 const defaultMinPasswordLength int = 6
+const defaultChallengeExpiryDuration float64 = 300
 
 // OAuthProviderConfiguration holds all config related to external account providers.
 type OAuthProviderConfiguration struct {
@@ -28,23 +31,22 @@ type EmailProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"true"`
 }
 
-type SamlProviderConfiguration struct {
-	Enabled     bool   `json:"enabled"`
-	MetadataURL string `json:"metadata_url" envconfig:"METADATA_URL"`
-	APIBase     string `json:"api_base" envconfig:"API_BASE"`
-	Name        string `json:"name"`
-	SigningCert string `json:"signing_cert" envconfig:"SIGNING_CERT"`
-	SigningKey  string `json:"signing_key" envconfig:"SIGNING_KEY"`
-}
-
 // DBConfiguration holds all the database related configuration.
 type DBConfiguration struct {
-	Driver string `json:"driver" required:"true"`
-	URL    string `json:"url" envconfig:"DATABASE_URL" required:"true"`
-
+	Driver    string `json:"driver" required:"true"`
+	URL       string `json:"url" envconfig:"DATABASE_URL" required:"true"`
+	Namespace string `json:"namespace" envconfig:"DB_NAMESPACE" default:"auth"`
 	// MaxPoolSize defaults to 0 (unlimited).
-	MaxPoolSize    int    `json:"max_pool_size" split_words:"true"`
-	MigrationsPath string `json:"migrations_path" split_words:"true" default:"./migrations"`
+	MaxPoolSize       int           `json:"max_pool_size" split_words:"true"`
+	MaxIdlePoolSize   int           `json:"max_idle_pool_size" split_words:"true"`
+	ConnMaxLifetime   time.Duration `json:"conn_max_lifetime,omitempty" split_words:"true"`
+	ConnMaxIdleTime   time.Duration `json:"conn_max_idle_time,omitempty" split_words:"true"`
+	HealthCheckPeriod time.Duration `json:"health_check_period" split_words:"true"`
+	MigrationsPath    string        `json:"migrations_path" split_words:"true" default:"./migrations"`
+}
+
+func (c *DBConfiguration) Validate() error {
+	return nil
 }
 
 // JWTConfiguration holds all the JWT related configuration.
@@ -57,26 +59,68 @@ type JWTConfiguration struct {
 	DefaultGroupName string   `json:"default_group_name" split_words:"true"`
 }
 
+// MFAConfiguration holds all the MFA related Configuration
+type MFAConfiguration struct {
+	Enabled                     bool    `default:"false"`
+	ChallengeExpiryDuration     float64 `json:"challenge_expiry_duration" default:"300" split_words:"true"`
+	RateLimitChallengeAndVerify float64 `split_words:"true" default:"15"`
+	MaxEnrolledFactors          float64 `split_words:"true" default:"10"`
+}
+
+type APIConfiguration struct {
+	Host            string
+	Port            string `envconfig:"PORT" default:"8081"`
+	Endpoint        string
+	RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
+	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
+}
+
+func (a *APIConfiguration) Validate() error {
+	if a.ExternalURL != "" {
+		// sometimes, in tests, ExternalURL is empty and we regard that
+		// as a valid value
+		_, err := url.ParseRequestURI(a.ExternalURL)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
-	API struct {
-		Host            string
-		Port            int `envconfig:"PORT" default:"8081"`
-		Endpoint        string
-		RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
-		ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
-	}
+	API                   APIConfiguration
 	DB                    DBConfiguration
 	External              ProviderConfiguration
 	Logging               LoggingConfig `envconfig:"LOG"`
 	OperatorToken         string        `split_words:"true" required:"false"`
-	MultiInstanceMode     bool
 	Tracing               TracingConfig
+	Metrics               MetricsConfig
 	SMTP                  SMTPConfiguration
 	RateLimitHeader       string  `split_words:"true"`
 	RateLimitEmailSent    float64 `split_words:"true" default:"30"`
 	RateLimitVerify       float64 `split_words:"true" default:"30"`
 	RateLimitTokenRefresh float64 `split_words:"true" default:"30"`
+	RateLimitSso          float64 `split_words:"true" default:"30"`
+
+	SiteURL           string   `json:"site_url" split_words:"true" required:"true"`
+	URIAllowList      []string `json:"uri_allow_list" split_words:"true"`
+	URIAllowListMap   map[string]glob.Glob
+	PasswordMinLength int                      `json:"password_min_length" split_words:"true"`
+	JWT               JWTConfiguration         `json:"jwt"`
+	Mailer            MailerConfiguration      `json:"mailer"`
+	Sms               SmsProviderConfiguration `json:"sms"`
+	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
+	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
+	Security          SecurityConfiguration    `json:"security"`
+	MFA               MFAConfiguration         `json:"MFA"`
+	Cookie            struct {
+		Key      string `json:"key"`
+		Domain   string `json:"domain"`
+		Duration int    `json:"duration"`
+	} `json:"cookies"`
+	SAML SAMLConfiguration `json:"saml"`
 }
 
 // EmailContentConfiguration holds the configuration for emails, both subjects and template URLs.
@@ -108,7 +152,6 @@ type ProviderConfiguration struct {
 	WorkOS      OAuthProviderConfiguration `json:"workos"`
 	Email       EmailProviderConfiguration `json:"email"`
 	Phone       PhoneProviderConfiguration `json:"phone"`
-	Saml        SamlProviderConfiguration  `json:"saml"`
 	Zoom        OAuthProviderConfiguration `json:"zoom"`
 	IosBundleId string                     `json:"ios_bundle_id" split_words:"true"`
 	RedirectURL string                     `json:"redirect_url"`
@@ -124,6 +167,10 @@ type SMTPConfiguration struct {
 	SenderName   string        `json:"sender_name" split_words:"true"`
 }
 
+func (c *SMTPConfiguration) Validate() error {
+	return nil
+}
+
 type MailerConfiguration struct {
 	Autoconfirm              bool                      `json:"autoconfirm"`
 	Subjects                 EmailContentConfiguration `json:"subjects"`
@@ -131,10 +178,11 @@ type MailerConfiguration struct {
 	URLPaths                 EmailContentConfiguration `json:"url_paths"`
 	SecureEmailChangeEnabled bool                      `json:"secure_email_change_enabled" split_words:"true" default:"true"`
 	OtpExp                   uint                      `json:"otp_exp" split_words:"true"`
+	OtpLength                int                       `json:"otp_length" split_words:"true"`
 }
 
 type PhoneProviderConfiguration struct {
-	Enabled bool `json:"enabled"`
+	Enabled bool `json:"enabled" default:"false"`
 }
 
 type SmsProviderConfiguration struct {
@@ -178,6 +226,24 @@ type CaptchaConfiguration struct {
 	Secret   string `json:"provider_secret"`
 }
 
+func (c *CaptchaConfiguration) Validate() error {
+	if !c.Enabled {
+		return nil
+	}
+
+	if c.Provider != "hcaptcha" {
+		return fmt.Errorf("unsupported captcha provider: %s", c.Provider)
+	}
+
+	c.Secret = strings.TrimSpace(c.Secret)
+
+	if c.Secret == "" {
+		return errors.New("hcaptcha provider secret is empty")
+	}
+
+	return nil
+}
+
 type SecurityConfiguration struct {
 	Captcha                               CaptchaConfiguration `json:"captcha"`
 	RefreshTokenRotationEnabled           bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
@@ -185,25 +251,8 @@ type SecurityConfiguration struct {
 	UpdatePasswordRequireReauthentication bool                 `json:"update_password_require_reauthentication" split_words:"true"`
 }
 
-// Configuration holds all the per-instance configuration.
-type Configuration struct {
-	SiteURL           string   `json:"site_url" split_words:"true" required:"true"`
-	URIAllowList      []string `json:"uri_allow_list" split_words:"true"`
-	URIAllowListMap   map[string]glob.Glob
-	PasswordMinLength int                      `json:"password_min_length" split_words:"true"`
-	JWT               JWTConfiguration         `json:"jwt"`
-	SMTP              SMTPConfiguration        `json:"smtp"`
-	Mailer            MailerConfiguration      `json:"mailer"`
-	External          ProviderConfiguration    `json:"external"`
-	Sms               SmsProviderConfiguration `json:"sms"`
-	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
-	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
-	Security          SecurityConfiguration    `json:"security"`
-	Cookie            struct {
-		Key      string `json:"key"`
-		Domain   string `json:"domain"`
-		Duration int    `json:"duration"`
-	} `json:"cookies"`
+func (c *SecurityConfiguration) Validate() error {
+	return c.Captcha.Validate()
 }
 
 func loadEnvironment(filename string) error {
@@ -237,7 +286,6 @@ func (w *WebhookConfig) HasEvent(event string) bool {
 	return false
 }
 
-// LoadGlobal loads configuration from file and environment variables.
 func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 	if err := loadEnvironment(filename); err != nil {
 		return nil, err
@@ -248,34 +296,29 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		return nil, err
 	}
 
-	if _, err := ConfigureLogging(&config.Logging); err != nil {
+	if err := config.ApplyDefaults(); err != nil {
 		return nil, err
 	}
 
-	ConfigureTracing(&config.Tracing)
-
-	if config.SMTP.MaxFrequency == 0 {
-		config.SMTP.MaxFrequency = 1 * time.Minute
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
+
+	if config.SAML.Enabled {
+		logrus.Warn("WARNING: SAML is an incomplete feature and should not be enabled for production use!")
+
+		if err := config.SAML.PopulateFields(config.API.ExternalURL); err != nil {
+			return nil, err
+		}
+	} else {
+		config.SAML.PrivateKey = ""
+	}
+
 	return config, nil
 }
 
-// LoadConfig loads per-instance configuration.
-func LoadConfig(filename string) (*Configuration, error) {
-	if err := loadEnvironment(filename); err != nil {
-		return nil, err
-	}
-
-	config := new(Configuration)
-	if err := envconfig.Process("gotrue", config); err != nil {
-		return nil, err
-	}
-	config.ApplyDefaults()
-	return config, nil
-}
-
-// ApplyDefaults sets defaults for a Configuration
-func (config *Configuration) ApplyDefaults() {
+// ApplyDefaults sets defaults for a GlobalConfiguration
+func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.JWT.AdminGroupName == "" {
 		config.JWT.AdminGroupName = "admin"
 	}
@@ -306,6 +349,11 @@ func (config *Configuration) ApplyDefaults() {
 
 	if config.Mailer.OtpExp == 0 {
 		config.Mailer.OtpExp = 86400 // 1 day
+	}
+
+	if config.Mailer.OtpLength == 0 || config.Mailer.OtpLength < 6 || config.Mailer.OtpLength > 10 {
+		// 6-digit otp by default
+		config.Mailer.OtpLength = 6
 	}
 
 	if config.SMTP.MaxFrequency == 0 {
@@ -344,6 +392,7 @@ func (config *Configuration) ApplyDefaults() {
 	if config.URIAllowList == nil {
 		config.URIAllowList = []string{}
 	}
+
 	if config.URIAllowList != nil {
 		config.URIAllowListMap = make(map[string]glob.Glob)
 		for _, uri := range config.URIAllowList {
@@ -351,94 +400,98 @@ func (config *Configuration) ApplyDefaults() {
 			config.URIAllowListMap[uri] = g
 		}
 	}
+
 	if config.PasswordMinLength < defaultMinPasswordLength {
 		config.PasswordMinLength = defaultMinPasswordLength
 	}
+	if config.MFA.ChallengeExpiryDuration < defaultChallengeExpiryDuration {
+		config.MFA.ChallengeExpiryDuration = defaultChallengeExpiryDuration
+	}
+
+	return nil
 }
 
-func (config *Configuration) Value() (driver.Value, error) {
-	data, err := json.Marshal(config)
-	if err != nil {
-		return driver.Value(""), err
-	}
-	return driver.Value(string(data)), nil
-}
-
-func (config *Configuration) Scan(src interface{}) error {
-	var source []byte
-	switch v := src.(type) {
-	case string:
-		source = []byte(v)
-	case []byte:
-		source = v
-	default:
-		return errors.New("Invalid data type for Configuration")
+// Validate validates all of configuration.
+func (c *GlobalConfiguration) Validate() error {
+	validatables := []interface {
+		Validate() error
+	}{
+		&c.API,
+		&c.DB,
+		&c.Tracing,
+		&c.Metrics,
+		&c.SMTP,
+		&c.SAML,
+		&c.Security,
 	}
 
-	if len(source) == 0 {
-		source = []byte("{}")
+	for _, validatable := range validatables {
+		if err := validatable.Validate(); err != nil {
+			return err
+		}
 	}
-	return json.Unmarshal(source, &config)
+
+	return nil
 }
 
 func (o *OAuthProviderConfiguration) Validate() error {
 	if !o.Enabled {
-		return errors.New("Provider is not enabled")
+		return errors.New("provider is not enabled")
 	}
 	if o.ClientID == "" {
-		return errors.New("Missing Oauth client ID")
+		return errors.New("missing Oauth client ID")
 	}
 	if o.Secret == "" {
-		return errors.New("Missing Oauth secret")
+		return errors.New("missing Oauth secret")
 	}
 	if o.RedirectURI == "" {
-		return errors.New("Missing redirect URI")
+		return errors.New("missing redirect URI")
 	}
 	return nil
 }
 
 func (t *TwilioProviderConfiguration) Validate() error {
 	if t.AccountSid == "" {
-		return errors.New("Missing Twilio account SID")
+		return errors.New("missing Twilio account SID")
 	}
 	if t.AuthToken == "" {
-		return errors.New("Missing Twilio auth token")
+		return errors.New("missing Twilio auth token")
 	}
 	if t.MessageServiceSid == "" {
-		return errors.New("Missing Twilio message service SID or Twilio phone number")
+		return errors.New("missing Twilio message service SID or Twilio phone number")
 	}
 	return nil
 }
 
 func (t *MessagebirdProviderConfiguration) Validate() error {
 	if t.AccessKey == "" {
-		return errors.New("Missing Messagebird access key")
+		return errors.New("missing Messagebird access key")
 	}
 	if t.Originator == "" {
-		return errors.New("Missing Messagebird originator")
+		return errors.New("missing Messagebird originator")
 	}
 	return nil
 }
 
 func (t *TextlocalProviderConfiguration) Validate() error {
 	if t.ApiKey == "" {
-		return errors.New("Missing Textlocal API key")
+		return errors.New("missing Textlocal API key")
 	}
 	if t.Sender == "" {
-		return errors.New("Missing Textlocal sender")
+		return errors.New("missing Textlocal sender")
 	}
 	return nil
 }
 
 func (t *VonageProviderConfiguration) Validate() error {
 	if t.ApiKey == "" {
-		return errors.New("Missing Vonage API key")
+		return errors.New("missing Vonage API key")
 	}
 	if t.ApiSecret == "" {
-		return errors.New("Missing Vonage API secret")
+		return errors.New("missing Vonage API secret")
 	}
 	if t.From == "" {
-		return errors.New("Missing Vonage 'from' parameter")
+		return errors.New("missing Vonage 'from' parameter")
 	}
 	return nil
 }

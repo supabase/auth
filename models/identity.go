@@ -2,8 +2,10 @@ package models
 
 import (
 	"database/sql"
+	"strings"
 	"time"
 
+	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
@@ -29,7 +31,7 @@ func (Identity) TableName() string {
 func NewIdentity(user *User, provider string, identityData map[string]interface{}) (*Identity, error) {
 	providerId, ok := identityData["sub"]
 	if !ok {
-		return nil, errors.New("Error missing provider id")
+		return nil, errors.New("error missing provider id")
 	}
 	now := time.Now()
 
@@ -44,6 +46,21 @@ func NewIdentity(user *User, provider string, identityData map[string]interface{
 	return identity, nil
 }
 
+func (i *Identity) BeforeCreate(tx *pop.Connection) error {
+	return i.BeforeUpdate(tx)
+}
+
+func (i *Identity) BeforeUpdate(tx *pop.Connection) error {
+	if _, ok := i.IdentityData["email"]; ok {
+		i.IdentityData["email"] = strings.ToLower(i.IdentityData["email"].(string))
+	}
+	return nil
+}
+
+func (i *Identity) IsForSSOProvider() bool {
+	return strings.HasPrefix(i.Provider, "sso:")
+}
+
 // FindIdentityById searches for an identity with the matching provider_id and provider given.
 func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider string) (*Identity, error) {
 	identity := &Identity{}
@@ -56,10 +73,10 @@ func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider st
 	return identity, nil
 }
 
-// FindIdentitiesByUser returns all identities associated to a user
-func FindIdentitiesByUser(tx *storage.Connection, user *User) ([]*Identity, error) {
+// FindIdentitiesByUserID returns all identities associated to a user ID.
+func FindIdentitiesByUserID(tx *storage.Connection, userID uuid.UUID) ([]*Identity, error) {
 	identities := []*Identity{}
-	if err := tx.Q().Where("user_id = ?", user.ID).All(&identities); err != nil {
+	if err := tx.Q().Where("user_id = ?", userID).All(&identities); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return identities, nil
 		}

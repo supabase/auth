@@ -8,16 +8,16 @@ import (
 )
 
 var filterColumnMap = map[string][]string{
-	"author": []string{"actor_username", "actor_name"},
-	"action": []string{"action"},
-	"type":   []string{"log_type"},
+	"author": {"actor_username", "actor_name"},
+	"action": {"action"},
+	"type":   {"log_type"},
 }
 
 func (a *API) adminAuditLog(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	instanceID := getInstanceID(ctx)
-	// aud := a.requestAud(ctx, r)
+	db := a.db.WithContext(ctx)
 
+	// aud := a.requestAud(ctx, r)
 	pageParams, err := paginate(r)
 	if err != nil {
 		return badRequestError("Bad Pagination Parameters: %v", err)
@@ -36,7 +36,7 @@ func (a *API) adminAuditLog(w http.ResponseWriter, r *http.Request) error {
 		qval = qparts[1]
 	}
 
-	logs, err := models.FindAuditLogEntries(a.db, instanceID, col, qval, pageParams)
+	logs, err := models.FindAuditLogEntries(db, col, qval, pageParams)
 	if err != nil {
 		return internalServerError("Error searching for audit logs").WithInternalError(err)
 	}
