@@ -113,7 +113,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					Provider: "email",
 					Aud:      aud,
 				}
-				user, terr = a.signupNewUser(ctx, tx, signupParams, false /* <- duplicateEmails */)
+				user, terr = a.signupNewUser(ctx, tx, signupParams, false /* <- isSSOUser */)
 				if terr != nil {
 					return terr
 				}
@@ -158,7 +158,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					Provider: "email",
 					Aud:      aud,
 				}
-				user, terr = a.signupNewUser(ctx, tx, signupParams, false /* <- duplicateEmails */)
+				user, terr = a.signupNewUser(ctx, tx, signupParams, false /* <- isSSOUser */)
 				if terr != nil {
 					return terr
 				}
