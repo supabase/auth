@@ -13,13 +13,17 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - id: meta
         uses: docker/metadata-action@v4
         with:
           images: |
             supabase/gotrue
-            public.ecr.aws/t3w2s2c9/gotrue
+            public.ecr.aws/supabase/gotrue
+            ghcr.io/supabase/gotrue
             436098097459.dkr.ecr.us-east-1.amazonaws.com/gotrue
             646182064048.dkr.ecr.us-east-1.amazonaws.com/gotrue
           flavor: |
@@ -59,6 +63,13 @@ jobs:
           registry: 646182064048.dkr.ecr.us-east-1.amazonaws.com
           username: ${{ secrets.PROD_ACCESS_KEY_ID }}
           password: ${{ secrets.PROD_SECRET_ACCESS_KEY }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: docker/build-push-action@v3
         with:
