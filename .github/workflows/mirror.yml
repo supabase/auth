@@ -1,4 +1,4 @@
-name: Mirror to ECR
+name: Mirror Image
 
 on:
   workflow_dispatch:
