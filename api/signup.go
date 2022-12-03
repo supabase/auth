@@ -106,7 +106,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 			// do not update the user because we can't be sure of their claimed identity
 		} else {
-			user, terr = a.signupNewUser(ctx, tx, params, false /* <- duplicateEmails */)
+			user, terr = a.signupNewUser(ctx, tx, params, false /* <- isSSOUser */)
 			if terr != nil {
 				return terr
 			}

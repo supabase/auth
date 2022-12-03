@@ -159,9 +159,18 @@ func (a *SAMLAssertion) NotBefore() time.Time {
 // NotAfter extracts the time at which or after this assertion should not be
 // considered.
 func (a *SAMLAssertion) NotAfter() time.Time {
-	if a.Conditions != nil && !a.Conditions.NotOnOrAfter.IsZero() {
-		return a.Conditions.NotOnOrAfter.UTC()
+	var notOnOrAfter time.Time
+
+	for _, statement := range a.AuthnStatements {
+		if statement.SessionNotOnOrAfter == nil {
+			continue
+		}
+
+		notOnOrAfter = *statement.SessionNotOnOrAfter
+		if !notOnOrAfter.IsZero() {
+			break
+		}
 	}
 
-	return time.Time{}
+	return notOnOrAfter
 }
