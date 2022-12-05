@@ -3,7 +3,6 @@ package models
 import (
 	"database/sql"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
@@ -40,6 +39,8 @@ func (RefreshToken) TableName() string {
 // refresh token to authenticated users.
 type GrantParams struct {
 	FactorID *uuid.UUID
+
+	SessionNotAfter *time.Time
 }
 
 // GrantAuthenticatedUser creates a refresh token for the provided user.
@@ -61,7 +62,7 @@ func GrantRefreshTokenSwap(r *http.Request, tx *storage.Connection, user *User, 
 			return terr
 		}
 
-		newToken, terr = createRefreshToken(rtx, user, token, nil)
+		newToken, terr = createRefreshToken(rtx, user, token, &GrantParams{})
 		return terr
 	})
 	return newToken, err
@@ -126,18 +127,25 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 	}
 
 	if token.SessionId == nil {
-		// Existing refresh tokens may have a null session_id if they were created before v2.15.3
-		var session *Session
-		var err error
-		// TODO(Joel): Find better workaround
-		if os.Getenv("GOTRUE_MFA_ENABLED") == "true" {
-			session, err = MFA_CreateSession(tx, user, params.FactorID)
-		} else {
-			session, err = CreateSession(tx, user)
-		}
+		session, err := NewSession()
 		if err != nil {
-			return nil, errors.Wrap(err, "Error generated unique session id")
+			return nil, errors.Wrap(err, "error instantiating new session object")
 		}
+
+		session.UserID = user.ID
+
+		if params.FactorID != nil {
+			session.FactorID = params.FactorID
+		}
+
+		if params.SessionNotAfter != nil {
+			session.NotAfter = params.SessionNotAfter
+		}
+
+		if err := tx.Create(session); err != nil {
+			return nil, errors.Wrap(err, "error creating new session")
+		}
+
 		token.SessionId = &session.ID
 	}
 

@@ -54,7 +54,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 				Aud:      aud,
 				Provider: "email",
 			}
-			user, err = a.signupNewUser(ctx, tx, &signupParams)
+			user, err = a.signupNewUser(ctx, tx, &signupParams, false /* <- isSSOUser */)
 			if err != nil {
 				return err
 			}

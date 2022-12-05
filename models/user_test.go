@@ -151,10 +151,12 @@ func (ts *UserTestSuite) TestFindUserWithRefreshToken() {
 	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
 	require.NoError(ts.T(), err)
 
-	n, nr, err := FindUserWithRefreshToken(ts.db, r.Token)
+	n, nr, s, err := FindUserWithRefreshToken(ts.db, r.Token)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), r.ID, nr.ID)
 	require.Equal(ts.T(), u.ID, n.ID)
+	require.NotNil(ts.T(), s)
+	require.Equal(ts.T(), *r.SessionId, s.ID)
 }
 
 func (ts *UserTestSuite) TestIsDuplicatedEmail() {
@@ -162,19 +164,19 @@ func (ts *UserTestSuite) TestIsDuplicatedEmail() {
 
 	e, err := IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "test")
 	require.NoError(ts.T(), err)
-	require.True(ts.T(), e, "expected email to be duplicated")
+	require.NotNil(ts.T(), e, "expected email to be duplicated")
 
 	e, err = IsDuplicatedEmail(ts.db, "davidcalavera@netlify.com", "test")
 	require.NoError(ts.T(), err)
-	require.False(ts.T(), e, "expected email to not be duplicated")
+	require.Nil(ts.T(), e, "expected email to not be duplicated")
 
 	e, err = IsDuplicatedEmail(ts.db, "david@netlify.com", "test")
 	require.NoError(ts.T(), err)
-	require.False(ts.T(), e, "expected same email to not be duplicated")
+	require.Nil(ts.T(), e, "expected same email to not be duplicated")
 
 	e, err = IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "other-aud")
 	require.NoError(ts.T(), err)
-	require.False(ts.T(), e, "expected same email to not be duplicated")
+	require.Nil(ts.T(), e, "expected same email to not be duplicated")
 }
 
 func (ts *UserTestSuite) createUser() *User {
@@ -184,9 +186,14 @@ func (ts *UserTestSuite) createUser() *User {
 func (ts *UserTestSuite) createUserWithEmail(email string) *User {
 	user, err := NewUser("", email, "secret", "test", nil)
 	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(user))
 
-	err = ts.db.Create(user)
+	identity, err := NewIdentity(user, "email", map[string]interface{}{
+		"sub":   user.ID.String(),
+		"email": email,
+	})
 	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(identity))
 
 	return user
 }
@@ -242,4 +249,60 @@ func (ts *UserTestSuite) TestRemoveUnconfirmedIdentities() {
 	require.NotNil(ts.T(), user.AppMetaData)
 	require.Equal(ts.T(), user.AppMetaData["provider"], "phone")
 	require.Equal(ts.T(), user.AppMetaData["providers"], []string{"phone", "twitter"})
+}
+
+func (ts *UserTestSuite) TestConfirmEmailChange() {
+	user, err := NewUser("", "test@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(user))
+
+	identity, err := NewIdentity(user, "email", map[string]interface{}{
+		"sub":   user.ID.String(),
+		"email": "test@example.com",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(identity))
+
+	user.EmailChange = "new@example.com"
+	require.NoError(ts.T(), ts.db.UpdateOnly(user, "email_change"))
+
+	require.NoError(ts.T(), user.ConfirmEmailChange(ts.db, 0))
+
+	require.NoError(ts.T(), ts.db.Eager().Load(user))
+	identity, err = FindIdentityByIdAndProvider(ts.db, user.ID.String(), "email")
+	require.NoError(ts.T(), err)
+
+	require.Equal(ts.T(), user.Email, storage.NullString("new@example.com"))
+	require.Equal(ts.T(), user.EmailChange, "")
+
+	require.NotNil(ts.T(), identity.IdentityData)
+	require.Equal(ts.T(), identity.IdentityData["email"], "new@example.com")
+}
+
+func (ts *UserTestSuite) TestConfirmPhoneChange() {
+	user, err := NewUser("123456789", "", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(user))
+
+	identity, err := NewIdentity(user, "phone", map[string]interface{}{
+		"sub":   user.ID.String(),
+		"phone": "123456789",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(identity))
+
+	user.PhoneChange = "987654321"
+	require.NoError(ts.T(), ts.db.UpdateOnly(user, "phone_change"))
+
+	require.NoError(ts.T(), user.ConfirmPhoneChange(ts.db))
+
+	require.NoError(ts.T(), ts.db.Eager().Load(user))
+	identity, err = FindIdentityByIdAndProvider(ts.db, user.ID.String(), "phone")
+	require.NoError(ts.T(), err)
+
+	require.Equal(ts.T(), user.Phone, storage.NullString("987654321"))
+	require.Equal(ts.T(), user.PhoneChange, "")
+
+	require.NotNil(ts.T(), identity.IdentityData)
+	require.Equal(ts.T(), identity.IdentityData["phone"], "987654321")
 }

@@ -56,6 +56,10 @@ func (i *Identity) BeforeUpdate(tx *pop.Connection) error {
 	return nil
 }
 
+func (i *Identity) IsForSSOProvider() bool {
+	return strings.HasPrefix(i.Provider, "sso:")
+}
+
 // FindIdentityById searches for an identity with the matching provider_id and provider given.
 func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider string) (*Identity, error) {
 	identity := &Identity{}
@@ -68,10 +72,10 @@ func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider st
 	return identity, nil
 }
 
-// FindIdentitiesByUser returns all identities associated to a user
-func FindIdentitiesByUser(tx *storage.Connection, user *User) ([]*Identity, error) {
+// FindIdentitiesByUserID returns all identities associated to a user ID.
+func FindIdentitiesByUserID(tx *storage.Connection, userID uuid.UUID) ([]*Identity, error) {
 	identities := []*Identity{}
-	if err := tx.Q().Where("user_id = ?", user.ID).All(&identities); err != nil {
+	if err := tx.Q().Where("user_id = ?", userID).All(&identities); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return identities, nil
 		}

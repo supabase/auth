@@ -182,6 +182,20 @@ func (ts *SSOTestSuite) TestAdminCreateSSOProvider() {
 			},
 		},
 		{
+			StatusCode: http.StatusCreated,
+			Request: map[string]interface{}{
+				"type":         "saml",
+				"metadata_xml": validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-WITH-ATTRIBUTE-MAPPING"),
+				"attribute_mapping": map[string]interface{}{
+					"keys": map[string]interface{}{
+						"username": map[string]interface{}{
+							"name": "mail",
+						},
+					},
+				},
+			},
+		},
+		{
 			StatusCode: http.StatusBadRequest,
 			Request: map[string]interface{}{
 				"type":         "saml",
@@ -413,6 +427,19 @@ func (ts *SSOTestSuite) TestAdminUpdateSSOProvider() {
 			},
 		},
 		{
+			ID:     providers[1].ID,
+			Status: http.StatusOK,
+			Request: map[string]interface{}{
+				"attribute_mapping": map[string]interface{}{
+					"keys": map[string]interface{}{
+						"username": map[string]interface{}{
+							"name": "mail",
+						},
+					},
+				},
+			},
+		},
+		{
 			ID:     providers[0].ID,
 			Status: http.StatusOK,
 			Request: map[string]interface{}{
@@ -588,6 +615,16 @@ func (ts *SSOTestSuite) TestSingleSignOn() {
 			URL:  "https://accounts.google.com/o/saml2?idpid=EXAMPLE-B",
 		},
 		{
+			// call /sso with domain=example.com (provider=EXAMPLE-B)
+			// should be successful and redirect to the EXAMPLE-B SSO URL
+			Request: map[string]interface{}{
+				"domain":             "example.com",
+				"skip_http_redirect": true,
+			},
+			Code: http.StatusOK,
+			URL:  "https://accounts.google.com/o/saml2?idpid=EXAMPLE-B",
+		},
+		{
 			// call /sso with domain=example.org (no such provider)
 			// should be unsuccessful with 404
 			Request: map[string]interface{}{
@@ -617,12 +654,25 @@ func (ts *SSOTestSuite) TestSingleSignOn() {
 
 		require.Equal(ts.T(), w.Code, example.Code)
 
-		if example.Code != http.StatusSeeOther {
+		locationURLString := ""
+
+		if example.Code == http.StatusSeeOther {
+			locationURLString = w.Header().Get("Location")
+		} else if example.Code == http.StatusOK {
+			var response struct {
+				URL string `json:"url"`
+			}
+
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&response))
+
+			require.NotEmpty(ts.T(), response.URL)
+
+			locationURLString = response.URL
+		} else {
 			continue
 		}
 
-		locationURL, err := url.ParseRequestURI(w.Header().Get("Location"))
-
+		locationURL, err := url.ParseRequestURI(locationURLString)
 		require.NoError(ts.T(), err)
 
 		locationQuery, err := url.ParseQuery(locationURL.RawQuery)

@@ -25,6 +25,9 @@ var (
 // loadSSOProvider looks for an idp_id parameter in the URL route and loads the SSO provider
 // with that ID (or resource ID) and adds it to the context.
 func (a *API) loadSSOProvider(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+
 	var err error
 	var provider *models.SSOProvider
 
@@ -32,7 +35,7 @@ func (a *API) loadSSOProvider(w http.ResponseWriter, r *http.Request) (context.C
 
 	if idpID, err := uuid.FromString(idpParam); err == nil {
 		// idpParam is a UUIDv4
-		provider, err = models.FindSSOProviderByID(a.db, idpID)
+		provider, err = models.FindSSOProviderByID(db, idpID)
 		if err != nil {
 			if !models.IsNotFoundError(err) {
 				return nil, internalServerError("Database error finding SSO Identity Provider").WithInternalError(err)
@@ -49,7 +52,7 @@ func (a *API) loadSSOProvider(w http.ResponseWriter, r *http.Request) (context.C
 			return nil, notFoundError("SSO Identity Provider not found")
 		}
 
-		provider, err = models.FindSSOProviderByResourceID(a.db, idpParam)
+		provider, err = models.FindSSOProviderByResourceID(db, idpParam)
 		if err != nil {
 			if models.IsNotFoundError(err) {
 				return nil, notFoundError("SSO Identity Provider not found")
@@ -71,7 +74,10 @@ func (a *API) loadSSOProvider(w http.ResponseWriter, r *http.Request) (context.C
 // adminSSOProvidersList lists all SAML SSO Identity Providers in the system. Does
 // not deal with pagination at this time.
 func (a *API) adminSSOProvidersList(w http.ResponseWriter, r *http.Request) error {
-	providers, err := models.FindAllSAMLProviders(a.db)
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+
+	providers, err := models.FindAllSAMLProviders(db)
 	if err != nil {
 		return err
 	}
@@ -203,6 +209,7 @@ func fetchSAMLMetadata(ctx context.Context, url string) ([]byte, error) {
 // adminSSOProvidersCreate creates a new SAML Identity Provider in the system.
 func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 
 	body, err := getBodyBytes(r)
 	if err != nil {
@@ -224,7 +231,7 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 	}
 
 	if params.ResourceID != "" {
-		if _, err := models.FindSSOProviderByResourceID(a.db, params.ResourceID); err != nil {
+		if _, err := models.FindSSOProviderByResourceID(db, params.ResourceID); err != nil {
 			if !models.IsNotFoundError(err) {
 				return internalServerError("Unable to find SSO provider by resource ID").WithInternalError(err)
 			}
@@ -233,7 +240,7 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	existingProvider, err := models.FindSAMLProviderByEntityID(a.db, metadata.EntityID)
+	existingProvider, err := models.FindSAMLProviderByEntityID(db, metadata.EntityID)
 	if err != nil && !models.IsNotFoundError(err) {
 		return err
 	}
@@ -257,9 +264,10 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 		provider.SAMLProvider.MetadataURL = &params.MetadataURL
 	}
 
-	for _, domain := range params.Domains {
+	provider.SAMLProvider.AttributeMapping = params.AttributeMapping
 
-		existingProvider, err := models.FindSSOProviderByDomain(a.db, domain)
+	for _, domain := range params.Domains {
+		existingProvider, err := models.FindSSOProviderByDomain(db, domain)
 		if err != nil && !models.IsNotFoundError(err) {
 			return err
 		}
@@ -272,7 +280,7 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 		})
 	}
 
-	if err := a.db.Transaction(func(tx *storage.Connection) error {
+	if err := db.Transaction(func(tx *storage.Connection) error {
 		return tx.Eager().Create(provider)
 	}); err != nil {
 		return err
@@ -291,6 +299,7 @@ func (a *API) adminSSOProvidersGet(w http.ResponseWriter, r *http.Request) error
 // adminSSOProvidersUpdate updates a provider with the provided diff values.
 func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 
 	body, err := getBodyBytes(r)
 	if err != nil {
@@ -313,7 +322,7 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 	if params.ResourceID != "" && (provider.ResourceID == nil || params.ResourceID != *provider.ResourceID) {
 		// resource ID is being updated
 
-		existingProvider, err := models.FindSSOProviderByResourceID(a.db, params.ResourceID)
+		existingProvider, err := models.FindSSOProviderByResourceID(db, params.ResourceID)
 		if err != nil && !models.IsNotFoundError(err) {
 			return err
 		}
@@ -345,48 +354,67 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 		modified = true
 	}
 
-	var createDomains []string
-	keepDomains := make(map[string]bool)
+	var createDomains []models.SSODomain
+	keepProviders := make(map[string]bool)
 
 	for _, domain := range params.Domains {
-		existingProvider, err := models.FindSSOProviderByDomain(a.db, domain)
+		existingProvider, err := models.FindSSOProviderByDomain(db, domain)
 		if err != nil && !models.IsNotFoundError(err) {
 			return err
 		}
 		if existingProvider != nil {
 			if existingProvider.ID == provider.ID {
-				keepDomains[domain] = true
+				keepProviders[domain] = true
 			} else {
 				return badRequestError("SSO domain '%s' already assigned to another provider (%s)", domain, existingProvider.ID.String())
 			}
 		} else {
-			createDomains = append(createDomains, domain)
+			modified = true
+			createDomains = append(createDomains, models.SSODomain{
+				Domain:        domain,
+				SSOProviderID: provider.ID,
+			})
 		}
 	}
 
-	var updatedDomains []models.SSODomain
+	var deleteDomains []models.SSODomain
 
 	for _, domain := range provider.SSODomains {
-		if keepDomains[domain.Domain] {
-			updatedDomains = append(updatedDomains, domain)
+		if !keepProviders[domain.Domain] {
+			modified = true
+			deleteDomains = append(deleteDomains, domain)
 		}
 	}
 
-	for _, domain := range createDomains {
-		updatedDomains = append(updatedDomains, models.SSODomain{
-			Domain: domain,
-		})
+	updateAttributeMapping := !provider.SAMLProvider.AttributeMapping.Equal(&params.AttributeMapping)
+	if updateAttributeMapping {
+		modified = true
+		provider.SAMLProvider.AttributeMapping = params.AttributeMapping
 	}
 
-	modified = modified || len(createDomains) > 0
-
-	provider.SSODomains = updatedDomains
-
 	if modified {
-		if err := a.db.Transaction(func(tx *storage.Connection) error {
-			return tx.Eager().Update(provider)
+		if err := db.Transaction(func(tx *storage.Connection) error {
+			if terr := tx.Eager().Update(provider); terr != nil {
+				return terr
+			}
+
+			if terr := tx.Destroy(deleteDomains); terr != nil {
+				return terr
+			}
+
+			if terr := tx.Eager().Create(createDomains); terr != nil {
+				return terr
+			}
+
+			if updateAttributeMapping {
+				if terr := tx.Eager().Update(&provider.SAMLProvider); terr != nil {
+					return terr
+				}
+			}
+
+			return tx.Eager().Load(provider)
 		}); err != nil {
-			return err
+			return unprocessableEntityError("Updating SSO provider failed, likely due to a conflict. Try again?").WithInternalError(err)
 		}
 	}
 
@@ -395,9 +423,12 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 
 // adminSSOProvidersDelete deletes a SAML identity provider.
 func (a *API) adminSSOProvidersDelete(w http.ResponseWriter, r *http.Request) error {
-	provider := getSSOProvider(r.Context())
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 
-	if err := a.db.Transaction(func(tx *storage.Connection) error {
+	provider := getSSOProvider(ctx)
+
+	if err := db.Transaction(func(tx *storage.Connection) error {
 		return tx.Eager().Destroy(provider)
 	}); err != nil {
 		return err

@@ -123,11 +123,8 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		if config.MFA.Enabled {
-			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
-		} else {
-			token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
-		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
+
 		if terr != nil {
 			return terr
 		}
@@ -222,12 +219,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		if config.MFA.Enabled {
-			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
-		} else {
-			token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
-
-		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 		if terr != nil {
 			return terr
 		}

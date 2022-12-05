@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/api/sms_provider"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
@@ -77,7 +79,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		user, err = models.FindUserByEmailAndAudience(db, params.Email, params.Aud)
+		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud)
 	case "phone":
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone signups are disabled")
@@ -102,15 +104,16 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return UserExistsError
 			}
 
-			if err := user.UpdateUserMetaData(tx, params.Data); err != nil {
-				return internalServerError("Database error updating user").WithInternalError(err)
-			}
+			// do not update the user because we can't be sure of their claimed identity
 		} else {
-			user, terr = a.signupNewUser(ctx, tx, params)
+			user, terr = a.signupNewUser(ctx, tx, params, false /* <- isSSOUser */)
 			if terr != nil {
 				return terr
 			}
-			identity, terr := a.createNewIdentity(tx, user, params.Provider, map[string]interface{}{"sub": user.ID.String()})
+			identity, terr := a.createNewIdentity(tx, user, params.Provider, structs.Map(provider.Claims{
+				Subject: user.ID.String(),
+				Email:   user.GetEmail(),
+			}))
 			if terr != nil {
 				return terr
 			}
@@ -220,12 +223,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 				return terr
 			}
-
-			if config.MFA.Enabled {
-				token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
-			} else {
-				token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
-			}
+			token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
 
 			if terr != nil {
 				return terr
@@ -281,7 +279,7 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 	return u, nil
 }
 
-func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, params *SignupParams) (*models.User, error) {
+func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, params *SignupParams, isSSOUser bool) (*models.User, error) {
 	config := a.config
 
 	var user *models.User
@@ -295,6 +293,8 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 		// handles external provider case
 		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
 	}
+
+	user.IsSSOUser = isSSOUser
 
 	if err != nil {
 		return nil, internalServerError("Database error creating user").WithInternalError(err)

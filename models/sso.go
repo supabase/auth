@@ -43,6 +43,47 @@ type SAMLAttributeMapping struct {
 	Keys map[string]SAMLAttribute `json:"keys,omitempty"`
 }
 
+func (m *SAMLAttributeMapping) Equal(o *SAMLAttributeMapping) bool {
+	if m == o {
+		return true
+	}
+
+	if m == nil || o == nil {
+		return false
+	}
+
+	if m.Keys == nil && o.Keys == nil {
+		return true
+	}
+
+	if len(m.Keys) != len(o.Keys) {
+		return false
+	}
+
+	for mkey, mvalue := range m.Keys {
+		value, ok := o.Keys[mkey]
+		if !ok {
+			return false
+		}
+
+		if mvalue.Name != value.Name || len(mvalue.Names) != len(value.Names) {
+			return false
+		}
+
+		for i := 0; i < len(mvalue.Names); i += 1 {
+			if mvalue.Names[i] != value.Names[i] {
+				return false
+			}
+		}
+
+		if mvalue.Default != value.Default {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (m *SAMLAttributeMapping) Scan(src interface{}) error {
 	b, ok := src.([]byte)
 	if !ok {

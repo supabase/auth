@@ -63,8 +63,7 @@ func (ts *AuthTestSuite) TestParseJWTClaims() {
 
 	req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
 	req.Header.Set("Authorization", "Bearer "+userJwt)
-	w := httptest.NewRecorder()
-	ctx, err := ts.API.parseJWTClaims(userJwt, req, w)
+	ctx, err := ts.API.parseJWTClaims(userJwt, req)
 	require.NoError(ts.T(), err)
 
 	// check if token is stored in context
@@ -76,14 +75,12 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	var s *models.Session
-	if ts.Config.MFA.Enabled {
-		s, err = models.MFA_CreateSession(ts.API.db, u, &uuid.Nil)
-	} else {
-		s, err = models.CreateSession(ts.API.db, u)
-
-	}
+	s, err := models.NewSession()
 	require.NoError(ts.T(), err)
+	s.UserID = u.ID
+	require.NoError(ts.T(), ts.API.db.Create(s))
+
+	require.NoError(ts.T(), ts.API.db.Load(s))
 
 	cases := []struct {
 		Desc            string
@@ -172,8 +169,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 			req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
 			req.Header.Set("Authorization", "Bearer "+userJwt)
 
-			w := httptest.NewRecorder()
-			ctx, err := ts.API.parseJWTClaims(userJwt, req, w)
+			ctx, err := ts.API.parseJWTClaims(userJwt, req)
 			require.NoError(ts.T(), err)
 			ctx, err = ts.API.maybeLoadUserOrSession(ctx)
 			if c.ExpectedError != nil {

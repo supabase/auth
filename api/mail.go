@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/structs"
+	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/mailer"
@@ -111,11 +113,14 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					Provider: "email",
 					Aud:      aud,
 				}
-				user, terr = a.signupNewUser(ctx, tx, signupParams)
+				user, terr = a.signupNewUser(ctx, tx, signupParams, false /* <- isSSOUser */)
 				if terr != nil {
 					return terr
 				}
-				identity, terr := a.createNewIdentity(tx, user, "email", map[string]interface{}{"sub": user.ID.String()})
+				identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+					Subject: user.ID.String(),
+					Email:   user.GetEmail(),
+				}))
 				if terr != nil {
 					return terr
 				}
@@ -153,11 +158,14 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					Provider: "email",
 					Aud:      aud,
 				}
-				user, terr = a.signupNewUser(ctx, tx, signupParams)
+				user, terr = a.signupNewUser(ctx, tx, signupParams, false /* <- isSSOUser */)
 				if terr != nil {
 					return terr
 				}
-				identity, terr := a.createNewIdentity(tx, user, "email", map[string]interface{}{"sub": user.ID.String()})
+				identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+					Subject: user.ID.String(),
+					Email:   user.GetEmail(),
+				}))
 				if terr != nil {
 					return terr
 				}
@@ -174,9 +182,9 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return unprocessableEntityError("The new email address provided is invalid")
 			}
-			if exists, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud); terr != nil {
+			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud); terr != nil {
 				return internalServerError("Database error checking email").WithInternalError(terr)
-			} else if exists {
+			} else if duplicateUser != nil {
 				return unprocessableEntityError(DuplicateEmailMsg)
 			}
 			now := time.Now()

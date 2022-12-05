@@ -74,6 +74,10 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 
+	if user.IsSSOUser {
+		return unprocessableEntityError("MFA enrollment only supported for non-SSO users at this time")
+	}
+
 	factorType := params.FactorType
 
 	if factorType != models.TOTP && factorType != models.Recovery {
@@ -301,6 +305,10 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 
+	if factor.UserID != user.ID {
+		return internalServerError("user needs to own factor to verify")
+	}
+
 	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -433,6 +441,9 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	if factor.Status == models.FactorStateVerified && session.GetAAL() != models.AAL2.String() {
 		return badRequestError("AAL2 required to unenroll verified factor")
+	}
+	if factor.UserID != user.ID {
+		return internalServerError("user must own factor to unenroll")
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {

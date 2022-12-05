@@ -1133,6 +1133,7 @@ method can be used to set custom user data. Changing the email will result in a 
 {
   "email": "new-email@example.com",
   "password": "new-password",
+  "phone": "+123456789",
   "data": {
     "key": "value",
     "number": 10,
@@ -1148,6 +1149,8 @@ Returns:
   "id": "11111111-2222-3333-4444-5555555555555",
   "email": "email@example.com",
   "email_change_sent_at": "2016-05-15T20:49:40.882805774-07:00",
+  "phone": "+123456789",
+  "phone_change_sent_at": "2016-05-15T20:49:40.882805774-07:00",
   "created_at": "2016-05-15T19:53:12.368652374-07:00",
   "updated_at": "2016-05-15T19:53:12.368652374-07:00"
 }

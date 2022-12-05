@@ -12,9 +12,14 @@ import (
 )
 
 type SingleSignOnParams struct {
-	ProviderID uuid.UUID `json:"provider_id"`
-	Domain     string    `json:"domain"`
-	RedirectTo string    `json:"redirect_to"`
+	ProviderID       uuid.UUID `json:"provider_id"`
+	Domain           string    `json:"domain"`
+	RedirectTo       string    `json:"redirect_to"`
+	SkipHTTPRedirect *bool     `json:"skip_http_redirect"`
+}
+
+type SingleSignOnResponse struct {
+	URL string `json:"url"`
 }
 
 func (p *SingleSignOnParams) validate() (bool, error) {
@@ -110,7 +115,18 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Error creating SAML authentication request redirect URL").WithInternalError(err)
 	}
 
-	http.Redirect(w, r, ssoRedirectURL.String(), http.StatusSeeOther)
+	skipHTTPRedirect := false
 
+	if params.SkipHTTPRedirect != nil {
+		skipHTTPRedirect = *params.SkipHTTPRedirect
+	}
+
+	if skipHTTPRedirect {
+		return sendJSON(w, http.StatusOK, SingleSignOnResponse{
+			URL: ssoRedirectURL.String(),
+		})
+	}
+
+	http.Redirect(w, r, ssoRedirectURL.String(), http.StatusSeeOther)
 	return nil
 }

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/api/provider"
-	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
@@ -157,7 +157,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				return terr
 			}
 		} else {
-			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, user); terr != nil {
+			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
 				if errors.Is(terr, errReturnNil) {
 					return nil
 				}
@@ -165,11 +165,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				return terr
 			}
 		}
-		if config.MFA.Enabled {
-			token, terr = a.MFA_issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
-		} else {
-			token, terr = a.issueRefreshToken(ctx, tx, user, grantParams)
-		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
 
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
@@ -203,78 +199,91 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
-func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string, user *models.User) (*models.User, error) {
+func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
 	ctx := r.Context()
 	aud := a.requestAud(ctx, r)
 	config := a.config
 
 	var terr error
 
+	var user *models.User
+	var identity *models.Identity
+
 	var emailData provider.Email
 	var identityData map[string]interface{}
 	if userData.Metadata != nil {
-		identityData, terr = userData.Metadata.ToMap()
-		if terr != nil {
-			return nil, terr
+		identityData = structs.Map(userData.Metadata)
+	}
+
+	var emails []string
+
+	for _, email := range userData.Emails {
+		if email.Verified || config.Mailer.Autoconfirm {
+			emails = append(emails, email.Email)
 		}
 	}
 
-	var identity *models.Identity
-	// check if identity exists
-	if identity, terr = models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType); terr != nil {
-		if models.IsNotFoundError(terr) {
-			user, emailData, terr = a.getUserByVerifiedEmail(tx, config, userData.Emails, aud)
-			if terr != nil && !models.IsNotFoundError(terr) {
-				return nil, internalServerError("Error checking for existing users").WithInternalError(terr)
-			}
-			if user != nil {
-				if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
-					return nil, terr
-				}
-				if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
-					return nil, terr
-				}
-			} else {
-				if config.DisableSignup {
-					return nil, forbiddenError("Signups not allowed for this instance")
-				}
-
-				// prefer primary email for new signups
-				emailData = userData.Emails[0]
-				for _, e := range userData.Emails {
-					if e.Primary {
-						emailData = e
-						break
-					}
-				}
-
-				params := &SignupParams{
-					Provider: providerType,
-					Email:    emailData.Email,
-					Aud:      aud,
-					Data:     identityData,
-				}
-
-				user, terr = a.signupNewUser(ctx, tx, params)
-				if terr != nil {
-					return nil, terr
-				}
-
-				if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
-					return nil, terr
-				}
-			}
-		} else {
-			return nil, terr
-		}
+	decision, terr := models.DetermineAccountLinking(tx, providerType, userData.Metadata.Subject, emails)
+	if terr != nil {
+		return nil, terr
 	}
 
-	if identity != nil && user == nil {
-		// get user associated with identity
-		user, terr = models.FindUserByID(tx, identity.UserID)
+	switch decision.Decision {
+	case models.LinkAccount:
+		user = decision.User
+
+		emailData = userData.Emails[0]
+		for _, e := range userData.Emails {
+			if e.Primary || e.Verified {
+				emailData = e
+				break
+			}
+		}
+
+		if _, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+			return nil, terr
+		}
+
+		if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
+			return nil, terr
+		}
+
+	case models.CreateAccount:
+		if config.DisableSignup {
+			return nil, forbiddenError("Signups not allowed for this instance")
+		}
+
+		// prefer primary email for new signups
+		emailData = userData.Emails[0]
+		for _, e := range userData.Emails {
+			if e.Primary {
+				emailData = e
+				break
+			}
+		}
+
+		params := &SignupParams{
+			Provider: providerType,
+			Email:    emailData.Email,
+			Aud:      aud,
+			Data:     identityData,
+		}
+
+		isSSOUser := strings.HasPrefix(providerType, "sso:")
+
+		user, terr = a.signupNewUser(ctx, tx, params, isSSOUser)
 		if terr != nil {
 			return nil, terr
 		}
+
+		if _, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+			return nil, terr
+		}
+
+	case models.AccountExists:
+		user = decision.User
+		identity = decision.Identities[0]
+
 		identity.IdentityData = identityData
 		if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
 			return nil, terr
@@ -290,6 +299,12 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
 			return nil, terr
 		}
+
+	case models.MultipleAccounts:
+		return nil, internalServerError(fmt.Sprintf("Multiple accounts with the same email address in the same linking domain detected: %v", decision.LinkingDomain))
+
+	default:
+		return nil, internalServerError(fmt.Sprintf("Unknown automatic linking decision: %v", decision.Decision))
 	}
 
 	if user.IsBanned() {
@@ -373,10 +388,7 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 
 	var identityData map[string]interface{}
 	if userData.Metadata != nil {
-		identityData, err = userData.Metadata.ToMap()
-		if err != nil {
-			return nil, internalServerError("Error serialising user metadata").WithInternalError(err)
-		}
+		identityData = structs.Map(userData.Metadata)
 	}
 	if _, err := a.createNewIdentity(tx, user, providerType, identityData); err != nil {
 		return nil, err
@@ -549,25 +561,4 @@ func (a *API) createNewIdentity(tx *storage.Connection, user *models.User, provi
 	}
 
 	return identity, nil
-}
-
-// getUserByVerifiedEmail checks if one of the verified emails already belongs to a user
-func (a *API) getUserByVerifiedEmail(tx *storage.Connection, config *conf.GlobalConfiguration, emails []provider.Email, aud string) (*models.User, provider.Email, error) {
-	var user *models.User
-	var emailData provider.Email
-	var err error
-
-	for _, e := range emails {
-		if e.Verified || config.Mailer.Autoconfirm {
-			user, err = models.FindUserByEmailAndAudience(tx, e.Email, aud)
-			if err != nil && !models.IsNotFoundError(err) {
-				return user, emailData, err
-			}
-			if user != nil {
-				emailData = e
-				break
-			}
-		}
-	}
-	return user, emailData, err
 }

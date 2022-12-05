@@ -48,11 +48,8 @@ func (ts *UserTestSuite) TestUserGet() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err, "Error finding user")
 	var token string
-	if ts.API.config.MFA.Enabled {
-		token, err = MFA_generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	} else {
-		token, err = generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	}
+	token, err = generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+
 	require.NoError(ts.T(), err, "Error generating access token")
 
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/user", nil)
@@ -117,12 +114,8 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 			require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user")
 
 			var token string
-			if ts.API.config.MFA.Enabled {
-				token, err = MFA_generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-			} else {
-				token, err = generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+			token, err = generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 
-			}
 			require.NoError(ts.T(), err, "Error generating access token")
 
 			var buffer bytes.Buffer
@@ -182,12 +175,7 @@ func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			var token string
-			if ts.API.config.MFA.Enabled {
-				token, err = MFA_generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-			} else {
-				token, err = generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-
-			}
+			token, err = generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err, "Error generating access token")
 
 			var buffer bytes.Buffer
@@ -262,12 +250,7 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			req.Header.Set("Content-Type", "application/json")
 
 			var token string
-			if ts.API.config.MFA.Enabled {
-				token, err = MFA_generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-			} else {
-				token, err = generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-
-			}
+			token, err = generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
@@ -288,20 +271,16 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	ts.Config.Security.UpdatePasswordRequireReauthentication = true
 
-	// create a confirmed user
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
+
+	// Confirm the test user
 	now := time.Now()
 	u.EmailConfirmedAt = &now
 	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
 	var token string
-	if ts.API.config.MFA.Enabled {
-		token, err = MFA_generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-	} else {
-		token, err = generateAccessToken(u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
-
-	}
+	token, err = generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
 
 	// request for reauthentication nonce
@@ -344,4 +323,81 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	require.True(ts.T(), u.Authenticate("newpass"))
 	require.Empty(ts.T(), u.ReauthenticationToken)
 	require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
+}
+
+func (ts *UserTestSuite) TestUserUpdatePasswordLogoutOtherSessions() {
+	ts.Config.Security.UpdatePasswordRequireReauthentication = false
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	// Confirm the test user
+	now := time.Now()
+	u.EmailConfirmedAt = &now
+	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
+
+	// Login the test user to get first session
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    u.GetEmail(),
+		"password": "password",
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	session1 := AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&session1))
+
+	// Login test user to get second session
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    u.GetEmail(),
+		"password": "password",
+	}))
+	req = httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	session2 := AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&session2))
+
+	// Update user's password using first session
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"password": "newpass",
+	}))
+
+	req = httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", session1.Token))
+
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// Attempt to refresh session1 should pass
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"refresh_token": session1.RefreshToken,
+	}))
+
+	req = httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// Attempt to refresh session2 should fail
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"refresh_token": session2.RefreshToken,
+	}))
+
+	req = httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.NotEqual(ts.T(), http.StatusOK, w.Code)
 }
