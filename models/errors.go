@@ -15,6 +15,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case TotpSecretNotFoundError, *TotpSecretNotFoundError:
 		return true
+	case RecoveryCodeNotFoundError, *RecoveryCodeNotFoundError:
+		return true
 	case IdentityNotFoundError, *IdentityNotFoundError:
 		return true
 	case ChallengeNotFoundError, *ChallengeNotFoundError:
@@ -88,6 +90,12 @@ type TotpSecretNotFoundError struct{}
 
 func (e TotpSecretNotFoundError) Error() string {
 	return "Totp Secret not found"
+}
+
+type RecoveryCodeNotFoundError struct{}
+
+func (e RecoveryCodeNotFoundError) Error() string {
+	return "Recovery code not found"
 }
 
 // SSOProviderNotFoundError represents an error when a SSO Provider can't be

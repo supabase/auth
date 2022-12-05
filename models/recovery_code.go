@@ -60,7 +60,7 @@ func FindMatchingRecoveryCode(tx *storage.Connection, factor *Factor, recoveryCo
 	rc := &RecoveryCode{}
 	if err := tx.Q().Where("factor_id = ? AND recovery_code = ? AND used_at is  null", factor.ID, recoveryCode).First(rc); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			return rc, errors.New("no matching recovery code")
+			return rc, RecoveryCodeNotFoundError{}
 		}
 		return nil, nil
 	}

@@ -342,11 +342,10 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		err = a.db.Transaction(func(tx *storage.Connection) error {
 			method = models.RecoveryCodeSignIn
 			recoveryCode, terr := models.FindMatchingRecoveryCode(tx, factor, params.Code)
-			if terr != nil {
-				return terr
-			}
-			if recoveryCode == nil {
+			if models.IsNotFoundError(terr) {
 				return unauthorizedError("invalid recovery code")
+			} else if terr != nil {
+				return terr
 			}
 			if factor.Status == models.FactorStateVerified {
 				terr = recoveryCode.Consume(tx)

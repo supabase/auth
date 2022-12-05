@@ -599,6 +599,7 @@ func (ts *MFATestSuite) TestVerifyRecoveryCode() {
 	require.Equal(ts.T(), http.StatusOK, y.Code)
 
 	code = enrollResp.Codes[1]
+	invalidCode := "invalidCode"
 	var loginChallengeBuffer bytes.Buffer
 	x = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &loginChallengeBuffer)
@@ -616,14 +617,27 @@ func (ts *MFATestSuite) TestVerifyRecoveryCode() {
 
 	require.NoError(ts.T(), json.NewEncoder(&loginVerifyBuffer).Encode(map[string]interface{}{
 		"challenge_id": challengeID,
+		"code":         invalidCode,
+	}))
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factorID), &loginVerifyBuffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+
+	ts.API.handler.ServeHTTP(y, req)
+	require.Equal(ts.T(), http.StatusUnauthorized, y.Code)
+
+	y = httptest.NewRecorder()
+
+	require.NoError(ts.T(), json.NewEncoder(&loginVerifyBuffer).Encode(map[string]interface{}{
+		"challenge_id": challengeID,
 		"code":         code,
 	}))
 	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factorID), &loginVerifyBuffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Set("Content-Type", "application/json")
 
-	// ts.API.handler.ServeHTTP(y, req)
-	// require.Equal(ts.T(), http.StatusOK, y.Code)
+	ts.API.handler.ServeHTTP(y, req)
+	require.Equal(ts.T(), http.StatusOK, y.Code)
 
 }
 
