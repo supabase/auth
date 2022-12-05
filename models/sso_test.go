@@ -36,10 +36,6 @@ func TestSSO(t *tst.T) {
 }
 
 func (ts *SSOTestSuite) TestConstraints() {
-	resourceID := func(rid string) *string {
-		return &rid
-	}
-
 	type exampleSpec struct {
 		Provider *SSOProvider
 	}
@@ -72,11 +68,6 @@ func (ts *SSOTestSuite) TestConstraints() {
 						Domain: "",
 					},
 				},
-			},
-		},
-		{
-			Provider: &SSOProvider{
-				ResourceID: resourceID(""),
 			},
 		},
 	}
