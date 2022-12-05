@@ -25,8 +25,7 @@ func (RecoveryCode) TableName() string {
 	return tableName
 }
 
-// Returns a new recovery code associated with the user
-func NewRecoveryCode(user *User, recoveryFactorID uuid.UUID, recoveryCode string) (*RecoveryCode, error) {
+func NewRecoveryCode(recoveryFactorID uuid.UUID, recoveryCode string) (*RecoveryCode, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -87,18 +86,17 @@ func InvalidateRecoveryCodesForFactor(tx *storage.Connection, factor *Factor) er
 	return nil
 }
 
-func GenerateBatchOfRecoveryCodes(tx *storage.Connection, user *User, factor *Factor) ([]*RecoveryCode, error) {
+func GenerateBatchOfRecoveryCodes(tx *storage.Connection, factor *Factor) ([]*RecoveryCode, error) {
 	if factor.FactorType != Recovery {
 		return nil, errors.New("recovery factor required to generate codes")
 	}
 	recoveryCodes := []*RecoveryCode{}
-	// TODO(Joel): Validate all recovery codes for user from DB and invalidate
 	if err := InvalidateRecoveryCodesForFactor(tx, factor); err != nil {
 		return nil, err
 	}
 
 	for i := 0; i <= NumRecoveryCodes; i++ {
-		rc, err := NewRecoveryCode(user, factor.ID, crypto.SecureToken(RecoveryCodeLength))
+		rc, err := NewRecoveryCode(factor.ID, crypto.SecureToken(RecoveryCodeLength))
 		if err != nil {
 			return nil, err
 		}

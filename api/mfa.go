@@ -221,7 +221,7 @@ func (a *API) EnrollRecoveryCode(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		codes, terr = models.GenerateBatchOfRecoveryCodes(tx, user, factor)
+		codes, terr = models.GenerateBatchOfRecoveryCodes(tx, factor)
 		if terr != nil {
 			return terr
 		}

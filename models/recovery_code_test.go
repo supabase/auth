@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/storage"
@@ -35,49 +36,30 @@ func TestRecoveryCode(t *testing.T) {
 	suite.Run(t, ts)
 }
 
-// func (ts *RecoveryCodeTestSuite) TestFindValidRecoveryCodesByFactor() {
-// 	var expectedRecoveryCodes []string
-// 	user, err := NewUser("", "", "", "", nil)
-// 	require.NoError(ts.T(), err)
-// 	err = ts.db.Create(user)
-// 	require.NoError(ts.T(), err)
-// 	for i := 0; i <= NumRecoveryCodes; i++ {
-// 		rc := ts.createRecoveryCode(user)
-// 		expectedRecoveryCodes = append(expectedRecoveryCodes, rc.RecoveryCode)
-// 	}
-// 	recoveryCodes, err := FindValidRecoveryCodesByFactor(ts.db, user)
-// 	require.NoError(ts.T(), err)
-// 	require.Equal(ts.T(), NumRecoveryCodes, len(recoveryCodes), fmt.Sprintf("Expected %d recovery codes but got %d", NumRecoveryCodes, len(recoveryCodes)))
-
-// 	for index, recoveryCode := range recoveryCodes {
-// 		require.Equal(ts.T(), expectedRecoveryCodes[index], recoveryCode, "Recovery codes should match")
-// 	}
-// }
-
-func (ts *RecoveryCodeTestSuite) createRecoveryCode(u *User) *RecoveryCode {
-	recoveryFactor, err := u.RecoveryFactor()
+func (ts *RecoveryCodeTestSuite) TestFindValidRecoveryCodesByFactor() {
+	var expectedRecoveryCodes []string
+	factor, err := NewFactor(nil, "", Recovery, FactorStateUnverified, "secret")
 	require.NoError(ts.T(), err)
+	err = ts.db.Create(factor)
+	require.NoError(ts.T(), err)
+	for i := 0; i <= NumRecoveryCodes; i++ {
+		rc := ts.createRecoveryCode(factor)
+		expectedRecoveryCodes = append(expectedRecoveryCodes, rc.RecoveryCode)
+	}
+	recoveryCodes, err := FindValidRecoveryCodesByFactor(ts.db, factor)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), NumRecoveryCodes, len(recoveryCodes), fmt.Sprintf("Expected %d recovery codes but got %d", NumRecoveryCodes, len(recoveryCodes)))
 
-	rc, err := NewRecoveryCode(u, recoveryFactor.ID, crypto.SecureToken(RecoveryCodeLength))
+	for index, recoveryCode := range recoveryCodes {
+		require.Equal(ts.T(), expectedRecoveryCodes[index], recoveryCode, "Recovery codes should match")
+	}
+}
+
+func (ts *RecoveryCodeTestSuite) createRecoveryCode(rf *Factor) *RecoveryCode {
+
+	rc, err := NewRecoveryCode(rf.ID, crypto.SecureToken(RecoveryCodeLength))
 	require.NoError(ts.T(), err)
 	err = ts.db.Create(rc)
 	require.NoError(ts.T(), err)
 	return rc
 }
-
-// Create Recovery Code
-// func (ts *RecoveryCodeTestSuite) TestConsumedRecoveryCodesAreNotValid() {
-// 	user, err := NewUser("", "", "", "", nil)
-// 	require.NoError(ts.T(), err)
-// 	err = ts.db.Create(user)
-// 	require.NoError(ts.T(), err)
-// 	rc := ts.createRecoveryCode(user)
-// 	isRCValid, err := FindMatchingRecoveryCode(ts.db, user, rc.RecoveryCode)
-// 	require.NoError(ts.T(), err)
-// 	require.Equal(ts.T(), true, isRCValid)
-// 	err = rc.Consume(ts.db)
-// 	require.NoError(ts.T(), err)
-// 	isRCValid, err = FindMatchingRecoveryCode(ts.db, user, rc.RecoveryCode)
-// 	require.NoError(ts.T(), err)
-// 	require.Equal(ts.T(), false, isRCValid)
-// }
