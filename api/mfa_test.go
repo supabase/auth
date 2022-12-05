@@ -160,7 +160,7 @@ func (ts *MFATestSuite) TestEnrollRecoveryCode() {
 	user, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	ts.Require().NoError(err)
 
-	token, err := MFA_generateAccessToken(ts.API.db, user, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	token, err := generateAccessToken(ts.API.db, user, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 	require.NoError(ts.T(), err)
 
 	w := httptest.NewRecorder()
@@ -220,7 +220,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			expectedHTTPCode: http.StatusBadRequest,
 		},
 		{
-			desc:             "Valid /verify request",
+			desc:             "Valid/verify request",
 			validChallenge:   true,
 			validCode:        true,
 			expectedHTTPCode: http.StatusOK,
@@ -296,7 +296,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	}
 }
 
-func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
+func (ts *MFATestSuite) TestUnenrollTOTPFactor() {
 	cases := []struct {
 		desc             string
 		isAAL2           bool
@@ -330,6 +330,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			factors, err := models.FindFactorsByUser(ts.API.db, u)
 			require.NoError(ts.T(), err, "error finding factors")
 			f := factors[0]
+
 			secondarySession, err = models.NewSession()
 			require.NoError(ts.T(), err, "Error creating test session")
 			secondarySession.UserID = u.ID
@@ -343,7 +344,6 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
 
 			var buffer bytes.Buffer
-
 			token, err := generateAccessToken(ts.API.db, u, &s.ID, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
 			require.NoError(ts.T(), err)
 
@@ -363,7 +363,9 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			}
 		})
 	}
+}
 
+func (ts *MFATestSuite) TestUnenrollRecoveryFactor() {
 }
 
 func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
@@ -548,7 +550,6 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 }
 
 func (ts *MFATestSuite) TestVerifyRecoveryCode() {
-	// TODO(Joel): Figure how to merge with above to reduce duplication
 	email := "test1@example.com"
 	password := "test123"
 	signUpResp := signUp(ts, email, password)
@@ -599,6 +600,17 @@ func (ts *MFATestSuite) TestVerifyRecoveryCode() {
 
 }
 
+func (ts *MFATestSuite) TestEnrollingRecoveryCodesTwice() {
+	// Call Enroll twice, save result of first enroll
+	// Check Database to validate that first set of recovery codes are invalid
+}
+
 func (ts *MFATestSuite) TestLoginWithRecoveryCode() {
+	// Can Login
+	// Call enroll, challenge, verify
+	// Call challenge, verify(incorrect code)
+
+	// Call challenge, verify(correct)
+	// Should succeed
 
 }
