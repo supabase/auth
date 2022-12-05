@@ -598,6 +598,33 @@ func (ts *MFATestSuite) TestVerifyRecoveryCode() {
 	ts.API.handler.ServeHTTP(y, req)
 	require.Equal(ts.T(), http.StatusOK, y.Code)
 
+	code = enrollResp.Codes[1]
+	var loginChallengeBuffer bytes.Buffer
+	x = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &loginChallengeBuffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+	ts.API.handler.ServeHTTP(x, req)
+	require.Equal(ts.T(), http.StatusOK, x.Code)
+	loginChallengeResp := ChallengeFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(x.Body).Decode(&loginChallengeResp))
+	challengeID = loginChallengeResp.ID
+
+	// Verify
+	var loginVerifyBuffer bytes.Buffer
+	y = httptest.NewRecorder()
+
+	require.NoError(ts.T(), json.NewEncoder(&loginVerifyBuffer).Encode(map[string]interface{}{
+		"challenge_id": challengeID,
+		"code":         code,
+	}))
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factorID), &loginVerifyBuffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+
+	// ts.API.handler.ServeHTTP(y, req)
+	// require.Equal(ts.T(), http.StatusOK, y.Code)
+
 }
 
 func (ts *MFATestSuite) TestEnrollingRecoveryCodesTwice() {
