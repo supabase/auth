@@ -345,7 +345,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
-			// TODO(Joel): Should return if recovery code not there
+			if recoveryCode == nil {
+				return unauthorizedError("invalid recovery code")
+			}
 			if factor.Status == models.FactorStateVerified {
 				terr = recoveryCode.Consume(tx)
 				if terr != nil {
@@ -387,49 +389,49 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if valid := totp.Validate(params.Code, factor.Secret); !valid {
 			return badRequestError("Invalid TOTP code entered")
 		}
-	}
-
-	err = a.db.Transaction(func(tx *storage.Connection) error {
-		var terr error
-		if terr = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
-			"factor_id":    factor.ID,
-			"challenge_id": challenge.ID,
-		}); terr != nil {
-			return terr
-		}
-		if terr = challenge.Verify(tx); terr != nil {
-			return terr
-		}
-		if factor.Status != models.FactorStateVerified {
-			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
+		err = a.db.Transaction(func(tx *storage.Connection) error {
+			var terr error
+			if terr = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
+				"factor_id":    factor.ID,
+				"challenge_id": challenge.ID,
+			}); terr != nil {
 				return terr
 			}
-		}
-		user, terr = models.FindUserByID(tx, user.ID)
-		if terr != nil {
-			return terr
-		}
-		token, terr = a.updateMFASessionAndClaims(r, tx, user, method, models.GrantParams{
-			FactorID: &factor.ID,
+			if terr = challenge.Verify(tx); terr != nil {
+				return terr
+			}
+			if factor.Status != models.FactorStateVerified {
+				if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
+					return terr
+				}
+			}
+			user, terr = models.FindUserByID(tx, user.ID)
+			if terr != nil {
+				return terr
+			}
+			token, terr = a.updateMFASessionAndClaims(r, tx, user, method, models.GrantParams{
+				FactorID: &factor.ID,
+			})
+			if terr != nil {
+				return terr
+			}
+			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+				return internalServerError("Failed to set JWT cookie. %s", terr)
+			}
+			if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
+				return internalServerError("Failed to update sessions. %s", terr)
+			}
+			return nil
 		})
-		if terr != nil {
-			return terr
+		if err != nil {
+			return err
 		}
-		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-			return internalServerError("Failed to set JWT cookie. %s", terr)
-		}
-		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
-			return internalServerError("Failed to update sessions. %s", terr)
-		}
-		return nil
-	})
-	if err != nil {
-		return err
+		metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
+
+		return sendJSON(w, http.StatusOK, token)
+	} else {
+		return badRequestError("invalid factor type")
 	}
-	metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
-
-	return sendJSON(w, http.StatusOK, token)
-
 }
 
 func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {

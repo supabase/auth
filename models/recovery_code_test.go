@@ -56,7 +56,6 @@ func (ts *RecoveryCodeTestSuite) TestFindValidRecoveryCodesByFactor() {
 }
 
 func (ts *RecoveryCodeTestSuite) createRecoveryCode(rf *Factor) *RecoveryCode {
-
 	rc, err := NewRecoveryCode(rf.ID, crypto.SecureToken(RecoveryCodeLength))
 	require.NoError(ts.T(), err)
 	err = ts.db.Create(rc)

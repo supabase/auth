@@ -54,8 +54,9 @@ func FindValidRecoveryCodesByFactor(tx *storage.Connection, factor *Factor) ([]*
 
 // Validate recovery code
 func FindMatchingRecoveryCode(tx *storage.Connection, factor *Factor, recoveryCode string) (*RecoveryCode, error) {
-	// TODO(Joel): Find way to guard against factor not being recovery factor
-	// TODO(Joel): Find way to guard against factors being unverified
+	if factor.FactorType != Recovery {
+		return nil, errors.New("factor needs to be recovery factor to use recovery code")
+	}
 	rc := &RecoveryCode{}
 	if err := tx.Q().Where("factor_id = ? AND recovery_code = ? AND used_at is  null", factor.ID, recoveryCode).First(rc); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
