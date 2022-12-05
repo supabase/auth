@@ -550,6 +550,9 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 }
 
 func (ts *MFATestSuite) TestVerifyRecoveryCode() {
+	// Enroll Recovery codes and verify recovery codes
+	// Then, attempt to log in with an incorrect recovery code
+	// And thereafter attempt to log in with a valid recovery code
 	email := "test1@example.com"
 	password := "test123"
 	signUpResp := signUp(ts, email, password)
@@ -611,7 +614,7 @@ func (ts *MFATestSuite) TestVerifyRecoveryCode() {
 	require.NoError(ts.T(), json.NewDecoder(x.Body).Decode(&loginChallengeResp))
 	challengeID = loginChallengeResp.ID
 
-	// Verify
+	// Second Verify, invalid
 	var loginVerifyBuffer bytes.Buffer
 	y = httptest.NewRecorder()
 
@@ -632,26 +635,75 @@ func (ts *MFATestSuite) TestVerifyRecoveryCode() {
 		"challenge_id": challengeID,
 		"code":         code,
 	}))
+	// Third Verify, valid code
 	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factorID), &loginVerifyBuffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Set("Content-Type", "application/json")
 
 	ts.API.handler.ServeHTTP(y, req)
 	require.Equal(ts.T(), http.StatusOK, y.Code)
+	// Check that sessions are downgraded and the token response is valid
 
 }
 
 func (ts *MFATestSuite) TestEnrollingRecoveryCodesTwice() {
 	// Call Enroll twice, save result of first enroll
-	// Check Database to validate that first set of recovery codes are invalid
-}
+	// Attempting to verify an instance in the first set of recovery codes should fail
+	email := "test1@example.com"
+	password := "test123"
+	signUpResp := signUp(ts, email, password)
 
-func (ts *MFATestSuite) TestLoginWithRecoveryCode() {
-	// Can Login
-	// Call enroll, challenge, verify
-	// Call challenge, verify(incorrect code)
+	token := signUpResp.Token
 
-	// Call challenge, verify(correct)
-	// Should succeed
+	var buffer bytes.Buffer
+	w := httptest.NewRecorder()
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": "john", "factor_type": models.Recovery, "issuer": ts.TestDomain}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/factors/", &buffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	enrollResp := EnrollRecoveryCodesResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
+	// factorID := enrollResp.ID
+	// code := enrollResp.Codes[0]
+	// Re-enroll recovery codes codes
+	y := httptest.NewRecorder()
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": "john", "factor_type": models.Recovery, "issuer": ts.TestDomain}))
+
+	secondReq := httptest.NewRequest(http.MethodPost, "http://localhost/factors/", &buffer)
+	secondReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	secondReq.Header.Set("Content-Type", "application/json")
+	ts.API.handler.ServeHTTP(y, secondReq)
+	require.Equal(ts.T(), http.StatusUnauthorized, y.Code)
+
+	// // Challenge
+	// var challengeBuffer bytes.Buffer
+	// x := httptest.NewRecorder()
+	// req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &challengeBuffer)
+	// req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	// req.Header.Set("Content-Type", "application/json")
+	// ts.API.handler.ServeHTTP(x, req)
+	// require.Equal(ts.T(), http.StatusOK, x.Code)
+	// challengeResp := ChallengeFactorResponse{}
+	// require.NoError(ts.T(), json.NewDecoder(x.Body).Decode(&challengeResp))
+	// challengeID := challengeResp.ID
+
+	// // Verify
+	// var verifyBuffer bytes.Buffer
+	// y := httptest.NewRecorder()
+
+	// require.NoError(ts.T(), json.NewEncoder(&verifyBuffer).Encode(map[string]interface{}{
+	// 	"challenge_id": challengeID,
+	// 	"code":         code,
+	// }))
+	// req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factorID), &verifyBuffer)
+	// req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	// req.Header.Set("Content-Type", "application/json")
+
+	// ts.API.handler.ServeHTTP(y, req)
+	// require.Equal(ts.T(), http.StatusUnauthorized, y.Code)
 
 }
