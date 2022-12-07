@@ -671,13 +671,13 @@ func (ts *MFATestSuite) TestEnrollingRecoveryCodesTwice() {
 	// code := enrollResp.Codes[0]
 	// Re-enroll recovery codes codes
 	y := httptest.NewRecorder()
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": "john", "factor_type": models.Recovery, "issuer": ts.TestDomain}))
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": "billy", "factor_type": models.Recovery, "issuer": ts.TestDomain}))
 
 	secondReq := httptest.NewRequest(http.MethodPost, "http://localhost/factors/", &buffer)
 	secondReq.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	secondReq.Header.Set("Content-Type", "application/json")
 	ts.API.handler.ServeHTTP(y, secondReq)
-	require.Equal(ts.T(), http.StatusUnauthorized, y.Code)
+	require.Equal(ts.T(), http.StatusOK, y.Code)
 
 	// // Challenge
 	// var challengeBuffer bytes.Buffer

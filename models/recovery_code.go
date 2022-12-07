@@ -73,6 +73,25 @@ func (r *RecoveryCode) Consume(tx *storage.Connection) error {
 	r.UsedAt = &now
 	return tx.UpdateOnly(r, "used_at")
 }
+
+func InvalidateRecoveryCodesForUser(tx *storage.Connection, user *User) error {
+	factors, err := FindFactorsByUser(tx, user)
+	if err != nil {
+		return err
+	}
+	// This is an n+1 query?
+	for _, factor := range factors {
+		if factor.FactorType == Recovery {
+			err = InvalidateRecoveryCodesForFactor(tx, factor)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+
+}
+
 func InvalidateRecoveryCodesForFactor(tx *storage.Connection, factor *Factor) error {
 	recoveryCodes, err := FindValidRecoveryCodesByFactor(tx, factor)
 	if err != nil {
@@ -87,12 +106,9 @@ func InvalidateRecoveryCodesForFactor(tx *storage.Connection, factor *Factor) er
 	return nil
 }
 
-func GenerateBatchOfRecoveryCodes(tx *storage.Connection, factor *Factor) ([]*RecoveryCode, error) {
-	if factor.FactorType != Recovery {
-		return nil, errors.New("recovery factor required to generate codes")
-	}
+func GenerateBatchOfRecoveryCodes(tx *storage.Connection, user *User, factor *Factor) ([]*RecoveryCode, error) {
 	recoveryCodes := []*RecoveryCode{}
-	if err := InvalidateRecoveryCodesForFactor(tx, factor); err != nil {
+	if err := InvalidateRecoveryCodesForUser(tx, user); err != nil {
 		return nil, err
 	}
 

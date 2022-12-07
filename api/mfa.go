@@ -196,16 +196,17 @@ func (a *API) EnrollRecoveryCode(w http.ResponseWriter, r *http.Request) error {
 	for _, factor := range factors {
 		if factor.Status == models.FactorStateVerified {
 			numVerifiedFactors += 1
+			if factor.FactorType == models.Recovery && factor.Status == models.FactorStateVerified {
+				numRecoveryFactors += 1
+			}
 		}
-		if factor.FactorType == models.Recovery {
-			numRecoveryFactors += 1
-		}
+
 	}
 	if numVerifiedFactors >= 1 {
 		return forbiddenError("number of enrolled factors exceeds the allowed value, unenroll to continue")
 	}
 	if numRecoveryFactors >= 1 {
-		return forbiddenError("can only have one recovery factor, please unenroll recovery factor to continue")
+		return forbiddenError("can only have one verified recovery factor, please unenroll recovery factor to continue")
 	}
 
 	factor, err := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, "")
@@ -219,7 +220,7 @@ func (a *API) EnrollRecoveryCode(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		codes, terr = models.GenerateBatchOfRecoveryCodes(tx, factor)
+		codes, terr = models.GenerateBatchOfRecoveryCodes(tx, user, factor)
 		if terr != nil {
 			return terr
 		}
