@@ -80,11 +80,15 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	factorType := params.FactorType
 
-	if factorType != models.TOTP && factorType != models.Recovery {
-		return badRequestError("factor_type needs to be totp or recovery")
-	}
-	if factorType == models.Recovery {
+	if !config.MFA.RecoveryCodesEnabled && factorType == models.Recovery {
+		return badRequestError("recovery codes are not enabled")
+
+	} else if factorType == models.Recovery {
 		return a.EnrollRecoveryCode(w, r)
+	}
+
+	if factorType != models.TOTP {
+		return badRequestError("invalid factor type")
 	}
 
 	if params.Issuer == "" {
@@ -337,7 +341,10 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var token *AccessTokenResponse
 
 	var method models.AuthenticationMethod
-	if factor.FactorType == models.Recovery {
+	if !config.MFA.RecoveryCodesEnabled && factor.FactorType == models.Recovery {
+		return badRequestError("recovery codes are not enabled")
+
+	} else if factor.FactorType == models.Recovery {
 		err = a.db.Transaction(func(tx *storage.Connection) error {
 			method = models.RecoveryCodeSignIn
 			recoveryCode, terr := models.FindMatchingRecoveryCode(tx, factor, params.Code)

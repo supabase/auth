@@ -553,6 +553,9 @@ func (ts *MFATestSuite) TestVerifyRecoveryCode() {
 	// Enroll Recovery codes and verify recovery codes
 	// Then, attempt to log in with an incorrect recovery code
 	// And thereafter attempt to log in with a valid recovery code
+	if !ts.API.config.MFA.RecoveryCodesEnabled {
+		return
+	}
 	email := "test1@example.com"
 	password := "test123"
 	signUpResp := signUp(ts, email, password)
@@ -649,6 +652,9 @@ func (ts *MFATestSuite) TestVerifyRecoveryCode() {
 func (ts *MFATestSuite) TestEnrollingRecoveryCodesTwice() {
 	// Call Enroll twice, save result of first enroll
 	// Attempting to verify an instance in the first set of recovery codes should fail
+	if !ts.API.config.MFA.RecoveryCodesEnabled {
+		return
+	}
 	email := "test1@example.com"
 	password := "test123"
 	signUpResp := signUp(ts, email, password)
