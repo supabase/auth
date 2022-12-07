@@ -127,17 +127,22 @@ func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 		})
 	}
 
+	var avatarURL string
+	if len(u.AvatarURL.DisplayImage.Elements) > 0 {
+		avatarURL = u.AvatarURL.DisplayImage.Elements[0].Identifiers[0].Identifier
+	}
+
 	return &UserProvidedData{
 		Metadata: &Claims{
 			Issuer:        g.APIPath,
 			Subject:       u.ID,
 			Name:          strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
-			Picture:       u.AvatarURL.DisplayImage.Elements[0].Identifiers[0].Identifier,
+			Picture:       avatarURL,
 			Email:         e.Elements[0].HandleTilde.EmailAddress,
 			EmailVerified: true,
 
 			// To be deprecated
-			AvatarURL:  u.AvatarURL.DisplayImage.Elements[0].Identifiers[0].Identifier,
+			AvatarURL:  avatarURL,
 			FullName:   strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
 			ProviderId: u.ID,
 		},
