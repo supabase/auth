@@ -154,6 +154,9 @@ func (ts *MFATestSuite) TestEnrollTOTPFactor() {
 }
 
 func (ts *MFATestSuite) TestEnrollRecoveryCode() {
+	if !ts.API.config.MFA.RecoveryCodesEnabled {
+		return
+	}
 	var buffer bytes.Buffer
 	testFriendlyName := "myFriendlyName"
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": testFriendlyName, "factor_type": models.Recovery}))
@@ -363,9 +366,6 @@ func (ts *MFATestSuite) TestUnenrollTOTPFactor() {
 			}
 		})
 	}
-}
-
-func (ts *MFATestSuite) TestUnenrollRecoveryFactor() {
 }
 
 func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
