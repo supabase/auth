@@ -37,6 +37,14 @@ type linkedinUser struct {
 	} `json:"profilePicture"`
 }
 
+func (u *linkedinUser) getAvatarUrl() string {
+	avatarURL := ""
+	if len(u.AvatarURL.DisplayImage.Elements) > 0 {
+		avatarURL = u.AvatarURL.DisplayImage.Elements[0].Identifiers[0].Identifier
+	}
+	return avatarURL
+}
+
 type linkedinName struct {
 	Localized       interface{}    `json:"localized"`
 	PreferredLocale linkedinLocale `json:"preferredLocale"`
@@ -127,10 +135,7 @@ func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 		})
 	}
 
-	var avatarURL string
-	if len(u.AvatarURL.DisplayImage.Elements) > 0 {
-		avatarURL = u.AvatarURL.DisplayImage.Elements[0].Identifiers[0].Identifier
-	}
+	avatarURL := u.getAvatarUrl()
 
 	return &UserProvidedData{
 		Metadata: &Claims{
