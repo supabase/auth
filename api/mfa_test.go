@@ -667,8 +667,8 @@ func (ts *MFATestSuite) TestEnrollingRecoveryCodesTwice() {
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 	enrollResp := EnrollRecoveryCodesResponse{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
-	// factorID := enrollResp.ID
-	// code := enrollResp.Codes[0]
+	factorID := enrollResp.ID
+	code := enrollResp.Codes[0]
 	// Re-enroll recovery codes codes
 	y := httptest.NewRecorder()
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": "billy", "factor_type": models.Recovery, "issuer": ts.TestDomain}))
@@ -679,31 +679,31 @@ func (ts *MFATestSuite) TestEnrollingRecoveryCodesTwice() {
 	ts.API.handler.ServeHTTP(y, secondReq)
 	require.Equal(ts.T(), http.StatusOK, y.Code)
 
-	// // Challenge
-	// var challengeBuffer bytes.Buffer
-	// x := httptest.NewRecorder()
-	// req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &challengeBuffer)
-	// req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	// req.Header.Set("Content-Type", "application/json")
-	// ts.API.handler.ServeHTTP(x, req)
-	// require.Equal(ts.T(), http.StatusOK, x.Code)
-	// challengeResp := ChallengeFactorResponse{}
-	// require.NoError(ts.T(), json.NewDecoder(x.Body).Decode(&challengeResp))
-	// challengeID := challengeResp.ID
+	// Challenge
+	var challengeBuffer bytes.Buffer
+	x := httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &challengeBuffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+	ts.API.handler.ServeHTTP(x, req)
+	require.Equal(ts.T(), http.StatusOK, x.Code)
+	challengeResp := ChallengeFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(x.Body).Decode(&challengeResp))
+	challengeID := challengeResp.ID
 
-	// // Verify
-	// var verifyBuffer bytes.Buffer
-	// y := httptest.NewRecorder()
+	// Verify
+	var verifyBuffer bytes.Buffer
+	y = httptest.NewRecorder()
 
-	// require.NoError(ts.T(), json.NewEncoder(&verifyBuffer).Encode(map[string]interface{}{
-	// 	"challenge_id": challengeID,
-	// 	"code":         code,
-	// }))
-	// req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factorID), &verifyBuffer)
-	// req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	// req.Header.Set("Content-Type", "application/json")
+	require.NoError(ts.T(), json.NewEncoder(&verifyBuffer).Encode(map[string]interface{}{
+		"challenge_id": challengeID,
+		"code":         code,
+	}))
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factorID), &verifyBuffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
 
-	// ts.API.handler.ServeHTTP(y, req)
-	// require.Equal(ts.T(), http.StatusUnauthorized, y.Code)
+	ts.API.handler.ServeHTTP(y, req)
+	require.Equal(ts.T(), http.StatusUnauthorized, y.Code)
 
 }
