@@ -300,7 +300,12 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 		modified = true
 	}
 
-	var createDomains []models.SSODomain
+	// domains are being "updated" only when params.Domains is not nil, if
+	// it was nil (but not `[]`) then the caller is expecting not to modify
+	// the domains
+	updateDomains := params.Domains != nil
+
+	var createDomains, deleteDomains []models.SSODomain
 	keepDomains := make(map[string]bool)
 
 	for _, domain := range params.Domains {
@@ -323,12 +328,12 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	var deleteDomains []models.SSODomain
-
-	for _, domain := range provider.SSODomains {
-		if !keepDomains[domain.Domain] {
-			modified = true
-			deleteDomains = append(deleteDomains, domain)
+	if updateDomains {
+		for i, domain := range provider.SSODomains {
+			if !keepDomains[domain.Domain] {
+				modified = true
+				deleteDomains = append(deleteDomains, provider.SSODomains[i])
+			}
 		}
 	}
 
@@ -344,12 +349,14 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 				return terr
 			}
 
-			if terr := tx.Destroy(deleteDomains); terr != nil {
-				return terr
-			}
+			if updateDomains {
+				if terr := tx.Destroy(deleteDomains); terr != nil {
+					return terr
+				}
 
-			if terr := tx.Eager().Create(createDomains); terr != nil {
-				return terr
+				if terr := tx.Eager().Create(createDomains); terr != nil {
+					return terr
+				}
 			}
 
 			if updateAttributeMapping {
