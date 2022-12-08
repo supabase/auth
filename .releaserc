@@ -1,7 +1,10 @@
 {
   "branches": [
     "master",
-    "hf/fix-last-sign-in-at-issue",
+    {
+        "name": "hf/fix-last-sign-in-at-issue",
+        "prerelease": true
+    },
     {
         "name": "mfa",
         "prerelease": true
