@@ -10,6 +10,7 @@ on:
       - master
       - mfa
       - zerosessionidfix
+      - lastsigninatfix
 
 jobs:
   release:
