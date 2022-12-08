@@ -1,6 +1,7 @@
 {
   "branches": [
     "master",
+    "hf/fix-last-sign-in-at-issue",
     {
         "name": "mfa",
         "prerelease": true
