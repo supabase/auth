@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	defaultTextLocalApiBase = "https://api.textlocal.in"
+	defaultTextLocalApiBase = "https://api.textlocal.in/send/"
 )
 
 type TextlocalProvider struct {
