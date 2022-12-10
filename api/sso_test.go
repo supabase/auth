@@ -82,13 +82,7 @@ func (ts *SSOTestSuite) TestAdminGetSSOProviderNotExist() {
 		URL string
 	}{
 		{
-			URL: "http://localhost/admin/sso/providers/unknown-provider-resource-id",
-		},
-		{
-			URL: "http://localhost/admin/sso/providers/1",
-		},
-		{
-			URL: "http://localhost/admin/sso/providers/0",
+			URL: "http://localhost/admin/sso/providers/not-a-uuid",
 		},
 		{
 			URL: "http://localhost/admin/sso/providers/677477db-3f51-4038-bc05-c6bb9bdc3c32",
@@ -170,7 +164,6 @@ func (ts *SSOTestSuite) TestAdminCreateSSOProvider() {
 			StatusCode: http.StatusCreated,
 			Request: map[string]interface{}{
 				"type":         "saml",
-				"resource_id":  "abcdefgh",
 				"metadata_xml": validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-B"),
 			},
 		},
@@ -206,22 +199,6 @@ func (ts *SSOTestSuite) TestAdminCreateSSOProvider() {
 			StatusCode: http.StatusCreated,
 			Request: map[string]interface{}{
 				"type":         "saml",
-				"resource_id":  "duplicate",
-				"metadata_xml": validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-DUPLICATE-RID-A"),
-			},
-		},
-		{
-			StatusCode: http.StatusBadRequest,
-			Request: map[string]interface{}{
-				"type":         "saml",
-				"resource_id":  "duplicate",
-				"metadata_xml": validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-DUPLICATE-RID-B"),
-			},
-		},
-		{
-			StatusCode: http.StatusCreated,
-			Request: map[string]interface{}{
-				"type":         "saml",
 				"metadata_xml": validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-WITH-DOMAIN-A"),
 				"domains": []string{
 					"example.com",
@@ -236,14 +213,6 @@ func (ts *SSOTestSuite) TestAdminCreateSSOProvider() {
 				"domains": []string{
 					"example.com",
 				},
-			},
-		},
-		{
-			StatusCode: http.StatusBadRequest,
-			Request: map[string]interface{}{
-				"type":         "saml",
-				"resource_id":  "1",
-				"metadata_xml": validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-WITH-INVALID-RESOURCE-ID"),
 			},
 		},
 		{
@@ -364,13 +333,6 @@ func (ts *SSOTestSuite) TestAdminUpdateSSOProvider() {
 				},
 			},
 		},
-		{
-			Request: map[string]interface{}{
-				"type":         "saml",
-				"resource_id":  "example-d",
-				"metadata_xml": validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-D"),
-			},
-		},
 	}
 
 	for i, example := range providers {
@@ -437,20 +399,6 @@ func (ts *SSOTestSuite) TestAdminUpdateSSOProvider() {
 						},
 					},
 				},
-			},
-		},
-		{
-			ID:     providers[0].ID,
-			Status: http.StatusOK,
-			Request: map[string]interface{}{
-				"resource_id": "deadbeef",
-			},
-		},
-		{
-			ID:     providers[2].ID,
-			Status: http.StatusBadRequest,
-			Request: map[string]interface{}{
-				"resource_id": "deadbeef",
 			},
 		},
 	}

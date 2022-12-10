@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"regexp"
 	"unicode/utf8"
 
 	"github.com/crewjam/saml"
@@ -18,55 +17,31 @@ import (
 	"github.com/netlify/gotrue/storage"
 )
 
-var (
-	ssoProviderResourceIDPattern = regexp.MustCompile("(?i)^[a-z0-9_-]{5,256}$")
-)
-
 // loadSSOProvider looks for an idp_id parameter in the URL route and loads the SSO provider
 // with that ID (or resource ID) and adds it to the context.
 func (a *API) loadSSOProvider(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	var err error
-	var provider *models.SSOProvider
-
 	idpParam := chi.URLParam(r, "idp_id")
 
-	if idpID, err := uuid.FromString(idpParam); err == nil {
-		// idpParam is a UUIDv4
-		provider, err = models.FindSSOProviderByID(db, idpID)
-		if err != nil {
-			if !models.IsNotFoundError(err) {
-				return nil, internalServerError("Database error finding SSO Identity Provider").WithInternalError(err)
-			}
-			// not found with the ID, maybe it's a ResourceID?
-		}
+	idpID, err := uuid.FromString(idpParam)
+	if err != nil {
+		// idpParam is not UUIDv4
+		return nil, notFoundError("SSO Identity Provider not found")
 	}
 
-	if provider == nil {
-		// provider wasn't found, consider idpParam is a resource ID
-
-		if !ssoProviderResourceIDPattern.MatchString(idpParam) {
-			// it is definitely not a resource ID
+	// idpParam is a UUIDv4
+	provider, err := models.FindSSOProviderByID(db, idpID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
 			return nil, notFoundError("SSO Identity Provider not found")
-		}
-
-		provider, err = models.FindSSOProviderByResourceID(db, idpParam)
-		if err != nil {
-			if models.IsNotFoundError(err) {
-				return nil, notFoundError("SSO Identity Provider not found")
-			} else {
-				return nil, internalServerError("Database error finding SSO Identity Provider").WithInternalError(err)
-			}
+		} else {
+			return nil, internalServerError("Database error finding SSO Identity Provider").WithInternalError(err)
 		}
 	}
 
 	observability.LogEntrySetField(r, "sso_provider_id", provider.ID.String())
-	if provider.ResourceID != nil {
-		resourceID := *provider.ResourceID
-		observability.LogEntrySetField(r, "sso_provider_resource_id", resourceID)
-	}
 
 	return withSSOProvider(r.Context(), provider), nil
 }
@@ -93,8 +68,7 @@ func (a *API) adminSSOProvidersList(w http.ResponseWriter, r *http.Request) erro
 }
 
 type CreateSSOProviderParams struct {
-	ResourceID string `json:"resource_id"`
-	Type       string `json:"type"`
+	Type string `json:"type"`
 
 	MetadataURL      string                      `json:"metadata_url"`
 	MetadataXML      string                      `json:"metadata_xml"`
@@ -105,8 +79,6 @@ type CreateSSOProviderParams struct {
 func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
 	if !forUpdate && p.Type != "saml" {
 		return badRequestError("Only 'saml' supported for SSO provider type")
-	} else if p.ResourceID != "" && !ssoProviderResourceIDPattern.MatchString(p.ResourceID) {
-		return badRequestError("Resource IDs can only contain letters, digits, dashes and underscores, have a minimum lenth of 5 and a maximum of 256")
 	} else if p.MetadataURL != "" && p.MetadataXML != "" {
 		return badRequestError("Only one of metadata_xml or metadata_url needs to be set")
 	} else if !forUpdate && p.MetadataURL == "" && p.MetadataXML == "" {
@@ -230,16 +202,6 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 
-	if params.ResourceID != "" {
-		if _, err := models.FindSSOProviderByResourceID(db, params.ResourceID); err != nil {
-			if !models.IsNotFoundError(err) {
-				return internalServerError("Unable to find SSO provider by resource ID").WithInternalError(err)
-			}
-		} else {
-			return badRequestError("A SSO provider with this resource ID (%s) already exists", params.ResourceID)
-		}
-	}
-
 	existingProvider, err := models.FindSAMLProviderByEntityID(db, metadata.EntityID)
 	if err != nil && !models.IsNotFoundError(err) {
 		return err
@@ -254,10 +216,6 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 			EntityID:    metadata.EntityID,
 			MetadataXML: string(rawMetadata),
 		},
-	}
-
-	if params.ResourceID != "" {
-		provider.ResourceID = &params.ResourceID
 	}
 
 	if params.MetadataURL != "" {
@@ -281,7 +239,11 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 	}
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
-		return tx.Eager().Create(provider)
+		if terr := tx.Eager().Create(provider); terr != nil {
+			return terr
+		}
+
+		return tx.Eager().Load(provider)
 	}); err != nil {
 		return err
 	}
@@ -319,22 +281,6 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 
 	provider := getSSOProvider(ctx)
 
-	if params.ResourceID != "" && (provider.ResourceID == nil || params.ResourceID != *provider.ResourceID) {
-		// resource ID is being updated
-
-		existingProvider, err := models.FindSSOProviderByResourceID(db, params.ResourceID)
-		if err != nil && !models.IsNotFoundError(err) {
-			return err
-		}
-
-		if existingProvider != nil {
-			return badRequestError("SSO Provider Resource ID (%s) can't be updated, already assigned to another provider (%s)", params.ResourceID, existingProvider.ID.String())
-		}
-
-		provider.ResourceID = &params.ResourceID
-		modified = true
-	}
-
 	if params.MetadataXML != "" || params.MetadataURL != "" {
 		// metadata is being updated
 		rawMetadata, metadata, err := params.metadata(ctx)
@@ -354,8 +300,13 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 		modified = true
 	}
 
-	var createDomains []models.SSODomain
-	keepProviders := make(map[string]bool)
+	// domains are being "updated" only when params.Domains is not nil, if
+	// it was nil (but not `[]`) then the caller is expecting not to modify
+	// the domains
+	updateDomains := params.Domains != nil
+
+	var createDomains, deleteDomains []models.SSODomain
+	keepDomains := make(map[string]bool)
 
 	for _, domain := range params.Domains {
 		existingProvider, err := models.FindSSOProviderByDomain(db, domain)
@@ -364,7 +315,7 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 		}
 		if existingProvider != nil {
 			if existingProvider.ID == provider.ID {
-				keepProviders[domain] = true
+				keepDomains[domain] = true
 			} else {
 				return badRequestError("SSO domain '%s' already assigned to another provider (%s)", domain, existingProvider.ID.String())
 			}
@@ -377,12 +328,12 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	var deleteDomains []models.SSODomain
-
-	for _, domain := range provider.SSODomains {
-		if !keepProviders[domain.Domain] {
-			modified = true
-			deleteDomains = append(deleteDomains, domain)
+	if updateDomains {
+		for i, domain := range provider.SSODomains {
+			if !keepDomains[domain.Domain] {
+				modified = true
+				deleteDomains = append(deleteDomains, provider.SSODomains[i])
+			}
 		}
 	}
 
@@ -398,12 +349,14 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 				return terr
 			}
 
-			if terr := tx.Destroy(deleteDomains); terr != nil {
-				return terr
-			}
+			if updateDomains {
+				if terr := tx.Destroy(deleteDomains); terr != nil {
+					return terr
+				}
 
-			if terr := tx.Eager().Create(createDomains); terr != nil {
-				return terr
+				if terr := tx.Eager().Create(createDomains); terr != nil {
+					return terr
+				}
 			}
 
 			if updateAttributeMapping {
