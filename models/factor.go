@@ -131,7 +131,6 @@ func (f *Factor) UpdateStatus(tx *storage.Connection, status string) error {
 	return tx.UpdateOnly(f, "status", "updated_at")
 }
 
-
 // UpdateFactorType modifies the factor type
 func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) error {
 	f.FactorType = factorType
