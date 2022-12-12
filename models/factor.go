@@ -131,18 +131,6 @@ func (f *Factor) UpdateStatus(tx *storage.Connection, status string) error {
 	return tx.UpdateOnly(f, "status", "updated_at")
 }
 
-// IsMFAEnabled determines if user has met the conditions to activate MFA
-func IsMFAEnabled(tx *storage.Connection, user *User) (bool, error) {
-	factors, err := FindVerifiedFactorsByUser(tx, user)
-	if err != nil {
-		return false, err
-	}
-	if len(factors) >= 1 {
-		return true, nil
-	}
-	return false, nil
-}
-
 // UpdateFactorType modifies the factor type
 func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) error {
 	f.FactorType = factorType
