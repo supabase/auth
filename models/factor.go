@@ -65,7 +65,7 @@ type Factor struct {
 	FriendlyName string      `json:"friendly_name,omitempty" db:"friendly_name"`
 	Secret       string      `json:"-" db:"secret"`
 	FactorType   string      `json:"factor_type" db:"factor_type"`
-	Challenge    []Challenge `json:"challenges,omitempty" has_many:"challenges"`
+	Challenge    []Challenge `json:"-" has_many:"challenges"`
 }
 
 func (Factor) TableName() string {
@@ -130,6 +130,22 @@ func FindUnverifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor,
 		return nil, errors.Wrap(err, "Database error when finding verified MFA factors")
 	}
 	return factors, nil
+}
+
+func DeleteUnverifiedFactors(tx *storage.Connection, user *User) error {
+	factors := []*Factor{}
+	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorStateUnverified.String()).All(&factors); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil
+		}
+		return errors.Wrap(err, "Database error when finding verified MFA factors")
+	}
+	for _, factor := range factors {
+		if err := tx.Destroy(factor); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func FindVerifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
