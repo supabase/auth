@@ -129,11 +129,10 @@ func DeleteUnverifiedFactors(tx *storage.Connection, user *User) error {
 		}
 		return errors.Wrap(err, "Database error when finding verified MFA factors")
 	}
-	for _, factor := range factors {
-		if err := tx.Destroy(factor); err != nil {
-			return err
-		}
+	if err = tx.Destroy(factors); err != nil {
+		return err
 	}
+
 	return nil
 }
 
