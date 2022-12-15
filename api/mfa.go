@@ -103,11 +103,9 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		if factor.Status == models.FactorStateVerified.String() {
 			numVerifiedFactors += 1
 		}
-
 	}
 	if numVerifiedFactors >= config.MFA.MaxVerifiedFactors {
 		return forbiddenError("number of enrolled factors exceeds the allowed value, unenroll to continue")
-
 	}
 
 	key, err := totp.Generate(totp.GenerateOpts{
