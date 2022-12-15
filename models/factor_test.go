@@ -65,7 +65,7 @@ func (ts *FactorTestSuite) TestUpdateStatus() {
 	f, err := NewFactor(u, "", TOTP, FactorStateUnverified, "some-secret")
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), f.UpdateStatus(ts.db, newFactorStatus))
-	require.Equal(ts.T(), newFactorStatus, f.Status)
+	require.Equal(ts.T(), newFactorStatus.String(), f.Status)
 }
 
 func (ts *FactorTestSuite) TestUpdateFriendlyName() {
