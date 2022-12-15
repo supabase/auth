@@ -10,10 +10,22 @@ import (
 	"github.com/pkg/errors"
 )
 
+type FactorState int
+
 const (
-	FactorStateUnverified = "unverified"
-	FactorStateVerified   = "verified"
+	FactorStateUnverified FactorState = iota
+	FactorStateVerified
 )
+
+func (factorState FactorState) String() string {
+	switch factorState {
+	case FactorStateUnverified:
+		return "unverified"
+	case FactorStateVerified:
+		return "verified"
+	}
+	return ""
+}
 
 const TOTP = "totp"
 
@@ -44,15 +56,16 @@ func (authMethod AuthenticationMethod) String() string {
 }
 
 type Factor struct {
-	ID           uuid.UUID `json:"id" db:"id"`
-	User         User      `json:"-" belongs_to:"user"`
-	UserID       uuid.UUID `json:"-" db:"user_id"`
-	CreatedAt    time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
-	Status       string    `json:"status" db:"status"`
-	FriendlyName string    `json:"friendly_name,omitempty" db:"friendly_name"`
-	Secret       string    `json:"-" db:"secret"`
-	FactorType   string    `json:"factor_type" db:"factor_type"`
+	ID           uuid.UUID   `json:"id" db:"id"`
+	User         User        `json:"-" belongs_to:"user"`
+	UserID       uuid.UUID   `json:"-" db:"user_id"`
+	CreatedAt    time.Time   `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time   `json:"updated_at" db:"updated_at"`
+	Status       string      `json:"status" db:"status"`
+	FriendlyName string      `json:"friendly_name,omitempty" db:"friendly_name"`
+	Secret       string      `json:"-" db:"secret"`
+	FactorType   string      `json:"factor_type" db:"factor_type"`
+	Challenge    []Challenge `json:"challenges,omitempty" has_many:"challenges"`
 }
 
 func (Factor) TableName() string {
@@ -60,7 +73,7 @@ func (Factor) TableName() string {
 	return tableName
 }
 
-func NewFactor(user *User, friendlyName string, factorType string, status, secret string) (*Factor, error) {
+func NewFactor(user *User, friendlyName string, factorType string, state FactorState, secret string) (*Factor, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error generating unique id")
@@ -68,7 +81,7 @@ func NewFactor(user *User, friendlyName string, factorType string, status, secre
 	factor := &Factor{
 		UserID:       user.ID,
 		ID:           id,
-		Status:       status,
+		Status:       state.String(),
 		FriendlyName: friendlyName,
 		Secret:       secret,
 		FactorType:   factorType,
@@ -108,15 +121,31 @@ func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Fac
 	return obj, nil
 }
 
-func FindVerifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
+// TODO(Joel): refactor into one function with below after adding a type for factorstate
+func FindUnverifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	factors := []*Factor{}
-	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorStateVerified).All(&factors); err != nil {
+	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorStateUnverified.String()).All(&factors); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return factors, nil
 		}
 		return nil, errors.Wrap(err, "Database error when finding verified MFA factors")
 	}
 	return factors, nil
+}
+
+func FindVerifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
+	factors := []*Factor{}
+	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorStateVerified.String()).All(&factors); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return factors, nil
+		}
+		return nil, errors.Wrap(err, "Database error when finding verified MFA factors")
+	}
+	return factors, nil
+}
+
+func RemoveUnverifiedFactorsForUser(tx *storage.Connection, user *User) {
+
 }
 
 // UpdateFriendlyName changes the friendly name
@@ -126,8 +155,8 @@ func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string)
 }
 
 // UpdateStatus modifies the factor status
-func (f *Factor) UpdateStatus(tx *storage.Connection, status string) error {
-	f.Status = status
+func (f *Factor) UpdateStatus(tx *storage.Connection, state FactorState) error {
+	f.Status = state.String()
 	return tx.UpdateOnly(f, "status", "updated_at")
 }
 

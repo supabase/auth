@@ -100,7 +100,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	numVerifiedFactors := 0
 
 	for _, factor := range factors {
-		if factor.Status == models.FactorStateVerified {
+		if factor.Status == models.FactorStateVerified.String() {
 			numVerifiedFactors += 1
 		}
 
@@ -260,7 +260,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = challenge.Verify(tx); terr != nil {
 			return terr
 		}
-		if factor.Status != models.FactorStateVerified {
+		if factor.Status != models.FactorStateVerified.String() {
 			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
 				return terr
 			}
@@ -299,7 +299,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	factor := getFactor(ctx)
 	session := getSession(ctx)
 
-	if factor.Status == models.FactorStateVerified && session.GetAAL() != models.AAL2.String() {
+	if factor.Status == models.FactorStateVerified.String() && session.GetAAL() != models.AAL2.String() {
 		return badRequestError("AAL2 required to unenroll verified factor")
 	}
 	if factor.UserID != user.ID {
