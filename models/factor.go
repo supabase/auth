@@ -143,10 +143,6 @@ func FindVerifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, e
 	return factors, nil
 }
 
-func RemoveUnverifiedFactorsForUser(tx *storage.Connection, user *User) {
-
-}
-
 // UpdateFriendlyName changes the friendly name
 func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	f.FriendlyName = friendlyName
