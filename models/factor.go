@@ -121,7 +121,6 @@ func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Fac
 	return obj, nil
 }
 
-// TODO(Joel): refactor into one function with below after adding a type for factorstate
 func FindUnverifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	factors := []*Factor{}
 	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorStateUnverified.String()).All(&factors); err != nil {

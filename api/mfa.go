@@ -281,6 +281,17 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
 			return internalServerError("Failed to update sessions. %s", terr)
 		}
+		unverifiedFactors, terr := models.FindUnverifiedFactorsByUser(tx, user)
+		if terr != nil {
+			return terr
+		}
+
+		for _, factor := range unverifiedFactors {
+			if terr = tx.Destroy(factor); terr != nil {
+				return terr
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
