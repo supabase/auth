@@ -121,17 +121,6 @@ func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Fac
 	return obj, nil
 }
 
-func FindUnverifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
-	factors := []*Factor{}
-	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorStateUnverified.String()).All(&factors); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return factors, nil
-		}
-		return nil, errors.Wrap(err, "Database error when finding verified MFA factors")
-	}
-	return factors, nil
-}
-
 func DeleteUnverifiedFactors(tx *storage.Connection, user *User) error {
 	factors := []*Factor{}
 	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorStateUnverified.String()).All(&factors); err != nil {
