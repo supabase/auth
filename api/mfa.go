@@ -74,6 +74,9 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	factorType := params.FactorType
+	// if factorType == models.WebAuthn {
+	// 	  return a.EnrollWebAuthnFactor(w,r)
+	// }
 	if factorType != models.TOTP {
 		return badRequestError("factor_type needs to be totp")
 	}
@@ -159,6 +162,16 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
+func (a *API) EnrollWebAuthnFactor(w http.ResponseWriter, r *http.Request) error {
+	// Initialize webauthn object and set it on the global context
+	// web, err = webauthn.New(&webauthn.Config{
+	// RPDisplayName: "Go Webauthn", // Display Name for your site
+	// RPID: "go-webauthn.local", // Generally the FQDN for your site
+	// RPOrigin: "https://login.go-webauthn.local", // The origin URL for WebAuthn requests
+	// RPIcon: "https://go-webauthn.local/logo.png", // Optional icon URL for your site
+	// })
+}
+
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
@@ -169,6 +182,13 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	challenge, err := models.NewChallenge(factor, ipAddress)
 	if err != nil {
 		return internalServerError("Database error creating challenge").WithInternalError(err)
+	}
+	// TODO(Joel): replace hardcoded string with actual value
+	if factor.FactorType == "webauthn" {
+		err := a.EnrollWebAuthnFactor(w, r)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -193,6 +213,23 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		ID:        challenge.ID,
 		ExpiresAt: expiryTime.Unix(),
 	})
+}
+
+func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) error {
+	// Returns the public key and related information
+	// ctx := r.Context()
+	// user = getUser(ctx)
+	// sessionData = getRegistrationSession()
+	// if registrationSession != nil:
+	//   parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
+	//   credential, err := web.CreateCredential(&user, sessionData, parsedResponse
+	//   if err == None:
+	//      store.save(cred, credential)
+	//   JSONResponse(w, "Registration Success", http.StatusOK)
+	// else:
+	//   options, sessionData, err = webauthn.BeginLogin(&user)
+	options := ""
+	return sendJSON(w, http.StatusOK, options)
 }
 
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
@@ -291,6 +328,22 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 	return sendJSON(w, http.StatusOK, token)
 
+}
+
+func (a *API) VerifyWebAuthnFactor(w http.ResponseWriter, r *http.Request) error {
+	// user := datastore.GetUser() // Get the user from context
+	// Get the session data stored from the function above
+	// sessionData := store.Get(r, "registration-session")
+	// parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
+	// credential, err := web.CreateCredential(&user, sessionData, parsedResponse)
+	// Handle validation or input errors
+	// If creation was successful, store the credential object
+	//   return JSONResponse(w, "Registration Success", http.StatusOK)
+	// else:
+	//   sessionData := store.Get(r, "login-session")
+	//   parsedResponse, err := protocol.ParseCredentialRequestResponseBody(r.Body)
+	//   credential, err := webauthn.ValidateLogin(&user, sessionData, parsedResponse)
+	return sendJSON(w, http.StatusOK, "")
 }
 
 func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
