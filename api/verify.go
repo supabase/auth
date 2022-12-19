@@ -382,7 +382,7 @@ func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *stor
 		return nil, nil
 	}
 
-	// one email is confirmed at this point
+	// one email is confirmed at this point if GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED is enabled
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 

@@ -297,16 +297,14 @@ func (u *User) ConfirmEmailChange(tx *storage.Connection, status int) error {
 			// no email identity, not an error
 			return nil
 		}
-
 		return err
 	}
 
 	if _, ok := identity.IdentityData["email"]; ok {
 		identity.IdentityData["email"] = email
-	}
-
-	if err := tx.UpdateOnly(identity, "identity_data"); err != nil {
-		return err
+		if err := tx.UpdateOnly(identity, "identity_data"); err != nil {
+			return err
+		}
 	}
 
 	return nil
