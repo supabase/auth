@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/aaronarduino/goqrsvg"
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
@@ -74,9 +76,9 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	factorType := params.FactorType
-	// if factorType == models.WebAuthn {
-	// 	  return a.EnrollWebAuthnFactor(w,r)
-	// }
+	if factorType == "webauthn" {
+		return a.EnrollWebAuthnFactor(w, r)
+	}
 	if factorType != models.TOTP {
 		return badRequestError("factor_type needs to be totp")
 	}
@@ -164,12 +166,86 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 func (a *API) EnrollWebAuthnFactor(w http.ResponseWriter, r *http.Request) error {
 	// Initialize webauthn object and set it on the global context
-	// web, err = webauthn.New(&webauthn.Config{
-	// RPDisplayName: "Go Webauthn", // Display Name for your site
-	// RPID: "go-webauthn.local", // Generally the FQDN for your site
-	// RPOrigin: "https://login.go-webauthn.local", // The origin URL for WebAuthn requests
-	// RPIcon: "https://go-webauthn.local/logo.png", // Optional icon URL for your site
-	// })
+	ctx := r.Context()
+	user := getUser(ctx)
+	// TODO(Joel): Figure out how to load this onto context
+	web, err := webauthn.New(&webauthn.Config{
+		RPDisplayName: "Go Webauthn",                        // Display Name for your site
+		RPID:          "go-webauthn.local",                  // Generally the FQDN for your site
+		RPOrigin:      "https://login.go-webauthn.local",    // The origin URL for WebAuthn requests
+		RPIcon:        "https://go-webauthn.local/logo.png", // Optional icon URL for your site
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Println(web)
+
+	params := &EnrollFactorParams{}
+	config := a.config
+	issuer := ""
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return internalServerError("Could not read body").WithInternalError(err)
+	}
+
+	if err := json.Unmarshal(body, params); err != nil {
+		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
+	}
+
+	// TODO(Joel): Factor this check into a function
+	if params.Issuer == "" {
+		u, err := url.ParseRequestURI(config.SiteURL)
+		if err != nil {
+			return internalServerError("site url is improperly formatted")
+		}
+		issuer = u.Host
+	} else {
+		issuer = params.Issuer
+	}
+
+	// Read from DB for certainty
+	factors, err := models.FindFactorsByUser(a.db, user)
+	if err != nil {
+		return internalServerError("error validating number of factors in system").WithInternalError(err)
+	}
+
+	if len(factors) >= int(config.MFA.MaxEnrolledFactors) {
+		return forbiddenError("Enrolled factors exceed allowed limit, unenroll to continue")
+	}
+	numVerifiedFactors := 0
+
+	// TODO: Remove this at v2
+	for _, factor := range factors {
+		if factor.Status == models.FactorStateVerified {
+			numVerifiedFactors += 1
+		}
+
+	}
+	if numVerifiedFactors >= 1 {
+		return forbiddenError("number of enrolled factors exceeds the allowed value, unenroll to continue")
+
+	}
+	// TODO (Joel): Properly populate the secret field
+	factor, err := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, "")
+	if err != nil {
+		return internalServerError("database error creating factor").WithInternalError(err)
+	}
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := tx.Create(factor); terr != nil {
+			return terr
+		}
+		if terr := models.NewAuditLogEntry(r, tx, user, models.EnrollFactorAction, r.RemoteAddr, map[string]interface{}{
+			"factor_id": factor.ID,
+		}); terr != nil {
+			return terr
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return sendJSON(w, http.StatusOK, issuer)
 }
 
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
@@ -185,7 +261,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	// TODO(Joel): replace hardcoded string with actual value
 	if factor.FactorType == "webauthn" {
-		err := a.EnrollWebAuthnFactor(w, r)
+		err := a.ChallengeWebAuthnFactor(w, r)
 		if err != nil {
 			return err
 		}
@@ -217,19 +293,36 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) error {
 	// Returns the public key and related information
-	// ctx := r.Context()
-	// user = getUser(ctx)
-	// sessionData = getRegistrationSession()
-	// if registrationSession != nil:
+	ctx := r.Context()
+	user := getUser(ctx)
+	// TODO (Joel): dump this in context
+	web, err := webauthn.New(&webauthn.Config{
+		RPDisplayName: "Go Webauthn",                        // Display Name for your site
+		RPID:          "go-webauthn.local",                  // Generally the FQDN for your site
+		RPOrigin:      "https://login.go-webauthn.local",    // The origin URL for WebAuthn requests
+		RPIcon:        "https://go-webauthn.local/logo.png", // Optional icon URL for your site
+	})
+	if err != nil {
+		return err
+	}
+	options, sessionData, err := web.BeginRegistration(user)
+	fmt.Printf("%v", options)
+	fmt.Printf("%v", sessionData)
+	fmt.Printf("%v", err)
+	// sessions
+	// if registrationSession != nil {
 	//   parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
 	//   credential, err := web.CreateCredential(&user, sessionData, parsedResponse
-	//   if err == None:
-	//      store.save(cred, credential)
-	//   JSONResponse(w, "Registration Success", http.StatusOK)
-	// else:
+	//   store.save(cred, credential)
+	// } else if loginSession != nil {
 	//   options, sessionData, err = webauthn.BeginLogin(&user)
-	options := ""
-	return sendJSON(w, http.StatusOK, options)
+	// } else {
+	//   return err
+	// if err != nil {
+	// 	  return err
+	// }
+
+	return sendJSON(w, http.StatusOK, nil)
 }
 
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
@@ -331,18 +424,26 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) VerifyWebAuthnFactor(w http.ResponseWriter, r *http.Request) error {
-	// user := datastore.GetUser() // Get the user from context
+	// ctx := r.Context()
+	//user = getUser(ctx)
 	// Get the session data stored from the function above
-	// sessionData := store.Get(r, "registration-session")
+	// registrationSession := getRegistrationSession()
+	// loginSession := getLoginSession()
+	// if registrationSession != nil {
 	// parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
 	// credential, err := web.CreateCredential(&user, sessionData, parsedResponse)
-	// Handle validation or input errors
-	// If creation was successful, store the credential object
-	//   return JSONResponse(w, "Registration Success", http.StatusOK)
-	// else:
-	//   sessionData := store.Get(r, "login-session")
+	// Handle validation or input errors	//
+	// } else if loginSession != nil {
 	//   parsedResponse, err := protocol.ParseCredentialRequestResponseBody(r.Body)
-	//   credential, err := webauthn.ValidateLogin(&user, sessionData, parsedResponse)
+	//   credential, err := webauthn.ValidateLogin(&user, sessionData, parsedResponse)//
+	// } else {
+	//   return internalServerError("Please initiate a webauthn session")
+	// }
+	//
+	// if err != nil {
+	//	 Store the credential object
+	// }
+
 	return sendJSON(w, http.StatusOK, "")
 }
 

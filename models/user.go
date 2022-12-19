@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/crypto"
@@ -627,4 +628,26 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection) error {
 	u.Identities = confirmedProviders
 
 	return nil
+}
+
+func (u *User) WebAuthnID() []byte {
+	return nil
+}
+
+func (u *User) WebAuthnName() string {
+	return string(u.Email)
+}
+
+func (u *User) WebAuthnDisplayName() string {
+	return string(u.Email)
+}
+
+func (u *User) WebAuthnIcon() string {
+	return string(u.Email)
+}
+
+// TODO(Joel): Correctly fill this
+func (u *User) WebAuthnCredentials() []webauthn.Credential {
+	// Find Factors and filter out factors which are webauthn
+	return []webauthn.Credential{}
 }
