@@ -27,7 +27,7 @@ type MiddlewareTestSuite struct {
 	Config *conf.GlobalConfiguration
 }
 
-func TestHCaptcha(t *testing.T) {
+func TestMiddlewareFunctions(t *testing.T) {
 	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
 
@@ -146,6 +146,54 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 			_, err := ts.API.verifyCaptcha(w, req)
 			require.Equal(ts.T(), c.expectedCode, err.(*HTTPError).Code)
 			require.Equal(ts.T(), c.expectedMsg, err.(*HTTPError).Message)
+		})
+	}
+}
+
+func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
+	// Set up rate limit config for this test
+	ts.Config.RateLimitEmailSent = 5
+	ts.Config.RateLimitSmsSent = 5
+
+	cases := []struct {
+		desc             string
+		expectedErrorMsg string
+		requestBody      map[string]interface{}
+	}{
+		{
+			desc:             "Email rate limit exceeded",
+			expectedErrorMsg: "429: Email rate limit exceeded",
+			requestBody: map[string]interface{}{
+				"email": "test@example.com",
+			},
+		},
+		{
+			desc:             "Sms rate limit exceeded",
+			expectedErrorMsg: "429: Sms rate limit exceeded",
+			requestBody: map[string]interface{}{
+				"phone": "+1233456789",
+			},
+		},
+	}
+
+	limiter := ts.API.limitEmailOrPhoneSentHandler()
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.requestBody))
+			req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+
+			for i := 0; i < 5; i++ {
+				_, err := limiter(w, req)
+				require.NoError(ts.T(), err)
+			}
+
+			// should exceed rate limit on 5th try
+			_, err := limiter(w, req)
+			require.Error(ts.T(), err)
+			require.Equal(ts.T(), c.expectedErrorMsg, err.Error())
 		})
 	}
 }
