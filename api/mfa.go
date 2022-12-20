@@ -12,6 +12,7 @@ import (
 	"github.com/aaronarduino/goqrsvg"
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
+	"github.com/duo-labs/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/metering"
@@ -168,7 +169,6 @@ func (a *API) EnrollWebAuthnFactor(w http.ResponseWriter, r *http.Request) error
 	// Initialize webauthn object and set it on the global context
 	ctx := r.Context()
 	user := getUser(ctx)
-	// TODO(Joel): Figure out how to load this onto context
 	web, err := webauthn.New(&webauthn.Config{
 		RPDisplayName: "Go Webauthn",                        // Display Name for your site
 		RPID:          "go-webauthn.local",                  // Generally the FQDN for your site
@@ -178,7 +178,14 @@ func (a *API) EnrollWebAuthnFactor(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
-	fmt.Println(web)
+	marshaledWebauthnInstance, err := json.Marshal(web)
+	if err != nil {
+		return err
+	}
+	err = storage.StoreInSession("webauthn-instance", string(marshaledWebauthnInstance), r, w)
+	if err != nil {
+		return err
+	}
 
 	params := &EnrollFactorParams{}
 	config := a.config
@@ -295,34 +302,54 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 	// Returns the public key and related information
 	ctx := r.Context()
 	user := getUser(ctx)
-	// TODO (Joel): dump this in context
-	web, err := webauthn.New(&webauthn.Config{
-		RPDisplayName: "Go Webauthn",                        // Display Name for your site
-		RPID:          "go-webauthn.local",                  // Generally the FQDN for your site
-		RPOrigin:      "https://login.go-webauthn.local",    // The origin URL for WebAuthn requests
-		RPIcon:        "https://go-webauthn.local/logo.png", // Optional icon URL for your site
-	})
+	web := &webauthn.WebAuthn{}
+
+	webMarshaled, err := storage.GetFromSession("webauthn-instance", r)
 	if err != nil {
 		return err
 	}
-	options, sessionData, err := web.BeginRegistration(user)
-	fmt.Printf("%v", options)
-	fmt.Printf("%v", sessionData)
-	fmt.Printf("%v", err)
-	// sessions
-	// if registrationSession != nil {
-	//   parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
-	//   credential, err := web.CreateCredential(&user, sessionData, parsedResponse
-	//   store.save(cred, credential)
-	// } else if loginSession != nil {
-	//   options, sessionData, err = webauthn.BeginLogin(&user)
-	// } else {
-	//   return err
-	// if err != nil {
-	// 	  return err
-	// }
 
-	return sendJSON(w, http.StatusOK, nil)
+	err = json.Unmarshal([]byte(webMarshaled), web)
+	if err != nil {
+		return err
+	}
+	registrationSession, err := storage.GetFromSession("registrationSession", r)
+	if err != nil {
+		return err
+	}
+
+	var options *protocol.CredentialCreation
+	if registrationSession != "" {
+		// Registration has been initiated
+		opt, sessionData, err := web.BeginLogin(user)
+		marshaledSession, err := json.Marshal(sessionData)
+		if err != nil {
+			return err
+		}
+		err = storage.StoreInSession("login-session", string(marshaledSession), r, w)
+		if err != nil {
+			return err
+		}
+		options = opt
+
+		//  store.save(cred, credential)
+	} else {
+		opt, sessionData, err := web.BeginRegistration(user)
+		marshaledSession, err := json.Marshal(sessionData)
+		if err != nil {
+			return err
+		}
+		err = storage.StoreInSession("registration-session", string(marshaledSession), r, w)
+		if err != nil {
+			return err
+		}
+		options = opt
+	}
+	if err != nil {
+		return err
+	}
+
+	return sendJSON(w, http.StatusOK, options)
 }
 
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
