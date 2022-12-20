@@ -12,6 +12,7 @@ import (
 	"github.com/aaronarduino/goqrsvg"
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
+	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/metering"
@@ -268,7 +269,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 	// TODO(Joel): replace hardcoded string with actual value
 	if factor.FactorType == "webauthn" {
-		fmt.Println("request starting")
 		err := a.ChallengeWebAuthnFactor(w, r)
 		if err != nil {
 			return err
@@ -305,7 +305,6 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 	user := getUser(ctx)
 	web := &webauthn.WebAuthn{}
 
-	fmt.Println("before challenge")
 	webMarshaled, err := storage.GetFromSession("webauthn", r)
 	if err != nil {
 		return err
@@ -316,12 +315,11 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 
-	fmt.Println("reach")
+	// Registration session
 	registrationSession, err := storage.GetFromSession("registration-session", r)
 	if err != nil {
 		// TODO(Joel): Properly handle this so it can fail and still continue
 		fmt.Println("and here")
-		// return err
 	}
 
 	if registrationSession != "" {
@@ -407,6 +405,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return badRequestError("%v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
+	if factor.FactorType == "webauthn" {
+		return a.VerifyWebAuthnFactor(w, r)
+	}
 
 	if valid := totp.Validate(params.Code, factor.Secret); !valid {
 		return badRequestError("Invalid TOTP code entered")
@@ -457,8 +458,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) VerifyWebAuthnFactor(w http.ResponseWriter, r *http.Request) error {
-	// ctx := r.Context()
-	// user := getUser(ctx)
+	sessionData := &webauthn.SessionData{}
+	ctx := r.Context()
+	user := getUser(ctx)
 	// Get the session data stored from the function above
 	// TODO(Joel): Refactor unmarshalling of webauthn into a single function on storage
 	web := &webauthn.WebAuthn{}
@@ -472,11 +474,23 @@ func (a *API) VerifyWebAuthnFactor(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
-	// sessionData, err := storage.GetFromSession( "registration-session", r)
+	sessionDataMarshaled, err := storage.GetFromSession("registration-session", r)
+	if err != nil {
+		fmt.Println("registration session not available")
+		return err
+	}
+	err = json.Unmarshal([]byte(sessionDataMarshaled), sessionData)
+	if err != nil {
+		return err
+	}
+
+	// Login Session:
+	// loginSessionData, err := storage.GetFromSession( "login-session", r)
 	// if err != nil {
-	// 	return err
+	// 	fmt.Println("login session not initiated")
 	// }
-	// TODO(Joel): Reshape body into creationresponse
+
+	// // TODO(Joel): Reshape body into creationresponse
 	// parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
 	// credential, err := web.CreateCredential(&user, sessionData, parsedResponse)
 
@@ -488,10 +502,17 @@ func (a *API) VerifyWebAuthnFactor(w http.ResponseWriter, r *http.Request) error
 	}
 	*/
 	// if registrationSession != nil {
-	// parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
+
+	parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
+	if err != nil {
+		return err
+	}
 	// Decision 1: Generic methods for login/registration sessions or separate ones?
-	// Decision 2: Store on Context or Session
-	// credential, err := web.CreateCredential(&user, sessionData, parsedResponse)
+	credential, err := web.CreateCredential(user, *sessionData, parsedResponse)
+	if err != nil {
+		return err
+	}
+	fmt.Println(credential)
 	// } else if loginSession != nil {
 	//   parsedResponse, err := protocol.ParseCredentialRequestResponseBody(r.Body)
 	//   credential, err := webauthn.ValidateLogin(&user, sessionData, parsedResponse)//
