@@ -12,7 +12,6 @@ import (
 	"github.com/aaronarduino/goqrsvg"
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
-	"github.com/duo-labs/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/metering"
@@ -182,14 +181,14 @@ func (a *API) EnrollWebAuthnFactor(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
-	err = storage.StoreInSession("webauthn-instance", string(marshaledWebauthnInstance), r, w)
+	err = storage.StoreInSession("webauthn", string(marshaledWebauthnInstance), r, w)
 	if err != nil {
 		return err
 	}
 
 	params := &EnrollFactorParams{}
 	config := a.config
-	issuer := ""
+	// issuer := ""
 	body, err := getBodyBytes(r)
 	if err != nil {
 		return internalServerError("Could not read body").WithInternalError(err)
@@ -200,15 +199,15 @@ func (a *API) EnrollWebAuthnFactor(w http.ResponseWriter, r *http.Request) error
 	}
 
 	// TODO(Joel): Factor this check into a function
-	if params.Issuer == "" {
-		u, err := url.ParseRequestURI(config.SiteURL)
-		if err != nil {
-			return internalServerError("site url is improperly formatted")
-		}
-		issuer = u.Host
-	} else {
-		issuer = params.Issuer
-	}
+	// if params.Issuer == "" {
+	// 	u, err := url.ParseRequestURI(config.SiteURL)
+	// 	if err != nil {
+	// 		return internalServerError("site url is improperly formatted")
+	// 	}
+	// 	issuer = u.Host
+	// } else {
+	// 	issuer = params.Issuer
+	// }
 
 	// Read from DB for certainty
 	factors, err := models.FindFactorsByUser(a.db, user)
@@ -252,7 +251,7 @@ func (a *API) EnrollWebAuthnFactor(w http.ResponseWriter, r *http.Request) error
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, issuer)
+	return sendJSON(w, http.StatusOK, factor)
 }
 
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
@@ -266,8 +265,10 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return internalServerError("Database error creating challenge").WithInternalError(err)
 	}
+
 	// TODO(Joel): replace hardcoded string with actual value
 	if factor.FactorType == "webauthn" {
+		fmt.Println("request starting")
 		err := a.ChallengeWebAuthnFactor(w, r)
 		if err != nil {
 			return err
@@ -304,7 +305,8 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 	user := getUser(ctx)
 	web := &webauthn.WebAuthn{}
 
-	webMarshaled, err := storage.GetFromSession("webauthn-instance", r)
+	fmt.Println("before challenge")
+	webMarshaled, err := storage.GetFromSession("webauthn", r)
 	if err != nil {
 		return err
 	}
@@ -313,15 +315,21 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return err
 	}
-	registrationSession, err := storage.GetFromSession("registrationSession", r)
+
+	fmt.Println("reach")
+	registrationSession, err := storage.GetFromSession("registration-session", r)
 	if err != nil {
-		return err
+		// TODO(Joel): Properly handle this so it can fail and still continue
+		fmt.Println("and here")
+		// return err
 	}
 
-	var options *protocol.CredentialCreation
 	if registrationSession != "" {
 		// Registration has been initiated
-		opt, sessionData, err := web.BeginLogin(user)
+		options, sessionData, err := web.BeginLogin(user)
+		if err != nil {
+			return err
+		}
 		marshaledSession, err := json.Marshal(sessionData)
 		if err != nil {
 			return err
@@ -330,11 +338,13 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 		if err != nil {
 			return err
 		}
-		options = opt
+		return sendJSON(w, http.StatusOK, options)
 
-		//  store.save(cred, credential)
 	} else {
-		opt, sessionData, err := web.BeginRegistration(user)
+		options, sessionData, err := web.BeginRegistration(user)
+		if err != nil {
+			return err
+		}
 		marshaledSession, err := json.Marshal(sessionData)
 		if err != nil {
 			return err
@@ -343,13 +353,9 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 		if err != nil {
 			return err
 		}
-		options = opt
-	}
-	if err != nil {
-		return err
+		return sendJSON(w, http.StatusOK, options)
 	}
 
-	return sendJSON(w, http.StatusOK, options)
 }
 
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
@@ -452,14 +458,40 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 func (a *API) VerifyWebAuthnFactor(w http.ResponseWriter, r *http.Request) error {
 	// ctx := r.Context()
-	//user = getUser(ctx)
+	// user := getUser(ctx)
 	// Get the session data stored from the function above
-	// registrationSession := getRegistrationSession()
-	// loginSession := getLoginSession()
-	// if registrationSession != nil {
+	// TODO(Joel): Refactor unmarshalling of webauthn into a single function on storage
+	web := &webauthn.WebAuthn{}
+
+	webMarshaled, err := storage.GetFromSession("webauthn", r)
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal([]byte(webMarshaled), web)
+	if err != nil {
+		return err
+	}
+	// sessionData, err := storage.GetFromSession( "registration-session", r)
+	// if err != nil {
+	// 	return err
+	// }
+	// TODO(Joel): Reshape body into creationresponse
 	// parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
 	// credential, err := web.CreateCredential(&user, sessionData, parsedResponse)
-	// Handle validation or input errors	//
+
+	/**
+	  type ParsedCredentialCreationData struct {
+	ParsedPublicKeyCredential
+	Response ParsedAttestationResponse
+	Raw      CredentialCreationResponse
+	}
+	*/
+	// if registrationSession != nil {
+	// parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
+	// Decision 1: Generic methods for login/registration sessions or separate ones?
+	// Decision 2: Store on Context or Session
+	// credential, err := web.CreateCredential(&user, sessionData, parsedResponse)
 	// } else if loginSession != nil {
 	//   parsedResponse, err := protocol.ParseCredentialRequestResponseBody(r.Body)
 	//   credential, err := webauthn.ValidateLogin(&user, sessionData, parsedResponse)//
