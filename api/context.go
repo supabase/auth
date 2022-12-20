@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 
-	"github.com/go-webauthn/webauthn/webauthn"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/models"
 )
@@ -223,19 +222,4 @@ func getSSOProvider(ctx context.Context) *models.SSOProvider {
 		return nil
 	}
 	return obj.(*models.SSOProvider)
-}
-
-// withWebAuthnConfig adds the webauthn config
-func withWebAuthnConfig(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, webAuthnConfigKey, id)
-}
-
-// getWebAuth reads the request ID from the context.
-func getWebAuthnConfig(ctx context.Context) *webauthn.WebAuthn {
-	obj := ctx.Value(webAuthnConfigKey)
-	if obj == nil {
-		return nil
-	}
-
-	return obj.(*webauthn.WebAuthn)
 }

@@ -220,7 +220,7 @@ func (a *API) EnrollWebAuthnFactor(w http.ResponseWriter, r *http.Request) error
 
 	// TODO: Remove this at v2
 	for _, factor := range factors {
-		if factor.Status == models.FactorStateVerified {
+		if factor.Status == models.FactorStateVerified.String() {
 			numVerifiedFactors += 1
 		}
 
