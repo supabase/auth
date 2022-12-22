@@ -42,7 +42,7 @@ type DBConfiguration struct {
 	ConnMaxLifetime   time.Duration `json:"conn_max_lifetime,omitempty" split_words:"true"`
 	ConnMaxIdleTime   time.Duration `json:"conn_max_idle_time,omitempty" split_words:"true"`
 	HealthCheckPeriod time.Duration `json:"health_check_period" split_words:"true"`
-	MigrationsPath    string        `json:"migrations_path" split_words:"true" default:"./migrations"`
+	MigrationsPath    string        `json:"migrations_path" split_words:"true" default:"./migrations/tenant"`
 }
 
 func (c *DBConfiguration) Validate() error {
