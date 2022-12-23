@@ -27,12 +27,12 @@ func RootCommand() *cobra.Command {
 	return &rootCmd
 }
 
-func loadGlobalConfig(ctx context.Context) *conf.TenantConfiguration {
+func loadTenantConfig(ctx context.Context) *conf.TenantConfiguration {
 	if ctx == nil {
 		panic("context must not be nil")
 	}
 
-	config, err := conf.LoadGlobal(configFile)
+	config, err := conf.LoadTenant(configFile)
 	if err != nil {
 		logrus.Fatalf("Failed to load configuration: %+v", err)
 	}
@@ -53,5 +53,5 @@ func loadGlobalConfig(ctx context.Context) *conf.TenantConfiguration {
 }
 
 func execWithConfigAndArgs(cmd *cobra.Command, fn func(config *conf.TenantConfiguration, args []string), args []string) {
-	fn(loadGlobalConfig(cmd.Context()), args)
+	fn(loadTenantConfig(cmd.Context()), args)
 }

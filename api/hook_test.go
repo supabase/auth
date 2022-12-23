@@ -23,10 +23,10 @@ func withFunctionHooks(ctx context.Context, hooks map[string][]string) context.C
 }
 
 func TestSignupHookSendInstanceID(t *testing.T) {
-	globalConfig, err := conf.LoadGlobal(apiTestConfig)
+	tenantConfig, err := conf.LoadTenant(apiTestConfig)
 	require.NoError(t, err)
 
-	conn, err := test.SetupDBConnection(globalConfig)
+	conn, err := test.SetupDBConnection(tenantConfig)
 	require.NoError(t, err)
 
 	user, err := models.NewUser("81234567", "test@truth.com", "thisisapassword", "", nil)
@@ -64,10 +64,10 @@ func TestSignupHookSendInstanceID(t *testing.T) {
 }
 
 func TestSignupHookFromClaims(t *testing.T) {
-	globalConfig, err := conf.LoadGlobal(apiTestConfig)
+	tenantConfig, err := conf.LoadTenant(apiTestConfig)
 	require.NoError(t, err)
 
-	conn, err := test.SetupDBConnection(globalConfig)
+	conn, err := test.SetupDBConnection(tenantConfig)
 	require.NoError(t, err)
 
 	user, err := models.NewUser("", "test@truth.com", "thisisapassword", "", nil)

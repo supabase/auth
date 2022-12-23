@@ -28,7 +28,7 @@ func setupAPIForTest() (*API, *conf.TenantConfiguration, error) {
 }
 
 func setupAPIForTestWithCallback(cb func(*conf.TenantConfiguration, *storage.Connection)) (*API, *conf.TenantConfiguration, error) {
-	config, err := conf.LoadGlobal(apiTestConfig)
+	config, err := conf.LoadTenant(apiTestConfig)
 	if err != nil {
 		return nil, nil, err
 	}

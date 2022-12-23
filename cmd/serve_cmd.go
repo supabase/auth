@@ -21,7 +21,7 @@ var serveCmd = cobra.Command{
 }
 
 func serve(ctx context.Context) {
-	config, err := conf.LoadGlobal(configFile)
+	config, err := conf.LoadTenant(configFile)
 	if err != nil {
 		logrus.WithError(err).Fatal("unable to load config")
 	}

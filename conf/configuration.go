@@ -95,7 +95,6 @@ type TenantConfiguration struct {
 	DB                    DBConfiguration
 	External              ProviderConfiguration
 	Logging               LoggingConfig `envconfig:"LOG"`
-	OperatorToken         string        `split_words:"true" required:"false"`
 	Tracing               TracingConfig
 	Metrics               MetricsConfig
 	SMTP                  SMTPConfiguration
@@ -288,7 +287,7 @@ func (w *WebhookConfig) HasEvent(event string) bool {
 	return false
 }
 
-func LoadGlobal(filename string) (*TenantConfiguration, error) {
+func LoadTenant(filename string) (*TenantConfiguration, error) {
 	if err := loadEnvironment(filename); err != nil {
 		return nil, err
 	}
