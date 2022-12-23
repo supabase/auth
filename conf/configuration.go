@@ -89,15 +89,26 @@ func (a *APIConfiguration) Validate() error {
 	return nil
 }
 
+type MultiTenantConfiguration struct {
+	Enabled bool   `envconfig:"MULTITENANT_ENABLED"`
+	URL     string `envconfig:"MULTITENANT_DATABASE_URL"`
+	ApiKey  string `envconfig:"MULTITENANT_APIKEY"`
+	Host    string `envconfig:"MULTITENANT_HOST"`
+	Port    string `envconfig:"MULTITENANT_PORT"`
+}
+
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
+	// these configs should apply to all tenants
+	MultiTenantConfiguration
+	Logging LoggingConfig `envconfig:"LOG"`
+	Tracing TracingConfig
+	Metrics MetricsConfig
+
+	// these configs are for a single tenant
 	API                   APIConfiguration
 	DB                    DBConfiguration
 	External              ProviderConfiguration
-	Logging               LoggingConfig `envconfig:"LOG"`
-	OperatorToken         string        `split_words:"true" required:"false"`
-	Tracing               TracingConfig
-	Metrics               MetricsConfig
 	SMTP                  SMTPConfiguration
 	RateLimitHeader       string  `split_words:"true"`
 	RateLimitEmailSent    float64 `split_words:"true" default:"30"`
@@ -286,6 +297,18 @@ func (w *WebhookConfig) HasEvent(event string) bool {
 		}
 	}
 	return false
+}
+
+func (c *MultiTenantConfiguration) Validate() error {
+	if c.Enabled {
+		if c.URL == "" {
+			return fmt.Errorf("GOTRUE_MULTITENANT_DATABASE_URL cannot be empty")
+		}
+		if c.ApiKey == "" {
+			return fmt.Errorf("GOTRUE_MULTITENANT_APIKEY cannot be empty")
+		}
+	}
+	return nil
 }
 
 func LoadGlobal(filename string) (*GlobalConfiguration, error) {
