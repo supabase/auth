@@ -20,7 +20,7 @@ import (
 type SSOTestSuite struct {
 	suite.Suite
 	API      *API
-	Config   *conf.GlobalConfiguration
+	Config   *conf.TenantConfiguration
 	AdminJWT string
 }
 

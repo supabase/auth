@@ -16,7 +16,7 @@ import (
 type LogoutTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 	token  string
 }
 

@@ -24,7 +24,7 @@ type Mailer interface {
 }
 
 // NewMailer returns a new gotrue mailer
-func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
+func NewMailer(globalConfig *conf.TenantConfiguration) Mailer {
 	mail := gomail.NewMessage()
 	from := mail.FormatAddress(globalConfig.SMTP.AdminEmail, globalConfig.SMTP.SenderName)
 

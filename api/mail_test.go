@@ -19,7 +19,7 @@ import (
 type MailTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 func TestMail(t *testing.T) {

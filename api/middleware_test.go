@@ -24,7 +24,7 @@ const (
 type MiddlewareTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 func TestMiddlewareFunctions(t *testing.T) {

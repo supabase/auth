@@ -89,8 +89,8 @@ func (a *APIConfiguration) Validate() error {
 	return nil
 }
 
-// GlobalConfiguration holds all the configuration that applies to all instances.
-type GlobalConfiguration struct {
+// TenantConfiguration holds all the configuration that applies to all instances.
+type TenantConfiguration struct {
 	API                   APIConfiguration
 	DB                    DBConfiguration
 	External              ProviderConfiguration
@@ -288,12 +288,12 @@ func (w *WebhookConfig) HasEvent(event string) bool {
 	return false
 }
 
-func LoadGlobal(filename string) (*GlobalConfiguration, error) {
+func LoadGlobal(filename string) (*TenantConfiguration, error) {
 	if err := loadEnvironment(filename); err != nil {
 		return nil, err
 	}
 
-	config := new(GlobalConfiguration)
+	config := new(TenantConfiguration)
 	if err := envconfig.Process("gotrue", config); err != nil {
 		return nil, err
 	}
@@ -319,8 +319,8 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 	return config, nil
 }
 
-// ApplyDefaults sets defaults for a GlobalConfiguration
-func (config *GlobalConfiguration) ApplyDefaults() error {
+// ApplyDefaults sets defaults for a TenantConfiguration
+func (config *TenantConfiguration) ApplyDefaults() error {
 	if config.JWT.AdminGroupName == "" {
 		config.JWT.AdminGroupName = "admin"
 	}
@@ -414,7 +414,7 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 }
 
 // Validate validates all of configuration.
-func (c *GlobalConfiguration) Validate() error {
+func (c *TenantConfiguration) Validate() error {
 	validatables := []interface {
 		Validate() error
 	}{

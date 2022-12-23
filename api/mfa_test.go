@@ -26,7 +26,7 @@ import (
 type MFATestSuite struct {
 	suite.Suite
 	API        *API
-	Config     *conf.GlobalConfiguration
+	Config     *conf.TenantConfiguration
 	TestDomain string
 	TestEmail  string
 	TestOTPKey *otp.Key

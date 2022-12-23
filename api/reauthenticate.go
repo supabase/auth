@@ -64,7 +64,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 }
 
 // verifyReauthentication checks if the nonce provided is valid
-func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.GlobalConfiguration, user *models.User) error {
+func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.TenantConfiguration, user *models.User) error {
 	if user.ReauthenticationToken == "" || user.ReauthenticationSentAt == nil {
 		return badRequestError(InvalidNonceMessage)
 	}

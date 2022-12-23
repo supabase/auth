@@ -29,12 +29,12 @@ var bearerRegexp = regexp.MustCompile(`^(?:B|b)earer (\S+$)`)
 type API struct {
 	handler http.Handler
 	db      *storage.Connection
-	config  *conf.GlobalConfiguration
+	config  *conf.TenantConfiguration
 	version string
 }
 
 // NewAPI instantiates a new REST API
-func NewAPI(globalConfig *conf.GlobalConfiguration, db *storage.Connection) *API {
+func NewAPI(globalConfig *conf.TenantConfiguration, db *storage.Connection) *API {
 	return NewAPIWithVersion(context.Background(), globalConfig, db, defaultVersion)
 }
 
@@ -53,7 +53,7 @@ func (a *API) deprecationNotices(ctx context.Context) {
 }
 
 // NewAPIWithVersion creates a new REST API using the specified version
-func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
+func NewAPIWithVersion(ctx context.Context, globalConfig *conf.TenantConfiguration, db *storage.Connection, version string) *API {
 	api := &API{config: globalConfig, db: db, version: version}
 
 	api.deprecationNotices(ctx)
@@ -234,7 +234,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 }
 
 // NewAPIFromConfigFile creates a new REST API using the provided configuration file.
-func NewAPIFromConfigFile(filename string, version string) (*API, *conf.GlobalConfiguration, error) {
+func NewAPIFromConfigFile(filename string, version string) (*API, *conf.TenantConfiguration, error) {
 	config, err := conf.LoadGlobal(filename)
 	if err != nil {
 		return nil, nil, err

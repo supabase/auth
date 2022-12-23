@@ -51,7 +51,7 @@ func TestSignupHookSendInstanceID(t *testing.T) {
 	localhost := removeLocalhostFromPrivateIPBlock()
 	defer unshiftPrivateIPBlock(localhost)
 
-	config := &conf.GlobalConfiguration{
+	config := &conf.TenantConfiguration{
 		Webhook: conf.WebhookConfig{
 			URL:    svr.URL,
 			Events: []string{SignupEvent},
@@ -92,7 +92,7 @@ func TestSignupHookFromClaims(t *testing.T) {
 	localhost := removeLocalhostFromPrivateIPBlock()
 	defer unshiftPrivateIPBlock(localhost)
 
-	config := &conf.GlobalConfiguration{
+	config := &conf.TenantConfiguration{
 		Webhook: conf.WebhookConfig{
 			Events: []string{"signup"},
 		},

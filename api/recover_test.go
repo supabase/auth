@@ -18,7 +18,7 @@ import (
 type RecoverTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 func TestRecover(t *testing.T) {

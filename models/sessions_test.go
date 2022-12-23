@@ -1,19 +1,20 @@
 package models
 
 import (
+	"testing"
+	"time"
+
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"testing"
-	"time"
 )
 
 type SessionsTestSuite struct {
 	suite.Suite
 	db     *storage.Connection
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 func (ts *SessionsTestSuite) SetupTest() {

@@ -334,7 +334,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int) error {
+func (a *API) sendEmailChange(tx *storage.Connection, config *conf.TenantConfiguration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int) error {
 	var err error
 	otpNew, err := crypto.GenerateOtp(otpLength)
 	if err != nil {

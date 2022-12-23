@@ -15,7 +15,7 @@ import (
 type ExternalTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 func TestExternal(t *testing.T) {

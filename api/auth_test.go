@@ -16,7 +16,7 @@ import (
 type AuthTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 func TestAuth(t *testing.T) {

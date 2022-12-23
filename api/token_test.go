@@ -19,7 +19,7 @@ import (
 type TokenTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 
 	RefreshToken *models.RefreshToken
 	User         *models.User

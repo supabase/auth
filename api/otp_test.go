@@ -17,7 +17,7 @@ import (
 type OtpTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 func TestOtp(t *testing.T) {

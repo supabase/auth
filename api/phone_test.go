@@ -22,7 +22,7 @@ import (
 type PhoneTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 type TestSmsProvider struct {

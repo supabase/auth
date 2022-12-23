@@ -22,7 +22,7 @@ import (
 type VerifyTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 func TestVerify(t *testing.T) {

@@ -27,7 +27,7 @@ func RootCommand() *cobra.Command {
 	return &rootCmd
 }
 
-func loadGlobalConfig(ctx context.Context) *conf.GlobalConfiguration {
+func loadGlobalConfig(ctx context.Context) *conf.TenantConfiguration {
 	if ctx == nil {
 		panic("context must not be nil")
 	}
@@ -52,6 +52,6 @@ func loadGlobalConfig(ctx context.Context) *conf.GlobalConfiguration {
 	return config
 }
 
-func execWithConfigAndArgs(cmd *cobra.Command, fn func(config *conf.GlobalConfiguration, args []string), args []string) {
+func execWithConfigAndArgs(cmd *cobra.Command, fn func(config *conf.TenantConfiguration, args []string), args []string) {
 	fn(loadGlobalConfig(cmd.Context()), args)
 }

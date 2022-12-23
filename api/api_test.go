@@ -23,11 +23,11 @@ func init() {
 // setupAPIForTest creates a new API to run tests with.
 // Using this function allows us to keep track of the database connection
 // and cleaning up data between tests.
-func setupAPIForTest() (*API, *conf.GlobalConfiguration, error) {
+func setupAPIForTest() (*API, *conf.TenantConfiguration, error) {
 	return setupAPIForTestWithCallback(nil)
 }
 
-func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *storage.Connection)) (*API, *conf.GlobalConfiguration, error) {
+func setupAPIForTestWithCallback(cb func(*conf.TenantConfiguration, *storage.Connection)) (*API, *conf.TenantConfiguration, error) {
 	config, err := conf.LoadGlobal(apiTestConfig)
 	if err != nil {
 		return nil, nil, err
