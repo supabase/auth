@@ -45,3 +45,39 @@ func (a *API) ListenAndServe(ctx context.Context, hostAndPort string) {
 		log.WithError(err).Fatal("http server listen failed")
 	}
 }
+
+// ListenAndServe starts the Multi-Tenant REST API
+func (mt *MultiTenantAPI) ListenAndServe(ctx context.Context, hostAndPort string) {
+	baseCtx, cancel := context.WithCancel(context.Background())
+
+	log := logrus.WithField("component", "multi-tenant-api")
+
+	server := &http.Server{
+		Addr:              hostAndPort,
+		Handler:           mt.handler,
+		ReadHeaderTimeout: 2 * time.Second, // to mitigate a Slowloris attack
+		BaseContext: func(net.Listener) context.Context {
+			return baseCtx
+		},
+	}
+
+	cleanupWaitGroup.Add(1)
+	go func() {
+		defer cleanupWaitGroup.Done()
+
+		<-ctx.Done()
+
+		defer cancel() // close baseContext
+
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Minute)
+		defer shutdownCancel()
+
+		if err := server.Shutdown(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
+			log.WithError(err).Error("shutdown failed")
+		}
+	}()
+
+	if err := server.ListenAndServe(); err != http.ErrServerClosed {
+		log.WithError(err).Fatal("http server listen failed")
+	}
+}

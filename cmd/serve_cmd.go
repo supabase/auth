@@ -21,11 +21,22 @@ var serveCmd = cobra.Command{
 }
 
 func serve(ctx context.Context) {
+	multiTenantConfig, err := conf.LoadMultiTenantConfig(configFile)
+	if err != nil {
+		logrus.WithError(err).Fatal("unable to load multi-tenant config")
+	}
+
+	if multiTenantConfig.Enabled {
+		// Run multi-tenant admin server
+		go func() {
+			api.NewMultiTenantApi(ctx, multiTenantConfig)
+		}()
+	}
+
 	config, err := conf.LoadTenant(configFile)
 	if err != nil {
 		logrus.WithError(err).Fatal("unable to load config")
 	}
-
 	db, err := storage.Dial(&storage.DialConfiguration{
 		DB:      config.DB,
 		Tracing: config.Tracing,

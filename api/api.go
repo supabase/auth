@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"regexp"
 	"time"
@@ -24,6 +25,12 @@ const (
 )
 
 var bearerRegexp = regexp.MustCompile(`^(?:B|b)earer (\S+$)`)
+
+type MultiTenantAPI struct {
+	handler http.Handler
+	db      *storage.Connection
+	config  *conf.MultiTenantConfiguration
+}
 
 // API is the main REST API
 type API struct {
@@ -50,6 +57,36 @@ func (a *API) deprecationNotices(ctx context.Context) {
 	if config.JWT.DefaultGroupName != "" {
 		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_DEFAULT_GROUP_NAME not supported by Supabase's GoTrue, will be removed soon")
 	}
+}
+
+func NewMultiTenantApi(ctx context.Context, multiTenantConfig *conf.MultiTenantConfiguration) {
+	c := &storage.DialConfiguration{
+		DB:      multiTenantConfig.DB,
+		Tracing: multiTenantConfig.Tracing,
+		Metrics: multiTenantConfig.Metrics,
+	}
+	db, err := storage.Dial(c)
+	if err != nil {
+		logrus.Fatalf("error opening database: %+v", err)
+	}
+	defer db.Close()
+	r := newRouter()
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) error {
+		w.WriteHeader(200)
+		_, err = w.Write([]byte("ok"))
+		return err
+	})
+
+	api := &MultiTenantAPI{config: multiTenantConfig, db: db}
+	addr := net.JoinHostPort(multiTenantConfig.Host, multiTenantConfig.Port)
+	corsHandler := cors.New(cors.Options{
+		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowCredentials: true,
+	})
+	api.handler = corsHandler.Handler(chi.ServerBaseContext(ctx, r))
+	logrus.Infof("GoTrue Multi-Tenant API started on: %s", addr)
+	api.ListenAndServe(ctx, addr)
 }
 
 // NewAPIWithVersion creates a new REST API using the specified version
@@ -231,21 +268,6 @@ func NewAPIWithVersion(ctx context.Context, tenantConfig *conf.TenantConfigurati
 
 	api.handler = corsHandler.Handler(chi.ServerBaseContext(ctx, r))
 	return api
-}
-
-// NewAPIFromConfigFile creates a new REST API using the provided configuration file.
-func NewAPIFromConfigFile(filename string, version string) (*API, *conf.TenantConfiguration, error) {
-	config, err := conf.LoadTenant(filename)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	db, err := storage.Dial(config)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return NewAPIWithVersion(context.Background(), config, db, version), config, nil
 }
 
 type HealthCheckResponse struct {
