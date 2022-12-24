@@ -19,7 +19,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.postgres.dev
-    container_name: gotrue_postgres
+    container_name: gotrue_postgresql
     ports:
       - '5432:5432'
     volumes:
@@ -30,5 +30,17 @@ services:
       - POSTGRES_DB=postgres
       # sets the schema name, this should match the `NAMESPACE` env var set in your .env file
       - DB_NAMESPACE=auth 
+  multitenant_db:
+    image: postgres:14
+    container_name: gotrue_multitenant_db
+    ports:
+      - '5433:5432'
+    volumes:
+      - multitenant_db_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=root
+      - POSTGRES_DB=postgres
 volumes:
   postgres_data:
+  multitenant_db_data:

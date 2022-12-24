@@ -90,12 +90,12 @@ func (a *APIConfiguration) Validate() error {
 }
 
 type MultiTenantConfiguration struct {
-	Enabled bool          `envconfig:"MULTITENANT_ENABLED"`
-	URL     string        `envconfig:"MULTITENANT_DATABASE_URL"`
-	ApiKey  string        `envconfig:"MULTITENANT_APIKEY"`
-	Host    string        `envconfig:"MULTITENANT_HOST"`
-	Port    string        `envconfig:"MULTITENANT_PORT"`
-	Logging LoggingConfig `envconfig:"LOG"`
+	Enabled bool            `envconfig:"MULTITENANT_ENABLED"`
+	DB      DBConfiguration `envconfig:"MULTITENANT"`
+	ApiKey  string          `envconfig:"MULTITENANT_APIKEY"`
+	Host    string          `envconfig:"MULTITENANT_HOST"`
+	Port    string          `envconfig:"MULTITENANT_PORT"`
+	Logging LoggingConfig   `envconfig:"LOG"`
 	Tracing TracingConfig
 	Metrics MetricsConfig
 }
@@ -300,7 +300,7 @@ func (w *WebhookConfig) HasEvent(event string) bool {
 
 func (c *MultiTenantConfiguration) Validate() error {
 	if c.Enabled {
-		if c.URL == "" {
+		if c.DB.URL == "" {
 			return fmt.Errorf("GOTRUE_MULTITENANT_DATABASE_URL cannot be empty")
 		}
 		if c.ApiKey == "" {
