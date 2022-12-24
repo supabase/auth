@@ -27,12 +27,35 @@ func RootCommand() *cobra.Command {
 	return &rootCmd
 }
 
-func loadGlobalConfig(ctx context.Context) *conf.GlobalConfiguration {
+func loadMultiTenantConfig(ctx context.Context) *conf.MultiTenantConfiguration {
+	if ctx == nil {
+		panic("context must not be nil")
+	}
+	config, err := conf.LoadMultiTenantConfig(configFile)
+	if err != nil {
+		logrus.Fatalf("Failed to load configuration: %+v", err)
+	}
+
+	if err := observability.ConfigureLogging(&config.Logging); err != nil {
+		logrus.WithError(err).Error("unable to configure logging")
+	}
+
+	if err := observability.ConfigureTracing(ctx, &config.Tracing); err != nil {
+		logrus.WithError(err).Error("unable to configure tracing")
+	}
+
+	if err := observability.ConfigureMetrics(ctx, &config.Metrics); err != nil {
+		logrus.WithError(err).Error("unable to configure metrics")
+	}
+	return config
+}
+
+func loadTenantConfig(ctx context.Context) *conf.TenantConfiguration {
 	if ctx == nil {
 		panic("context must not be nil")
 	}
 
-	config, err := conf.LoadGlobal(configFile)
+	config, err := conf.LoadTenant(configFile)
 	if err != nil {
 		logrus.Fatalf("Failed to load configuration: %+v", err)
 	}
@@ -52,6 +75,6 @@ func loadGlobalConfig(ctx context.Context) *conf.GlobalConfiguration {
 	return config
 }
 
-func execWithConfigAndArgs(cmd *cobra.Command, fn func(config *conf.GlobalConfiguration, args []string), args []string) {
-	fn(loadGlobalConfig(cmd.Context()), args)
+func execWithConfigAndArgs(cmd *cobra.Command, fn func(config *conf.TenantConfiguration, args []string), args []string) {
+	fn(loadTenantConfig(cmd.Context()), args)
 }

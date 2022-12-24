@@ -18,7 +18,7 @@ var handleApiRequest func(*http.Request) (*http.Response, error)
 
 type SmsProviderTestSuite struct {
 	suite.Suite
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 type MockHttpClient struct {
@@ -31,7 +31,7 @@ func (m *MockHttpClient) Do(req *http.Request) (*http.Response, error) {
 
 func TestSmsProvider(t *testing.T) {
 	ts := &SmsProviderTestSuite{
-		Config: &conf.GlobalConfiguration{
+		Config: &conf.TenantConfiguration{
 			Sms: conf.SmsProviderConfiguration{
 				Twilio: conf.TwilioProviderConfiguration{
 					AccountSid:        "test_account_sid",

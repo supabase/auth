@@ -23,7 +23,7 @@ import (
 type SignupTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 func TestSignup(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 var autoconfirm, isAdmin bool
 var audience string
 
-func getAudience(c *conf.GlobalConfiguration) string {
+func getAudience(c *conf.TenantConfiguration) string {
 	if audience == "" {
 		return c.JWT.Aud
 	}
@@ -65,7 +65,7 @@ var adminEditRoleCmd = cobra.Command{
 	},
 }
 
-func adminCreateUser(config *conf.GlobalConfiguration, args []string) {
+func adminCreateUser(config *conf.TenantConfiguration, args []string) {
 	db, err := storage.Dial(config)
 	if err != nil {
 		logrus.Fatalf("Error opening database: %+v", err)
@@ -114,7 +114,7 @@ func adminCreateUser(config *conf.GlobalConfiguration, args []string) {
 	logrus.Infof("Created user: %s", args[0])
 }
 
-func adminDeleteUser(config *conf.GlobalConfiguration, args []string) {
+func adminDeleteUser(config *conf.TenantConfiguration, args []string) {
 	db, err := storage.Dial(config)
 	if err != nil {
 		logrus.Fatalf("Error opening database: %+v", err)
@@ -137,7 +137,7 @@ func adminDeleteUser(config *conf.GlobalConfiguration, args []string) {
 	logrus.Infof("Removed user: %s", args[0])
 }
 
-func adminEditRole(config *conf.GlobalConfiguration, args []string) {
+func adminEditRole(config *conf.TenantConfiguration, args []string) {
 	db, err := storage.Dial(config)
 	if err != nil {
 		logrus.Fatalf("Error opening database: %+v", err)

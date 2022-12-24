@@ -21,10 +21,10 @@ func (ts *AccountLinkingTestSuite) SetupTest() {
 }
 
 func TestAccountLinking(t *testing.T) {
-	globalConfig, err := conf.LoadGlobal(modelsTestConfig)
+	tenantConfig, err := conf.LoadTenant(modelsTestConfig)
 	require.NoError(t, err)
 
-	conn, err := test.SetupDBConnection(globalConfig)
+	conn, err := test.SetupDBConnection(tenantConfig)
 	require.NoError(t, err)
 
 	ts := &AccountLinkingTestSuite{

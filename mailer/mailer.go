@@ -24,29 +24,29 @@ type Mailer interface {
 }
 
 // NewMailer returns a new gotrue mailer
-func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
+func NewMailer(tenantConfig *conf.TenantConfiguration) Mailer {
 	mail := gomail.NewMessage()
-	from := mail.FormatAddress(globalConfig.SMTP.AdminEmail, globalConfig.SMTP.SenderName)
+	from := mail.FormatAddress(tenantConfig.SMTP.AdminEmail, tenantConfig.SMTP.SenderName)
 
 	var mailClient MailClient
-	if globalConfig.SMTP.Host == "" {
-		logrus.Infof("Noop mail client being used for %v", globalConfig.SiteURL)
+	if tenantConfig.SMTP.Host == "" {
+		logrus.Infof("Noop mail client being used for %v", tenantConfig.SiteURL)
 		mailClient = &noopMailClient{}
 	} else {
 		mailClient = &mailme.Mailer{
-			Host:    globalConfig.SMTP.Host,
-			Port:    globalConfig.SMTP.Port,
-			User:    globalConfig.SMTP.User,
-			Pass:    globalConfig.SMTP.Pass,
+			Host:    tenantConfig.SMTP.Host,
+			Port:    tenantConfig.SMTP.Port,
+			User:    tenantConfig.SMTP.User,
+			Pass:    tenantConfig.SMTP.Pass,
 			From:    from,
-			BaseURL: globalConfig.SiteURL,
+			BaseURL: tenantConfig.SiteURL,
 			Logger:  logrus.StandardLogger(),
 		}
 	}
 
 	return &TemplateMailer{
-		SiteURL: globalConfig.SiteURL,
-		Config:  globalConfig,
+		SiteURL: tenantConfig.SiteURL,
+		Config:  tenantConfig,
 		Mailer:  mailClient,
 	}
 }

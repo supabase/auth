@@ -22,7 +22,7 @@ type Connection struct {
 }
 
 // Dial will connect to that storage engine
-func Dial(config *conf.GlobalConfiguration) (*Connection, error) {
+func Dial(config *conf.TenantConfiguration) (*Connection, error) {
 	if config.DB.Driver == "" && config.DB.URL != "" {
 		u, err := url.Parse(config.DB.URL)
 		if err != nil {

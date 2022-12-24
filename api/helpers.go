@@ -17,11 +17,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func addRequestID(globalConfig *conf.GlobalConfiguration) middlewareHandler {
+func addRequestID(tenantConfig *conf.TenantConfiguration) middlewareHandler {
 	return func(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 		id := ""
-		if globalConfig.API.RequestIDHeader != "" {
-			id = r.Header.Get(globalConfig.API.RequestIDHeader)
+		if tenantConfig.API.RequestIDHeader != "" {
+			id = r.Header.Get(tenantConfig.API.RequestIDHeader)
 		}
 		if id == "" {
 			uid, err := uuid.NewV4()
@@ -87,7 +87,7 @@ func getRedirectTo(r *http.Request) (reqref string) {
 	return
 }
 
-func isRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bool {
+func isRedirectURLValid(config *conf.TenantConfiguration, redirectURL string) bool {
 	if redirectURL == "" {
 		return false
 	}

@@ -1,19 +1,20 @@
 package models
 
 import (
+	"testing"
+	"time"
+
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/storage/test"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"testing"
-	"time"
 )
 
 type SessionsTestSuite struct {
 	suite.Suite
 	db     *storage.Connection
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 func (ts *SessionsTestSuite) SetupTest() {
@@ -27,13 +28,13 @@ func (ts *SessionsTestSuite) SetupTest() {
 }
 
 func TestSession(t *testing.T) {
-	globalConfig, err := conf.LoadGlobal(modelsTestConfig)
+	tenantConfig, err := conf.LoadTenant(modelsTestConfig)
 	require.NoError(t, err)
-	conn, err := test.SetupDBConnection(globalConfig)
+	conn, err := test.SetupDBConnection(tenantConfig)
 	require.NoError(t, err)
 	ts := &SessionsTestSuite{
 		db:     conn,
-		Config: globalConfig,
+		Config: tenantConfig,
 	}
 	defer ts.db.Close()
 	suite.Run(t, ts)

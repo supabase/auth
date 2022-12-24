@@ -17,7 +17,7 @@ type MailClient interface {
 // TemplateMailer will send mail and use templates from the site for easy mail styling
 type TemplateMailer struct {
 	SiteURL string
-	Config  *conf.GlobalConfiguration
+	Config  *conf.TenantConfiguration
 	Mailer  MailClient
 }
 

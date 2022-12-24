@@ -20,11 +20,11 @@ import (
 type OpenTelemetryTracerTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 func TestOpenTelemetryTracer(t *testing.T) {
-	api, config, err := setupAPIForTestWithCallback(func(config *conf.GlobalConfiguration, conn *storage.Connection) {
+	api, config, err := setupAPIForTestWithCallback(func(config *conf.TenantConfiguration, conn *storage.Connection) {
 		if config != nil {
 			config.Tracing.Enabled = true
 			config.Tracing.Exporter = conf.OpenTelemetryTracing

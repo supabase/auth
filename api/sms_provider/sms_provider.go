@@ -26,7 +26,7 @@ type SmsProvider interface {
 	SendSms(phone, message string) error
 }
 
-func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
+func GetSmsProvider(config conf.TenantConfiguration) (SmsProvider, error) {
 	switch name := config.Sms.Provider; name {
 	case "twilio":
 		return NewTwilioProvider(config.Sms.Twilio)

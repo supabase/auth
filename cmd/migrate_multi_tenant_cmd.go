@@ -19,8 +19,8 @@ var migrateMultiTenantCmd = cobra.Command{
 }
 
 func migrateMultiTenant(cmd *cobra.Command, args []string) {
-	tenantConfig := loadTenantConfig(cmd.Context())
-	u, err := url.Parse(tenantConfig.MultiTenantConfiguration.URL)
+	config := loadMultiTenantConfig(cmd.Context())
+	u, err := url.Parse(config.URL)
 	if err != nil {
 		logrus.Fatalf("%+v", errors.Wrap(err, "parsing db connection url"))
 	}
@@ -28,8 +28,8 @@ func migrateMultiTenant(cmd *cobra.Command, args []string) {
 	log := logrus.StandardLogger()
 
 	pop.Debug = false
-	if tenantConfig.Logging.Level != "" {
-		level, err := logrus.ParseLevel(tenantConfig.Logging.Level)
+	if config.Logging.Level != "" {
+		level, err := logrus.ParseLevel(config.Logging.Level)
 		if err != nil {
 			log.Fatalf("Failed to parse log level: %+v", err)
 		}
@@ -46,7 +46,7 @@ func migrateMultiTenant(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	processedUrl := tenantConfig.MultiTenantConfiguration.URL
+	processedUrl := config.URL
 	if len(u.Query()) != 0 {
 		processedUrl = fmt.Sprintf("%s&application_name=gotrue_multi_tenant_migrations", processedUrl)
 	} else {

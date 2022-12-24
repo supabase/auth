@@ -29,13 +29,13 @@ var bearerRegexp = regexp.MustCompile(`^(?:B|b)earer (\S+$)`)
 type API struct {
 	handler http.Handler
 	db      *storage.Connection
-	config  *conf.GlobalConfiguration
+	config  *conf.TenantConfiguration
 	version string
 }
 
 // NewAPI instantiates a new REST API
-func NewAPI(globalConfig *conf.GlobalConfiguration, db *storage.Connection) *API {
-	return NewAPIWithVersion(context.Background(), globalConfig, db, defaultVersion)
+func NewAPI(tenantConfig *conf.TenantConfiguration, db *storage.Connection) *API {
+	return NewAPIWithVersion(context.Background(), tenantConfig, db, defaultVersion)
 }
 
 func (a *API) deprecationNotices(ctx context.Context) {
@@ -53,8 +53,8 @@ func (a *API) deprecationNotices(ctx context.Context) {
 }
 
 // NewAPIWithVersion creates a new REST API using the specified version
-func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
-	api := &API{config: globalConfig, db: db, version: version}
+func NewAPIWithVersion(ctx context.Context, tenantConfig *conf.TenantConfiguration, db *storage.Connection, version string) *API {
+	api := &API{config: tenantConfig, db: db, version: version}
 
 	api.deprecationNotices(ctx)
 
@@ -62,19 +62,19 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	logger := observability.NewStructuredLogger(logrus.StandardLogger())
 
 	r := newRouter()
-	r.Use(addRequestID(globalConfig))
+	r.Use(addRequestID(tenantConfig))
 
 	// request tracing should be added only when tracing or metrics is
 	// enabled
-	if globalConfig.Tracing.Enabled {
-		switch globalConfig.Tracing.Exporter {
+	if tenantConfig.Tracing.Enabled {
+		switch tenantConfig.Tracing.Exporter {
 		case conf.OpenTracing:
 			r.UseBypass(opentracer)
 
 		default:
 			r.UseBypass(observability.RequestTracing())
 		}
-	} else if globalConfig.Metrics.Enabled {
+	} else if tenantConfig.Metrics.Enabled {
 		r.UseBypass(observability.RequestTracing())
 	}
 
@@ -234,8 +234,8 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 }
 
 // NewAPIFromConfigFile creates a new REST API using the provided configuration file.
-func NewAPIFromConfigFile(filename string, version string) (*API, *conf.GlobalConfiguration, error) {
-	config, err := conf.LoadGlobal(filename)
+func NewAPIFromConfigFile(filename string, version string) (*API, *conf.TenantConfiguration, error) {
+	config, err := conf.LoadTenant(filename)
 	if err != nil {
 		return nil, nil, err
 	}

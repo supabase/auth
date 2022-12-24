@@ -19,21 +19,21 @@ var migrateCmd = cobra.Command{
 }
 
 func migrate(cmd *cobra.Command, args []string) {
-	globalConfig := loadGlobalConfig(cmd.Context())
+	tenantConfig := loadTenantConfig(cmd.Context())
 
-	if globalConfig.DB.Driver == "" && globalConfig.DB.URL != "" {
-		u, err := url.Parse(globalConfig.DB.URL)
+	if tenantConfig.DB.Driver == "" && tenantConfig.DB.URL != "" {
+		u, err := url.Parse(tenantConfig.DB.URL)
 		if err != nil {
 			logrus.Fatalf("%+v", errors.Wrap(err, "parsing db connection url"))
 		}
-		globalConfig.DB.Driver = u.Scheme
+		tenantConfig.DB.Driver = u.Scheme
 	}
 
 	log := logrus.StandardLogger()
 
 	pop.Debug = false
-	if globalConfig.Logging.Level != "" {
-		level, err := logrus.ParseLevel(globalConfig.Logging.Level)
+	if tenantConfig.Logging.Level != "" {
+		level, err := logrus.ParseLevel(tenantConfig.Logging.Level)
 		if err != nil {
 			log.Fatalf("Failed to parse log level: %+v", err)
 		}
@@ -50,20 +50,20 @@ func migrate(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	u, _ := url.Parse(globalConfig.DB.URL)
-	processedUrl := globalConfig.DB.URL
+	u, _ := url.Parse(tenantConfig.DB.URL)
+	processedUrl := tenantConfig.DB.URL
 	if len(u.Query()) != 0 {
 		processedUrl = fmt.Sprintf("%s&application_name=gotrue_migrations", processedUrl)
 	} else {
 		processedUrl = fmt.Sprintf("%s?application_name=gotrue_migrations", processedUrl)
 	}
 	deets := &pop.ConnectionDetails{
-		Dialect: globalConfig.DB.Driver,
+		Dialect: tenantConfig.DB.Driver,
 		URL:     processedUrl,
 	}
 	deets.Options = map[string]string{
 		"migration_table_name": "schema_migrations",
-		"Namespace":            globalConfig.DB.Namespace,
+		"Namespace":            tenantConfig.DB.Namespace,
 	}
 
 	db, err := pop.NewConnection(deets)
@@ -76,8 +76,8 @@ func migrate(cmd *cobra.Command, args []string) {
 		log.Fatalf("%+v", errors.Wrap(err, "checking database connection"))
 	}
 
-	log.Debugf("Reading migrations from %s", globalConfig.DB.MigrationsPath)
-	mig, err := pop.NewFileMigrator(globalConfig.DB.MigrationsPath, db)
+	log.Debugf("Reading migrations from %s", tenantConfig.DB.MigrationsPath)
+	mig, err := pop.NewFileMigrator(tenantConfig.DB.MigrationsPath, db)
 	if err != nil {
 		log.Fatalf("%+v", errors.Wrap(err, "creating db migrator"))
 	}

@@ -90,25 +90,24 @@ func (a *APIConfiguration) Validate() error {
 }
 
 type MultiTenantConfiguration struct {
-	Enabled bool   `envconfig:"MULTITENANT_ENABLED"`
-	URL     string `envconfig:"MULTITENANT_DATABASE_URL"`
-	ApiKey  string `envconfig:"MULTITENANT_APIKEY"`
-	Host    string `envconfig:"MULTITENANT_HOST"`
-	Port    string `envconfig:"MULTITENANT_PORT"`
-}
-
-// GlobalConfiguration holds all the configuration that applies to all instances.
-type GlobalConfiguration struct {
-	// these configs should apply to all tenants
-	MultiTenantConfiguration
+	Enabled bool          `envconfig:"MULTITENANT_ENABLED"`
+	URL     string        `envconfig:"MULTITENANT_DATABASE_URL"`
+	ApiKey  string        `envconfig:"MULTITENANT_APIKEY"`
+	Host    string        `envconfig:"MULTITENANT_HOST"`
+	Port    string        `envconfig:"MULTITENANT_PORT"`
 	Logging LoggingConfig `envconfig:"LOG"`
 	Tracing TracingConfig
 	Metrics MetricsConfig
+}
 
-	// these configs are for a single tenant
+// TenantConfiguration holds all the configuration that applies to all instances.
+type TenantConfiguration struct {
 	API                   APIConfiguration
 	DB                    DBConfiguration
 	External              ProviderConfiguration
+	Logging               LoggingConfig `envconfig:"LOG"`
+	Tracing               TracingConfig
+	Metrics               MetricsConfig
 	SMTP                  SMTPConfiguration
 	RateLimitHeader       string  `split_words:"true"`
 	RateLimitEmailSent    float64 `split_words:"true" default:"30"`
@@ -311,12 +310,29 @@ func (c *MultiTenantConfiguration) Validate() error {
 	return nil
 }
 
-func LoadGlobal(filename string) (*GlobalConfiguration, error) {
+func LoadMultiTenantConfig(filename string) (*MultiTenantConfiguration, error) {
 	if err := loadEnvironment(filename); err != nil {
 		return nil, err
 	}
 
-	config := new(GlobalConfiguration)
+	config := new(MultiTenantConfiguration)
+	if err := envconfig.Process("gotrue", config); err != nil {
+		return nil, err
+	}
+
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+
+	return config, nil
+}
+
+func LoadTenant(filename string) (*TenantConfiguration, error) {
+	if err := loadEnvironment(filename); err != nil {
+		return nil, err
+	}
+
+	config := new(TenantConfiguration)
 	if err := envconfig.Process("gotrue", config); err != nil {
 		return nil, err
 	}
@@ -342,8 +358,8 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 	return config, nil
 }
 
-// ApplyDefaults sets defaults for a GlobalConfiguration
-func (config *GlobalConfiguration) ApplyDefaults() error {
+// ApplyDefaults sets defaults for a TenantConfiguration
+func (config *TenantConfiguration) ApplyDefaults() error {
 	if config.JWT.AdminGroupName == "" {
 		config.JWT.AdminGroupName = "admin"
 	}
@@ -437,7 +453,7 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 }
 
 // Validate validates all of configuration.
-func (c *GlobalConfiguration) Validate() error {
+func (c *TenantConfiguration) Validate() error {
 	validatables := []interface {
 		Validate() error
 	}{

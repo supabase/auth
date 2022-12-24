@@ -19,7 +19,7 @@ import (
 type UserTestSuite struct {
 	suite.Suite
 	API    *API
-	Config *conf.GlobalConfiguration
+	Config *conf.TenantConfiguration
 }
 
 func TestUser(t *testing.T) {

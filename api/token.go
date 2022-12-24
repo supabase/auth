@@ -77,7 +77,7 @@ type IdTokenGrantParams struct {
 const useCookieHeader = "x-use-cookie"
 const InvalidLoginMessage = "Invalid login credentials"
 
-func (p *IdTokenGrantParams) getVerifier(ctx context.Context, config *conf.GlobalConfiguration) (*oidc.IDTokenVerifier, error) {
+func (p *IdTokenGrantParams) getVerifier(ctx context.Context, config *conf.TenantConfiguration) (*oidc.IDTokenVerifier, error) {
 	var provider *oidc.Provider
 	var err error
 	var oAuthProvider conf.OAuthProviderConfiguration
@@ -707,14 +707,14 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 }
 
 // setCookieTokens sets the access_token & refresh_token in the cookies
-func (a *API) setCookieTokens(config *conf.GlobalConfiguration, token *AccessTokenResponse, session bool, w http.ResponseWriter) error {
+func (a *API) setCookieTokens(config *conf.TenantConfiguration, token *AccessTokenResponse, session bool, w http.ResponseWriter) error {
 	// don't need to catch error here since we always set the cookie name
 	_ = a.setCookieToken(config, "access-token", token.Token, session, w)
 	_ = a.setCookieToken(config, "refresh-token", token.RefreshToken, session, w)
 	return nil
 }
 
-func (a *API) setCookieToken(config *conf.GlobalConfiguration, name string, tokenString string, session bool, w http.ResponseWriter) error {
+func (a *API) setCookieToken(config *conf.TenantConfiguration, name string, tokenString string, session bool, w http.ResponseWriter) error {
 	if name == "" {
 		return errors.New("failed to set cookie, invalid name")
 	}
@@ -737,12 +737,12 @@ func (a *API) setCookieToken(config *conf.GlobalConfiguration, name string, toke
 	return nil
 }
 
-func (a *API) clearCookieTokens(config *conf.GlobalConfiguration, w http.ResponseWriter) {
+func (a *API) clearCookieTokens(config *conf.TenantConfiguration, w http.ResponseWriter) {
 	a.clearCookieToken(config, "access-token", w)
 	a.clearCookieToken(config, "refresh-token", w)
 }
 
-func (a *API) clearCookieToken(config *conf.GlobalConfiguration, name string, w http.ResponseWriter) {
+func (a *API) clearCookieToken(config *conf.TenantConfiguration, name string, w http.ResponseWriter) {
 	cookieName := config.Cookie.Key
 	if name != "" {
 		cookieName += "-" + name
