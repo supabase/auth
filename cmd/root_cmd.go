@@ -14,7 +14,15 @@ var configFile = ""
 var rootCmd = cobra.Command{
 	Use: "gotrue",
 	Run: func(cmd *cobra.Command, args []string) {
-		migrate(cmd, args)
+		multiTenantConfig, err := conf.LoadMultiTenantConfig(configFile)
+		if err != nil {
+			panic(err)
+		}
+		if multiTenantConfig.Enabled {
+			migrateMultiTenant(cmd, args)
+		} else {
+			migrate(cmd, args)
+		}
 		serve(cmd.Context())
 	},
 }

@@ -20,7 +20,7 @@ var migrateMultiTenantCmd = cobra.Command{
 
 func migrateMultiTenant(cmd *cobra.Command, args []string) {
 	config := loadMultiTenantConfig(cmd.Context())
-	u, err := url.Parse(config.URL)
+	u, err := url.Parse(config.DB.URL)
 	if err != nil {
 		logrus.Fatalf("%+v", errors.Wrap(err, "parsing db connection url"))
 	}
@@ -46,7 +46,7 @@ func migrateMultiTenant(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	processedUrl := config.URL
+	processedUrl := config.DB.URL
 	if len(u.Query()) != 0 {
 		processedUrl = fmt.Sprintf("%s&application_name=gotrue_multi_tenant_migrations", processedUrl)
 	} else {
