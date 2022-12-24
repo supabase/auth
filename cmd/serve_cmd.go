@@ -26,7 +26,11 @@ func serve(ctx context.Context) {
 		logrus.WithError(err).Fatal("unable to load config")
 	}
 
-	db, err := storage.Dial(config)
+	db, err := storage.Dial(&storage.DialConfiguration{
+		DB:      config.DB,
+		Tracing: config.Tracing,
+		Metrics: config.Metrics,
+	})
 	if err != nil {
 		logrus.Fatalf("error opening database: %+v", err)
 	}

@@ -6,5 +6,10 @@ import (
 )
 
 func SetupDBConnection(tenantConfig *conf.TenantConfiguration) (*storage.Connection, error) {
-	return storage.Dial(tenantConfig)
+	c := &storage.DialConfiguration{
+		DB:      tenantConfig.DB,
+		Tracing: tenantConfig.Tracing,
+		Metrics: tenantConfig.Metrics,
+	}
+	return storage.Dial(c)
 }

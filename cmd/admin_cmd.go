@@ -66,7 +66,12 @@ var adminEditRoleCmd = cobra.Command{
 }
 
 func adminCreateUser(config *conf.TenantConfiguration, args []string) {
-	db, err := storage.Dial(config)
+	c := &storage.DialConfiguration{
+		DB:      config.DB,
+		Tracing: config.Tracing,
+		Metrics: config.Metrics,
+	}
+	db, err := storage.Dial(c)
 	if err != nil {
 		logrus.Fatalf("Error opening database: %+v", err)
 	}
@@ -115,7 +120,12 @@ func adminCreateUser(config *conf.TenantConfiguration, args []string) {
 }
 
 func adminDeleteUser(config *conf.TenantConfiguration, args []string) {
-	db, err := storage.Dial(config)
+	c := &storage.DialConfiguration{
+		DB:      config.DB,
+		Tracing: config.Tracing,
+		Metrics: config.Metrics,
+	}
+	db, err := storage.Dial(c)
 	if err != nil {
 		logrus.Fatalf("Error opening database: %+v", err)
 	}
@@ -138,7 +148,12 @@ func adminDeleteUser(config *conf.TenantConfiguration, args []string) {
 }
 
 func adminEditRole(config *conf.TenantConfiguration, args []string) {
-	db, err := storage.Dial(config)
+	c := &storage.DialConfiguration{
+		DB:      config.DB,
+		Tracing: config.Tracing,
+		Metrics: config.Metrics,
+	}
+	db, err := storage.Dial(c)
 	if err != nil {
 		logrus.Fatalf("Error opening database: %+v", err)
 	}

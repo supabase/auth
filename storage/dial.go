@@ -21,8 +21,14 @@ type Connection struct {
 	*pop.Connection
 }
 
+type DialConfiguration struct {
+	DB      conf.DBConfiguration
+	Tracing conf.TracingConfig
+	Metrics conf.MetricsConfig
+}
+
 // Dial will connect to that storage engine
-func Dial(config *conf.TenantConfiguration) (*Connection, error) {
+func Dial(config *DialConfiguration) (*Connection, error) {
 	if config.DB.Driver == "" && config.DB.URL != "" {
 		u, err := url.Parse(config.DB.URL)
 		if err != nil {
