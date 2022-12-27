@@ -65,6 +65,7 @@ type MFAConfiguration struct {
 	ChallengeExpiryDuration     float64 `json:"challenge_expiry_duration" default:"300" split_words:"true"`
 	RateLimitChallengeAndVerify float64 `split_words:"true" default:"15"`
 	MaxEnrolledFactors          float64 `split_words:"true" default:"10"`
+	MaxVerifiedFactors          int     `split_words:"true" default:"10"`
 }
 
 type APIConfiguration struct {
@@ -100,6 +101,7 @@ type GlobalConfiguration struct {
 	SMTP                  SMTPConfiguration
 	RateLimitHeader       string  `split_words:"true"`
 	RateLimitEmailSent    float64 `split_words:"true" default:"30"`
+	RateLimitSmsSent      float64 `split_words:"true" default:"30"`
 	RateLimitVerify       float64 `split_words:"true" default:"30"`
 	RateLimitTokenRefresh float64 `split_words:"true" default:"30"`
 	RateLimitSso          float64 `split_words:"true" default:"30"`
