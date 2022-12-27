@@ -7,8 +7,8 @@ import (
 
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
+	"github.com/supabase/gotrue/storage"
 )
 
 type Identity struct {

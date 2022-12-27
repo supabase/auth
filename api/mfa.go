@@ -12,11 +12,11 @@ import (
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/metering"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/storage"
-	"github.com/netlify/gotrue/utilities"
 	"github.com/pquerna/otp/totp"
+	"github.com/supabase/gotrue/metering"
+	"github.com/supabase/gotrue/models"
+	"github.com/supabase/gotrue/storage"
+	"github.com/supabase/gotrue/utilities"
 )
 
 const DefaultQRSize = 3

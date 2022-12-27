@@ -2,7 +2,7 @@
 package docs
 
 import (
-	"github.com/netlify/gotrue/api"
+	"github.com/supabase/gotrue/api"
 )
 
 // swagger:route POST /token?grant_type=password token token-password

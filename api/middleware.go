@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netlify/gotrue/observability"
-	"github.com/netlify/gotrue/security"
+	"github.com/supabase/gotrue/observability"
+	"github.com/supabase/gotrue/security"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"

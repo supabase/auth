@@ -5,13 +5,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/storage"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/mocktracer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/gotrue/conf"
+	"github.com/supabase/gotrue/storage"
 )
 
 type OpenTracerTestSuite struct {

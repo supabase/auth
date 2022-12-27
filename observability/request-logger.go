@@ -6,8 +6,8 @@ import (
 	"time"
 
 	chimiddleware "github.com/go-chi/chi/middleware"
-	"github.com/netlify/gotrue/utilities"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/gotrue/utilities"
 )
 
 func NewStructuredLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {

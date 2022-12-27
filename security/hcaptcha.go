@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netlify/gotrue/utilities"
 	"github.com/pkg/errors"
+	"github.com/supabase/gotrue/utilities"
 )
 
 type GotrueRequest struct {

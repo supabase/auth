@@ -6,8 +6,8 @@ import (
 	"encoding/xml"
 
 	"github.com/crewjam/saml"
-	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase/gotrue/models"
 )
 
 func TestSAMLAssertionUserID(t *tst.T) {

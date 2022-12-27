@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/crypto"
-	"github.com/netlify/gotrue/storage"
-	"github.com/netlify/gotrue/storage/test"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase/gotrue/conf"
+	"github.com/supabase/gotrue/crypto"
+	"github.com/supabase/gotrue/storage"
+	"github.com/supabase/gotrue/storage/test"
 )
 
 const (

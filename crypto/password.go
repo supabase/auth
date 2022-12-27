@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/netlify/gotrue/observability"
+	"github.com/supabase/gotrue/observability"
 	"go.opentelemetry.io/otel/attribute"
 	metricinstrument "go.opentelemetry.io/otel/metric/instrument"
 	"golang.org/x/crypto/bcrypt"

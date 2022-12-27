@@ -4,12 +4,12 @@ import (
 	"context"
 	"net"
 
-	"github.com/netlify/gotrue/api"
-	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/storage"
-	"github.com/netlify/gotrue/utilities"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/supabase/gotrue/api"
+	"github.com/supabase/gotrue/conf"
+	"github.com/supabase/gotrue/storage"
+	"github.com/supabase/gotrue/utilities"
 )
 
 var serveCmd = cobra.Command{

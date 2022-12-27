@@ -2,8 +2,8 @@
 package docs
 
 import (
-	"github.com/netlify/gotrue/api"
-	"github.com/netlify/gotrue/models"
+	"github.com/supabase/gotrue/api"
+	"github.com/supabase/gotrue/models"
 )
 
 // swagger:route GET /user user user-get

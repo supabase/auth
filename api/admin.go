@@ -10,10 +10,10 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/observability"
-	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
+	"github.com/supabase/gotrue/models"
+	"github.com/supabase/gotrue/observability"
+	"github.com/supabase/gotrue/storage"
 )
 
 type AdminUserParams struct {

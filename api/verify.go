@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/observability"
-	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
+	"github.com/supabase/gotrue/models"
+	"github.com/supabase/gotrue/observability"
+	"github.com/supabase/gotrue/storage"
 )
 
 var (

@@ -9,13 +9,13 @@ import (
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
 	"github.com/go-chi/chi"
-	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/mailer"
-	"github.com/netlify/gotrue/observability"
-	"github.com/netlify/gotrue/storage"
 	"github.com/rs/cors"
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/gotrue/conf"
+	"github.com/supabase/gotrue/mailer"
+	"github.com/supabase/gotrue/observability"
+	"github.com/supabase/gotrue/storage"
 )
 
 const (

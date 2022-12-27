@@ -9,12 +9,12 @@ import (
 
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/api/provider"
-	"github.com/netlify/gotrue/api/sms_provider"
-	"github.com/netlify/gotrue/metering"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
+	"github.com/supabase/gotrue/api/provider"
+	"github.com/supabase/gotrue/api/sms_provider"
+	"github.com/supabase/gotrue/metering"
+	"github.com/supabase/gotrue/models"
+	"github.com/supabase/gotrue/storage"
 )
 
 // SignupParams are the parameters the Signup endpoint accepts

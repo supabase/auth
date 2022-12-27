@@ -10,14 +10,14 @@ import (
 	"time"
 
 	"github.com/fatih/structs"
-	"github.com/netlify/gotrue/api/provider"
-	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/crypto"
-	"github.com/netlify/gotrue/mailer"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
+	"github.com/supabase/gotrue/api/provider"
+	"github.com/supabase/gotrue/conf"
+	"github.com/supabase/gotrue/crypto"
+	"github.com/supabase/gotrue/mailer"
+	"github.com/supabase/gotrue/models"
+	"github.com/supabase/gotrue/storage"
 )
 
 var (

@@ -1,9 +1,0 @@
-[build]
-  publish = "www"
-  command = "exit 0"
-
-[[redirects]]
-from = "/*"
-to = "https://github.com/netlify/gotrue"
-status = 302
-force = true

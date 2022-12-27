@@ -6,9 +6,9 @@ import (
 
 	"github.com/crewjam/saml"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/storage"
-	"github.com/netlify/gotrue/utilities"
+	"github.com/supabase/gotrue/models"
+	"github.com/supabase/gotrue/storage"
+	"github.com/supabase/gotrue/utilities"
 )
 
 type SingleSignOnParams struct {

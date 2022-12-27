@@ -3,11 +3,11 @@ package models
 import (
 	"testing"
 
-	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/storage"
-	"github.com/netlify/gotrue/storage/test"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/gotrue/conf"
+	"github.com/supabase/gotrue/storage"
+	"github.com/supabase/gotrue/storage/test"
 )
 
 type AccountLinkingTestSuite struct {

@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/utilities"
 	"github.com/pquerna/otp"
+	"github.com/supabase/gotrue/conf"
+	"github.com/supabase/gotrue/models"
+	"github.com/supabase/gotrue/utilities"
 
 	"github.com/jackc/pgx/v4"
 

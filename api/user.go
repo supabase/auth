@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/netlify/gotrue/api/sms_provider"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/observability"
-	"github.com/netlify/gotrue/storage"
+	"github.com/supabase/gotrue/api/sms_provider"
+	"github.com/supabase/gotrue/models"
+	"github.com/supabase/gotrue/observability"
+	"github.com/supabase/gotrue/storage"
 )
 
 // UserUpdateParams parameters for updating a user

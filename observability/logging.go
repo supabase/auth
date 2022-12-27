@@ -7,8 +7,8 @@ import (
 	"github.com/bombsimon/logrusr/v3"
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gobuffalo/pop/v5/logging"
-	"github.com/netlify/gotrue/conf"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/gotrue/conf"
 	"go.opentelemetry.io/otel"
 )
 

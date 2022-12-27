@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/storage"
+	"github.com/supabase/gotrue/models"
+	"github.com/supabase/gotrue/storage"
 )
 
 // RecoverParams holds the parameters for a password recovery request

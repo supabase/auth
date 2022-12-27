@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/storage"
+	"github.com/supabase/gotrue/models"
+	"github.com/supabase/gotrue/storage"
 )
 
 // InviteParams are the parameters the Signup endpoint accepts

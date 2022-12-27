@@ -6,10 +6,10 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/netlify/gotrue/api/sms_provider"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/storage"
 	"github.com/sethvargo/go-password/password"
+	"github.com/supabase/gotrue/api/sms_provider"
+	"github.com/supabase/gotrue/models"
+	"github.com/supabase/gotrue/storage"
 )
 
 // OtpParams contains the request body params for the otp endpoint

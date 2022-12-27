@@ -2,7 +2,7 @@
 package docs
 
 import (
-	"github.com/netlify/gotrue/api"
+	"github.com/supabase/gotrue/api"
 )
 
 // swagger:route GET /verify verify verify-get

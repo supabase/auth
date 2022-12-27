@@ -10,10 +10,10 @@ import (
 	"testing"
 
 	"github.com/golang-jwt/jwt"
-	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/models"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/gotrue/conf"
+	"github.com/supabase/gotrue/models"
 )
 
 type MailTestSuite struct {

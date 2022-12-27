@@ -12,9 +12,9 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/observability"
-	"github.com/netlify/gotrue/storage"
+	"github.com/supabase/gotrue/models"
+	"github.com/supabase/gotrue/observability"
+	"github.com/supabase/gotrue/storage"
 )
 
 // loadSSOProvider looks for an idp_id parameter in the URL route and loads the SSO provider

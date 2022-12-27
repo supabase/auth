@@ -10,8 +10,8 @@ import (
 	"github.com/crewjam/saml"
 	"github.com/crewjam/saml/samlsp"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
+	"github.com/supabase/gotrue/storage"
 )
 
 type SSOProvider struct {

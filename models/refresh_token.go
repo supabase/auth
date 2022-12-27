@@ -7,9 +7,9 @@ import (
 
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/crypto"
-	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
+	"github.com/supabase/gotrue/crypto"
+	"github.com/supabase/gotrue/storage"
 )
 
 // RefreshToken is the database model for refresh tokens.

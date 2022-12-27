@@ -12,12 +12,12 @@ import (
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/netlify/gotrue/api/provider"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/observability"
-	"github.com/netlify/gotrue/storage"
-	"github.com/netlify/gotrue/utilities"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/gotrue/api/provider"
+	"github.com/supabase/gotrue/models"
+	"github.com/supabase/gotrue/observability"
+	"github.com/supabase/gotrue/storage"
+	"github.com/supabase/gotrue/utilities"
 	"golang.org/x/oauth2"
 )
 

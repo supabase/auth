@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/observability"
-	"github.com/netlify/gotrue/storage"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/gotrue/observability"
+	"github.com/supabase/gotrue/storage"
 )
 
 type AuditAction string

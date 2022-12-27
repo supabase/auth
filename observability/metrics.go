@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/netlify/gotrue/conf"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/gotrue/conf"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
