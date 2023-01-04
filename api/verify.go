@@ -31,6 +31,8 @@ const (
 	emailChangeVerification = "email_change"
 	smsVerification         = "sms"
 	phoneChangeVerification = "phone_change"
+	// includes signupVerification and magicLinkVerification
+	emailOTPVerification = "email"
 )
 
 const (
@@ -490,6 +492,17 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 
 	var isValid bool
 	switch params.Type {
+	case emailOTPVerification:
+		// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
+		if isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp) {
+			isValid = true
+			params.Type = signupVerification
+		} else if isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp) {
+			isValid = true
+			params.Type = magicLinkVerification
+		} else {
+			isValid = false
+		}
 	case signupVerification, inviteVerification:
 		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
 	case recoveryVerification, magicLinkVerification:
