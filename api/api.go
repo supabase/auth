@@ -59,26 +59,16 @@ func (a *API) deprecationNotices(ctx context.Context) {
 	}
 }
 
-func NewMultiTenantApi(ctx context.Context, multiTenantConfig *conf.MultiTenantConfiguration) {
-	c := &storage.DialConfiguration{
-		DB:      multiTenantConfig.DB,
-		Tracing: multiTenantConfig.Tracing,
-		Metrics: multiTenantConfig.Metrics,
-	}
-	db, err := storage.Dial(c)
-	if err != nil {
-		logrus.Fatalf("error opening database: %+v", err)
-	}
-	defer db.Close()
+func NewMultiTenantApi(ctx context.Context, multiTenantConfig *conf.MultiTenantConfiguration, db *storage.Connection) {
 	r := newRouter()
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) error {
 		w.WriteHeader(200)
-		_, err = w.Write([]byte("ok"))
+		_, err := w.Write([]byte("ok"))
 		return err
 	})
 
 	api := &MultiTenantAPI{config: multiTenantConfig, db: db}
-	addr := net.JoinHostPort(multiTenantConfig.Host, multiTenantConfig.Port)
+	addr := net.JoinHostPort(multiTenantConfig.AdminHost, multiTenantConfig.AdminPort)
 	corsHandler := cors.New(cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},

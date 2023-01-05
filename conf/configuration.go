@@ -90,18 +90,21 @@ func (a *APIConfiguration) Validate() error {
 }
 
 type MultiTenantConfiguration struct {
-	Enabled bool            `envconfig:"MULTITENANT_ENABLED"`
-	DB      DBConfiguration `envconfig:"MULTITENANT"`
-	ApiKey  string          `envconfig:"MULTITENANT_APIKEY"`
-	Host    string          `envconfig:"MULTITENANT_HOST"`
-	Port    string          `envconfig:"MULTITENANT_PORT"`
-	Logging LoggingConfig   `envconfig:"LOG"`
-	Tracing TracingConfig
-	Metrics MetricsConfig
+	Enabled   bool            `envconfig:"MULTITENANT_ENABLED"`
+	DB        DBConfiguration `envconfig:"MULTITENANT"`
+	ApiKey    string          `envconfig:"MULTITENANT_APIKEY"`
+	AdminHost string          `envconfig:"MULTITENANT_HOST"`
+	AdminPort string          `envconfig:"MULTITENANT_PORT"`
+	Host      string          `envconfig:"API_HOST"`
+	Port      string          `envconfig:"PORT"`
+	Logging   LoggingConfig   `envconfig:"LOG"`
+	Tracing   TracingConfig
+	Metrics   MetricsConfig
 }
 
 // TenantConfiguration holds all the configuration that applies to all instances.
 type TenantConfiguration struct {
+	Id                    string
 	API                   APIConfiguration
 	DB                    DBConfiguration
 	External              ProviderConfiguration

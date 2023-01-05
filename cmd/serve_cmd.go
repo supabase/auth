@@ -41,8 +41,7 @@ func serve(ctx context.Context) {
 			api.NewMultiTenantApi(ctx, multiTenantConfig, db)
 		}()
 		// Run tenant server
-
-		api := api.NewAPIWithVersion(ctx, nil, nil, db, utilities.Version)
+		api := api.NewAPIWithVersion(ctx, nil, nil, utilities.Version)
 
 		addr := net.JoinHostPort(multiTenantConfig.Host, multiTenantConfig.Port)
 		logrus.Infof("GoTrue API started on: %s", addr)
@@ -63,7 +62,7 @@ func serve(ctx context.Context) {
 		}
 		defer db.Close()
 
-		api := api.NewAPIWithVersion(ctx, config, db, nil, utilities.Version)
+		api := api.NewAPIWithVersion(ctx, config, db, utilities.Version)
 
 		addr := net.JoinHostPort(config.API.Host, config.API.Port)
 		logrus.Infof("GoTrue API started on: %s", addr)
