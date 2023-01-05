@@ -27,30 +27,47 @@ func serve(ctx context.Context) {
 	}
 
 	if multiTenantConfig.Enabled {
+		db, err := storage.Dial(&storage.DialConfiguration{
+			DB:      multiTenantConfig.DB,
+			Tracing: multiTenantConfig.Tracing,
+			Metrics: multiTenantConfig.Metrics,
+		})
+		if err != nil {
+			logrus.Fatalf("error opening database: %+v", err)
+		}
+		defer db.Close()
 		// Run multi-tenant admin server
 		go func() {
-			api.NewMultiTenantApi(ctx, multiTenantConfig)
+			api.NewMultiTenantApi(ctx, multiTenantConfig, db)
 		}()
+		// Run tenant server
+
+		api := api.NewAPIWithVersion(ctx, nil, nil, db, utilities.Version)
+
+		addr := net.JoinHostPort(multiTenantConfig.Host, multiTenantConfig.Port)
+		logrus.Infof("GoTrue API started on: %s", addr)
+
+		api.ListenAndServe(ctx, addr)
+	} else {
+		config, err := conf.LoadTenant(configFile)
+		if err != nil {
+			logrus.WithError(err).Fatal("unable to load config")
+		}
+		db, err := storage.Dial(&storage.DialConfiguration{
+			DB:      config.DB,
+			Tracing: config.Tracing,
+			Metrics: config.Metrics,
+		})
+		if err != nil {
+			logrus.Fatalf("error opening database: %+v", err)
+		}
+		defer db.Close()
+
+		api := api.NewAPIWithVersion(ctx, config, db, nil, utilities.Version)
+
+		addr := net.JoinHostPort(config.API.Host, config.API.Port)
+		logrus.Infof("GoTrue API started on: %s", addr)
+
+		api.ListenAndServe(ctx, addr)
 	}
-
-	config, err := conf.LoadTenant(configFile)
-	if err != nil {
-		logrus.WithError(err).Fatal("unable to load config")
-	}
-	db, err := storage.Dial(&storage.DialConfiguration{
-		DB:      config.DB,
-		Tracing: config.Tracing,
-		Metrics: config.Metrics,
-	})
-	if err != nil {
-		logrus.Fatalf("error opening database: %+v", err)
-	}
-	defer db.Close()
-
-	api := api.NewAPIWithVersion(ctx, config, db, utilities.Version)
-
-	addr := net.JoinHostPort(config.API.Host, config.API.Port)
-	logrus.Infof("GoTrue API started on: %s", addr)
-
-	api.ListenAndServe(ctx, addr)
 }
