@@ -138,7 +138,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		var herr *HTTPError
 		if errors.As(err, &herr) {
-			rurl := a.prepErrorRedirectURL(herr, r, params.RedirectTo)
+			rurl := a.prepErrorRedirectURL(herr, w, r, params.RedirectTo)
 			http.Redirect(w, r, rurl, http.StatusSeeOther)
 			return nil
 		}
@@ -340,12 +340,12 @@ func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Conn
 	return user, nil
 }
 
-func (a *API) prepErrorRedirectURL(err *HTTPError, r *http.Request, rurl string) string {
+func (a *API) prepErrorRedirectURL(err *HTTPError, w http.ResponseWriter, r *http.Request, rurl string) string {
 	q := url.Values{}
-
 	log := observability.GetLogEntry(r)
-	log.Error(err.Message)
-
+	errorID := getRequestID(r.Context())
+	err.ErrorID = errorID
+	log.WithError(err.Cause()).Info(err.Error())
 	if str, ok := oauthErrorMap[err.Code]; ok {
 		q.Set("error", str)
 	}
