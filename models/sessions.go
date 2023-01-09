@@ -218,12 +218,12 @@ func (s *Session) UpdateWebauthnConfiguration(tx *storage.Connection, webauthn *
 	return tx.UpdateOnly(s, "webauthn_configuration")
 }
 
-func (s *Session) UpdateWebauthnRegistrationSession(tx *storage.Connection, registrationSession map[string]interface{}) error {
-	s.WebauthnRegistrationSession = registrationSession
+func (s *Session) UpdateWebauthnRegistrationSession(tx *storage.Connection, registrationSession *webauthn.SessionData) error {
+	s.WebauthnRegistrationSession = structs.Map(registrationSession)
 	return tx.UpdateOnly(s, "webauthn_registration_session")
 }
 
-func (s *Session) UpdateWebauthnLoginSession(tx *storage.Connection, loginSession map[string]interface{}) error {
-	s.WebauthnLoginSession = loginSession
+func (s *Session) UpdateWebauthnLoginSession(tx *storage.Connection, loginSession *webauthn.SessionData) error {
+	s.WebauthnLoginSession = structs.Map(loginSession)
 	return tx.UpdateOnly(s, "webauthn_login_session")
 }

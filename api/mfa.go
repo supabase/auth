@@ -301,6 +301,7 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 	session := getSession(ctx)
 	web := &webauthn.WebAuthn{}
 
+	// TODO(Joel): Substitute this with a webauthn config read from the db
 	webMarshaled, err := storage.GetFromSession("webauthn", r)
 	if err != nil {
 		return err
@@ -320,14 +321,12 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 		if err != nil {
 			return err
 		}
-		marshaledSession, err := json.Marshal(sessionData)
-		if err != nil {
-			return err
-		}
-		err = storage.StoreInSession("login-session", string(marshaledSession), r, w)
-		if err != nil {
-			return err
-		}
+		err = a.db.Transaction(func(tx *storage.Connection) error {
+			if terr := session.UpdateWebauthnLoginSession(tx, sessionData); terr != nil {
+				return terr
+			}
+			return nil
+		})
 		return sendJSON(w, http.StatusOK, options)
 
 	} else {
@@ -335,14 +334,14 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 		if err != nil {
 			return err
 		}
-		marshaledSession, err := json.Marshal(sessionData)
-		if err != nil {
-			return err
-		}
-		err = storage.StoreInSession("registration-session", string(marshaledSession), r, w)
-		if err != nil {
-			return err
-		}
+
+		err = a.db.Transaction(func(tx *storage.Connection) error {
+			if terr := session.UpdateWebauthnRegistrationSession(tx, sessionData); terr != nil {
+				return terr
+			}
+			return nil
+		})
+
 		return sendJSON(w, http.StatusOK, options)
 	}
 
