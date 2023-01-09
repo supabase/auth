@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/structs"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
 	"github.com/netlify/gotrue/storage"
@@ -209,4 +211,19 @@ func (s *Session) GetAAL() string {
 		return ""
 	}
 	return *(s.AAL)
+}
+
+func (s *Session) UpdateWebauthnConfiguration(tx *storage.Connection, webauthn *webauthn.WebAuthn) error {
+	s.WebauthnConfiguration = structs.Map(webauthn)
+	return tx.UpdateOnly(s, "webauthn_configuration")
+}
+
+func (s *Session) UpdateWebauthnRegistrationSession(tx *storage.Connection, registrationSession map[string]interface{}) error {
+	s.WebauthnRegistrationSession = registrationSession
+	return tx.UpdateOnly(s, "webauthn_registration_session")
+}
+
+func (s *Session) UpdateWebauthnLoginSession(tx *storage.Connection, loginSession map[string]interface{}) error {
+	s.WebauthnLoginSession = loginSession
+	return tx.UpdateOnly(s, "webauthn_login_session")
 }

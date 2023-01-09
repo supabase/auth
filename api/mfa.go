@@ -166,20 +166,14 @@ func (a *API) EnrollWebAuthnFactor(w http.ResponseWriter, r *http.Request) error
 	// Initialize webauthn object and set it on the global context
 	ctx := r.Context()
 	user := getUser(ctx)
+	session := getSession(ctx)
+
 	web, err := webauthn.New(&webauthn.Config{
 		RPDisplayName: "Go Webauthn",                        // Display Name for your site
 		RPID:          "go-webauthn.local",                  // Generally the FQDN for your site
 		RPOrigin:      "https://login.go-webauthn.local",    // The origin URL for WebAuthn requests
 		RPIcon:        "https://go-webauthn.local/logo.png", // Optional icon URL for your site
 	})
-	if err != nil {
-		return err
-	}
-	marshaledWebauthnInstance, err := json.Marshal(web)
-	if err != nil {
-		return err
-	}
-	err = storage.StoreInSession("webauthn", string(marshaledWebauthnInstance), r, w)
 	if err != nil {
 		return err
 	}
@@ -238,6 +232,9 @@ func (a *API) EnrollWebAuthnFactor(w http.ResponseWriter, r *http.Request) error
 		if terr := tx.Create(factor); terr != nil {
 			return terr
 		}
+		if terr := session.UpdateWebauthnConfiguration(tx, web); terr != nil {
+			return terr
+		}
 		if terr := models.NewAuditLogEntry(r, tx, user, models.EnrollFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id": factor.ID,
 		}); terr != nil {
@@ -276,6 +273,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr := tx.Create(challenge); terr != nil {
 			return terr
 		}
+
 		if terr := models.NewAuditLogEntry(r, tx, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":     factor.ID,
 			"factor_status": factor.Status,
@@ -300,6 +298,7 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 	// Returns the public key and related information
 	ctx := r.Context()
 	user := getUser(ctx)
+	session := getSession(ctx)
 	web := &webauthn.WebAuthn{}
 
 	webMarshaled, err := storage.GetFromSession("webauthn", r)
@@ -313,13 +312,9 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 	}
 
 	// Registration session
-	registrationSession, err := storage.GetFromSession("registration-session", r)
-	if err != nil {
-		// TODO(Joel): Properly handle this so it can fail and still continue
-		fmt.Println("and here")
-	}
+	registrationSession := session.WebauthnConfiguration
 
-	if registrationSession != "" {
+	if registrationSession != nil {
 		// Registration has been initiated
 		options, sessionData, err := web.BeginLogin(user)
 		if err != nil {
