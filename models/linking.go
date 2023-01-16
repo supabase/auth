@@ -1,7 +1,6 @@
 package models
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/netlify/gotrue/storage"
@@ -78,8 +77,6 @@ func DetermineAccountLinking(tx *storage.Connection, provider, sub string, email
 			return AccountLinkingResult{}, terr
 		}
 	}
-
-	fmt.Printf("similar identities %v\n", similarIdentities)
 
 	// TODO: determine linking behavior over phone too
 

@@ -15,8 +15,7 @@ import (
 )
 
 type SSOProvider struct {
-	ID         uuid.UUID `db:"id" json:"id"`
-	ResourceID *string   `db:"resource_id" json:"resource_id,omitempty"`
+	ID uuid.UUID `db:"id" json:"id"`
 
 	SAMLProvider SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
 	SSODomains   []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
@@ -144,28 +143,6 @@ func (d SSODomain) TableName() string {
 	return "sso_domains"
 }
 
-type SSOSession struct {
-	ID uuid.UUID `db:"id"`
-
-	Session   *Session  `belongs_to:"session"`
-	SessionID uuid.UUID `db:"session_id"`
-
-	SSOProvider   *SSOProvider `belongs_to:"sso_providers"`
-	SSOProviderID uuid.UUID    `db:"sso_provider_id"`
-
-	NotBefore time.Time `db:"not_before"`
-	NotAfter  time.Time `db:"not_after"`
-
-	IdPInitiated bool `db:"idp_initiated"`
-
-	CreatedAt time.Time `db:"created_at" json:"-"`
-	UpdatedAt time.Time `db:"updated_at" json:"-"`
-}
-
-func (s SSOSession) TableName() string {
-	return "sso_sessions"
-}
-
 type SAMLRelayState struct {
 	ID uuid.UUID `db:"id"`
 
@@ -183,19 +160,6 @@ type SAMLRelayState struct {
 
 func (s SAMLRelayState) TableName() string {
 	return "saml_relay_states"
-}
-
-func FindSSOProviderByResourceID(tx *storage.Connection, resourceID string) (*SSOProvider, error) {
-	var ssoProvider SSOProvider
-	if err := tx.Eager().Q().Where("resource_id = ?", strings.ToLower(resourceID)).First(&ssoProvider); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, SSOProviderNotFoundError{}
-		}
-
-		return nil, errors.Wrap(err, "error finding SSO provider by resource ID")
-	}
-
-	return &ssoProvider, nil
 }
 
 func FindSAMLProviderByEntityID(tx *storage.Connection, entityId string) (*SSOProvider, error) {

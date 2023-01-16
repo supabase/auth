@@ -192,7 +192,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
 	} else {
-		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), r, rurl)
+		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
 	}
 
 	http.Redirect(w, r, rurl, http.StatusFound)
@@ -269,7 +269,9 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			Data:     identityData,
 		}
 
-		user, terr = a.signupNewUser(ctx, tx, params, false /* <-duplicateEmail */)
+		isSSOUser := strings.HasPrefix(providerType, "sso:")
+
+		user, terr = a.signupNewUser(ctx, tx, params, isSSOUser)
 		if terr != nil {
 			return nil, terr
 		}

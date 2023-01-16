@@ -10,7 +10,7 @@ comment on column {{ index .Options "Namespace" }}.users.is_sso_user is 'Auth: S
 
 create unique index if not exists users_email_partial_key on {{ index .Options "Namespace" }}.users (email) where (is_sso_user = false);
 
-comment on index {{ index .Options "Namespace" }}.users_email_key is 'Auth: A partial unique index that applies only when is_sso_user is false';
+comment on index {{ index .Options "Namespace" }}.users_email_partial_key is 'Auth: A partial unique index that applies only when is_sso_user is false';
 
 alter table only {{ index .Options "Namespace" }}.users
   drop constraint if exists users_email_key;

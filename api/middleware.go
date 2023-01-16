@@ -70,10 +70,17 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 
 func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 	// limit per hour
-	freq := a.config.RateLimitEmailSent / (60 * 60)
-	lmt := tollbooth.NewLimiter(freq, &limiter.ExpirableOptions{
+	emailFreq := a.config.RateLimitEmailSent / (60 * 60)
+	smsFreq := a.config.RateLimitSmsSent / (60 * 60)
+
+	emailLimiter := tollbooth.NewLimiter(emailFreq, &limiter.ExpirableOptions{
 		DefaultExpirationTTL: time.Hour,
 	}).SetBurst(int(a.config.RateLimitEmailSent)).SetMethods([]string{"PUT", "POST"})
+
+	phoneLimiter := tollbooth.NewLimiter(smsFreq, &limiter.ExpirableOptions{
+		DefaultExpirationTTL: time.Hour,
+	}).SetBurst(int(a.config.RateLimitSmsSent)).SetMethods([]string{"PUT", "POST"})
+
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		c := req.Context()
 		config := a.config
@@ -94,14 +101,14 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 				}
 
 				if requestBody.Email != "" {
-					if err := tollbooth.LimitByKeys(lmt, []string{"email_functions"}); err != nil {
-						return c, httpError(http.StatusTooManyRequests, "Rate limit exceeded")
+					if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
+						return c, httpError(http.StatusTooManyRequests, "Email rate limit exceeded")
 					}
 				}
 
 				if requestBody.Phone != "" {
-					if err := tollbooth.LimitByKeys(lmt, []string{"phone_functions"}); err != nil {
-						return c, httpError(http.StatusTooManyRequests, "Rate limit exceeded")
+					if err := tollbooth.LimitByKeys(phoneLimiter, []string{"phone_functions"}); err != nil {
+						return c, httpError(http.StatusTooManyRequests, "Sms rate limit exceeded")
 					}
 				}
 			}

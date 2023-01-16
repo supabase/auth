@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	linkedinUser       string = `{"id":"linkedinTestId","firstName":{"localized":{"en_US":"Linkedin"},"preferredLocale":{"country":"US","language":"en"}},"lastName":{"localized":{"en_US":"Test"},"preferredLocale":{"country":"US","language":"en"}},"profilePicture":{"displayImage~":{"elements":[{"identifiers":[{"identifier":"http://example.com/avatar"}]}]}}}`
-	linkedinEmail      string = `{"elements": [{"handle": "","handle~": {"emailAddress": "linkedin@example.com"}}]}`
-	linkedinWrongEmail string = `{"elements": [{"handle": "","handle~": {"emailAddress": "other@example.com"}}]}`
+	linkedinUser             string = `{"id":"linkedinTestId","firstName":{"localized":{"en_US":"Linkedin"},"preferredLocale":{"country":"US","language":"en"}},"lastName":{"localized":{"en_US":"Test"},"preferredLocale":{"country":"US","language":"en"}},"profilePicture":{"displayImage~":{"elements":[{"identifiers":[{"identifier":"http://example.com/avatar"}]}]}}}`
+	linkedinUserNoProfilePic string = `{"id":"linkedinTestId","firstName":{"localized":{"en_US":"Linkedin"},"preferredLocale":{"country":"US","language":"en"}},"lastName":{"localized":{"en_US":"Test"},"preferredLocale":{"country":"US","language":"en"}},"profilePicture":{"displayImage~":{"elements":[]}}}`
+	linkedinEmail            string = `{"elements": [{"handle": "","handle~": {"emailAddress": "linkedin@example.com"}}]}`
+	linkedinWrongEmail       string = `{"elements": [{"handle": "","handle~": {"emailAddress": "other@example.com"}}]}`
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalLinkedin() {
@@ -155,4 +156,15 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalLinkedinErrorWhenEmailDoesnt
 	u := performAuthorization(ts, "linkedin", code, "invite_token")
 
 	assertAuthorizationFailure(ts, u, "Invited email does not match emails from external provider", "invalid_request", "")
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalLinkedin_MissingProfilePic() {
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	server := LinkedinTestSignupSetup(ts, &tokenCount, &userCount, code, linkedinUserNoProfilePic, linkedinEmail)
+	defer server.Close()
+
+	u := performAuthorization(ts, "linkedin", code, "")
+
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "linkedin@example.com", "Linkedin Test", "linkedinTestId", "")
 }

@@ -137,7 +137,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			factors, err := models.FindFactorsByUser(ts.API.db, user)
 			ts.Require().NoError(err)
 			latestFactor := factors[len(factors)-1]
-			require.Equal(ts.T(), models.FactorStateUnverified, latestFactor.Status)
+			require.Equal(ts.T(), models.FactorStateUnverified.String(), latestFactor.Status)
 			if c.friendlyName != "" && c.expectedCode == http.StatusOK {
 				require.Equal(ts.T(), c.friendlyName, latestFactor.FriendlyName)
 			}
