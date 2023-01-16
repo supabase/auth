@@ -31,17 +31,13 @@ const (
 	emailChangeVerification = "email_change"
 	smsVerification         = "sms"
 	phoneChangeVerification = "phone_change"
+	// includes signupVerification and magicLinkVerification
+	emailOTPVerification = "email"
 )
 
 const (
 	zeroConfirmation int = iota
 	singleConfirmation
-)
-
-const (
-	// v1 uses crypto.SecureToken()
-	v1OtpLength      = 22
-	sum224HashLength = 28
 )
 
 // Only applicable when SECURE_EMAIL_CHANGE_ENABLED
@@ -89,10 +85,8 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		if params.Token == "" {
 			return badRequestError("Verify requires a token")
 		}
-		if len(params.Token) > v1OtpLength {
-			// token follows the v2 format and includes "-"
-			params.Token = strings.ReplaceAll(params.Token, "-", "")
-		}
+		params.Token = strings.ReplaceAll(params.Token, "-", "")
+
 		if params.Type == "" {
 			return badRequestError("Verify requires a verification type")
 		}
@@ -174,10 +168,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	if params.Token == "" {
 		return badRequestError("Verify requires a token")
 	}
-	if len(params.Token) > v1OtpLength {
-		// token follows the v2 format and includes "-"
-		params.Token = strings.ReplaceAll(params.Token, "-", "")
-	}
+	params.Token = strings.ReplaceAll(params.Token, "-", "")
 
 	if params.Type == "" {
 		return badRequestError("Verify requires a verification type")
@@ -501,38 +492,27 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 
 	var isValid bool
 	switch params.Type {
-	case signupVerification, inviteVerification:
-		// TODO(km): remove when old token format is deprecated
-		// the new token format is represented by a MD5 hash which is 32 characters (128 bits) long
-		// anything shorter than 32 characters can safely be assumed to be using the old token format
-		if len(user.ConfirmationToken) < sum224HashLength {
-			tokenHash = params.Token
+	case emailOTPVerification:
+		// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
+		if isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp) {
+			isValid = true
+			params.Type = signupVerification
+		} else if isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp) {
+			isValid = true
+			params.Type = magicLinkVerification
+		} else {
+			isValid = false
 		}
+	case signupVerification, inviteVerification:
 		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
 	case recoveryVerification, magicLinkVerification:
-		// TODO(km): remove when old token format is deprecated
-		if len(user.RecoveryToken) < sum224HashLength {
-			tokenHash = params.Token
-		}
 		isValid = isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
 	case emailChangeVerification:
-		// TODO(km): remove when old token format is deprecated
-		if len(user.EmailChangeTokenCurrent) < sum224HashLength && len(user.EmailChangeTokenNew) < sum224HashLength {
-			tokenHash = params.Token
-		}
 		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
 			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
 	case phoneChangeVerification:
-		// TODO(km): remove when old token format is deprecated
-		if len(user.PhoneChangeToken) < sum224HashLength {
-			tokenHash = params.Token
-		}
 		isValid = isOtpValid(tokenHash, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
 	case smsVerification:
-		// TODO(km): remove when old token format is deprecated
-		if len(user.ConfirmationToken) < sum224HashLength {
-			tokenHash = params.Token
-		}
 		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Sms.OtpExp)
 	}
 

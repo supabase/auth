@@ -659,6 +659,17 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			expected: expectedResponse,
 		},
 		{
+			desc:     "Valid Email OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":      emailOTPVerification,
+				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+				"token":     "123456",
+				"email":     u.GetEmail(),
+			},
+			expected: expectedResponse,
+		},
+		{
 			desc:     "Valid Email Change OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
