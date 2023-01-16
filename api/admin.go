@@ -394,7 +394,7 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	params := &adminUserDeleteParams{}
 	q := r.URL.Query()
-	params.IsSoftDelete = q.Get("is_soft_delete")
+	params.IsSoftDelete = strings.ToLower(q.Get("is_soft_delete"))
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserDeletedAction, "", map[string]interface{}{
