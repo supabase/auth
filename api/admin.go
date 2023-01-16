@@ -33,7 +33,7 @@ type AdminUserParams struct {
 }
 
 type adminUserDeleteParams struct {
-	IsSoftDelete string `json:"is_soft_delete"`
+	ShouldSoftDelete bool `json:"should_soft_delete"`
 }
 
 type adminUserUpdateFactorParams struct {
@@ -393,8 +393,17 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 
 	var err error
 	params := &adminUserDeleteParams{}
-	q := r.URL.Query()
-	params.IsSoftDelete = strings.ToLower(q.Get("is_soft_delete"))
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, params); err != nil {
+			return badRequestError("Could not read params: %v", err)
+		}
+	} else {
+		params.ShouldSoftDelete = false
+	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserDeletedAction, "", map[string]interface{}{
@@ -405,22 +414,19 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 			return internalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 
-		if params.IsSoftDelete == "true" {
+		if params.ShouldSoftDelete {
 			if user.DeletedAt != nil {
 				// user has been soft deleted already
 				return nil
 			}
-			softDeleteId, terr := crypto.GenerateNanoId(5)
-			if terr != nil {
-				return terr
-			}
-			user.Email = storage.NullString(fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(user.GetEmail()))))
-			user.Phone = storage.NullString(fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(user.GetPhone()))))
-			user.EmailChange = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(user.EmailChange)))
-			user.PhoneChange = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(user.PhoneChange)))
+			user.Email = storage.NullString(obfuscateFieldForSoftDelete(user.GetEmail()))
+			user.Phone = storage.NullString(obfuscateFieldForSoftDelete(user.GetPhone()))
+			user.EncryptedPassword = ""
+			user.EmailChange = obfuscateFieldForSoftDelete(user.EmailChange)
+			user.PhoneChange = obfuscateFieldForSoftDelete(user.PhoneChange)
 			now := time.Now()
 			user.DeletedAt = &now
-			if terr := tx.UpdateOnly(user, "email", "phone", "email_change", "phone_change", "deleted_at"); terr != nil {
+			if terr := tx.UpdateOnly(user, "email", "phone", "encrypted_password", "email_change", "phone_change", "deleted_at"); terr != nil {
 				return internalServerError("Error soft deleting user").WithInternalError(terr)
 			}
 
@@ -448,8 +454,8 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 			}
 			// set identity_data to {}
 			for _, identity := range identities {
-				identity.ProviderId = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(identity.ProviderId)))
-				if terr := tx.UpdateOnly(identity, "provider_id"); terr != nil {
+				identity.ID = obfuscateFieldForSoftDelete(identity.ID)
+				if terr := tx.UpdateOnly(identity, "id"); terr != nil {
 					return internalServerError("Error soft deleting identity id").WithInternalError(terr)
 				}
 				identityDataUpdates := map[string]interface{}{}
@@ -485,6 +491,11 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, map[string]interface{}{})
+}
+
+func obfuscateFieldForSoftDelete(field string) string {
+	softDeleteId, _ := crypto.GenerateNanoId(5)
+	return fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(field)))
 }
 
 func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) error {

@@ -434,15 +434,22 @@ func (ts *AdminTestSuite) TestAdminUserUpdateBannedUntilFailed() {
 	})
 }
 
-// TestAdminUserDelete tests API /admin/user route (DELETE)
+// TestAdminUserDelete tests API /admin/users route (DELETE)
 func (ts *AdminTestSuite) TestAdminUserDelete() {
 	type expected struct {
 		code int
 		err  error
 	}
-	signupParams := &SignupParams{Email: "test-delete@example.com", Password: "test", Data: map[string]interface{}{"name": "test"}, Provider: "email", Aud: ts.Config.JWT.Aud}
+	signupParams := &SignupParams{
+		Email:    "test-delete@example.com",
+		Password: "test",
+		Data:     map[string]interface{}{"name": "test"},
+		Provider: "email",
+		Aud:      ts.Config.JWT.Aud,
+	}
 	cases := []struct {
 		desc         string
+		body         map[string]interface{}
 		isSoftDelete string
 		isSSOUser    bool
 		expected     expected
@@ -452,35 +459,47 @@ func (ts *AdminTestSuite) TestAdminUserDelete() {
 			isSoftDelete: "",
 			isSSOUser:    false,
 			expected:     expected{code: http.StatusOK, err: models.UserNotFoundError{}},
+			body:         nil,
 		},
 		{
 			desc:         "Test admin delete user (hard deletion)",
 			isSoftDelete: "?is_soft_delete=false",
 			isSSOUser:    false,
 			expected:     expected{code: http.StatusOK, err: models.UserNotFoundError{}},
+			body: map[string]interface{}{
+				"should_soft_delete": false,
+			},
 		},
 		{
 			desc:         "Test admin delete user (soft deletion)",
 			isSoftDelete: "?is_soft_delete=true",
 			isSSOUser:    false,
 			expected:     expected{code: http.StatusOK, err: models.UserNotFoundError{}},
+			body: map[string]interface{}{
+				"should_soft_delete": true,
+			},
 		},
 		{
 			desc:         "Test admin delete user (soft deletion & sso user)",
 			isSoftDelete: "?is_soft_delete=true",
 			isSSOUser:    true,
 			expected:     expected{code: http.StatusBadRequest, err: nil},
+			body: map[string]interface{}{
+				"should_soft_delete": true,
+			},
 		},
 	}
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
 			u, err := ts.API.signupNewUser(context.Background(), ts.API.db, signupParams, c.isSSOUser)
 			require.NoError(ts.T(), err, "Error creating user")
 
 			// Setup request
 			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s"+c.isSoftDelete, u.ID), nil)
+			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
 
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 

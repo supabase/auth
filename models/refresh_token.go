@@ -102,11 +102,6 @@ func GetValidChildToken(tx *storage.Connection, token *RefreshToken) (*RefreshTo
 	return refreshToken, nil
 }
 
-// RevokeRefreshTokensByUser revokes all refresh tokens for a given user.
-func RevokeRefreshTokensByUser(tx *storage.Connection, userID uuid.UUID) error {
-	return tx.RawQuery("update "+(&pop.Model{Value: RefreshToken{}}).TableName()+" set revoked = true where user_id = ?;", userID).Exec()
-}
-
 func FindTokenBySessionID(tx *storage.Connection, sessionId *uuid.UUID) (*RefreshToken, error) {
 	refreshToken := &RefreshToken{}
 	err := tx.Q().Where("session_id = ?", sessionId).Order("created_at asc").First(refreshToken)

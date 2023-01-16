@@ -12,8 +12,7 @@ import (
 )
 
 type Identity struct {
-	ID           int        `json:"id" db:"id"`
-	ProviderId   string     `json:"provider_id" db:"provider_id"`
+	ID           string     `json:"id" db:"id"`
 	UserID       uuid.UUID  `json:"user_id" db:"user_id"`
 	IdentityData JSONMap    `json:"identity_data,omitempty" db:"identity_data"`
 	Provider     string     `json:"provider" db:"provider"`
@@ -36,7 +35,7 @@ func NewIdentity(user *User, provider string, identityData map[string]interface{
 	now := time.Now()
 
 	identity := &Identity{
-		ProviderId:   providerId.(string),
+		ID:           providerId.(string),
 		UserID:       user.ID,
 		IdentityData: identityData,
 		Provider:     provider,
@@ -61,10 +60,10 @@ func (i *Identity) IsForSSOProvider() bool {
 	return strings.HasPrefix(i.Provider, "sso:")
 }
 
-// FindIdentityById searches for an identity with the matching provider_id and provider given.
+// FindIdentityById searches for an identity with the matching id and provider given.
 func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider string) (*Identity, error) {
 	identity := &Identity{}
-	if err := tx.Q().Where("provider_id = ? AND provider = ?", providerId, provider).First(identity); err != nil {
+	if err := tx.Q().Where("id = ? AND provider = ?", providerId, provider).First(identity); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, IdentityNotFoundError{}
 		}
