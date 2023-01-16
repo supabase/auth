@@ -2,14 +2,17 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/crypto"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
@@ -27,6 +30,10 @@ type AdminUserParams struct {
 	UserMetaData map[string]interface{} `json:"user_metadata"`
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	BanDuration  string                 `json:"ban_duration"`
+}
+
+type adminUserDeleteParams struct {
+	ShouldSoftDelete bool `json:"should_soft_delete"`
 }
 
 type adminUserUpdateFactorParams struct {
@@ -374,14 +381,31 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, user)
 }
 
-// adminUserDelete delete a user
+// adminUserDelete deletes a user
 func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	db := a.db.WithContext(ctx)
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
 
-	err := db.Transaction(func(tx *storage.Connection) error {
+	if user.IsSSOUser {
+		return badRequestError("user should be removed via identity provider instead")
+	}
+
+	var err error
+	params := &adminUserDeleteParams{}
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, params); err != nil {
+			return badRequestError("Could not read params: %v", err)
+		}
+	} else {
+		params.ShouldSoftDelete = false
+	}
+
+	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserDeletedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
@@ -390,9 +414,76 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 			return internalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 
-		if terr := tx.Destroy(user); terr != nil {
-			return internalServerError("Database error deleting user").WithInternalError(terr)
+		if params.ShouldSoftDelete {
+			if user.DeletedAt != nil {
+				// user has been soft deleted already
+				return nil
+			}
+			user.Email = storage.NullString(obfuscateFieldForSoftDelete(user.GetEmail()))
+			user.Phone = storage.NullString(obfuscateFieldForSoftDelete(user.GetPhone()))
+			user.EncryptedPassword = ""
+			user.EmailChange = obfuscateFieldForSoftDelete(user.EmailChange)
+			user.PhoneChange = obfuscateFieldForSoftDelete(user.PhoneChange)
+			now := time.Now()
+			user.DeletedAt = &now
+			if terr := tx.UpdateOnly(user, "email", "phone", "encrypted_password", "email_change", "phone_change", "deleted_at"); terr != nil {
+				return internalServerError("Error soft deleting user").WithInternalError(terr)
+			}
+
+			// set raw_user_meta_data to {}
+			userMetaDataUpdates := map[string]interface{}{}
+			for k := range user.UserMetaData {
+				userMetaDataUpdates[k] = nil
+			}
+			if terr := user.UpdateUserMetaData(tx, userMetaDataUpdates); terr != nil {
+				return internalServerError("Error soft deleting user meta data").WithInternalError(terr)
+			}
+
+			// set raw_app_meta_data to {}
+			appMetaDataUpdates := map[string]interface{}{}
+			for k := range user.AppMetaData {
+				appMetaDataUpdates[k] = nil
+			}
+			if terr := user.UpdateAppMetaData(tx, appMetaDataUpdates); terr != nil {
+				return internalServerError("Error soft deleting app meta data").WithInternalError(terr)
+			}
+
+			identities, terr := models.FindIdentitiesByUserID(tx, user.ID)
+			if terr != nil {
+				return internalServerError("Error retrieving identities").WithInternalError(terr)
+			}
+			// set identity_data to {}
+			for _, identity := range identities {
+				identity.ID = obfuscateFieldForSoftDelete(identity.ID)
+				if terr := tx.UpdateOnly(identity, "id"); terr != nil {
+					return internalServerError("Error soft deleting identity id").WithInternalError(terr)
+				}
+				identityDataUpdates := map[string]interface{}{}
+				for k := range identity.IdentityData {
+					identityDataUpdates[k] = nil
+				}
+				if terr := identity.UpdateIdentityData(tx, identityDataUpdates); terr != nil {
+					return internalServerError("Error soft deleting identity data").WithInternalError(terr)
+				}
+			}
+			// hard delete all associated factors
+			if terr := models.DeleteFactorsByUserId(tx, user.ID); terr != nil {
+				return internalServerError("Error deleting user's factors").WithInternalError(terr)
+			}
+			// hard delete all associated sessions
+			if terr := models.Logout(tx, user.ID); terr != nil {
+				return internalServerError("Error deleting user's sessions").WithInternalError(terr)
+			}
+			// for backward compatibility: hard delete all associated refresh tokens
+			if terr = models.LogoutAllRefreshTokens(tx, user.ID); terr != nil {
+				return internalServerError("Error deleting user's refresh tokens").WithInternalError(terr)
+			}
+		} else {
+			if terr := tx.Destroy(user); terr != nil {
+				return internalServerError("Database error deleting user").WithInternalError(terr)
+			}
 		}
+
 		return nil
 	})
 	if err != nil {
@@ -400,6 +491,11 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, map[string]interface{}{})
+}
+
+func obfuscateFieldForSoftDelete(field string) string {
+	softDeleteId, _ := crypto.GenerateNanoId(5)
+	return fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(field)))
 }
 
 func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) error {

@@ -176,5 +176,11 @@ func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {
 		}
 	}
 	return updateFactorAssociatedSessions(tx, f.UserID, f.ID, AAL1.String())
+}
 
+func DeleteFactorsByUserId(tx *storage.Connection, userId uuid.UUID) error {
+	if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Factor{}}).TableName()+" WHERE user_id = ?", userId).Exec(); err != nil {
+		return err
+	}
+	return nil
 }
