@@ -381,11 +381,15 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, user)
 }
 
-// adminUserDelete delete a user
+// adminUserDelete deletes a user
 func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
+
+	if user.IsSSOUser {
+		return badRequestError("user should be removed via identity provider instead")
+	}
 
 	var err error
 	params := &adminUserDeleteParams{}
@@ -416,48 +420,57 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 			user.PhoneChange = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(user.PhoneChange)))
 			now := time.Now()
 			user.DeletedAt = &now
-			userMetaDataUpdates := map[string]interface{}{}
-			for k, v := range user.UserMetaData {
-				switch t := v.(type) {
-				case string:
-					userMetaDataUpdates[k] = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(t)))
-				case []byte:
-					userMetaDataUpdates[k] = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256(t))
-				}
-			}
 			if terr := tx.UpdateOnly(user, "email", "phone", "email_change", "phone_change", "deleted_at"); terr != nil {
 				return internalServerError("Error soft deleting user").WithInternalError(terr)
 			}
+
+			// set raw_user_meta_data to {}
+			userMetaDataUpdates := map[string]interface{}{}
+			for k := range user.UserMetaData {
+				userMetaDataUpdates[k] = nil
+			}
 			if terr := user.UpdateUserMetaData(tx, userMetaDataUpdates); terr != nil {
 				return internalServerError("Error soft deleting user meta data").WithInternalError(terr)
+			}
+
+			// set raw_app_meta_data to {}
+			appMetaDataUpdates := map[string]interface{}{}
+			for k := range user.AppMetaData {
+				appMetaDataUpdates[k] = nil
+			}
+			if terr := user.UpdateAppMetaData(tx, appMetaDataUpdates); terr != nil {
+				return internalServerError("Error soft deleting app meta data").WithInternalError(terr)
 			}
 
 			identities, terr := models.FindIdentitiesByUserID(tx, user.ID)
 			if terr != nil {
 				return internalServerError("Error retrieving identities").WithInternalError(terr)
 			}
-
+			// set identity_data to {}
 			for _, identity := range identities {
 				identity.ProviderId = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(identity.ProviderId)))
 				if terr := tx.UpdateOnly(identity, "provider_id"); terr != nil {
 					return internalServerError("Error soft deleting identity id").WithInternalError(terr)
 				}
 				identityDataUpdates := map[string]interface{}{}
-				for k, v := range identity.IdentityData {
-					switch t := v.(type) {
-					case string:
-						identityDataUpdates[k] = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(t)))
-					case []byte:
-						identityDataUpdates[k] = fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256(t))
-					}
+				for k := range identity.IdentityData {
+					identityDataUpdates[k] = nil
 				}
 				if terr := identity.UpdateIdentityData(tx, identityDataUpdates); terr != nil {
 					return internalServerError("Error soft deleting identity data").WithInternalError(terr)
 				}
 			}
-
-			if terr = models.RevokeRefreshTokensByUser(tx, user.ID); terr != nil {
-				return internalServerError("Error soft deleting refresh tokens").WithInternalError(terr)
+			// hard delete all associated factors
+			if terr := models.DeleteFactorsByUserId(tx, user.ID); terr != nil {
+				return internalServerError("Error deleting user's factors").WithInternalError(terr)
+			}
+			// hard delete all associated sessions
+			if terr := models.Logout(tx, user.ID); terr != nil {
+				return internalServerError("Error deleting user's sessions").WithInternalError(terr)
+			}
+			// for backward compatibility: hard delete all associated refresh tokens
+			if terr = models.LogoutAllRefreshTokens(tx, user.ID); terr != nil {
+				return internalServerError("Error deleting user's refresh tokens").WithInternalError(terr)
 			}
 		} else {
 			if terr := tx.Destroy(user); terr != nil {
