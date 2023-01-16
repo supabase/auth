@@ -19,6 +19,6 @@ BEGIN
       ALTER TABLE "{{ index .Options "Namespace" }}"."refresh_tokens" ADD CONSTRAINT refresh_tokens_parent_fkey FOREIGN KEY (parent) REFERENCES {{ index .Options "Namespace" }}.refresh_tokens("token");
   END IF;
 
-  CREATE INDEX IF NOT EXISTS refresh_tokens_parent_idx ON refresh_tokens USING btree (parent);
+  CREATE INDEX IF NOT EXISTS refresh_tokens_parent_idx ON "{{ index .Options "Namespace" }}"."refresh_tokens" USING btree (parent);
 END $$;
 
