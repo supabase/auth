@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -435,18 +436,67 @@ func (ts *AdminTestSuite) TestAdminUserUpdateBannedUntilFailed() {
 
 // TestAdminUserDelete tests API /admin/user route (DELETE)
 func (ts *AdminTestSuite) TestAdminUserDelete() {
-	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
-	require.NoError(ts.T(), err, "Error making new user")
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+	type expected struct {
+		code int
+		err  error
+	}
+	signupParams := &SignupParams{Email: "test-delete@example.com", Password: "test", Data: map[string]interface{}{"name": "test"}, Provider: "email", Aud: ts.Config.JWT.Aud}
+	cases := []struct {
+		desc         string
+		isSoftDelete string
+		isSSOUser    bool
+		expected     expected
+	}{
+		{
+			desc:         "Test admin delete user (default)",
+			isSoftDelete: "",
+			isSSOUser:    false,
+			expected:     expected{code: http.StatusOK, err: models.UserNotFoundError{}},
+		},
+		{
+			desc:         "Test admin delete user (hard deletion)",
+			isSoftDelete: "?is_soft_delete=false",
+			isSSOUser:    false,
+			expected:     expected{code: http.StatusOK, err: models.UserNotFoundError{}},
+		},
+		{
+			desc:         "Test admin delete user (soft deletion)",
+			isSoftDelete: "?is_soft_delete=true",
+			isSSOUser:    false,
+			expected:     expected{code: http.StatusOK, err: models.UserNotFoundError{}},
+		},
+		{
+			desc:         "Test admin delete user (soft deletion & sso user)",
+			isSoftDelete: "?is_soft_delete=true",
+			isSSOUser:    true,
+			expected:     expected{code: http.StatusBadRequest, err: nil},
+		},
+	}
 
-	// Setup request
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s", u.ID), nil)
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			u, err := ts.API.signupNewUser(context.Background(), ts.API.db, signupParams, c.isSSOUser)
+			require.NoError(ts.T(), err, "Error creating user")
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+			// Setup request
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s"+c.isSoftDelete, u.ID), nil)
 
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), c.expected.code, w.Code)
+
+			if c.isSSOUser {
+				u, err = models.FindUserByID(ts.API.db, u.ID)
+				require.NotNil(ts.T(), u)
+			} else {
+				_, err = models.FindUserByEmailAndAudience(ts.API.db, signupParams.Email, ts.Config.JWT.Aud)
+			}
+			require.Equal(ts.T(), c.expected.err, err)
+		})
+	}
+
 }
 
 func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
