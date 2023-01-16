@@ -124,6 +124,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	config := a.config
 
 	providerType := getExternalProviderType(ctx)
+	// isImplicit := getFlowType(ctx)
 	var userData *provider.UserProvidedData
 	var providerAccessToken string
 	var providerRefreshToken string
@@ -177,6 +178,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	}
 
 	rurl := a.getExternalRedirectURL(r)
+	// if isImplict  {
+	// Do everything below
 	if token != nil {
 		q := url.Values{}
 		q.Set("provider_token", providerAccessToken)
@@ -194,10 +197,38 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	} else {
 		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
 	}
-
+	// }  till here - otherwise you can ignore
+	// Change this line to return a JSON response with AuthCode
 	http.Redirect(w, r, rurl, http.StatusFound)
 	return nil
 }
+
+// Logic for PKCE token verifier, we do not support `plain` unless there are special requests from enterprise customers
+// func (a *API) TokenVerifier() {
+//  Decode inputParams
+//  if(SHA256(params.CodeChallenge)) != base64.StdEncoding.EncodeToString(Sum256(ASCII(params.code_verifier))) {
+//     return forbiddenError("code verifier does not match code challenge")
+//  }
+// 	if token != nil {
+// 		q := url.Values{}
+// 		q.Set("provider_token", providerAccessToken)
+// 		// Because not all providers give out a refresh token
+// 		// See corresponding OAuth2 spec: <https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1>
+// 		if providerRefreshToken != "" {
+// 			q.Set("provider_refresh_token", providerRefreshToken)
+// 		}
+
+// 		rurl = token.AsRedirectURL(rurl, q)
+
+// 		if err := a.setCookieTokens(config, token, false, w); err != nil {
+// 			return internalServerError("Failed to set JWT cookie. %s", err)
+// 		}
+// 	} else {
+// 		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
+// 	}
+// 	http.Redirect(w, r, rurl, http.StatusFound)
+//	return nil
+// }
 
 func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
 	ctx := r.Context()
