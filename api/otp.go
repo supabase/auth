@@ -92,53 +92,61 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	var isNewUser bool
 	aud := a.requestAud(ctx, r)
+	user, err := models.FindUserByPhoneAndAudience(db, params.Phone, aud)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			isNewUser = true
+		} else {
+			return internalServerError("Database error finding user").WithInternalError(err)
+		}
+	}
+	if user != nil {
+		isNewUser = !user.IsPhoneConfirmed()
+	}
+	if isNewUser {
+		// User either doesn't exist or hasn't completed the signup process.
+		// Sign them up with temporary password.
+		password, err := password.Generate(64, 10, 0, false, true)
+		if err != nil {
+			internalServerError("error creating user").WithInternalError(err)
+		}
 
-	user, uerr := models.FindUserByPhoneAndAudience(db, params.Phone, aud)
-	if uerr != nil {
-		// if user does not exists, sign up the user
-		if models.IsNotFoundError(uerr) {
-			password, err := password.Generate(64, 10, 0, false, true)
-			if err != nil {
-				internalServerError("error creating user").WithInternalError(err)
+		signUpParams := &SignupParams{
+			Phone:    params.Phone,
+			Password: password,
+			Data:     params.Data,
+		}
+		newBodyContent, err := json.Marshal(signUpParams)
+		if err != nil {
+			return badRequestError("Could not parse metadata: %v", err)
+		}
+		r.Body = io.NopCloser(bytes.NewReader(newBodyContent))
+
+		fakeResponse := &responseStub{}
+
+		if config.Sms.Autoconfirm {
+			// signups are autoconfirmed, send otp after signup
+			if err := a.Signup(fakeResponse, r); err != nil {
+				return err
 			}
 
 			signUpParams := &SignupParams{
-				Phone:    params.Phone,
-				Password: password,
-				Data:     params.Data,
+				Phone: params.Phone,
 			}
 			newBodyContent, err := json.Marshal(signUpParams)
 			if err != nil {
 				return badRequestError("Could not parse metadata: %v", err)
 			}
 			r.Body = io.NopCloser(bytes.NewReader(newBodyContent))
-
-			fakeResponse := &responseStub{}
-
-			if config.Sms.Autoconfirm {
-				// signups are autoconfirmed, send otp after signup
-				if err := a.Signup(fakeResponse, r); err != nil {
-					return err
-				}
-
-				signUpParams := &SignupParams{
-					Phone: params.Phone,
-				}
-				newBodyContent, err := json.Marshal(signUpParams)
-				if err != nil {
-					return badRequestError("Could not parse metadata: %v", err)
-				}
-				r.Body = io.NopCloser(bytes.NewReader(newBodyContent))
-				return a.SmsOtp(w, r)
-			}
-
-			if err := a.Signup(fakeResponse, r); err != nil {
-				return err
-			}
-			return sendJSON(w, http.StatusOK, make(map[string]string))
+			return a.SmsOtp(w, r)
 		}
-		return internalServerError("Database error finding user").WithInternalError(uerr)
+
+		if err := a.Signup(fakeResponse, r); err != nil {
+			return err
+		}
+		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
