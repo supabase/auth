@@ -495,7 +495,7 @@ func (ts *AdminTestSuite) TestAdminUserDelete() {
 			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
 			u, err := ts.API.signupNewUser(context.Background(), ts.API.db, signupParams, c.isSSOUser)
-			require.NoError(ts.T(), err, "Error creating user")
+			require.NoError(ts.T(), err)
 
 			// Setup request
 			w := httptest.NewRecorder()
@@ -515,7 +515,68 @@ func (ts *AdminTestSuite) TestAdminUserDelete() {
 			require.Equal(ts.T(), c.expected.err, err)
 		})
 	}
+}
 
+func (ts *AdminTestSuite) TestAdminUserSoftDeletion() {
+	// create user
+	u, err := models.NewUser("123456789", "test@example.com", "secret", ts.Config.JWT.Aud, map[string]interface{}{"name": "test"})
+	require.NoError(ts.T(), err)
+	u.ConfirmationToken = "some_token"
+	u.RecoveryToken = "some_token"
+	u.EmailChangeTokenCurrent = "some_token"
+	u.EmailChangeTokenNew = "some_token"
+	u.PhoneChangeToken = "some_token"
+	u.AppMetaData = map[string]interface{}{
+		"provider": "email",
+	}
+	require.NoError(ts.T(), ts.API.db.Create(u))
+
+	// create user identities
+	_, err = ts.API.createNewIdentity(ts.API.db, u, "email", map[string]interface{}{
+		"sub":   "123456",
+		"email": "test@example.com",
+	})
+	require.NoError(ts.T(), err)
+	_, err = ts.API.createNewIdentity(ts.API.db, u, "github", map[string]interface{}{
+		"sub":   "234567",
+		"email": "test@example.com",
+	})
+	require.NoError(ts.T(), err)
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"should_soft_delete": true,
+	}))
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// get soft-deleted user from db
+	deletedUser, err := models.FindUserByID(ts.API.db, u.ID)
+	require.NoError(ts.T(), err)
+
+	require.Empty(ts.T(), deletedUser.ConfirmationToken)
+	require.Empty(ts.T(), deletedUser.RecoveryToken)
+	require.Empty(ts.T(), deletedUser.EmailChangeTokenCurrent)
+	require.Empty(ts.T(), deletedUser.EmailChangeTokenNew)
+	require.Empty(ts.T(), deletedUser.EncryptedPassword)
+	require.Empty(ts.T(), deletedUser.PhoneChangeToken)
+	require.Empty(ts.T(), deletedUser.UserMetaData)
+	require.Empty(ts.T(), deletedUser.AppMetaData)
+	require.NotEmpty(ts.T(), deletedUser.DeletedAt)
+	require.NotEmpty(ts.T(), deletedUser.GetEmail())
+
+	// get soft-deleted user's identity from db
+	deletedIdentities, err := models.FindIdentitiesByUserID(ts.API.db, deletedUser.ID)
+	require.NoError(ts.T(), err)
+
+	for _, identity := range deletedIdentities {
+		require.Empty(ts.T(), identity.IdentityData)
+	}
 }
 
 func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {

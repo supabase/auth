@@ -2,7 +2,9 @@ package models
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 
@@ -626,4 +628,101 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection) error {
 	u.Identities = confirmedProviders
 
 	return nil
+}
+
+// SoftDeleteUser performs a soft deletion on the user by obfuscating and clearing certain fields
+func (u *User) SoftDeleteUser(tx *storage.Connection) error {
+	u.Email = storage.NullString(obfuscateFieldForSoftDelete(u.GetEmail()))
+	u.Phone = storage.NullString(obfuscateFieldForSoftDelete(u.GetPhone()))
+	u.EmailChange = obfuscateFieldForSoftDelete(u.EmailChange)
+	u.PhoneChange = obfuscateFieldForSoftDelete(u.PhoneChange)
+	u.EncryptedPassword = ""
+	u.ConfirmationToken = ""
+	u.RecoveryToken = ""
+	u.EmailChangeTokenCurrent = ""
+	u.EmailChangeTokenNew = ""
+	u.PhoneChangeToken = ""
+
+	// set deleted_at time
+	now := time.Now()
+	u.DeletedAt = &now
+
+	if err := tx.UpdateOnly(
+		u,
+		"email",
+		"phone",
+		"encrypted_password",
+		"email_change",
+		"phone_change",
+		"confirmation_token",
+		"recovery_token",
+		"email_change_token_current",
+		"email_change_token_new",
+		"phone_change_token",
+		"deleted_at",
+	); err != nil {
+		return err
+	}
+
+	// set raw_user_meta_data to {}
+	userMetaDataUpdates := map[string]interface{}{}
+	for k := range u.UserMetaData {
+		userMetaDataUpdates[k] = nil
+	}
+
+	if err := u.UpdateUserMetaData(tx, userMetaDataUpdates); err != nil {
+		return err
+	}
+
+	// set raw_app_meta_data to {}
+	appMetaDataUpdates := map[string]interface{}{}
+	for k := range u.AppMetaData {
+		appMetaDataUpdates[k] = nil
+	}
+
+	if err := u.UpdateAppMetaData(tx, appMetaDataUpdates); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// SoftDeleteUserIdentities performs a soft deletion on all identities associated to a user
+func (u *User) SoftDeleteUserIdentities(tx *storage.Connection) error {
+	identities, err := FindIdentitiesByUserID(tx, u.ID)
+	if err != nil {
+		return err
+	}
+
+	// set identity_data to {}
+	for _, identity := range identities {
+		identityDataUpdates := map[string]interface{}{}
+		for k := range identity.IdentityData {
+			identityDataUpdates[k] = nil
+		}
+		if err := identity.UpdateIdentityData(tx, identityDataUpdates); err != nil {
+			return err
+		}
+		// updating the identity.ID has to happen last since the primary key is on (provider, id)
+		// we use RawQuery here instead of UpdateOnly because UpdateOnly relies on the primary key of Identity
+		if err := tx.RawQuery(
+			"update "+
+				(&pop.Model{Value: Identity{}}).TableName()+
+				" set id = ? where id = ? and provider = ?",
+			obfuscateFieldForSoftDelete(identity.ID),
+			identity.ID,
+			identity.Provider,
+		).Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func obfuscateFieldForSoftDelete(field string) string {
+	if field != "" {
+		softDeleteId, _ := crypto.GenerateNanoId(5)
+		return fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(field)))
+	}
+	return field
 }
