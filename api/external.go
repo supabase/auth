@@ -90,6 +90,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 			// See https://workos.com/docs/reference/sso/authorize/get
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("provider", query.Get(key)))
 		} else {
+			// Joel - What happens if we include additional params here?
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam(key, query.Get(key)))
 		}
 	}
@@ -102,6 +103,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 			return internalServerError("Error storing request token in session").WithInternalError(err)
 		}
 	default:
+		// Grant Type
 		authURL = p.AuthCodeURL(tokenString, authUrlParams...)
 	}
 

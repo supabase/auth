@@ -20,6 +20,7 @@ import (
 	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/utilities"
 	"github.com/pquerna/otp/totp"
+	"github.com/mitchellh/mapstructure"
 )
 
 const DefaultQRSize = 3
@@ -55,6 +56,8 @@ type ChallengeFactorResponse struct {
 type UnenrollFactorResponse struct {
 	ID uuid.UUID `json:"id"`
 }
+
+
 
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -170,8 +173,8 @@ func (a *API) EnrollWebAuthnFactor(w http.ResponseWriter, r *http.Request) error
 
 	web, err := webauthn.New(&webauthn.Config{
 		RPDisplayName: "Go Webauthn",                        // Display Name for your site
-		RPID:          "go-webauthn.local",                  // Generally the FQDN for your site
-		RPOrigin:      "https://login.go-webauthn.local",    // The origin URL for WebAuthn requests
+		RPID:          "2175-203-116-4-74.ap.ngrok.io",                  // Generally the FQDN for your site
+		RPOrigin:      "https://2175-203-116-4-74.ap.ngrok.io",    // The origin URL for WebAuthn requests
 		RPIcon:        "https://go-webauthn.local/logo.png", // Optional icon URL for your site
 	})
 	if err != nil {
@@ -263,10 +266,9 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 	// TODO(Joel): replace hardcoded string with actual value
 	if factor.FactorType == "webauthn" {
-		err := a.ChallengeWebAuthnFactor(w, r)
-		if err != nil {
-			return err
-		}
+		return a.ChallengeWebAuthnFactor(w, r)
+		
+
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -299,23 +301,23 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 	ctx := r.Context()
 	user := getUser(ctx)
 	session := getSession(ctx)
+	factor := getFactor(ctx)
+	ipAddress := utilities.GetIPAddress(r)
+	challenge, err := models.NewChallenge(factor, ipAddress)
 	web := &webauthn.WebAuthn{}
 
 	// TODO(Joel): Substitute this with a webauthn config read from the db
-	webMarshaled, err := storage.GetFromSession("webauthn", r)
-	if err != nil {
-		return err
-	}
+	webMarshaled := session.WebauthnConfiguration
 
-	err = json.Unmarshal([]byte(webMarshaled), web)
+	err = mapstructure.Decode(webMarshaled, web)
 	if err != nil {
 		return err
 	}
 
 	// Registration session
-	registrationSession := session.WebauthnConfiguration
-
-	if registrationSession != nil {
+	registrationSession := session.WebauthnRegistrationSession
+	// TODO(Joel) - Properly check if registrationSession is empty,
+	if registrationSession == nil {
 		// Registration has been initiated
 		options, sessionData, err := web.BeginLogin(user)
 		if err != nil {
@@ -330,6 +332,7 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 		return sendJSON(w, http.StatusOK, options)
 
 	} else {
+
 		options, sessionData, err := web.BeginRegistration(user)
 		if err != nil {
 			return err
@@ -342,7 +345,27 @@ func (a *API) ChallengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 			return nil
 		})
 
-		return sendJSON(w, http.StatusOK, options)
+		// Registration case
+	err = a.db.Transaction(func(tx *storage.Connection) error {
+		if terr := tx.Create(challenge); terr != nil {
+			return terr
+		}
+
+		if terr := models.NewAuditLogEntry(r, tx, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
+			"factor_id":     factor.ID,
+			"factor_status": factor.Status,
+		}); terr != nil {
+			return terr
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+		fmt.Printf("reached\n")
+		fmt.Printf("%+v\n", options)
+
+		return sendJSON(w, http.StatusOK,*options)
 	}
 
 }
@@ -455,49 +478,44 @@ func (a *API) VerifyWebAuthnFactor(w http.ResponseWriter, r *http.Request) error
 	sessionData := &webauthn.SessionData{}
 	ctx := r.Context()
 	user := getUser(ctx)
-	// Get the session data stored from the function above
-	// TODO(Joel): Refactor unmarshalling of webauthn into a single function on storage
+	session := getSession(ctx)
+
 	web := &webauthn.WebAuthn{}
+	webMarshaled := session.WebauthnConfiguration
 
-	webMarshaled, err := storage.GetFromSession("webauthn", r)
-	if err != nil {
-		return err
-	}
-
-	err = json.Unmarshal([]byte(webMarshaled), web)
-	if err != nil {
-		return err
-	}
-	sessionDataMarshaled, err := storage.GetFromSession("registration-session", r)
-	if err != nil {
-		fmt.Println("registration session not available")
-		return err
-	}
-	err = json.Unmarshal([]byte(sessionDataMarshaled), sessionData)
+	err := mapstructure.Decode(webMarshaled, web)
 	if err != nil {
 		return err
 	}
 
+
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return internalServerError("Could not read body").WithInternalError(err)
+	}
+	params := &protocol.ParsedCredentialCreationData{}
+
+	if err := json.Unmarshal(body, params); err != nil {
+		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
+	}
+	fmt.Println(params)
 	// Login Session:
-	// loginSessionData, err := storage.GetFromSession( "login-session", r)
-	// if err != nil {
-	// 	fmt.Println("login session not initiated")
-	// }
+	loginSession := session.WebauthnLoginSession
+	registrationSession := session.WebauthnRegistrationSession
 
-	// // TODO(Joel): Reshape body into creationresponse
-	// parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
-	// credential, err := web.CreateCredential(&user, sessionData, parsedResponse)
-
-	/**
-	  type ParsedCredentialCreationData struct {
+	parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
+	credential, err := web.CreateCredential(user, *sessionData, parsedResponse)
+	fmt.Println(credential)
+    /**
+	type ParsedCredentialCreationData struct {
 	ParsedPublicKeyCredential
 	Response ParsedAttestationResponse
 	Raw      CredentialCreationResponse
 	}
-	*/
-	// if registrationSession != nil {
+	**/
 
-	parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
+	if registrationSession != nil {
+		parsedResponse, err := protocol.ParseCredentialCreationResponseBody(r.Body)
 	if err != nil {
 		return err
 	}
@@ -507,13 +525,17 @@ func (a *API) VerifyWebAuthnFactor(w http.ResponseWriter, r *http.Request) error
 		return err
 	}
 	fmt.Println(credential)
-	// } else if loginSession != nil {
-	//   parsedResponse, err := protocol.ParseCredentialRequestResponseBody(r.Body)
-	//   credential, err := webauthn.ValidateLogin(&user, sessionData, parsedResponse)//
-	// } else {
-	//   return internalServerError("Please initiate a webauthn session")
-	// }
-	//
+	} else if loginSession != nil {
+		parsedResponse, err := protocol.ParseCredentialRequestResponseBody(r.Body)
+		if err != nil {
+			return err
+		}
+		credential, err := web.ValidateLogin(user, *sessionData, parsedResponse)
+		fmt.Println(credential)
+	} else {
+		return internalServerError("Please initiate a webauthn session")
+	}
+
 	// if err != nil {
 	//	 Store the credential object
 	// }
