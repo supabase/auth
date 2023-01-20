@@ -414,6 +414,16 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 		return nil, err
 	}
 
+	// an account with a previously unconfirmed email + password
+	// combination or phone may exist. so now that there is an
+	// OAuth identity bound to this user, and since they have not
+	// confirmed their email or phone, they are unaware that a
+	// potentially malicious door exists into their account; thus
+	// the password and phone needs to be removed.
+	if err = user.RemoveUnconfirmedIdentities(tx); err != nil {
+		return nil, internalServerError("Error updating user").WithInternalError(err)
+	}
+
 	// confirm because they were able to respond to invite email
 	if err := user.Confirm(tx); err != nil {
 		return nil, err
