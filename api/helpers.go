@@ -183,19 +183,19 @@ func (no noLocalTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 			host, _, err := net.SplitHostPort(addr)
 			if err != nil {
 				cancel()
-				fmt.Printf("Canceleing dur to error in addr parsing %v", err)
+				fmt.Printf("Cancelling due to error in addr parsing %v", err)
 				return
 			}
 			ip := net.ParseIP(host)
 			if ip == nil {
 				cancel()
-				fmt.Printf("Canceleing dur to error in ip parsing %v", host)
+				fmt.Printf("Cancelling due to error in ip parsing %v", host)
 				return
 			}
 
 			if isPrivateIP(ip) {
 				cancel()
-				fmt.Println("Canceleing dur to private ip range")
+				fmt.Println("Cancelling due to private ip range")
 				return
 			}
 
@@ -217,12 +217,6 @@ func SafeRoundtripper(trans http.RoundTripper, log logrus.FieldLogger) http.Roun
 	}
 
 	return ret
-}
-
-func SafeHTTPClient(client *http.Client, log logrus.FieldLogger) *http.Client {
-	client.Transport = SafeRoundtripper(client.Transport, log)
-
-	return client
 }
 
 func isStringInSlice(checkValue string, list []string) bool {
