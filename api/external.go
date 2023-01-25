@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	b64 "encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -223,11 +221,15 @@ func (a *API) TokenVerifier(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
+	providerType := getExternalProviderType(ctx)
+
 	params := &TokenVerifierParams{}
 	body, err := getBodyBytes(r)
 	var userData *provider.UserProvidedData
 	var providerAccessToken string
 	var providerRefreshToken string
+	var grantParams models.GrantParams
+
 	if err != nil {
 		return internalServerError("Could not read body").WithInternalError(err)
 	}
@@ -236,12 +238,12 @@ func (a *API) TokenVerifier(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
-	if sha256.Sum256([]byte(params.CodeChallenge)) != b64.StdEncoding.EncodeToString([]byte(sha256.Sum256([]byte(params.CodeVerifier)))) {
-		return forbiddenError("code verifier does not match code challenge")
-	}
+	// if sha256.Sum256([]byte(params.CodeChallenge)) != b64.StdEncoding.EncodeToString([]byte(sha256.Sum256([]byte(params.CodeVerifier)))) {
+	// 	return forbiddenError("code verifier does not match code challenge")
+	// }
 	var user *models.User
 	var token *AccessTokenResponse
-	err := db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		inviteToken := getInviteToken(ctx)
 		if inviteToken != "" {
