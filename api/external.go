@@ -2,6 +2,9 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	b64 "encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -35,8 +38,14 @@ type ExternalSignupParams struct {
 	Code     string `json:"code"`
 }
 
+type TokenVerifierParams struct {
+	CodeChallenge string `json:"code_challenge"`
+	CodeVerifier  string `json:"code_verifier"`
+}
+
 // ExternalProviderRedirect redirects the request to the corresponding oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
+	const codeChallenge = "code_challenge"
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
@@ -44,6 +53,11 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	query := r.URL.Query()
 	providerType := query.Get("provider")
 	scopes := query.Get("scopes")
+	challenge := query.Get(codeChallenge)
+	err := storage.StoreInSession(codeChallenge, challenge, r, w)
+	if err != nil {
+		return internalServerError("Error storing code challenge in session").WithInternalError(err)
+	}
 
 	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
@@ -85,6 +99,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
 	query.Del("scopes")
 	query.Del("provider")
+	query.Del("code_challenge")
 	for key := range query {
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get
@@ -178,8 +193,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	}
 
 	rurl := a.getExternalRedirectURL(r)
-	// if isImplict  {
-	// Do everything below
+	// if isImplict do everything below
 	if token != nil {
 		q := url.Values{}
 		q.Set("provider_token", providerAccessToken)
@@ -203,32 +217,79 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
-// Logic for PKCE token verifier, we do not support `plain` unless there are special requests from enterprise customers
-// func (a *API) TokenVerifier() {
-//  Decode inputParams
-//  if(SHA256(params.CodeChallenge)) != base64.StdEncoding.EncodeToString(Sum256(ASCII(params.code_verifier))) {
-//     return forbiddenError("code verifier does not match code challenge")
-//  }
-// 	if token != nil {
-// 		q := url.Values{}
-// 		q.Set("provider_token", providerAccessToken)
-// 		// Because not all providers give out a refresh token
-// 		// See corresponding OAuth2 spec: <https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1>
-// 		if providerRefreshToken != "" {
-// 			q.Set("provider_refresh_token", providerRefreshToken)
-// 		}
+// We don't support plain for now
+func (a *API) TokenVerifier(w http.ResponseWriter, r *http.Request) error {
+	// TODO(Joel): Decide if these should be query params or code verifiers
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+	config := a.config
+	params := &TokenVerifierParams{}
+	body, err := getBodyBytes(r)
+	var userData *provider.UserProvidedData
+	var providerAccessToken string
+	var providerRefreshToken string
+	if err != nil {
+		return internalServerError("Could not read body").WithInternalError(err)
+	}
 
-// 		rurl = token.AsRedirectURL(rurl, q)
+	err = json.Unmarshal(body, params)
+	if err != nil {
+		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
+	}
+	if sha256.Sum256([]byte(params.CodeChallenge)) != b64.StdEncoding.EncodeToString([]byte(sha256.Sum256([]byte(params.CodeVerifier)))) {
+		return forbiddenError("code verifier does not match code challenge")
+	}
+	var user *models.User
+	var token *AccessTokenResponse
+	err := db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		inviteToken := getInviteToken(ctx)
+		if inviteToken != "" {
+			if user, terr = a.processInvite(r, ctx, tx, userData, inviteToken, providerType); terr != nil {
+				return terr
+			}
+		} else {
+			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
+				if errors.Is(terr, errReturnNil) {
+					return nil
+				}
 
-// 		if err := a.setCookieTokens(config, token, false, w); err != nil {
-// 			return internalServerError("Failed to set JWT cookie. %s", err)
-// 		}
-// 	} else {
-// 		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
-// 	}
-// 	http.Redirect(w, r, rurl, http.StatusFound)
-//	return nil
-// }
+				return terr
+			}
+		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+
+		if terr != nil {
+			return oauthError("server_error", terr.Error())
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	rurl := a.getExternalRedirectURL(r)
+	if token != nil {
+		q := url.Values{}
+		q.Set("provider_token", providerAccessToken)
+		// Because not all providers give out a refresh token
+		// See corresponding OAuth2 spec: <https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1>
+		if providerRefreshToken != "" {
+			q.Set("provider_refresh_token", providerRefreshToken)
+		}
+
+		rurl = token.AsRedirectURL(rurl, q)
+
+		if err := a.setCookieTokens(config, token, false, w); err != nil {
+			return internalServerError("Failed to set JWT cookie. %s", err)
+		}
+	} else {
+
+		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
+	}
+	http.Redirect(w, r, rurl, http.StatusFound)
+	return nil
+}
 
 func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
 	ctx := r.Context()
