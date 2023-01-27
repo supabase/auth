@@ -81,7 +81,7 @@ func NewKakaoProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	oauthScopes := []string{
 		"account_email",
 		"profile_image",
-		"profile_nickname" ,
+		"profile_nickname",
 	}
 
 	if scopes != "" {
