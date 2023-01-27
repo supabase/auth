@@ -2,17 +2,14 @@ package api
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"regexp"
-	"time"
 
-	"github.com/didip/tollbooth/v5"
-	"github.com/didip/tollbooth/v5/limiter"
 	"github.com/go-chi/chi"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/mailer"
 	"github.com/netlify/gotrue/observability"
-	"github.com/netlify/gotrue/storage"
 	"github.com/rs/cors"
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
@@ -28,14 +25,13 @@ var bearerRegexp = regexp.MustCompile(`^(?:B|b)earer (\S+$)`)
 // API is the main REST API
 type API struct {
 	handler http.Handler
-	db      *storage.Connection
-	config  *conf.GlobalConfiguration
+	*Tenant
 	version string
 }
 
 // NewAPI instantiates a new REST API
-func NewAPI(globalConfig *conf.GlobalConfiguration, db *storage.Connection) *API {
-	return NewAPIWithVersion(context.Background(), globalConfig, db, defaultVersion)
+func NewAPI(globalConfig *conf.GlobalConfiguration) *API {
+	return NewAPIWithVersion(context.Background(), globalConfig, defaultVersion)
 }
 
 func (a *API) deprecationNotices(ctx context.Context) {
@@ -53,13 +49,15 @@ func (a *API) deprecationNotices(ctx context.Context) {
 }
 
 // NewAPIWithVersion creates a new REST API using the specified version
-func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
-	api := &API{config: globalConfig, db: db, version: version}
-
-	api.deprecationNotices(ctx)
-
+func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfiguration, version string) *API {
 	xffmw, _ := xff.Default()
 	logger := observability.NewStructuredLogger(logrus.StandardLogger())
+	// in single-tenant mode, there's only 1 tenant so we can just use the config loaded from file
+	tenant, err := NewTenant(globalConfig)
+	if err != nil {
+		log.Fatalf("Failed to load tenant: %+v", err)
+	}
+	api := &API{Tenant: tenant, version: version}
 
 	r := newRouter()
 	r.Use(addRequestID(globalConfig))
@@ -98,7 +96,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		r.Get("/authorize", api.ExternalProviderRedirect)
 
-		sharedLimiter := api.limitEmailOrPhoneSentHandler()
+		sharedLimiter := api.limitEmailOrPhoneSentHandler
 		r.With(sharedLimiter).With(api.requireAdminCredentials).Post("/invite", api.Invite)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/signup", api.Signup)
 		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
@@ -106,19 +104,9 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
 
-		r.With(api.limitHandler(
-			// Allow requests at the specified rate per 5 minutes.
-			tollbooth.NewLimiter(api.config.RateLimitTokenRefresh/(60*5), &limiter.ExpirableOptions{
-				DefaultExpirationTTL: time.Hour,
-			}).SetBurst(30),
-		)).With(api.verifyCaptcha).Post("/token", api.Token)
+		r.With(api.limitHandler("token")).With(api.verifyCaptcha).Post("/token", api.Token)
 
-		r.With(api.limitHandler(
-			// Allow requests at the specified rate per 5 minutes.
-			tollbooth.NewLimiter(api.config.RateLimitVerify/(60*5), &limiter.ExpirableOptions{
-				DefaultExpirationTTL: time.Hour,
-			}).SetBurst(30),
-		)).Route("/verify", func(r *router) {
+		r.With(api.limitHandler("verify")).Route("/verify", func(r *router) {
 			r.Get("/", api.Verify)
 			r.Post("/", api.Verify)
 		})
@@ -139,14 +127,8 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Route("/{factor_id}", func(r *router) {
 				r.Use(api.loadFactor)
 
-				r.With(api.limitHandler(
-					tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
-						DefaultExpirationTTL: time.Minute,
-					}).SetBurst(30))).Post("/verify", api.VerifyFactor)
-				r.With(api.limitHandler(
-					tollbooth.NewLimiter(api.config.MFA.RateLimitChallengeAndVerify/60, &limiter.ExpirableOptions{
-						DefaultExpirationTTL: time.Minute,
-					}).SetBurst(30))).Post("/challenge", api.ChallengeFactor)
+				r.With(api.limitHandler("mfa/verify")).Post("/verify", api.VerifyFactor)
+				r.With(api.limitHandler("mfa/challenge")).Post("/challenge", api.ChallengeFactor)
 				r.Delete("/", api.UnenrollFactor)
 
 			})
@@ -154,22 +136,12 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		if api.config.SAML.Enabled {
 			r.Route("/sso", func(r *router) {
-				r.With(api.limitHandler(
-					// Allow requests at the specified rate per 5 minutes.
-					tollbooth.NewLimiter(api.config.RateLimitSso/(60*5), &limiter.ExpirableOptions{
-						DefaultExpirationTTL: time.Hour,
-					}).SetBurst(30),
-				)).With(api.verifyCaptcha).Post("/", api.SingleSignOn)
+				r.With(api.limitHandler("sso")).With(api.verifyCaptcha).Post("/", api.SingleSignOn)
 
 				r.Route("/saml", func(r *router) {
 					r.Get("/metadata", api.SAMLMetadata)
 
-					r.With(api.limitHandler(
-						// Allow requests at the specified rate per 5 minutes.
-						tollbooth.NewLimiter(api.config.SAML.RateLimitAssertion/(60*5), &limiter.ExpirableOptions{
-							DefaultExpirationTTL: time.Hour,
-						}).SetBurst(30),
-					)).Post("/acs", api.SAMLACS)
+					r.With(api.limitHandler("sso/assertion")).Post("/acs", api.SAMLACS)
 				})
 			})
 		}

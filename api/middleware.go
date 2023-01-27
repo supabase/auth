@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/security"
 
 	"github.com/didip/tollbooth/v5"
-	"github.com/didip/tollbooth/v5/limiter"
 	jwt "github.com/golang-jwt/jwt"
 )
 
@@ -46,9 +44,10 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
+func (a *API) limitHandler(rateLimiterType string) middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		c := req.Context()
+		lmt := a.limiters[rateLimiterType]
 
 		if limitHeader := a.config.RateLimitHeader; limitHeader != "" {
 			key := req.Header.Get(limitHeader)
@@ -68,53 +67,42 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	}
 }
 
-func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
-	// limit per hour
-	emailFreq := a.config.RateLimitEmailSent / (60 * 60)
-	smsFreq := a.config.RateLimitSmsSent / (60 * 60)
+func (a *API) limitEmailOrPhoneSentHandler(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	c := req.Context()
+	config := a.config
+	emailLimiter := a.limiters["email"]
+	phoneLimiter := a.limiters["sms"]
 
-	emailLimiter := tollbooth.NewLimiter(emailFreq, &limiter.ExpirableOptions{
-		DefaultExpirationTTL: time.Hour,
-	}).SetBurst(int(a.config.RateLimitEmailSent)).SetMethods([]string{"PUT", "POST"})
+	if (config.External.Email.Enabled && !config.Mailer.Autoconfirm) || (config.External.Phone.Enabled) {
+		if req.Method == "PUT" || req.Method == "POST" {
+			bodyBytes, err := getBodyBytes(req)
+			if err != nil {
+				return c, internalServerError("Error invalid request body").WithInternalError(err)
+			}
 
-	phoneLimiter := tollbooth.NewLimiter(smsFreq, &limiter.ExpirableOptions{
-		DefaultExpirationTTL: time.Hour,
-	}).SetBurst(int(a.config.RateLimitSmsSent)).SetMethods([]string{"PUT", "POST"})
+			var requestBody struct {
+				Email string `json:"email"`
+				Phone string `json:"phone"`
+			}
 
-	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
-		c := req.Context()
-		config := a.config
-		if (config.External.Email.Enabled && !config.Mailer.Autoconfirm) || (config.External.Phone.Enabled) {
-			if req.Method == "PUT" || req.Method == "POST" {
-				bodyBytes, err := getBodyBytes(req)
-				if err != nil {
-					return c, internalServerError("Error invalid request body").WithInternalError(err)
+			if err := json.Unmarshal(bodyBytes, &requestBody); err != nil {
+				return c, badRequestError("Error invalid request body").WithInternalError(err)
+			}
+
+			if requestBody.Email != "" {
+				if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
+					return c, httpError(http.StatusTooManyRequests, "Email rate limit exceeded")
 				}
+			}
 
-				var requestBody struct {
-					Email string `json:"email"`
-					Phone string `json:"phone"`
-				}
-
-				if err := json.Unmarshal(bodyBytes, &requestBody); err != nil {
-					return c, badRequestError("Error invalid request body").WithInternalError(err)
-				}
-
-				if requestBody.Email != "" {
-					if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
-						return c, httpError(http.StatusTooManyRequests, "Email rate limit exceeded")
-					}
-				}
-
-				if requestBody.Phone != "" {
-					if err := tollbooth.LimitByKeys(phoneLimiter, []string{"phone_functions"}); err != nil {
-						return c, httpError(http.StatusTooManyRequests, "Sms rate limit exceeded")
-					}
+			if requestBody.Phone != "" {
+				if err := tollbooth.LimitByKeys(phoneLimiter, []string{"phone_functions"}); err != nil {
+					return c, httpError(http.StatusTooManyRequests, "Sms rate limit exceeded")
 				}
 			}
 		}
-		return c, nil
 	}
+	return c, nil
 }
 
 func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) (context.Context, error) {

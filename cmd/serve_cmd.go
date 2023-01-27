@@ -6,7 +6,6 @@ import (
 
 	"github.com/netlify/gotrue/api"
 	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/storage"
 	"github.com/netlify/gotrue/utilities"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -26,14 +25,9 @@ func serve(ctx context.Context) {
 		logrus.WithError(err).Fatal("unable to load config")
 	}
 
-	db, err := storage.Dial(config)
-	if err != nil {
-		logrus.Fatalf("error opening database: %+v", err)
-	}
+	api := api.NewAPIWithVersion(ctx, config, utilities.Version)
+	db := api.Tenant.GetConnection()
 	defer db.Close()
-
-	api := api.NewAPIWithVersion(ctx, config, db, utilities.Version)
-
 	addr := net.JoinHostPort(config.API.Host, config.API.Port)
 	logrus.Infof("GoTrue API started on: %s", addr)
 
