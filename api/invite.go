@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/fatih/structs"
+	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/storage"
 )
@@ -58,6 +60,14 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return err
 			}
+			identity, err := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+				Subject: user.ID.String(),
+				Email:   user.GetEmail(),
+			}))
+			if err != nil {
+				return err
+			}
+			user.Identities = []models.Identity{*identity}
 		}
 
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{

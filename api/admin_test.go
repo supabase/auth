@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -433,20 +434,149 @@ func (ts *AdminTestSuite) TestAdminUserUpdateBannedUntilFailed() {
 	})
 }
 
-// TestAdminUserDelete tests API /admin/user route (DELETE)
+// TestAdminUserDelete tests API /admin/users route (DELETE)
 func (ts *AdminTestSuite) TestAdminUserDelete() {
-	u, err := models.NewUser("123456789", "test-delete@example.com", "test", ts.Config.JWT.Aud, nil)
-	require.NoError(ts.T(), err, "Error making new user")
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+	type expected struct {
+		code int
+		err  error
+	}
+	signupParams := &SignupParams{
+		Email:    "test-delete@example.com",
+		Password: "test",
+		Data:     map[string]interface{}{"name": "test"},
+		Provider: "email",
+		Aud:      ts.Config.JWT.Aud,
+	}
+	cases := []struct {
+		desc         string
+		body         map[string]interface{}
+		isSoftDelete string
+		isSSOUser    bool
+		expected     expected
+	}{
+		{
+			desc:         "Test admin delete user (default)",
+			isSoftDelete: "",
+			isSSOUser:    false,
+			expected:     expected{code: http.StatusOK, err: models.UserNotFoundError{}},
+			body:         nil,
+		},
+		{
+			desc:         "Test admin delete user (hard deletion)",
+			isSoftDelete: "?is_soft_delete=false",
+			isSSOUser:    false,
+			expected:     expected{code: http.StatusOK, err: models.UserNotFoundError{}},
+			body: map[string]interface{}{
+				"should_soft_delete": false,
+			},
+		},
+		{
+			desc:         "Test admin delete user (soft deletion)",
+			isSoftDelete: "?is_soft_delete=true",
+			isSSOUser:    false,
+			expected:     expected{code: http.StatusOK, err: models.UserNotFoundError{}},
+			body: map[string]interface{}{
+				"should_soft_delete": true,
+			},
+		},
+		{
+			desc:         "Test admin delete user (soft deletion & sso user)",
+			isSoftDelete: "?is_soft_delete=true",
+			isSSOUser:    true,
+			expected:     expected{code: http.StatusBadRequest, err: nil},
+			body: map[string]interface{}{
+				"should_soft_delete": true,
+			},
+		},
+	}
 
-	// Setup request
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+			u, err := ts.API.signupNewUser(context.Background(), ts.API.db, signupParams, c.isSSOUser)
+			require.NoError(ts.T(), err)
+
+			// Setup request
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
+
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), c.expected.code, w.Code)
+
+			if c.isSSOUser {
+				u, err = models.FindUserByID(ts.API.db, u.ID)
+				require.NotNil(ts.T(), u)
+			} else {
+				_, err = models.FindUserByEmailAndAudience(ts.API.db, signupParams.Email, ts.Config.JWT.Aud)
+			}
+			require.Equal(ts.T(), c.expected.err, err)
+		})
+	}
+}
+
+func (ts *AdminTestSuite) TestAdminUserSoftDeletion() {
+	// create user
+	u, err := models.NewUser("123456789", "test@example.com", "secret", ts.Config.JWT.Aud, map[string]interface{}{"name": "test"})
+	require.NoError(ts.T(), err)
+	u.ConfirmationToken = "some_token"
+	u.RecoveryToken = "some_token"
+	u.EmailChangeTokenCurrent = "some_token"
+	u.EmailChangeTokenNew = "some_token"
+	u.PhoneChangeToken = "some_token"
+	u.AppMetaData = map[string]interface{}{
+		"provider": "email",
+	}
+	require.NoError(ts.T(), ts.API.db.Create(u))
+
+	// create user identities
+	_, err = ts.API.createNewIdentity(ts.API.db, u, "email", map[string]interface{}{
+		"sub":   "123456",
+		"email": "test@example.com",
+	})
+	require.NoError(ts.T(), err)
+	_, err = ts.API.createNewIdentity(ts.API.db, u, "github", map[string]interface{}{
+		"sub":   "234567",
+		"email": "test@example.com",
+	})
+	require.NoError(ts.T(), err)
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"should_soft_delete": true,
+	}))
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s", u.ID), nil)
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// get soft-deleted user from db
+	deletedUser, err := models.FindUserByID(ts.API.db, u.ID)
+	require.NoError(ts.T(), err)
+
+	require.Empty(ts.T(), deletedUser.ConfirmationToken)
+	require.Empty(ts.T(), deletedUser.RecoveryToken)
+	require.Empty(ts.T(), deletedUser.EmailChangeTokenCurrent)
+	require.Empty(ts.T(), deletedUser.EmailChangeTokenNew)
+	require.Empty(ts.T(), deletedUser.EncryptedPassword)
+	require.Empty(ts.T(), deletedUser.PhoneChangeToken)
+	require.Empty(ts.T(), deletedUser.UserMetaData)
+	require.Empty(ts.T(), deletedUser.AppMetaData)
+	require.NotEmpty(ts.T(), deletedUser.DeletedAt)
+	require.NotEmpty(ts.T(), deletedUser.GetEmail())
+
+	// get soft-deleted user's identity from db
+	deletedIdentities, err := models.FindIdentitiesByUserID(ts.API.db, deletedUser.ID)
+	require.NoError(ts.T(), err)
+
+	for _, identity := range deletedIdentities {
+		require.Empty(ts.T(), identity.IdentityData)
+	}
 }
 
 func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {

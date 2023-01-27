@@ -48,53 +48,62 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	var isNewUser bool
 	aud := a.requestAud(ctx, r)
 	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			// User doesn't exist, sign them up with temporary password
-			password, err := password.Generate(64, 10, 0, false, true)
-			if err != nil {
-				internalServerError("error creating user").WithInternalError(err)
-			}
+			isNewUser = true
+		} else {
+			return internalServerError("Database error finding user").WithInternalError(err)
+		}
+	}
+	if user != nil {
+		isNewUser = !user.IsConfirmed()
+	}
+	if isNewUser {
+		// User either doesn't exist or hasn't completed the signup process.
+		// Sign them up with temporary password.
+		password, err := password.Generate(64, 10, 0, false, true)
+		if err != nil {
+			internalServerError("error creating user").WithInternalError(err)
+		}
 
-			signUpParams := &SignupParams{
-				Email:    params.Email,
-				Password: password,
-				Data:     params.Data,
-			}
-			newBodyContent, err := json.Marshal(signUpParams)
-			if err != nil {
-				return badRequestError("Could not parse metadata: %v", err)
-			}
-			r.Body = io.NopCloser(strings.NewReader(string(newBodyContent)))
-			r.ContentLength = int64(len(string(newBodyContent)))
+		signUpParams := &SignupParams{
+			Email:    params.Email,
+			Password: password,
+			Data:     params.Data,
+		}
+		newBodyContent, err := json.Marshal(signUpParams)
+		if err != nil {
+			return badRequestError("Could not parse metadata: %v", err)
+		}
+		r.Body = io.NopCloser(strings.NewReader(string(newBodyContent)))
+		r.ContentLength = int64(len(string(newBodyContent)))
 
-			fakeResponse := &responseStub{}
-			if config.Mailer.Autoconfirm {
-				// signups are autoconfirmed, send magic link after signup
-				if err := a.Signup(fakeResponse, r); err != nil {
-					return err
-				}
-				newBodyContent := &SignupParams{
-					Email: params.Email,
-					Data:  params.Data,
-				}
-				metadata, err := json.Marshal(newBodyContent)
-				if err != nil {
-					return badRequestError("Could not parse metadata: %v", err)
-				}
-				r.Body = io.NopCloser(bytes.NewReader(metadata))
-				return a.MagicLink(w, r)
-			}
-			// otherwise confirmation email already contains 'magic link'
+		fakeResponse := &responseStub{}
+		if config.Mailer.Autoconfirm {
+			// signups are autoconfirmed, send magic link after signup
 			if err := a.Signup(fakeResponse, r); err != nil {
 				return err
 			}
-
-			return sendJSON(w, http.StatusOK, make(map[string]string))
+			newBodyContent := &SignupParams{
+				Email: params.Email,
+				Data:  params.Data,
+			}
+			metadata, err := json.Marshal(newBodyContent)
+			if err != nil {
+				return badRequestError("Could not parse metadata: %v", err)
+			}
+			r.Body = io.NopCloser(bytes.NewReader(metadata))
+			return a.MagicLink(w, r)
 		}
-		return internalServerError("Database error finding user").WithInternalError(err)
+		// otherwise confirmation email already contains 'magic link'
+		if err := a.Signup(fakeResponse, r); err != nil {
+			return err
+		}
+
+		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
