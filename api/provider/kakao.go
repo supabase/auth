@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"strconv"
+	"strings"
 
 	"github.com/netlify/gotrue/conf"
 	"golang.org/x/oauth2"
@@ -77,7 +78,15 @@ func NewKakaoProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	authHost := chooseHost(ext.URL, defaultKakaoAuthBase)
 	apiHost := chooseHost(ext.URL, defaultKakaoAPIBase)
 
-	oauthScopes := []string{}
+	oauthScopes := []string{
+		"account_email",
+		"profile_image",
+		"profile_nickname" ,
+	}
+
+	if scopes != "" {
+		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
+	}
 
 	return &kakaoProvider{
 		Config: &oauth2.Config{
