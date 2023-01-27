@@ -58,6 +58,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		log.Fatalf("Failed to load tenant: %+v", err)
 	}
 	api := &API{Tenant: tenant, version: version}
+	api.deprecationNotices(ctx)
 
 	r := newRouter()
 	r.Use(addRequestID(globalConfig))

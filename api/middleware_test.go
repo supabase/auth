@@ -151,10 +151,6 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 }
 
 func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
-	// Set up rate limit config for this test
-	ts.Config.RateLimitEmailSent = 5
-	ts.Config.RateLimitSmsSent = 5
-
 	cases := []struct {
 		desc             string
 		expectedErrorMsg string
@@ -176,7 +172,7 @@ func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
 		},
 	}
 
-	limiter := ts.API.limitEmailOrPhoneSentHandler()
+	limiter := ts.API.limitEmailOrPhoneSentHandler
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			var buffer bytes.Buffer
@@ -185,7 +181,7 @@ func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
-			for i := 0; i < 5; i++ {
+			for i := 0; i < 30; i++ {
 				_, err := limiter(w, req)
 				require.NoError(ts.T(), err)
 			}

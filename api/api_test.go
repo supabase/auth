@@ -46,7 +46,7 @@ func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *storage.Con
 		cb(nil, conn)
 	}
 
-	return NewAPIWithVersion(context.Background(), config, conn, apiTestVersion), config, nil
+	return NewAPIWithVersion(context.Background(), config, apiTestVersion), config, nil
 }
 
 func TestEmailEnabledByDefault(t *testing.T) {
