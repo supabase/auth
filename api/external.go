@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -238,9 +240,12 @@ func (a *API) TokenVerifier(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
-	// if sha256.Sum256([]byte(params.CodeChallenge)) != b64.StdEncoding.EncodeToString([]byte(sha256.Sum256([]byte(params.CodeVerifier)))) {
-	// 	return forbiddenError("code verifier does not match code challenge")
-	// }
+	hashedCodeChallenge := sha256.Sum256([]byte(params.CodeChallenge))
+	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
+	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
+	if string(hashedCodeChallenge[:]) != encodedCodeVerifier {
+		return forbiddenError("code verifier does not match code challenge")
+	}
 	var user *models.User
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
