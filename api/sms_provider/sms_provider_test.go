@@ -51,6 +51,10 @@ func TestSmsProvider(t *testing.T) {
 					ApiKey: "test_api_key",
 					Sender: "test_sender",
 				},
+				SendBlue: conf.SendBlueProviderConfiguration{
+					KeyID:     "test_key_id",
+					SecretKey: "test_secret_key",
+				},
 			},
 		},
 	}
@@ -213,4 +217,63 @@ func (ts *SmsProviderTestSuite) TestTextLocalSendSms() {
 
 	err = textlocalProvider.SendSms(phone, message)
 	require.NoError(ts.T(), err)
+}
+
+func (ts *SmsProviderTestSuite) TestSendBlueSms() {
+	defer gock.Off()
+	provider, err := NewSendBlueProvider(ts.Config.Sms.SendBlue)
+	require.NoError(ts.T(), err)
+
+	sendBlueProvider, ok := provider.(*SendBlueProvider)
+	require.Equal(ts.T(), true, ok)
+
+	phone := "123456789"
+	message := "This is the sms code: 123456"
+	body := map[string]string{
+		"number":  "+" + phone,
+		"content": message,
+	}
+
+	cases := []struct {
+		Desc             string
+		SendBlueResponse *gock.Response
+		ExpectedError    error
+	}{
+		{
+			Desc: "Successfully sent sms",
+			SendBlueResponse: gock.New(sendBlueProvider.APIPath).Post("").
+				MatchType("json").JSON(body).
+				Reply(202).JSON(SendBlueResponse{
+				ErrorCode:    0,
+				ErrorMessage: "",
+			}),
+			ExpectedError: nil,
+		},
+		{
+			Desc: "Sms send failure",
+			SendBlueResponse: gock.New(sendBlueProvider.APIPath).Post("").
+				MatchType("json").JSON(body).
+				Reply(400).JSON(SendBlueResponse{
+				ErrorCode:    402,
+				ErrorMessage: "BLACKLISTED_NUMBER",
+			}),
+			ExpectedError: fmt.Errorf("sendblue error: %v (status %v)", "BLACKLISTED_NUMBER", 402),
+		},
+		{
+			Desc: "Bad token",
+			SendBlueResponse: gock.New(sendBlueProvider.APIPath).Post("").
+				MatchType("json").JSON(body).
+				Reply(401).JSON(SendBlueResponse{
+				Message: "Invalid Credentials",
+			}),
+			ExpectedError: fmt.Errorf("sendblue error: %v", "Invalid Credentials"),
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.Desc, func() {
+			err = sendBlueProvider.SendSms(phone, message)
+			require.Equal(ts.T(), c.ExpectedError, err)
+		})
+	}
 }
