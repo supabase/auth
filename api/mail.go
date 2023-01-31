@@ -340,6 +340,7 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfigu
 	if err != nil {
 		return err
 	}
+	u.EmailChange = email
 	u.EmailChangeTokenNew = fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+otpNew)))
 
 	otpCurrent := ""
@@ -353,7 +354,7 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfigu
 			return err
 		}
 	}
-	u.EmailChange = email
+
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
 	if err := mailer.EmailChangeMail(u, otpNew, otpCurrent, referrerURL); err != nil {
