@@ -158,6 +158,8 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	grantType := r.FormValue("grant_type")
 
 	switch grantType {
+	case "pkce":
+		return a.TokenVerifier(ctx, w, r)
 	case "password":
 		return a.ResourceOwnerPasswordGrant(ctx, w, r)
 	case "refresh_token":

@@ -90,10 +90,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.Get("/", api.ExternalProviderCallback)
 		r.Post("/", api.ExternalProviderCallback)
 	})
-	// Add route for step 2: Takes in Auth Code + Verifier -> Returns token
-	r.Route("/oauth", func(r *router) {
-		r.Post("/token", api.TokenVerifier)
-	})
 
 	r.Route("/", func(r *router) {
 		r.UseBypass(logger)

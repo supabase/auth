@@ -218,9 +218,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 }
 
 // We don't support plain for now
-func (a *API) TokenVerifier(w http.ResponseWriter, r *http.Request) error {
+func (a *API) TokenVerifier(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	// TODO(Joel): Decide if these should be query params or code verifiers
-	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
 	providerType := getExternalProviderType(ctx)
