@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -72,6 +73,12 @@ type IdTokenGrantParams struct {
 	Provider string `json:"provider"`
 	ClientID string `json:"client_id"`
 	Issuer   string `json:"issuer"`
+}
+
+// PKCEGrantParams are the parameters the PKCEGrant method accepts
+type PKCEGrantParams struct {
+	CodeChallenge string `json:"code_challenge"`
+	CodeVerifier  string `json:"code_verifier"`
 }
 
 const useCookieHeader = "x-use-cookie"
@@ -159,7 +166,7 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 
 	switch grantType {
 	case "pkce":
-		return a.TokenVerifier(ctx, w, r)
+		return a.PKCEGrant(ctx, w, r)
 	case "password":
 		return a.ResourceOwnerPasswordGrant(ctx, w, r)
 	case "refresh_token":
@@ -562,6 +569,86 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	metering.RecordLogin("id_token", user.ID)
 	return sendJSON(w, http.StatusOK, token)
+}
+
+// We don't support plain for now
+func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	// TODO(Joel): Decide if these should be query params or code verifiers
+	db := a.db.WithContext(ctx)
+	config := a.config
+	providerType := getExternalProviderType(ctx)
+
+	params := &PKCEGrantParams{}
+	body, err := getBodyBytes(r)
+	var userData *provider.UserProvidedData
+	var providerAccessToken string
+	var providerRefreshToken string
+	var grantParams models.GrantParams
+
+	if err != nil {
+		return internalServerError("Could not read body").WithInternalError(err)
+	}
+
+	err = json.Unmarshal(body, params)
+	if err != nil {
+		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
+	}
+	hashedCodeChallenge := sha256.Sum256([]byte(params.CodeChallenge))
+	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
+	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
+	if string(hashedCodeChallenge[:]) != encodedCodeVerifier {
+		return forbiddenError("code verifier does not match code challenge")
+	}
+	var user *models.User
+	var token *AccessTokenResponse
+	err = db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		inviteToken := getInviteToken(ctx)
+		if inviteToken != "" {
+			if user, terr = a.processInvite(r, ctx, tx, userData, inviteToken, providerType); terr != nil {
+				return terr
+			}
+		} else {
+			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
+				if errors.Is(terr, errReturnNil) {
+					return nil
+				}
+
+				return terr
+			}
+		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+
+		if terr != nil {
+			return oauthError("server_error", terr.Error())
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	rurl := a.getExternalRedirectURL(r)
+	if token != nil {
+		q := url.Values{}
+		q.Set("provider_token", providerAccessToken)
+		// Because not all providers give out a refresh token
+		// See corresponding OAuth2 spec: <https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1>
+		if providerRefreshToken != "" {
+			q.Set("provider_refresh_token", providerRefreshToken)
+		}
+
+		rurl = token.AsRedirectURL(rurl, q)
+
+		if err := a.setCookieTokens(config, token, false, w); err != nil {
+			return internalServerError("Failed to set JWT cookie. %s", err)
+		}
+	} else {
+
+		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
+	}
+	http.Redirect(w, r, rurl, http.StatusFound)
+	return nil
 }
 
 func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string) (string, error) {
