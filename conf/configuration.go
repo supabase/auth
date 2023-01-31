@@ -198,6 +198,7 @@ type SmsProviderConfiguration struct {
 	Messagebird  MessagebirdProviderConfiguration `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration   `json:"textlocal"`
 	Vonage       VonageProviderConfiguration      `json:"vonage"`
+	SendBlue     SendBlueProviderConfiguration    `json:"sendblue"`
 }
 
 type TwilioProviderConfiguration struct {
@@ -220,6 +221,11 @@ type VonageProviderConfiguration struct {
 	ApiKey    string `json:"api_key" split_words:"true"`
 	ApiSecret string `json:"api_secret" split_words:"true"`
 	From      string `json:"from" split_words:"true"`
+}
+
+type SendBlueProviderConfiguration struct {
+	KeyID     string `json:"key_id" split_words:"true"`
+	SecretKey string `json:"secret_key" split_words:"true"`
 }
 
 type CaptchaConfiguration struct {
@@ -494,6 +500,16 @@ func (t *VonageProviderConfiguration) Validate() error {
 	}
 	if t.From == "" {
 		return errors.New("missing Vonage 'from' parameter")
+	}
+	return nil
+}
+
+func (t *SendBlueProviderConfiguration) Validate() error {
+	if t.KeyID == "" {
+		return errors.New("missing SendBlue Key ID (API Key)")
+	}
+	if t.SecretKey == "" {
+		return errors.New("missing SendBlue Secret Key (API Secret)")
 	}
 	return nil
 }

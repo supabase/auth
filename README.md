@@ -692,7 +692,7 @@ Controls the number of digits of the sms otp sent.
 
 `SMS_PROVIDER` - `string`
 
-Available options are: `twilio`, `messagebird`, `textlocal`, and `vonage`
+Available options are: `twilio`, `messagebird`, `textlocal`, `vonage`, and `sendblue`
 
 Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/requests-to-twilio#credentials):
 
@@ -704,6 +704,11 @@ Or Messagebird credentials, which can be obtained in the [Dashboard](https://das
 
 - `SMS_MESSAGEBIRD_ACCESS_KEY` - your Messagebird access key
 - `SMS_MESSAGEBIRD_ORIGINATOR` - SMS sender (your Messagebird phone number with + or company name)
+
+Or SendBlue credentials, available at the [Dashboard](https://sendblue.co/dashboard/api)
+
+- `SMS_SENDBLUE_KEY_ID` - called "API Key" (first field) on the dashboard
+- `SMS_SENDBLUE_SECRET_KEY` - called "API Secret" (second field) on the dashboard
 
 ### CAPTCHA
 
