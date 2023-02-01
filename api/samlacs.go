@@ -33,7 +33,7 @@ func (a *API) samlDestroyRelayState(ctx context.Context, relayState *models.SAML
 
 func IsMetadataStale(idpMetadata *saml.EntityDescriptor, samlProvider models.SAMLProvider) bool {
 	hasIDPMetadataExpired := !idpMetadata.ValidUntil.IsZero() && idpMetadata.ValidUntil.Before(time.Now())
-	hasCacheDurationExceeded := samlProvider.UpdatedAt.Add(idpMetadata.CacheDuration).Before(time.Now())
+	hasCacheDurationExceeded := idpMetadata.CacheDuration != 0 && samlProvider.UpdatedAt.Add(idpMetadata.CacheDuration).Before(time.Now())
 	return hasIDPMetadataExpired || hasCacheDurationExceeded
 }
 
