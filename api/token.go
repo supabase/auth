@@ -78,7 +78,7 @@ type IdTokenGrantParams struct {
 
 // PKCEGrantParams are the parameters the PKCEGrant method accepts
 type PKCEGrantParams struct {
-	CodeChallenge string `json:"code_challenge"`
+	AuthCode string `json:"auth_code"`
 	// TODO(Joel) - discuss: let's not support plain for now?
 	// ChallengeMethod string // The encryption method (ex. S256).
 	CodeVerifier string `json:"code_verifier"`
@@ -594,6 +594,7 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
+	// TODO(Joel): Also fetch auth code from DB and validate that the auth code matches
 
 	hashedCodeChallenge := sha256.Sum256([]byte(params.CodeChallenge))
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))

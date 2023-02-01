@@ -94,16 +94,16 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("provider", query.Get(key)))
-		} else if key == "flow_type" {
-			// Declare auth code flow
-			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("response_type", query.Get(key)))
-			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("code_challenge", query.Get("code_challenge")))
 		} else {
+			// Not needed since we're only enforcing Client -> Supabase AUth and not Auth -> Provider
+			//else if key == "flow_type" {
+			// Declare auth code flow
+			// authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("response_type", query.Get(key)))
+			//authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("code_challenge", query.Get("code_challenge")))
+			//	}
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam(key, query.Get(key)))
 		}
 	}
-	query.Del("code_challenge")
-	query.Del("flow_type")
 	var authURL string
 	switch externalProvider := p.(type) {
 	case *provider.TwitterProvider:
@@ -115,6 +115,9 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	default:
 		authURL = p.AuthCodeURL(tokenString, authUrlParams...)
 	}
+	// Validate the code challenge as per PKCE spec and also associate the code challenge with an id
+	// Save the code challenge into the db table
+	// query.Del("code_challenge")
 
 	http.Redirect(w, r, authURL, http.StatusFound)
 	return nil
@@ -135,10 +138,10 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	config := a.config
 
 	providerType := getExternalProviderType(ctx)
-	// isImplicit := getFlowType(ctx)
 	var userData *provider.UserProvidedData
 	var providerAccessToken string
 	var providerRefreshToken string
+	var code string
 	var grantParams models.GrantParams
 
 	if providerType == "twitter" {
@@ -157,7 +160,11 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		userData = oAuthResponseData.userData
 		providerAccessToken = oAuthResponseData.token
 		providerRefreshToken = oAuthResponseData.refreshToken
+		code = oAuthResponseData.code
 	}
+	// We make use of sha256(provider|authcode) as the authcode for GoTrue. If this is a PKCE flow we return code here.
+	// GoTrue should store auth code  in the database, maybe under the sessions table
+	fmt.Println(code)
 
 	var user *models.User
 	var token *AccessTokenResponse
@@ -189,7 +196,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	}
 
 	rurl := a.getExternalRedirectURL(r)
-	// if isImplict do everything below
 	if token != nil {
 		q := url.Values{}
 		q.Set("provider_token", providerAccessToken)
@@ -207,8 +213,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	} else {
 		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
 	}
-	// }  till here - otherwise you can ignore
-	// Change this line to return a JSON response with AuthCode
 	http.Redirect(w, r, rurl, http.StatusFound)
 	return nil
 }

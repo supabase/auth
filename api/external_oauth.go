@@ -17,6 +17,7 @@ type OAuthProviderData struct {
 	userData     *provider.UserProvidedData
 	token        string
 	refreshToken string
+	code         string
 }
 
 // loadOAuthState parses the `state` query parameter as a JWS payload,
@@ -74,7 +75,6 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		"code":     oauthCode,
 	}).Debug("Exchanging oauth code")
 
-	// Validate the code here and then pass the pkce challenge as an option
 	token, err := oAuthProvider.GetOAuthToken(oauthCode)
 	if err != nil {
 		return nil, internalServerError("Unable to exchange external code: %s", oauthCode).WithInternalError(err)
@@ -101,6 +101,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		userData:     userData,
 		token:        token.AccessToken,
 		refreshToken: token.RefreshToken,
+		code:         oauthCode,
 	}, nil
 }
 
