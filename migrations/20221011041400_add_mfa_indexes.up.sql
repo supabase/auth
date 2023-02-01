@@ -5,8 +5,9 @@ do $$
 begin
   if not exists
      (select constraint_name
-      from information_schema.check_constraints
-      where constraint_schema = '{{ index .Options "Namespace" }}'
+      from information_schema.table_constraints
+      where table_schema = '{{ index .Options "Namespace" }}'
+      and table_name = 'mfa_amr_claims'
       and constraint_name = 'amr_id_pk')
   then
     alter table {{ index .Options "Namespace" }}.mfa_amr_claims add constraint amr_id_pk primary key(id);
