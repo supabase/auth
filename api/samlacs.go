@@ -164,7 +164,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 			logentry = logentry.WithField("expires_in", time.Until(idpMetadata.ValidUntil).String())
 			logentry = logentry.WithField("valid_until", idpMetadata.ValidUntil)
 			logentry = logentry.WithError(err)
-			logentry.Warn("Metadata could not be retrieved. Continuing with existing metadata")
+			logentry.Warn("SAML Metadata could not be retrieved, continuing with existing metadata")
 		} else {
 			ssoProvider.SAMLProvider.MetadataXML = string(rawMetadata)
 			samlMetadataModified = true
