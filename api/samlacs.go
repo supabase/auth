@@ -163,7 +163,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 			logentry := log.WithField("sso_provider_id", ssoProvider.ID.String())
 			logentry = logentry.WithField("expires_in", time.Until(idpMetadata.ValidUntil).String())
 			logentry = logentry.WithField("valid_until", idpMetadata.ValidUntil)
-			logentry = logentry.WithField("error", err)
+			logentry = logentry.WithError(err)
 			logentry.Warn("Metadata could not be retrieved. Continuing with existing metadata")
 		} else {
 			ssoProvider.SAMLProvider.MetadataXML = string(rawMetadata)
@@ -259,16 +259,19 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var token *AccessTokenResponse
-
 	if err := db.Transaction(func(tx *storage.Connection) error {
-		var terr error
-		var user *models.User
-
 		if samlMetadataModified {
-			if terr = tx.Update(ssoProvider.SAMLProvider); terr != nil {
+			if terr := tx.Update(ssoProvider.SAMLProvider); terr != nil {
 				return terr
 			}
 		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if err := db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		var user *models.User
 
 		// accounts potentially created via SAML can contain non-unique email addresses in the auth.users table
 		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, "sso:"+ssoProvider.ID.String()); terr != nil {
