@@ -136,23 +136,19 @@ func (p AppleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 			}
 
 			// get the public key for verifying the identity token signature
-			set, err := jwk.FetchHTTP(p.UserInfoURL, jwk.WithHTTPClient(http.DefaultClient))
+			set, err := jwk.Fetch(ctx, p.UserInfoURL, jwk.WithHTTPClient(http.DefaultClient))
 			if err != nil {
 				return nil, err
 			}
-			selectedKey := set.Keys[0]
-			for _, key := range set.Keys {
-				if key.KeyID() == kid {
-					selectedKey = key
-					break
-				}
-			}
-			pubKeyIface, _ := selectedKey.Materialize()
-			pubKey, ok := pubKeyIface.(*rsa.PublicKey)
+			selectedKey, ok := set.LookupKeyID(kid)
 			if !ok {
-				return nil, fmt.Errorf(`expected RSA public key from %s`, p.UserInfoURL)
+				return nil, fmt.Errorf("unable to lookup Apple ID key with kid = %q", kid)
 			}
-			return pubKey, nil
+			var pubKey rsa.PublicKey
+			if err := selectedKey.Raw(&pubKey); err != nil {
+				return nil, fmt.Errorf("expected RSA public key from %q with kid %q", p.UserInfoURL, kid)
+			}
+			return &pubKey, nil
 		})
 		if err != nil {
 			return &UserProvidedData{}, err
