@@ -192,7 +192,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
 	} else {
-		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), r, rurl)
+		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
 	}
 
 	http.Redirect(w, r, rurl, http.StatusFound)
@@ -269,7 +269,9 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			Data:     identityData,
 		}
 
-		user, terr = a.signupNewUser(ctx, tx, params, false /* <-duplicateEmail */)
+		isSSOUser := strings.HasPrefix(providerType, "sso:")
+
+		user, terr = a.signupNewUser(ctx, tx, params, isSSOUser)
 		if terr != nil {
 			return nil, terr
 		}
@@ -410,6 +412,16 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 	}
 	if err := triggerEventHooks(ctx, tx, SignupEvent, user, config); err != nil {
 		return nil, err
+	}
+
+	// an account with a previously unconfirmed email + password
+	// combination or phone may exist. so now that there is an
+	// OAuth identity bound to this user, and since they have not
+	// confirmed their email or phone, they are unaware that a
+	// potentially malicious door exists into their account; thus
+	// the password and phone needs to be removed.
+	if err = user.RemoveUnconfirmedIdentities(tx); err != nil {
+		return nil, internalServerError("Error updating user").WithInternalError(err)
 	}
 
 	// confirm because they were able to respond to invite email

@@ -28,14 +28,14 @@ func (Identity) TableName() string {
 
 // NewIdentity returns an identity associated to the user's id.
 func NewIdentity(user *User, provider string, identityData map[string]interface{}) (*Identity, error) {
-	id, ok := identityData["sub"]
+	providerId, ok := identityData["sub"]
 	if !ok {
 		return nil, errors.New("error missing provider id")
 	}
 	now := time.Now()
 
 	identity := &Identity{
-		ID:           id.(string),
+		ID:           providerId.(string),
 		UserID:       user.ID,
 		IdentityData: identityData,
 		Provider:     provider,
@@ -60,7 +60,7 @@ func (i *Identity) IsForSSOProvider() bool {
 	return strings.HasPrefix(i.Provider, "sso:")
 }
 
-// FindIdentityById searches for an identity with the matching provider_id and provider given.
+// FindIdentityById searches for an identity with the matching id and provider given.
 func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider string) (*Identity, error) {
 	identity := &Identity{}
 	if err := tx.Q().Where("id = ? AND provider = ?", providerId, provider).First(identity); err != nil {
@@ -72,10 +72,10 @@ func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider st
 	return identity, nil
 }
 
-// FindIdentitiesByUser returns all identities associated to a user
-func FindIdentitiesByUser(tx *storage.Connection, user *User) ([]*Identity, error) {
+// FindIdentitiesByUserID returns all identities associated to a user ID.
+func FindIdentitiesByUserID(tx *storage.Connection, userID uuid.UUID) ([]*Identity, error) {
 	identities := []*Identity{}
-	if err := tx.Q().Where("user_id = ?", user.ID).All(&identities); err != nil {
+	if err := tx.Q().Where("user_id = ?", userID).All(&identities); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return identities, nil
 		}
@@ -98,4 +98,22 @@ func FindProvidersByUser(tx *storage.Connection, user *User) ([]string, error) {
 		providers = append(providers, identity.Provider)
 	}
 	return providers, nil
+}
+
+// UpdateIdentityData sets all identity_data from a map of updates,
+// ensuring that it doesn't override attributes that are not
+// in the provided map.
+func (i *Identity) UpdateIdentityData(tx *storage.Connection, updates map[string]interface{}) error {
+	if i.IdentityData == nil {
+		i.IdentityData = updates
+	} else {
+		for key, value := range updates {
+			if value != nil {
+				i.IdentityData[key] = value
+			} else {
+				delete(i.IdentityData, key)
+			}
+		}
+	}
+	return tx.UpdateOnly(i, "identity_data")
 }

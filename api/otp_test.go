@@ -131,3 +131,52 @@ func (ts *OtpTestSuite) TestNoSignupsForOtp() {
 		"msg":  "Signups not allowed for otp",
 	})
 }
+
+func (ts *OtpTestSuite) TestSubsequentOtp() {
+	ts.Config.SMTP.MaxFrequency = 0
+	userEmail := "foo@example.com"
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": userEmail,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	newUser, err := models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), newUser.ConfirmationToken)
+	require.NotEmpty(ts.T(), newUser.ConfirmationSentAt)
+	require.Empty(ts.T(), newUser.RecoveryToken)
+	require.Empty(ts.T(), newUser.RecoverySentAt)
+	require.Empty(ts.T(), newUser.EmailConfirmedAt)
+
+	// since the signup process hasn't been completed,
+	// subsequent requests for another magiclink should not create a recovery token
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": userEmail,
+	}))
+
+	req = httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), user.ConfirmationToken)
+	require.NotEmpty(ts.T(), user.ConfirmationSentAt)
+	require.Empty(ts.T(), user.RecoveryToken)
+	require.Empty(ts.T(), user.RecoverySentAt)
+	require.Empty(ts.T(), user.EmailConfirmedAt)
+}

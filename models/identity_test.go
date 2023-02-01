@@ -53,11 +53,34 @@ func (ts *IdentityTestSuite) TestNewIdentity() {
 
 func (ts *IdentityTestSuite) TestFindUserIdentities() {
 	u := ts.createUserWithIdentity("test@supabase.io")
-	identities, err := FindIdentitiesByUser(ts.db, u)
+	identities, err := FindIdentitiesByUserID(ts.db, u.ID)
 	require.NoError(ts.T(), err)
 
 	require.Len(ts.T(), identities, 1)
 
+}
+
+func (ts *IdentityTestSuite) TestUpdateIdentityData() {
+	u := ts.createUserWithIdentity("test@supabase.io")
+
+	identities, err := FindIdentitiesByUserID(ts.db, u.ID)
+	require.NoError(ts.T(), err)
+
+	updates := map[string]interface{}{
+		"sub":   nil,
+		"name":  nil,
+		"email": nil,
+	}
+	for _, identity := range identities {
+		err := identity.UpdateIdentityData(ts.db, updates)
+		require.NoError(ts.T(), err)
+	}
+
+	updatedIdentities, err := FindIdentitiesByUserID(ts.db, u.ID)
+	require.NoError(ts.T(), err)
+	for _, identity := range updatedIdentities {
+		require.Empty(ts.T(), identity.IdentityData)
+	}
 }
 
 func (ts *IdentityTestSuite) createUserWithEmail(email string) *User {

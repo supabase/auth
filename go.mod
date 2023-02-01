@@ -22,8 +22,7 @@ require (
 	github.com/jmoiron/sqlx v1.3.3
 	github.com/joho/godotenv v1.3.0
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/lestrrat-go/jwx v0.9.0
-	github.com/lib/pq v1.10.1 // indirect
+	github.com/lestrrat-go/jwx v1.2.25
 	github.com/microcosm-cc/bluemonday v1.0.19 // indirect
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/mrjones/oauth v0.0.0-20190623134757-126b35219450
@@ -36,7 +35,7 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.1.3
 	github.com/stretchr/testify v1.8.0
-	golang.org/x/crypto v0.0.0-20220128200615-198e4374d7ed
+	golang.org/x/crypto v0.0.0-20220427172511-eb4f295cb31f
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 )
@@ -66,7 +65,8 @@ require (
 )
 
 require (
-	github.com/crewjam/saml v0.4.8
+	github.com/crewjam/saml v0.4.9
+	github.com/fatih/structs v1.1.0
 	github.com/jackc/pgx/v4 v4.11.0
 )
 
@@ -78,8 +78,8 @@ require (
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/crewjam/httperr v0.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.0-20210816181553-5444fa50b93d // indirect
 	github.com/fatih/color v1.10.0 // indirect
-	github.com/fatih/structs v1.1.0 // indirect
 	github.com/felixge/httpsnoop v1.0.3 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -93,6 +93,7 @@ require (
 	github.com/gobuffalo/packr/v2 v2.8.1 // indirect
 	github.com/gobuffalo/plush/v4 v4.1.0 // indirect
 	github.com/gobuffalo/tags/v3 v3.1.0 // indirect
+	github.com/goccy/go-json v0.9.7 // indirect
 	github.com/golang-jwt/jwt/v4 v4.4.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/gorilla/context v1.1.1 // indirect
@@ -107,6 +108,11 @@ require (
 	github.com/jackc/pgtype v1.7.0 // indirect
 	github.com/jonboulle/clockwork v0.2.2 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
+	github.com/lestrrat-go/backoff/v2 v2.0.8 // indirect
+	github.com/lestrrat-go/blackmagic v1.0.0 // indirect
+	github.com/lestrrat-go/httpcc v1.0.1 // indirect
+	github.com/lestrrat-go/iter v1.0.1 // indirect
+	github.com/lestrrat-go/option v1.0.0 // indirect
 	github.com/luna-duclos/instrumentedsql v1.1.3 // indirect
 	github.com/mattermost/xml-roundtrip-validator v0.1.0 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
@@ -136,7 +142,6 @@ require (
 	golang.org/x/sys v0.0.0-20220422013727-9388b58f7150 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20200416051211-89c76fbcd5d1 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/appengine v1.6.6 // indirect
 	google.golang.org/genproto v0.0.0-20211118181313-81c1377c94b1 // indirect
 	google.golang.org/grpc v1.46.2 // indirect

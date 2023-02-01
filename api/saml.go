@@ -35,6 +35,8 @@ func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 		IDPMetadata:       identityProvider,
 	})
 
+	provider.AuthnNameIDFormat = saml.PersistentNameIDFormat
+
 	return &provider
 }
 

@@ -99,16 +99,13 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	numVerifiedFactors := 0
 
-	// TODO: Remove this at v2
 	for _, factor := range factors {
-		if factor.Status == models.FactorStateVerified {
+		if factor.Status == models.FactorStateVerified.String() {
 			numVerifiedFactors += 1
 		}
-
 	}
-	if numVerifiedFactors >= 1 {
-		return forbiddenError("number of enrolled factors exceeds the allowed value, unenroll to continue")
-
+	if numVerifiedFactors >= config.MFA.MaxVerifiedFactors {
+		return forbiddenError("Maximum number of enrolled factors reached, unenroll to continue")
 	}
 
 	key, err := totp.Generate(totp.GenerateOpts{
@@ -214,6 +211,10 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 
+	if factor.UserID != user.ID {
+		return internalServerError("user needs to own factor to verify")
+	}
+
 	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -257,7 +258,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = challenge.Verify(tx); terr != nil {
 			return terr
 		}
-		if factor.Status != models.FactorStateVerified {
+		if factor.Status != models.FactorStateVerified.String() {
 			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
 				return terr
 			}
@@ -278,6 +279,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
 			return internalServerError("Failed to update sessions. %s", terr)
 		}
+		if terr = models.DeleteUnverifiedFactors(tx, user); terr != nil {
+			return internalServerError("Error removing unverified factors. %s", terr)
+		}
 		return nil
 	})
 	if err != nil {
@@ -296,8 +300,11 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	factor := getFactor(ctx)
 	session := getSession(ctx)
 
-	if factor.Status == models.FactorStateVerified && session.GetAAL() != models.AAL2.String() {
+	if factor.Status == models.FactorStateVerified.String() && session.GetAAL() != models.AAL2.String() {
 		return badRequestError("AAL2 required to unenroll verified factor")
+	}
+	if factor.UserID != user.ID {
+		return internalServerError("user must own factor to unenroll")
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {

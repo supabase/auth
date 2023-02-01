@@ -233,21 +233,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	return api
 }
 
-// NewAPIFromConfigFile creates a new REST API using the provided configuration file.
-func NewAPIFromConfigFile(filename string, version string) (*API, *conf.GlobalConfiguration, error) {
-	config, err := conf.LoadGlobal(filename)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	db, err := storage.Dial(config)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return NewAPIWithVersion(context.Background(), config, db, version), config, nil
-}
-
 type HealthCheckResponse struct {
 	Version     string `json:"version"`
 	Name        string `json:"name"`

@@ -57,7 +57,8 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	session, err = FindSessionByID(ts.db, session.ID)
 	require.NoError(ts.T(), err)
 
-	aal, amr := session.CalculateAALAndAMR()
+	aal, amr, err := session.CalculateAALAndAMR(ts.db)
+	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), AAL2.String(), aal)
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
 
@@ -67,7 +68,8 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	session, err = FindSessionByID(ts.db, session.ID)
 	require.NoError(ts.T(), err)
 
-	aal, amr = session.CalculateAALAndAMR()
+	aal, amr, err = session.CalculateAALAndAMR(ts.db)
+	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), AAL2.String(), aal)
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))

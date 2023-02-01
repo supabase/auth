@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
@@ -36,6 +37,7 @@ func (aal AuthenticatorAssuranceLevel) String() string {
 type AMREntry struct {
 	Method    string `json:"method"`
 	Timestamp int64  `json:"timestamp"`
+	Provider  string `json:"provider,omitempty"`
 }
 
 type sortAMREntries struct {
@@ -149,7 +151,7 @@ func (s *Session) UpdateAssociatedAAL(tx *storage.Connection, aal string) error 
 	return tx.Update(s)
 }
 
-func (s *Session) CalculateAALAndAMR() (aal string, amr []AMREntry) {
+func (s *Session) CalculateAALAndAMR(tx *storage.Connection) (aal string, amr []AMREntry, err error) {
 	amr, aal = []AMREntry{}, AAL1.String()
 	for _, claim := range s.AMRClaims {
 		if *claim.AuthenticationMethod == TOTPSignIn.String() {
@@ -170,7 +172,30 @@ func (s *Session) CalculateAALAndAMR() (aal string, amr []AMREntry) {
 		Array: amr,
 	})
 
-	return aal, amr
+	lastIndex := len(amr) - 1
+
+	if lastIndex > -1 && amr[lastIndex].Method == SSOSAML.String() {
+		// initial AMR claim is from sso/saml, we need to add information
+		// about the provider that was used for the authentication
+		identities, err := FindIdentitiesByUserID(tx, s.UserID)
+		if err != nil {
+			return aal, amr, err
+		}
+
+		if len(identities) == 1 {
+			identity := identities[0]
+
+			if strings.HasPrefix(identity.Provider, "sso:") {
+				amr[lastIndex].Provider = strings.TrimPrefix(identity.Provider, "sso:")
+			}
+		}
+
+		// otherwise we can't identify that this user account has only
+		// one SSO identity, so we are not encoding the provider at
+		// this time
+	}
+
+	return aal, amr, nil
 }
 
 func (s *Session) GetAAL() string {

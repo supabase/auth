@@ -45,7 +45,6 @@ func TruncateAll(conn *storage.Connection) error {
 			(&pop.Model{Value: AMRClaim{}}).TableName(),
 			(&pop.Model{Value: SSOProvider{}}).TableName(),
 			(&pop.Model{Value: SSODomain{}}).TableName(),
-			(&pop.Model{Value: SSOSession{}}).TableName(),
 			(&pop.Model{Value: SAMLProvider{}}).TableName(),
 			(&pop.Model{Value: SAMLRelayState{}}).TableName(),
 		}

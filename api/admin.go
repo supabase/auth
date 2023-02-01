@@ -29,6 +29,10 @@ type AdminUserParams struct {
 	BanDuration  string                 `json:"ban_duration"`
 }
 
+type adminUserDeleteParams struct {
+	ShouldSoftDelete bool `json:"should_soft_delete"`
+}
+
 type adminUserUpdateFactorParams struct {
 	FriendlyName string `json:"friendly_name"`
 	FactorType   string `json:"factor_type"`
@@ -374,14 +378,31 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, user)
 }
 
-// adminUserDelete delete a user
+// adminUserDelete deletes a user
 func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
-	db := a.db.WithContext(ctx)
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
 
-	err := db.Transaction(func(tx *storage.Connection) error {
+	if user.IsSSOUser {
+		return badRequestError("user should be removed via identity provider instead")
+	}
+
+	var err error
+	params := &adminUserDeleteParams{}
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, params); err != nil {
+			return badRequestError("Could not read params: %v", err)
+		}
+	} else {
+		params.ShouldSoftDelete = false
+	}
+
+	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserDeletedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
@@ -390,9 +411,37 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 			return internalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 
-		if terr := tx.Destroy(user); terr != nil {
-			return internalServerError("Database error deleting user").WithInternalError(terr)
+		if params.ShouldSoftDelete {
+			if user.DeletedAt != nil {
+				// user has been soft deleted already
+				return nil
+			}
+			if terr := user.SoftDeleteUser(tx); terr != nil {
+				return internalServerError("Error soft deleting user").WithInternalError(terr)
+			}
+
+			if terr := user.SoftDeleteUserIdentities(tx); terr != nil {
+				return internalServerError("Error soft deleting user identities").WithInternalError(terr)
+			}
+
+			// hard delete all associated factors
+			if terr := models.DeleteFactorsByUserId(tx, user.ID); terr != nil {
+				return internalServerError("Error deleting user's factors").WithInternalError(terr)
+			}
+			// hard delete all associated sessions
+			if terr := models.Logout(tx, user.ID); terr != nil {
+				return internalServerError("Error deleting user's sessions").WithInternalError(terr)
+			}
+			// for backward compatibility: hard delete all associated refresh tokens
+			if terr := models.LogoutAllRefreshTokens(tx, user.ID); terr != nil {
+				return internalServerError("Error deleting user's refresh tokens").WithInternalError(terr)
+			}
+		} else {
+			if terr := tx.Destroy(user); terr != nil {
+				return internalServerError("Database error deleting user").WithInternalError(terr)
+			}
 		}
+
 		return nil
 	})
 	if err != nil {
@@ -407,14 +456,7 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 
-	MFAEnabled, err := models.IsMFAEnabled(a.db, user)
-	if err != nil {
-		return err
-	} else if !MFAEnabled {
-		return forbiddenError("You do not have a verified factor enrolled")
-	}
-
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.DeleteFactorAction, r.RemoteAddr, map[string]interface{}{
 			"user_id":   user.ID,
 			"factor_id": factor.ID,

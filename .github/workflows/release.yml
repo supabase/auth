@@ -10,6 +10,7 @@ on:
       - master
       - mfa
       - zerosessionidfix
+      - lastsigninatfix
 
 jobs:
   release:
@@ -18,7 +19,6 @@ jobs:
       version: ${{ steps.semantic.outputs.new_release_version }}
 
     runs-on: ubuntu-20.04
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v3
       - name: Release on GitHub
