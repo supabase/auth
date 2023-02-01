@@ -74,6 +74,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		"code":     oauthCode,
 	}).Debug("Exchanging oauth code")
 
+	// Validate the code here and then pass the pkce challenge as an option
 	token, err := oAuthProvider.GetOAuthToken(oauthCode)
 	if err != nil {
 		return nil, internalServerError("Unable to exchange external code: %s", oauthCode).WithInternalError(err)

@@ -2,8 +2,8 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +15,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
+	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/conf"
 	"github.com/netlify/gotrue/metering"
 	"github.com/netlify/gotrue/models"
@@ -571,9 +572,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
-// We don't support plain for now
 func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	// TODO(Joel): Decide if these should be query params or code verifiers
 	db := a.db.WithContext(ctx)
 	config := a.config
 	providerType := getExternalProviderType(ctx)
@@ -593,6 +592,7 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
+
 	hashedCodeChallenge := sha256.Sum256([]byte(params.CodeChallenge))
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
 	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
@@ -603,6 +603,7 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
+		// Check if user exists and create account otherwise
 		inviteToken := getInviteToken(ctx)
 		if inviteToken != "" {
 			if user, terr = a.processInvite(r, ctx, tx, userData, inviteToken, providerType); terr != nil {

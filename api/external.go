@@ -35,11 +35,8 @@ type ExternalSignupParams struct {
 	Code     string `json:"code"`
 }
 
-
-
 // ExternalProviderRedirect redirects the request to the corresponding oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
-	const codeChallenge = "code_challenge"
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
@@ -47,8 +44,8 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	query := r.URL.Query()
 	providerType := query.Get("provider")
 	scopes := query.Get("scopes")
-	challenge := query.Get(codeChallenge)
-	err := storage.StoreInSession(codeChallenge, challenge, r, w)
+	challenge := query.Get("code_challenge")
+	err := storage.StoreInSession("code_challenge", challenge, r, w)
 	if err != nil {
 		return internalServerError("Error storing code challenge in session").WithInternalError(err)
 	}
@@ -93,15 +90,20 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
 	query.Del("scopes")
 	query.Del("provider")
-	query.Del("code_challenge")
 	for key := range query {
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("provider", query.Get(key)))
+		} else if key == "flow_type" {
+			// Declare auth code flow
+			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("response_type", query.Get(key)))
+			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("code_challenge", query.Get("code_challenge")))
 		} else {
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam(key, query.Get(key)))
 		}
 	}
+	query.Del("code_challenge")
+	query.Del("flow_type")
 	var authURL string
 	switch externalProvider := p.(type) {
 	case *provider.TwitterProvider:
@@ -210,8 +212,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	http.Redirect(w, r, rurl, http.StatusFound)
 	return nil
 }
-
-
 
 func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
 	ctx := r.Context()
