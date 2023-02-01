@@ -595,8 +595,8 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 	// TODO(Joel): Also fetch auth code from DB and validate that the auth code matches
-
-	hashedCodeChallenge := sha256.Sum256([]byte(params.CodeChallenge))
+	// TODO(Joel): Fetch the hashedCodeChallenge from DB
+	hashedCodeChallenge := ""
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
 	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
 	if string(hashedCodeChallenge[:]) != encodedCodeVerifier {

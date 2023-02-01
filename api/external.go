@@ -166,6 +166,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	// GoTrue should store auth code  in the database, maybe under the sessions table
 	fmt.Println(code)
 
+	// This part is only relevant in the implicit flow, in PKCE this should be a separate step
+
 	var user *models.User
 	var token *AccessTokenResponse
 	err := db.Transaction(func(tx *storage.Connection) error {
