@@ -79,7 +79,9 @@ type IdTokenGrantParams struct {
 // PKCEGrantParams are the parameters the PKCEGrant method accepts
 type PKCEGrantParams struct {
 	CodeChallenge string `json:"code_challenge"`
-	CodeVerifier  string `json:"code_verifier"`
+	// TODO(Joel) - discuss: let's not support plain for now?
+	// ChallengeMethod string // The encryption method (ex. S256).
+	CodeVerifier string `json:"code_verifier"`
 }
 
 const useCookieHeader = "x-use-cookie"
@@ -645,7 +647,6 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
 	} else {
-
 		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
 	}
 	http.Redirect(w, r, rurl, http.StatusFound)
