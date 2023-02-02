@@ -205,17 +205,43 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
+		var identities []models.Identity
 		if params.Email != "" {
+			if user.GetEmail() == "" {
+				// if the user doesn't have an existing email
+				// then updating the user's email should create a new email identity
+				identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+					Subject: user.ID.String(),
+					Email:   params.Email,
+				}))
+				if terr != nil {
+					return terr
+				}
+				identities = append(identities, *identity)
+			}
 			if terr := user.SetEmail(tx, params.Email); terr != nil {
 				return terr
 			}
 		}
 
 		if params.Phone != "" {
+			if user.GetPhone() == "" {
+				// if the user doesn't have an existing phone
+				// then updating the user's phone should create a new phone identity
+				identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+					Subject: user.ID.String(),
+					Phone:   params.Phone,
+				}))
+				if terr != nil {
+					return terr
+				}
+				identities = append(identities, *identity)
+			}
 			if terr := user.SetPhone(tx, params.Phone); terr != nil {
 				return terr
 			}
 		}
+		user.Identities = append(user.Identities, identities...)
 
 		if params.AppMetaData != nil {
 			if terr := user.UpdateAppMetaData(tx, params.AppMetaData); terr != nil {
