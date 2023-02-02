@@ -44,11 +44,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	query := r.URL.Query()
 	providerType := query.Get("provider")
 	scopes := query.Get("scopes")
-	challenge := query.Get("code_challenge")
-	err := storage.StoreInSession("code_challenge", challenge, r, w)
-	if err != nil {
-		return internalServerError("Error storing code challenge in session").WithInternalError(err)
-	}
 
 	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
@@ -95,12 +90,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 			// See https://workos.com/docs/reference/sso/authorize/get
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("provider", query.Get(key)))
 		} else {
-			// Not needed since we're only enforcing Client -> Supabase AUth and not Auth -> Provider
-			//else if key == "flow_type" {
-			// Declare auth code flow
-			// authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("response_type", query.Get(key)))
-			//authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam("code_challenge", query.Get("code_challenge")))
-			//	}
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam(key, query.Get(key)))
 		}
 	}
@@ -115,9 +104,11 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	default:
 		authURL = p.AuthCodeURL(tokenString, authUrlParams...)
 	}
-	// Validate the code challenge as per PKCE spec and also associate the code challenge with an id
-	// Save the code challenge into the db table
-	// query.Del("code_challenge")
+
+	// Validate the code challenge as per PKCE spec and also associate the code challenge with an id.
+	//
+	// Store the challenge together with oauth_state
+	query.Del("code_challenge")
 
 	http.Redirect(w, r, authURL, http.StatusFound)
 	return nil
