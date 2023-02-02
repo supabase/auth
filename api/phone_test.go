@@ -56,12 +56,12 @@ func (ts *PhoneTestSuite) SetupTest() {
 }
 
 func (ts *PhoneTestSuite) TestValidateE164Format() {
-	isValid := ts.API.validateE164Format("0123456789")
+	isValid := validateE164Format("0123456789")
 	assert.Equal(ts.T(), false, isValid)
 }
 
 func (ts *PhoneTestSuite) TestFormatPhoneNumber() {
-	actual := ts.API.formatPhoneNumber("+1 23456789 ")
+	actual := formatPhoneNumber("+1 23456789 ")
 	assert.Equal(ts.T(), "123456789", actual)
 }
 
