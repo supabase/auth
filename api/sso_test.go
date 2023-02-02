@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/conf"
@@ -100,8 +101,8 @@ func (ts *SSOTestSuite) TestAdminGetSSOProviderNotExist() {
 	}
 }
 
-func expiredSAMLIDPMetadata(entityID string) string {
-	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="%s" validUntil='2001-02-03T04:05:06.789'>
+func configurableSAMLIDPMetadata(entityID, validUntil, cacheDuration string) string {
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="%s" validUntil='%s' cacheDuration='%s'>
   <md:IDPSSODescriptor WantAuthnRequestsSigned="false" protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
     <md:KeyDescriptor use="signing">
       <ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
@@ -129,23 +130,42 @@ x6lVV4kXi0x0n198/gkjnA85rPZoZ6dmqHtkcM0Gabgg6KEE5ubSDlWDsdv27uANceCZAoxd1+in
     <md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="%s"/>
     <md:SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="%s"/>
   </md:IDPSSODescriptor>
-</md:EntityDescriptor>`, entityID, entityID, entityID)
+</md:EntityDescriptor>`, entityID, validUntil, cacheDuration, entityID, entityID)
 
 }
 
 func (ts *SSOTestSuite) TestIsStaleSAMLMetadata() {
+	const DateInPast = "2001-02-03T04:05:06.789"
+	const DateInFarFuture = "2999-02-03T04:05:06.789"
+	// https://en.wikipedia.org/wiki/ISO_8601
+	currentTime := time.Now()
+	currentTimeAsISO8601 := currentTime.UTC().Format("2006-01-02T15:04:05Z07:00")
+	const OneHour = "PT1H"
 	examples := []struct {
-		Metadata []byte
-		IsStale  bool
+		Description           string
+		Metadata              []byte
+		IsStale               bool
+		CacheDurationExceeded bool
 	}{
 		{
-
-			Metadata: []byte(expiredSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-B")),
-			IsStale:  true,
+			Description:           "Metadata is valid and within cache duration",
+			Metadata:              []byte(configurableSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-B", DateInFarFuture, OneHour)),
+			IsStale:               false,
+			CacheDurationExceeded: false,
 		},
 		{
-			Metadata: []byte(validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-B")),
-			IsStale:  false,
+
+			Description:           "Metadata is valid but is a minute past cache duration",
+			Metadata:              []byte(configurableSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-B", currentTimeAsISO8601, OneHour)),
+			IsStale:               true,
+			CacheDurationExceeded: true,
+		},
+
+		{
+			Description:           "Metadata is invalid but within cache duration",
+			Metadata:              []byte(configurableSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-B", DateInPast, OneHour)),
+			IsStale:               true,
+			CacheDurationExceeded: false,
 		},
 	}
 
@@ -155,6 +175,10 @@ func (ts *SSOTestSuite) TestIsStaleSAMLMetadata() {
 		provider := models.SAMLProvider{
 			EntityID:    metadata.EntityID,
 			MetadataXML: string(example.Metadata),
+			UpdatedAt:   currentTime,
+		}
+		if example.CacheDurationExceeded {
+			provider.UpdatedAt = currentTime.Add(-time.Minute * 59)
 		}
 
 		require.Equal(ts.T(), example.IsStale, IsMetadataStale(metadata, provider))
@@ -163,7 +187,7 @@ func (ts *SSOTestSuite) TestIsStaleSAMLMetadata() {
 }
 
 func validSAMLIDPMetadata(entityID string) string {
-	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="%s" validUntil='2999-02-03T04:05:06.789'>
+	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?><md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="%s">
   <md:IDPSSODescriptor WantAuthnRequestsSigned="false" protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
     <md:KeyDescriptor use="signing">
       <ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
