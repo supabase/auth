@@ -43,7 +43,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	if params.Email == "" {
 		return unprocessableEntityError("Password recovery requires an email")
 	}
-	params.Email, err = a.validateEmail(ctx, params.Email)
+	params.Email, err = validateEmail(params.Email)
 	if err != nil {
 		return err
 	}

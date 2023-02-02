@@ -75,7 +75,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if !config.External.Email.Enabled {
 			return badRequestError("Email signups are disabled")
 		}
-		params.Email, err = a.validateEmail(ctx, params.Email)
+		params.Email, err = validateEmail(params.Email)
 		if err != nil {
 			return err
 		}
@@ -84,7 +84,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone signups are disabled")
 		}
-		params.Phone, err = a.validatePhone(params.Phone)
+		params.Phone, err = validatePhone(params.Phone)
 		if err != nil {
 			return err
 		}

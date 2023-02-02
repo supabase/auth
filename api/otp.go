@@ -87,7 +87,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		params.Data = make(map[string]interface{})
 	}
 
-	params.Phone, err = a.validatePhone(params.Phone)
+	params.Phone, err = validatePhone(params.Phone)
 	if err != nil {
 		return err
 	}
@@ -179,13 +179,13 @@ func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) (bool, error)
 		aud := a.requestAud(ctx, r)
 		var err error
 		if params.Email != "" {
-			params.Email, err = a.validateEmail(ctx, params.Email)
+			params.Email, err = validateEmail(params.Email)
 			if err != nil {
 				return false, err
 			}
 			_, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 		} else if params.Phone != "" {
-			params.Phone, err = a.validatePhone(params.Phone)
+			params.Phone, err = validatePhone(params.Phone)
 			if err != nil {
 				return false, err
 			}

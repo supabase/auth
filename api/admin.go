@@ -147,14 +147,14 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Email != "" {
-		params.Email, err = a.validateEmail(ctx, params.Email)
+		params.Email, err = validateEmail(params.Email)
 		if err != nil {
 			return err
 		}
 	}
 
 	if params.Phone != "" {
-		params.Phone, err = a.validatePhone(params.Phone)
+		params.Phone, err = validatePhone(params.Phone)
 		if err != nil {
 			return err
 		}
@@ -264,7 +264,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Email != "" {
-		params.Email, err = a.validateEmail(ctx, params.Email)
+		params.Email, err = validateEmail(params.Email)
 		if err != nil {
 			return err
 		}
@@ -276,7 +276,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Phone != "" {
-		params.Phone, err = a.validatePhone(params.Phone)
+		params.Phone, err = validatePhone(params.Phone)
 		if err != nil {
 			return err
 		}
