@@ -23,23 +23,23 @@ const (
 	phoneReauthenticationOtp = "reauthentication"
 )
 
-func (a *API) validatePhone(phone string) (string, error) {
-	phone = a.formatPhoneNumber(phone)
-	if isValid := a.validateE164Format(phone); !isValid {
+func validatePhone(phone string) (string, error) {
+	phone = formatPhoneNumber(phone)
+	if isValid := validateE164Format(phone); !isValid {
 		return "", unprocessableEntityError("Invalid phone number format")
 	}
 	return phone, nil
 }
 
 // validateE164Format checks if phone number follows the E.164 format
-func (a *API) validateE164Format(phone string) bool {
+func validateE164Format(phone string) bool {
 	// match should never fail as long as regexp is valid
 	matched, _ := regexp.Match(e164Format, []byte(phone))
 	return matched
 }
 
 // formatPhoneNumber removes "+" and whitespaces in a phone number
-func (a *API) formatPhoneNumber(phone string) string {
+func formatPhoneNumber(phone string) string {
 	return strings.ReplaceAll(strings.Trim(phone, "+"), " ", "")
 }
 
