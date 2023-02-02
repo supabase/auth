@@ -305,7 +305,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if user, err := models.IsDuplicatedEmail(db, params.Email, aud); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
 		} else if user != nil {
-			return unprocessableEntityError("Email address already registered by another user")
+			return unprocessableEntityError(DuplicateEmailMsg)
 		}
 		providers = append(providers, "email")
 	}

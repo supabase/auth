@@ -130,6 +130,9 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 			ts.Config.Mailer.SecureEmailChangeEnabled = c.isSecureEmailChangeEnabled
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), c.expectedCode, w.Code)
+
+			// remove user after each case
+			require.NoError(ts.T(), ts.API.db.Destroy(u))
 		})
 	}
 
