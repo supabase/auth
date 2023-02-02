@@ -450,7 +450,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	var err error
 	var tokenHash string
 	if isPhoneOtpVerification(params) {
-		params.Phone, err = a.validatePhone(params.Phone)
+		params.Phone, err = validatePhone(params.Phone)
 		if err != nil {
 			return nil, err
 		}
@@ -464,7 +464,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			return nil, badRequestError("Invalid sms verification type")
 		}
 	} else if isEmailOtpVerification(params) {
-		params.Email, err = a.validateEmail(ctx, params.Email)
+		params.Email, err = validateEmail(params.Email)
 		if err != nil {
 			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}

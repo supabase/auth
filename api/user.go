@@ -124,7 +124,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Email != "" && params.Email != user.GetEmail() {
-			params.Email, terr = a.validateEmail(ctx, params.Email)
+			params.Email, terr = validateEmail(params.Email)
 			if terr != nil {
 				return terr
 			}
@@ -144,7 +144,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Phone != "" && params.Phone != user.GetPhone() {
-			params.Phone, err = a.validatePhone(params.Phone)
+			params.Phone, err = validatePhone(params.Phone)
 			if err != nil {
 				return err
 			}

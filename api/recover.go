@@ -37,7 +37,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	var user *models.User
 	aud := a.requestAud(ctx, r)
 
-	params.Email, err = a.validateEmail(ctx, params.Email)
+	params.Email, err = validateEmail(params.Email)
 	if err != nil {
 		return err
 	}

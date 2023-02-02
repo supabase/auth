@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -9,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/badoux/checkmail"
 	"github.com/fatih/structs"
 	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/conf"
@@ -60,7 +60,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not parse JSON: %v", err)
 	}
 
-	params.Email, err = a.validateEmail(ctx, params.Email)
+	params.Email, err = validateEmail(params.Email)
 	if err != nil {
 		return err
 	}
@@ -178,7 +178,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if !config.Mailer.SecureEmailChangeEnabled && params.Type == "email_change_current" {
 				return unprocessableEntityError("Enable secure email change to generate link for current email")
 			}
-			params.NewEmail, terr = a.validateEmail(ctx, params.NewEmail)
+			params.NewEmail, terr = validateEmail(params.NewEmail)
 			if terr != nil {
 				return unprocessableEntityError("The new email address provided is invalid")
 			}
@@ -372,12 +372,11 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfigu
 	), "Database error updating user for email change")
 }
 
-func (a *API) validateEmail(ctx context.Context, email string) (string, error) {
+func validateEmail(email string) (string, error) {
 	if email == "" {
 		return "", unprocessableEntityError("An email address is required")
 	}
-	mailer := a.Mailer(ctx)
-	if err := mailer.ValidateEmail(email); err != nil {
+	if err := checkmail.ValidateFormat(email); err != nil {
 		return "", unprocessableEntityError("Unable to validate email address: " + err.Error())
 	}
 	return strings.ToLower(email), nil

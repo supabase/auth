@@ -204,7 +204,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone logins are disabled")
 		}
-		params.Phone = a.formatPhoneNumber(params.Phone)
+		params.Phone = formatPhoneNumber(params.Phone)
 		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
 	} else {
 		return oauthError("invalid_grant", InvalidLoginMessage)
