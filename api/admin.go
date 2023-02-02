@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/api/provider"
 	"github.com/netlify/gotrue/models"
 	"github.com/netlify/gotrue/observability"
 	"github.com/netlify/gotrue/storage"
@@ -267,6 +270,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		return unprocessableEntityError("Cannot create a user without either an email or phone")
 	}
 
+	var providers []string
 	if params.Email != "" {
 		params.Email, err = validateEmail(params.Email)
 		if err != nil {
@@ -277,6 +281,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		} else if user != nil {
 			return unprocessableEntityError("Email address already registered by another user")
 		}
+		providers = append(providers, "email")
 	}
 
 	if params.Phone != "" {
@@ -289,6 +294,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		} else if exists {
 			return unprocessableEntityError("Phone number already registered by another user")
 		}
+		providers = append(providers, "phone")
 	}
 
 	if params.Password == nil || *params.Password == "" {
@@ -304,35 +310,49 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Error creating user").WithInternalError(err)
 	}
 
-	if user.AppMetaData == nil {
-		user.AppMetaData = make(map[string]interface{})
-	}
-	user.AppMetaData["provider"] = "email"
-	user.AppMetaData["providers"] = []string{"email"}
-
-	if params.BanDuration != "" {
-		duration := time.Duration(0)
-		if params.BanDuration != "none" {
-			duration, err = time.ParseDuration(params.BanDuration)
-			if err != nil {
-				return badRequestError("invalid format for ban duration: %v", err)
-			}
-		}
-		if terr := user.Ban(a.db, duration); terr != nil {
-			return terr
-		}
+	user.AppMetaData = map[string]interface{}{
+		// default to the first provider in the providers slice
+		"provider":  providers[0],
+		"providers": providers,
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
+		if terr := tx.Create(user); terr != nil {
+			return terr
+		}
+
+		var identities []models.Identity
+		if user.GetEmail() != "" {
+			identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+				Subject: user.ID.String(),
+				Email:   user.GetEmail(),
+			}))
+
+			if terr != nil {
+				return terr
+			}
+			identities = append(identities, *identity)
+		}
+
+		if user.GetPhone() != "" {
+			identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+				Subject: user.ID.String(),
+				Email:   user.GetPhone(),
+			}))
+
+			if terr != nil {
+				return terr
+			}
+			identities = append(identities, *identity)
+		}
+
+		user.Identities = identities
+
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserSignedUpAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
 		}); terr != nil {
-			return terr
-		}
-
-		if terr := tx.Create(user); terr != nil {
 			return terr
 		}
 
@@ -362,10 +382,26 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
+		if params.BanDuration != "" {
+			duration := time.Duration(0)
+			if params.BanDuration != "none" {
+				duration, err = time.ParseDuration(params.BanDuration)
+				if err != nil {
+					return badRequestError("invalid format for ban duration: %v", err)
+				}
+			}
+			if terr := user.Ban(a.db, duration); terr != nil {
+				return terr
+			}
+		}
+
 		return nil
 	})
 
 	if err != nil {
+		if strings.Contains("invalid format for ban duration", err.Error()) {
+			return err
+		}
 		return internalServerError("Database error creating new user").WithInternalError(err)
 	}
 
