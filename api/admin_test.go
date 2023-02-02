@@ -243,6 +243,8 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"email":           "test1@example.com",
 				"phone":           "123456789",
 				"isAuthenticated": true,
+				"provider":        "email",
+				"providers":       []string{"email", "phone"},
 			},
 		},
 		{
@@ -255,6 +257,8 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"email":           "test2@example.com",
 				"phone":           "",
 				"isAuthenticated": false,
+				"provider":        "email",
+				"providers":       []string{"email"},
 			},
 		},
 		{
@@ -268,6 +272,8 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"email":           "test3@example.com",
 				"phone":           "",
 				"isAuthenticated": false,
+				"provider":        "email",
+				"providers":       []string{"email"},
 			},
 		},
 		{
@@ -282,6 +288,8 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"email":           "test4@example.com",
 				"phone":           "",
 				"isAuthenticated": true,
+				"provider":        "email",
+				"providers":       []string{"email"},
 			},
 		},
 	}
@@ -305,8 +313,8 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 			assert.Equal(ts.T(), c.expected["email"], data.GetEmail())
 			assert.Equal(ts.T(), c.expected["phone"], data.GetPhone())
-			assert.Equal(ts.T(), "email", data.AppMetaData["provider"])
-			assert.Equal(ts.T(), []interface{}{"email"}, data.AppMetaData["providers"])
+			assert.Equal(ts.T(), c.expected["provider"], data.AppMetaData["provider"])
+			assert.ElementsMatch(ts.T(), c.expected["providers"], data.AppMetaData["providers"])
 
 			u, err := models.FindUserByEmailAndAudience(ts.API.db, data.GetEmail(), ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
