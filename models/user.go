@@ -562,16 +562,12 @@ func IsDuplicatedPhone(tx *storage.Connection, phone, aud string) (bool, error) 
 	return true, nil
 }
 
-// Ban a user for a given duration
-func (u *User) Ban(tx *storage.Connection, duration string) error {
-	if duration == "none" {
+// Ban a user for a given duration.
+func (u *User) Ban(tx *storage.Connection, duration time.Duration) error {
+	if duration == time.Duration(0) {
 		u.BannedUntil = nil
 	} else {
-		d, err := time.ParseDuration(duration)
-		if err != nil {
-			return fmt.Errorf("invalid format for ban duration: %v", err)
-		}
-		t := time.Now().Add(d)
+		t := time.Now().Add(duration)
 		u.BannedUntil = &t
 	}
 	return tx.UpdateOnly(u, "banned_until")
