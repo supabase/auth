@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
@@ -215,17 +214,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.BanDuration != "" {
-			if params.BanDuration == "none" {
-				user.BannedUntil = nil
-			} else {
-				duration, terr := time.ParseDuration(params.BanDuration)
-				if terr != nil {
-					return badRequestError("Invalid format for ban_duration: %v", terr)
-				}
-				t := time.Now().Add(duration)
-				user.BannedUntil = &t
-			}
-			if terr := user.UpdateBannedUntil(tx); terr != nil {
+			if terr := user.Ban(tx, params.BanDuration); terr != nil {
 				return terr
 			}
 		}
@@ -244,8 +233,8 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		if errors.Is(err, invalidPasswordLengthError(config)) {
 			return err
 		}
-		if strings.Contains(err.Error(), "Invalid format for ban_duration") {
-			return err
+		if strings.Contains(err.Error(), "invalid format for ban duration") {
+			return badRequestError(err.Error())
 		}
 		return internalServerError("Error updating user").WithInternalError(err)
 	}
@@ -317,15 +306,6 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	user.AppMetaData["provider"] = "email"
 	user.AppMetaData["providers"] = []string{"email"}
 
-	if params.BanDuration != "" {
-		duration, terr := time.ParseDuration(params.BanDuration)
-		if terr != nil {
-			return badRequestError("Invalid format for ban_duration: %v", terr)
-		}
-		t := time.Now().Add(duration)
-		user.BannedUntil = &t
-	}
-
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserSignedUpAction, "", map[string]interface{}{
 			"user_id":    user.ID,
@@ -365,12 +345,18 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
+		if params.BanDuration != "" {
+			if terr := user.Ban(tx, params.BanDuration); terr != nil {
+				return terr
+			}
+		}
+
 		return nil
 	})
 
 	if err != nil {
-		if strings.Contains(err.Error(), "Invalid format for ban_duration") {
-			return err
+		if strings.Contains(err.Error(), "invalid format for ban duration") {
+			return badRequestError(err.Error())
 		}
 		return internalServerError("Database error creating new user").WithInternalError(err)
 	}
