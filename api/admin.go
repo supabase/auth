@@ -363,7 +363,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if user.GetPhone() != "" {
 			identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
 				Subject: user.ID.String(),
-				Email:   user.GetPhone(),
+				Phone:   user.GetPhone(),
 			}))
 
 			if terr != nil {
