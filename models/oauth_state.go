@@ -2,6 +2,7 @@ package models
 
 import (
 	"time"
+	"github.com/pkg/errors"
 
 	"github.com/gofrs/uuid"
 )
@@ -15,7 +16,23 @@ type OAuthState struct {
 	UpdatedAt           time.Time `json:"updated_at" db:"updated_at"`
 }
 
+
 func (OAuthState) TableName() string {
 	tableName := "oauth_state"
 	return tableName
+}
+
+
+func NewOAuthState(internalAuthCode, providerType, hashedChallenge string) (*OAuthState, error) {
+	id, err := uuid.NewV4()
+	if err != nil {
+		return nil, errors.Wrap("error generating unique oauth state verifier")
+	}
+	oauth := &OAuthState{
+		ID: id,
+		ProviderType: providerType,
+		HashedCodeChallenge: hashedChallenge,
+		InternalAuthCode: internalAuthCode,
+	}
+	return oauth, nil
 }

@@ -106,8 +106,11 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	}
 
 	// Validate the code challenge as per PKCE spec and also associate the code challenge with an id.
-	//
-	// Store the challenge together with oauth_state
+	// if pkce.length() >= 43 && pkce.length <= 128 && pkce.hasValidCharacters() {
+	//    state models.OAuthState  := OAuthState(provider, challenge, pkce)
+	//    state.create()
+	// }
+	// Store the challenge together with OAuthState
 	query.Del("code_challenge")
 
 	http.Redirect(w, r, authURL, http.StatusFound)
