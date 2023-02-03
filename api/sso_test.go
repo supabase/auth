@@ -151,21 +151,21 @@ func (ts *SSOTestSuite) TestIsStaleSAMLMetadata() {
 	}{
 		{
 			Description:           "Metadata is valid and within cache duration",
-			Metadata:              []byte(configurableSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-B", DateInFarFuture, OneHour)),
+			Metadata:              []byte(configurableSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-B", dateInFarFuture, oneHour)),
 			IsStale:               false,
 			CacheDurationExceeded: false,
 		},
 		{
 
 			Description:           "Metadata is valid but is a minute past cache duration",
-			Metadata:              []byte(configurableSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-B", currentTimeAsISO8601, OneHour)),
+			Metadata:              []byte(configurableSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-B", currentTimeAsISO8601, oneHour)),
 			IsStale:               true,
 			CacheDurationExceeded: true,
 		},
 
 		{
 			Description:           "Metadata is invalid but within cache duration",
-			Metadata:              []byte(configurableSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-B", DateInPast, OneHour)),
+			Metadata:              []byte(configurableSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-B", dateInPast, oneHour)),
 			IsStale:               true,
 			CacheDurationExceeded: false,
 		},
