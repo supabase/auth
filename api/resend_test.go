@@ -37,6 +37,77 @@ func (ts *ResendTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 }
 
+func (ts *ResendTestSuite) TestResendValidation() {
+	cases := []struct {
+		desc     string
+		params   map[string]interface{}
+		expected map[string]interface{}
+	}{
+		{
+			desc: "Invalid type",
+			params: map[string]interface{}{
+				"type":  "invalid",
+				"email": "foo@example.com",
+			},
+			expected: map[string]interface{}{
+				"code":    http.StatusBadRequest,
+				"message": "Missing one of these types: signup, email_change, sms, phone_change",
+			},
+		},
+		{
+			desc: "Type & email mismatch",
+			params: map[string]interface{}{
+				"type":  "sms",
+				"email": "foo@example.com",
+			},
+			expected: map[string]interface{}{
+				"code":    http.StatusBadRequest,
+				"message": "Type provided requires a phone number",
+			},
+		},
+		{
+			desc: "Type & phone mismatch",
+			params: map[string]interface{}{
+				"type":  "email_change",
+				"phone": "+123456789",
+			},
+			expected: map[string]interface{}{
+				"code":    http.StatusBadRequest,
+				"message": "Type provided requires an email address",
+			},
+		},
+		{
+			desc: "Email & phone number provided",
+			params: map[string]interface{}{
+				"type":  "email_change",
+				"phone": "+123456789",
+				"email": "foo@example.com",
+			},
+			expected: map[string]interface{}{
+				"code":    http.StatusBadRequest,
+				"message": "Only an email address or phone number should be provided.",
+			},
+		},
+	}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.params))
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/resend", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), c.expected["code"], w.Code)
+
+			data := make(map[string]interface{})
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			require.Equal(ts.T(), c.expected["message"], data["msg"])
+		})
+	}
+
+}
+
 func (ts *ResendTestSuite) TestResendSuccess() {
 	// Create user
 	u, err := models.NewUser("123456789", "foo@example.com", "password", ts.Config.JWT.Aud, nil)
@@ -54,9 +125,8 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 
 	cases := []struct {
-		desc     string
-		params   map[string]interface{}
-		expected map[string]interface{}
+		desc   string
+		params map[string]interface{}
 	}{
 		{
 			desc: "Resend signup confirmation",
@@ -64,7 +134,6 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 				"type":  "signup",
 				"email": "foo@example.com",
 			},
-			expected: map[string]interface{}{},
 		},
 		{
 			desc: "Resend email change",
@@ -72,7 +141,6 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 				"type":  "email_change",
 				"email": "foo@example.com",
 			},
-			expected: map[string]interface{}{},
 		},
 	}
 

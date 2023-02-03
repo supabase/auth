@@ -19,7 +19,7 @@ type SendConfirmationParams struct {
 }
 
 func (p *SendConfirmationParams) Validate() error {
-	if p.Type == "" {
+	if p.Type != signupVerification && p.Type != emailChangeVerification && p.Type != smsVerification && p.Type != phoneChangeVerification {
 		return badRequestError("Missing one of these types: signup, email_change, sms, phone_change")
 	}
 	if p.Email == "" && (p.Type == signupVerification || p.Type == emailChangeVerification) {
