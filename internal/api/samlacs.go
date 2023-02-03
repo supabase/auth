@@ -12,11 +12,11 @@ import (
 	"github.com/crewjam/saml"
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/api/provider"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/observability"
-	"github.com/netlify/gotrue/storage"
-	"github.com/netlify/gotrue/utilities"
+	"github.com/netlify/gotrue/internal/api/provider"
+	"github.com/netlify/gotrue/internal/models"
+	"github.com/netlify/gotrue/internal/observability"
+	"github.com/netlify/gotrue/internal/storage"
+	"github.com/netlify/gotrue/internal/utilities"
 )
 
 func (a *API) samlDestroyRelayState(ctx context.Context, relayState *models.SAMLRelayState) error {

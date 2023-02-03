@@ -3,8 +3,8 @@ package mailer
 import (
 	"net/url"
 
-	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/models"
+	"github.com/netlify/gotrue/internal/conf"
+	"github.com/netlify/gotrue/internal/models"
 	"github.com/netlify/mailme"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/gomail.v2"

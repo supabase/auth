@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/observability"
-	"github.com/netlify/gotrue/storage"
+	"github.com/netlify/gotrue/internal/models"
+	"github.com/netlify/gotrue/internal/observability"
+	"github.com/netlify/gotrue/internal/storage"
 	"github.com/sethvargo/go-password/password"
 )
 

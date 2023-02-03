@@ -3,7 +3,7 @@ package models
 import (
 	"database/sql"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/storage"
+	"github.com/netlify/gotrue/internal/storage"
 	"github.com/pkg/errors"
 	"time"
 )

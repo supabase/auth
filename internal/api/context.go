@@ -4,7 +4,7 @@ import (
 	"context"
 
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/netlify/gotrue/models"
+	"github.com/netlify/gotrue/internal/models"
 )
 
 type contextKey string

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/gobuffalo/pop/v5"
-	"github.com/netlify/gotrue/models"
+	"github.com/netlify/gotrue/internal/models"
 	"github.com/stretchr/testify/assert"
 )
 

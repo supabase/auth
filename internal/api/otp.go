@@ -6,9 +6,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/netlify/gotrue/api/sms_provider"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/storage"
+	"github.com/netlify/gotrue/internal/api/sms_provider"
+	"github.com/netlify/gotrue/internal/models"
+	"github.com/netlify/gotrue/internal/storage"
 	"github.com/sethvargo/go-password/password"
 )
 

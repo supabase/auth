@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
-	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/internal/conf"
 	"golang.org/x/oauth2"
 )
 

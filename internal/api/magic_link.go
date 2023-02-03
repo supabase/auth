@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/storage"
+	"github.com/netlify/gotrue/internal/models"
+	"github.com/netlify/gotrue/internal/storage"
 	"github.com/sethvargo/go-password/password"
 )
 

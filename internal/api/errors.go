@@ -7,9 +7,9 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/observability"
-	"github.com/netlify/gotrue/utilities"
+	"github.com/netlify/gotrue/internal/conf"
+	"github.com/netlify/gotrue/internal/observability"
+	"github.com/netlify/gotrue/internal/utilities"
 	"github.com/pkg/errors"
 )
 

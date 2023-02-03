@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/internal/conf"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/internal/conf"
 )
 
 var defaultTimeout time.Duration = time.Second * 10

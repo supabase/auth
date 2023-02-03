@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/crewjam/saml"
-	"github.com/netlify/gotrue/conf"
+	"github.com/netlify/gotrue/internal/conf"
 	"github.com/stretchr/testify/require"
 )
 

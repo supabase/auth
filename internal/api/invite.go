@@ -5,9 +5,9 @@ import (
 	"net/http"
 
 	"github.com/fatih/structs"
-	"github.com/netlify/gotrue/api/provider"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/storage"
+	"github.com/netlify/gotrue/internal/api/provider"
+	"github.com/netlify/gotrue/internal/models"
+	"github.com/netlify/gotrue/internal/storage"
 )
 
 // InviteParams are the parameters the Signup endpoint accepts

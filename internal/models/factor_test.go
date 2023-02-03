@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/storage"
-	"github.com/netlify/gotrue/storage/test"
+	"github.com/netlify/gotrue/internal/conf"
+	"github.com/netlify/gotrue/internal/storage"
+	"github.com/netlify/gotrue/internal/storage/test"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )

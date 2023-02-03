@@ -3,7 +3,7 @@ package models
 import (
 	"strings"
 
-	"github.com/netlify/gotrue/storage"
+	"github.com/netlify/gotrue/internal/storage"
 )
 
 // GetAccountLinkingDomain returns a string that describes the account linking

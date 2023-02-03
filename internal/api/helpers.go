@@ -10,9 +10,9 @@ import (
 	"net/url"
 
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/models"
-	"github.com/netlify/gotrue/utilities"
+	"github.com/netlify/gotrue/internal/conf"
+	"github.com/netlify/gotrue/internal/models"
+	"github.com/netlify/gotrue/internal/utilities"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )

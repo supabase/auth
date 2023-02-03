@@ -6,9 +6,9 @@ import (
 	"net/url"
 
 	"github.com/mrjones/oauth"
-	"github.com/netlify/gotrue/api/provider"
-	"github.com/netlify/gotrue/observability"
-	"github.com/netlify/gotrue/storage"
+	"github.com/netlify/gotrue/internal/api/provider"
+	"github.com/netlify/gotrue/internal/observability"
+	"github.com/netlify/gotrue/internal/storage"
 	"github.com/sirupsen/logrus"
 )
 

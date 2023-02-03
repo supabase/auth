@@ -6,7 +6,7 @@ import (
 	"time"
 
 	chimiddleware "github.com/go-chi/chi/middleware"
-	"github.com/netlify/gotrue/utilities"
+	"github.com/netlify/gotrue/internal/utilities"
 	"github.com/sirupsen/logrus"
 )
 
