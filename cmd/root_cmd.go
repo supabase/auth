@@ -3,8 +3,8 @@ package cmd
 import (
 	"context"
 
-	"github.com/netlify/gotrue/conf"
-	"github.com/netlify/gotrue/observability"
+	"github.com/netlify/gotrue/internal/conf"
+	"github.com/netlify/gotrue/internal/observability"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
