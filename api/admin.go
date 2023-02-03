@@ -207,17 +207,26 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		var identities []models.Identity
 		if params.Email != "" {
-			if user.GetEmail() == "" {
+			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email"); terr != nil && !models.IsNotFoundError(terr) {
+				return terr
+			} else if identity == nil {
 				// if the user doesn't have an existing email
 				// then updating the user's email should create a new email identity
-				identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+				i, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
 					Subject: user.ID.String(),
 					Email:   params.Email,
 				}))
 				if terr != nil {
 					return terr
 				}
-				identities = append(identities, *identity)
+				identities = append(identities, *i)
+			} else {
+				// update the existing email identity
+				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
+					"email": params.Email,
+				}); terr != nil {
+					return terr
+				}
 			}
 			if terr := user.SetEmail(tx, params.Email); terr != nil {
 				return terr
@@ -225,7 +234,9 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Phone != "" {
-			if user.GetPhone() == "" {
+			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone"); terr != nil && !models.IsNotFoundError(terr) {
+				return terr
+			} else if identity == nil {
 				// if the user doesn't have an existing phone
 				// then updating the user's phone should create a new phone identity
 				identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
@@ -236,6 +247,13 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 				identities = append(identities, *identity)
+			} else {
+				// update the existing phone identity
+				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
+					"phone": params.Phone,
+				}); terr != nil {
+					return terr
+				}
 			}
 			if terr := user.SetPhone(tx, params.Phone); terr != nil {
 				return terr
