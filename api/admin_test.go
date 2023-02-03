@@ -233,6 +233,20 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 		expected map[string]interface{}
 	}{
 		{
+			desc: "Only phone",
+			params: map[string]interface{}{
+				"phone":    "123456789",
+				"password": "test1",
+			},
+			expected: map[string]interface{}{
+				"email":           "",
+				"phone":           "123456789",
+				"isAuthenticated": true,
+				"provider":        "phone",
+				"providers":       []string{"phone"},
+			},
+		},
+		{
 			desc: "With password",
 			params: map[string]interface{}{
 				"email":    "test1@example.com",
@@ -316,8 +330,20 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			assert.Equal(ts.T(), c.expected["provider"], data.AppMetaData["provider"])
 			assert.ElementsMatch(ts.T(), c.expected["providers"], data.AppMetaData["providers"])
 
-			u, err := models.FindUserByEmailAndAudience(ts.API.db, data.GetEmail(), ts.Config.JWT.Aud)
+			u, err := models.FindUserByID(ts.API.db, data.ID)
 			require.NoError(ts.T(), err)
+
+			// verify that the corresponding identities were created
+			require.NotEmpty(ts.T(), u.Identities)
+			for _, identity := range u.Identities {
+				require.Equal(ts.T(), u.ID, identity.UserID)
+				if identity.Provider == "email" {
+					require.Equal(ts.T(), c.expected["email"], identity.IdentityData["email"])
+				}
+				if identity.Provider == "phone" {
+					require.Equal(ts.T(), c.expected["phone"], identity.IdentityData["phone"])
+				}
+			}
 
 			var expectedPassword string
 			if _, ok := c.params["password"]; ok {
@@ -325,6 +351,9 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			}
 
 			assert.Equal(ts.T(), c.expected["isAuthenticated"], u.Authenticate(expectedPassword))
+
+			// remove created user after each case
+			require.NoError(ts.T(), ts.API.db.Destroy(u))
 		})
 	}
 }
@@ -362,6 +391,8 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
 	var buffer bytes.Buffer
+	newEmail := "test2@example.com"
+	newPhone := "234567890"
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"role": "testing",
 		"app_metadata": map[string]interface{}{
@@ -371,6 +402,8 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 			"name": "David",
 		},
 		"ban_duration": "24h",
+		"email":        newEmail,
+		"phone":        newPhone,
 	}))
 
 	// Setup request
@@ -388,12 +421,33 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 	assert.Equal(ts.T(), "testing", data.Role)
 	assert.NotNil(ts.T(), data.UserMetaData)
 	assert.Equal(ts.T(), "David", data.UserMetaData["name"])
+	assert.Equal(ts.T(), newEmail, data.GetEmail())
+	assert.Equal(ts.T(), newPhone, data.GetPhone())
 
 	assert.NotNil(ts.T(), data.AppMetaData)
 	assert.Len(ts.T(), data.AppMetaData["roles"], 2)
 	assert.Contains(ts.T(), data.AppMetaData["roles"], "writer")
 	assert.Contains(ts.T(), data.AppMetaData["roles"], "editor")
 	assert.NotNil(ts.T(), data.BannedUntil)
+
+	u, err = models.FindUserByID(ts.API.db, data.ID)
+	require.NoError(ts.T(), err)
+
+	// check if the corresponding identities were successfully created
+	require.NotEmpty(ts.T(), u.Identities)
+
+	for _, identity := range u.Identities {
+		// for email & phone identities, the providerId is the same as the userId
+		require.Equal(ts.T(), u.ID.String(), identity.ID)
+		require.Equal(ts.T(), u.ID, identity.UserID)
+		if identity.Provider == "email" {
+			require.Equal(ts.T(), newEmail, identity.IdentityData["email"])
+		}
+		if identity.Provider == "phone" {
+			require.Equal(ts.T(), newPhone, identity.IdentityData["phone"])
+
+		}
+	}
 }
 
 func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
