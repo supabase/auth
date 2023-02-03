@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/netlify/gotrue/utilities"
+	"github.com/netlify/gotrue/internal/utilities"
 	"github.com/spf13/cobra"
 )
 
