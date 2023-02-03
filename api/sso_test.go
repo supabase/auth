@@ -18,6 +18,10 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+const dateInPast = "2001-02-03T04:05:06.789"
+const dateInFarFuture = "2999-02-03T04:05:06.789"
+const oneHour = "PT1H"
+
 type SSOTestSuite struct {
 	suite.Suite
 	API      *API
@@ -135,12 +139,10 @@ x6lVV4kXi0x0n198/gkjnA85rPZoZ6dmqHtkcM0Gabgg6KEE5ubSDlWDsdv27uANceCZAoxd1+in
 }
 
 func (ts *SSOTestSuite) TestIsStaleSAMLMetadata() {
-	const DateInPast = "2001-02-03T04:05:06.789"
-	const DateInFarFuture = "2999-02-03T04:05:06.789"
+
 	// https://en.wikipedia.org/wiki/ISO_8601
 	currentTime := time.Now()
 	currentTimeAsISO8601 := currentTime.UTC().Format("2006-01-02T15:04:05Z07:00")
-	const OneHour = "PT1H"
 	examples := []struct {
 		Description           string
 		Metadata              []byte

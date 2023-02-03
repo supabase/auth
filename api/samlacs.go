@@ -259,16 +259,12 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var token *AccessTokenResponse
-	if err := db.Transaction(func(tx *storage.Connection) error {
-		if samlMetadataModified {
-			if terr := tx.Update(ssoProvider.SAMLProvider); terr != nil {
-				return terr
-			}
+	if samlMetadataModified {
+		if err := a.db.Update(ssoProvider.SAMLProvider); err != nil {
+			return err
 		}
-		return nil
-	}); err != nil {
-		return err
 	}
+
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		var user *models.User
