@@ -355,6 +355,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	user.AppMetaData = map[string]interface{}{
+		// TODO: Deprecate "provider" field
 		// default to the first provider in the providers slice
 		"provider":  providers[0],
 		"providers": providers,
