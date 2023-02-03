@@ -13,7 +13,7 @@ import (
 
 const (
 	apiTestVersion = "1"
-	apiTestConfig  = "../hack/test.env"
+	apiTestConfig  = "../../hack/test.env"
 )
 
 func init() {

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-const modelsTestConfig = "../hack/test.env"
+const modelsTestConfig = "../../hack/test.env"
 
 func init() {
 	crypto.PasswordHashCost = crypto.QuickHashCost
