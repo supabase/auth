@@ -38,7 +38,7 @@ func NewOAuthState(providerType, hashedChallenge string) (*OAuthState, error) {
 	return oauth, nil
 }
 
-func FindUserByAuthCode(tx *storage.Connection, internalAuthCode string) (*OAuthState, error) {
+func FindOAuthStateByAuthCode(tx *storage.Connection, internalAuthCode string) (*OAuthState, error) {
 	obj := &OAuthState{}
 	if err := tx.Eager().Q().Where("internal_oauth_code = ?", internalAuthCode).First(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
