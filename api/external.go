@@ -44,6 +44,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	query := r.URL.Query()
 	providerType := query.Get("provider")
 	scopes := query.Get("scopes")
+	codeChallenge := query.Get("code_challenge")
 
 	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
@@ -105,12 +106,18 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		authURL = p.AuthCodeURL(tokenString, authUrlParams...)
 	}
 
-	// Validate the code challenge as per PKCE spec and also associate the code challenge with an id.
-	// if pkce.length() >= 43 && pkce.length <= 128 && pkce.hasValidCharacters() {
-	//    state models.OAuthState  := OAuthState(provider, challenge, pkce)
-	//    state.create()
-	// }
-	// Store the challenge together with OAuthState
+	if codeChallenge != "" && len(codeChallenge) < 43 || len(codeChallenge) > 128 {
+		// TODO also check for valid characters in the if check above
+		// Check PKCE ref for exact error to return
+		return internalServerError("invalid code challenge")
+	}
+	oauthState, err := models.NewOAuthState(providerType, codeChallenge)
+	if err != nil {
+		return err
+	}
+	if err := a.db.Create(oauthState); err != nil {
+		return err
+	}
 	query.Del("code_challenge")
 
 	http.Redirect(w, r, authURL, http.StatusFound)

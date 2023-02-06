@@ -105,3 +105,11 @@ type SAMLRelayStateNotFoundError struct{}
 func (e SAMLRelayStateNotFoundError) Error() string {
 	return "SAML RelayState not found"
 }
+
+// OAuthStateNotFoundError represents an error when an OAuthState can't be
+// found.
+type OAuthStateNotFoundError struct{}
+
+func (e OAuthStateNotFoundError) Error() string {
+	return "OAuth State not found"
+}
