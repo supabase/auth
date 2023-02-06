@@ -70,6 +70,8 @@ type IdTokenGrantParams struct {
 	IdToken  string `json:"id_token"`
 	Nonce    string `json:"nonce"`
 	Provider string `json:"provider"`
+	ClientID string `json:"client_id"`
+	Issuer   string `json:"issuer"`
 }
 
 const useCookieHeader = "x-use-cookie"
@@ -121,6 +123,16 @@ func (p *IdTokenGrantParams) getVerifier(ctx context.Context, config *conf.Globa
 	}
 
 	return provider.Verifier(&oidc.Config{ClientID: oAuthProviderClientId}), nil
+}
+
+func (p *IdTokenGrantParams) getVerifierFromClientIDandIssuer(ctx context.Context) (*oidc.IDTokenVerifier, error) {
+	var provider *oidc.Provider
+	var err error
+	provider, err = oidc.NewProvider(ctx, p.Issuer)
+	if err != nil {
+		return nil, fmt.Errorf("issuer %s doesn't support the id_token grant flow", p.Issuer)
+	}
+	return provider.Verifier(&oidc.Config{ClientID: p.ClientID}), nil
 }
 
 func getEmailVerified(v interface{}) bool {
@@ -392,11 +404,18 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return oauthError("invalid request", "id_token required")
 	}
 
-	if params.Provider == "" {
-		return oauthError("invalid request", "provider required")
+	if params.Provider == "" && (params.ClientID == "" || params.Issuer == "") {
+		return oauthError("invalid request", "provider or client_id and issuer required")
 	}
 
-	verifier, err := params.getVerifier(ctx, a.config)
+	var verifier *oidc.IDTokenVerifier
+	if params.Provider != "" {
+		verifier, err = params.getVerifier(ctx, a.config)
+	} else if params.ClientID != "" && params.Issuer != "" {
+		verifier, err = params.getVerifierFromClientIDandIssuer(ctx)
+	} else {
+		return badRequestError("%v", err)
+	}
 	if err != nil {
 		return err
 	}

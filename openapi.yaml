@@ -90,7 +90,7 @@ paths:
               description: |-
                 For the refresh token flow, supply only `refresh_token`.
                 For the email/phone with password flow, supply `email`, `phone` and `password` with an optional `gotrue_meta_security`.
-                For the OIDC ID token flow, supply `id_token`, `nonce`, `provider` with an optional `gotrue_meta_security`.
+                For the OIDC ID token flow, supply `id_token`, `nonce`, `provider`, `client_id`, `issuer` with an optional `gotrue_meta_security`.
               properties:
                 refresh_token:
                   type: string
@@ -111,6 +111,10 @@ paths:
                   enum:
                     - google
                     - apple
+                client_id:
+                  type: string
+                issuer:
+                  type: string
                 gotrue_meta_security:
                   $ref: '#/components/schemas/GoTrueMetaSecurity'
       responses:
