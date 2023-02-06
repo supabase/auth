@@ -17,6 +17,7 @@ import (
 	"github.com/netlify/gotrue/internal/conf"
 	"github.com/netlify/gotrue/internal/metering"
 	"github.com/netlify/gotrue/internal/models"
+	"github.com/netlify/gotrue/internal/observability"
 	"github.com/netlify/gotrue/internal/storage"
 )
 
@@ -388,6 +389,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	config := a.config
+	log := observability.GetLogEntry(r)
 
 	params := &IdTokenGrantParams{}
 
@@ -412,7 +414,20 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	if params.Provider != "" {
 		verifier, err = params.getVerifier(ctx, a.config)
 	} else if params.ClientID != "" && params.Issuer != "" {
-		verifier, err = params.getVerifierFromClientIDandIssuer(ctx)
+		log.WithField("issuer", params.Issuer).WithField("client_id", params.ClientID).Warn("Use of POST /token with issuer and client_id is deprecated for security reasons. Please switch to using the API with provider only!")
+
+		for _, issuer := range a.config.External.AllowedIdTokenIssuers {
+			if params.Issuer == issuer {
+				verifier, err = params.getVerifierFromClientIDandIssuer(ctx)
+				break
+			}
+		}
+		if err != nil {
+			return err
+		}
+		if verifier == nil {
+			return badRequestError("Issuer not allowed")
+		}
 	} else {
 		return badRequestError("%v", err)
 	}
