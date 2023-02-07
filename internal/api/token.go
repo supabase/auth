@@ -475,7 +475,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		var terr error
 		var identity *models.Identity
 
-		if identity, terr = models.FindIdentityByIdAndProvider(tx, sub, params.Provider); terr != nil {
+		provider := params.Provider
+		if provider == "" {
+			provider = params.Issuer
+		}
+
+		if identity, terr = models.FindIdentityByIdAndProvider(tx, sub, provider); terr != nil {
 			// create new identity & user if identity is not found
 			if models.IsNotFoundError(terr) {
 				if config.DisableSignup {
@@ -493,7 +498,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				if terr != nil {
 					return terr
 				}
-				if _, terr = a.createNewIdentity(tx, user, params.Provider, claims); terr != nil {
+				if _, terr = a.createNewIdentity(tx, user, provider, claims); terr != nil {
 					return terr
 				}
 			} else {
