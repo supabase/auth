@@ -167,11 +167,10 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		providerRefreshToken = oAuthResponseData.refreshToken
 		code = oAuthResponseData.code
 	}
-	// We make use of sha256(provider|authcode) as the authcode for GoTrue. If this is a PKCE flow we return code here.
-	// GoTrue should store auth code  in the database, maybe under the sessions table
+	// if flowType == 'pkce' {
 	fmt.Println(code)
-
-	// This part is only relevant in the implicit flow, in PKCE this should be a separate step
+	//   return auth code here and don't do anything more
+	// }
 
 	var user *models.User
 	var token *AccessTokenResponse

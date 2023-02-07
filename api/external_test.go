@@ -76,6 +76,51 @@ func performAuthorizationRequest(ts *ExternalTestSuite, provider string, inviteT
 	return w
 }
 
+func performPKCEAuthorizationRequest(ts *ExternalTestSuite, provider string, codeVerifier string) *httptest.ResponseRecorder {
+	authorizeURL := "http://localhost/authorize?flow_type=pkce&provider=" + provider
+	if codeVerifier != "" {
+		authorizeURL = authorizeURL + "&code_verifier=" + codeVerifier
+	}
+
+	req := httptest.NewRequest(http.MethodGet, authorizeURL, nil)
+	req.Header.Set("Referer", "https://example.supabase.com/admin")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	return w
+}
+func performPKCEAuthorization(ts *ExternalTestSuite, provider string, code string, inviteToken string) *url.URL {
+	// TODO - Do the same as regular authorization but with both steps
+	// w := performAuthorizationRequest(ts, provider, inviteToken)
+	// ts.Require().Equal(http.StatusFound, w.Code)
+	// u, err := url.Parse(w.Header().Get("Location"))
+	// ts.Require().NoError(err, "redirect url parse failed")
+	//	q := u.Query()
+	// Set s
+	// testURL, err := url.Parse("http://localhost/callback")
+	// ts.Require().NoError(err)
+	// v := testURL.Query()
+	// v.Set("code", code)
+	// v.Set("state", state)
+	// testURL.RawQuery = v.Encode()
+	// req := httptest.NewRequest(http.MethodGet, testURL.String(), nil)
+	// w = httptest.NewRecorder()
+	// ts.API.handler.ServeHTTP(w, req)
+	//
+	// TODO - Modify this section so that it checks if an internal auth code was returned
+	//
+	// ts.Require().Equal(http.StatusOK, w.Code)
+	// TODO - Make use of this internal auth code and make a new request to /token?grant_type=pkce
+	//
+	// req := httptest.NewRequest(http.MethodGet, testURL.String(), nil)
+	// y = httptest.NewRecorder()
+	// ts.API.handler.ServeHTTP(y, req)
+	// TODO - Modify this so it adjusts for the fact that AurhotizationSuccess returns token etc in body
+	// assertAuthorizationSuccess()
+	return nil
+
+}
+
 func performAuthorization(ts *ExternalTestSuite, provider string, code string, inviteToken string) *url.URL {
 	w := performAuthorizationRequest(ts, provider, inviteToken)
 	ts.Require().Equal(http.StatusFound, w.Code)

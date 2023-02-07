@@ -133,6 +133,30 @@ func (ts *TokenTestSuite) TestTokenPasswordGrantFailure() {
 	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
 }
 
+func (ts *TokenTestSuite) TestTokenPKCEGrantSuccess() {
+
+	// initialize code Challenge
+	// verifier = hash(challenge)
+	// internalAuthCode = <generate-a-value>
+	// Create new OAuth State (internalAuthCode, verifier)
+	//	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &buffer)
+	// req.Header.Set("Content-Type", "application/json")
+
+	// Create a buffer and then read it in.
+	// w := httptest.NewRecorder()
+	// ts.API.handler.ServeHTTP(w, req)
+	// assert.Equal(ts.T(), http.StatusOK, w.Code)
+	// write state to db
+	//
+}
+
+func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
+	// Do Same thing as in TestTokenPKCEGrant Success but with:
+	// Case 1: invalid authcode
+	// Case 2: Invalid challenge
+	// Case 3: invalid authcode + verifier
+}
+
 func (ts *TokenTestSuite) TestTokenRefreshTokenGrantFailure() {
 	_ = ts.createBannedUser()
 
