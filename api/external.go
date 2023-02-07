@@ -45,6 +45,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	providerType := query.Get("provider")
 	scopes := query.Get("scopes")
 	codeChallenge := query.Get("code_challenge")
+	flowType := query.Get("flow_type")
 
 	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
@@ -105,20 +106,23 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	default:
 		authURL = p.AuthCodeURL(tokenString, authUrlParams...)
 	}
-
-	if codeChallenge != "" && len(codeChallenge) < 43 || len(codeChallenge) > 128 {
-		// TODO also check for valid characters in the if check above
-		// Check PKCE ref for exact error to return
-		return internalServerError("invalid code challenge")
-	}
-	oauthState, err := models.NewOAuthState(providerType, codeChallenge)
-	if err != nil {
-		return err
-	}
-	if err := a.db.Create(oauthState); err != nil {
-		return err
-	}
 	query.Del("code_challenge")
+
+	if flowType == "pkce" {
+		if codeChallenge == "" || len(codeChallenge) < 43 || len(codeChallenge) > 128 {
+			// TODO also check for valid characters in the if check above
+			// Check PKCE ref for exact error to return
+			return internalServerError("invalid code challenge")
+		}
+		oauthState, err := models.NewOAuthState(providerType, codeChallenge)
+		if err != nil {
+			return err
+		}
+		if err := a.db.Create(oauthState); err != nil {
+			return err
+		}
+		// TODO - maybe return auth code here
+	}
 
 	http.Redirect(w, r, authURL, http.StatusFound)
 	return nil

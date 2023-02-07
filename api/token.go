@@ -592,10 +592,7 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
-	authState, err := models.FindOAuthStateByAuthCode(params.AuthCode)
-	if err != nil {
-		return err
-	}
+	authState, err := models.FindOAuthStateByAuthCode(db, params.AuthCode)
 	hashedCodeChallenge := authState.HashedCodeChallenge
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
 	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
