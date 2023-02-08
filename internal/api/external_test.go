@@ -76,10 +76,10 @@ func performAuthorizationRequest(ts *ExternalTestSuite, provider string, inviteT
 	return w
 }
 
-func performPKCEAuthorizationRequest(ts *ExternalTestSuite, provider string, codeVerifier string) *httptest.ResponseRecorder {
+func performPKCEAuthorizationRequest(ts *ExternalTestSuite, provider string, codeChallenge string) *httptest.ResponseRecorder {
 	authorizeURL := "http://localhost/authorize?flow_type=pkce&provider=" + provider
-	if codeVerifier != "" {
-		authorizeURL = authorizeURL + "&code_verifier=" + codeVerifier
+	if codeChallenge != "" {
+		authorizeURL = authorizeURL + "&code_challenge=" + codeChallenge
 	}
 
 	req := httptest.NewRequest(http.MethodGet, authorizeURL, nil)
@@ -89,13 +89,14 @@ func performPKCEAuthorizationRequest(ts *ExternalTestSuite, provider string, cod
 
 	return w
 }
-func performPKCEAuthorization(ts *ExternalTestSuite, provider string, code string, inviteToken string) *url.URL {
+func performPKCEAuthorization(ts *ExternalTestSuite, provider string) *url.URL {
 	// TODO - Do the same as regular authorization but with both steps
-	// w := performAuthorizationRequest(ts, provider, inviteToken)
-	// ts.Require().Equal(http.StatusFound, w.Code)
+	codeVerifier := "123456abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	w := performPKCEAuthorizationRequest(ts, provider, codeVerifier)
+	ts.Require().Equal(http.StatusFound, w.Code)
 	// u, err := url.Parse(w.Header().Get("Location"))
 	// ts.Require().NoError(err, "redirect url parse failed")
-	//	q := u.Query()
+	// q := u.Query()
 	// Set s
 	// testURL, err := url.Parse("http://localhost/callback")
 	// ts.Require().NoError(err)
@@ -202,4 +203,8 @@ func (ts *ExternalTestSuite) TestSignupExternalUnsupported() {
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	ts.Equal(w.Code, http.StatusBadRequest)
+}
+
+func (ts *ExternalTestSuite) TestPKCEAuthorization() {
+	performPKCEAuthorization(ts, "github")
 }

@@ -95,6 +95,14 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam(key, query.Get(key)))
 		}
 	}
+
+	// TODO - Find less hacky way of conveying state through
+	// This is done separately from the validation checks below as we don't want to create state till the end
+	// but we need to append to the token string now to pass into AuthCodeURL function
+	if flowType == "pkce" {
+		tokenString += "&flow_type=pkce"
+	}
+
 	var authURL string
 	switch externalProvider := p.(type) {
 	case *provider.TwitterProvider:
@@ -121,7 +129,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		if err := a.db.Create(oauthState); err != nil {
 			return err
 		}
-		// TODO - maybe return auth code here
 	}
 
 	http.Redirect(w, r, authURL, http.StatusFound)
@@ -167,9 +174,11 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		providerRefreshToken = oAuthResponseData.refreshToken
 		code = oAuthResponseData.code
 	}
-	// if flowType == 'pkce' {
 	fmt.Println(code)
-	//   return auth code here and don't do anything more
+	// TODO - figure out how to fetch flow type from OAuth
+	// if flowType == "pkce" {
+	// 	// TODO: update auth code in oauth state
+	// 	return sendJSON(w, http.StatusOK, code)
 	// }
 
 	var user *models.User
