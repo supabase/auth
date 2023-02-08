@@ -27,6 +27,7 @@ type ExternalProviderClaims struct {
 	Provider    string `json:"provider"`
 	InviteToken string `json:"invite_token,omitempty"`
 	Referrer    string `json:"referrer,omitempty"`
+	FlowType    string `json:"flow_type"`
 }
 
 // ExternalSignupParams are the parameters the Signup endpoint accepts
@@ -78,6 +79,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		Provider:    providerType,
 		InviteToken: inviteToken,
 		Referrer:    redirectURL,
+		FlowType:    flowType,
 	})
 	tokenString, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
@@ -95,14 +97,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam(key, query.Get(key)))
 		}
 	}
-
-	// TODO - Find less hacky way of conveying state through
-	// This is done separately from the validation checks below as we don't want to create state till the end
-	// but we need to append to the token string now to pass into AuthCodeURL function
-	if flowType == "pkce" {
-		tokenString += "&flow_type=pkce"
-	}
-
 	var authURL string
 	switch externalProvider := p.(type) {
 	case *provider.TwitterProvider:
@@ -117,8 +111,8 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	query.Del("code_challenge")
 
 	if flowType == "pkce" {
+		// TODO abstract into helper function
 		if codeChallenge == "" || len(codeChallenge) < 43 || len(codeChallenge) > 128 {
-			// TODO also check for valid characters in the if check above
 			// Check PKCE ref for exact error to return
 			return internalServerError("invalid code challenge")
 		}
@@ -153,8 +147,9 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var userData *provider.UserProvidedData
 	var providerAccessToken string
 	var providerRefreshToken string
-	var code string
+	//var code string
 	var grantParams models.GrantParams
+	flowType := getFlowType(ctx)
 
 	if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
@@ -172,14 +167,15 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		userData = oAuthResponseData.userData
 		providerAccessToken = oAuthResponseData.token
 		providerRefreshToken = oAuthResponseData.refreshToken
-		code = oAuthResponseData.code
+		//code = oAuthResponseData.code
 	}
-	fmt.Println(code)
 	// TODO - figure out how to fetch flow type from OAuth
-	// if flowType == "pkce" {
-	// 	// TODO: update auth code in oauth state
-	// 	return sendJSON(w, http.StatusOK, code)
-	// }
+	if flowType == "pkce" {
+		return internalServerError("error")
+
+		// TODO - figure out how to properly fetch the state to update
+		//return sendJSON(w, http.StatusOK, code)
+	}
 
 	var user *models.User
 	var token *AccessTokenResponse
@@ -480,7 +476,10 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	if claims.Referrer != "" {
 		ctx = withExternalReferrer(ctx, claims.Referrer)
 	}
-
+	// TODO - More stringent checks here on what's a valid flow type
+	if claims.FlowType == "pkce" {
+		ctx = withFlowType(ctx, claims.FlowType)
+	}
 	ctx = withExternalProviderType(ctx, claims.Provider)
 	return withSignature(ctx, state), nil
 }

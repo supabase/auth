@@ -28,6 +28,7 @@ const (
 	oauthTokenKey           = contextKey("oauth_token") // for OAuth1.0, also known as request token
 	oauthVerifierKey        = contextKey("oauth_verifier")
 	ssoProviderKey          = contextKey("sso_provider")
+	flowTypeKey             = contextKey("flow_type")
 )
 
 // withToken adds the JWT token to the context.
@@ -123,6 +124,19 @@ func withSignature(ctx context.Context, id string) context.Context {
 
 func withInviteToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, inviteTokenKey, token)
+}
+
+func withFlowType(ctx context.Context, flowType string) context.Context {
+	return context.WithValue(ctx, flowTypeKey, flowType)
+}
+
+func getFlowType(ctx context.Context) string {
+	obj := ctx.Value(flowTypeKey)
+	if obj == nil {
+		return ""
+	}
+
+	return obj.(string)
 }
 
 func getInviteToken(ctx context.Context) string {
