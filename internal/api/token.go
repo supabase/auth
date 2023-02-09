@@ -15,7 +15,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
-	"github.com/netlify/gotrue/internal/api/provider"
+	// "github.com/netlify/gotrue/internal/api/provider"
 	"github.com/netlify/gotrue/internal/conf"
 	"github.com/netlify/gotrue/internal/metering"
 	"github.com/netlify/gotrue/internal/models"
@@ -590,59 +590,53 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	config := a.config
-	providerType := getExternalProviderType(ctx)
 
 	params := &PKCEGrantParams{}
 	body, err := getBodyBytes(r)
-	var userData *provider.UserProvidedData
+	// var userData *provider.UserProvidedData
 	var providerAccessToken string
 	var providerRefreshToken string
-	var grantParams models.GrantParams
+	// var grantParams models.GrantParams
 
 	if err != nil {
 		return internalServerError("Could not read body").WithInternalError(err)
 	}
 
-	err = json.Unmarshal(body, params)
-	if err != nil {
+	if err = json.Unmarshal(body, params); err != nil {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
+
 	authState, err := models.FindOAuthStateByAuthCode(db, params.AuthCode)
+	if authState.InternalAuthCode != params.AuthCode {
+		return forbiddenError("invalid auth code")
+	}
 	hashedCodeChallenge := authState.HashedCodeChallenge
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
 	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
 	if string(hashedCodeChallenge[:]) != encodedCodeVerifier {
-		return forbiddenError("code verifier does not match code challenge")
+		return forbiddenError(fmt.Sprintf("code verifier does not match code challenge, code verifier is %s, code challenge is %s, hashed Code verifier is: %s", encodedCodeVerifier, hashedCodeChallenge[:], hashedCodeVerifier))
 	}
-	var user *models.User
+	// var user *models.User
 	var token *AccessTokenResponse
-	err = db.Transaction(func(tx *storage.Connection) error {
-		var terr error
-		// Check if user exists and create account otherwise
-		inviteToken := getInviteToken(ctx)
-		if inviteToken != "" {
-			if user, terr = a.processInvite(r, ctx, tx, userData, inviteToken, providerType); terr != nil {
-				return terr
-			}
-		} else {
-			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
-				if errors.Is(terr, errReturnNil) {
-					return nil
-				}
+	// err = db.Transaction(func(tx *storage.Connection) error {
+	// 	var terr error
+	// 	if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, authState.ProviderType); terr != nil {
+	// 		if errors.Is(terr, errReturnNil) {
+	// 			return nil
+	// 		}
 
-				return terr
-			}
-		}
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+	// 		return terr
+	// 	}
+	// 	token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
 
-		if terr != nil {
-			return oauthError("server_error", terr.Error())
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
+	// 	if terr != nil {
+	// 		return oauthError("server_error", terr.Error())
+	// 	}
+	// 	return nil
+	// })
+	// if err != nil {
+	// 	return err
+	// }
 
 	rurl := a.getExternalRedirectURL(r)
 	if token != nil {
@@ -660,9 +654,10 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
 	} else {
-		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
+		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", authState.ProviderType), w, r, rurl)
 	}
-	http.Redirect(w, r, rurl, http.StatusFound)
+	// http.Redirect(w, r, rurl, http.StatusFound)
+	http.Redirect(w, r, "http://localhost:9999/settings", http.StatusFound)
 	return nil
 }
 

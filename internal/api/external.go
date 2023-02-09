@@ -27,7 +27,7 @@ type ExternalProviderClaims struct {
 	Provider    string `json:"provider"`
 	InviteToken string `json:"invite_token,omitempty"`
 	Referrer    string `json:"referrer,omitempty"`
-	FlowType    string `json:"flow_type"`
+	OAuthID     string `json:"oauth_id"`
 }
 
 // ExternalSignupParams are the parameters the Signup endpoint accepts
@@ -68,6 +68,23 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
+	oauthID := ""
+	if flowType == "pkce" {
+		// if !isValidCodeChallenge(codeChallenge) {
+		// Check PKCE ref for exact error to return
+		//	return internalServerError("invalid code challenge")
+		// }
+		oauthState, err := models.NewOAuthState(providerType, codeChallenge)
+		if err != nil {
+			return err
+		}
+		if err := a.db.Create(oauthState); err != nil {
+			return err
+		}
+
+		oauthID = oauthState.ID.String()
+	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
 		NetlifyMicroserviceClaims: NetlifyMicroserviceClaims{
 			StandardClaims: jwt.StandardClaims{
@@ -79,7 +96,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		Provider:    providerType,
 		InviteToken: inviteToken,
 		Referrer:    redirectURL,
-		FlowType:    flowType,
+		OAuthID:     oauthID,
 	})
 	tokenString, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
@@ -97,6 +114,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam(key, query.Get(key)))
 		}
 	}
+
 	var authURL string
 	switch externalProvider := p.(type) {
 	case *provider.TwitterProvider:
@@ -110,24 +128,13 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	}
 	query.Del("code_challenge")
 
-	if flowType == "pkce" {
-		// TODO abstract into helper function
-		if codeChallenge == "" || len(codeChallenge) < 43 || len(codeChallenge) > 128 {
-			// Check PKCE ref for exact error to return
-			return internalServerError("invalid code challenge")
-		}
-		oauthState, err := models.NewOAuthState(providerType, codeChallenge)
-		if err != nil {
-			return err
-		}
-		if err := a.db.Create(oauthState); err != nil {
-			return err
-		}
-	}
-
 	http.Redirect(w, r, authURL, http.StatusFound)
 	return nil
 }
+
+// func isValidCodeChallenge(codeChallenge string) bool {
+// 	return codeChallenge == "" || len(codeChallenge) < 43 || len(codeChallenge) > 128
+// }
 
 // ExternalProviderCallback handles the callback endpoint in the external oauth provider flow
 func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
@@ -147,9 +154,9 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var userData *provider.UserProvidedData
 	var providerAccessToken string
 	var providerRefreshToken string
-	//var code string
+	var code string
 	var grantParams models.GrantParams
-	flowType := getFlowType(ctx)
+	oauthID := getOAuthID(ctx)
 
 	if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
@@ -167,14 +174,20 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		userData = oAuthResponseData.userData
 		providerAccessToken = oAuthResponseData.token
 		providerRefreshToken = oAuthResponseData.refreshToken
-		//code = oAuthResponseData.code
+		code = oAuthResponseData.code
 	}
-	// TODO - figure out how to fetch flow type from OAuth
-	if flowType == "pkce" {
-		return internalServerError("error")
+	if oauthID != "" {
+		// TODO - Fetch OAuth ID and update code
+		oauthState, err := models.FindOAuthStateByID(a.db, oauthID)
+		if err != nil {
+			return err
+		}
+		oauthState.InternalAuthCode = code
+		if terr := a.db.Update(oauthState); terr != nil {
+			return terr
+		}
 
-		// TODO - figure out how to properly fetch the state to update
-		//return sendJSON(w, http.StatusOK, code)
+		return sendJSON(w, http.StatusOK, code)
 	}
 
 	var user *models.User
@@ -476,9 +489,9 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	if claims.Referrer != "" {
 		ctx = withExternalReferrer(ctx, claims.Referrer)
 	}
-	// TODO - More stringent checks here on what's a valid flow type
-	if claims.FlowType == "pkce" {
-		ctx = withFlowType(ctx, claims.FlowType)
+	// TODO - More stringent checks here on OAuthID
+	if claims.OAuthID != "" {
+		ctx = withOAuthID(ctx, claims.OAuthID)
 	}
 	ctx = withExternalProviderType(ctx, claims.Provider)
 	return withSignature(ctx, state), nil

@@ -40,7 +40,19 @@ func NewOAuthState(providerType, hashedChallenge string) (*OAuthState, error) {
 
 func FindOAuthStateByAuthCode(tx *storage.Connection, internalAuthCode string) (*OAuthState, error) {
 	obj := &OAuthState{}
-	if err := tx.Eager().Q().Where("internal_oauth_code = ?", internalAuthCode).First(obj); err != nil {
+	if err := tx.Eager().Q().Where("internal_auth_code = ?", internalAuthCode).First(obj); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, OAuthStateNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding user")
+	}
+
+	return obj, nil
+}
+
+func FindOAuthStateByID(tx *storage.Connection, id string) (*OAuthState, error) {
+	obj := &OAuthState{}
+	if err := tx.Eager().Q().Where("id= ?", id).First(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, OAuthStateNotFoundError{}
 		}

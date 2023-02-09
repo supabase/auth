@@ -120,7 +120,7 @@ func performPKCEAuthorization(ts *ExternalTestSuite, provider, code string) *url
 	//
 	// TODO - Modify this section so that it checks if an internal auth code was returned
 	// ts.Require.NotEmpty(ts.T(),callbackResp.AuthCode)
-	//// Convert the internalAuthCode to be part of body
+	// Convert the internalAuthCode to be part of body
 	// var pkceTokenRequest bytes.Buffer
 	//require.NoError(ts.T(), json.NewEncoder(&pkceTokenRequest).Encode(map[string]interface{}{
 	//	"auth_code":    callbackResp.AuthCode,
