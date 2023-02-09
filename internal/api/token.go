@@ -15,7 +15,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
-	// "github.com/netlify/gotrue/internal/api/provider"
+	"github.com/netlify/gotrue/internal/api/provider"
 	"github.com/netlify/gotrue/internal/conf"
 	"github.com/netlify/gotrue/internal/metering"
 	"github.com/netlify/gotrue/internal/models"
@@ -593,10 +593,10 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 
 	params := &PKCEGrantParams{}
 	body, err := getBodyBytes(r)
-	// var userData *provider.UserProvidedData
+	var userData *provider.UserProvidedData
 	var providerAccessToken string
 	var providerRefreshToken string
-	// var grantParams models.GrantParams
+	var grantParams models.GrantParams
 
 	if err != nil {
 		return internalServerError("Could not read body").WithInternalError(err)
@@ -610,33 +610,54 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	if authState.InternalAuthCode != params.AuthCode {
 		return forbiddenError("invalid auth code")
 	}
+	providerType := authState.ProviderType
+
 	hashedCodeChallenge := authState.HashedCodeChallenge
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
 	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
 	if string(hashedCodeChallenge[:]) != encodedCodeVerifier {
 		return forbiddenError(fmt.Sprintf("code verifier does not match code challenge, code verifier is %s, code challenge is %s, hashed Code verifier is: %s", encodedCodeVerifier, hashedCodeChallenge[:], hashedCodeVerifier))
 	}
-	// var user *models.User
+
+	if providerType == "twitter" {
+		// future OAuth1.0 providers will use this method
+		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)
+		if err != nil {
+			return err
+		}
+		userData = oAuthResponseData.userData
+		providerAccessToken = oAuthResponseData.token
+	} else {
+		oAuthResponseData, err := a.oAuthPKCECallback(ctx, r, providerType, authState.InternalAuthCode)
+		if err != nil {
+			return err
+		}
+		userData = oAuthResponseData.userData
+		providerAccessToken = oAuthResponseData.token
+		providerRefreshToken = oAuthResponseData.refreshToken
+	}
+	fmt.Println("callback success")
+
 	var token *AccessTokenResponse
-	// err = db.Transaction(func(tx *storage.Connection) error {
-	// 	var terr error
-	// 	if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, authState.ProviderType); terr != nil {
-	// 		if errors.Is(terr, errReturnNil) {
-	// 			return nil
-	// 		}
+	err = db.Transaction(func(tx *storage.Connection) error {
+		var user *models.User
+		var terr error
+		if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
+			if errors.Is(terr, errReturnNil) {
+				return nil
+			}
 
-	// 		return terr
-	// 	}
-	// 	token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
-
-	// 	if terr != nil {
-	// 		return oauthError("server_error", terr.Error())
-	// 	}
-	// 	return nil
-	// })
-	// if err != nil {
-	// 	return err
-	// }
+			return terr
+		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+		if terr != nil {
+			return oauthError("server_error", terr.Error())
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
 
 	rurl := a.getExternalRedirectURL(r)
 	if token != nil {

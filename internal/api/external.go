@@ -154,9 +154,36 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var userData *provider.UserProvidedData
 	var providerAccessToken string
 	var providerRefreshToken string
-	var code string
 	var grantParams models.GrantParams
 	oauthID := getOAuthID(ctx)
+	if oauthID != "" {
+		oauthState, err := models.FindOAuthStateByID(a.db, oauthID)
+		if err != nil {
+			return err
+		}
+		var rq url.Values
+		if err := r.ParseForm(); r.Method == http.MethodPost && err == nil {
+			rq = r.Form
+		} else {
+			rq = r.URL.Query()
+		}
+
+		extError := rq.Get("error")
+		if extError != "" {
+			return oauthError(extError, rq.Get("error_description"))
+		}
+
+		oauthCode := rq.Get("code")
+		if oauthCode == "" {
+			return badRequestError("Authorization code missing")
+		}
+		oauthState.InternalAuthCode = oauthCode
+		if terr := a.db.Update(oauthState); terr != nil {
+			return terr
+		}
+
+		return sendJSON(w, http.StatusOK, oauthCode)
+	}
 
 	if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
@@ -174,20 +201,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		userData = oAuthResponseData.userData
 		providerAccessToken = oAuthResponseData.token
 		providerRefreshToken = oAuthResponseData.refreshToken
-		code = oAuthResponseData.code
-	}
-	if oauthID != "" {
-		// TODO - Fetch OAuth ID and update code
-		oauthState, err := models.FindOAuthStateByID(a.db, oauthID)
-		if err != nil {
-			return err
-		}
-		oauthState.InternalAuthCode = code
-		if terr := a.db.Update(oauthState); terr != nil {
-			return terr
-		}
-
-		return sendJSON(w, http.StatusOK, code)
 	}
 
 	var user *models.User
@@ -353,6 +366,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return nil, unauthorizedError("User is unauthorized")
 	}
 
+	fmt.Println("decision made")
 	// an account with a previously unconfirmed email + password
 	// combination or phone may exist. so now that there is an
 	// OAuth identity bound to this user, and since they have not
@@ -362,6 +376,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	if terr = user.RemoveUnconfirmedIdentities(tx); terr != nil {
 		return nil, internalServerError("Error updating user").WithInternalError(terr)
 	}
+	fmt.Println("idents removed")
 
 	if !user.IsConfirmed() {
 		if !emailData.Verified && !config.Mailer.Autoconfirm {
@@ -578,7 +593,6 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger) *url
 		return getErrorQueryString(e.Cause(), errorID, log)
 	default:
 		error_type, error_description := "server_error", err.Error()
-
 		// Provide better error messages for certain user-triggered Postgres errors.
 		if pgErr := utilities.NewPostgresError(e); pgErr != nil {
 			error_description = pgErr.Message
