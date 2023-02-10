@@ -49,6 +49,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
 	}
+	metadata := query.Get("metadata")
 
 	inviteToken := query.Get("invite_token")
 	if inviteToken != "" {
@@ -72,6 +73,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 			},
 			SiteURL:    config.SiteURL,
 			InstanceID: uuid.Nil.String(),
+			Metadata:   metadata,
 		},
 		Provider:    providerType,
 		InviteToken: inviteToken,
@@ -85,6 +87,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
 	query.Del("scopes")
 	query.Del("provider")
+	query.Del("metadata")
 	for key := range query {
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get
@@ -203,6 +206,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	ctx := r.Context()
 	aud := a.requestAud(ctx, r)
 	config := a.config
+	// metadata := getOAuthMetadata(ctx)
 
 	var terr error
 
@@ -212,6 +216,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	var emailData provider.Email
 	var identityData map[string]interface{}
 	if userData.Metadata != nil {
+		// TODO - merge the metadata structs
 		identityData = structs.Map(userData.Metadata)
 	}
 
@@ -446,6 +451,9 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	}
 	if claims.Referrer != "" {
 		ctx = withExternalReferrer(ctx, claims.Referrer)
+	}
+	if claims.NetlifyMicroserviceClaims.Metadata != "" {
+		ctx = withOAuthMetadata(ctx, claims.NetlifyMicroserviceClaims.Metadata)
 	}
 
 	ctx = withExternalProviderType(ctx, claims.Provider)

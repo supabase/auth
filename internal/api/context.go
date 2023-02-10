@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 
+	"encoding/json"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/netlify/gotrue/internal/models"
 )
@@ -28,6 +29,7 @@ const (
 	oauthTokenKey           = contextKey("oauth_token") // for OAuth1.0, also known as request token
 	oauthVerifierKey        = contextKey("oauth_verifier")
 	ssoProviderKey          = contextKey("sso_provider")
+	metadataKey             = contextKey("metadata")
 )
 
 // withToken adds the JWT token to the context.
@@ -125,6 +127,10 @@ func withInviteToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, inviteTokenKey, token)
 }
 
+func withOAuthMetadata(ctx context.Context, metadata string) context.Context {
+	return context.WithValue(ctx, metadataKey, metadata)
+}
+
 func getInviteToken(ctx context.Context) string {
 	obj := ctx.Value(inviteTokenKey)
 	if obj == nil {
@@ -132,6 +138,20 @@ func getInviteToken(ctx context.Context) string {
 	}
 
 	return obj.(string)
+}
+func getOAuthMetadata(ctx context.Context) map[string]interface{} {
+	if ctx == nil {
+		return nil
+	}
+	obj := ctx.Value(metadataKey)
+	if obj == nil {
+		return nil
+	}
+	var metadata map[string]interface{}
+	if err := json.Unmarshal([]byte(obj.([]byte)), &metadata); err != nil {
+		return nil
+	}
+	return metadata
 }
 
 // withExternalProviderType adds the provided request ID to the context.

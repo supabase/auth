@@ -12,6 +12,7 @@ import (
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
+
 	jwt "github.com/golang-jwt/jwt"
 )
 
@@ -22,6 +23,7 @@ type NetlifyMicroserviceClaims struct {
 	SiteURL       string        `json:"site_url"`
 	InstanceID    string        `json:"id"`
 	FunctionHooks FunctionHooks `json:"function_hooks"`
+	Metadata      string        `json:"metadata"`
 }
 
 func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
