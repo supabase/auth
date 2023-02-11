@@ -128,7 +128,7 @@ docker-compose -f docker-compose-dev.yml up postgres
 You may see a message like:
 
 ```
-Unable to find image 'postgres:13' locally
+Unable to find image 'postgres:14' locally
 ```
 
 And then
@@ -140,7 +140,7 @@ Pulling from library/postgres
 as Docker installs the image:
 
 ```
-Unable to find image 'postgres:13' locally
+Unable to find image 'postgres:14' locally
 13: Pulling from library/postgres
 968621624b32: Pull complete
 9ef9c0761899: Pull complete
@@ -156,7 +156,7 @@ b749e660435b: Pull complete
 2d4dfc6819e6: Pull complete
 c99864ddd548: Pull complete
 Digest: sha256:3c6d1cef78fe0c84a79c76f0907aed29895dff661fecd45103f7afe2a055078e
-Status: Downloaded newer image for postgres:13
+Status: Downloaded newer image for postgres:14
 f709b97d83fddc3b099e4f2ddc4cb2fbf68052e7a8093332bec57672f38cfa36
 ```
 

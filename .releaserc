@@ -2,6 +2,10 @@
   "branches": [
     "master",
     {
+        "name": "lastsigninatfix",
+        "prerelease": true
+    },
+    {
         "name": "mfa",
         "prerelease": true
     }
