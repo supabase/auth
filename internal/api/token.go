@@ -607,12 +607,15 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	authState, err := models.FindOAuthStateByAuthCode(db, params.AuthCode)
+	if models.IsNotFoundError(err) {
+		return forbiddenError("invalid auth state")
+	} else if err != nil {
+		return err
+	}
 	if authState.InternalAuthCode != params.AuthCode {
 		return forbiddenError("invalid auth code")
 	}
-	if err != nil {
-		return err
-	}
+
 	providerType := authState.ProviderType
 
 	hashedCodeChallenge := authState.HashedCodeChallenge
