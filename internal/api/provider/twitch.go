@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/netlify/gotrue/internal/conf"
+	"github.com/netlify/gotrue/internal/utilities"
 	"golang.org/x/oauth2"
 )
 
@@ -97,7 +98,7 @@ func (t twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer utilities.SafeClose(resp.Body)
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("a %v error occurred with retrieving user from twitch", resp.StatusCode)
