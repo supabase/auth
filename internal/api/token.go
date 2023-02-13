@@ -610,6 +610,9 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	if authState.InternalAuthCode != params.AuthCode {
 		return forbiddenError("invalid auth code")
 	}
+	if err != nil {
+		return err
+	}
 	providerType := authState.ProviderType
 
 	hashedCodeChallenge := authState.HashedCodeChallenge
@@ -677,8 +680,7 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	} else {
 		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", authState.ProviderType), w, r, rurl)
 	}
-	// http.Redirect(w, r, rurl, http.StatusFound)
-	http.Redirect(w, r, "http://localhost:9999/settings", http.StatusFound)
+	http.Redirect(w, r, rurl, http.StatusFound)
 	return nil
 }
 

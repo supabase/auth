@@ -70,10 +70,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 
 	oauthID := ""
 	if flowType == "pkce" {
-		// if !isValidCodeChallenge(codeChallenge) {
-		// Check PKCE ref for exact error to return
-		//	return internalServerError("invalid code challenge")
-		// }
 		oauthState, err := models.NewOAuthState(providerType, codeChallenge)
 		if err != nil {
 			return err
@@ -132,9 +128,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-// func isValidCodeChallenge(codeChallenge string) bool {
-// 	return codeChallenge == "" || len(codeChallenge) < 43 || len(codeChallenge) > 128
-// }
 
 // ExternalProviderCallback handles the callback endpoint in the external oauth provider flow
 func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
@@ -495,6 +488,7 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
 		return []byte(config.JWT.Secret), nil
 	})
+	fmt.Println(claims)
 	if err != nil || claims.Provider == "" {
 		return nil, badRequestError("OAuth state is invalid: %v", err)
 	}
@@ -504,7 +498,6 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	if claims.Referrer != "" {
 		ctx = withExternalReferrer(ctx, claims.Referrer)
 	}
-	// TODO - More stringent checks here on OAuthID
 	if claims.OAuthID != "" {
 		ctx = withOAuthID(ctx, claims.OAuthID)
 	}
