@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/netlify/gotrue/internal/conf"
+	"github.com/netlify/gotrue/internal/utilities"
 )
 
 const (
@@ -63,7 +64,7 @@ func (t *TextlocalProvider) SendSms(phone string, message string) error {
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
+	defer utilities.SafeClose(res.Body)
 
 	resp := &TextlocalResponse{}
 	derr := json.NewDecoder(res.Body).Decode(resp)

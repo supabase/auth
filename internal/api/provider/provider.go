@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/netlify/gotrue/internal/utilities"
 	"golang.org/x/oauth2"
 )
 
@@ -110,10 +111,10 @@ func makeRequest(ctx context.Context, tok *oauth2.Token, g *oauth2.Config, url s
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
+	defer utilities.SafeClose(res.Body)
 
 	bodyBytes, _ := io.ReadAll(res.Body)
-	defer res.Body.Close()
+	defer utilities.SafeClose(res.Body)
 	res.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {

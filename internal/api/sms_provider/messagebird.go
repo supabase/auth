@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/netlify/gotrue/internal/conf"
+	"github.com/netlify/gotrue/internal/utilities"
 )
 
 const (
@@ -83,7 +84,7 @@ func (t *MessagebirdProvider) SendSms(phone string, message string) error {
 		}
 		return resp
 	}
-	defer res.Body.Close()
+	defer utilities.SafeClose(res.Body)
 
 	// validate sms status
 	resp := &MessagebirdResponse{}
