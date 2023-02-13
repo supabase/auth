@@ -612,7 +612,7 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	} else if err != nil {
 		return err
 	}
-	if authState.InternalAuthCode != params.AuthCode {
+	if authState.AuthCode != params.AuthCode {
 		return forbiddenError("invalid auth code")
 	}
 
@@ -634,7 +634,7 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		userData = oAuthResponseData.userData
 		providerAccessToken = oAuthResponseData.token
 	} else {
-		oAuthResponseData, err := a.oAuthPKCECallback(ctx, r, providerType, authState.InternalAuthCode)
+		oAuthResponseData, err := a.oAuthPKCECallback(ctx, r, providerType, authState.AuthCode)
 		if err != nil {
 			return err
 		}

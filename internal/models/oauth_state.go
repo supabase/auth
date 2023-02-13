@@ -11,7 +11,7 @@ import (
 
 type OAuthState struct {
 	ID                  uuid.UUID `json:"id" db:"id"`
-	InternalAuthCode    string    `json:"internal_auth_code" db:"internal_auth_code"`
+	AuthCode            string    `json:"auth_code" db:"auth_code"`
 	HashedCodeChallenge string    `json:"hashed_code_challenge" db:"hashed_code_challenge"`
 	ProviderType        string    `json:"provider_type" db:"provider_type"`
 	RedirectURI         string    `json:"redirect_uri" db:"redirect_uri"`
@@ -38,9 +38,9 @@ func NewOAuthState(providerType, hashedChallenge string) (*OAuthState, error) {
 	return oauth, nil
 }
 
-func FindOAuthStateByAuthCode(tx *storage.Connection, internalAuthCode string) (*OAuthState, error) {
+func FindOAuthStateByAuthCode(tx *storage.Connection, authCode string) (*OAuthState, error) {
 	obj := &OAuthState{}
-	if err := tx.Eager().Q().Where("internal_auth_code = ?", internalAuthCode).First(obj); err != nil {
+	if err := tx.Eager().Q().Where("auth_code = ?", authCode).First(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, OAuthStateNotFoundError{}
 		}

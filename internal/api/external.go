@@ -169,7 +169,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if oauthCode == "" {
 			return badRequestError("Authorization code missing")
 		}
-		oauthState.InternalAuthCode = oauthCode
+		oauthState.AuthCode = oauthCode
 		if terr := a.db.Update(oauthState); terr != nil {
 			return terr
 		}

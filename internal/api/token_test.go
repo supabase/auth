@@ -141,7 +141,7 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantSuccess() {
 	codeChallenge := sha256.Sum256([]byte(codeVerifier))
 	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
 	oauthState, err := models.NewOAuthState("github", challenge)
-	oauthState.InternalAuthCode = authCode
+	oauthState.AuthCode = authCode
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Create(oauthState))
 	var buffer bytes.Buffer
@@ -170,7 +170,7 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
 	oauthState, err := models.NewOAuthState("github", challenge)
 	require.NoError(ts.T(), err)
-	oauthState.InternalAuthCode = authCode
+	oauthState.AuthCode = authCode
 	require.NoError(ts.T(), ts.API.db.Create(oauthState))
 	cases := []struct {
 		desc             string
