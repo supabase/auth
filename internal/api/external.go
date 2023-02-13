@@ -128,7 +128,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-
 // ExternalProviderCallback handles the callback endpoint in the external oauth provider flow
 func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	a.redirectErrors(a.internalExternalProviderCallback, w, r)
@@ -488,7 +487,6 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
 		return []byte(config.JWT.Secret), nil
 	})
-	fmt.Println(claims)
 	if err != nil || claims.Provider == "" {
 		return nil, badRequestError("OAuth state is invalid: %v", err)
 	}

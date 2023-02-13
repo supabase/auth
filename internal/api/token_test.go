@@ -2,6 +2,8 @@ package api
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -134,27 +136,83 @@ func (ts *TokenTestSuite) TestTokenPasswordGrantFailure() {
 }
 
 func (ts *TokenTestSuite) TestTokenPKCEGrantSuccess() {
+	authCode := "123456"
+	codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
+	codeChallenge := sha256.Sum256([]byte(codeVerifier))
+	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
+	oauthState, err := models.NewOAuthState("github", challenge)
+	oauthState.InternalAuthCode = authCode
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(oauthState))
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"code_verifier": codeVerifier,
+		"auth_code":     authCode,
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=pkce", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	// TODO - figure out how to properly flag this error
+	// assert.Equal(ts.T(), http.StatusNotFound, w.Code)
 
-	// initialize code Challenge
-	// verifier = hash(challenge)
-	// internalAuthCode = <generate-a-value>
-	// Create new OAuth State (internalAuthCode, verifier)
-	//	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &buffer)
-	// req.Header.Set("Content-Type", "application/json")
-
-	// Create a buffer and then read it in.
-	// w := httptest.NewRecorder()
-	// ts.API.handler.ServeHTTP(w, req)
-	// assert.Equal(ts.T(), http.StatusOK, w.Code)
-	// write state to db
-	//
 }
 
 func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
+
 	// Do Same thing as in TestTokenPKCEGrant Success but with:
 	// Case 1: invalid authcode
 	// Case 2: Invalid challenge
 	// Case 3: invalid authcode + verifier
+	// authCode := "123456"
+	// codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
+	// codeChallenge := sha256.Sum256([]byte(codeVerifier))
+	// challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
+	// oauthState, err := models.NewOAuthState("github", challenge)
+	// oauthState.InternalAuthCode = authCode
+	// require.NoError(ts.T(), err)
+	// require.NoError(ts.T(), ts.API.db.Create(oauthState))
+	// cases := []struct {
+	// 	desc string
+	// 	authCode string
+	// 	codeVerifier string
+	// 	expectedHTTPCode int
+	// }{
+	// 	{
+	// 		desc: "Invaid Authcode",
+	// 		authCode: authCode,
+	// 		codeVerifier: codeVerifier,
+	// 		expectedHTTPCode: http.StatusOK,
+	// 	},
+	// 	{
+	// 		desc: "Invalid codeVerifier",
+	// 		authCode: authCode,
+	// 		codeVerifier: codeVerifier,
+	// 		expectedHTTPCode: http.StatusOK,
+	// 	},
+	// 	{
+	// 		desc: "Invalid auth code and verifier",
+	// 		authCode: authCode,
+	// 		codeVerifier: codeVerifier,
+	// 		expectedHTTPCode: http.StatusOK,
+	// 	},
+	// }
+	// for _, v := range cases {
+	// 	ts.Run(v.desc, func() {
+	// 		var buffer bytes.Buffer
+	// 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+	// 			"code_verifier": codeVerifier,
+	// 			"auth_code": authCode,
+	// 		}))
+	// 		req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=pkce", &buffer)
+	// 		req.Header.Set("Content-Type", "application/json")
+	// 		w := httptest.NewRecorder()
+	// 		ts.API.handler.ServeHTTP(w, req)
+	// 		assert.Equal(ts.T(), http.StatusForbidden, w.Code)
+
+	// 	})
+	// }
+
 }
 
 func (ts *TokenTestSuite) TestTokenRefreshTokenGrantFailure() {
