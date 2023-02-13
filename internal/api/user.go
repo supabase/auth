@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/fatih/structs"
+	"github.com/netlify/gotrue/internal/api/provider"
 	"github.com/netlify/gotrue/internal/api/sms_provider"
 	"github.com/netlify/gotrue/internal/models"
 	"github.com/netlify/gotrue/internal/observability"
@@ -42,6 +44,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
+	aud := a.requestAud(ctx, r)
 
 	params := &UserUpdateParams{}
 
@@ -58,6 +61,32 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	session := getSession(ctx)
 	log := observability.GetLogEntry(r)
 	log.Debugf("Checking params for token %v", params)
+
+	if params.Email != "" && params.Email != user.GetEmail() {
+		params.Email, err = validateEmail(params.Email)
+		if err != nil {
+			return err
+		}
+		var duplicateUser *models.User
+		if duplicateUser, err = models.IsDuplicatedEmail(a.db, params.Email, aud); err != nil {
+			return internalServerError("Database error checking email").WithInternalError(err)
+		} else if duplicateUser != nil {
+			return unprocessableEntityError(DuplicateEmailMsg)
+		}
+	}
+
+	if params.Phone != "" && params.Phone != user.GetPhone() {
+		params.Phone, err = validatePhone(params.Phone)
+		if err != nil {
+			return err
+		}
+		var exists bool
+		if exists, err = models.IsDuplicatedPhone(a.db, params.Phone, aud); err != nil {
+			return internalServerError("Database error checking phone").WithInternalError(err)
+		} else if exists {
+			return unprocessableEntityError(DuplicatePhoneMsg)
+		}
+	}
 
 	if user.IsSSOUser {
 		if (params.Password != nil && *params.Password != "") || params.Email != "" || params.Phone != "" || params.Nonce != "" {
@@ -123,19 +152,20 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
+		var identities []models.Identity
 		if params.Email != "" && params.Email != user.GetEmail() {
-			params.Email, terr = validateEmail(params.Email)
-			if terr != nil {
-				return terr
+			if user.GetEmail() == "" {
+				// if the user doesn't have an existing email
+				// then updating the user's email should create a new email identity
+				identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+					Subject: user.ID.String(),
+					Email:   params.Email,
+				}))
+				if terr != nil {
+					return terr
+				}
+				identities = append(identities, *identity)
 			}
-
-			var duplicateUser *models.User
-			if duplicateUser, terr = models.IsDuplicatedEmail(tx, params.Email, user.Aud); terr != nil {
-				return internalServerError("Database error checking email").WithInternalError(terr)
-			} else if duplicateUser != nil {
-				return unprocessableEntityError(DuplicateEmailMsg)
-			}
-
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)
 			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, config.Mailer.OtpLength); terr != nil {
@@ -144,15 +174,17 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Phone != "" && params.Phone != user.GetPhone() {
-			params.Phone, err = validatePhone(params.Phone)
-			if err != nil {
-				return err
-			}
-			var exists bool
-			if exists, terr = models.IsDuplicatedPhone(tx, params.Phone, user.Aud); terr != nil {
-				return internalServerError("Database error checking phone").WithInternalError(terr)
-			} else if exists {
-				return unprocessableEntityError(DuplicatePhoneMsg)
+			if user.GetPhone() == "" {
+				// if the user doesn't have an existing phone
+				// then updating the user's phone should create a new phone identity
+				identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+					Subject: user.ID.String(),
+					Phone:   params.Phone,
+				}))
+				if terr != nil {
+					return terr
+				}
+				identities = append(identities, *identity)
 			}
 			if config.Sms.Autoconfirm {
 				return user.UpdatePhone(tx, params.Phone)
@@ -166,6 +198,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				}
 			}
 		}
+		user.Identities = append(user.Identities, identities...)
 
 		if terr = models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 			return internalServerError("Error recording audit log entry").WithInternalError(terr)
