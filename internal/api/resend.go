@@ -11,16 +11,21 @@ import (
 	"github.com/netlify/gotrue/internal/storage"
 )
 
-// RecoverParams holds the parameters for a password recovery request
-type SendConfirmationParams struct {
+// ResendConfirmationParams holds the parameters for a resend request
+type ResendConfirmationParams struct {
 	Type  string `json:"type"`
 	Email string `json:"email"`
 	Phone string `json:"phone"`
 }
 
-func (p *SendConfirmationParams) Validate() error {
-	if p.Type != signupVerification && p.Type != emailChangeVerification && p.Type != smsVerification && p.Type != phoneChangeVerification {
+func (p *ResendConfirmationParams) Validate() error {
+	switch p.Type {
+	case signupVerification, emailChangeVerification, smsVerification, phoneChangeVerification:
+		break
+	default:
+		// type does not match one of the above
 		return badRequestError("Missing one of these types: signup, email_change, sms, phone_change")
+
 	}
 	if p.Email == "" && (p.Type == signupVerification || p.Type == emailChangeVerification) {
 		return badRequestError("Type provided requires an email address")
@@ -54,7 +59,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
-	params := &SendConfirmationParams{}
+	params := &ResendConfirmationParams{}
 
 	body, err := getBodyBytes(r)
 	if err != nil {
