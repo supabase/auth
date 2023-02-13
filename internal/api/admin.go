@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
+	"github.com/netlify/gotrue/internal/api/provider"
 	"github.com/netlify/gotrue/internal/models"
 	"github.com/netlify/gotrue/internal/observability"
 	"github.com/netlify/gotrue/internal/storage"
@@ -161,6 +163,19 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	if params.BanDuration != "" {
+		duration := time.Duration(0)
+		if params.BanDuration != "none" {
+			duration, err = time.ParseDuration(params.BanDuration)
+			if err != nil {
+				return badRequestError("invalid format for ban duration: %v", err)
+			}
+		}
+		if terr := user.Ban(a.db, duration); terr != nil {
+			return terr
+		}
+	}
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if params.Role != "" {
 			if terr := user.SetRole(tx, params.Role); terr != nil {
@@ -190,17 +205,61 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
+		var identities []models.Identity
 		if params.Email != "" {
+			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email"); terr != nil && !models.IsNotFoundError(terr) {
+				return terr
+			} else if identity == nil {
+				// if the user doesn't have an existing email
+				// then updating the user's email should create a new email identity
+				i, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+					Subject: user.ID.String(),
+					Email:   params.Email,
+				}))
+				if terr != nil {
+					return terr
+				}
+				identities = append(identities, *i)
+			} else {
+				// update the existing email identity
+				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
+					"email": params.Email,
+				}); terr != nil {
+					return terr
+				}
+			}
 			if terr := user.SetEmail(tx, params.Email); terr != nil {
 				return terr
 			}
 		}
 
 		if params.Phone != "" {
+			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone"); terr != nil && !models.IsNotFoundError(terr) {
+				return terr
+			} else if identity == nil {
+				// if the user doesn't have an existing phone
+				// then updating the user's phone should create a new phone identity
+				identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+					Subject: user.ID.String(),
+					Phone:   params.Phone,
+				}))
+				if terr != nil {
+					return terr
+				}
+				identities = append(identities, *identity)
+			} else {
+				// update the existing phone identity
+				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
+					"phone": params.Phone,
+				}); terr != nil {
+					return terr
+				}
+			}
 			if terr := user.SetPhone(tx, params.Phone); terr != nil {
 				return terr
 			}
 		}
+		user.Identities = append(user.Identities, identities...)
 
 		if params.AppMetaData != nil {
 			if terr := user.UpdateAppMetaData(tx, params.AppMetaData); terr != nil {
@@ -210,22 +269,6 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		if params.UserMetaData != nil {
 			if terr := user.UpdateUserMetaData(tx, params.UserMetaData); terr != nil {
-				return terr
-			}
-		}
-
-		if params.BanDuration != "" {
-			if params.BanDuration == "none" {
-				user.BannedUntil = nil
-			} else {
-				duration, terr := time.ParseDuration(params.BanDuration)
-				if terr != nil {
-					return badRequestError("Invalid format for ban_duration: %v", terr)
-				}
-				t := time.Now().Add(duration)
-				user.BannedUntil = &t
-			}
-			if terr := user.UpdateBannedUntil(tx); terr != nil {
 				return terr
 			}
 		}
@@ -242,9 +285,6 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 	if err != nil {
 		if errors.Is(err, invalidPasswordLengthError(config)) {
-			return err
-		}
-		if strings.Contains(err.Error(), "Invalid format for ban_duration") {
 			return err
 		}
 		return internalServerError("Error updating user").WithInternalError(err)
@@ -274,6 +314,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		return unprocessableEntityError("Cannot create a user without either an email or phone")
 	}
 
+	var providers []string
 	if params.Email != "" {
 		params.Email, err = validateEmail(params.Email)
 		if err != nil {
@@ -282,8 +323,9 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if user, err := models.IsDuplicatedEmail(db, params.Email, aud); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
 		} else if user != nil {
-			return unprocessableEntityError("Email address already registered by another user")
+			return unprocessableEntityError(DuplicateEmailMsg)
 		}
+		providers = append(providers, "email")
 	}
 
 	if params.Phone != "" {
@@ -296,6 +338,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		} else if exists {
 			return unprocessableEntityError("Phone number already registered by another user")
 		}
+		providers = append(providers, "phone")
 	}
 
 	if params.Password == nil || *params.Password == "" {
@@ -311,31 +354,50 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Error creating user").WithInternalError(err)
 	}
 
-	if user.AppMetaData == nil {
-		user.AppMetaData = make(map[string]interface{})
-	}
-	user.AppMetaData["provider"] = "email"
-	user.AppMetaData["providers"] = []string{"email"}
-
-	if params.BanDuration != "" {
-		duration, terr := time.ParseDuration(params.BanDuration)
-		if terr != nil {
-			return badRequestError("Invalid format for ban_duration: %v", terr)
-		}
-		t := time.Now().Add(duration)
-		user.BannedUntil = &t
+	user.AppMetaData = map[string]interface{}{
+		// TODO: Deprecate "provider" field
+		// default to the first provider in the providers slice
+		"provider":  providers[0],
+		"providers": providers,
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
+		if terr := tx.Create(user); terr != nil {
+			return terr
+		}
+
+		var identities []models.Identity
+		if user.GetEmail() != "" {
+			identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+				Subject: user.ID.String(),
+				Email:   user.GetEmail(),
+			}))
+
+			if terr != nil {
+				return terr
+			}
+			identities = append(identities, *identity)
+		}
+
+		if user.GetPhone() != "" {
+			identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+				Subject: user.ID.String(),
+				Phone:   user.GetPhone(),
+			}))
+
+			if terr != nil {
+				return terr
+			}
+			identities = append(identities, *identity)
+		}
+
+		user.Identities = identities
+
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserSignedUpAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
 		}); terr != nil {
-			return terr
-		}
-
-		if terr := tx.Create(user); terr != nil {
 			return terr
 		}
 
@@ -365,11 +427,24 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
+		if params.BanDuration != "" {
+			duration := time.Duration(0)
+			if params.BanDuration != "none" {
+				duration, err = time.ParseDuration(params.BanDuration)
+				if err != nil {
+					return badRequestError("invalid format for ban duration: %v", err)
+				}
+			}
+			if terr := user.Ban(a.db, duration); terr != nil {
+				return terr
+			}
+		}
+
 		return nil
 	})
 
 	if err != nil {
-		if strings.Contains(err.Error(), "Invalid format for ban_duration") {
+		if strings.Contains("invalid format for ban duration", err.Error()) {
 			return err
 		}
 		return internalServerError("Database error creating new user").WithInternalError(err)

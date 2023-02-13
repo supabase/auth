@@ -17,6 +17,7 @@ import (
 	"github.com/netlify/gotrue/internal/conf"
 	"github.com/netlify/gotrue/internal/metering"
 	"github.com/netlify/gotrue/internal/models"
+	"github.com/netlify/gotrue/internal/observability"
 	"github.com/netlify/gotrue/internal/storage"
 )
 
@@ -70,6 +71,8 @@ type IdTokenGrantParams struct {
 	IdToken  string `json:"id_token"`
 	Nonce    string `json:"nonce"`
 	Provider string `json:"provider"`
+	ClientID string `json:"client_id"`
+	Issuer   string `json:"issuer"`
 }
 
 const useCookieHeader = "x-use-cookie"
@@ -121,6 +124,16 @@ func (p *IdTokenGrantParams) getVerifier(ctx context.Context, config *conf.Globa
 	}
 
 	return provider.Verifier(&oidc.Config{ClientID: oAuthProviderClientId}), nil
+}
+
+func (p *IdTokenGrantParams) getVerifierFromClientIDandIssuer(ctx context.Context) (*oidc.IDTokenVerifier, error) {
+	var provider *oidc.Provider
+	var err error
+	provider, err = oidc.NewProvider(ctx, p.Issuer)
+	if err != nil {
+		return nil, fmt.Errorf("issuer %s doesn't support the id_token grant flow", p.Issuer)
+	}
+	return provider.Verifier(&oidc.Config{ClientID: p.ClientID}), nil
 }
 
 func getEmailVerified(v interface{}) bool {
@@ -376,6 +389,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	config := a.config
+	log := observability.GetLogEntry(r)
 
 	params := &IdTokenGrantParams{}
 
@@ -392,11 +406,31 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return oauthError("invalid request", "id_token required")
 	}
 
-	if params.Provider == "" {
-		return oauthError("invalid request", "provider required")
+	if params.Provider == "" && (params.ClientID == "" || params.Issuer == "") {
+		return oauthError("invalid request", "provider or client_id and issuer required")
 	}
 
-	verifier, err := params.getVerifier(ctx, a.config)
+	var verifier *oidc.IDTokenVerifier
+	if params.Provider != "" {
+		verifier, err = params.getVerifier(ctx, a.config)
+	} else if params.ClientID != "" && params.Issuer != "" {
+		log.WithField("issuer", params.Issuer).WithField("client_id", params.ClientID).Warn("Use of POST /token with issuer and client_id is deprecated for security reasons. Please switch to using the API with provider only!")
+
+		for _, issuer := range a.config.External.AllowedIdTokenIssuers {
+			if params.Issuer == issuer {
+				verifier, err = params.getVerifierFromClientIDandIssuer(ctx)
+				break
+			}
+		}
+		if err != nil {
+			return err
+		}
+		if verifier == nil {
+			return badRequestError("Issuer not allowed")
+		}
+	} else {
+		return badRequestError("%v", err)
+	}
 	if err != nil {
 		return err
 	}
