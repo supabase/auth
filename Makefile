@@ -35,8 +35,8 @@ vet: # Vet the code
 	go vet $(CHECK_FILES)
 
 sec: dev-deps # Check for security vulnerabilities
-	gosec -quiet $(CHECK_FILES)
-	gosec -quiet -tests -exclude=G104 $(CHECK_FILES)
+	gosec -quiet -exclude-generated $(CHECK_FILES)
+	gosec -quiet -tests -exclude-generated -exclude=G104 $(CHECK_FILES)
 
 unused: dev-deps # Look for unused code
 	@echo "Unused code:"
