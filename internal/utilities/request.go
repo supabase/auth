@@ -43,7 +43,7 @@ func GetBodyBytes(req *http.Request) ([]byte, error) {
 	}
 
 	originalBody := req.Body
-	defer originalBody.Close()
+	defer SafeClose(originalBody)
 
 	buf, err := io.ReadAll(originalBody)
 	if err != nil {
