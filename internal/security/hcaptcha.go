@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netlify/gotrue/internal/utilities"
+	"github.com/supabase/gotrue/internal/utilities"
 	"github.com/pkg/errors"
 )
 

@@ -10,12 +10,12 @@ import (
 
 	"github.com/badoux/checkmail"
 	"github.com/fatih/structs"
-	"github.com/netlify/gotrue/internal/api/provider"
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/crypto"
-	"github.com/netlify/gotrue/internal/mailer"
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/api/provider"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/crypto"
+	"github.com/supabase/gotrue/internal/mailer"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/storage"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
 )

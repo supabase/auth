@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/netlify/gotrue/internal/utilities"
+	"github.com/supabase/gotrue/internal/utilities"
 	"golang.org/x/oauth2"
 )
 
