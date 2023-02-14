@@ -5,11 +5,11 @@ import (
 	"net/http"
 
 	"github.com/fatih/structs"
-	"github.com/netlify/gotrue/internal/api/provider"
-	"github.com/netlify/gotrue/internal/api/sms_provider"
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/observability"
-	"github.com/netlify/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/api/provider"
+	"github.com/supabase/gotrue/internal/api/sms_provider"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 // UserUpdateParams parameters for updating a user

@@ -6,7 +6,7 @@ import (
 	"encoding/xml"
 
 	"github.com/crewjam/saml"
-	"github.com/netlify/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/models"
 	"github.com/stretchr/testify/require"
 )
 

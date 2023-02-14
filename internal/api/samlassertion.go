@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/crewjam/saml"
-	"github.com/netlify/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/models"
 )
 
 type SAMLAssertion struct {
