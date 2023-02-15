@@ -12,9 +12,10 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/observability"
-	"github.com/netlify/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 // loadSSOProvider looks for an idp_id parameter in the URL route and loads the SSO provider
@@ -165,7 +166,7 @@ func fetchSAMLMetadata(ctx context.Context, url string) ([]byte, error) {
 		return nil, err
 	}
 
-	defer resp.Body.Close()
+	defer utilities.SafeClose(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		return nil, badRequestError("HTTP %v error fetching SAML Metadata from URL '%s'", resp.StatusCode, url)
 	}

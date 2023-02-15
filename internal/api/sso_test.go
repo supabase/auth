@@ -12,10 +12,10 @@ import (
 	"time"
 
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/models"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/models"
 )
 
 const dateInPast = "2001-02-03T04:05:06.789"

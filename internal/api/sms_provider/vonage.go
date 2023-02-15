@@ -8,7 +8,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/netlify/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/utilities"
+	"golang.org/x/exp/utf8string"
 )
 
 const (
@@ -52,6 +54,11 @@ func (t *VonageProvider) SendSms(phone string, message string) error {
 		"api_secret": {t.Config.ApiSecret},
 	}
 
+	isMessageContainUnicode := !utf8string.NewString(message).IsASCII()
+	if isMessageContainUnicode {
+		body.Set("type", "unicode")
+	}
+
 	client := &http.Client{Timeout: defaultTimeout}
 	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
 	if err != nil {
@@ -63,7 +70,7 @@ func (t *VonageProvider) SendSms(phone string, message string) error {
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
+	defer utilities.SafeClose(res.Body)
 
 	resp := &VonageResponse{}
 	derr := json.NewDecoder(res.Body).Decode(resp)

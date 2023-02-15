@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/storage"
 	"github.com/sethvargo/go-password/password"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 // MagicLinkParams holds the parameters for a magic link request

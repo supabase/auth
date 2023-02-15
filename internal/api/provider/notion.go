@@ -8,7 +8,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/netlify/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/utilities"
 	"golang.org/x/oauth2"
 )
 
@@ -82,7 +83,7 @@ func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer utilities.SafeClose(resp.Body)
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("a %v error occurred with retrieving user from notion", resp.StatusCode)

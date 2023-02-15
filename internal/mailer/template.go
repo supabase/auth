@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/badoux/checkmail"
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/models"
 )
 
 type MailClient interface {

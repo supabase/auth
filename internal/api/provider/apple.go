@@ -13,7 +13,7 @@ import (
 
 	"github.com/golang-jwt/jwt"
 	"github.com/lestrrat-go/jwx/jwk"
-	"github.com/netlify/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/conf"
 	"golang.org/x/oauth2"
 )
 

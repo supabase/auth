@@ -12,7 +12,7 @@ GoTrue is a user management and authentication server written in Go that powers
 - Sign in with external providers (Google, Apple, Facebook, Discord, ...)
 
 It is originally based on the excellent
-[GoTrue](https://github.com/netlify/gotrue) codebase by
+[GoTrue](https://github.com/supabase/gotrue) codebase by
 [Netlify](https://netlify.com), however both have diverged significantly in
 features and capabilities.
 
