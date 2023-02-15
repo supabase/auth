@@ -3,10 +3,10 @@ package mailer
 import (
 	"net/url"
 
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/models"
 	"github.com/netlify/mailme"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/models"
 	"gopkg.in/gomail.v2"
 )
 

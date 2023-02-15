@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
-	"github.com/sethvargo/go-password/password"
 )
 
 var (

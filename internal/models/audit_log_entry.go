@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/storage"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 type AuditAction string
