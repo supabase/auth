@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/crypto"
-	"github.com/netlify/gotrue/internal/storage"
-	"github.com/netlify/gotrue/internal/storage/test"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/crypto"
+	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/storage/test"
 	"github.com/stretchr/testify/require"
 )
 

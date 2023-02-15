@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/storage"
 	"github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/mocktracer"
 	"github.com/stretchr/testify/assert"

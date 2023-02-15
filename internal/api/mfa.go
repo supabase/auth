@@ -12,10 +12,10 @@ import (
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/internal/metering"
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/storage"
-	"github.com/netlify/gotrue/internal/utilities"
+	"github.com/supabase/gotrue/internal/metering"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 	"github.com/pquerna/otp/totp"
 )
 

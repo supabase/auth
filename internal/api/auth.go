@@ -8,8 +8,8 @@ import (
 
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 // requireAuthentication checks incoming requests for tokens presented using the Authorization header

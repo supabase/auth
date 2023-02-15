@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netlify/gotrue/internal/utilities"
+	"github.com/supabase/gotrue/internal/utilities"
 	"github.com/pkg/errors"
 )
 
@@ -84,7 +84,7 @@ func verifyCaptchaCode(token string, secretKey string, clientIP string) (Verific
 	if err != nil {
 		return VerificationResponse{}, errors.Wrap(err, "failed to verify hcaptcha response")
 	}
-	defer res.Body.Close()
+	defer utilities.SafeClose(res.Body)
 
 	var verificationResponse VerificationResponse
 
