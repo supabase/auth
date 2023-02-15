@@ -217,10 +217,10 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	var emailData provider.Email
 	var identityData map[string]interface{}
 	if userData.Metadata != nil {
-		if len(metadata) != 0 {
-			maps.Copy(userData.Metadata, metadata)
-		}
 		identityData = structs.Map(userData.Metadata)
+		if len(metadata) != 0 {
+			maps.Copy(identityData, metadata)
+		}
 	}
 
 	var emails []string

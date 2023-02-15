@@ -69,6 +69,7 @@ require (
 	github.com/deepmap/oapi-codegen v1.12.4
 	github.com/fatih/structs v1.1.0
 	github.com/jackc/pgx/v4 v4.11.0
+	golang.org/x/exp v0.0.0-20230213192124-5e25df0256eb
 )
 
 require (
