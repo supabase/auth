@@ -177,7 +177,6 @@ func (ts *SmsProviderTestSuite) TestVonageSendSms() {
 		"text":       {message},
 		"api_key":    {vonageProvider.Config.ApiKey},
 		"api_secret": {vonageProvider.Config.ApiSecret},
-		"type": 	  {"unicode"},
 	}
 
 	gock.New(vonageProvider.APIPath).Post("").MatchType("url").BodyString(body.Encode()).Reply(200).JSON(VonageResponse{
