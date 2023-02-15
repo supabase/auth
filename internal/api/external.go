@@ -58,7 +58,9 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		if err != nil {
 			return err
 		}
-		json.Unmarshal([]byte(decodedMetadata), &metadata)
+		if err := json.Unmarshal([]byte(decodedMetadata), &metadata); err != nil {
+			return err
+		}
 	}
 
 	inviteToken := query.Get("invite_token")
