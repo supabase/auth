@@ -19,6 +19,7 @@ import (
 	"github.com/supabase/gotrue/internal/utilities"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
+	"golang.org/x/exp/maps"
 )
 
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
@@ -206,7 +207,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	ctx := r.Context()
 	aud := a.requestAud(ctx, r)
 	config := a.config
-	// metadata := getOAuthMetadata(ctx)
+	metadata := getOAuthMetadata(ctx)
 
 	var terr error
 
@@ -216,7 +217,9 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	var emailData provider.Email
 	var identityData map[string]interface{}
 	if userData.Metadata != nil {
-		// TODO - merge the metadata structs
+		if len(metadata) != 0 {
+			maps.Copy(userData.Metadata, metadata)
+		}
 		identityData = structs.Map(userData.Metadata)
 	}
 
