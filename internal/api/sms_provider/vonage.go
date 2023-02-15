@@ -51,6 +51,7 @@ func (t *VonageProvider) SendSms(phone string, message string) error {
 		"text":       {message},
 		"api_key":    {t.Config.ApiKey},
 		"api_secret": {t.Config.ApiSecret},
+		"type": 	  {"unicode"},
 	}
 
 	client := &http.Client{Timeout: defaultTimeout}
