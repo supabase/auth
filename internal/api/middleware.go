@@ -20,10 +20,10 @@ type FunctionHooks map[string][]string
 
 type NetlifyMicroserviceClaims struct {
 	jwt.StandardClaims
-	SiteURL       string        `json:"site_url"`
-	InstanceID    string        `json:"id"`
-	FunctionHooks FunctionHooks `json:"function_hooks"`
-	Metadata      string        `json:"metadata"`
+	SiteURL       string                 `json:"site_url"`
+	InstanceID    string                 `json:"id"`
+	FunctionHooks FunctionHooks          `json:"function_hooks"`
+	Metadata      map[string]interface{} `json:"metadata"`
 }
 
 func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
