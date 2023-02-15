@@ -5,7 +5,7 @@ ENV GOOS=linux
 
 RUN apk add --no-cache make git bash
 
-WORKDIR /go/src/github.com/netlify/gotrue
+WORKDIR /go/src/github.com/supabase/gotrue
 
 # Pulling dependencies
 COPY ./Makefile ./go.* ./
