@@ -11,7 +11,7 @@ import (
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gobuffalo/pop/v5/columns"
 	"github.com/jmoiron/sqlx"
-	"github.com/netlify/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/conf"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )

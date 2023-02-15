@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/internal/observability"
-	"github.com/netlify/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/gotrue/internal/storage"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )

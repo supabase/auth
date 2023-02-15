@@ -14,11 +14,11 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/metering"
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/observability"
-	"github.com/netlify/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/metering"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 // GoTrueClaims is a struct thats used for JWT claims

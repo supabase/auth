@@ -11,10 +11,10 @@ services:
       - '9999:9999'
       - '9100:9100'
     environment:
-      - GOTRUE_DB_MIGRATIONS_PATH=/go/src/github.com/netlify/gotrue/migrations
+      - GOTRUE_DB_MIGRATIONS_PATH=/go/src/github.com/supabase/gotrue/migrations
     volumes:
-      - ./:/go/src/github.com/netlify/gotrue
-    command: CompileDaemon --build="make build" --directory=/go/src/github.com/netlify/gotrue --recursive=true -pattern="(.+\.go|.+\.env)" -exclude=gotrue -exclude=gotrue-arm64 -exclude=.env --command="/go/src/github.com/netlify/gotrue/gotrue -c=.env.docker"
+      - ./:/go/src/github.com/supabase/gotrue
+    command: CompileDaemon --build="make build" --directory=/go/src/github.com/supabase/gotrue --recursive=true -pattern="(.+\.go|.+\.env)" -exclude=gotrue -exclude=gotrue-arm64 -exclude=.env --command="/go/src/github.com/supabase/gotrue/gotrue -c=.env.docker"
   postgres:
     build:
       context: .
