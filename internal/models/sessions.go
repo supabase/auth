@@ -8,8 +8,8 @@ import (
 
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/gotrue/internal/storage"
 	"github.com/pkg/errors"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 type AuthenticatorAssuranceLevel int

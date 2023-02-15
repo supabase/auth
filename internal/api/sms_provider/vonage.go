@@ -10,6 +10,7 @@ import (
 
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/utilities"
+	"golang.org/x/exp/utf8string"
 )
 
 const (
@@ -51,6 +52,11 @@ func (t *VonageProvider) SendSms(phone string, message string) error {
 		"text":       {message},
 		"api_key":    {t.Config.ApiKey},
 		"api_secret": {t.Config.ApiSecret},
+	}
+
+	isMessageContainUnicode := !utf8string.NewString(message).IsASCII()
+	if isMessageContainUnicode {
+		body.Set("type", "unicode")
 	}
 
 	client := &http.Client{Timeout: defaultTimeout}

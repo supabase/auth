@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pquerna/otp"
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/utilities"
-	"github.com/pquerna/otp"
 
 	"github.com/jackc/pgx/v4"
 

@@ -10,10 +10,10 @@ import (
 	"testing"
 
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/supabase/gotrue/internal/conf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/gotrue/internal/conf"
 )
 
 const (
