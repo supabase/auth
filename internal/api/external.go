@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,14 +13,14 @@ import (
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/gotrue/internal/api/provider"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
 	"github.com/supabase/gotrue/internal/utilities"
-	"github.com/sirupsen/logrus"
-	"golang.org/x/oauth2"
 	"golang.org/x/exp/maps"
+	"golang.org/x/oauth2"
 )
 
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
@@ -50,7 +51,15 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
 	}
-	metadata := query.Get("metadata")
+	encodedMetadata := query.Get("metadata")
+	var metadata map[string]interface{}
+	if encodedMetadata != "" {
+		decodedMetadata, err := url.QueryUnescape(encodedMetadata)
+		if err != nil {
+			return err
+		}
+		json.Unmarshal([]byte(decodedMetadata), &metadata)
+	}
 
 	inviteToken := query.Get("invite_token")
 	if inviteToken != "" {
@@ -455,7 +464,7 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	if claims.Referrer != "" {
 		ctx = withExternalReferrer(ctx, claims.Referrer)
 	}
-	if claims.NetlifyMicroserviceClaims.Metadata != "" {
+	if claims.NetlifyMicroserviceClaims.Metadata != nil {
 		ctx = withOAuthMetadata(ctx, claims.NetlifyMicroserviceClaims.Metadata)
 	}
 

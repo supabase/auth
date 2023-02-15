@@ -127,7 +127,7 @@ func withInviteToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, inviteTokenKey, token)
 }
 
-func withOAuthMetadata(ctx context.Context, metadata string) context.Context {
+func withOAuthMetadata(ctx context.Context, metadata map[string]interface{}) context.Context {
 	return context.WithValue(ctx, metadataKey, metadata)
 }
 
