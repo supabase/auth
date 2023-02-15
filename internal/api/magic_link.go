@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
-	"github.com/sethvargo/go-password/password"
 )
 
 // MagicLinkParams holds the parameters for a magic link request

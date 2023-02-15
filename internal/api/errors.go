@@ -7,10 +7,10 @@ import (
 	"os"
 	"runtime/debug"
 
+	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/utilities"
-	"github.com/pkg/errors"
 )
 
 // Common error messages during signup flow

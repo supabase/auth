@@ -7,10 +7,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/gotrue/cmd"
 	"github.com/supabase/gotrue/internal/api"
 	"github.com/supabase/gotrue/internal/observability"
-	"github.com/sirupsen/logrus"
 )
 
 func init() {

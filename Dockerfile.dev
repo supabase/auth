@@ -1,11 +1,11 @@
-FROM golang:1.19-alpine
+FROM golang:1.20-alpine
 ENV GO111MODULE=on
 ENV CGO_ENABLED=0
 ENV GOOS=linux
 
 RUN apk add --no-cache make git bash
 
-WORKDIR /go/src/github.com/netlify/gotrue
+WORKDIR /go/src/github.com/supabase/gotrue
 
 # Pulling dependencies
 COPY ./Makefile ./go.* ./
