@@ -10,9 +10,9 @@ import (
 
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gofrs/uuid"
+	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/crypto"
 	"github.com/supabase/gotrue/internal/storage"
-	"github.com/pkg/errors"
 )
 
 // User respresents a registered user with email/password authentication

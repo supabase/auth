@@ -9,13 +9,13 @@ import (
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
 	"github.com/go-chi/chi"
+	"github.com/rs/cors"
+	"github.com/sebest/xff"
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/mailer"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
-	"github.com/rs/cors"
-	"github.com/sebest/xff"
-	"github.com/sirupsen/logrus"
 )
 
 const (
