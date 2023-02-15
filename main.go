@@ -7,9 +7,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/netlify/gotrue/api"
-	"github.com/netlify/gotrue/cmd"
-	"github.com/netlify/gotrue/observability"
+	"github.com/supabase/gotrue/cmd"
+	"github.com/supabase/gotrue/internal/api"
+	"github.com/supabase/gotrue/internal/observability"
 	"github.com/sirupsen/logrus"
 )
 
