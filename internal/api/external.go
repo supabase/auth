@@ -58,6 +58,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		if err != nil {
 			return err
 		}
+
 		if err := json.Unmarshal([]byte(decodedMetadata), &metadata); err != nil {
 			return err
 		}

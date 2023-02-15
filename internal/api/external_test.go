@@ -159,7 +159,6 @@ func (ts *ExternalTestSuite) TestSignupExternalUnsupported() {
 	ts.Equal(w.Code, http.StatusBadRequest)
 }
 
-
 func (ts *ExternalTestSuite) TestSignupWithMetadata() {
 	authorizeURL := "http://localhost/authorize?provider=github&metadata=" + url.QueryEscape(`{"data":{"firstName":"generic","lastname":"last","amount":23232.87}}`)
 
