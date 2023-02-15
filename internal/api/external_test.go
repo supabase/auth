@@ -158,3 +158,20 @@ func (ts *ExternalTestSuite) TestSignupExternalUnsupported() {
 	ts.API.handler.ServeHTTP(w, req)
 	ts.Equal(w.Code, http.StatusBadRequest)
 }
+
+
+func (ts *ExternalTestSuite) TestSignupWithMetadata() {
+	authorizeURL := "http://localhost/authorize?provider=github&metadata=" + url.QueryEscape(`{"data":{"firstName":"generic","lastname":"last","amount":23232.87}}`)
+
+	req := httptest.NewRequest(http.MethodGet, authorizeURL, nil)
+	req.Header.Set("Referer", "https://example.netlify.com/admin")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	ts.Require().Equal(http.StatusFound, w.Code)
+	u, err := url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err, "redirect url parse failed")
+	// q := u.Query()
+	// state := q.Get("state")
+	// TODO - validate that the fields match above. JWT debugger seems to suggest it's fine
+
+}
