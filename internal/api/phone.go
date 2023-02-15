@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/api/sms_provider"
 	"github.com/supabase/gotrue/internal/crypto"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
-	"github.com/pkg/errors"
 )
 
 const e164Format = `^[1-9]\d{1,14}$`

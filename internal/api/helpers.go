@@ -10,11 +10,11 @@ import (
 	"net/url"
 
 	"github.com/gofrs/uuid"
+	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/utilities"
-	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 func addRequestID(globalConfig *conf.GlobalConfiguration) middlewareHandler {

@@ -4,12 +4,12 @@ import (
 	"context"
 	"net"
 
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 	"github.com/supabase/gotrue/internal/api"
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/storage"
 	"github.com/supabase/gotrue/internal/utilities"
-	"github.com/sirupsen/logrus"
-	"github.com/spf13/cobra"
 )
 
 var serveCmd = cobra.Command{

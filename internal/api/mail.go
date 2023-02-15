@@ -10,14 +10,14 @@ import (
 
 	"github.com/badoux/checkmail"
 	"github.com/fatih/structs"
+	"github.com/pkg/errors"
+	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/gotrue/internal/api/provider"
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/crypto"
 	"github.com/supabase/gotrue/internal/mailer"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
-	"github.com/pkg/errors"
-	"github.com/sethvargo/go-password/password"
 )
 
 var (
