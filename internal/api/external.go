@@ -70,7 +70,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	oauthID := ""
 	if flowType == "pkce" {
 		codeChallenge := query.Get("code_challenge")
-		if codeChallenge != "" {
+		if codeChallenge == "" {
 			return badRequestError("Code challenge must be non-empty in pkce flow")
 		}
 		oauthState, err := models.NewOAuthState(providerType, codeChallenge)

@@ -45,6 +45,11 @@ type AccessTokenResponse struct {
 	RefreshToken string       `json:"refresh_token"`
 	User         *models.User `json:"user"`
 }
+type PKCEResponse struct {
+	TokenResponse AccessTokenResponse
+	ProviderToken string
+	ProviderRefreshToken string
+}
 
 // AsRedirectURL encodes the AccessTokenResponse as a redirect URL that
 // includes the access token response data in a URL fragment.
@@ -683,7 +688,12 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	// }
 	// http.Redirect(w, r, rurl, http.StatusFound)
 	//return nil
-	return sendJSON(w, http.StatusOK, token)
+	return sendJSON(w, http.StatusOK, &PKCEResponse{
+		TokenResponse: *token,
+		ProviderToken: providerAccessToken,
+		ProviderRefreshToken: providerRefreshToken,
+
+	})
 
 }
 
