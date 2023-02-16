@@ -622,7 +622,6 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	codeChallenge := authState.HashedCodeChallenge
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
 	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
-	fmt.Println("%s", codeChallenge[:])
 	if string(codeChallenge[:]) != encodedCodeVerifier {
 		return forbiddenError(fmt.Sprintf("code challenge is %s but codeVerifier is %s", codeChallenge, encodedCodeVerifier))
 	}
