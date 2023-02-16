@@ -2,8 +2,8 @@ package models
 
 import (
 	"database/sql"
-	"github.com/netlify/gotrue/internal/storage"
 	"github.com/pkg/errors"
+	"github.com/supabase/gotrue/internal/storage"
 	"time"
 
 	"github.com/gofrs/uuid"

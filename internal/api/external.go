@@ -173,8 +173,17 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if terr := a.db.Update(oauthState); terr != nil {
 			return terr
 		}
+		rurl := a.getExternalRedirectURL(r)
+		u, err := url.Parse(rurl)
+		if err != nil {
+			return err
+		}
+		q := u.Query()
+		q.Set("code", oauthCode)
+		u.RawQuery = q.Encode()
+		http.Redirect(w, r, u.String(), http.StatusFound)
+		return nil
 
-		return sendJSON(w, http.StatusOK, oauthCode)
 	}
 
 	if providerType == "twitter" {
@@ -358,7 +367,6 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return nil, unauthorizedError("User is unauthorized")
 	}
 
-	fmt.Println("decision made")
 	// an account with a previously unconfirmed email + password
 	// combination or phone may exist. so now that there is an
 	// OAuth identity bound to this user, and since they have not
@@ -368,7 +376,6 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	if terr = user.RemoveUnconfirmedIdentities(tx); terr != nil {
 		return nil, internalServerError("Error updating user").WithInternalError(terr)
 	}
-	fmt.Println("idents removed")
 
 	if !user.IsConfirmed() {
 		if !emailData.Verified && !config.Mailer.Autoconfirm {

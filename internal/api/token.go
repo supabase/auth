@@ -591,13 +591,13 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	db := a.db.WithContext(ctx)
 	config := a.config
 
-	params := &PKCEGrantParams{}
-	body, err := getBodyBytes(r)
 	var userData *provider.UserProvidedData
 	var providerAccessToken string
 	var providerRefreshToken string
 	var grantParams models.GrantParams
 
+	params := &PKCEGrantParams{}
+	body, err := getBodyBytes(r)
 	if err != nil {
 		return internalServerError("Could not read body").WithInternalError(err)
 	}
@@ -618,11 +618,12 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 
 	providerType := authState.ProviderType
 
-	hashedCodeChallenge := authState.HashedCodeChallenge
+	codeChallenge := authState.HashedCodeChallenge
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
 	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
-	if string(hashedCodeChallenge[:]) != encodedCodeVerifier {
-		return forbiddenError(fmt.Sprintf("code verifier does not match code challenge, code verifier is %s, code challenge is %s, hashed Code verifier is: %s", encodedCodeVerifier, hashedCodeChallenge[:], hashedCodeVerifier))
+	fmt.Println("%s", codeChallenge[:])
+	if string(codeChallenge[:]) != encodedCodeVerifier {
+		return forbiddenError(fmt.Sprintf("code challenge is %s but codeVerifier is %s", codeChallenge, encodedCodeVerifier))
 	}
 
 	if providerType == "twitter" {
@@ -665,7 +666,6 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		return err
 	}
 
-	rurl := a.getExternalRedirectURL(r)
 	if token != nil {
 		q := url.Values{}
 		q.Set("provider_token", providerAccessToken)
@@ -674,17 +674,19 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		if providerRefreshToken != "" {
 			q.Set("provider_refresh_token", providerRefreshToken)
 		}
-
-		rurl = token.AsRedirectURL(rurl, q)
+		// 	rurl = token.AsRedirectURL(rurl, q)
 
 		if err := a.setCookieTokens(config, token, false, w); err != nil {
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
-	} else {
-		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", authState.ProviderType), w, r, rurl)
 	}
-	http.Redirect(w, r, rurl, http.StatusFound)
-	return nil
+	// } else {
+	// 	rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", authState.ProviderType), w, r, rurl)
+	// }
+	// http.Redirect(w, r, rurl, http.StatusFound)
+	//return nil
+	return sendJSON(w, http.StatusOK, token)
+
 }
 
 func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string) (string, error) {
