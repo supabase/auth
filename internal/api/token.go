@@ -618,7 +618,7 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	providerType := authState.ProviderType
-	codeChallenge := authState.HashedCodeChallenge
+	codeChallenge := authState.CodeChallenge
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
 	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
 	if string(codeChallenge[:]) != encodedCodeVerifier {

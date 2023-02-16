@@ -159,13 +159,10 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantSuccess() {
 }
 
 func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
-
-	// Do Same thing as in TestTokenPKCEGrant Success but with:
-	// Case 1: invalid authcode
-	// Case 2: Invalid challenge
-	// Case 3: invalid authcode + verifier
 	authCode := "1234563"
 	codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
+	invalidAuthCode := authCode + "123"
+	invalidVerifier := codeVerifier + "123"
 	codeChallenge := sha256.Sum256([]byte(codeVerifier))
 	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
 	oauthState, err := models.NewOAuthState("github", challenge)
@@ -180,18 +177,18 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 	}{
 		{
 			desc:         "Invalid Authcode",
-			authCode:     "12214125",
+			authCode:     invalidAuthCode,
 			codeVerifier: codeVerifier,
 		},
 		{
 			desc:         "Invalid codeVerifier",
 			authCode:     authCode,
-			codeVerifier: "codeVerifier",
+			codeVerifier: invalidVerifier,
 		},
 		{
 			desc:         "Invalid auth code and verifier",
-			authCode:     "a12e12",
-			codeVerifier: "codeaVerifier",
+			authCode:     invalidAuthCode,
+			codeVerifier: invalidVerifier,
 		},
 	}
 	for _, v := range cases {
@@ -205,7 +202,7 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			// assert.Equal(ts.T(), http.StatusForbidden, w.Code)
+			assert.Equal(ts.T(), http.StatusForbidden, w.Code)
 
 		})
 	}
