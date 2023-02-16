@@ -618,7 +618,6 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	providerType := authState.ProviderType
-
 	codeChallenge := authState.HashedCodeChallenge
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
 	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
@@ -643,7 +642,6 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		providerAccessToken = oAuthResponseData.token
 		providerRefreshToken = oAuthResponseData.refreshToken
 	}
-	fmt.Println("callback success")
 
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {

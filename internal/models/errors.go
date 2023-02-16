@@ -25,6 +25,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case SAMLRelayStateNotFoundError, *SAMLRelayStateNotFoundError:
 		return true
+	case OAuthStateNotFoundError, *OAuthStateNotFoundError:
+		return true
 	}
 	return false
 }

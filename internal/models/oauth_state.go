@@ -10,13 +10,12 @@ import (
 )
 
 type OAuthState struct {
-	ID                  uuid.UUID `json:"id" db:"id"`
-	AuthCode            string    `json:"auth_code" db:"auth_code"`
-	HashedCodeChallenge string    `json:"hashed_code_challenge" db:"hashed_code_challenge"`
-	ProviderType        string    `json:"provider_type" db:"provider_type"`
-	RedirectURI         string    `json:"redirect_uri" db:"redirect_uri"`
-	CreatedAt           time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at" db:"updated_at"`
+	ID            uuid.UUID `json:"id" db:"id"`
+	AuthCode      string    `json:"auth_code" db:"auth_code"`
+	CodeChallenge string    `json:"code_challenge" db:"code_challenge"`
+	ProviderType  string    `json:"provider_type" db:"provider_type"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
 }
 
 func (OAuthState) TableName() string {
@@ -24,16 +23,15 @@ func (OAuthState) TableName() string {
 	return tableName
 }
 
-func NewOAuthState(providerType, hashedChallenge string) (*OAuthState, error) {
+func NewOAuthState(providerType, codeChallenge string) (*OAuthState, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.New("error generating unique oauth state verifier")
 	}
 	oauth := &OAuthState{
-		ID:                  id,
-		ProviderType:        providerType,
-		HashedCodeChallenge: hashedChallenge,
-		// TODO(Joel): Consider reinstating authcode and redirect uri
+		ID:            id,
+		ProviderType:  providerType,
+		CodeChallenge: codeChallenge,
 	}
 	return oauth, nil
 }
