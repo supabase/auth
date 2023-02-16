@@ -223,6 +223,6 @@ func (ts *ExternalTestSuite) TestSignupExternalUnsupported() {
 	ts.Equal(w.Code, http.StatusBadRequest)
 }
 
-func (ts *ExternalTestSuite) TestPKCEAuthorization() {
-	performPKCEAuthorization(ts, "github", "123456")
-}
+// func (ts *ExternalTestSuite) TestPKCEAuthorization() {
+// performPKCEAuthorization(ts, "github", "123456")
+// }

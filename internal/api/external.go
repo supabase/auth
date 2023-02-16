@@ -45,7 +45,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	query := r.URL.Query()
 	providerType := query.Get("provider")
 	scopes := query.Get("scopes")
-	codeChallenge := query.Get("code_challenge")
 	flowType := query.Get("flow_type")
 
 	p, err := a.Provider(ctx, providerType, scopes)
@@ -70,6 +69,10 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 
 	oauthID := ""
 	if flowType == "pkce" {
+		codeChallenge := query.Get("code_challenge")
+		if codeChallenge != "" {
+			return badRequestError("Code challenge must be non-empty in pkce flow")
+		}
 		oauthState, err := models.NewOAuthState(providerType, codeChallenge)
 		if err != nil {
 			return err
@@ -102,6 +105,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
 	query.Del("scopes")
 	query.Del("provider")
+	query.Del("code_challenge")
 	for key := range query {
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get
@@ -122,7 +126,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	default:
 		authURL = p.AuthCodeURL(tokenString, authUrlParams...)
 	}
-	query.Del("code_challenge")
 
 	http.Redirect(w, r, authURL, http.StatusFound)
 	return nil
