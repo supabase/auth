@@ -16,6 +16,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
 	"github.com/supabase/gotrue/internal/api/provider"
+
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/metering"
 	"github.com/supabase/gotrue/internal/models"
