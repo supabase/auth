@@ -38,7 +38,6 @@ func NewDiscordProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 	apiPath := chooseHost(ext.URL, defaultDiscordAPIBase) + "/api"
 
 	oauthScopes := []string{
-		"email",
 		"identify",
 	}
 
