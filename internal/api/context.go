@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-
-	"encoding/json"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/supabase/gotrue/internal/models"
 )
@@ -147,11 +145,7 @@ func getOAuthMetadata(ctx context.Context) map[string]interface{} {
 	if obj == nil {
 		return nil
 	}
-	var metadata map[string]interface{}
-	if err := json.Unmarshal([]byte(obj.([]byte)), &metadata); err != nil {
-		return nil
-	}
-	return metadata
+	return obj.(map[string]interface{})
 }
 
 // withExternalProviderType adds the provided request ID to the context.

@@ -25,7 +25,7 @@ import (
 
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
 type ExternalProviderClaims struct {
-	NetlifyMicroserviceClaims
+	SupabaseMicroserviceClaims
 	Provider    string `json:"provider"`
 	InviteToken string `json:"invite_token,omitempty"`
 	Referrer    string `json:"referrer,omitempty"`
@@ -80,7 +80,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
-		NetlifyMicroserviceClaims: NetlifyMicroserviceClaims{
+		SupabaseMicroserviceClaims: SupabaseMicroserviceClaims{
 			StandardClaims: jwt.StandardClaims{
 				ExpiresAt: time.Now().Add(5 * time.Minute).Unix(),
 			},
@@ -165,9 +165,11 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	var user *models.User
 	var token *AccessTokenResponse
+
 	err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		inviteToken := getInviteToken(ctx)
+
 		if inviteToken != "" {
 			if user, terr = a.processInvite(r, ctx, tx, userData, inviteToken, providerType); terr != nil {
 				return terr
@@ -219,6 +221,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	ctx := r.Context()
 	aud := a.requestAud(ctx, r)
 	config := a.config
+
 	metadata := getOAuthMetadata(ctx)
 
 	var terr error
@@ -467,8 +470,8 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	if claims.Referrer != "" {
 		ctx = withExternalReferrer(ctx, claims.Referrer)
 	}
-	if claims.NetlifyMicroserviceClaims.Metadata != nil {
-		ctx = withOAuthMetadata(ctx, claims.NetlifyMicroserviceClaims.Metadata)
+	if claims.SupabaseMicroserviceClaims.Metadata != nil {
+		ctx = withOAuthMetadata(ctx, claims.SupabaseMicroserviceClaims.Metadata)
 	}
 
 	ctx = withExternalProviderType(ctx, claims.Provider)

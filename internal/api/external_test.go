@@ -164,7 +164,6 @@ func (ts *ExternalTestSuite) TestSignupWithMetadata() {
 	authorizeURL := "http://localhost/authorize?provider=github&metadata=" + url.QueryEscape(`{"data":{"firstName":"mukesh","lastname":"ambana","amount":999999}}`)
 
 	req := httptest.NewRequest(http.MethodGet, authorizeURL, nil)
-	req.Header.Set("Referer", "https://example.netlify.com/admin")
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	ts.Require().Equal(http.StatusFound, w.Code)
@@ -179,5 +178,5 @@ func (ts *ExternalTestSuite) TestSignupWithMetadata() {
 		require.NoError(ts.T(), err)
 		return []byte(config.JWT.Secret), nil
 	})
-	require.NotEmpty(ts.T(), token.Claims.(*ExternalProviderClaims).NetlifyMicroserviceClaims.Metadata["data"])
+	require.NotEmpty(ts.T(), token.Claims.(*ExternalProviderClaims).SupabaseMicroserviceClaims.Metadata["data"])
 }
