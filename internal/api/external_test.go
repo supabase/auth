@@ -176,6 +176,7 @@ func (ts *ExternalTestSuite) TestSignupWithMetadata() {
 
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
 	token, err := p.ParseWithClaims(state, &ExternalProviderClaims{}, func(token *jwt.Token) (interface{}, error) {
+		require.NoError(ts.T(), err)
 		return []byte(config.JWT.Secret), nil
 	})
 	require.NotEmpty(ts.T(), token.Claims.(*ExternalProviderClaims).NetlifyMicroserviceClaims.Metadata["data"])
