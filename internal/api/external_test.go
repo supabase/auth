@@ -1,6 +1,7 @@
 package api
 
 import (
+	jwt "github.com/golang-jwt/jwt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -160,7 +161,7 @@ func (ts *ExternalTestSuite) TestSignupExternalUnsupported() {
 }
 
 func (ts *ExternalTestSuite) TestSignupWithMetadata() {
-	authorizeURL := "http://localhost/authorize?provider=github&metadata=" + url.QueryEscape(`{"data":{"firstName":"generic","lastname":"last","amount":23232.87}}`)
+	authorizeURL := "http://localhost/authorize?provider=github&metadata=" + url.QueryEscape(`{"data":{"firstName":"mukesh","lastname":"ambana","amount":999999}}`)
 
 	req := httptest.NewRequest(http.MethodGet, authorizeURL, nil)
 	req.Header.Set("Referer", "https://example.netlify.com/admin")
@@ -169,8 +170,13 @@ func (ts *ExternalTestSuite) TestSignupWithMetadata() {
 	ts.Require().Equal(http.StatusFound, w.Code)
 	u, err := url.Parse(w.Header().Get("Location"))
 	ts.Require().NoError(err, "redirect url parse failed")
-	// q := u.Query()
-	// state := q.Get("state")
-	// TODO - validate that the fields match above. JWT debugger seems to suggest it's fine
+	q := u.Query()
+	state := q.Get("state")
+	config := ts.API.config
 
+	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+	token, err := p.ParseWithClaims(state, &ExternalProviderClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(config.JWT.Secret), nil
+	})
+	require.NotEmpty(ts.T(), token.Claims.(*ExternalProviderClaims).NetlifyMicroserviceClaims.Metadata["data"])
 }
