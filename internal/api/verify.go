@@ -134,7 +134,6 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			if terr := models.LogoutAllExceptMe(tx, session.ID, user.ID); terr != nil {
 				return terr
 			}
-			return nil
 			if err != nil {
 				return err
 			}
