@@ -9,9 +9,9 @@ import (
 	"time"
 
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/netlify/gotrue/internal/api/provider"
-	"github.com/netlify/gotrue/internal/models"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase/gotrue/internal/api/provider"
+	"github.com/supabase/gotrue/internal/models"
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalKakao() {
