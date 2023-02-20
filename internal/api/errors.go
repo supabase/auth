@@ -7,10 +7,10 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/observability"
-	"github.com/netlify/gotrue/internal/utilities"
 	"github.com/pkg/errors"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 // Common error messages during signup flow

@@ -6,10 +6,10 @@ import (
 	"net/url"
 
 	"github.com/mrjones/oauth"
-	"github.com/netlify/gotrue/internal/api/provider"
-	"github.com/netlify/gotrue/internal/observability"
-	"github.com/netlify/gotrue/internal/storage"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/gotrue/internal/api/provider"
+	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 // OAuthProviderData contains the userData and token returned by the oauth provider

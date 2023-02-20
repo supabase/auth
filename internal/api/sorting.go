@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/netlify/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/models"
 )
 
 func sort(r *http.Request, allowedFields map[string]bool, defaultSort []models.SortField) (*models.SortParams, error) {

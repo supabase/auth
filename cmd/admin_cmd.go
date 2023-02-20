@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/storage"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 var autoconfirm, isAdmin bool

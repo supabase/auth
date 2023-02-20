@@ -3,13 +3,13 @@ package models
 import (
 	"testing"
 
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/crypto"
-	"github.com/netlify/gotrue/internal/storage"
-	"github.com/netlify/gotrue/internal/storage/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/crypto"
+	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/storage/test"
 )
 
 const modelsTestConfig = "../../hack/test.env"

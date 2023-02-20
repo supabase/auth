@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/storage/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/storage/test"
 )
 
 // withFunctionHooks adds the provided function hooks to the context.

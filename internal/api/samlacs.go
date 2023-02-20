@@ -12,11 +12,11 @@ import (
 	"github.com/crewjam/saml"
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/internal/api/provider"
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/observability"
-	"github.com/netlify/gotrue/internal/storage"
-	"github.com/netlify/gotrue/internal/utilities"
+	"github.com/supabase/gotrue/internal/api/provider"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 func (a *API) samlDestroyRelayState(ctx context.Context, relayState *models.SAMLRelayState) error {
@@ -143,6 +143,8 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	samlMetadataModified := false
+
 	if ssoProvider.SAMLProvider.MetadataURL == nil {
 		if !idpMetadata.ValidUntil.IsZero() && time.Until(idpMetadata.ValidUntil) <= (30*24*60)*time.Second {
 			logentry := log.WithField("sso_provider_id", ssoProvider.ID.String())
@@ -152,11 +154,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 
 			logentry.Warn("SAML Metadata for identity provider will expire soon! Update its metadata_xml!")
 		}
-	}
-
-	var samlMetadataModified bool
-	samlMetadataModified = false
-	if *ssoProvider.SAMLProvider.MetadataURL != "" && IsMetadataStale(idpMetadata, ssoProvider.SAMLProvider) {
+	} else if *ssoProvider.SAMLProvider.MetadataURL != "" && IsMetadataStale(idpMetadata, ssoProvider.SAMLProvider) {
 		rawMetadata, err := fetchSAMLMetadata(ctx, *ssoProvider.SAMLProvider.MetadataURL)
 		if err != nil {
 			// Fail silently but raise warning and continue with existing metadata
@@ -169,7 +167,6 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 			ssoProvider.SAMLProvider.MetadataXML = string(rawMetadata)
 			samlMetadataModified = true
 		}
-
 	}
 
 	serviceProvider := a.getSAMLServiceProvider(idpMetadata, initiatedBy == "idp")

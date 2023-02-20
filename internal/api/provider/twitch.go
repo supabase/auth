@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/utilities"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/utilities"
 	"golang.org/x/oauth2"
 )
 

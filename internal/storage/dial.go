@@ -11,9 +11,9 @@ import (
 	"github.com/gobuffalo/pop/v5"
 	"github.com/gobuffalo/pop/v5/columns"
 	"github.com/jmoiron/sqlx"
-	"github.com/netlify/gotrue/internal/conf"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/gotrue/internal/conf"
 )
 
 // Connection is the interface a storage provider must implement.
