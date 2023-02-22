@@ -135,29 +135,6 @@ func (ts *TokenTestSuite) TestTokenPasswordGrantFailure() {
 	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
 }
 
-func (ts *TokenTestSuite) TestTokenPKCEGrantSuccess() {
-	authCode := "123456"
-	codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
-	codeChallenge := sha256.Sum256([]byte(codeVerifier))
-	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
-	oauthState, err := models.NewOAuthState("github", challenge)
-	oauthState.AuthCode = authCode
-	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.API.db.Create(oauthState))
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"code_verifier": codeVerifier,
-		"auth_code":     authCode,
-	}))
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=pkce", &buffer)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	// TODO - figure out how to properly flag this error
-	// assert.Equal(ts.T(), http.StatusNotFound, w.Code)
-
-}
-
 func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 	authCode := "1234563"
 	codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
