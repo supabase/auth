@@ -698,6 +698,17 @@ func (u *User) SoftDeleteUser(tx *storage.Connection) error {
 	return nil
 }
 
+func (u *User) LogoutAllSessionsExceptMine(tx *storage.Connection) error {
+	session, err := FindSessionByUserID(tx, u.ID)
+	if err != nil || IsNotFoundError(err) {
+		return err
+	}
+	if err := LogoutAllExceptMe(tx, session.ID, u.ID); err != nil {
+		return err
+	}
+	return nil
+}
+
 // SoftDeleteUserIdentities performs a soft deletion on all identities associated to a user
 func (u *User) SoftDeleteUserIdentities(tx *storage.Connection) error {
 	identities, err := FindIdentitiesByUserID(tx, u.ID)

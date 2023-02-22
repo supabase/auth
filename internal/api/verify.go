@@ -127,11 +127,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
 		if params.Type == recoveryVerification {
-			session, terr := models.FindSessionByUserID(tx, user.ID)
-			if terr != nil || models.IsNotFoundError(terr) {
-				return err
-			}
-			if terr := models.LogoutAllExceptMe(tx, session.ID, user.ID); terr != nil {
+			if terr := user.LogoutAllSessionsExceptMine(tx); terr != nil {
 				return terr
 			}
 		}
@@ -227,21 +223,11 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
 			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
-		if params.Type == recoveryVerification {
-			err = db.Transaction(func(tx *storage.Connection) error {
-				session, terr := models.FindSessionByUserID(tx, user.ID)
-				if terr != nil || models.IsNotFoundError(terr) {
-					return err
-				}
-				if terr := models.LogoutAllExceptMe(tx, session.ID, user.ID); terr != nil {
-					return terr
-				}
-				return nil
-			})
-			if err != nil {
-				return err
-			}
 
+		if params.Type == recoveryVerification {
+			if terr := user.LogoutAllSessionsExceptMine(tx); terr != nil {
+				return terr
+			}
 		}
 
 		return nil
