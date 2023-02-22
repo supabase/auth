@@ -128,16 +128,12 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		}
 		if params.Type == recoveryVerification {
 			session, terr := models.FindSessionByUserID(tx, user.ID)
-			if terr != nil || models.IsNotFoundError(err) {
+			if terr != nil || models.IsNotFoundError(terr) {
 				return err
 			}
 			if terr := models.LogoutAllExceptMe(tx, session.ID, user.ID); terr != nil {
 				return terr
 			}
-			if err != nil {
-				return err
-			}
-
 		}
 		return nil
 
@@ -234,7 +230,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		if params.Type == recoveryVerification {
 			err = db.Transaction(func(tx *storage.Connection) error {
 				session, terr := models.FindSessionByUserID(tx, user.ID)
-				if terr != nil || models.IsNotFoundError(err) {
+				if terr != nil || models.IsNotFoundError(terr) {
 					return err
 				}
 				if terr := models.LogoutAllExceptMe(tx, session.ID, user.ID); terr != nil {
