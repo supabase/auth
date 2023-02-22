@@ -90,9 +90,7 @@ func performPKCEAuthorizationRequest(ts *ExternalTestSuite, provider string, cod
 	return w
 }
 func performPKCEAuthorization(ts *ExternalTestSuite, provider, code string) *url.URL {
-	// TODO - Do the same as regular authorization but with both steps
 	codeChallenge := "123456abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ123456abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	// codeVerifier := "123456abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	w := performPKCEAuthorizationRequest(ts, provider, codeChallenge)
 	ts.Require().Equal(http.StatusFound, w.Code)
 	u, err := url.Parse(w.Header().Get("Location"))
@@ -110,33 +108,11 @@ func performPKCEAuthorization(ts *ExternalTestSuite, provider, code string) *url
 	req := httptest.NewRequest(http.MethodGet, testURL.String(), nil)
 	w = httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
-	//ts.Require().Equal(http.StatusOK, w.Code)
+	ts.Require().Equal(http.StatusFound, w.Code)
+	u, err = url.Parse(w.Header().Get("Location"))
+	ts.Require().NoError(err, "redirect url parse failed")
 
-	// req := httptest.NewRequest(http.MethodGet, testURL.String(), nil)
-	// y := httptest.NewRecorder()
-	// ts.API.handler.ServeHTTP(y, req)
-	// callbackResp := &PKCECallbackResp{}
-	// require.NoError(ts.T(), json.NewDecoder(y.Body).Decode(&callbackResp))
-	//
-	// TODO - Modify this section so that it checks if an internal auth code was returned
-	// ts.Require.NotEmpty(ts.T(),callbackResp.AuthCode)
-	// Convert the internalAuthCode to be part of body
-	// var pkceTokenRequest bytes.Buffer
-	//require.NoError(ts.T(), json.NewEncoder(&pkceTokenRequest).Encode(map[string]interface{}{
-	//	"auth_code":    callbackResp.AuthCode,
-	//	"code_verifier": codeVerifier,
-	// }))
-	//
-	//
-	// req := httptest.NewRequest(http.MethodPost, "http://localhost/token&grant_type=pkce", &pkceTokenRequest)
-	// z = httptest.NewRecorder()
-	// ts.API.handler.ServeHTTP(z, req)
-	// ts.Require().Equal(http.StatusOK, z.Code)
-
-	// TODO - Modify this so it adjusts for the fact that AuthorizationSuccess returns token etc in body
-	// assertAuthorizationSuccess()
-	// Done!
-	return nil
+	return u
 
 }
 
@@ -222,7 +198,3 @@ func (ts *ExternalTestSuite) TestSignupExternalUnsupported() {
 	ts.API.handler.ServeHTTP(w, req)
 	ts.Equal(w.Code, http.StatusBadRequest)
 }
-
-// func (ts *ExternalTestSuite) TestPKCEAuthorization() {
-// performPKCEAuthorization(ts, "github", "123456")
-// }

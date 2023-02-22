@@ -46,8 +46,8 @@ type AccessTokenResponse struct {
 	User         *models.User `json:"user"`
 }
 type PKCEResponse struct {
-	TokenResponse AccessTokenResponse
-	ProviderToken string
+	TokenResponse        AccessTokenResponse
+	ProviderToken        string
 	ProviderRefreshToken string
 }
 
@@ -689,10 +689,9 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	// http.Redirect(w, r, rurl, http.StatusFound)
 	//return nil
 	return sendJSON(w, http.StatusOK, &PKCEResponse{
-		TokenResponse: *token,
-		ProviderToken: providerAccessToken,
+		TokenResponse:        *token,
+		ProviderToken:        providerAccessToken,
 		ProviderRefreshToken: providerRefreshToken,
-
 	})
 
 }
