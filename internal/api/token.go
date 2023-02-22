@@ -677,17 +677,10 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		if providerRefreshToken != "" {
 			q.Set("provider_refresh_token", providerRefreshToken)
 		}
-		// 	rurl = token.AsRedirectURL(rurl, q)
-
 		if err := a.setCookieTokens(config, token, false, w); err != nil {
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
 	}
-	// } else {
-	// 	rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", authState.ProviderType), w, r, rurl)
-	// }
-	// http.Redirect(w, r, rurl, http.StatusFound)
-	//return nil
 	return sendJSON(w, http.StatusOK, &PKCEResponse{
 		TokenResponse:        *token,
 		ProviderToken:        providerAccessToken,
