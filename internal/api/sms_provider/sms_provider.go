@@ -44,6 +44,6 @@ func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
 	}
 }
 
-func IsValidMessageChannel(channel string) bool {
-	return channel == SMSProvider || channel == WhatsappProvider
+func IsValidMessageChannel(channel string, config conf.GlobalConfiguration) bool {
+	return (channel == SMSProvider || channel == WhatsappProvider) && config.Sms.Provider == "twilio"
 }

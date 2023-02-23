@@ -66,7 +66,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
 	}
-	if !sms_provider.IsValidMessageChannel(params.Channel) {
+	if !sms_provider.IsValidMessageChannel(params.Channel, *config) {
 		params.Channel = sms_provider.SMSProvider
 	}
 
