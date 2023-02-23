@@ -44,6 +44,15 @@ func NewVonageProvider(config conf.VonageProviderConfiguration) (SmsProvider, er
 	}, nil
 }
 
+func (t *VonageProvider) SendMessage(phone string, message string, messageType string) error {
+	switch messageType {
+	case "sms":
+		return t.SendSms(phone, message)
+	default:
+		return nil
+	}
+}
+
 // Send an SMS containing the OTP with Vonage's API
 func (t *VonageProvider) SendSms(phone string, message string) error {
 	body := url.Values{

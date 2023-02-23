@@ -193,7 +193,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return badRequestError("Error sending sms: %v", terr)
 				}
-				if terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeVerification, smsProvider); terr != nil {
+				if terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeVerification, smsProvider, "sms"); terr != nil {
 					return internalServerError("Error sending phone change otp").WithInternalError(terr)
 				}
 			}

@@ -55,6 +55,15 @@ func NewMessagebirdProvider(config conf.MessagebirdProviderConfiguration) (SmsPr
 	}, nil
 }
 
+func (t *MessagebirdProvider) SendMessage(phone string, message string, messageType string) error {
+	switch messageType {
+	case "sms":
+		return t.SendSms(phone, message)
+	default:
+		return nil
+	}
+}
+
 // Send an SMS containing the OTP with Messagebird's API
 func (t *MessagebirdProvider) SendSms(phone string, message string) error {
 	body := url.Values{
