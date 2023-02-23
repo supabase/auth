@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/supabase/gotrue/internal/api/sms_provider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -98,7 +99,7 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			err = ts.API.sendPhoneConfirmation(ctx, ts.API.db, u, "123456789", c.otpType, &TestSmsProvider{}, "sms")
+			err = ts.API.sendPhoneConfirmation(ctx, ts.API.db, u, "123456789", c.otpType, &TestSmsProvider{}, sms_provider.SMSProvider)
 			require.Equal(ts.T(), c.expected, err)
 			u, err = models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)

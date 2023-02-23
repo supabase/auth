@@ -43,3 +43,7 @@ func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
 		return nil, fmt.Errorf("sms Provider %s could not be found", name)
 	}
 }
+
+func IsValidMessageChannel(channel string) bool {
+	return channel == SMSProvider || channel == WhatsappProvider
+}

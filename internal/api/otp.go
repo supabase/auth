@@ -89,7 +89,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read sms otp params: %v", err)
 	}
 	// TODO(Joel): Block for non-Twilio SMS providers
-	if params.Phone != "" && params.Channel == "" {
+	if params.Phone != "" && !sms_provider.IsValidMessageChannel(params.Channel) {
 		params.Channel = sms_provider.SMSProvider
 	}
 	if params.Data == nil {
