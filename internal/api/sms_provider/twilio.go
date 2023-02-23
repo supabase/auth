@@ -56,9 +56,9 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 
 func (t *TwilioProvider) SendMessage(phone string, message string, messageType string) error {
 	switch messageType {
-	case "sms":
+	case SMSProvider:
 		return t.SendSms(phone, message)
-	case "whatsapp":
+	case WhatsappProvider:
 		return t.SendWhatsappMessage(phone, message)
 	default:
 		return nil

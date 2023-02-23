@@ -90,7 +90,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	}
 	// TODO(Joel): Block for non-Twilio SMS providers
 	if params.Phone != "" && params.Channel == "" {
-		params.Channel = "sms"
+		params.Channel = sms_provider.SMSProvider
 	}
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})

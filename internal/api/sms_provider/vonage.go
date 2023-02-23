@@ -46,7 +46,7 @@ func NewVonageProvider(config conf.VonageProviderConfiguration) (SmsProvider, er
 
 func (t *VonageProvider) SendMessage(phone string, message string, messageType string) error {
 	switch messageType {
-	case "sms":
+	case SMSProvider:
 		return t.SendSms(phone, message)
 	default:
 		return nil

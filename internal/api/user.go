@@ -75,8 +75,8 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			return unprocessableEntityError(DuplicateEmailMsg)
 		}
 	}
-	if params.Channel == "phone" && (params.Channel != "whatsapp" || params.Channel == "sms") {
-		params.Channel = "sms"
+	if params.Channel == "phone" && (params.Channel != sms_provider.WhatsappProvider && params.Channel != sms_provider.SMSProvider) {
+		params.Channel = sms_provider.SMSProvider
 	}
 
 	if params.Phone != "" && params.Phone != user.GetPhone() {

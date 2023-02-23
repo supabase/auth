@@ -11,6 +11,9 @@ import (
 
 var defaultTimeout time.Duration = time.Second * 10
 
+const SMSProvider = "sms"
+const WhatsappProvider = "whatsapp"
+
 func init() {
 	timeoutStr := os.Getenv("GOTRUE_INTERNAL_HTTP_TIMEOUT")
 	if timeoutStr != "" {

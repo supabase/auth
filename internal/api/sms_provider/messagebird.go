@@ -57,7 +57,7 @@ func NewMessagebirdProvider(config conf.MessagebirdProviderConfiguration) (SmsPr
 
 func (t *MessagebirdProvider) SendMessage(phone string, message string, messageType string) error {
 	switch messageType {
-	case "sms":
+	case SMSProvider:
 		return t.SendSms(phone, message)
 	default:
 		return nil
