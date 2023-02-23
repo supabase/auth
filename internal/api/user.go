@@ -20,6 +20,7 @@ type UserUpdateParams struct {
 	Data     map[string]interface{} `json:"data"`
 	AppData  map[string]interface{} `json:"app_metadata,omitempty"`
 	Phone    string                 `json:"phone"`
+	Channel  string                 `json:"channel"`
 }
 
 // UserGet returns a user
@@ -74,8 +75,12 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			return unprocessableEntityError(DuplicateEmailMsg)
 		}
 	}
+	if params.Channel == "phone" && (params.Channel != "whatsapp" || params.Channel == "sms") {
+		params.Channel = "sms"
+	}
 
 	if params.Phone != "" && params.Phone != user.GetPhone() {
+
 		params.Phone, err = validatePhone(params.Phone)
 		if err != nil {
 			return err
@@ -193,7 +198,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return badRequestError("Error sending sms: %v", terr)
 				}
-				if terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeVerification, smsProvider, "sms"); terr != nil {
+				if terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeVerification, smsProvider, params.Channel); terr != nil {
 					return internalServerError("Error sending phone change otp").WithInternalError(terr)
 				}
 			}
