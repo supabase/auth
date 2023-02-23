@@ -91,6 +91,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	if params.Phone != "" && !sms_provider.IsValidMessageChannel(params.Channel, *config) {
 		params.Channel = sms_provider.SMSProvider
 	}
+
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
 	}
@@ -125,6 +126,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			Phone:    params.Phone,
 			Password: password,
 			Data:     params.Data,
+			Channel:  params.Channel,
 		}
 		newBodyContent, err := json.Marshal(signUpParams)
 		if err != nil {
@@ -141,7 +143,8 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			}
 
 			signUpParams := &SignupParams{
-				Phone: params.Phone,
+				Phone:   params.Phone,
+				Channel: params.Channel,
 			}
 			newBodyContent, err := json.Marshal(signUpParams)
 			if err != nil {
