@@ -66,8 +66,14 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
 	}
-	if params.Provider == "phone" && !sms_provider.IsValidMessageChannel(params.Channel, *config) {
+
+	// For backwards compatibility, we default to SMS if params Channel is not specified
+	if params.Phone != "" && params.Channel == "" {
 		params.Channel = sms_provider.SMSProvider
+	}
+
+	if params.Provider == "phone" && !sms_provider.IsValidMessageChannel(params.Channel, *config) {
+		return badRequestError("Invalid channel type. Please use whatsapp or sms")
 	}
 
 	var user *models.User
