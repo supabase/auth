@@ -69,7 +69,7 @@ func (a *API) requestAud(ctx context.Context, r *http.Request) string {
 		return claims.Audience
 	}
 
-	// Finally, return the default of none of the above methods are successful
+	// Finally, return the default if none of the above methods are successful
 	return config.JWT.Aud
 }
 
