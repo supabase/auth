@@ -44,12 +44,12 @@ func NewVonageProvider(config conf.VonageProviderConfiguration) (SmsProvider, er
 	}, nil
 }
 
-func (t *VonageProvider) SendMessage(phone string, message string, messageType string) error {
-	switch messageType {
+func (t *VonageProvider) SendMessage(phone string, message string, channel string) error {
+	switch channel {
 	case SMSProvider:
 		return t.SendSms(phone, message)
 	default:
-		return nil
+		return errors.New("channel type is not supported for Vonage")
 	}
 }
 

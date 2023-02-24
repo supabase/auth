@@ -2,6 +2,7 @@ package sms_provider
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -61,7 +62,7 @@ func (t *TwilioProvider) SendMessage(phone string, message string, messageType s
 	case WhatsappProvider:
 		return t.SendWhatsappMessage(phone, message)
 	default:
-		return nil
+		return errors.New("channel type is not supported for Twilio")
 	}
 }
 
@@ -82,17 +83,17 @@ func (t *TwilioProvider) SendWhatsappMessage(phone string, message string) error
 	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	r.SetBasicAuth(t.Config.AccountSid, t.Config.AuthToken)
 	res, err := client.Do(r)
+	defer utilities.SafeClose(res.Body)
 	if err != nil {
 		return err
 	}
-	if res.StatusCode/100 != 2 {
+	if res.StatusCode != http.StatusOK {
 		resp := &twilioErrResponse{}
 		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
 			return err
 		}
 		return resp
 	}
-	defer utilities.SafeClose(res.Body)
 
 	// validate sms status
 	resp := &SmsStatus{}

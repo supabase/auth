@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"errors"
 
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/utilities"
@@ -55,12 +56,12 @@ func NewMessagebirdProvider(config conf.MessagebirdProviderConfiguration) (SmsPr
 	}, nil
 }
 
-func (t *MessagebirdProvider) SendMessage(phone string, message string, messageType string) error {
-	switch messageType {
+func (t *MessagebirdProvider) SendMessage(phone string, message string, channel string) error {
+	switch channel {
 	case SMSProvider:
 		return t.SendSms(phone, message)
 	default:
-		return nil
+		return errors.New("channel type is not supported for Vonage")
 	}
 }
 
