@@ -2,11 +2,11 @@ package sms_provider
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
-	"errors"
 
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/utilities"
