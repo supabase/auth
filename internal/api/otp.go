@@ -165,7 +165,9 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
-		if err := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); err != nil {
+		if err := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", map[string]interface{}{
+			"channel": params.Channel,
+		}); err != nil {
 			return err
 		}
 		smsProvider, terr := sms_provider.GetSmsProvider(*config)

@@ -164,6 +164,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if config.Sms.Autoconfirm {
 				if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
+					"channel":  params.Channel,
 				}); terr != nil {
 					return terr
 				}
