@@ -35,11 +35,12 @@ func TestOtp(t *testing.T) {
 
 func (ts *OtpTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
-	// Configured to allow testing of invalid channel params
-	ts.Config.External.Phone.Enabled = true
+
 }
 
 func (ts *OtpTestSuite) TestOtp() {
+	// Configured to allow testing of invalid channel params
+	ts.Config.External.Phone.Enabled = true
 	cases := []struct {
 		desc     string
 		params   OtpParams
