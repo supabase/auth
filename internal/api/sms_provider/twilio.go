@@ -55,8 +55,8 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 	}, nil
 }
 
-func (t *TwilioProvider) SendMessage(phone string, message string, messageType string) error {
-	switch messageType {
+func (t *TwilioProvider) SendMessage(phone string, message string, channel string) error {
+	switch channel {
 	case SMSProvider:
 		return t.SendSms(phone, message)
 	case WhatsappProvider:

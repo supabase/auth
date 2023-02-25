@@ -44,8 +44,8 @@ func NewTextlocalProvider(config conf.TextlocalProviderConfiguration) (SmsProvid
 	}, nil
 }
 
-func (t *TextlocalProvider) SendMessage(phone string, message string, messageType string) error {
-	switch messageType {
+func (t *TextlocalProvider) SendMessage(phone string, message string, channel string) error {
+	switch channel {
 	case SMSProvider:
 		return t.SendSms(phone, message)
 	default:
