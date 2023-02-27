@@ -83,7 +83,6 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Phone != "" && params.Phone != user.GetPhone() {
-
 		params.Phone, err = validatePhone(params.Phone)
 		if err != nil {
 			return err
