@@ -49,7 +49,7 @@ func (t *TextlocalProvider) SendMessage(phone string, message string, channel st
 	case SMSProvider:
 		return t.SendSms(phone, message)
 	default:
-		return errors.New("channel type is not supported for textlocal")
+		return fmt.Errorf("channel type %q is not supported for TextLocal", channel)
 	}
 }
 

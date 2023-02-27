@@ -2,7 +2,6 @@ package sms_provider
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -61,7 +60,7 @@ func (t *MessagebirdProvider) SendMessage(phone string, message string, channel 
 	case SMSProvider:
 		return t.SendSms(phone, message)
 	default:
-		return errors.New("channel type is not supported for Vonage")
+		return fmt.Errorf("channel type %q is not supported for Messagebird", channel)
 	}
 }
 

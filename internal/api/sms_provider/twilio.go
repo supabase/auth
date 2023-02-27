@@ -2,7 +2,6 @@ package sms_provider
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -62,7 +61,7 @@ func (t *TwilioProvider) SendMessage(phone string, message string, channel strin
 	case WhatsappProvider:
 		return t.SendWhatsappMessage(phone, message)
 	default:
-		return errors.New("channel type is not supported for Twilio")
+		return fmt.Errorf("channel type %q is not supported for Twilio", channel)
 	}
 }
 
