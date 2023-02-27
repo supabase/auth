@@ -45,11 +45,11 @@ func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
 }
 
 func IsValidMessageChannel(channel string, config conf.GlobalConfiguration) bool {
-	switch {
-	case channel == SMSProvider:
+	switch channel {
+	case SMSProvider:
 		return true
-	case channel == WhatsappProvider && config.Sms.Provider == "twilio":
-		return true
+	case WhatsappProvider:
+		return config.Sms.Provider == "twilio"
 	default:
 		return false
 	}
