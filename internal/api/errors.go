@@ -20,6 +20,8 @@ var (
 	UserExistsError   error = errors.New("user already exists")
 )
 
+const InvalidChannelError = "Invalid channel, supported values are 'sms' or 'whatsapp'"
+
 var oauthErrorMap = map[int]string{
 	http.StatusBadRequest:          "invalid_request",
 	http.StatusUnauthorized:        "unauthorized_client",

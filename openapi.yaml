@@ -489,6 +489,9 @@ paths:
                   format: phone
                 channel:
                   type: string
+                  enum:
+                    - sms
+                    - whatsapp
                 create_user:
                   type: boolean
                 data:
@@ -557,6 +560,9 @@ paths:
                   type: object
                 channel:
                   type: string
+                  enum:
+                    - sms
+                    - whatsapp
       responses:
         200:
           description: User's updated account information.

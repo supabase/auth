@@ -73,7 +73,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Provider == "phone" && !sms_provider.IsValidMessageChannel(params.Channel, *config) {
-		return badRequestError("Invalid channel type. Please use whatsapp or sms")
+		return badRequestError(InvalidChannelError)
 	}
 
 	var user *models.User

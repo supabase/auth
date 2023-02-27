@@ -79,7 +79,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		params.Channel = sms_provider.SMSProvider
 	}
 	if params.Phone != "" && !sms_provider.IsValidMessageChannel(params.Channel, *config) {
-		return badRequestError("Invalid Channel. Please use 'sms' or 'whatsapp'")
+		return badRequestError(InvalidChannelError)
 	}
 
 	if params.Phone != "" && params.Phone != user.GetPhone() {

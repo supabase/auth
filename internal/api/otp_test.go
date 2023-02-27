@@ -98,7 +98,7 @@ func (ts *OtpTestSuite) TestOtp() {
 				http.StatusBadRequest,
 				map[string]interface{}{
 					"code": float64(http.StatusBadRequest),
-					"msg":  "Invalid Channel. Please use 'sms' or 'whatsapp'",
+					"msg":  InvalidChannelError,
 				},
 			},
 		},
