@@ -310,6 +310,9 @@ paths:
                   format: phone
                 channel:
                   type: string
+                  enum:
+                    - sms
+                    - whatsapp
                 password:
                   type: string
                 data:
