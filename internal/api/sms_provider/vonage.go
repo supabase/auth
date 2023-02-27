@@ -49,7 +49,7 @@ func (t *VonageProvider) SendMessage(phone string, message string, channel strin
 	case SMSProvider:
 		return t.SendSms(phone, message)
 	default:
-		return errors.New("channel type is not supported for Vonage")
+		return fmt.Errorf("channel type %q is not supported for Vonage", channel)
 	}
 }
 
