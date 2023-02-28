@@ -66,6 +66,7 @@ func (t *TwilioProvider) SendMessage(phone string, message string, channel strin
 }
 
 // Send a Whatsapp message containing the OTP with Twilio's API
+// TODO (J0) Merge with SendSms once stable
 func (t *TwilioProvider) SendWhatsappMessage(phone string, message string) error {
 	body := url.Values{
 		"To":      {"whatsapp:" + "+" + phone}, // twilio api requires "+" extension to be included
