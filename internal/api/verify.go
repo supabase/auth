@@ -132,7 +132,6 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 		return nil
-
 	})
 	if err != nil {
 		var herr *HTTPError
@@ -229,9 +228,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 		}
-
 		return nil
-
 	})
 
 	if err != nil {

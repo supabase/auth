@@ -613,26 +613,25 @@ func (ts *VerifyTestSuite) TestVerifyValidRecoveryRemovesSession() {
 	// Test Credentials for this test
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-
 	sentTime := time.Now()
 	u.EmailConfirmedAt = &sentTime
-	require.NoError(ts.T(), ts.API.db.Update(u))
+	require.NoError(ts.T(), ts.API.db.Update(u), "Error confirming test user")
+
+	// Login to create a session
 	var signInBuffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&signInBuffer).Encode(map[string]interface{}{
 		"email":    ts.TestEmail,
 		"password": ts.TestPassword,
 	}))
 
-	// Login to create a session
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &signInBuffer)
 	req.Header.Set("Content-Type", "application/json")
-
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
 	firstSession, err := models.FindSessionByUserID(ts.API.db, u.ID)
-	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), err, "Error finding test session")
 
 	type expected struct {
 		code int
@@ -649,7 +648,7 @@ func (ts *VerifyTestSuite) TestVerifyValidRecoveryRemovesSession() {
 		"email":     u.GetEmail(),
 	}
 
-	// Secondary session to simulate a login by the same user elsewhere to create session
+	// Secondary session to simulate a login by the same user elsewhere
 	secondSession, err := models.NewSession()
 	require.NoError(ts.T(), err, "Error creating test session")
 	secondSession.UserID = u.ID
@@ -671,9 +670,9 @@ func (ts *VerifyTestSuite) TestVerifyValidRecoveryRemovesSession() {
 	w = httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, verifyReq)
 	assert.Equal(ts.T(), expectedResponse.code, w.Code)
-	sessions, err := models.FindSessionsByUserID(ts.API.db, u.ID)
 
-	// Only my session remaining
+	// Only first session remaining
+	sessions, err := models.FindSessionsByUserID(ts.API.db, u.ID)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), 1, len(sessions))
 	require.Equal(ts.T(), firstSession.ID, sessions[0].ID)
