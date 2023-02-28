@@ -44,6 +44,15 @@ func NewTextlocalProvider(config conf.TextlocalProviderConfiguration) (SmsProvid
 	}, nil
 }
 
+func (t *TextlocalProvider) SendMessage(phone string, message string, channel string) error {
+	switch channel {
+	case SMSProvider:
+		return t.SendSms(phone, message)
+	default:
+		return fmt.Errorf("channel type %q is not supported for TextLocal", channel)
+	}
+}
+
 // Send an SMS containing the OTP with Textlocal's API
 func (t *TextlocalProvider) SendSms(phone string, message string) error {
 	body := url.Values{

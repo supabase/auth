@@ -25,6 +25,7 @@ type SignupParams struct {
 	Data     map[string]interface{} `json:"data"`
 	Provider string                 `json:"-"`
 	Aud      string                 `json:"-"`
+	Channel  string                 `json:"channel"`
 }
 
 // Signup is the endpoint for registering a new user
@@ -64,6 +65,15 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
+	}
+
+	// For backwards compatibility, we default to SMS if params Channel is not specified
+	if params.Phone != "" && params.Channel == "" {
+		params.Channel = sms_provider.SMSProvider
+	}
+
+	if params.Provider == "phone" && !sms_provider.IsValidMessageChannel(params.Channel, *config) {
+		return badRequestError(InvalidChannelError)
 	}
 
 	var user *models.User
@@ -154,6 +164,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if config.Sms.Autoconfirm {
 				if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
+					"channel":  params.Channel,
 				}); terr != nil {
 					return terr
 				}
@@ -173,7 +184,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
-				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider); terr != nil {
+				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
 			}

@@ -44,7 +44,7 @@ func formatPhoneNumber(phone string) string {
 }
 
 // sendPhoneConfirmation sends an otp to the user's phone number
-func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider) error {
+func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string) error {
 	config := a.config
 
 	var token *string
@@ -87,7 +87,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		message = strings.Replace(config.Sms.Template, "{{ .Code }}", otp, -1)
 	}
 
-	if serr := smsProvider.SendSms(phone, message); serr != nil {
+	if serr := smsProvider.SendMessage(phone, message, channel); serr != nil {
 		*token = oldToken
 		return serr
 	}

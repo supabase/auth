@@ -55,6 +55,15 @@ func NewMessagebirdProvider(config conf.MessagebirdProviderConfiguration) (SmsPr
 	}, nil
 }
 
+func (t *MessagebirdProvider) SendMessage(phone string, message string, channel string) error {
+	switch channel {
+	case SMSProvider:
+		return t.SendSms(phone, message)
+	default:
+		return fmt.Errorf("channel type %q is not supported for Messagebird", channel)
+	}
+}
+
 // Send an SMS containing the OTP with Messagebird's API
 func (t *MessagebirdProvider) SendSms(phone string, message string) error {
 	body := url.Values{

@@ -294,6 +294,11 @@ paths:
                 value:
                   phone: "+1234567890"
                   password: password1
+              "phone+password+whatsapp":
+                value:
+                  phone: "+1234567890"
+                  password: password1
+                  channel: whatsapp
             schema:
               type: object
               properties:
@@ -303,6 +308,11 @@ paths:
                 phone:
                   type: string
                   format: phone
+                channel:
+                  type: string
+                  enum:
+                    - sms
+                    - whatsapp
                 password:
                   type: string
                 data:
@@ -477,6 +487,11 @@ paths:
                 phone:
                   type: string
                   format: phone
+                channel:
+                  type: string
+                  enum:
+                    - sms
+                    - whatsapp
                 create_user:
                   type: boolean
                 data:
@@ -543,6 +558,11 @@ paths:
                   type: object
                 app_metadata:
                   type: object
+                channel:
+                  type: string
+                  enum:
+                    - sms
+                    - whatsapp
       responses:
         200:
           description: User's updated account information.

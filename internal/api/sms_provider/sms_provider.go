@@ -11,6 +11,9 @@ import (
 
 var defaultTimeout time.Duration = time.Second * 10
 
+const SMSProvider = "sms"
+const WhatsappProvider = "whatsapp"
+
 func init() {
 	timeoutStr := os.Getenv("GOTRUE_INTERNAL_HTTP_TIMEOUT")
 	if timeoutStr != "" {
@@ -23,7 +26,7 @@ func init() {
 }
 
 type SmsProvider interface {
-	SendSms(phone, message string) error
+	SendMessage(phone, message, channel string) error
 }
 
 func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
@@ -38,5 +41,16 @@ func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
 		return NewVonageProvider(config.Sms.Vonage)
 	default:
 		return nil, fmt.Errorf("sms Provider %s could not be found", name)
+	}
+}
+
+func IsValidMessageChannel(channel string, config conf.GlobalConfiguration) bool {
+	switch channel {
+	case SMSProvider:
+		return true
+	case WhatsappProvider:
+		return config.Sms.Provider == "twilio"
+	default:
+		return false
 	}
 }

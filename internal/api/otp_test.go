@@ -35,9 +35,12 @@ func TestOtp(t *testing.T) {
 
 func (ts *OtpTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
+
 }
 
 func (ts *OtpTestSuite) TestOtp() {
+	// Configured to allow testing of invalid channel params
+	ts.Config.External.Phone.Enabled = true
 	cases := []struct {
 		desc     string
 		params   OtpParams
@@ -78,6 +81,24 @@ func (ts *OtpTestSuite) TestOtp() {
 				map[string]interface{}{
 					"code": float64(http.StatusBadRequest),
 					"msg":  "Only an email address or phone number should be provided",
+				},
+			},
+		},
+		{
+			desc: "Test Failure invalid channel param",
+			params: OtpParams{
+				Phone:      "123456789",
+				Channel:    "invalidchannel",
+				CreateUser: true,
+			},
+			expected: struct {
+				code     int
+				response map[string]interface{}
+			}{
+				http.StatusBadRequest,
+				map[string]interface{}{
+					"code": float64(http.StatusBadRequest),
+					"msg":  InvalidChannelError,
 				},
 			},
 		},
