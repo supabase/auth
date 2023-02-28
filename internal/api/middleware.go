@@ -10,6 +10,7 @@ import (
 	"github.com/supabase/gotrue/internal/security"
 
 	"github.com/didip/tollbooth/v5"
+	"github.com/didip/tollbooth/v5/limiter"
 	jwt "github.com/golang-jwt/jwt"
 )
 
@@ -44,10 +45,31 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func (a *API) limitHandler(rateLimiterType string) middlewareHandler {
+func (a *API) limitHandler(r rateLimiterType) middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		c := req.Context()
-		lmt := a.limiters[rateLimiterType]
+
+		var lmt *limiter.Limiter
+		switch r {
+		case RateLimitEmailSent:
+			lmt = a.limiters.EmailSent
+		case RateLimitSmsSent:
+			lmt = a.limiters.SmsSent
+		case RateLimitTokenRefresh:
+			lmt = a.limiters.TokenRefresh
+		case RateLimitVerify:
+			lmt = a.limiters.Verify
+		case RateLimitMFAVerify:
+			lmt = a.limiters.MFAVerify
+		case RateLimitMFAChallenge:
+			lmt = a.limiters.MFAChallenge
+		case RateLimitSSO:
+			lmt = a.limiters.SSO
+		case RateLimitSSOAssertion:
+			lmt = a.limiters.SSOAssertion
+		default:
+			return c, internalServerError("invalid rate limit type")
+		}
 
 		if limitHeader := a.config.RateLimitHeader; limitHeader != "" {
 			key := req.Header.Get(limitHeader)
@@ -70,8 +92,8 @@ func (a *API) limitHandler(rateLimiterType string) middlewareHandler {
 func (a *API) limitEmailOrPhoneSentHandler(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	c := req.Context()
 	config := a.config
-	emailLimiter := a.limiters["email"]
-	phoneLimiter := a.limiters["sms"]
+	emailLimiter := a.limiters.EmailSent
+	phoneLimiter := a.limiters.SmsSent
 
 	if (config.External.Email.Enabled && !config.Mailer.Autoconfirm) || (config.External.Phone.Enabled) {
 		if req.Method == "PUT" || req.Method == "POST" {

@@ -106,9 +106,9 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
 
-		r.With(api.limitHandler("token")).With(api.verifyCaptcha).Post("/token", api.Token)
+		r.With(api.limitHandler(RateLimitTokenRefresh)).With(api.verifyCaptcha).Post("/token", api.Token)
 
-		r.With(api.limitHandler("verify")).Route("/verify", func(r *router) {
+		r.With(api.limitHandler(RateLimitMFAVerify)).Route("/verify", func(r *router) {
 			r.Get("/", api.Verify)
 			r.Post("/", api.Verify)
 		})
@@ -129,8 +129,8 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Route("/{factor_id}", func(r *router) {
 				r.Use(api.loadFactor)
 
-				r.With(api.limitHandler("mfa/verify")).Post("/verify", api.VerifyFactor)
-				r.With(api.limitHandler("mfa/challenge")).Post("/challenge", api.ChallengeFactor)
+				r.With(api.limitHandler(RateLimitMFAVerify)).Post("/verify", api.VerifyFactor)
+				r.With(api.limitHandler(RateLimitMFAChallenge)).Post("/challenge", api.ChallengeFactor)
 				r.Delete("/", api.UnenrollFactor)
 
 			})
@@ -138,12 +138,12 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		if api.config.SAML.Enabled {
 			r.Route("/sso", func(r *router) {
-				r.With(api.limitHandler("sso")).With(api.verifyCaptcha).Post("/", api.SingleSignOn)
+				r.With(api.limitHandler(RateLimitSSO)).With(api.verifyCaptcha).Post("/", api.SingleSignOn)
 
 				r.Route("/saml", func(r *router) {
 					r.Get("/metadata", api.SAMLMetadata)
 
-					r.With(api.limitHandler("sso/assertion")).Post("/acs", api.SAMLACS)
+					r.With(api.limitHandler(RateLimitSSOAssertion)).Post("/acs", api.SAMLACS)
 				})
 			})
 		}
