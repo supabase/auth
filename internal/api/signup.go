@@ -9,12 +9,12 @@ import (
 
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
+	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/api/provider"
 	"github.com/supabase/gotrue/internal/api/sms_provider"
 	"github.com/supabase/gotrue/internal/metering"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
-	"github.com/pkg/errors"
 )
 
 // SignupParams are the parameters the Signup endpoint accepts

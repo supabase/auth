@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/utilities"
-	"github.com/sirupsen/logrus"
 
 	"github.com/opentracing/opentracing-go"
 	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/opentracer"
