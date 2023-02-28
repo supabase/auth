@@ -21,8 +21,11 @@ import (
 
 type VerifyTestSuite struct {
 	suite.Suite
-	API    *API
-	Config *conf.GlobalConfiguration
+	API          *API
+	Config       *conf.GlobalConfiguration
+	TestEmail    string
+	TestPassword string
+	TestToken    string
 }
 
 func TestVerify(t *testing.T) {
@@ -40,9 +43,12 @@ func TestVerify(t *testing.T) {
 
 func (ts *VerifyTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
+	ts.TestEmail = "test@example.com"
+	ts.TestPassword = "password"
+	ts.TestToken = "123456"
 
 	// Create user
-	u, err := models.NewUser("12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("12345678", ts.TestEmail, ts.TestPassword, ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }
@@ -603,6 +609,76 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 	}
 }
 
+func (ts *VerifyTestSuite) TestVerifyValidRecoveryRemovesSession() {
+	// Test Credentials for this test
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	sentTime := time.Now()
+	u.EmailConfirmedAt = &sentTime
+	require.NoError(ts.T(), ts.API.db.Update(u))
+	var signInBuffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&signInBuffer).Encode(map[string]interface{}{
+		"email":    ts.TestEmail,
+		"password": ts.TestPassword,
+	}))
+
+	// Login to create a session
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &signInBuffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	firstSession, err := models.FindSessionByUserID(ts.API.db, u.ID)
+	require.NoError(ts.T(), err)
+
+	type expected struct {
+		code int
+	}
+
+	expectedResponse := expected{
+		code: http.StatusOK,
+	}
+
+	body := map[string]interface{}{
+		"type":      recoveryVerification,
+		"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+ts.TestToken))),
+		"token":     ts.TestToken,
+		"email":     u.GetEmail(),
+	}
+
+	// Secondary session to simulate a login by the same user elsewhere to create session
+	secondSession, err := models.NewSession()
+	require.NoError(ts.T(), err, "Error creating test session")
+	secondSession.UserID = u.ID
+	require.NoError(ts.T(), ts.API.db.Create(secondSession), "Error saving test session")
+
+	u.RecoverySentAt = &sentTime
+	u.RecoveryToken = body["tokenHash"].(string)
+	u.ConfirmationToken = body["tokenHash"].(string)
+	require.NoError(ts.T(), ts.API.db.Update(u))
+
+	var verifyBuffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&verifyBuffer).Encode(body))
+
+	// Setup request
+	verifyReq := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &verifyBuffer)
+	verifyReq.Header.Set("Content-Type", "application/json")
+
+	// Setup response recorder
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, verifyReq)
+	assert.Equal(ts.T(), expectedResponse.code, w.Code)
+	sessions, err := models.FindSessionsByUserID(ts.API.db, u.ID)
+
+	// Only my session remaining
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), 1, len(sessions))
+	require.Equal(ts.T(), firstSession.ID, sessions[0].ID)
+}
+
 func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
@@ -630,8 +706,8 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      smsVerification,
-				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetPhone()+"123456"))),
-				"token":     "123456",
+				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetPhone()+ts.TestToken))),
+				"token":     ts.TestToken,
 				"phone":     u.GetPhone(),
 			},
 			expected: expectedResponse,
@@ -641,8 +717,8 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      signupVerification,
-				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
-				"token":     "123456",
+				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+ts.TestToken))),
+				"token":     ts.TestToken,
 				"email":     u.GetEmail(),
 			},
 			expected: expectedResponse,
@@ -652,8 +728,8 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      recoveryVerification,
-				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
-				"token":     "123456",
+				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+ts.TestToken))),
+				"token":     ts.TestToken,
 				"email":     u.GetEmail(),
 			},
 			expected: expectedResponse,
@@ -663,8 +739,8 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      emailOTPVerification,
-				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
-				"token":     "123456",
+				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+ts.TestToken))),
+				"token":     ts.TestToken,
 				"email":     u.GetEmail(),
 			},
 			expected: expectedResponse,
@@ -674,8 +750,8 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      emailChangeVerification,
-				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+"123456"))),
-				"token":     "123456",
+				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+ts.TestToken))),
+				"token":     ts.TestToken,
 				"email":     u.EmailChange,
 			},
 			expected: expectedResponse,
@@ -685,8 +761,8 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      phoneChangeVerification,
-				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.PhoneChange+"123456"))),
-				"token":     "123456",
+				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.PhoneChange+ts.TestToken))),
+				"token":     ts.TestToken,
 				"phone":     u.PhoneChange,
 			},
 			expected: expectedResponse,
