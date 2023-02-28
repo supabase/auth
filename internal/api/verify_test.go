@@ -610,7 +610,6 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 }
 
 func (ts *VerifyTestSuite) TestVerifyValidRecoveryRemovesSession() {
-	// Test Credentials for this test
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	sentTime := time.Now()
@@ -623,9 +622,9 @@ func (ts *VerifyTestSuite) TestVerifyValidRecoveryRemovesSession() {
 		"email":    ts.TestEmail,
 		"password": ts.TestPassword,
 	}))
-
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &signInBuffer)
 	req.Header.Set("Content-Type", "application/json")
+
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
