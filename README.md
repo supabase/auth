@@ -768,7 +768,7 @@ Creates (POST) or Updates (PUT) the user based on the `user_id` specified. The `
 ```js
 headers:
 {
-  "Authorization": "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO" // admin role required
+  "Authorization": "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO" // requires a role claim that can be set in the GOTRUE_JWT_ADMIN_ROLES env var
 }
 
 body:
