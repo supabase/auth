@@ -614,7 +614,7 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 
 	authState, err := models.FindOAuthStateByAuthCode(db, params.AuthCode)
 	if models.IsNotFoundError(err) {
-		return forbiddenError("invalid auth state")
+		return forbiddenError("invalid oauth state, please ensure oauth redirect has successfully completed")
 	} else if err != nil {
 		return err
 	}
@@ -627,7 +627,7 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
 	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
 	if string(codeChallenge[:]) != encodedCodeVerifier {
-		return forbiddenError(fmt.Sprintf("code challenge is %s but codeVerifier is %s", codeChallenge, encodedCodeVerifier))
+		return forbiddenError("code challenge does not match previously saved code verifier")
 	}
 
 	if providerType == "twitter" {
