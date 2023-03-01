@@ -39,16 +39,13 @@ type GoTrueClaims struct {
 
 // AccessTokenResponse represents an OAuth2 success response
 type AccessTokenResponse struct {
-	Token        string       `json:"access_token"`
-	TokenType    string       `json:"token_type"` // Bearer
-	ExpiresIn    int          `json:"expires_in"`
-	RefreshToken string       `json:"refresh_token"`
-	User         *models.User `json:"user"`
-}
-type PKCEResponse struct {
-	TokenResponse        AccessTokenResponse
-	ProviderToken        string
-	ProviderRefreshToken string
+	Token                string       `json:"access_token"`
+	TokenType            string       `json:"token_type"` // Bearer
+	ExpiresIn            int          `json:"expires_in"`
+	RefreshToken         string       `json:"refresh_token"`
+	User                 *models.User `json:"user"`
+	ProviderToken        string       `json:"provider_token,omitempty"`
+	ProviderRefreshToken string       `json:"provider_refresh_token,omitempty"`
 }
 
 // AsRedirectURL encodes the AccessTokenResponse as a redirect URL that
@@ -681,11 +678,7 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
 	}
-	return sendJSON(w, http.StatusOK, &PKCEResponse{
-		TokenResponse:        *token,
-		ProviderToken:        providerAccessToken,
-		ProviderRefreshToken: providerRefreshToken,
-	})
+	return sendJSON(w, http.StatusOK, token)
 
 }
 
