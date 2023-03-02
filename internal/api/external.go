@@ -171,35 +171,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		providerAccessToken = oAuthResponseData.token
 		providerRefreshToken = oAuthResponseData.refreshToken
 	}
-
-	var user *models.User
-	var token *AccessTokenResponse
-	err := db.Transaction(func(tx *storage.Connection) error {
-		var terr error
-		inviteToken := getInviteToken(ctx)
-		if inviteToken != "" {
-			if user, terr = a.processInvite(r, ctx, tx, userData, inviteToken, providerType); terr != nil {
-				return terr
-			}
-		} else {
-			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
-				if errors.Is(terr, errReturnNil) {
-					return nil
-				}
-
-				return terr
-			}
-		}
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
-
-		if terr != nil {
-			return oauthError("server_error", terr.Error())
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
 	oauthID := getOAuthID(ctx)
 	if oauthID != "" {
 		oauthState, err := models.FindOAuthStateByID(a.db, oauthID)
@@ -224,6 +195,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		}
 		supabaseAuthCode := sha256.Sum256([]byte(providerOAuthCode + oauthState.CodeChallenge))
 		oauthState.SupabaseAuthCode = providerOAuthCode
+		oauthState.ProviderAccessToken = providerAccessToken
+		oauthState.ProviderRefreshToken = providerRefreshToken
 		if terr := a.db.Update(oauthState); terr != nil {
 			return terr
 		}
@@ -237,6 +210,36 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		u.RawQuery = q.Encode()
 		http.Redirect(w, r, u.String(), http.StatusFound)
 		return nil
+	}
+
+	var user *models.User
+	var token *AccessTokenResponse
+	err := db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		inviteToken := getInviteToken(ctx)
+		if inviteToken != "" {
+			if user, terr = a.processInvite(r, ctx, tx, userData, inviteToken, providerType); terr != nil {
+				return terr
+			}
+		} else {
+			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
+				if errors.Is(terr, errReturnNil) {
+					return nil
+				}
+
+				return terr
+			}
+		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+
+		if terr != nil {
+			return oauthError("server_error", terr.Error())
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 
 	rurl := a.getExternalRedirectURL(r)
@@ -254,8 +257,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if err := a.setCookieTokens(config, token, false, w); err != nil {
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
-		// TODO(Joel)- if oauthid is not null,
-		// Save the provider refresh and oauth token to state
+
 	} else {
 		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
 	}
@@ -599,6 +601,7 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger) *url
 		return getErrorQueryString(e.Cause(), errorID, log)
 	default:
 		error_type, error_description := "server_error", err.Error()
+
 		// Provide better error messages for certain user-triggered Postgres errors.
 		if pgErr := utilities.NewPostgresError(e); pgErr != nil {
 			error_description = pgErr.Message

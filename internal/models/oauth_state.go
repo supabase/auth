@@ -10,12 +10,14 @@ import (
 )
 
 type OAuthState struct {
-	ID               uuid.UUID `json:"id" db:"id"`
-	SupabaseAuthCode string    `json:"supabase_auth_code" db:"supabase_auth_code"`
-	CodeChallenge    string    `json:"code_challenge" db:"code_challenge"`
-	ProviderType     string    `json:"provider_type" db:"provider_type"`
-	CreatedAt        time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
+	ID                   uuid.UUID `json:"id" db:"id"`
+	SupabaseAuthCode     string    `json:"supabase_auth_code" db:"supabase_auth_code"`
+	CodeChallenge        string    `json:"code_challenge" db:"code_challenge"`
+	ProviderType         string    `json:"provider_type" db:"provider_type"`
+	ProviderAccessToken  string    `json:"provider_access_token" db:"provider_access_token"`
+	ProviderRefreshToken string    `json:"provider_refresh_token" db:"provider_refresh_token"`
+	CreatedAt            time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at" db:"updated_at"`
 }
 
 func (OAuthState) TableName() string {
