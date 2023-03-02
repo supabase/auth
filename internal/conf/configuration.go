@@ -52,6 +52,8 @@ func (c *DBConfiguration) Validate() error {
 // JWTConfiguration holds all the JWT related configuration.
 type JWTConfiguration struct {
 	Secret           string   `json:"secret" required:"true"`
+	SigningMethod    string   `json:"signing_method" split_words:"true"`
+	Pubkey           string   `json:"pubkey"`
 	Exp              int      `json:"exp"`
 	Aud              string   `json:"aud"`
 	AdminGroupName   string   `json:"admin_group_name" split_words:"true"`
