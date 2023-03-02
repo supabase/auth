@@ -590,6 +590,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 }
 
 func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	// TODO (Joel) - write a test for this function
 	db := a.db.WithContext(ctx)
 	config := a.config
 
@@ -629,6 +630,8 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		var user *models.User
 		var terr error
 		// TODO(Joel) - Check that issuing session here doesn't cause any mismatch
+		// TODO(Joel) - Fix this, currently use is null
+		// TODO (Joel) - ensure auth state matches before we extract user from context
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())

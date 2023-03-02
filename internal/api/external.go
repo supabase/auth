@@ -196,7 +196,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		}
 		hashedAuthCodeAndChallenge := sha256.Sum256([]byte(providerOAuthCode + oauthState.CodeChallenge))
 		supabaseAuthCode := base64.StdEncoding.EncodeToString(hashedAuthCodeAndChallenge[:])
-		oauthState.SupabaseAuthCode = providerOAuthCode
+		oauthState.SupabaseAuthCode = supabaseAuthCode
 		oauthState.ProviderAccessToken = providerAccessToken
 		oauthState.ProviderRefreshToken = providerRefreshToken
 		if terr := a.db.Update(oauthState); terr != nil {
@@ -211,6 +211,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		q.Set("code", supabaseAuthCode[:])
 		u.RawQuery = q.Encode()
 		err = db.Transaction(func(tx *storage.Connection) error {
+			// TODO(Joel) - Decide whether to give user authenticated status
 			if _, terr := a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
 				if errors.Is(terr, errReturnNil) {
 					return nil
