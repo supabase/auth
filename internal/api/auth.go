@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	jwt "github.com/golang-jwt/jwt"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
 )
@@ -68,10 +67,7 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request) (context.Context, e
 	ctx := r.Context()
 	config := a.config
 
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
-	token, err := p.ParseWithClaims(bearer, &GoTrueClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(config.JWT.Secret), nil
-	})
+	token, err := parseJWTTokenWithClaims(bearer, config, &GoTrueClaims{})
 	if err != nil {
 		return nil, unauthorizedError("invalid JWT: unable to parse or verify signature, %v", err)
 	}

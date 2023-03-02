@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"time"
 
-	jwt "github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/gotrue/internal/models"
 )
@@ -30,10 +29,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGithub() {
 	ts.Equal("user:email", q.Get("scope"))
 
 	claims := ExternalProviderClaims{}
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
-	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
+	_, err = parseJWTTokenWithClaims(q.Get("state"), ts.Config, &claims)
 	ts.Require().NoError(err)
 
 	ts.Equal("github", claims.Provider)
