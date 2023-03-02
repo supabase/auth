@@ -97,6 +97,15 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), authCode, expectedAuthCode)
 
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, "github@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), user)
+
+	oauthState, err := models.FindOAuthStateByAuthCode(ts.API.db, authCode)
+	require.NoError(ts.T(), err)
+	// Check against mock response returned in GithubTestSignupSetup
+	require.Equal(ts.T(), oauthState.ProviderAccessToken, "github_token")
+
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalGitHubDisableSignupErrorWhenNoUser() {

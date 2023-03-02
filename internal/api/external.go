@@ -210,6 +210,19 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		q := u.Query()
 		q.Set("code", supabaseAuthCode[:])
 		u.RawQuery = q.Encode()
+		err = db.Transaction(func(tx *storage.Connection) error {
+			if _, terr := a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
+				if errors.Is(terr, errReturnNil) {
+					return nil
+				}
+
+				return terr
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 		http.Redirect(w, r, u.String(), http.StatusFound)
 		return nil
 	}

@@ -76,7 +76,6 @@ func performAuthorizationRequest(ts *ExternalTestSuite, provider string, inviteT
 	return w
 }
 
-// TODO(Joel) - reinstate once the existing flow is validated
 func performPKCEAuthorizationRequest(ts *ExternalTestSuite, provider string, codeChallenge string) *httptest.ResponseRecorder {
 	authorizeURL := "http://localhost/authorize?flow_type=pkce&provider=" + provider
 	if codeChallenge != "" {

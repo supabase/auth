@@ -44,7 +44,7 @@ func FindOAuthStateByAuthCode(tx *storage.Connection, supabaseAuthCode string) (
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, OAuthStateNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding user")
+		return nil, errors.Wrap(err, "error finding oauth state")
 	}
 
 	return obj, nil
@@ -52,11 +52,11 @@ func FindOAuthStateByAuthCode(tx *storage.Connection, supabaseAuthCode string) (
 
 func FindOAuthStateByID(tx *storage.Connection, id string) (*OAuthState, error) {
 	obj := &OAuthState{}
-	if err := tx.Eager().Q().Where("id= ?", id).First(obj); err != nil {
+	if err := tx.Eager().Q().Where("id = ?", id).First(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, OAuthStateNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding user")
+		return nil, errors.Wrap(err, "error finding oauth state")
 	}
 
 	return obj, nil
