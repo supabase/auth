@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-
-	jwt "github.com/golang-jwt/jwt"
 )
 
 const (
@@ -31,10 +29,7 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkOSWithConnection() {
 	ts.Equal(connection, q.Get("connection"))
 
 	claims := ExternalProviderClaims{}
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
-	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
+	_, err = parseJWTTokenWithClaims(q.Get("state"), ts.Config, &claims)
 	ts.Require().NoError(err)
 
 	ts.Equal("workos", claims.Provider)
@@ -57,10 +52,7 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkOSWithOrganization() {
 	ts.Equal(organization, q.Get("organization"))
 
 	claims := ExternalProviderClaims{}
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
-	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
+	_, err = parseJWTTokenWithClaims(q.Get("state"), ts.Config, &claims)
 	ts.Require().NoError(err)
 
 	ts.Equal("workos", claims.Provider)
@@ -83,10 +75,7 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkOSWithProvider() {
 	ts.Equal(provider, q.Get("provider"))
 
 	claims := ExternalProviderClaims{}
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
-	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(ts.Config.JWT.Secret), nil
-	})
+	_, err = parseJWTTokenWithClaims(q.Get("state"), ts.Config, &claims)
 	ts.Require().NoError(err)
 
 	ts.Equal("workos", claims.Provider)

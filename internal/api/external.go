@@ -434,10 +434,8 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 func (a *API) loadExternalState(ctx context.Context, state string) (context.Context, error) {
 	config := a.config
 	claims := ExternalProviderClaims{}
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
-	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(config.JWT.Secret), nil
-	})
+
+	_, err := parseJWTTokenWithClaims(state, config, &claims)
 	if err != nil || claims.Provider == "" {
 		return nil, badRequestError("OAuth state is invalid: %v", err)
 	}

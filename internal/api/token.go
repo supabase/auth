@@ -577,6 +577,20 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
+func parseJWTTokenWithClaims(bearer string, config *conf.GlobalConfiguration, claims jwt.Claims) (*jwt.Token, error) {
+	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+	return p.ParseWithClaims(bearer, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(config.JWT.Secret), nil
+	})
+}
+
+func parseJWTToken(bearer string, config *conf.GlobalConfiguration) (*jwt.Token, error) {
+	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+	return p.Parse(bearer, func(token *jwt.Token) (interface{}, error) {
+		return []byte(config.JWT.Secret), nil
+	})
+}
+
 func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string) (string, error) {
 	aal, amr := models.AAL1.String(), []models.AMREntry{}
 	sid := ""
