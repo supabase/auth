@@ -65,7 +65,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
+	claims := ExternalProviderClaims{
 		NetlifyMicroserviceClaims: NetlifyMicroserviceClaims{
 			StandardClaims: jwt.StandardClaims{
 				ExpiresAt: time.Now().Add(5 * time.Minute).Unix(),
@@ -76,8 +76,8 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		Provider:    providerType,
 		InviteToken: inviteToken,
 		Referrer:    redirectURL,
-	})
-	tokenString, err := token.SignedString([]byte(config.JWT.Secret))
+	}
+	tokenString, err := newJWTTokenWithClaims(config.JWT, claims)
 	if err != nil {
 		return internalServerError("Error creating state").WithInternalError(err)
 	}

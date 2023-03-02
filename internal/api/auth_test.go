@@ -44,7 +44,7 @@ func (ts *AuthTestSuite) TestExtractBearerToken() {
 	userClaims := &GoTrueClaims{
 		Role: "authenticated",
 	}
-	userJwt, err := jwt.NewWithClaims(jwt.SigningMethodHS256, userClaims).SignedString([]byte(ts.Config.JWT.Secret))
+	userJwt, err := newJWTTokenWithClaims(ts.Config.JWT, userClaims)
 	require.NoError(ts.T(), err)
 	req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
 	req.Header.Set("Authorization", "Bearer "+userJwt)
@@ -58,7 +58,7 @@ func (ts *AuthTestSuite) TestParseJWTClaims() {
 	userClaims := &GoTrueClaims{
 		Role: "authenticated",
 	}
-	userJwt, err := jwt.NewWithClaims(jwt.SigningMethodHS256, userClaims).SignedString([]byte(ts.Config.JWT.Secret))
+	userJwt, err := newJWTTokenWithClaims(ts.Config.JWT, userClaims)
 	require.NoError(ts.T(), err)
 
 	req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
@@ -163,7 +163,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 
 	for _, c := range cases {
 		ts.Run(c.Desc, func() {
-			userJwt, err := jwt.NewWithClaims(jwt.SigningMethodHS256, c.UserJwtClaims).SignedString([]byte(ts.Config.JWT.Secret))
+			userJwt, err := newJWTTokenWithClaims(ts.Config.JWT, c.UserJwtClaims)
 			require.NoError(ts.T(), err)
 
 			req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)

@@ -591,6 +591,11 @@ func parseJWTToken(bearer string, config *conf.GlobalConfiguration) (*jwt.Token,
 	})
 }
 
+func newJWTTokenWithClaims(JWT conf.JWTConfiguration, claims jwt.Claims) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(JWT.Secret))
+}
+
 func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, config *conf.GlobalConfiguration) (string, error) {
 	aal, amr := models.AAL1.String(), []models.AMREntry{}
 	sid := ""
@@ -622,8 +627,7 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 		AuthenticationMethodReference: amr,
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(config.JWT.Secret))
+	return newJWTTokenWithClaims(config.JWT, claims)
 }
 
 func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
