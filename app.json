@@ -14,6 +14,9 @@
     "GOTRUE_DB_NAMESPACE": {
       "value": "auth"
     },
+    "GOTRUE_JWT_SIGNING_METHOD": {
+      "value": "HS256"
+    },
     "GOTRUE_JWT_SECRET": {
       "required": true
     },

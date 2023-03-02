@@ -248,21 +248,56 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 }
 
 func parseJWTTokenWithClaims(bearer string, config *conf.GlobalConfiguration, claims jwt.Claims) (*jwt.Token, error) {
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name, jwt.SigningMethodRS256.Name}}
 	return p.ParseWithClaims(bearer, claims, func(token *jwt.Token) (interface{}, error) {
+		untypedAlg, found := token.Header["alg"]
+		if found {
+			alg, ok := untypedAlg.(string)
+			if ok && alg == "RS256" {
+				pubKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(config.JWT.Pubkey))
+				if err != nil {
+					return nil, unauthorizedError("An error occurred parsing the public key base64; this is a code bug")
+				}
+				return pubKey, nil
+			}
+		}
 		return []byte(config.JWT.Secret), nil
 	})
 }
 
 func parseJWTToken(bearer string, config *conf.GlobalConfiguration) (*jwt.Token, error) {
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name, jwt.SigningMethodRS256.Name}}
 	return p.Parse(bearer, func(token *jwt.Token) (interface{}, error) {
+		untypedAlg, found := token.Header["alg"]
+		if found {
+			alg, ok := untypedAlg.(string)
+			if ok && alg == "RS256" {
+				pubKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(config.JWT.Pubkey))
+				if err != nil {
+					return nil, unauthorizedError("An error occurred parsing the public key base64; this is a code bug")
+				}
+				return pubKey, nil
+			}
+		}
 		return []byte(config.JWT.Secret), nil
 	})
 }
 
 func newJWTTokenWithClaims(config *conf.JWTConfiguration, claims jwt.Claims) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	var token *jwt.Token
+	var key interface{}
+	var err error
+	switch config.SigningMethod {
+	case "RS256":
+		token = jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+		key, err = jwt.ParseRSAPrivateKeyFromPEM([]byte(config.Secret))
+		if err != nil {
+			return "", err
+		}
+	default:
+		token = jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		key = []byte(config.Secret)
+	}
 
 	if config.KeyID != "" {
 		if token.Header == nil {
@@ -272,7 +307,7 @@ func newJWTTokenWithClaims(config *conf.JWTConfiguration, claims jwt.Claims) (st
 		token.Header["kid"] = config.KeyID
 	}
 
-	signed, err := token.SignedString([]byte(config.Secret))
+	signed, err := token.SignedString(key)
 	if err != nil {
 		return "", err
 	}
