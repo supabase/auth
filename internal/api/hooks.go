@@ -137,8 +137,7 @@ func (w *Webhook) trigger() (io.ReadCloser, error) {
 }
 
 func (w *Webhook) generateSignature() (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, w.claims)
-	tokenString, err := token.SignedString([]byte(w.jwtSecret))
+	tokenString, err := newJWTTokenWithClaims(&conf.JWTConfiguration{Secret: w.jwtSecret}, w.claims)
 	if err != nil {
 		return "", internalServerError("Failed build signing string").WithInternalError(err)
 	}

@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"testing"
 
-	jwt "github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -48,7 +47,7 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 	adminClaims := &GoTrueClaims{
 		Role: "supabase_admin",
 	}
-	adminJwt, err := jwt.NewWithClaims(jwt.SigningMethodHS256, adminClaims).SignedString([]byte(ts.Config.JWT.Secret))
+	adminJwt, err := newJWTTokenWithClaims(&ts.Config.JWT, adminClaims)
 	require.NoError(ts.T(), err)
 	cases := []struct {
 		desc             string

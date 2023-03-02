@@ -261,6 +261,24 @@ func parseJWTToken(bearer string, config *conf.GlobalConfiguration) (*jwt.Token,
 	})
 }
 
+func newJWTTokenWithClaims(config *conf.JWTConfiguration, claims jwt.Claims) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	if config.KeyID != "" {
+		if token.Header == nil {
+			token.Header = make(map[string]interface{})
+		}
+
+		token.Header["kid"] = config.KeyID
+	}
+
+	signed, err := token.SignedString([]byte(config.Secret))
+	if err != nil {
+		return "", err
+	}
+	return signed, nil
+}
+
 func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, config *conf.JWTConfiguration) (string, int64, error) {
 	aal, amr := models.AAL1.String(), []models.AMREntry{}
 	sid := ""
@@ -297,21 +315,10 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 		AuthenticationMethodReference: amr,
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	if config.KeyID != "" {
-		if token.Header == nil {
-			token.Header = make(map[string]interface{})
-		}
-
-		token.Header["kid"] = config.KeyID
-	}
-
-	signed, err := token.SignedString([]byte(config.Secret))
+	signed, err :=  newJWTTokenWithClaims(config, claims)
 	if err != nil {
 		return "", 0, err
 	}
-
 	return signed, expiresAt, nil
 }
 

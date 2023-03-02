@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/gobwas/glob"
-	"github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/gotrue/internal/conf"
@@ -53,7 +52,7 @@ func (ts *MailTestSuite) TestGenerateLink() {
 	claims := &GoTrueClaims{
 		Role: "supabase_admin",
 	}
-	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))
+	token, err := newJWTTokenWithClaims(&ts.Config.JWT, claims)
 	require.NoError(ts.T(), err, "Error generating admin jwt")
 
 	ts.setURIAllowListMap("http://localhost:8000/**")
