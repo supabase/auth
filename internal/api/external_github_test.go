@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -77,20 +79,25 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHub_AuthorizationCode() {
 	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "github@example.com", "GitHub Test", "123", "http://example.com/avatar")
 }
 
-// TODO (Joel) - reinstate once done
-// func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
-// 	tokenCount, userCount := 0, 0
-// 	code := "authcode"
-// 	emails := `[{"email":"github@example.com", "primary": true, "verified": true}]`
-// 	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
-// 	defer server.Close()
+func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	codeChallenge := "challenge"
+	emails := `[{"email":"github@example.com", "primary": true, "verified": true}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
 
-// 	u := performPKCEAuthorization(ts, "github", code)
-// 	m, err := url.ParseQuery(u.RawQuery)
+	hashedAuthCodeAndChallenge := sha256.Sum256([]byte(code + codeChallenge))
+	expectedAuthCode := base64.StdEncoding.EncodeToString(hashedAuthCodeAndChallenge[:])
 
-// 	require.NoError(ts.T(), err)
-// 	require.Equal(ts.T(), m["code"][0], code)
-// }
+	u := performPKCEAuthorization(ts, "github", code, codeChallenge)
+	m, err := url.ParseQuery(u.RawQuery)
+	authCode := m["code"][0]
+
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), authCode, expectedAuthCode)
+
+}
 
 func (ts *ExternalTestSuite) TestSignupExternalGitHubDisableSignupErrorWhenNoUser() {
 	ts.Config.DisableSignup = true
