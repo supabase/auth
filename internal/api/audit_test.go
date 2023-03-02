@@ -48,7 +48,7 @@ func (ts *AuditTestSuite) makeSuperAdmin(email string) string {
 	u.Role = "supabase_admin"
 
 	var token string
-	token, err = generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	token, err = generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config)
 	require.NoError(ts.T(), err, "Error generating access token")
 
 	_, err = parseJWTToken(token, ts.Config)
