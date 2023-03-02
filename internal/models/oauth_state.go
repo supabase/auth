@@ -10,12 +10,12 @@ import (
 )
 
 type OAuthState struct {
-	ID            uuid.UUID `json:"id" db:"id"`
-	AuthCode      string    `json:"auth_code" db:"auth_code"`
-	CodeChallenge string    `json:"code_challenge" db:"code_challenge"`
-	ProviderType  string    `json:"provider_type" db:"provider_type"`
-	CreatedAt     time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
+	ID               uuid.UUID `json:"id" db:"id"`
+	SupabaseAuthCode string    `json:"supabase_auth_code" db:"supabase_auth_code"`
+	CodeChallenge    string    `json:"code_challenge" db:"code_challenge"`
+	ProviderType     string    `json:"provider_type" db:"provider_type"`
+	CreatedAt        time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
 }
 
 func (OAuthState) TableName() string {
@@ -36,9 +36,9 @@ func NewOAuthState(providerType, codeChallenge string) (*OAuthState, error) {
 	return oauth, nil
 }
 
-func FindOAuthStateByAuthCode(tx *storage.Connection, authCode string) (*OAuthState, error) {
+func FindOAuthStateByAuthCode(tx *storage.Connection, supabaseAuthCode string) (*OAuthState, error) {
 	obj := &OAuthState{}
-	if err := tx.Eager().Q().Where("auth_code = ?", authCode).First(obj); err != nil {
+	if err := tx.Eager().Q().Where("supabase_auth_code = ?", supabaseAuthCode).First(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, OAuthStateNotFoundError{}
 		}

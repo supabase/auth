@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net/http"
@@ -20,6 +21,8 @@ import (
 	"github.com/supabase/gotrue/internal/utilities"
 	"golang.org/x/oauth2"
 )
+
+const pkce = "pkce"
 
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
 type ExternalProviderClaims struct {
@@ -68,7 +71,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
 	oauthID := ""
-	if flowType == "pkce" {
+	if flowType == pkce {
 		codeChallenge := query.Get("code_challenge")
 		if codeChallenge == "" {
 			return badRequestError("Code challenge must be non-empty in pkce flow")
@@ -150,44 +153,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var providerAccessToken string
 	var providerRefreshToken string
 	var grantParams models.GrantParams
-	oauthID := getOAuthID(ctx)
-	if oauthID != "" {
-		oauthState, err := models.FindOAuthStateByID(a.db, oauthID)
-		if err != nil {
-			return err
-		}
-		var rq url.Values
-		if err := r.ParseForm(); r.Method == http.MethodPost && err == nil {
-			rq = r.Form
-		} else {
-			rq = r.URL.Query()
-		}
-
-		extError := rq.Get("error")
-		if extError != "" {
-			return oauthError(extError, rq.Get("error_description"))
-		}
-
-		oauthCode := rq.Get("code")
-		if oauthCode == "" {
-			return badRequestError("Authorization code missing")
-		}
-		oauthState.AuthCode = oauthCode
-		if terr := a.db.Update(oauthState); terr != nil {
-			return terr
-		}
-		rurl := a.getExternalRedirectURL(r)
-		u, err := url.Parse(rurl)
-		if err != nil {
-			return err
-		}
-		q := u.Query()
-		q.Set("code", oauthCode)
-		u.RawQuery = q.Encode()
-		http.Redirect(w, r, u.String(), http.StatusFound)
-		return nil
-
-	}
 
 	if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
@@ -235,6 +200,44 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return err
 	}
+	oauthID := getOAuthID(ctx)
+	if oauthID != "" {
+		oauthState, err := models.FindOAuthStateByID(a.db, oauthID)
+		if err != nil {
+			return err
+		}
+		var rq url.Values
+		if err := r.ParseForm(); r.Method == http.MethodPost && err == nil {
+			rq = r.Form
+		} else {
+			rq = r.URL.Query()
+		}
+
+		extError := rq.Get("error")
+		if extError != "" {
+			return oauthError(extError, rq.Get("error_description"))
+		}
+
+		providerOAuthCode := rq.Get("code")
+		if providerOAuthCode == "" {
+			return badRequestError("provider authorization code missing")
+		}
+		supabaseAuthCode := sha256.Sum256([]byte(providerOAuthCode + oauthState.CodeChallenge))
+		oauthState.SupabaseAuthCode = providerOAuthCode
+		if terr := a.db.Update(oauthState); terr != nil {
+			return terr
+		}
+		rurl := a.getExternalRedirectURL(r)
+		u, err := url.Parse(rurl)
+		if err != nil {
+			return err
+		}
+		q := u.Query()
+		q.Set("code", string(supabaseAuthCode[:]))
+		u.RawQuery = q.Encode()
+		http.Redirect(w, r, u.String(), http.StatusFound)
+		return nil
+	}
 
 	rurl := a.getExternalRedirectURL(r)
 	if token != nil {
@@ -251,6 +254,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if err := a.setCookieTokens(config, token, false, w); err != nil {
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
+		// TODO(Joel)- if oauthid is not null,
+		// Save the provider refresh and oauth token to state
 	} else {
 		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
 	}

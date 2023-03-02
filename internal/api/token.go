@@ -15,7 +15,6 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
-	"github.com/supabase/gotrue/internal/api/provider"
 
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/metering"
@@ -594,7 +593,6 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	db := a.db.WithContext(ctx)
 	config := a.config
 
-	var userData *provider.UserProvidedData
 	var providerAccessToken string
 	var providerRefreshToken string
 	var grantParams models.GrantParams
@@ -615,11 +613,10 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	} else if err != nil {
 		return err
 	}
-	if authState.AuthCode != params.AuthCode {
+	if authState.SupabaseAuthCode != params.AuthCode {
 		return forbiddenError("invalid auth code")
 	}
 
-	providerType := authState.ProviderType
 	codeChallenge := authState.CodeChallenge
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
 	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
@@ -627,35 +624,11 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		return forbiddenError("code challenge does not match previously saved code verifier")
 	}
 
-	if providerType == "twitter" {
-		// future OAuth1.0 providers will use this method
-		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)
-		if err != nil {
-			return err
-		}
-		userData = oAuthResponseData.userData
-		providerAccessToken = oAuthResponseData.token
-	} else {
-		oAuthResponseData, err := a.oAuthPKCECallback(ctx, r, providerType, authState.AuthCode)
-		if err != nil {
-			return err
-		}
-		userData = oAuthResponseData.userData
-		providerAccessToken = oAuthResponseData.token
-		providerRefreshToken = oAuthResponseData.refreshToken
-	}
-
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var user *models.User
 		var terr error
-		if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
-			if errors.Is(terr, errReturnNil) {
-				return nil
-			}
-
-			return terr
-		}
+		// TODO(Joel) - Check that issuing session here doesn't cause any mismatch
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())

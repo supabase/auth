@@ -105,50 +105,6 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 	}, nil
 }
 
-func (a *API) oAuthPKCECallback(ctx context.Context, r *http.Request, providerType, oauthCode string) (*OAuthProviderData, error) {
-
-	oAuthProvider, err := a.OAuthProvider(ctx, providerType)
-	if err != nil {
-		return nil, badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
-	}
-
-	log := observability.GetLogEntry(r)
-	log.WithFields(logrus.Fields{
-		"provider": providerType,
-		"code":     oauthCode,
-	}).Debug("Exchanging oauth code")
-
-	token, err := oAuthProvider.GetOAuthToken(oauthCode)
-	if err != nil {
-		return nil, internalServerError("Unable to exchange external code: %s", oauthCode).WithInternalError(err)
-	}
-
-	userData, err := oAuthProvider.GetUserData(ctx, token)
-	if err != nil {
-		return nil, internalServerError("Error getting user email from external provider").WithInternalError(err)
-	}
-
-	// TODO - figure out how to support Apple later
-	// switch externalProvider := oAuthProvider.(type) {
-	// case *provider.AppleProvider:
-	//     // apple only returns user info the first time
-	//     oauthUser := rq.Get("user")
-	//     if oauthUser != "" {
-	//         err := externalProvider.ParseUser(oauthUser, userData)
-	//         if err != nil {
-	//             return nil, err
-	//         }
-	//     }
-	// }
-
-	return &OAuthProviderData{
-		userData:     userData,
-		token:        token.AccessToken,
-		refreshToken: token.RefreshToken,
-		code:         oauthCode,
-	}, nil
-}
-
 func (a *API) oAuth1Callback(ctx context.Context, r *http.Request, providerType string) (*OAuthProviderData, error) {
 	oAuthProvider, err := a.OAuthProvider(ctx, providerType)
 	if err != nil {
