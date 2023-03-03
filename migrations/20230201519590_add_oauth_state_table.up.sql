@@ -2,7 +2,7 @@
 create table if not exists {{ index .Options "Namespace" }}.oauth_state(
        id uuid primary key,
        supabase_auth_code text unique null constraint non_empty_code CHECK(length(supabase_auth_code)>0),
-       code_challenge text null,
+       code_challenge text null constraint non_empty_challenge CHECK(length(code_challenge)>0),
        provider_type text null,
        provider_access_token text null,
        provider_refresh_token text null,
