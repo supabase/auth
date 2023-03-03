@@ -1,8 +1,6 @@
 package api
 
 import (
-	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -87,15 +85,12 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
 	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
 	defer server.Close()
 
-	hashedAuthCodeAndChallenge := sha256.Sum256([]byte(code + codeChallenge))
-	expectedAuthCode := base64.StdEncoding.EncodeToString(hashedAuthCodeAndChallenge[:])
-
 	u := performPKCEAuthorization(ts, "github", code, codeChallenge)
 	m, err := url.ParseQuery(u.RawQuery)
 	authCode := m["code"][0]
 
 	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), authCode, expectedAuthCode)
+	require.NotEmpty(ts.T(), authCode)
 
 	user, err := models.FindUserByEmailAndAudience(ts.API.db, "github@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)

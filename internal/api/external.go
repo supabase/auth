@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
@@ -194,9 +192,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if providerOAuthCode == "" {
 			return badRequestError("provider authorization code missing")
 		}
-		hashedAuthCodeAndChallenge := sha256.Sum256([]byte(providerOAuthCode + oauthState.CodeChallenge))
-		supabaseAuthCode := base64.StdEncoding.EncodeToString(hashedAuthCodeAndChallenge[:])
-		oauthState.SupabaseAuthCode = supabaseAuthCode
 		oauthState.ProviderAccessToken = providerAccessToken
 		oauthState.ProviderRefreshToken = providerRefreshToken
 		if terr := a.db.Update(oauthState); terr != nil {
