@@ -1,6 +1,10 @@
 package api
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -80,7 +84,11 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHub_AuthorizationCode() {
 func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
 	tokenCount, userCount := 0, 0
 	code := "authcode"
-	codeChallenge := "challenge"
+	codeVerifier := "challenge"
+
+	hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
+	codeChallenge := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
+
 	emails := `[{"email":"github@example.com", "primary": true, "verified": true}]`
 	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
 	defer server.Close()
@@ -99,6 +107,20 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
 	oauthState, err := models.FindOAuthStateByAuthCode(ts.API.db, authCode)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), "github_token", oauthState.ProviderAccessToken)
+
+	// Exchange Auth Code for token
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"code_verifier": codeVerifier,
+		"auth_code":     authCode,
+		"grant_type":    PKCE,
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/oauth/token", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalGitHubDisableSignupErrorWhenNoUser() {
