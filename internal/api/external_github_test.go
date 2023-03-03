@@ -99,7 +99,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
 	oauthState, err := models.FindOAuthStateByAuthCode(ts.API.db, authCode)
 	require.NoError(ts.T(), err)
 	// Check against mock response returned in GithubTestSignupSetup
-	require.Equal(ts.T(), oauthState.ProviderAccessToken, "github_token")
+	require.Equal(ts.T(), "github_token", oauthState.ProviderAccessToken)
 
 }
 

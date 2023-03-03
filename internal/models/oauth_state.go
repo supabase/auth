@@ -11,6 +11,7 @@ import (
 
 type OAuthState struct {
 	ID                   uuid.UUID `json:"id" db:"id"`
+	UserID               uuid.UUID `json:"user_id" db:"user_id"`
 	SupabaseAuthCode     string    `json:"supabase_auth_code" db:"supabase_auth_code"`
 	CodeChallenge        string    `json:"code_challenge" db:"code_challenge"`
 	ProviderType         string    `json:"provider_type" db:"provider_type"`

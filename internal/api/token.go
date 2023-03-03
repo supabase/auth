@@ -615,11 +615,17 @@ func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	authState, err := models.FindOAuthStateByAuthCode(db, params.AuthCode)
-	if models.IsNotFoundError(err) {
+	if models.IsNotFoundError(err) || authState.UserID == uuid.Nil {
 		return forbiddenError("invalid oauth state, please ensure oauth redirect has successfully completed")
 	} else if err != nil {
 		return err
 	}
+
+	user, err := models.FindUserByID(db, authState.UserID)
+	if err != nil {
+		return err
+	}
+
 	if authState.SupabaseAuthCode != params.AuthCode {
 		return forbiddenError("invalid auth code")
 	}
@@ -633,10 +639,7 @@ func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
 
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
-		var user *models.User
 		var terr error
-		// TODO(Joel) - Check that issuing session here doesn't cause any mismatch
-		// TODO(Joel) - Fix this, currently use is null
 		// TODO (Joel) - ensure auth state matches before we extract user from context
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
 		if terr != nil {

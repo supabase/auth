@@ -172,11 +172,9 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	}
 	oauthID := getOAuthID(ctx)
 	if oauthID != "" {
-		oauthState, err := models.FindOAuthStateByID(a.db, oauthID)
-		if err != nil {
-			return err
-		}
+
 		var rq url.Values
+		var supabaseAuthCode string
 		if err := r.ParseForm(); r.Method == http.MethodPost && err == nil {
 			rq = r.Form
 		} else {
@@ -192,25 +190,25 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if providerOAuthCode == "" {
 			return badRequestError("provider authorization code missing")
 		}
-		oauthState.ProviderAccessToken = providerAccessToken
-		oauthState.ProviderRefreshToken = providerRefreshToken
-		if terr := a.db.Update(oauthState); terr != nil {
-			return terr
-		}
-		rurl := a.getExternalRedirectURL(r)
-		u, err := url.Parse(rurl)
+		oauthState, err := models.FindOAuthStateByID(a.db, oauthID)
 		if err != nil {
 			return err
 		}
-		q := u.Query()
-		q.Set("code", oauthState.SupabaseAuthCode)
-		u.RawQuery = q.Encode()
+
 		err = db.Transaction(func(tx *storage.Connection) error {
-			if _, terr := a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
+			user, terr := a.createAccountFromExternalIdentity(tx, r, userData, providerType)
+			if terr != nil {
 				if errors.Is(terr, errReturnNil) {
 					return nil
 				}
 
+				return terr
+			}
+			oauthState.ProviderAccessToken = providerAccessToken
+			oauthState.ProviderRefreshToken = providerRefreshToken
+			oauthState.UserID = user.ID
+			supabaseAuthCode = oauthState.SupabaseAuthCode
+			if terr := a.db.Update(oauthState); terr != nil {
 				return terr
 			}
 			return nil
@@ -218,6 +216,15 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if err != nil {
 			return err
 		}
+
+		rurl := a.getExternalRedirectURL(r)
+		u, err := url.Parse(rurl)
+		if err != nil {
+			return err
+		}
+		q := u.Query()
+		q.Set("code", supabaseAuthCode)
+		u.RawQuery = q.Encode()
 		http.Redirect(w, r, u.String(), http.StatusFound)
 		return nil
 	}
