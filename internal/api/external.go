@@ -23,7 +23,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const pkce = "pkce"
+const PKCE = "pkce"
 
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
 type ExternalProviderClaims struct {
@@ -72,7 +72,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
 	oauthID := ""
-	if flowType == pkce {
+	if flowType == PKCE {
 		codeChallenge := query.Get("code_challenge")
 		if codeChallenge == "" {
 			return badRequestError("Code challenge must be non-empty in pkce flow")
@@ -211,7 +211,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		q.Set("code", supabaseAuthCode[:])
 		u.RawQuery = q.Encode()
 		err = db.Transaction(func(tx *storage.Connection) error {
-			// TODO(Joel) - Decide whether to give user authenticated status
 			if _, terr := a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
 				if errors.Is(terr, errReturnNil) {
 					return nil

@@ -150,22 +150,32 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 		desc             string
 		authCode         string
 		codeVerifier     string
+		grantType        string
 		expectedHTTPCode int
 	}{
 		{
 			desc:         "Invalid Authcode",
 			authCode:     invalidAuthCode,
 			codeVerifier: codeVerifier,
+			grantType:    PKCE,
 		},
 		{
 			desc:         "Invalid codeVerifier",
 			authCode:     authCode,
 			codeVerifier: invalidVerifier,
+			grantType:    PKCE,
 		},
 		{
 			desc:         "Invalid auth code and verifier",
 			authCode:     invalidAuthCode,
 			codeVerifier: invalidVerifier,
+			grantType:    PKCE,
+		},
+		{
+			desc:         "Invalid grant type",
+			authCode:     authCode,
+			codeVerifier: codeVerifier,
+			grantType:    PKCE + "123",
 		},
 	}
 	for _, v := range cases {
@@ -175,7 +185,7 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 				"code_verifier": v.codeVerifier,
 				"auth_code":     v.authCode,
 			}))
-			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=pkce", &buffer)
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/oauth/token", &buffer)
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
@@ -200,8 +210,9 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantSuccess() {
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"code_verifier": codeVerifier,
 		"auth_code":     authCode,
+		"grant_type": PKCE,
 	}))
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=pkce", &buffer)
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/oauth/token", &buffer)
 	req.Header.Set("Content-Type", "application/json")
 	// Simulate loading user after succesful /authenticate call
 	u, err := models.NewUser("", "foo@example.com", "password", ts.Config.JWT.Aud, nil)

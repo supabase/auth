@@ -83,6 +83,7 @@ type IdTokenGrantParams struct {
 type PKCEGrantParams struct {
 	AuthCode     string `json:"auth_code"`
 	CodeVerifier string `json:"code_verifier"`
+	GrantType    string `json:"grant_type"`
 }
 
 const useCookieHeader = "x-use-cookie"
@@ -167,10 +168,7 @@ func getEmailVerified(v interface{}) bool {
 func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	grantType := r.FormValue("grant_type")
-
 	switch grantType {
-	case "pkce":
-		return a.PKCEGrant(ctx, w, r)
 	case "password":
 		return a.ResourceOwnerPasswordGrant(ctx, w, r)
 	case "refresh_token":
@@ -589,8 +587,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	// TODO (Joel) - write a test for this function
+func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
 
@@ -606,6 +604,14 @@ func (a *API) PKCEGrant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 
 	if err = json.Unmarshal(body, params); err != nil {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
+	}
+
+	if params.GrantType != PKCE {
+		return badRequestError("only pkce grant type is supported")
+	}
+
+	if params.AuthCode == "" || params.CodeVerifier == "" {
+		return badRequestError("invalid request: both auth code and code verifier should be non-empty")
 	}
 
 	authState, err := models.FindOAuthStateByAuthCode(db, params.AuthCode)
