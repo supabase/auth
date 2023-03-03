@@ -121,6 +121,13 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
+	// Validate that access token and provider tokens are present
+	data := AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.NotEmpty(ts.T(), data.Token)
+	require.NotEmpty(ts.T(), data.RefreshToken)
+	require.NotEmpty(ts.T(), data.ProviderAccessToken)
+	require.Equal(ts.T(), data.User.ID, user.ID)
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalGitHubDisableSignupErrorWhenNoUser() {
