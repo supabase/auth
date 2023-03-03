@@ -183,7 +183,35 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 
 		})
 	}
+}
 
+// TODO(Joel) - Add case for valid user
+func (ts *TokenTestSuite) TestTokenPKCEGrantSuccess() {
+	// withUser
+	authCode := "1234563"
+	codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
+	codeChallenge := sha256.Sum256([]byte(codeVerifier))
+	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
+	oauthState, err := models.NewOAuthState("github", challenge)
+	require.NoError(ts.T(), err)
+	oauthState.SupabaseAuthCode = authCode
+	require.NoError(ts.T(), ts.API.db.Create(oauthState))
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"code_verifier": codeVerifier,
+		"auth_code":     authCode,
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=pkce", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	// Simulate loading user after succesful /authenticate call
+	u, err := models.NewUser("", "foo@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	ctx := withUser(req.Context(), u)
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+	// TODO - check for token
 }
 
 func (ts *TokenTestSuite) TestTokenRefreshTokenGrantFailure() {

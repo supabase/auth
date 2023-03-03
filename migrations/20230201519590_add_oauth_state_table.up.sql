@@ -1,7 +1,7 @@
 -- auth.oauth_state definition
 create table if not exists {{ index .Options "Namespace" }}.oauth_state(
        id uuid primary key,
-       supabase_auth_code text unique null,
+       supabase_auth_code text unique null constraint non_empty_code CHECK(length(supabase_auth_code)>0),
        code_challenge text null,
        provider_type text null,
        provider_access_token text null,
