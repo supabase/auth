@@ -208,7 +208,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			return err
 		}
 		q := u.Query()
-		q.Set("code", supabaseAuthCode[:])
+		q.Set("code", oauthState.SupabaseAuthCode)
 		u.RawQuery = q.Encode()
 		err = db.Transaction(func(tx *storage.Connection) error {
 			if _, terr := a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
