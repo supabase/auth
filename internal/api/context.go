@@ -135,7 +135,6 @@ func getOAuthID(ctx context.Context) string {
 	if obj == nil {
 		return ""
 	}
-
 	return obj.(string)
 }
 

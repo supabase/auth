@@ -43,7 +43,7 @@ type AccessTokenResponse struct {
 	ExpiresIn            int          `json:"expires_in"`
 	RefreshToken         string       `json:"refresh_token"`
 	User                 *models.User `json:"user"`
-	ProviderToken        string       `json:"provider_token,omitempty"`
+	ProviderAccessToken  string       `json:"provider_token,omitempty"`
 	ProviderRefreshToken string       `json:"provider_refresh_token,omitempty"`
 }
 
@@ -590,10 +590,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
-	config := a.config
 
-	var providerAccessToken string
-	var providerRefreshToken string
 	var grantParams models.GrantParams
 
 	params := &PKCEGrantParams{}
@@ -606,6 +603,7 @@ func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 
+	// To give room in case we wish to support other grants
 	if params.GrantType != PKCE {
 		return badRequestError("only pkce grant type is supported")
 	}
@@ -614,23 +612,24 @@ func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("invalid request: both auth code and code verifier should be non-empty")
 	}
 
-	authState, err := models.FindOAuthStateByAuthCode(db, params.AuthCode)
-	if models.IsNotFoundError(err) || authState.UserID == uuid.Nil {
+	oauthState, err := models.FindOAuthStateByAuthCode(db, params.AuthCode)
+	// Sanity check in case user ID was not set properly
+	if models.IsNotFoundError(err) || oauthState.UserID == uuid.Nil {
 		return forbiddenError("invalid oauth state, please ensure oauth redirect has successfully completed")
 	} else if err != nil {
 		return err
 	}
 
-	user, err := models.FindUserByID(db, authState.UserID)
+	user, err := models.FindUserByID(db, oauthState.UserID)
 	if err != nil {
 		return err
 	}
 
-	if authState.SupabaseAuthCode != params.AuthCode {
+	if oauthState.SupabaseAuthCode != params.AuthCode {
 		return forbiddenError("invalid auth code")
 	}
 
-	codeChallenge := authState.CodeChallenge
+	codeChallenge := oauthState.CodeChallenge
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
 	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
 	if string(codeChallenge[:]) != encodedCodeVerifier {
@@ -640,7 +639,6 @@ func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		// TODO (Joel) - ensure auth state matches before we extract user from context
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
@@ -652,15 +650,11 @@ func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if token != nil {
-		q := url.Values{}
-		q.Set("provider_token", providerAccessToken)
+		token.ProviderAccessToken = oauthState.ProviderAccessToken
 		// Because not all providers give out a refresh token
 		// See corresponding OAuth2 spec: <https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1>
-		if providerRefreshToken != "" {
-			q.Set("provider_refresh_token", providerRefreshToken)
-		}
-		if err := a.setCookieTokens(config, token, false, w); err != nil {
-			return internalServerError("Failed to set JWT cookie. %s", err)
+		if oauthState.ProviderRefreshToken != "" {
+			token.ProviderRefreshToken = oauthState.ProviderRefreshToken
 		}
 	}
 	return sendJSON(w, http.StatusOK, token)

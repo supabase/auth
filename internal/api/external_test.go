@@ -86,9 +86,9 @@ func performPKCEAuthorizationRequest(ts *ExternalTestSuite, provider string, cod
 	req.Header.Set("Referer", "https://example.supabase.com/admin")
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
-
 	return w
 }
+
 func performPKCEAuthorization(ts *ExternalTestSuite, provider, code, codeChallenge string) *url.URL {
 	w := performPKCEAuthorizationRequest(ts, provider, codeChallenge)
 	ts.Require().Equal(http.StatusFound, w.Code)

@@ -171,8 +171,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		providerRefreshToken = oAuthResponseData.refreshToken
 	}
 	oauthID := getOAuthID(ctx)
+	// if there's a non-empty OAuthID we perform PKCE Flow
 	if oauthID != "" {
-
 		var rq url.Values
 		var supabaseAuthCode string
 		if err := r.ParseForm(); r.Method == http.MethodPost && err == nil {
@@ -180,7 +180,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		} else {
 			rq = r.URL.Query()
 		}
-
 		extError := rq.Get("error")
 		if extError != "" {
 			return oauthError(extError, rq.Get("error_description"))
@@ -190,6 +189,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if providerOAuthCode == "" {
 			return badRequestError("provider authorization code missing")
 		}
+
 		oauthState, err := models.FindOAuthStateByID(a.db, oauthID)
 		if err != nil {
 			return err
@@ -207,7 +207,9 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			oauthState.ProviderAccessToken = providerAccessToken
 			oauthState.ProviderRefreshToken = providerRefreshToken
 			oauthState.UserID = user.ID
+
 			supabaseAuthCode = oauthState.SupabaseAuthCode
+
 			if terr := a.db.Update(oauthState); terr != nil {
 				return terr
 			}
@@ -225,6 +227,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		q := u.Query()
 		q.Set("code", supabaseAuthCode)
 		u.RawQuery = q.Encode()
+
 		http.Redirect(w, r, u.String(), http.StatusFound)
 		return nil
 	}
@@ -252,7 +255,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
-
 		return nil
 	})
 	if err != nil {
@@ -274,10 +276,10 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if err := a.setCookieTokens(config, token, false, w); err != nil {
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
-
 	} else {
 		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
 	}
+
 	http.Redirect(w, r, rurl, http.StatusFound)
 	return nil
 }

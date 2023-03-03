@@ -31,7 +31,6 @@ func NewOAuthState(providerType, codeChallenge string) (*OAuthState, error) {
 	if err != nil {
 		return nil, errors.New("error generating unique oauth state verifier")
 	}
-	// Used as a temporary random indentifier to ensure Auth Code is non empty
 	authCode, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.New("error generating auth code")
