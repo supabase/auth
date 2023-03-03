@@ -96,7 +96,6 @@ func performPKCEAuthorization(ts *ExternalTestSuite, provider, code, codeChallen
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	state := q.Get("state")
-	// Set s
 	testURL, err := url.Parse("http://localhost/callback")
 	ts.Require().NoError(err)
 	v := testURL.Query()
