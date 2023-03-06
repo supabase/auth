@@ -207,6 +207,7 @@ type SmsProviderConfiguration struct {
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
+	Msg91        Msg91ProviderConfiguration        `json:"msg91"`
 }
 
 type TwilioProviderConfiguration struct {
@@ -229,6 +230,11 @@ type MessagebirdProviderConfiguration struct {
 type TextlocalProviderConfiguration struct {
 	ApiKey string `json:"api_key" split_words:"true"`
 	Sender string `json:"sender" split_words:"true"`
+}
+
+type Msg91ProviderConfiguration struct {
+	AuthKey string `json:"auth_key" split_words:"true"`
+	Sender  string `json:"sender" split_words:"true"`
 }
 
 type VonageProviderConfiguration struct {
@@ -514,6 +520,16 @@ func (t *TextlocalProviderConfiguration) Validate() error {
 	}
 	if t.Sender == "" {
 		return errors.New("missing Textlocal sender")
+	}
+	return nil
+}
+
+func (t *Msg91ProviderConfiguration) Validate() error {
+	if t.AuthKey == "" {
+		return errors.New("missing Msg91 Auth key")
+	}
+	if t.Sender == "" {
+		return errors.New("missing Msg91 sender")
 	}
 	return nil
 }
