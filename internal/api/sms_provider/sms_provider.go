@@ -39,6 +39,8 @@ func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
 		return NewTextlocalProvider(config.Sms.Textlocal)
 	case "vonage":
 		return NewVonageProvider(config.Sms.Vonage)
+	case "msg91":
+		return NewMsg91Provider(config.Sms.Msg91)
 	default:
 		return nil, fmt.Errorf("sms Provider %s could not be found", name)
 	}
