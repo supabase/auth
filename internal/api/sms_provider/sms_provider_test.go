@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -50,6 +51,11 @@ func TestSmsProvider(t *testing.T) {
 				Textlocal: conf.TextlocalProviderConfiguration{
 					ApiKey: "test_api_key",
 					Sender: "test_sender",
+				},
+				Msg91: conf.Msg91ProviderConfiguration{
+					AuthKey:       "test_auth_key",
+					SenderId:      "test_sender_id",
+					DltTemplateId: "test_dlt_template_id",
 				},
 			},
 		},
@@ -212,5 +218,31 @@ func (ts *SmsProviderTestSuite) TestTextLocalSendSms() {
 	})
 
 	err = textlocalProvider.SendSms(phone, message)
+	require.NoError(ts.T(), err)
+}
+
+func (ts *SmsProviderTestSuite) TestMsg91SendSms() {
+	defer gock.Off()
+	provider, err := NewMsg91Provider(ts.Config.Sms.Msg91)
+	require.NoError(ts.T(), err)
+	msg91Provider, ok := provider.(*Msg91Provider)
+	require.Equal(ts.T(), true, ok)
+
+	phone := "123456789"
+	message := "This is the sms code: 123456"
+	body := url.Values{
+		"authkey":   {msg91Provider.Config.AuthKey},
+		"sender":    {msg91Provider.Config.SenderId},
+		"DLT_TE_ID": {msg91Provider.Config.DltTemplateId},
+		"mobiles":   {phone},
+		"message":   {message},
+		"route":     {strconv.Itoa(4)},
+	}
+
+	gock.New(msg91Provider.APIPath).Post("").MatchType("url").BodyString(body.Encode()).Reply(200).JSON(Msg91Response{
+		Data: "success",
+	})
+
+	err = msg91Provider.SendSms(phone, message)
 	require.NoError(ts.T(), err)
 }
