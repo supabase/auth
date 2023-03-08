@@ -25,7 +25,7 @@ func IsNotFoundError(err error) bool {
 		return true
 	case SAMLRelayStateNotFoundError, *SAMLRelayStateNotFoundError:
 		return true
-	case OAuthStateNotFoundError, *OAuthStateNotFoundError:
+	case FlowStateNotFoundError, *FlowStateNotFoundError:
 		return true
 	}
 	return false
@@ -108,10 +108,10 @@ func (e SAMLRelayStateNotFoundError) Error() string {
 	return "SAML RelayState not found"
 }
 
-// OAuthStateNotFoundError represents an error when an OAuthState can't be
+// FlowStateNotFoundError represents an error when an FlowState can't be
 // found.
-type OAuthStateNotFoundError struct{}
+type FlowStateNotFoundError struct{}
 
-func (e OAuthStateNotFoundError) Error() string {
+func (e FlowStateNotFoundError) Error() string {
 	return "OAuth State not found"
 }

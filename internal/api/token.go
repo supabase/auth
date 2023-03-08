@@ -612,7 +612,7 @@ func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("invalid request: both auth code and code verifier should be non-empty")
 	}
 
-	oauthState, err := models.FindOAuthStateByAuthCode(db, params.AuthCode)
+	oauthState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
 	// Sanity check in case user ID was not set properly
 	if models.IsNotFoundError(err) || oauthState.UserID == uuid.Nil {
 		return forbiddenError("invalid oauth state, please ensure oauth redirect has successfully completed")

@@ -104,7 +104,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
 	user, err := models.FindUserByEmailAndAudience(ts.API.db, "github@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), user)
-	oauthState, err := models.FindOAuthStateByAuthCode(ts.API.db, authCode)
+	oauthState, err := models.FindFlowStateByAuthCode(ts.API.db, authCode)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), "github_token", oauthState.ProviderAccessToken)
 

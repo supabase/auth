@@ -75,7 +75,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		if codeChallenge == "" {
 			return badRequestError("Code challenge must be non-empty in pkce flow")
 		}
-		oauthState, err := models.NewOAuthState(providerType, codeChallenge)
+		oauthState, err := models.NewFlowState(providerType, codeChallenge)
 		if err != nil {
 			return err
 		}
@@ -190,7 +190,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			return badRequestError("provider authorization code missing")
 		}
 
-		oauthState, err := models.FindOAuthStateByID(a.db, oauthID)
+		oauthState, err := models.FindFlowStateByID(a.db, oauthID)
 		if err != nil {
 			return err
 		}

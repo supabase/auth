@@ -9,7 +9,7 @@ import (
 	"github.com/gofrs/uuid"
 )
 
-type OAuthState struct {
+type FlowState struct {
 	ID                   uuid.UUID `json:"id" db:"id"`
 	UserID               uuid.UUID `json:"user_id" db:"user_id"`
 	AuthCode             string    `json:"auth_code" db:"auth_code"`
@@ -21,12 +21,12 @@ type OAuthState struct {
 	UpdatedAt            time.Time `json:"updated_at" db:"updated_at"`
 }
 
-func (OAuthState) TableName() string {
-	tableName := "oauth_state"
+func (FlowState) TableName() string {
+	tableName := "flow_state"
 	return tableName
 }
 
-func NewOAuthState(providerType, codeChallenge string) (*OAuthState, error) {
+func NewFlowState(providerType, codeChallenge string) (*FlowState, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.New("error generating unique oauth state verifier")
@@ -35,7 +35,7 @@ func NewOAuthState(providerType, codeChallenge string) (*OAuthState, error) {
 	if err != nil {
 		return nil, errors.New("error generating auth code")
 	}
-	oauth := &OAuthState{
+	oauth := &FlowState{
 		ID:            id,
 		ProviderType:  providerType,
 		CodeChallenge: codeChallenge,
@@ -44,11 +44,11 @@ func NewOAuthState(providerType, codeChallenge string) (*OAuthState, error) {
 	return oauth, nil
 }
 
-func FindOAuthStateByAuthCode(tx *storage.Connection, authCode string) (*OAuthState, error) {
-	obj := &OAuthState{}
+func FindFlowStateByAuthCode(tx *storage.Connection, authCode string) (*FlowState, error) {
+	obj := &FlowState{}
 	if err := tx.Eager().Q().Where("auth_code = ?", authCode).First(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, OAuthStateNotFoundError{}
+			return nil, FlowStateNotFoundError{}
 		}
 		return nil, errors.Wrap(err, "error finding oauth state")
 	}
@@ -56,11 +56,11 @@ func FindOAuthStateByAuthCode(tx *storage.Connection, authCode string) (*OAuthSt
 	return obj, nil
 }
 
-func FindOAuthStateByID(tx *storage.Connection, id string) (*OAuthState, error) {
-	obj := &OAuthState{}
+func FindFlowStateByID(tx *storage.Connection, id string) (*FlowState, error) {
+	obj := &FlowState{}
 	if err := tx.Eager().Q().Where("id = ?", id).First(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, OAuthStateNotFoundError{}
+			return nil, FlowStateNotFoundError{}
 		}
 		return nil, errors.Wrap(err, "error finding oauth state")
 	}

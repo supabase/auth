@@ -1,5 +1,5 @@
--- auth.oauth_state definition
-create table if not exists {{ index .Options "Namespace" }}.oauth_state(
+-- auth.flow_state definition
+create table if not exists {{ index .Options "Namespace" }}.flow_state(
        id uuid primary key,
        user_id uuid null,
        auth_code text unique not null,
@@ -10,5 +10,5 @@ create table if not exists {{ index .Options "Namespace" }}.oauth_state(
        created_at timestamptz null,
        updated_at timestamptz null
 );
-create index idx_auth_code on {{ index .Options "Namespace" }}.oauth_state(auth_code);
-comment on table {{ index .Options "Namespace" }}.oauth_state is 'stores metadata for oauth provider logins';
+create index idx_auth_code on {{ index .Options "Namespace" }}.flow_state(auth_code);
+comment on table {{ index .Options "Namespace" }}.flow_state is 'stores metadata for oauth provider logins';
