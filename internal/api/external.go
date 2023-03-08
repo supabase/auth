@@ -174,7 +174,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	// if there's a non-empty OAuthID we perform PKCE Flow
 	if oauthID != "" {
 		var rq url.Values
-		var supabaseAuthCode string
+		var authCode string
 		if err := r.ParseForm(); r.Method == http.MethodPost && err == nil {
 			rq = r.Form
 		} else {
@@ -208,7 +208,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			oauthState.ProviderRefreshToken = providerRefreshToken
 			oauthState.UserID = user.ID
 
-			supabaseAuthCode = oauthState.SupabaseAuthCode
+			authCode = oauthState.AuthCode
 
 			if terr := a.db.Update(oauthState); terr != nil {
 				return terr
@@ -225,7 +225,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			return err
 		}
 		q := u.Query()
-		q.Set("code", supabaseAuthCode)
+		q.Set("code", authCode)
 		u.RawQuery = q.Encode()
 
 		http.Redirect(w, r, u.String(), http.StatusFound)

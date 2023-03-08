@@ -625,7 +625,7 @@ func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	if oauthState.SupabaseAuthCode != params.AuthCode {
+	if oauthState.AuthCode != params.AuthCode {
 		return forbiddenError("invalid auth code")
 	}
 

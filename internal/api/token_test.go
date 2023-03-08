@@ -144,7 +144,7 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
 	oauthState, err := models.NewOAuthState("github", challenge)
 	require.NoError(ts.T(), err)
-	oauthState.SupabaseAuthCode = authCode
+	oauthState.AuthCode = authCode
 	require.NoError(ts.T(), ts.API.db.Create(oauthState))
 	cases := []struct {
 		desc             string

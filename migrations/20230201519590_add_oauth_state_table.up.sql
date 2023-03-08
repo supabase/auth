@@ -2,7 +2,7 @@
 create table if not exists {{ index .Options "Namespace" }}.oauth_state(
        id uuid primary key,
        user_id uuid null,
-       supabase_auth_code text unique not null,
+       auth_code text unique not null,
        code_challenge text not null,
        provider_type text null,
        provider_access_token text null,
@@ -10,5 +10,5 @@ create table if not exists {{ index .Options "Namespace" }}.oauth_state(
        created_at timestamptz null,
        updated_at timestamptz null
 );
-create index idx_auth_code on {{ index .Options "Namespace" }}.oauth_state(supabase_auth_code);
+create index idx_auth_code on {{ index .Options "Namespace" }}.oauth_state(auth_code);
 comment on table {{ index .Options "Namespace" }}.oauth_state is 'stores metadata for oauth provider logins';

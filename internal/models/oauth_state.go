@@ -12,7 +12,7 @@ import (
 type OAuthState struct {
 	ID                   uuid.UUID `json:"id" db:"id"`
 	UserID               uuid.UUID `json:"user_id" db:"user_id"`
-	SupabaseAuthCode     string    `json:"supabase_auth_code" db:"supabase_auth_code"`
+	AuthCode             string    `json:"auth_code" db:"auth_code"`
 	CodeChallenge        string    `json:"code_challenge" db:"code_challenge"`
 	ProviderType         string    `json:"provider_type" db:"provider_type"`
 	ProviderAccessToken  string    `json:"provider_access_token" db:"provider_access_token"`
@@ -36,17 +36,17 @@ func NewOAuthState(providerType, codeChallenge string) (*OAuthState, error) {
 		return nil, errors.New("error generating auth code")
 	}
 	oauth := &OAuthState{
-		ID:               id,
-		ProviderType:     providerType,
-		CodeChallenge:    codeChallenge,
-		SupabaseAuthCode: authCode.String(),
+		ID:            id,
+		ProviderType:  providerType,
+		CodeChallenge: codeChallenge,
+		AuthCode:      authCode.String(),
 	}
 	return oauth, nil
 }
 
-func FindOAuthStateByAuthCode(tx *storage.Connection, supabaseAuthCode string) (*OAuthState, error) {
+func FindOAuthStateByAuthCode(tx *storage.Connection, authCode string) (*OAuthState, error) {
 	obj := &OAuthState{}
-	if err := tx.Eager().Q().Where("supabase_auth_code = ?", supabaseAuthCode).First(obj); err != nil {
+	if err := tx.Eager().Q().Where("auth_code = ?", authCode).First(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, OAuthStateNotFoundError{}
 		}
