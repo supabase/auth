@@ -612,24 +612,24 @@ func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("invalid request: both auth code and code verifier should be non-empty")
 	}
 
-	oauthState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
+	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
 	// Sanity check in case user ID was not set properly
-	if models.IsNotFoundError(err) || oauthState.UserID == uuid.Nil {
+	if models.IsNotFoundError(err) || flowState.UserID == uuid.Nil {
 		return forbiddenError("invalid oauth state, please ensure oauth redirect has successfully completed")
 	} else if err != nil {
 		return err
 	}
 
-	user, err := models.FindUserByID(db, oauthState.UserID)
+	user, err := models.FindUserByID(db, flowState.UserID)
 	if err != nil {
 		return err
 	}
 
-	if oauthState.AuthCode != params.AuthCode {
+	if flowState.AuthCode != params.AuthCode {
 		return forbiddenError("invalid auth code")
 	}
 
-	codeChallenge := oauthState.CodeChallenge
+	codeChallenge := flowState.CodeChallenge
 	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
 	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
 	if string(codeChallenge[:]) != encodedCodeVerifier {
@@ -650,11 +650,11 @@ func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if token != nil {
-		token.ProviderAccessToken = oauthState.ProviderAccessToken
+		token.ProviderAccessToken = flowState.ProviderAccessToken
 		// Because not all providers give out a refresh token
 		// See corresponding OAuth2 spec: <https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1>
-		if oauthState.ProviderRefreshToken != "" {
-			token.ProviderRefreshToken = oauthState.ProviderRefreshToken
+		if flowState.ProviderRefreshToken != "" {
+			token.ProviderRefreshToken = flowState.ProviderRefreshToken
 		}
 	}
 	return sendJSON(w, http.StatusOK, token)

@@ -75,15 +75,15 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		if codeChallenge == "" {
 			return badRequestError("Code challenge must be non-empty in pkce flow")
 		}
-		oauthState, err := models.NewFlowState(providerType, codeChallenge)
+		flowState, err := models.NewFlowState(providerType, codeChallenge)
 		if err != nil {
 			return err
 		}
-		if err := a.db.Create(oauthState); err != nil {
+		if err := a.db.Create(flowState); err != nil {
 			return err
 		}
 
-		oauthID = oauthState.ID.String()
+		oauthID = flowState.ID.String()
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
@@ -190,7 +190,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			return badRequestError("provider authorization code missing")
 		}
 
-		oauthState, err := models.FindFlowStateByID(a.db, oauthID)
+		flowState, err := models.FindFlowStateByID(a.db, oauthID)
 		if err != nil {
 			return err
 		}
@@ -204,13 +204,13 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 				return terr
 			}
-			oauthState.ProviderAccessToken = providerAccessToken
-			oauthState.ProviderRefreshToken = providerRefreshToken
-			oauthState.UserID = user.ID
+			flowState.ProviderAccessToken = providerAccessToken
+			flowState.ProviderRefreshToken = providerRefreshToken
+			flowState.UserID = user.ID
 
-			authCode = oauthState.AuthCode
+			authCode = flowState.AuthCode
 
-			if terr := a.db.Update(oauthState); terr != nil {
+			if terr := a.db.Update(flowState); terr != nil {
 				return terr
 			}
 			return nil
