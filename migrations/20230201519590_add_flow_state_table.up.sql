@@ -1,8 +1,14 @@
--- auth.flow_state definition
+-- see: https://stackoverflow.com/questions/7624919/check-if-a-user-defined-type-already-exists-in-postgresql/48382296#48382296
+do $$ begin
+    create type code_challenge_method as enum('s256', 'plain');
+exception
+    when duplicate_object then null;
+end $$;
 create table if not exists {{ index .Options "Namespace" }}.flow_state(
        id uuid primary key,
        user_id uuid null,
        auth_code text unique not null,
+       code_challenge_method code_challenge_method not null,
        code_challenge text not null,
        provider_type text null,
        provider_access_token text null,

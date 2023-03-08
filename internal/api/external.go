@@ -75,7 +75,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		if codeChallenge == "" {
 			return badRequestError("Code challenge must be non-empty in pkce flow")
 		}
-		flowState, err := models.NewFlowState(providerType, codeChallenge)
+		flowState, err := models.NewFlowState(providerType, codeChallenge, models.SHA256)
 		if err != nil {
 			return err
 		}
