@@ -618,7 +618,7 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	flowStateCreationTime := flowState.CreatedAt
 	flowStateExpiryTime := flowStateCreationTime.Add(time.Second * time.Duration(flowStateExpiryDuration))
 	if time.Now().After(flowStateExpiryTime) {
-		return forbiddenError("invalid oauth state, oauth sate has expired")
+		return forbiddenError("invalid oauth state, oauth state has expired")
 	}
 
 	user, err := models.FindUserByID(db, flowState.UserID)
