@@ -87,6 +87,7 @@ type PKCEGrantParams struct {
 
 const useCookieHeader = "x-use-cookie"
 const InvalidLoginMessage = "Invalid login credentials"
+const InvalidCodeChallengeError = "code challenge does not match previously saved code verifier"
 
 func (p *IdTokenGrantParams) getVerifier(ctx context.Context, config *conf.GlobalConfiguration) (*oidc.IDTokenVerifier, error) {
 	var provider *oidc.Provider
@@ -624,10 +625,23 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	codeChallenge := flowState.CodeChallenge
-	hashedCodeVerifier := sha256.Sum256([]byte(params.CodeVerifier))
-	encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
-	if string(codeChallenge[:]) != encodedCodeVerifier {
-		return forbiddenError("code challenge does not match previously saved code verifier")
+	codeChallengeAsString := string(codeChallenge[:])
+	codeVerifier := params.CodeVerifier
+
+	switch flowState.CodeChallengeMethod {
+	case models.SHA256.String():
+		encryptedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
+		encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(encryptedCodeVerifier[:])
+		if codeChallengeAsString != encodedCodeVerifier {
+			return forbiddenError(InvalidCodeChallengeError)
+		}
+	case models.Plain.String():
+		if codeChallengeAsString != codeVerifier {
+			return forbiddenError(InvalidCodeChallengeError)
+		}
+	default:
+		return forbiddenError("code challenge method not supported")
+
 	}
 
 	var token *AccessTokenResponse
