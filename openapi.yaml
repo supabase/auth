@@ -281,7 +281,7 @@ paths:
             format: uri
         - name: flow_type
           in: query
-          description: (Optional) OAuth flow used for authorization.
+          description: (Optional) OAuth flow used for authorization. When not specified, `implicit` is used. Given that `pkce` is a more secure option, it is recommended that users of this API use `pkce`.
           schema:
             type: string
             enum:
@@ -289,7 +289,7 @@ paths:
               - implicit
         - name: code_challenge_method
           in: query
-          description: (Optional) Method used to encrypt the verifier. Can be plain (unencrypted) or SHA256
+          description: (Optional) Method used to encrypt the verifier. Can be `plain` (no transformation) or `s256` (where SHA-256 is used). It is always recommended that `s256` is used.
           schema:
             type: string
             enum:

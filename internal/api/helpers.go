@@ -238,11 +238,7 @@ func isValidCodeChallenge(codeChallenge string) bool {
 	// See Section 4.2: https://www.rfc-editor.org/rfc/rfc7636#section-4.2
 	hasValidChallengeChars := regexp.MustCompile("^[a-zA-Z-._~0-9]+$").MatchString
 	switch codeChallengeLength := len(codeChallenge); {
-	case codeChallengeLength < 43:
-		return false
-	case codeChallengeLength > 128:
-		return false
-	case !hasValidChallengeChars(codeChallenge):
+	case codeChallengeLength < 43, codeChallengeLength > 128, !hasValidChallengeChars(codeChallenge):
 		return false
 	default:
 		return true
