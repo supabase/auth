@@ -27,6 +27,7 @@ type CodeChallengeMethod int
 const (
 	SHA256 CodeChallengeMethod = iota
 	Plain
+	Unsupported
 )
 
 func (authMethod CodeChallengeMethod) String() string {
@@ -35,6 +36,8 @@ func (authMethod CodeChallengeMethod) String() string {
 		return "s256"
 	case Plain:
 		return "plain"
+	case Unsupported:
+		return "unsupported"
 	}
 	return ""
 }
@@ -52,6 +55,9 @@ func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeCh
 	authCode, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.New("error generating auth code")
+	}
+	if codeChallengeMethod == Unsupported {
+		return nil, errors.New("invalid code challenge method")
 	}
 	oauth := &FlowState{
 		ID:                  id,
