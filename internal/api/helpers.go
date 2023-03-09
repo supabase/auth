@@ -235,6 +235,7 @@ func getBodyBytes(req *http.Request) ([]byte, error) {
 }
 
 var codeChallengePattern = regexp.MustCompile("^[a-zA-Z-._~0-9]+$")
+
 func isValidCodeChallenge(codeChallenge string) bool {
 	// See RFC 7636 Section 4.2: https://www.rfc-editor.org/rfc/rfc7636#section-4.2
 	hasValidChallengeChars := codeChallengePattern.MatchString
