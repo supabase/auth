@@ -625,7 +625,7 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	codeChallenge := flowState.CodeChallenge
-	codeChallengeAsString := string(codeChallenge[:])
+	codeChallengeAsString := string(codeChallenge)
 	codeVerifier := params.CodeVerifier
 
 	switch flowState.CodeChallengeMethod {
