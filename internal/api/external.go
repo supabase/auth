@@ -49,23 +49,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	scopes := query.Get("scopes")
 	flowType := query.Get("flow_type")
 	codeChallengeMethodParam := query.Get("code_challenge_method")
-	var codeChallengeMethod models.CodeChallengeMethod
-
-	switch codeChallengeMethodParam {
-	case "":
-		codeChallengeMethod = models.SHA256
-	case "plain":
-		codeChallengeMethod = models.Plain
-	case "s256":
-		codeChallengeMethod = models.SHA256
-	case "S256":
-		codeChallengeMethod = models.SHA256
-	default:
-		codeChallengeMethod = models.Unsupported
-	}
-	if codeChallengeMethod == models.Unsupported {
-		return badRequestError("code challenge method is unsupported")
-	}
 
 	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
@@ -89,6 +72,15 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 
 	flowStateID := ""
 	if flowType == PKCE {
+		var codeChallengeMethod models.CodeChallengeMethod
+		switch strings.ToLower(codeChallengeMethodParam) {
+		case "plain":
+			codeChallengeMethod = models.Plain
+		case "s256":
+			codeChallengeMethod = models.SHA256
+		default:
+			return badRequestError("code challenge method is unsupported")
+		}
 		codeChallenge := query.Get("code_challenge")
 		if !isValidCodeChallenge(codeChallenge) {
 			return badRequestError("invalid code challenge")
