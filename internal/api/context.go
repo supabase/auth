@@ -28,7 +28,7 @@ const (
 	oauthTokenKey           = contextKey("oauth_token") // for OAuth1.0, also known as request token
 	oauthVerifierKey        = contextKey("oauth_verifier")
 	ssoProviderKey          = contextKey("sso_provider")
-	oauthIDKey              = contextKey("oauth_id")
+	flowStateKey            = contextKey("flow_state_id")
 )
 
 // withToken adds the JWT token to the context.
@@ -126,12 +126,12 @@ func withInviteToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, inviteTokenKey, token)
 }
 
-func withOAuthID(ctx context.Context, OAuthID string) context.Context {
-	return context.WithValue(ctx, oauthIDKey, OAuthID)
+func withFlowStateID(ctx context.Context, FlowStateID string) context.Context {
+	return context.WithValue(ctx, flowStateKey, FlowStateID)
 }
 
-func getOAuthID(ctx context.Context) string {
-	obj := ctx.Value(oauthIDKey)
+func getFlowStateID(ctx context.Context) string {
+	obj := ctx.Value(flowStateKey)
 	if obj == nil {
 		return ""
 	}

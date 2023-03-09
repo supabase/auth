@@ -29,7 +29,7 @@ type ExternalProviderClaims struct {
 	Provider    string `json:"provider"`
 	InviteToken string `json:"invite_token,omitempty"`
 	Referrer    string `json:"referrer,omitempty"`
-	OAuthID     string `json:"oauth_id"`
+	FlowStateID string `json:"flow_state_id"`
 }
 
 // ExternalSignupParams are the parameters the Signup endpoint accepts
@@ -69,11 +69,11 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
-	oauthID := ""
+	flowStateID := ""
 	if flowType == PKCE {
 		codeChallenge := query.Get("code_challenge")
-		if codeChallenge == "" {
-			return badRequestError("Code challenge must be non-empty in pkce flow")
+		if !isValidCodeChallenge(codeChallenge) {
+			return badRequestError("invalid code challenge")
 		}
 		flowState, err := models.NewFlowState(providerType, codeChallenge, models.SHA256)
 		if err != nil {
@@ -83,7 +83,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 			return err
 		}
 
-		oauthID = flowState.ID.String()
+		flowStateID = flowState.ID.String()
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
@@ -97,7 +97,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		Provider:    providerType,
 		InviteToken: inviteToken,
 		Referrer:    redirectURL,
-		OAuthID:     oauthID,
+		FlowStateID: flowStateID,
 	})
 	tokenString, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
@@ -170,9 +170,9 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		providerAccessToken = oAuthResponseData.token
 		providerRefreshToken = oAuthResponseData.refreshToken
 	}
-	oauthID := getOAuthID(ctx)
-	// if there's a non-empty OAuthID we perform PKCE Flow
-	if oauthID != "" {
+	flowStateID := getFlowStateID(ctx)
+	// if there's a non-empty FlowStateID we perform PKCE Flow
+	if flowStateID != "" {
 		var rq url.Values
 		var authCode string
 		if err := r.ParseForm(); r.Method == http.MethodPost && err == nil {
@@ -190,7 +190,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			return badRequestError("provider authorization code missing")
 		}
 
-		flowState, err := models.FindFlowStateByID(a.db, oauthID)
+		flowState, err := models.FindFlowStateByID(a.db, flowStateID)
 		if err != nil {
 			return err
 		}
@@ -532,8 +532,8 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	if claims.Referrer != "" {
 		ctx = withExternalReferrer(ctx, claims.Referrer)
 	}
-	if claims.OAuthID != "" {
-		ctx = withOAuthID(ctx, claims.OAuthID)
+	if claims.FlowStateID != "" {
+		ctx = withFlowStateID(ctx, claims.FlowStateID)
 	}
 	ctx = withExternalProviderType(ctx, claims.Provider)
 	return withSignature(ctx, state), nil

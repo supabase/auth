@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"regexp"
 
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
@@ -231,4 +232,18 @@ func isStringInSlice(checkValue string, list []string) bool {
 // getBodyBytes returns a byte array of the request's Body.
 func getBodyBytes(req *http.Request) ([]byte, error) {
 	return utilities.GetBodyBytes(req)
+}
+
+func isValidCodeChallenge(codeChallenge string) bool {
+	hasValidChallengeChars := regexp.MustCompile("^[a-zA-Z-._~0-9]+$").MatchString
+	switch codeChallengeLength := len(codeChallenge); {
+	case codeChallengeLength < 43:
+		return false
+	case codeChallengeLength > 128:
+		return false
+	case !hasValidChallengeChars(codeChallenge):
+		return false
+	default:
+		return true
+	}
 }
