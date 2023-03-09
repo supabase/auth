@@ -51,20 +51,13 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	codeChallengeMethodParam := query.Get("code_challenge_method")
 	var codeChallengeMethod models.CodeChallengeMethod
 
-	switch codeChallengeMethodParam {
-	case "":
-		codeChallengeMethod = models.SHA256
+	switch strings.ToLower(codeChallengeMethodParam) {
 	case "plain":
 		codeChallengeMethod = models.Plain
 	case "s256":
 		codeChallengeMethod = models.SHA256
-	case "S256":
-		codeChallengeMethod = models.SHA256
 	default:
-		codeChallengeMethod = models.Unsupported
-	}
-	if codeChallengeMethod == models.Unsupported {
-		return badRequestError("code challenge method is unsupported")
+                return badRequestError("code challenge method is unsupported")
 	}
 
 	p, err := a.Provider(ctx, providerType, scopes)
