@@ -187,9 +187,12 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		var authCode string
 		if err := r.ParseForm(); r.Method == http.MethodPost && err == nil {
 			rq = r.Form
+		} else if err != nil {
+			return err
 		} else {
 			rq = r.URL.Query()
 		}
+
 		extError := rq.Get("error")
 		if extError != "" {
 			return oauthError(extError, rq.Get("error_description"))

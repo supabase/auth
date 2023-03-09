@@ -27,7 +27,6 @@ type CodeChallengeMethod int
 const (
 	SHA256 CodeChallengeMethod = iota
 	Plain
-	Unsupported
 )
 
 func (authMethod CodeChallengeMethod) String() string {
@@ -36,8 +35,6 @@ func (authMethod CodeChallengeMethod) String() string {
 		return "s256"
 	case Plain:
 		return "plain"
-	case Unsupported:
-		return "unsupported"
 	}
 	return ""
 }
