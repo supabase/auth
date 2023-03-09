@@ -614,6 +614,12 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	} else if err != nil {
 		return err
 	}
+	flowStateExpiryDuration := a.config.External.FlowStateExpiryDuration
+	flowStateCreationTime := flowState.CreatedAt
+	flowStateExpiryTime := flowStateCreationTime.Add(time.Second * time.Duration(flowStateExpiryDuration))
+	if time.Now().After(flowStateExpiryTime) {
+		return forbiddenError("invalid oauth state, oauth sate has expired")
+	}
 
 	user, err := models.FindUserByID(db, flowState.UserID)
 	if err != nil {
@@ -630,8 +636,8 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 
 	switch flowState.CodeChallengeMethod {
 	case models.SHA256.String():
-		encryptedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
-		encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(encryptedCodeVerifier[:])
+		hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
+		encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
 		if codeChallengeAsString != encodedCodeVerifier {
 			return forbiddenError(InvalidCodeChallengeError)
 		}
@@ -654,6 +660,9 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		return nil
 	})
 	if err != nil {
+		return err
+	}
+	if err := a.db.Destroy(flowState); err != nil {
 		return err
 	}
 

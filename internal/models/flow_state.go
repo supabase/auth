@@ -53,9 +53,7 @@ func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeCh
 	if err != nil {
 		return nil, errors.New("error generating auth code")
 	}
-	if codeChallengeMethod == Unsupported {
-		return nil, errors.New("invalid code challenge method")
-	}
+
 	oauth := &FlowState{
 		ID:                  id,
 		ProviderType:        providerType,
