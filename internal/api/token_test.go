@@ -159,7 +159,7 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 			codeVerifier: codeVerifier,
 		},
 		{
-			desc:         "Invalid codeVerifier",
+			desc:         "Invalid code verifier",
 			authCode:     authCode,
 			codeVerifier: invalidVerifier,
 		},

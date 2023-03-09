@@ -113,5 +113,5 @@ func (e SAMLRelayStateNotFoundError) Error() string {
 type FlowStateNotFoundError struct{}
 
 func (e FlowStateNotFoundError) Error() string {
-	return "OAuth State not found"
+	return "Flow State not found"
 }

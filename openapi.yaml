@@ -279,6 +279,22 @@ paths:
           schema:
             type: string
             format: uri
+        - name: flow_type
+          in: query
+          description: (Optional) OAuth flow used for authorization.
+          schema:
+            type: string
+            enum:
+              - pkce
+              - implicit
+        - name: code_challenge_method
+          in: query
+          description: (Optional) Method used to encrypt the verifier. Can be plain (unencrypted) or SHA256
+          schema:
+            type: string
+            enum:
+              - plain
+              - s256
       responses:
         302:
           $ref: "#/components/responses/OAuthAuthorizeRedirectResponse"

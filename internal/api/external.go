@@ -56,6 +56,8 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		codeChallengeMethod = models.SHA256
 	case "s256":
 		codeChallengeMethod = models.SHA256
+	case "S256":
+		codeChallengeMethod = models.SHA256
 	default:
 		codeChallengeMethod = models.Unsupported
 	}
