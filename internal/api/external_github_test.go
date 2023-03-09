@@ -113,9 +113,8 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"code_verifier": codeVerifier,
 		"auth_code":     authCode,
-		"grant_type":    PKCE,
 	}))
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/oauth/token", &buffer)
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=oauth_pkce", &buffer)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)

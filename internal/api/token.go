@@ -83,7 +83,6 @@ type IdTokenGrantParams struct {
 type PKCEGrantParams struct {
 	AuthCode     string `json:"auth_code"`
 	CodeVerifier string `json:"code_verifier"`
-	GrantType    string `json:"grant_type"`
 }
 
 const useCookieHeader = "x-use-cookie"
@@ -175,6 +174,8 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 		return a.RefreshTokenGrant(ctx, w, r)
 	case "id_token":
 		return a.IdTokenGrant(ctx, w, r)
+	case "oauth_pkce":
+		return a.OAuthPKCE(ctx, w, r)
 	default:
 		return oauthError("unsupported_grant_type", "")
 	}
@@ -587,10 +588,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
+func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
-
 	var grantParams models.GrantParams
 
 	params := &PKCEGrantParams{}
@@ -601,11 +600,6 @@ func (a *API) OAuthPKCE(w http.ResponseWriter, r *http.Request) error {
 
 	if err = json.Unmarshal(body, params); err != nil {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
-	}
-
-	// To give room in case we wish to support other grants
-	if params.GrantType != PKCE {
-		return badRequestError("only pkce grant type is supported")
 	}
 
 	if params.AuthCode == "" || params.CodeVerifier == "" {

@@ -157,25 +157,16 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 			desc:         "Invalid Authcode",
 			authCode:     invalidAuthCode,
 			codeVerifier: codeVerifier,
-			grantType:    PKCE,
 		},
 		{
 			desc:         "Invalid codeVerifier",
 			authCode:     authCode,
 			codeVerifier: invalidVerifier,
-			grantType:    PKCE,
 		},
 		{
 			desc:         "Invalid auth code and verifier",
 			authCode:     invalidAuthCode,
 			codeVerifier: invalidVerifier,
-			grantType:    PKCE,
-		},
-		{
-			desc:         "Invalid grant type",
-			authCode:     authCode,
-			codeVerifier: codeVerifier,
-			grantType:    PKCE + "123",
 		},
 	}
 	for _, v := range cases {
@@ -184,17 +175,12 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 				"code_verifier": v.codeVerifier,
 				"auth_code":     v.authCode,
-				"grant_type":    v.grantType,
 			}))
-			req := httptest.NewRequest(http.MethodPost, "http://localhost/oauth/token", &buffer)
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=oauth_pkce", &buffer)
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			if v.grantType != PKCE {
-				assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
-			} else {
-				assert.Equal(ts.T(), http.StatusForbidden, w.Code)
-			}
+			assert.Equal(ts.T(), http.StatusForbidden, w.Code)
 		})
 	}
 }
