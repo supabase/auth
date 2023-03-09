@@ -81,7 +81,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHub_AuthorizationCode() {
 	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "github@example.com", "GitHub Test", "123", "http://example.com/avatar")
 }
 
-func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
+func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCESHA256() {
 	tokenCount, userCount := 0, 0
 	code := "authcode"
 	codeVerifier := "challenge"
@@ -94,7 +94,54 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
 	defer server.Close()
 
 	// Check for valid auth code returned
-	u := performPKCEAuthorization(ts, "github", code, codeChallenge)
+	u := performPKCEAuthorization(ts, "github", code, codeChallenge, "s256")
+	m, err := url.ParseQuery(u.RawQuery)
+	authCode := m["code"][0]
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), authCode)
+
+	// Check for valid provider access token, mock does not return refresh toekn
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, "github@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), user)
+	flowState, err := models.FindFlowStateByAuthCode(ts.API.db, authCode)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), "github_token", flowState.ProviderAccessToken)
+
+	// Exchange Auth Code for token
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"code_verifier": codeVerifier,
+		"auth_code":     authCode,
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=oauth_pkce", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// Validate that access token and provider tokens are present
+	data := AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.NotEmpty(ts.T(), data.Token)
+	require.NotEmpty(ts.T(), data.RefreshToken)
+	require.NotEmpty(ts.T(), data.ProviderAccessToken)
+	require.Equal(ts.T(), data.User.ID, user.ID)
+}
+
+// TODO(Joel) - refactor plain and SHA256 into a single test
+func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCEPlain() {
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+	codeVerifier := "challengechallengchallengchallengchallengchallengchallengeeeeee"
+	codeChallenge := codeVerifier
+
+	emails := `[{"email":"github@example.com", "primary": true, "verified": true}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	// Check for valid auth code returned
+	u := performPKCEAuthorization(ts, "github", code, codeChallenge, "plain")
 	m, err := url.ParseQuery(u.RawQuery)
 	authCode := m["code"][0]
 	require.NoError(ts.T(), err)

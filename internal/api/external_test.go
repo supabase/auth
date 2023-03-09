@@ -76,10 +76,10 @@ func performAuthorizationRequest(ts *ExternalTestSuite, provider string, inviteT
 	return w
 }
 
-func performPKCEAuthorizationRequest(ts *ExternalTestSuite, provider string, codeChallenge string) *httptest.ResponseRecorder {
+func performPKCEAuthorizationRequest(ts *ExternalTestSuite, provider, codeChallenge, codeChallengeMethod string) *httptest.ResponseRecorder {
 	authorizeURL := "http://localhost/authorize?flow_type=pkce&provider=" + provider
 	if codeChallenge != "" {
-		authorizeURL = authorizeURL + "&code_challenge=" + codeChallenge
+		authorizeURL = authorizeURL + "&code_challenge=" + codeChallenge + "&code_challenge_method=" + codeChallengeMethod
 	}
 
 	req := httptest.NewRequest(http.MethodGet, authorizeURL, nil)
@@ -89,8 +89,8 @@ func performPKCEAuthorizationRequest(ts *ExternalTestSuite, provider string, cod
 	return w
 }
 
-func performPKCEAuthorization(ts *ExternalTestSuite, provider, code, codeChallenge string) *url.URL {
-	w := performPKCEAuthorizationRequest(ts, provider, codeChallenge)
+func performPKCEAuthorization(ts *ExternalTestSuite, provider, code, codeChallenge, codeChallengeMethod string) *url.URL {
+	w := performPKCEAuthorizationRequest(ts, provider, codeChallenge, codeChallengeMethod)
 	ts.Require().Equal(http.StatusFound, w.Code)
 	u, err := url.Parse(w.Header().Get("Location"))
 	ts.Require().NoError(err, "redirect url parse failed")
