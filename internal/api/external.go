@@ -118,6 +118,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	query.Del("scopes")
 	query.Del("provider")
 	query.Del("code_challenge")
+	query.Del("code_challenge_method")
 	for key := range query {
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get
