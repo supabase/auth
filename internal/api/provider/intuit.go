@@ -17,7 +17,8 @@ import (
 
 const (
 	defaultIntuitAuthBase  = "appcenter.intuit.com/connect/oauth2"
-	defaultIntiutTokenHost = "oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
+	/* #nosec */
+	defaultIntuitTokenHost = "oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
 	defaultIntuitAPIBase   = "accounts.platform.intuit.com/v1"
 )
 
@@ -41,7 +42,7 @@ func NewIntuitProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 
 	authHost := chooseHost(ext.URL, defaultIntuitAuthBase)
 	apiPath := chooseHost(ext.ApiURL, defaultIntuitAPIBase)
-	tokenHost := chooseHost("", defaultIntiutTokenHost)
+	tokenHost := chooseHost("", defaultIntuitTokenHost)
 
 	oauthScopes := []string{"openid", "email", "profile"}
 
