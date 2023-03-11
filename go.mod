@@ -8,6 +8,7 @@ require (
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc
 	github.com/coreos/go-oidc/v3 v3.6.0
 	github.com/didip/tollbooth/v5 v5.1.1
+	github.com/ecchochan/mailme v1.1.1-allow-cidrs
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/gobuffalo/validate/v3 v3.3.3 // indirect
 	github.com/gobwas/glob v0.2.3
@@ -40,6 +41,7 @@ require (
 require (
 	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
 	github.com/gobuffalo/nulls v0.4.2 // indirect
+	github.com/netlify/netlify-commons v0.32.0 // indirect
 )
 
 require (
