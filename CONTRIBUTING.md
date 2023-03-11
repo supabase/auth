@@ -251,6 +251,7 @@ To see the current settings, make a request to `http://localhost:9999/settings` 
     "github": false,
     "gitlab": false,
     "google": false,
+    "intuit": false,
     "facebook": false,
     "spotify": false,
     "slack": false,

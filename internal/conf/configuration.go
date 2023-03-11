@@ -144,6 +144,7 @@ type ProviderConfiguration struct {
 	Github                OAuthProviderConfiguration `json:"github"`
 	Gitlab                OAuthProviderConfiguration `json:"gitlab"`
 	Google                OAuthProviderConfiguration `json:"google"`
+	Intuit                OAuthProviderConfiguration `json:"intuit"`
 	Notion                OAuthProviderConfiguration `json:"notion"`
 	Keycloak              OAuthProviderConfiguration `json:"keycloak"`
 	Linkedin              OAuthProviderConfiguration `json:"linkedin"`

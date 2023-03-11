@@ -472,6 +472,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewGitlabProvider(config.External.Gitlab, scopes)
 	case "google":
 		return provider.NewGoogleProvider(config.External.Google, scopes)
+	case "intuit":
+		return provider.NewIntuitProvider(config.External.Intuit, scopes)
 	case "keycloak":
 		return provider.NewKeycloakProvider(config.External.Keycloak, scopes)
 	case "linkedin":

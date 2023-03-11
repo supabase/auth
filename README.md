@@ -421,7 +421,7 @@ The default group to assign all new users to.
 
 ### External Authentication Providers
 
-We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin`, `notion`, `spotify`, `slack`, `twitch`, `twitter` and `workos` for external authentication.
+We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `intuit` `keycloak`, `linkedin`, `notion`, `spotify`, `slack`, `twitch`, `twitter` and `workos` for external authentication.
 
 Use the names as the keys underneath `external` to configure each separately.
 
@@ -747,6 +747,7 @@ Returns the publicly available settings for this gotrue instance.
     "github": true,
     "gitlab": true,
     "google": true,
+    "intuit": true,
     "keycloak": true,
     "linkedin": true,
     "notion": true,
@@ -1189,7 +1190,7 @@ Get access_token from external oauth provider
 query params:
 
 ```
-provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | keycloak | linkedin | notion | slack | spotify | twitch | twitter | workos
+provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | intuit | keycloak | linkedin | notion | slack | spotify | twitch | twitter | workos
 
 scopes=<optional additional scopes depending on the provider (email and name are requested by default)>
 ```
