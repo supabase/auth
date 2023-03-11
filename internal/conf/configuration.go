@@ -25,6 +25,7 @@ type OAuthProviderConfiguration struct {
 	URL         string `json:"url"`
 	ApiURL      string `json:"api_url" split_words:"true"`
 	Enabled     bool   `json:"enabled"`
+	Sandbox     bool   `json:"sandbox"`
 }
 
 type EmailProviderConfiguration struct {

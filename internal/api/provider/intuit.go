@@ -22,6 +22,8 @@ const (
 	defaultIntuitAPIBase   = "accounts.platform.intuit.com/v1"
 )
 
+const sandboxAPIBase = "sandbox-accounts.platform.intuit.com/v1"
+
 type intuitProvider struct {
 	*oauth2.Config
 	APIPath string
@@ -42,7 +44,11 @@ func NewIntuitProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 
 	authHost := chooseHost(ext.URL, defaultIntuitAuthBase)
 	apiPath := chooseHost(ext.ApiURL, defaultIntuitAPIBase)
-	tokenHost := chooseHost("", defaultIntuitTokenHost)
+	tokenHost := chooseHost(ext.URL, defaultIntuitTokenHost)
+
+	if ext.Sandbox {
+		apiPath = chooseHost(ext.ApiURL, sandboxAPIBase)
+	}
 
 	oauthScopes := []string{"openid", "email", "profile"}
 
