@@ -16,7 +16,7 @@ import (
 // )
 
 const (
-	defaultIntuitAuthBase  = "appcenter.intuit.com/connect/oauth2"
+	defaultIntuitAuthBase = "appcenter.intuit.com/connect/oauth2"
 	/* #nosec */
 	defaultIntuitTokenHost = "oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
 	defaultIntuitAPIBase   = "accounts.platform.intuit.com/v1"
