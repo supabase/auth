@@ -3,10 +3,11 @@ package provider
 import (
 	"context"
 	"errors"
-	"strings"
 	"github.com/supabase/gotrue/internal/conf"
 	"golang.org/x/oauth2"
+	"strings"
 )
+
 // For Intuit Sandbox use:
 // const (
 // 	defaultIntuitAuthBase = "appcenter.intuit.com/connect/oauth2"
@@ -15,9 +16,9 @@ import (
 // )
 
 const (
-	defaultIntuitAuthBase = "appcenter.intuit.com/connect/oauth2"
+	defaultIntuitAuthBase  = "appcenter.intuit.com/connect/oauth2"
 	defaultIntiutTokenHost = "oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
-	defaultIntuitAPIBase  = "accounts.platform.intuit.com/v1"
+	defaultIntuitAPIBase   = "accounts.platform.intuit.com/v1"
 )
 
 type intuitProvider struct {
@@ -26,13 +27,12 @@ type intuitProvider struct {
 }
 
 type intuitUser struct {
-	FirstName  string `json:"givenName"`
-	LastName   string `json:"familyName"`
-	Email 	   string `json:"email"`
-	Verified   bool   `json:"email_verified"`
-	Sub        string `json:"sub"`
+	FirstName string `json:"givenName"`
+	LastName  string `json:"familyName"`
+	Email     string `json:"email"`
+	Verified  bool   `json:"email_verified"`
+	Sub       string `json:"sub"`
 }
-
 
 func NewIntuitProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
