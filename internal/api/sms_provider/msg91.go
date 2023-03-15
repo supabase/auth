@@ -94,7 +94,6 @@ func (t *Msg91Provider) SendSms(phone string, message string) error {
 	client := &http.Client{Timeout: defaultTimeout}
 
 	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
-
 	if err != nil {
 		return err
 	}
