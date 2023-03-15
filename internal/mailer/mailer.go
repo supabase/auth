@@ -1,8 +1,10 @@
 package mailer
 
 import (
+	"fmt"
 	"net/url"
 
+	"github.com/gofrs/uuid"
 	"github.com/netlify/mailme"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/gotrue/internal/conf"
@@ -26,6 +28,10 @@ type Mailer interface {
 // NewMailer returns a new gotrue mailer
 func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
 	mail := gomail.NewMessage()
+
+	// so that messages are not grouped under each other
+	mail.SetHeader("Message-ID", fmt.Sprintf("<%s@gotrue-mailer>", uuid.Must(uuid.NewV4()).String()))
+
 	from := mail.FormatAddress(globalConfig.SMTP.AdminEmail, globalConfig.SMTP.SenderName)
 
 	var mailClient MailClient
