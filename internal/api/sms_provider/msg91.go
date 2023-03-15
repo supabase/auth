@@ -59,7 +59,7 @@ type Msg91Response struct {
 	Data string `json:"data"`
 }
 
-// Creates a SmsProvider with the Msg91 Config
+// NewMsg91Provider creates a new SmsProvider for Msg91.
 func NewMsg91Provider(config conf.Msg91ProviderConfiguration) (SmsProvider, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
