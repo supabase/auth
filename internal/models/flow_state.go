@@ -11,7 +11,7 @@ import (
 
 type FlowState struct {
 	ID                   uuid.UUID `json:"id" db:"id"`
-	UserID               uuid.UUID `json:"user_id" db:"user_id"`
+	UserID               *uuid.UUID `json:"user_id,omitempty" db:"user_id"`
 	AuthCode             string    `json:"auth_code" db:"auth_code"`
 	CodeChallenge        string    `json:"code_challenge" db:"code_challenge"`
 	CodeChallengeMethod  string    `json:"code_challenge_method" db:"code_challenge_method"`
