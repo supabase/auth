@@ -584,22 +584,22 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	switch params.Type {
 	case emailOTPVerification:
 		// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
-		if isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp) {
+		if isOtpValid(params.Token, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp) {
 			isValid = true
 			params.Type = signupVerification
-		} else if isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp) {
+		} else if isOtpValid(params.Token, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp) {
 			isValid = true
 			params.Type = magicLinkVerification
 		} else {
 			isValid = false
 		}
 	case signupVerification, inviteVerification:
-		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
+		isValid = isOtpValid(params.Token, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
 	case recoveryVerification, magicLinkVerification:
-		isValid = isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
+		isValid = isOtpValid(params.Token, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
 	case emailChangeVerification:
-		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
-			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
+		isValid = isOtpValid(params.Token, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
+			isOtpValid(params.Token, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
 	case phoneChangeVerification:
 		if config.Sms.IsTwilioVerifyProvider() {
 			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(user.PhoneChange, params.Token); err != nil {
@@ -607,7 +607,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			}
 			return user, nil
 		}
-		isValid = isOtpValid(tokenHash, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
+		isValid = isOtpValid(params.Token, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
 	case smsVerification:
 		if config.Sms.IsTwilioVerifyProvider() {
 			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(params.Phone, params.Token); err != nil {
@@ -615,7 +615,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			}
 			return user, nil
 		}
-		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Sms.OtpExp)
+		isValid = isOtpValid(params.Token, user.ConfirmationToken, user.ConfirmationSentAt, config.Sms.OtpExp)
 	}
 
 	if !isValid || err != nil {
