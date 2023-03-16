@@ -219,7 +219,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 
 	for _, email := range userData.Emails {
 		if email.Verified || config.Mailer.Autoconfirm {
-			emails = append(emails, email.Email)
+			emails = append(emails, strings.ToLower(email.Email))
 		}
 	}
 
