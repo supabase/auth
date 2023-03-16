@@ -740,6 +740,7 @@ func obfuscateEmail(u *User, email string) string {
 }
 
 func obfuscatePhone(u *User, phone string) string {
+        // Field converted from VARCHAR(15) to text
 	return obfuscateValue(u.ID, phone)[:15]
 }
 
