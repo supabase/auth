@@ -6,7 +6,9 @@ begin
     alter column phone type text,
     alter column phone_change type text;
 exception
-  -- dependent object: https://www.postgresql.org/docs/current/errcodes-appendix.html
+  -- SQLSTATE errcodes https://www.postgresql.org/docs/current/errcodes-appendix.html
+  when SQLSTATE '0A000' then
+    raise notice 'Unable to change data type of phone, phone_change columns due to use by a view or rule';
   when SQLSTATE '2BP01' then
     raise notice 'Unable to change data type of phone, phone_change columns due to dependent objects';
 end $$;
