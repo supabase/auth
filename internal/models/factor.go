@@ -129,17 +129,6 @@ func DeleteUnverifiedFactors(tx *storage.Connection, user *User) error {
 	return nil
 }
 
-func FindVerifiedFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
-	factors := []*Factor{}
-	if err := tx.Q().Where("user_id = ? AND status = ?", user.ID, FactorStateVerified.String()).All(&factors); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return factors, nil
-		}
-		return nil, errors.Wrap(err, "Database error when finding verified MFA factors")
-	}
-	return factors, nil
-}
-
 // UpdateFriendlyName changes the friendly name
 func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	f.FriendlyName = friendlyName
