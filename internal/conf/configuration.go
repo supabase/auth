@@ -16,7 +16,7 @@ import (
 
 const defaultMinPasswordLength int = 6
 const defaultChallengeExpiryDuration float64 = 300
-const defaultFlowStateExpiryDuration float64 = 300
+const defaultFlowStateExpiryDuration time.Duration = 300 * time.Second
 
 // OAuthProviderConfiguration holds all config related to external account providers.
 type OAuthProviderConfiguration struct {
@@ -159,7 +159,7 @@ type ProviderConfiguration struct {
 	IosBundleId             string                     `json:"ios_bundle_id" split_words:"true"`
 	RedirectURL             string                     `json:"redirect_url"`
 	AllowedIdTokenIssuers   []string                   `json:"allowed_id_token_issuers" split_words:"true"`
-	FlowStateExpiryDuration float64                    `split_words:"true" default:"300"`
+	FlowStateExpiryDuration time.Duration              `json:"flow_state_expiry_duration" split_words:"true"`
 }
 
 type SMTPConfiguration struct {
