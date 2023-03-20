@@ -58,9 +58,9 @@ func TestSmsProvider(t *testing.T) {
 					Sender: "test_sender",
 				},
 				Msg91: conf.Msg91ProviderConfiguration{
-					AuthKey:       "test_auth_key",
-					SenderId:      "test_sender_id",
-					DltTemplateId: "test_dlt_template_id",
+					AuthKey:  "test_auth_key",
+					SenderId: "test_sender_id",
+					// DltTemplateId: "test_dlt_template_id",
 				},
 			},
 		},
@@ -297,16 +297,19 @@ func (ts *SmsProviderTestSuite) TestMsg91SendSms() {
 	msg91Provider, ok := provider.(*Msg91Provider)
 
 	body := url.Values{
-		"authkey":   {msg91Provider.Config.AuthKey},
-		"sender":    {msg91Provider.Config.SenderId},
-		"DLT_TE_ID": {msg91Provider.Config.DltTemplateId},
-		"mobiles":   {phone},
-		"message":   {message},
-		"route":     {strconv.Itoa(4)},
+		"authkey":  {msg91Provider.Config.AuthKey},
+		"sender":   {msg91Provider.Config.SenderId},
+		"mobiles":  {phone},
+		"message":  {message},
+		"route":    {strconv.Itoa(4)},
+		"response": {"json"},
 	}
+	// if msg91Provider.Config.DltTemplateId != nil && *msg91Provider.Config.DltTemplateId != "" {
+	// 	body.Set("DLT_TE_ID", *msg91Provider.Config.DltTemplateId)
+	// }
 
 	gock.New(msg91Provider.APIPath).Post("").MatchType("url").BodyString(body.Encode()).Reply(200).JSON(Msg91Response{
-		Data: "success",
+		Type: "success",
 	})
 
 	err = msg91Provider.SendSms(phone, message)

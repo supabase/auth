@@ -235,7 +235,7 @@ type TextlocalProviderConfiguration struct {
 type Msg91ProviderConfiguration struct {
 	AuthKey       string `json:"auth_key" split_words:"true"`
 	SenderId      string `json:"sender_id" split_words:"true"`
-	DltTemplateId string `json:"dlt_template_id" split_words:"true"`
+	DltTemplateId *string `json:"dlt_template_id,omitempty" split_words:"true"`
 }
 
 type VonageProviderConfiguration struct {
@@ -529,9 +529,9 @@ func (t *Msg91ProviderConfiguration) Validate() error {
 	if t.AuthKey == "" {
 		return errors.New("missing Msg91 Auth key")
 	}
-	if t.DltTemplateId == "" {
-		return errors.New("missing Msg91 Template Id")
-	}
+	// if t.DltTemplateId == "" {
+	// 	return errors.New("missing Msg91 Template Id")
+	// }
 	if t.SenderId == "" {
 		return errors.New("missing Msg91 Sender Id")
 	}
