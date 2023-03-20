@@ -705,7 +705,8 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 
-			*ts.Config = *c.customConfig
+			ts.Config.JWT = c.customConfig.JWT
+			ts.Config.External = c.customConfig.External
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), c.expected, w.Code)
 		})
