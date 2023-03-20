@@ -10,16 +10,16 @@ import (
 )
 
 type FlowState struct {
-	ID                   uuid.UUID `json:"id" db:"id"`
-	UserID               uuid.UUID `json:"user_id" db:"user_id"`
-	AuthCode             string    `json:"auth_code" db:"auth_code"`
-	CodeChallenge        string    `json:"code_challenge" db:"code_challenge"`
-	CodeChallengeMethod  string    `json:"code_challenge_method" db:"code_challenge_method"`
-	ProviderType         string    `json:"provider_type" db:"provider_type"`
-	ProviderAccessToken  string    `json:"provider_access_token" db:"provider_access_token"`
-	ProviderRefreshToken string    `json:"provider_refresh_token" db:"provider_refresh_token"`
-	CreatedAt            time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt            time.Time `json:"updated_at" db:"updated_at"`
+	ID                   uuid.UUID  `json:"id" db:"id"`
+	UserID               *uuid.UUID `json:"user_id" db:"user_id"`
+	AuthCode             string     `json:"auth_code" db:"auth_code"`
+	CodeChallenge        string     `json:"code_challenge" db:"code_challenge"`
+	CodeChallengeMethod  string     `json:"code_challenge_method" db:"code_challenge_method"`
+	ProviderType         string     `json:"provider_type" db:"provider_type"`
+	ProviderAccessToken  string     `json:"provider_access_token" db:"provider_access_token"`
+	ProviderRefreshToken string     `json:"provider_refresh_token" db:"provider_refresh_token"`
+	CreatedAt            time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 type CodeChallengeMethod int

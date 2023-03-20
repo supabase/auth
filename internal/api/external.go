@@ -220,7 +220,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			}
 			flowState.ProviderAccessToken = providerAccessToken
 			flowState.ProviderRefreshToken = providerRefreshToken
-			flowState.UserID = user.ID
+			flowState.UserID = &(user.ID)
 
 			authCode = flowState.AuthCode
 

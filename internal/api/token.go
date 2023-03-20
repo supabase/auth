@@ -610,7 +610,7 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 
 	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
 	// Sanity check in case user ID was not set properly
-	if models.IsNotFoundError(err) || flowState.UserID == uuid.Nil {
+	if models.IsNotFoundError(err) || flowState.UserID == nil {
 		return forbiddenError("invalid oauth state, please ensure oauth redirect has successfully completed")
 	} else if err != nil {
 		return err
@@ -619,7 +619,7 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		return forbiddenError("invalid oauth state, oauth state has expired")
 	}
 
-	user, err := models.FindUserByID(db, flowState.UserID)
+	user, err := models.FindUserByID(db, *flowState.UserID)
 	if err != nil {
 		return err
 	}
