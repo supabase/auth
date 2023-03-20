@@ -626,23 +626,18 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		return err
 	}
 
-	if flowState.AuthCode != params.AuthCode {
-		return forbiddenError("invalid auth code")
-	}
-
 	codeChallenge := flowState.CodeChallenge
-	codeChallengeAsString := string(codeChallenge)
 	codeVerifier := params.CodeVerifier
 
 	switch flowState.CodeChallengeMethod {
 	case models.SHA256.String():
 		hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
 		encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
-		if codeChallengeAsString != encodedCodeVerifier {
+		if codeChallenge != encodedCodeVerifier {
 			return forbiddenError(InvalidCodeChallengeError)
 		}
 	case models.Plain.String():
-		if codeChallengeAsString != codeVerifier {
+		if codeChallenge != codeVerifier {
 			return forbiddenError(InvalidCodeChallengeError)
 		}
 	default:

@@ -49,11 +49,7 @@ func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeCh
 	if err != nil {
 		return nil, errors.New("error generating unique oauth state verifier")
 	}
-	authCode, err := uuid.NewV4()
-	if err != nil {
-		return nil, errors.New("error generating auth code")
-	}
-
+	authCode := uuid.Must(uuid.NewV4())
 	oauth := &FlowState{
 		ID:                  id,
 		ProviderType:        providerType,
