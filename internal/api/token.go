@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -630,11 +631,11 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	case models.SHA256.String():
 		hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
 		encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
-		if codeChallenge != encodedCodeVerifier {
+		if subtle.ConstantTimeCompare([]byte(codeChallenge), []byte(encodedCodeVerifier)) != 1 {
 			return forbiddenError(InvalidCodeChallengeError)
 		}
 	case models.Plain.String():
-		if codeChallenge != codeVerifier {
+		if subtle.ConstantTimeCompare([]byte(codeChallenge), []byte(codeVerifier)) != 1 {
 			return forbiddenError(InvalidCodeChallengeError)
 		}
 	default:
