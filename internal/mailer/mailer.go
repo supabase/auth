@@ -13,14 +13,14 @@ import (
 // Mailer defines the interface a mailer must implement.
 type Mailer interface {
 	Send(user *models.User, subject, body string, data map[string]interface{}) error
-	InviteMail(user *models.User, otp, referrerURL string) error
-	ConfirmationMail(user *models.User, otp, referrerURL string) error
-	RecoveryMail(user *models.User, otp, referrerURL string) error
-	MagicLinkMail(user *models.User, otp, referrerURL string) error
-	EmailChangeMail(user *models.User, otpNew, otpCurrent, referrerURL string) error
+	InviteMail(user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	ConfirmationMail(user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	RecoveryMail(user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	MagicLinkMail(user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	EmailChangeMail(user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error
 	ReauthenticateMail(user *models.User, otp string) error
 	ValidateEmail(email string) error
-	GetEmailActionLink(user *models.User, actionType, referrerURL string) (string, error)
+	GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error)
 }
 
 // NewMailer returns a new gotrue mailer
@@ -58,23 +58,18 @@ func withDefault(value, defaultValue string) string {
 	return value
 }
 
-func getSiteURL(referrerURL, siteURL, filepath, fragment string) (string, error) {
-	baseURL := siteURL
-	if filepath == "" && referrerURL != "" {
-		baseURL = referrerURL
-	}
-
-	site, err := url.Parse(baseURL)
-	if err != nil {
-		return "", err
-	}
+func getPath(filepath, params string) (*url.URL, error) {
+	var path *url.URL
+	var err error
 	if filepath != "" {
-		path, err := url.Parse(filepath)
+		path, err = url.Parse(filepath)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		site = site.ResolveReference(path)
+	} else {
+		p := url.URL{}
+		path = &p
 	}
-	site.RawQuery = fragment
-	return site.String(), nil
+	path.RawQuery = params
+	return path, nil
 }
