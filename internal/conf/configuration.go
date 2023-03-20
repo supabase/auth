@@ -69,20 +69,27 @@ type MFAConfiguration struct {
 }
 
 type APIConfiguration struct {
-	Host            string
-	Port            string `envconfig:"PORT" default:"8081"`
-	Endpoint        string
-	RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
-	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
+	Host               string
+	Port               string `envconfig:"PORT" default:"8081"`
+	Endpoint           string
+	RequestIDHeader    string   `envconfig:"REQUEST_ID_HEADER"`
+	ExternalURL        string   `json:"external_url" envconfig:"API_EXTERNAL_URL"`
+	DomainAllowList    []string `json:"domain_allow_list" envconfig:"DOMAIN_ALLOW_LIST"`
+	DomainAllowListMap map[string]*url.URL
 }
 
 func (a *APIConfiguration) Validate() error {
 	if a.ExternalURL != "" {
 		// sometimes, in tests, ExternalURL is empty and we regard that
 		// as a valid value
-		_, err := url.ParseRequestURI(a.ExternalURL)
+		u, err := url.ParseRequestURI(a.ExternalURL)
 		if err != nil {
 			return err
+		}
+
+		if len(a.DomainAllowList) == 0 {
+			// for backward compatibility, always include the ExternalURL
+			a.DomainAllowList = []string{u.Host}
 		}
 	}
 
@@ -413,6 +420,17 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 
 	if len(config.External.AllowedIdTokenIssuers) == 0 {
 		config.External.AllowedIdTokenIssuers = append(config.External.AllowedIdTokenIssuers, "https://appleid.apple.com", "https://accounts.google.com")
+	}
+
+	if config.API.DomainAllowList != nil {
+		config.API.DomainAllowListMap = make(map[string]*url.URL)
+		for _, uri := range config.API.DomainAllowList {
+			u, err := url.ParseRequestURI(uri)
+			if err != nil {
+				return err
+			}
+			config.API.DomainAllowListMap[u.Host] = u
+		}
 	}
 
 	return nil

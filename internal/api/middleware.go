@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -177,4 +178,17 @@ func isIgnoreCaptchaRoute(req *http.Request) bool {
 		return true
 	}
 	return false
+}
+
+func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	config := a.config
+	u, ok := config.API.DomainAllowListMap[req.Host]
+	if !ok {
+		var err error
+		if u, err = url.ParseRequestURI(config.API.ExternalURL); err != nil {
+			return ctx, err
+		}
+	}
+	return withExternalHost(ctx, u), nil
 }

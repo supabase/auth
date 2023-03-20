@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	jwt "github.com/golang-jwt/jwt"
@@ -194,6 +195,46 @@ func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
 			_, err := limiter(w, req)
 			require.Error(ts.T(), err)
 			require.Equal(ts.T(), c.expectedErrorMsg, err.Error())
+		})
+	}
+}
+
+func (ts *MiddlewareTestSuite) TestIsValidExternalHost() {
+	cases := []struct {
+		desc        string
+		requestURL  string
+		expectedURL string
+	}{
+		{
+			desc:        "Valid custom external url",
+			requestURL:  "https://example.custom.com",
+			expectedURL: "https://example.custom.com",
+		},
+		{
+			desc:        "Invalid custom external url",
+			requestURL:  "https://invalid.custom.com",
+			expectedURL: "http://localhost:9999",
+		},
+	}
+
+	ts.Config.API.DomainAllowList = []string{"https://example.custom.com"}
+
+	u, err := url.ParseRequestURI("https://example.custom.com")
+	require.NoError(ts.T(), err)
+
+	ts.Config.API.DomainAllowListMap = map[string]*url.URL{
+		u.Host: u,
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			req := httptest.NewRequest(http.MethodPost, c.requestURL, nil)
+			w := httptest.NewRecorder()
+			ctx, err := ts.API.isValidExternalHost(w, req)
+			require.NoError(ts.T(), err)
+
+			externalURL := getExternalHost(ctx)
+			require.Equal(ts.T(), c.expectedURL, externalURL.String())
 		})
 	}
 }
