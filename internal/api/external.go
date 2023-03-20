@@ -71,7 +71,9 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
 	flowStateID := ""
-	if flowType == PKCE {
+	codeChallenge := query.Get("code_challenge")
+	switch true {
+	case flowType == PKCE && codeChallenge != "" && codeChallengeMethodParam != "":
 		var codeChallengeMethod models.CodeChallengeMethod
 		switch strings.ToLower(codeChallengeMethodParam) {
 		case "plain":
@@ -81,7 +83,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		default:
 			return badRequestError("code challenge method is unsupported")
 		}
-		codeChallenge := query.Get("code_challenge")
 		if !isValidCodeChallenge(codeChallenge) {
 			return badRequestError("invalid code challenge")
 		}
@@ -92,8 +93,14 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		if err := a.db.Create(flowState); err != nil {
 			return err
 		}
-
 		flowStateID = flowState.ID.String()
+	case (flowType == PKCE && codeChallenge == "") || (flowType == PKCE && codeChallengeMethodParam == ""):
+		return badRequestError("code challenge and code challenge method are required to perform PKCE")
+	case flowType == "":
+		break
+	default:
+		// Should not reach here
+		return badRequestError("invalid request parameters")
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
