@@ -457,41 +457,59 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 func (a *API) Provider(ctx context.Context, name string, scopes string) (provider.Provider, error) {
 	config := a.config
 	name = strings.ToLower(name)
+	callbackURL := getExternalHost(ctx).String() + "/callback"
 
 	switch name {
 	case "apple":
+		config.External.Apple.RedirectURI = callbackURL
 		return provider.NewAppleProvider(config.External.Apple)
 	case "azure":
+		config.External.Azure.RedirectURI = callbackURL
 		return provider.NewAzureProvider(config.External.Azure, scopes)
 	case "bitbucket":
+		config.External.Bitbucket.RedirectURI = callbackURL
 		return provider.NewBitbucketProvider(config.External.Bitbucket)
 	case "discord":
+		config.External.Discord.RedirectURI = callbackURL
 		return provider.NewDiscordProvider(config.External.Discord, scopes)
 	case "github":
+		config.External.Github.RedirectURI = callbackURL
 		return provider.NewGithubProvider(config.External.Github, scopes)
 	case "gitlab":
+		config.External.Gitlab.RedirectURI = callbackURL
 		return provider.NewGitlabProvider(config.External.Gitlab, scopes)
 	case "google":
+		config.External.Google.RedirectURI = callbackURL
 		return provider.NewGoogleProvider(config.External.Google, scopes)
 	case "keycloak":
+		config.External.Keycloak.RedirectURI = callbackURL
 		return provider.NewKeycloakProvider(config.External.Keycloak, scopes)
 	case "linkedin":
+		config.External.Linkedin.RedirectURI = callbackURL
 		return provider.NewLinkedinProvider(config.External.Linkedin, scopes)
 	case "facebook":
+		config.External.Facebook.RedirectURI = callbackURL
 		return provider.NewFacebookProvider(config.External.Facebook, scopes)
 	case "notion":
+		config.External.Notion.RedirectURI = callbackURL
 		return provider.NewNotionProvider(config.External.Notion)
 	case "spotify":
+		config.External.Spotify.RedirectURI = callbackURL
 		return provider.NewSpotifyProvider(config.External.Spotify, scopes)
 	case "slack":
+		config.External.Slack.RedirectURI = callbackURL
 		return provider.NewSlackProvider(config.External.Slack, scopes)
 	case "twitch":
+		config.External.Twitch.RedirectURI = callbackURL
 		return provider.NewTwitchProvider(config.External.Twitch, scopes)
 	case "twitter":
+		config.External.Twitter.RedirectURI = callbackURL
 		return provider.NewTwitterProvider(config.External.Twitter, scopes)
 	case "workos":
+		config.External.WorkOS.RedirectURI = callbackURL
 		return provider.NewWorkOSProvider(config.External.WorkOS)
 	case "zoom":
+		config.External.Zoom.RedirectURI = callbackURL
 		return provider.NewZoomProvider(config.External.Zoom)
 	default:
 		return nil, fmt.Errorf("Provider %s could not be found", name)
