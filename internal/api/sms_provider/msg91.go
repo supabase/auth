@@ -48,7 +48,7 @@ import (
 // }
 
 const (
-	defaultMsg91ApiBase = "https://api.msg91.com/api/sendhttp.php?pluginsource=68"
+	defaultMsg91ApiBase = "https://api.msg91.com/api/sendhttp.php"
 )
 
 type Msg91Provider struct {
