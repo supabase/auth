@@ -4,6 +4,6 @@
 
 [[redirects]]
 from = "/*"
-to = "https://github.com/netlify/gotrue"
+to = "https://github.com/supabase/gotrue"
 status = 302
 force = true

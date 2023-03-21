@@ -1,6 +1,6 @@
 .PHONY: all build deps dev-deps image migrate test vet sec format unused
 CHECK_FILES?=./...
-FLAGS?=-ldflags "-X github.com/netlify/gotrue/utilities.Version=`git describe --tags`" -buildvcs=false
+FLAGS?=-ldflags "-X github.com/supabase/gotrue/internal/utilities.Version=`git describe --tags`" -buildvcs=false
 DEV_DOCKER_COMPOSE:=docker-compose-dev.yml
 
 help: ## Show this help.
@@ -16,6 +16,7 @@ dev-deps: ## Install developer dependencies
 	@go install github.com/gobuffalo/pop/soda@latest
 	@go install github.com/securego/gosec/v2/cmd/gosec@latest
 	@go install honnef.co/go/tools/cmd/staticcheck@latest
+	@go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
 
 deps: ## Install dependencies.
 	@go mod download
@@ -34,8 +35,8 @@ vet: # Vet the code
 	go vet $(CHECK_FILES)
 
 sec: dev-deps # Check for security vulnerabilities
-	gosec -quiet $(CHECK_FILES)
-	gosec -quiet -tests -exclude=G104 $(CHECK_FILES)
+	gosec -quiet -exclude-generated $(CHECK_FILES)
+	gosec -quiet -tests -exclude-generated -exclude=G104 $(CHECK_FILES)
 
 unused: dev-deps # Look for unused code
 	@echo "Unused code:"
@@ -45,8 +46,12 @@ unused: dev-deps # Look for unused code
 	
 	@echo "Code used only in _test.go (do move it in those files):"
 	staticcheck -checks U1000 -tests=false $(CHECK_FILES)
+
 static: dev-deps
 	staticcheck ./...
+
+generate: dev-deps
+	go generate ./...
 
 dev: ## Run the development containers
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up

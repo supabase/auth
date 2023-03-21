@@ -2,7 +2,7 @@
 package docs
 
 import (
-	"github.com/netlify/gotrue/api"
+	"github.com/supabase/gotrue/internal/api"
 )
 
 // swagger:route GET /admin/users admin admin-list-users

@@ -13,13 +13,18 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
     steps:
       - id: meta
         uses: docker/metadata-action@v4
         with:
           images: |
             supabase/gotrue
-            public.ecr.aws/t3w2s2c9/gotrue
+            public.ecr.aws/supabase/gotrue
+            ghcr.io/supabase/gotrue
             436098097459.dkr.ecr.us-east-1.amazonaws.com/gotrue
             646182064048.dkr.ecr.us-east-1.amazonaws.com/gotrue
           flavor: |
@@ -39,26 +44,36 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: configure aws credentials - prod
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.PROD_AWS_ROLE }}
+          aws-region: us-east-1
       - name: Login to ECR
         uses: docker/login-action@v2
         with:
           registry: public.ecr.aws
-          username: ${{ secrets.PROD_ACCESS_KEY_ID }}
-          password: ${{ secrets.PROD_SECRET_ACCESS_KEY }}
-
-      - name: Login to ECR account - staging
-        uses: docker/login-action@v2
-        with:
-          registry: 436098097459.dkr.ecr.us-east-1.amazonaws.com
-          username: ${{ secrets.DEV_ACCESS_KEY_ID }}
-          password: ${{ secrets.DEV_SECRET_ACCESS_KEY }}
-
       - name: Login to ECR account - prod
         uses: docker/login-action@v2
         with:
           registry: 646182064048.dkr.ecr.us-east-1.amazonaws.com
-          username: ${{ secrets.PROD_ACCESS_KEY_ID }}
-          password: ${{ secrets.PROD_SECRET_ACCESS_KEY }}
+
+      - name: configure aws credentials - staging
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.DEV_AWS_ROLE }}
+          aws-region: us-east-1
+      - name: Login to ECR account - staging
+        uses: docker/login-action@v2
+        with:
+          registry: 436098097459.dkr.ecr.us-east-1.amazonaws.com
+
+      - name: Login to GHCR
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: docker/build-push-action@v3
         with:

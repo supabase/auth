@@ -22,7 +22,7 @@ create table if not exists {{ index .Options "Namespace" }}.mfa_factors(
 );
 comment on table {{ index .Options "Namespace" }}.mfa_factors is 'auth: stores metadata about factors';
 
-create unique index mfa_factors_user_friendly_name_unique on {{ index .Options "Namespace" }}.mfa_factors (friendly_name, user_id) where trim(friendly_name) <> '';
+create unique index if not exists mfa_factors_user_friendly_name_unique on {{ index .Options "Namespace" }}.mfa_factors (friendly_name, user_id) where trim(friendly_name) <> '';
 
 -- auth.mfa_challenges definition
 create table if not exists {{ index .Options "Namespace" }}.mfa_challenges(

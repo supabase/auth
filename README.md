@@ -12,8 +12,8 @@ GoTrue is a user management and authentication server written in Go that powers
 - Sign in with external providers (Google, Apple, Facebook, Discord, ...)
 
 It is originally based on the excellent
-[GoTrue](https://github.com/netlify/gotrue) codebase by
-[Netlify](https://netlify.com), however both have diverged significantly in
+[GoTrue codebase by
+Netlify](https://github.com/netlify/gotrue), however both have diverged significantly in
 features and capabilities.
 
 ## Quick Start
@@ -768,7 +768,7 @@ Creates (POST) or Updates (PUT) the user based on the `user_id` specified. The `
 ```js
 headers:
 {
-  "Authorization": "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO" // admin role required
+  "Authorization": "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO" // requires a role claim that can be set in the GOTRUE_JWT_ADMIN_ROLES env var
 }
 
 body:
