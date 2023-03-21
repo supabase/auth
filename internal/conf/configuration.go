@@ -82,14 +82,9 @@ func (a *APIConfiguration) Validate() error {
 	if a.ExternalURL != "" {
 		// sometimes, in tests, ExternalURL is empty and we regard that
 		// as a valid value
-		u, err := url.ParseRequestURI(a.ExternalURL)
+		_, err := url.ParseRequestURI(a.ExternalURL)
 		if err != nil {
 			return err
-		}
-
-		if len(a.DomainAllowList) == 0 {
-			// for backward compatibility, always include the ExternalURL
-			a.DomainAllowList = []string{u.Host}
 		}
 	}
 
@@ -422,15 +417,19 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.External.AllowedIdTokenIssuers = append(config.External.AllowedIdTokenIssuers, "https://appleid.apple.com", "https://accounts.google.com")
 	}
 
-	if config.API.DomainAllowList != nil {
-		config.API.DomainAllowListMap = make(map[string]*url.URL)
-		for _, uri := range config.API.DomainAllowList {
-			u, err := url.ParseRequestURI(uri)
-			if err != nil {
-				return err
-			}
-			config.API.DomainAllowListMap[u.Host] = u
+	if config.API.DomainAllowList == nil && config.API.ExternalURL != "" {
+		// for backward compatibility, always include the ExternalURL in the DomainAllowList
+		config.API.DomainAllowList = []string{config.API.ExternalURL}
+	}
+
+	// Get the hostname and create a map of each hostname to URL
+	config.API.DomainAllowListMap = make(map[string]*url.URL)
+	for _, uri := range config.API.DomainAllowList {
+		u, err := url.ParseRequestURI(uri)
+		if err != nil {
+			return err
 		}
+		config.API.DomainAllowListMap[u.Host] = u
 	}
 
 	return nil
