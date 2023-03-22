@@ -92,6 +92,7 @@ func performPKCEAuthorizationRequest(ts *ExternalTestSuite, provider, codeChalle
 func performPKCEAuthorization(ts *ExternalTestSuite, provider, code, codeChallenge, codeChallengeMethod string) *url.URL {
 	w := performPKCEAuthorizationRequest(ts, provider, codeChallenge, codeChallengeMethod)
 	ts.Require().Equal(http.StatusFound, w.Code)
+	// Get code and state from the redirect
 	u, err := url.Parse(w.Header().Get("Location"))
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
@@ -102,7 +103,7 @@ func performPKCEAuthorization(ts *ExternalTestSuite, provider, code, codeChallen
 	v.Set("code", code)
 	v.Set("state", state)
 	testURL.RawQuery = v.Encode()
-	// Get request to callback endpoint, get back code
+	// Use the code to get a token
 	req := httptest.NewRequest(http.MethodGet, testURL.String(), nil)
 	w = httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)

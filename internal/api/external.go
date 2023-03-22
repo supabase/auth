@@ -48,6 +48,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	providerType := query.Get("provider")
 	scopes := query.Get("scopes")
 	flowType := query.Get("flow_type")
+	codeChallenge := query.Get("code_challenge")
 	codeChallengeMethodParam := query.Get("code_challenge_method")
 
 	p, err := a.Provider(ctx, providerType, scopes)
@@ -71,8 +72,9 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 
 	flowStateID := ""
-	codeChallenge := query.Get("code_challenge")
 	switch true {
+	case flowType == PKCE && (codeChallenge == "" || codeChallengeMethodParam == ""):
+		return badRequestError("code challenge and code challenge method are required to perform PKCE")
 	case flowType == PKCE && codeChallenge != "" && codeChallengeMethodParam != "":
 		var codeChallengeMethod models.CodeChallengeMethod
 		switch strings.ToLower(codeChallengeMethodParam) {
@@ -94,8 +96,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 			return err
 		}
 		flowStateID = flowState.ID.String()
-	case (flowType == PKCE && codeChallenge == "") || (flowType == PKCE && codeChallengeMethodParam == ""):
-		return badRequestError("code challenge and code challenge method are required to perform PKCE")
+	// Implicit Flow
 	case flowType == "":
 		break
 	default:
@@ -227,6 +228,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			}
 			flowState.ProviderAccessToken = providerAccessToken
 			flowState.ProviderRefreshToken = providerRefreshToken
+			// flowState stores UserID as *uuid.UUID
 			flowState.UserID = &(user.ID)
 
 			authCode = flowState.AuthCode

@@ -18,6 +18,9 @@ import (
 	"github.com/supabase/gotrue/internal/utilities"
 )
 
+const MinCodeChallengeLength = 43
+const MaxCodeChallengeLength = 128
+
 func addRequestID(globalConfig *conf.GlobalConfiguration) middlewareHandler {
 	return func(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 		id := ""
@@ -240,7 +243,7 @@ func isValidCodeChallenge(codeChallenge string) bool {
 	// See RFC 7636 Section 4.2: https://www.rfc-editor.org/rfc/rfc7636#section-4.2
 	hasValidChallengeChars := codeChallengePattern.MatchString
 	switch codeChallengeLength := len(codeChallenge); {
-	case codeChallengeLength < 43, codeChallengeLength > 128, !hasValidChallengeChars(codeChallenge):
+	case codeChallengeLength < MinCodeChallengeLength, codeChallengeLength > MaxCodeChallengeLength, !hasValidChallengeChars(codeChallenge):
 		return false
 	default:
 		return true
