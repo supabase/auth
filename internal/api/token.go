@@ -650,23 +650,21 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	if err := a.db.Destroy(flowState); err != nil {
-		return err
-	}
-
-	if token != nil {
 		token.ProviderAccessToken = flowState.ProviderAccessToken
 		// Because not all providers give out a refresh token
 		// See corresponding OAuth2 spec: <https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1>
 		if flowState.ProviderRefreshToken != "" {
 			token.ProviderRefreshToken = flowState.ProviderRefreshToken
 		}
+		if terr = tx.Destroy(flowState); terr != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
 	}
+
 	return sendJSON(w, http.StatusOK, token)
 
 }
