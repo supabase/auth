@@ -85,8 +85,8 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		default:
 			return badRequestError("code challenge method is unsupported")
 		}
-		if !isValidCodeChallenge(codeChallenge) {
-			return badRequestError("invalid code challenge")
+		if valid, err := isValidCodeChallenge(codeChallenge); !valid {
+			return err
 		}
 		flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethod)
 		if err != nil {
