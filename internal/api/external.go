@@ -171,6 +171,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var providerAccessToken string
 	var providerRefreshToken string
 	var grantParams models.GrantParams
+	var err error
 
 	if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
@@ -189,57 +190,19 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		providerAccessToken = oAuthResponseData.token
 		providerRefreshToken = oAuthResponseData.refreshToken
 	}
-	flowStateID := getFlowStateID(ctx)
+
+	var flowState *models.FlowState
 	// if there's a non-empty FlowStateID we perform PKCE Flow
-	if flowStateID != "" {
-		var authCode string
-
-		flowState, err := models.FindFlowStateByID(a.db, flowStateID)
+	if flowStateID := getFlowStateID(ctx); flowStateID != "" {
+		flowState, err = models.FindFlowStateByID(a.db, flowStateID)
 		if err != nil {
 			return err
 		}
-
-		err = db.Transaction(func(tx *storage.Connection) error {
-			user, terr := a.createAccountFromExternalIdentity(tx, r, userData, providerType)
-			if terr != nil {
-				if errors.Is(terr, errReturnNil) {
-					return nil
-				}
-
-				return terr
-			}
-			flowState.ProviderAccessToken = providerAccessToken
-			flowState.ProviderRefreshToken = providerRefreshToken
-			// flowState stores UserID as *uuid.UUID
-			flowState.UserID = &(user.ID)
-
-			authCode = flowState.AuthCode
-
-			if terr := a.db.Update(flowState); terr != nil {
-				return terr
-			}
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-
-		rurl := a.getExternalRedirectURL(r)
-		u, err := url.Parse(rurl)
-		if err != nil {
-			return err
-		}
-		q := u.Query()
-		q.Set("code", authCode)
-		u.RawQuery = q.Encode()
-
-		http.Redirect(w, r, u.String(), http.StatusFound)
-		return nil
 	}
 
 	var user *models.User
 	var token *AccessTokenResponse
-	err := db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		inviteToken := getInviteToken(ctx)
 		if inviteToken != "" {
@@ -255,7 +218,15 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				return terr
 			}
 		}
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+		if flowState != nil {
+			// This means that the callback is using PKCE
+			flowState.ProviderAccessToken = providerAccessToken
+			flowState.ProviderRefreshToken = providerRefreshToken
+			flowState.UserID = &(user.ID)
+			terr = tx.Update(flowState)
+		} else {
+			token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+		}
 
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
@@ -267,7 +238,13 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	}
 
 	rurl := a.getExternalRedirectURL(r)
-	if token != nil {
+	if flowState != nil {
+		// This means that the callback is using PKCE
+		// Set the flowState.AuthCode to the query param here
+		q := url.Values{}
+		q.Set("code", flowState.AuthCode)
+		rurl += "?" + q.Encode()
+	} else if token != nil {
 		q := url.Values{}
 		q.Set("provider_token", providerAccessToken)
 		// Because not all providers give out a refresh token
