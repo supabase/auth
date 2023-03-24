@@ -192,25 +192,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	flowStateID := getFlowStateID(ctx)
 	// if there's a non-empty FlowStateID we perform PKCE Flow
 	if flowStateID != "" {
-		var rq url.Values
 		var authCode string
-		if err := r.ParseForm(); r.Method == http.MethodPost && err == nil {
-			rq = r.Form
-		} else if err != nil {
-			return err
-		} else {
-			rq = r.URL.Query()
-		}
-
-		extError := rq.Get("error")
-		if extError != "" {
-			return oauthError(extError, rq.Get("error_description"))
-		}
-
-		providerOAuthCode := rq.Get("code")
-		if providerOAuthCode == "" {
-			return badRequestError("provider authorization code missing")
-		}
 
 		flowState, err := models.FindFlowStateByID(a.db, flowStateID)
 		if err != nil {
