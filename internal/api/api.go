@@ -85,7 +85,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 	r.Route("/callback", func(r *router) {
 		r.UseBypass(logger)
-		r.Use(api.loadOAuthState)
+		r.Use(api.loadFlowState)
 
 		r.Get("/", api.ExternalProviderCallback)
 		r.Post("/", api.ExternalProviderCallback)

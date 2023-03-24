@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"regexp"
 
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
@@ -16,6 +17,9 @@ import (
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/utilities"
 )
+
+const MinCodeChallengeLength = 43
+const MaxCodeChallengeLength = 128
 
 func addRequestID(globalConfig *conf.GlobalConfiguration) middlewareHandler {
 	return func(w http.ResponseWriter, r *http.Request) (context.Context, error) {
@@ -231,4 +235,19 @@ func isStringInSlice(checkValue string, list []string) bool {
 // getBodyBytes returns a byte array of the request's Body.
 func getBodyBytes(req *http.Request) ([]byte, error) {
 	return utilities.GetBodyBytes(req)
+}
+
+var codeChallengePattern = regexp.MustCompile("^[a-zA-Z-._~0-9]+$")
+
+func isValidCodeChallenge(codeChallenge string) (bool, error) {
+	// See RFC 7636 Section 4.2: https://www.rfc-editor.org/rfc/rfc7636#section-4.2
+	hasValidChallengeChars := codeChallengePattern.MatchString
+	switch codeChallengeLength := len(codeChallenge); {
+	case codeChallengeLength < MinCodeChallengeLength, codeChallengeLength > MaxCodeChallengeLength:
+		return false, badRequestError("code challenge has to be between %v and %v characters", MinCodeChallengeLength, MaxCodeChallengeLength)
+	case !hasValidChallengeChars(codeChallenge):
+		return false, badRequestError("code challenge can only contain alphanumeric characters, hyphens, periods, underscores and tildes")
+	default:
+		return true, nil
+	}
 }

@@ -2,6 +2,8 @@ package api
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -131,6 +133,56 @@ func (ts *TokenTestSuite) TestTokenPasswordGrantFailure() {
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+}
+
+func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
+	authCode := "1234563"
+	codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
+	invalidAuthCode := authCode + "123"
+	invalidVerifier := codeVerifier + "123"
+	codeChallenge := sha256.Sum256([]byte(codeVerifier))
+	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
+	flowState, err := models.NewFlowState("github", challenge, models.SHA256)
+	require.NoError(ts.T(), err)
+	flowState.AuthCode = authCode
+	require.NoError(ts.T(), ts.API.db.Create(flowState))
+	cases := []struct {
+		desc             string
+		authCode         string
+		codeVerifier     string
+		grantType        string
+		expectedHTTPCode int
+	}{
+		{
+			desc:         "Invalid Authcode",
+			authCode:     invalidAuthCode,
+			codeVerifier: codeVerifier,
+		},
+		{
+			desc:         "Invalid code verifier",
+			authCode:     authCode,
+			codeVerifier: invalidVerifier,
+		},
+		{
+			desc:         "Invalid auth code and verifier",
+			authCode:     invalidAuthCode,
+			codeVerifier: invalidVerifier,
+		},
+	}
+	for _, v := range cases {
+		ts.Run(v.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"code_verifier": v.codeVerifier,
+				"auth_code":     v.authCode,
+			}))
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=oauth_pkce", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), http.StatusForbidden, w.Code)
+		})
+	}
 }
 
 func (ts *TokenTestSuite) TestTokenRefreshTokenGrantFailure() {

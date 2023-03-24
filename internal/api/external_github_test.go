@@ -1,6 +1,10 @@
 package api
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -75,6 +79,80 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHub_AuthorizationCode() {
 	u := performAuthorization(ts, "github", code, "")
 
 	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "github@example.com", "GitHub Test", "123", "http://example.com/avatar")
+}
+
+func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
+	tokenCount, userCount := 0, 0
+	code := "authcode"
+
+	// for the plain challenge method, the code verifier == code challenge
+	// code challenge has to be between 43 - 128 chars for the plain challenge method
+	codeVerifier := "testtesttesttesttesttesttesttesttesttesttesttesttesttest"
+
+	emails := `[{"email":"github@example.com", "primary": true, "verified": true}]`
+	server := GitHubTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
+	defer server.Close()
+
+	cases := []struct {
+		desc                string
+		codeChallengeMethod string
+	}{
+		{
+			desc:                "SHA256",
+			codeChallengeMethod: "s256",
+		},
+		{
+			desc:                "Plain",
+			codeChallengeMethod: "plain",
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var codeChallenge string
+			if c.codeChallengeMethod == "s256" {
+				hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
+				codeChallenge = base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
+			} else {
+				codeChallenge = codeVerifier
+			}
+			// Check for valid auth code returned
+			u := performPKCEAuthorization(ts, "github", code, codeChallenge, c.codeChallengeMethod)
+			m, err := url.ParseQuery(u.RawQuery)
+			authCode := m["code"][0]
+			require.NoError(ts.T(), err)
+			require.NotEmpty(ts.T(), authCode)
+
+			// Check for valid provider access token, mock does not return refresh toekn
+			user, err := models.FindUserByEmailAndAudience(ts.API.db, "github@example.com", ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+			require.NotEmpty(ts.T(), user)
+			flowState, err := models.FindFlowStateByAuthCode(ts.API.db, authCode)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), "github_token", flowState.ProviderAccessToken)
+
+			// Exchange Auth Code for token
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"code_verifier": codeVerifier,
+				"auth_code":     authCode,
+			}))
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=oauth_pkce", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
+
+			// Validate that access token and provider tokens are present
+			data := AccessTokenResponse{}
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			require.NotEmpty(ts.T(), data.Token)
+			require.NotEmpty(ts.T(), data.RefreshToken)
+			require.NotEmpty(ts.T(), data.ProviderAccessToken)
+			require.Equal(ts.T(), data.User.ID, user.ID)
+		})
+	}
+
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalGitHubDisableSignupErrorWhenNoUser() {

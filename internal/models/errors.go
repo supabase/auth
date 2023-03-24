@@ -25,6 +25,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case SAMLRelayStateNotFoundError, *SAMLRelayStateNotFoundError:
 		return true
+	case FlowStateNotFoundError, *FlowStateNotFoundError:
+		return true
 	}
 	return false
 }
@@ -104,4 +106,12 @@ type SAMLRelayStateNotFoundError struct{}
 
 func (e SAMLRelayStateNotFoundError) Error() string {
 	return "SAML RelayState not found"
+}
+
+// FlowStateNotFoundError represents an error when an FlowState can't be
+// found.
+type FlowStateNotFoundError struct{}
+
+func (e FlowStateNotFoundError) Error() string {
+	return "Flow State not found"
 }
