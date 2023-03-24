@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	"fmt"
+	"encoding/base64"
 	"strings"
 	"time"
 
@@ -643,10 +643,10 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection) error {
 
 // SoftDeleteUser performs a soft deletion on the user by obfuscating and clearing certain fields
 func (u *User) SoftDeleteUser(tx *storage.Connection) error {
-	u.Email = storage.NullString(obfuscateFieldForSoftDelete(u.GetEmail()))
-	u.Phone = storage.NullString(obfuscateFieldForSoftDelete(u.GetPhone()))
-	u.EmailChange = obfuscateFieldForSoftDelete(u.EmailChange)
-	u.PhoneChange = obfuscateFieldForSoftDelete(u.PhoneChange)
+	u.Email = storage.NullString(obfuscateEmail(u, u.GetEmail()))
+	u.Phone = storage.NullString(obfuscatePhone(u, u.GetPhone()))
+	u.EmailChange = obfuscateEmail(u, u.EmailChange)
+	u.PhoneChange = obfuscatePhone(u, u.PhoneChange)
 	u.EncryptedPassword = ""
 	u.ConfirmationToken = ""
 	u.RecoveryToken = ""
@@ -720,7 +720,7 @@ func (u *User) SoftDeleteUserIdentities(tx *storage.Connection) error {
 			"update "+
 				(&pop.Model{Value: Identity{}}).TableName()+
 				" set id = ? where id = ? and provider = ?",
-			obfuscateFieldForSoftDelete(identity.ID),
+			obfuscateIdentityId(identity),
 			identity.ID,
 			identity.Provider,
 		).Exec(); err != nil {
@@ -730,10 +730,20 @@ func (u *User) SoftDeleteUserIdentities(tx *storage.Connection) error {
 	return nil
 }
 
-func obfuscateFieldForSoftDelete(field string) string {
-	if field != "" {
-		softDeleteId, _ := crypto.GenerateNanoId(5)
-		return fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(field)))
-	}
-	return field
+func obfuscateValue(id uuid.UUID, value string) string {
+	hash := sha256.Sum256([]byte(id.String() + value))
+	return base64.RawURLEncoding.EncodeToString(hash[:])
+}
+
+func obfuscateEmail(u *User, email string) string {
+	return obfuscateValue(u.ID, email)
+}
+
+func obfuscatePhone(u *User, phone string) string {
+	// Field converted from VARCHAR(15) to text
+	return obfuscateValue(u.ID, phone)[:15]
+}
+
+func obfuscateIdentityId(identity *Identity) string {
+	return obfuscateValue(identity.UserID, identity.Provider+":"+identity.ID)
 }
