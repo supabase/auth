@@ -17,15 +17,17 @@ type OtpParams struct {
 	Email      string                 `json:"email"`
 	Phone      string                 `json:"phone"`
 	CreateUser bool                   `json:"create_user"`
+	FlowType   string                 `json:"flow_type"`
 	Data       map[string]interface{} `json:"data"`
 	Channel    string                 `json:"channel"`
 }
 
 // SmsParams contains the request body params for sms otp
 type SmsParams struct {
-	Phone   string                 `json:"phone"`
-	Channel string                 `json:"channel"`
-	Data    map[string]interface{} `json:"data"`
+	Phone    string                 `json:"phone"`
+	Channel  string                 `json:"channel"`
+	Data     map[string]interface{} `json:"data"`
+	FlowType string                 `json:"flow_type"`
 }
 
 // Otp returns the MagicLink or SmsOtp handler based on the request body params
@@ -51,6 +53,13 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	if params.Email != "" && params.Channel != "" {
 		return badRequestError("Channel should only be specified with Phone OTP")
 	}
+	// For backwards compatibility, we default to implicit if flow_type is not specified
+	// if params.FlowType != "implicit" && params.FlowType != "pkce" {
+	// 	return badRequestError("Invalid flow_type")
+	// }
+	// if params.FlowType == "" {
+	// 	params.FlowType = "implicit"
+	// }
 
 	if ok, err := a.shouldCreateUser(r, params); !ok {
 		return badRequestError("Signups not allowed for otp")

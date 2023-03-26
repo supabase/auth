@@ -232,3 +232,12 @@ func isStringInSlice(checkValue string, list []string) bool {
 func getBodyBytes(req *http.Request) ([]byte, error) {
 	return utilities.GetBodyBytes(req)
 }
+
+func addPrefixToToken(token, flowType string) string {
+	if flowType == "pkce" {
+		return "pkce" + "_" + token
+	} else if flowType == "implicit" {
+		return token
+	}
+	return token
+}

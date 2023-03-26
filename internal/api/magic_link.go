@@ -15,8 +15,9 @@ import (
 
 // MagicLinkParams holds the parameters for a magic link request
 type MagicLinkParams struct {
-	Email string                 `json:"email"`
-	Data  map[string]interface{} `json:"data"`
+	Email    string                 `json:"email"`
+	FlowType string                 `json:"flow_type"`
+	Data     map[string]interface{} `json:"data"`
 }
 
 // MagicLink sends a recovery email
@@ -35,7 +36,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
-
+	// TODO validate flow_type here
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
 	}
@@ -113,7 +114,8 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
-		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength)
+		// Check the flow type here
+		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, params.FlowType)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {
