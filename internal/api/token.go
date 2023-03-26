@@ -610,6 +610,7 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
+	// TODO(Joel) - Add additional check to ensure that flow state type matches
 	// Sanity check in case user ID was not set properly
 	if models.IsNotFoundError(err) || flowState.UserID == nil {
 		return forbiddenError("invalid oauth state, please ensure oauth redirect has successfully completed")

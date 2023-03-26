@@ -73,6 +73,7 @@ paths:
               - refresh_token
               - id_token
               - oauth_pkce
+              - magic_link_pkce
       security:
         - APIKeyAuth: []
       requestBody:
@@ -190,6 +191,24 @@ paths:
           schema:
             type: string
             format: uri
+        - name: flow_type
+          in: query
+          schema:
+            type: string
+            enum:
+              - pkce
+              - implicit
+          description: >
+           Can be implicit or PKCE. TODO - touch up on this description
+        - name: code_challenge_method:
+          in: query
+          description: >
+            Can be s256 or plain
+          schema:
+            type: enum
+            enum:
+              - s256
+              - plain
       security:
         - APIKeyAuth: []
       responses:
@@ -234,6 +253,20 @@ paths:
                   format: uri
                   description: >
                     (Optional) URL to redirect back into the app on after verification completes successfully. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
+                flow_type:
+                  type: string
+                  enum:
+                    - pkce
+                    - implicit
+                  description: >
+                    (Optional) defaults to implicit -> Add more
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - s256
+                    - plain
+                  description: >
+                    (Optional) Fill in details here
       responses:
         200:
           description: An access and refresh token.
