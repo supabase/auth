@@ -188,6 +188,7 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	assert.Equal(ts.T(), "unauthorized_client", f.Get("error"))
 }
 
+// TODO(Joel) - include PKCE cases
 func (ts *VerifyTestSuite) TestInvalidOtp() {
 	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "12345678", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
@@ -720,3 +721,5 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 		})
 	}
 }
+
+// TODO - test verify valid PKCE OTP

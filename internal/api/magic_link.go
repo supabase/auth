@@ -111,6 +111,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
+		// TODO - if isPKCE then send a code and return instead
 
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
