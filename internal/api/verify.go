@@ -206,10 +206,12 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		default:
 			return unprocessableEntityError("Unsupported verification type")
 		}
-
 		if terr != nil {
 			return terr
 		}
+		// TODO create flow state and store type of flow state. If flow state is PKCE, return here and don't proceed with issuing a refresh
+		// token. The client will need to call the token endpoint to get a refresh token.
+
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 		if terr != nil {
 			return terr
@@ -454,6 +456,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		if err != nil {
 			return nil, err
 		}
+		// Generate PKCE token or non-pkce token depending on flowType
 		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
 		switch params.Type {
 		case phoneChangeVerification:
