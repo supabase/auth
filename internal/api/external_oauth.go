@@ -17,11 +17,12 @@ type OAuthProviderData struct {
 	userData     *provider.UserProvidedData
 	token        string
 	refreshToken string
+	code         string
 }
 
-// loadOAuthState parses the `state` query parameter as a JWS payload,
+// loadFlowState parses the `state` query parameter as a JWS payload,
 // extracting the provider requested
-func (a *API) loadOAuthState(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+func (a *API) loadFlowState(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	var state string
 	if r.Method == http.MethodPost {
 		state = r.FormValue("state")
@@ -100,6 +101,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		userData:     userData,
 		token:        token.AccessToken,
 		refreshToken: token.RefreshToken,
+		code:         oauthCode,
 	}, nil
 }
 

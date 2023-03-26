@@ -72,6 +72,7 @@ paths:
               - password
               - refresh_token
               - id_token
+              - oauth_pkce
       security:
         - APIKeyAuth: []
       requestBody:
@@ -85,6 +86,10 @@ paths:
               grant_type=refresh_token:
                 value:
                   refresh_token: 4nYUCw0wZR_DNOTSDbSGMQ
+              grant_type=oauth_pkce:
+                value:
+                  auth_code: 009e5066-fc11-4eca-8c8c-6fd82aa263f2
+                  code_verifier: ktPNXpR65N6JtgzQA8_5HHtH6PBSAahMNoLKRzQEa0Tzgl.vdV~b6lPk004XOd.4lR0inCde.NoQx5K63xPfzL8o7tJAjXncnhw5Niv9ycQ.QRV9JG.y3VapqbgLfIrJ
             schema:
               type: object
               description: |-
@@ -117,6 +122,11 @@ paths:
                   type: string
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
+                auth_code:
+                  type: string
+                  format: uuid
+                code_verifier:
+                  type: string
       responses:
         200:
           description: >
@@ -269,6 +279,22 @@ paths:
           schema:
             type: string
             format: uri
+        - name: flow_type
+          in: query
+          description: (Optional) OAuth flow used for authorization. When not specified, `implicit` is used. Given that `pkce` is a more secure option, it is recommended that users of this API use `pkce`.
+          schema:
+            type: string
+            enum:
+              - pkce
+              - implicit
+        - name: code_challenge_method
+          in: query
+          description: (Optional) Method used to encrypt the verifier. Can be `plain` (no transformation) or `s256` (where SHA-256 is used). It is always recommended that `s256` is used.
+          schema:
+            type: string
+            enum:
+              - plain
+              - s256
       responses:
         302:
           $ref: "#/components/responses/OAuthAuthorizeRedirectResponse"
