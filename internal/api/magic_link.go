@@ -111,7 +111,21 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
-		// TODO - if isPKCE then send a code and return instead
+		// TODO - if it has the isPKCE param then create a flow state
+		if params.FlowType == "pkce" {
+			// TODO (joel) modify so code challenge is passed in
+			codeChallengeMethod := models.SHA256
+			providerType := "gotrue"
+			codeChallenge := "test"
+			flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethod)
+			if err != nil {
+				return err
+			}
+			flowState.UserID = &(user.ID)
+			if err := tx.UpdateOnly(flowState); err != nil {
+				return err
+			}
+		}
 
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)

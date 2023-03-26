@@ -604,6 +604,36 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 	}
 }
 
+func (ts *VerifyTestSuite) TestVerifyValidPKCEOtp() {
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	u.EmailChange = "new@example.com"
+	u.Phone = "12345678"
+	u.PhoneChange = "1234567890"
+	u.ConfirmationToken = fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetEmail()+"123456")))
+	sentTime := time.Now()
+	u.ConfirmationSentAt = &sentTime
+
+	require.NoError(ts.T(), ts.API.db.Update(u))
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"type":      emailOTPVerification,
+		"flow_type": "pkce",
+		"token":     "123456",
+		"email":     u.GetEmail(),
+	}))
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Setup response recorder
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
 func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)

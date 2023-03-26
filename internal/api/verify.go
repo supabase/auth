@@ -49,6 +49,7 @@ type VerifyParams struct {
 	Token      string `json:"token"`
 	Email      string `json:"email"`
 	Phone      string `json:"phone"`
+	FlowType   string `json:"flow_type"`
 	RedirectTo string `json:"redirect_to"`
 }
 
@@ -70,6 +71,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 	params := &VerifyParams{}
 	params.Token = r.FormValue("token")
+	params.FlowType = r.FormValue("flow_type")
 	params.Type = r.FormValue("type")
 	params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
 
@@ -173,6 +175,10 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	if params.Type == "" {
 		return badRequestError("Verify requires a verification type")
 	}
+	// TODO (Joel) - Change this to throw an error if not speicifed
+	if params.FlowType == "" {
+		params.FlowType = "implicit"
+	}
 
 	var (
 		user        *models.User
@@ -212,19 +218,27 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		// TODO create flow state and store type of flow state. If flow state is PKCE, return here and don't proceed with issuing a refresh
 		// token. The client will need to call the token endpoint to get a refresh token.
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
-		if terr != nil {
-			return terr
-		}
+		if params.FlowType == "implicit" {
+			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
+			if terr != nil {
+				return terr
+			}
 
-		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-			return internalServerError("Failed to set JWT cookie. %s", terr)
+			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+				return internalServerError("Failed to set JWT cookie. %s", terr)
+			}
 		}
+		// TODO(Joel) - include else caluse here which checks for flow state as well as the method
 		return nil
 	})
 
 	if err != nil {
 		return err
+	}
+	if params.FlowType == "pkce" {
+		return sendJSON(w, http.StatusOK, map[string]string{
+			"token": "test",
+		})
 	}
 	return sendJSON(w, http.StatusOK, token)
 }
@@ -456,8 +470,13 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		if err != nil {
 			return nil, err
 		}
-		// Generate PKCE token or non-pkce token depending on flowType
-		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
+		if params.FlowType == "pkce" {
+			tokenHash = fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
+		} else {
+			// Generate PKCE token or non-pkce token depending on flowType
+			tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
+		}
+
 		switch params.Type {
 		case phoneChangeVerification:
 			user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
@@ -471,7 +490,12 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		if err != nil {
 			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}
-		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))
+		if params.FlowType == "pkce" {
+			tokenHash = fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))
+		} else {
+			// Generate PKCE token or non-pkce token depending on flowType
+			tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))
+		}
 		switch params.Type {
 		case emailChangeVerification:
 			user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)

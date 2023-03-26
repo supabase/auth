@@ -38,6 +38,7 @@ func (ts *OtpTestSuite) SetupTest() {
 
 }
 
+// TODO (Joel) - Add a case for otp with pkce - it should generate  a valid magic link
 func (ts *OtpTestSuite) TestOtp() {
 	// Configured to allow testing of invalid channel params
 	ts.Config.External.Phone.Enabled = true
