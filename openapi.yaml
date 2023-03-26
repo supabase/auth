@@ -200,15 +200,6 @@ paths:
               - implicit
           description: >
            Can be implicit or PKCE. TODO - touch up on this description
-        - name: code_challenge_method:
-          in: query
-          description: >
-            Can be s256 or plain
-          schema:
-            type: enum
-            enum:
-              - s256
-              - plain
       security:
         - APIKeyAuth: []
       responses:
@@ -260,13 +251,6 @@ paths:
                     - implicit
                   description: >
                     (Optional) defaults to implicit -> Add more
-                code_challenge_method:
-                  type: string
-                  enum:
-                    - s256
-                    - plain
-                  description: >
-                    (Optional) Fill in details here
       responses:
         200:
           description: An access and refresh token.
@@ -555,6 +539,16 @@ paths:
                   type: boolean
                 data:
                   type: object
+                flow_type:
+                  type: string
+                  enum:
+                    - pkce
+                    - implicit
+                code_challenge_method:
+                  type: enum
+                  enum:
+                    - s256
+                    - plain
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:
