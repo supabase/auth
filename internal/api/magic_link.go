@@ -18,6 +18,8 @@ type MagicLinkParams struct {
 	Email    string                 `json:"email"`
 	FlowType string                 `json:"flow_type"`
 	Data     map[string]interface{} `json:"data"`
+	CodeChallenge string `json:"code_challenge"`
+	CodeChallengeMethod string `json:"code_challenge_method"`
 }
 
 func (p *MagicLinkParams) Validate() error {
@@ -119,13 +121,12 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
-		// TODO - if it has the isPKCE param then create a flow state
 		if params.FlowType == "pkce" {
-			// TODO (joel) modify so code challenge is passed in
+			// TODO (joel) handle the conversion from string to enum
 			codeChallengeMethod := models.SHA256
+			// TODO - figure out what's a reasonabl filler value for provider type
 			providerType := "gotrue"
-			codeChallenge := "test"
-			flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethod)
+			flowState, err := models.NewFlowState(providerType, params.CodeChallenge, codeChallengeMethod)
 			if err != nil {
 				return err
 			}
@@ -145,6 +146,10 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
 		}
 		return internalServerError("Error sending magic link").WithInternalError(err)
+	}
+	if params.FlowType == "pkce" {
+		// TODO - Change this into a redirect
+		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
 
 	return sendJSON(w, http.StatusOK, make(map[string]string))

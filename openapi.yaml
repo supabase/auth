@@ -549,6 +549,8 @@ paths:
                   enum:
                     - s256
                     - plain
+                code_challenge:
+                  type: string
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:
