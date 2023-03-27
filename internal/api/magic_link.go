@@ -121,6 +121,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
+		flowStateID := ""
 		if params.FlowType == "pkce" {
 			// TODO (joel) handle the conversion from string to enum
 			codeChallengeMethod := models.SHA256
@@ -134,12 +135,13 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			if err := tx.UpdateOnly(flowState); err != nil {
 				return err
 			}
+			flowStateID = flowState.ID.String()
 		}
 
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
 		// Check the flow type here
-		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, params.FlowType)
+		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, flowStateID)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {

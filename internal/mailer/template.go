@@ -268,7 +268,6 @@ func (m *TemplateMailer) MagicLinkMail(user *models.User, otp, referrerURL, flow
 		"TokenHash":       user.RecoveryToken,
 		"Data":            user.UserMetaData,
 	}
-
 	return m.Mailer.Mail(
 		user.GetEmail(),
 		string(withDefault(m.Config.Mailer.Subjects.MagicLink, "Your Magic Link")),

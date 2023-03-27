@@ -337,6 +337,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending magic link email")
 	}
+
 	u.RecoverySentAt = &now
 	return errors.Wrap(tx.UpdateOnly(u, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
 }
