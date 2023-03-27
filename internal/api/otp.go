@@ -70,15 +70,12 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	if err = json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
+
 	if err := params.Validate(); err != nil {
 		return err
 	}
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
-	}
-	// For backwards compatibility, we default to SMS if params Channel is not specified
-	if params.Phone != "" && params.Channel == "" {
-		params.Channel = sms_provider.SMSProvider
 	}
 
 	if ok, err := a.shouldCreateUser(r, params); !ok {
@@ -116,6 +113,10 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read sms otp params: %v", err)
+	}
+	// For backwards compatibility, we default to SMS if params Channel is not specified
+	if params.Phone != "" && params.Channel == "" {
+		params.Channel = sms_provider.SMSProvider
 	}
 
 	if err := params.Validate(*config); err != nil {
