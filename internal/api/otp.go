@@ -8,6 +8,7 @@ import (
 
 	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/gotrue/internal/api/sms_provider"
+	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
 )
@@ -38,6 +39,20 @@ func (p *OtpParams) Validate() error {
 	return nil
 }
 
+func (p *SmsParams) Validate(config conf.GlobalConfiguration) error {
+	if p.Phone != "" && !sms_provider.IsValidMessageChannel(p.Channel, config) {
+		return badRequestError(InvalidChannelError)
+	}
+
+	var err error
+	p.Phone, err = validatePhone(p.Phone)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Otp returns the MagicLink or SmsOtp handler based on the request body params
 func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	params := &OtpParams{
@@ -55,8 +70,12 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	if err = json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
+
 	if err := params.Validate(); err != nil {
 		return err
+	}
+	if params.Data == nil {
+		params.Data = make(map[string]interface{})
 	}
 
 	if ok, err := a.shouldCreateUser(r, params); !ok {
@@ -99,16 +118,8 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	if params.Phone != "" && params.Channel == "" {
 		params.Channel = sms_provider.SMSProvider
 	}
-	if params.Phone != "" && !sms_provider.IsValidMessageChannel(params.Channel, *config) {
-		return badRequestError(InvalidChannelError)
-	}
 
-	if params.Data == nil {
-		params.Data = make(map[string]interface{})
-	}
-
-	params.Phone, err = validatePhone(params.Phone)
-	if err != nil {
+	if err := params.Validate(*config); err != nil {
 		return err
 	}
 
