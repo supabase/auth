@@ -93,8 +93,8 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if err := params.Validate(); err != nil {
-			return err
+		if terr := params.Validate(); terr != nil {
+			return terr
 		}
 
 		params.Token = strings.ReplaceAll(params.Token, "-", "")
