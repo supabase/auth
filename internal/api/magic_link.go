@@ -50,7 +50,6 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
-
 	if err := params.Validate(); err != nil {
 		return err
 	}

@@ -185,7 +185,6 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-
 	params.Token = strings.ReplaceAll(params.Token, "-", "")
 
 	var (

@@ -15,12 +15,14 @@ import (
 
 // OtpParams contains the request body params for the otp endpoint
 type OtpParams struct {
-	Email      string                 `json:"email"`
-	Phone      string                 `json:"phone"`
-	CreateUser bool                   `json:"create_user"`
-	FlowType   string                 `json:"flow_type"`
-	Data       map[string]interface{} `json:"data"`
-	Channel    string                 `json:"channel"`
+	Email               string                 `json:"email"`
+	Phone               string                 `json:"phone"`
+	CreateUser          bool                   `json:"create_user"`
+	FlowType            string                 `json:"flow_type"`
+	Data                map[string]interface{} `json:"data"`
+	Channel             string                 `json:"channel"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
+	CodeChallenge       string                 `json:"code_challenge"`
 }
 
 // SmsParams contains the request body params for sms otp
@@ -63,20 +65,10 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
 	}
-	// TODO(Joel)- Change this to be a hard requirement and move to Validate() function similar to
-	// ResendConfirmationParams
+	// TODO(Joel)- Change this to be a hard requirement and move to Validate() function
 	if params.FlowType == "" {
 		params.FlowType = "implicit"
 	}
-
-	// For backwards compatibility, we default to implicit if flow_type is not specified
-	// if params.FlowType != "implicit" && params.FlowType != "pkce" {
-	// 	return badRequestError("Invalid flow_type")
-	// }
-	// if params.FlowType == "" {
-	//
-	// 	params.FlowType = "implicit"
-	// }
 
 	body, err := getBodyBytes(r)
 	if err != nil {
