@@ -118,7 +118,8 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-
+		// TODO (joel) if isPKCE redirect to the given URL without issuing token, also set auth code
+		// which is obtained by searching for flow state
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 
 		if terr != nil {
@@ -236,6 +237,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if params.FlowType == "pkce" {
+		// TODO (Joel) - Check if it makes sense to return on the POST /verify case
 		return sendJSON(w, http.StatusOK, map[string]string{
 			"token": "test",
 		})

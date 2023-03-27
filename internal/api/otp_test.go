@@ -39,6 +39,36 @@ func (ts *OtpTestSuite) SetupTest() {
 }
 
 // TODO (Joel) - Add a case for otp with pkce - it should generate  a valid magic link
+// TODO (Joel) - write a custom .Validate() method for PKCE speicfic set of params`
+func (ts *OtpTestSuite) TestOtpPKCE() {
+	ts.Config.External.Phone.Enabled = true
+	// Code Verifier must be specified with Code Challenge
+	var buffer bytes.Buffer
+	params := OtpParams{
+		Email:      "test@example.com",
+		CreateUser: true,
+		FlowType:   "pkce",
+		Data: map[string]interface{}{
+			"somedata": "metadata",
+		},
+	}
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(params))
+
+	req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	data := make(map[string]interface{})
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+	// TODO (Joel) - Possibly remove this later since these are implementation details
+	// Check that code has been created with pkce_ prefix
+
+}
+
 func (ts *OtpTestSuite) TestOtp() {
 	// Configured to allow testing of invalid channel params
 	ts.Config.External.Phone.Enabled = true

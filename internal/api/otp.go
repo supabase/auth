@@ -38,6 +38,20 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
 	}
+	// TODO(Joel)- Change this to be a hard requirement and move to Validate() function similar to
+	// ResendConfirmationParams
+	if params.FlowType == "" {
+		params.FlowType = "implicit"
+	}
+
+	// For backwards compatibility, we default to implicit if flow_type is not specified
+	// if params.FlowType != "implicit" && params.FlowType != "pkce" {
+	// 	return badRequestError("Invalid flow_type")
+	// }
+	// if params.FlowType == "" {
+	//
+	// 	params.FlowType = "implicit"
+	// }
 
 	body, err := getBodyBytes(r)
 	if err != nil {
@@ -53,13 +67,6 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	if params.Email != "" && params.Channel != "" {
 		return badRequestError("Channel should only be specified with Phone OTP")
 	}
-	// For backwards compatibility, we default to implicit if flow_type is not specified
-	// if params.FlowType != "implicit" && params.FlowType != "pkce" {
-	// 	return badRequestError("Invalid flow_type")
-	// }
-	// if params.FlowType == "" {
-	// 	params.FlowType = "implicit"
-	// }
 
 	if ok, err := a.shouldCreateUser(r, params); !ok {
 		return badRequestError("Signups not allowed for otp")
