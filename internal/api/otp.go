@@ -30,6 +30,16 @@ type SmsParams struct {
 	FlowType string                 `json:"flow_type"`
 }
 
+func (p *OtpParams) Validate() error {
+	if p.Email != "" && p.Phone != "" {
+		return badRequestError("Only an email address or phone number should be provided")
+	}
+	if p.Email != "" && p.Channel != "" {
+		return badRequestError("Channel should only be specified with Phone OTP")
+	}
+	return nil
+}
+
 // Otp returns the MagicLink or SmsOtp handler based on the request body params
 func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	params := &OtpParams{
@@ -61,11 +71,8 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	if err = json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
-	if params.Email != "" && params.Phone != "" {
-		return badRequestError("Only an email address or phone number should be provided")
-	}
-	if params.Email != "" && params.Channel != "" {
-		return badRequestError("Channel should only be specified with Phone OTP")
+	if err := params.Validate(); err != nil {
+		return err
 	}
 
 	if ok, err := a.shouldCreateUser(r, params); !ok {
