@@ -49,13 +49,7 @@ func (p *SmsParams) Validate(config conf.GlobalConfiguration) error {
 	if err != nil {
 		return err
 	}
-	if p.Data == nil {
-		p.Data = make(map[string]interface{})
-	}
-	// For backwards compatibility, we default to SMS if params Channel is not specified
-	if p.Phone != "" && p.Channel == "" {
-		p.Channel = sms_provider.SMSProvider
-	}
+
 	return nil
 }
 
@@ -78,6 +72,13 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	}
 	if err := params.Validate(); err != nil {
 		return err
+	}
+	if params.Data == nil {
+		params.Data = make(map[string]interface{})
+	}
+	// For backwards compatibility, we default to SMS if params Channel is not specified
+	if params.Phone != "" && params.Channel == "" {
+		params.Channel = sms_provider.SMSProvider
 	}
 
 	if ok, err := a.shouldCreateUser(r, params); !ok {

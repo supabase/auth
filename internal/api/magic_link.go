@@ -28,9 +28,7 @@ func (p *MagicLinkParams) Validate() error {
 	if err != nil {
 		return err
 	}
-	if p.Data == nil {
-		p.Data = make(map[string]interface{})
-	}
+
 	return nil
 }
 
@@ -55,6 +53,9 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	if params.Data == nil {
+		params.Data = make(map[string]interface{})
+	}
 	var isNewUser bool
 	aud := a.requestAud(ctx, r)
 	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
