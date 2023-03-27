@@ -8,6 +8,7 @@ import (
 
 	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/gotrue/internal/api/sms_provider"
+	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
 )
@@ -34,6 +35,26 @@ func (p *OtpParams) Validate() error {
 	}
 	if p.Email != "" && p.Channel != "" {
 		return badRequestError("Channel should only be specified with Phone OTP")
+	}
+	return nil
+}
+
+func (p *SmsParams) Validate(config conf.GlobalConfiguration) error {
+	if p.Phone != "" && !sms_provider.IsValidMessageChannel(p.Channel, config) {
+		return badRequestError(InvalidChannelError)
+	}
+
+	var err error
+	p.Phone, err = validatePhone(p.Phone)
+	if err != nil {
+		return err
+	}
+	if p.Data == nil {
+		p.Data = make(map[string]interface{})
+	}
+	// For backwards compatibility, we default to SMS if params Channel is not specified
+	if p.Phone != "" && p.Channel == "" {
+		p.Channel = sms_provider.SMSProvider
 	}
 	return nil
 }
@@ -95,20 +116,8 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read sms otp params: %v", err)
 	}
-	// For backwards compatibility, we default to SMS if params Channel is not specified
-	if params.Phone != "" && params.Channel == "" {
-		params.Channel = sms_provider.SMSProvider
-	}
-	if params.Phone != "" && !sms_provider.IsValidMessageChannel(params.Channel, *config) {
-		return badRequestError(InvalidChannelError)
-	}
 
-	if params.Data == nil {
-		params.Data = make(map[string]interface{})
-	}
-
-	params.Phone, err = validatePhone(params.Phone)
-	if err != nil {
+	if err := params.Validate(*config); err != nil {
 		return err
 	}
 
