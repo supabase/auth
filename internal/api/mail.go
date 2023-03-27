@@ -311,7 +311,7 @@ func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, ma
 	return errors.Wrap(tx.UpdateOnly(u, "reauthentication_token", "reauthentication_sent_at"), "Database error updating user for reauthentication")
 }
 
-func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int, flowType string) error {
+func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int, flowStateID string) error {
 	var err error
 	// since Magic Link is just a recovery with a different template and behaviour
 	// around new users we will reuse the recovery db timer to prevent potential abuse
@@ -324,16 +324,22 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 		return err
 	}
 	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	var flowType string
+	// TODO(Joel): Find a way to refactor this
+	if flowStateID != "" {
+		flowType = "pkce"
+	} else {
+		flowType = "implicit"
+	}
 	u.RecoveryToken = addPrefixToToken(token, flowType)
 	now := time.Now()
-	if err := mailer.MagicLinkMail(u, otp, referrerURL); err != nil {
+	if err := mailer.MagicLinkMail(u, otp, referrerURL, flowStateID); err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending magic link email")
 	}
 	u.RecoverySentAt = &now
 	return errors.Wrap(tx.UpdateOnly(u, "recovery_token", "recovery_sent_at"), "Database error updating user for recovery")
 }
-
 
 // sendEmailChange sends out an email change token to the new email.
 func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int, flowType string) error {

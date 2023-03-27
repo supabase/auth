@@ -15,11 +15,11 @@ import (
 
 // MagicLinkParams holds the parameters for a magic link request
 type MagicLinkParams struct {
-	Email    string                 `json:"email"`
-	FlowType string                 `json:"flow_type"`
-	Data     map[string]interface{} `json:"data"`
-	CodeChallenge string `json:"code_challenge"`
-	CodeChallengeMethod string `json:"code_challenge_method"`
+	Email               string                 `json:"email"`
+	FlowType            string                 `json:"flow_type"`
+	Data                map[string]interface{} `json:"data"`
+	CodeChallenge       string                 `json:"code_challenge"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
 }
 
 func (p *MagicLinkParams) Validate() error {
@@ -147,11 +147,6 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		}
 		return internalServerError("Error sending magic link").WithInternalError(err)
 	}
-	if params.FlowType == "pkce" {
-		// TODO - Change this into a redirect
-		return sendJSON(w, http.StatusOK, make(map[string]string))
-	}
-
 	return sendJSON(w, http.StatusOK, make(map[string]string))
 }
 

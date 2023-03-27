@@ -248,10 +248,15 @@ func (m *TemplateMailer) RecoveryMail(user *models.User, otp, referrerURL string
 }
 
 // MagicLinkMail sends a login link mail
-func (m *TemplateMailer) MagicLinkMail(user *models.User, otp, referrerURL string) error {
+func (m *TemplateMailer) MagicLinkMail(user *models.User, otp, referrerURL, flowStateID string) error {
 	redirectParam := encodeRedirectParam(referrerURL)
 
-	url, err := getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=magiclink"+redirectParam)
+	fragment := "token=" + user.RecoveryToken + "&type=magiclink" + redirectParam
+	if flowStateID != "" {
+		fragment = fragment + "&flow_id=" + flowStateID
+	}
+
+	url, err := getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, fragment)
 	if err != nil {
 		return err
 	}
