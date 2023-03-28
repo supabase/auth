@@ -131,8 +131,9 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecoveryPKCE() {
 }
 func (ts *VerifyTestSuite) TestMagicLinkPKCE() {
 	// Create User
-	_, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), u.Confirm(ts.API.db))
 
 	// Request body
 	var buffer bytes.Buffer
@@ -152,24 +153,24 @@ func (ts *VerifyTestSuite) TestMagicLinkPKCE() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-	// u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	// require.NoError(ts.T(), err)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
 
-	// assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
-	// assert.False(ts.T(), u.IsConfirmed())
+	flowState, err := models.FindFlowStateByUserID(ts.API.db, u.ID.String())
+	require.NoError(ts.T(), err)
 
-	// reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", recoveryVerification, u.RecoveryToken)
-	// req = httptest.NewRequest(http.MethodGet, reqURL, nil)
+	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s&flow_type=pkce&flow_state_id=%s", magicLinkVerification, u.ConfirmationToken, flowState.ID)
+	req = httptest.NewRequest(http.MethodGet, reqURL, nil)
 
-	// w = httptest.NewRecorder()
-	// ts.API.handler.ServeHTTP(w, req)
-	// assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
 
-	// u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	// require.NoError(ts.T(), err)
-	// assert.True(ts.T(), u.IsConfirmed())
-	// _, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	// require.NoError(ts.T(), err)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	assert.True(ts.T(), u.IsConfirmed())
+	_, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
 
 }
 

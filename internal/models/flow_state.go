@@ -90,6 +90,19 @@ func FindFlowStateByID(tx *storage.Connection, id string) (*FlowState, error) {
 	return obj, nil
 }
 
+// TODO(joel) - find a better place to plop this
+func FindFlowStateByUserID(tx *storage.Connection, id string) (*FlowState, error) {
+	obj := &FlowState{}
+	if err := tx.Eager().Q().Where("user_id = ?", id).First(obj); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, FlowStateNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding oauth state")
+	}
+
+	return obj, nil
+}
+
 func (f *FlowState) VerifyPKCE(codeChallenge, codeVerifier string) error {
 	switch f.CodeChallengeMethod {
 	case SHA256.String():

@@ -132,7 +132,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			flowState.UserID = &(user.ID)
-			if err := tx.UpdateOnly(flowState); err != nil {
+			if err := tx.Create(flowState); err != nil {
 				return err
 			}
 			flowStateID = flowState.ID.String()
