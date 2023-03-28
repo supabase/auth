@@ -165,6 +165,14 @@ func (u *User) GetPhone() string {
 	return string(u.Phone)
 }
 
+// GetName returns the user's name as a string
+func (u *User) GetName() string {
+	if u.UserMetaData == nil || u.UserMetaData["name"] == nil {
+		return u.GetEmail()
+	}
+	return u.UserMetaData["name"].(string)
+}
+
 // UpdateUserMetaData sets all user data from a map of updates,
 // ensuring that it doesn't override attributes that are not
 // in the provided map.
