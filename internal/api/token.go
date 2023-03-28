@@ -3,8 +3,6 @@ package api
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -88,7 +86,6 @@ type PKCEGrantParams struct {
 
 const useCookieHeader = "x-use-cookie"
 const InvalidLoginMessage = "Invalid login credentials"
-const InvalidCodeChallengeError = "code challenge does not match previously saved code verifier"
 
 func (p *IdTokenGrantParams) getVerifier(ctx context.Context, config *conf.GlobalConfiguration) (*oidc.IDTokenVerifier, error) {
 	var provider *oidc.Provider
@@ -623,24 +620,8 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return err
 	}
-
-	codeChallenge := flowState.CodeChallenge
-	codeVerifier := params.CodeVerifier
-
-	switch flowState.CodeChallengeMethod {
-	case models.SHA256.String():
-		hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
-		encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
-		if subtle.ConstantTimeCompare([]byte(codeChallenge), []byte(encodedCodeVerifier)) != 1 {
-			return forbiddenError(InvalidCodeChallengeError)
-		}
-	case models.Plain.String():
-		if subtle.ConstantTimeCompare([]byte(codeChallenge), []byte(codeVerifier)) != 1 {
-			return forbiddenError(InvalidCodeChallengeError)
-		}
-	default:
-		return forbiddenError("code challenge method not supported")
-
+	if err := flowState.VerifyPKCE(flowState.CodeChallenge, params.CodeVerifier); err != nil {
+		return forbiddenError(err.Error())
 	}
 
 	var token *AccessTokenResponse
