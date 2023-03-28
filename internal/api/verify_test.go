@@ -129,10 +129,47 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecoveryPKCE() {
 	assert.True(ts.T(), u.IsConfirmed())
 	// TODO check that there's an auth code returned
 }
-func (ts *VerifyTestSuite) TestVerifyGetPKCESignup() {
+func (ts *VerifyTestSuite) TestMagicLinkPKCE() {
 	// Create User
 	_, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
+
+	// Request body
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":                 "test@example.com",
+		"flow_type":             "pkce",
+		"code_challenge_method": "S256",
+		"code_challenge":        "testtesttesttesttesttesttesttest",
+	}))
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/otp", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Setup response recorder
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	// require.NoError(ts.T(), err)
+
+	// assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
+	// assert.False(ts.T(), u.IsConfirmed())
+
+	// reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", recoveryVerification, u.RecoveryToken)
+	// req = httptest.NewRequest(http.MethodGet, reqURL, nil)
+
+	// w = httptest.NewRecorder()
+	// ts.API.handler.ServeHTTP(w, req)
+	// assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
+
+	// u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	// require.NoError(ts.T(), err)
+	// assert.True(ts.T(), u.IsConfirmed())
+	// _, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	// require.NoError(ts.T(), err)
 
 }
 
@@ -801,5 +838,3 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 		})
 	}
 }
-
-// TODO - test verify valid PKCE OTP

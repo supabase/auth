@@ -82,6 +82,17 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 	}
 }
 
+func isPKCEFlow(flowType, flowStateID string, db *storage.Connection) (bool, error) {
+	if flowStateID == "" {
+		return false, nil
+	}
+	flowState, err := models.FindFlowStateByID(db, flowStateID)
+	if models.IsNotFoundError(err) {
+		return false, err
+	}
+	return strings.ToLower(flowType) == "pkce" && flowState.AuthCode != "", err
+}
+
 func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -91,7 +102,6 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	params.Type = r.FormValue("type")
 	params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
 	params.FlowStateID = r.FormValue("flow_state_id")
-	isPKCE := params.FlowStateID != ""
 
 	var (
 		user        *models.User
@@ -99,6 +109,11 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		err         error
 		token       *AccessTokenResponse
 	)
+
+	isPKCE, err := isPKCEFlow(params.FlowType, params.FlowStateID, db)
+	if err != nil {
+		return err
+	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -442,19 +457,14 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 
 	var user *models.User
 	var err error
-	// TODO - Update here to handle PKCE case
-	// Add additional checks for code verifier
-	//
-	//
-	// if code verifier is valid, then append pkce_ to the token param
-
+	token := addPrefixToToken(params.Token, params.FlowType)
 	switch params.Type {
 	case signupVerification, inviteVerification:
-		user, err = models.FindUserByConfirmationToken(conn, params.Token)
+		user, err = models.FindUserByConfirmationToken(conn, token)
 	case recoveryVerification, magicLinkVerification:
-		user, err = models.FindUserByRecoveryToken(conn, params.Token)
+		user, err = models.FindUserByRecoveryToken(conn, token)
 	case emailChangeVerification:
-		user, err = models.FindUserByEmailChangeToken(conn, params.Token)
+		user, err = models.FindUserByEmailChangeToken(conn, token)
 	default:
 		return nil, badRequestError("Invalid email verification type")
 	}
