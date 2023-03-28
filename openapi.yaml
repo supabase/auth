@@ -200,6 +200,12 @@ paths:
               - implicit
           description: >
            Can be implicit or PKCE. TODO - touch up on this description
+        - FlowStateID: string
+          in: query
+          schema:
+            type: string
+          description: >
+            (Optional) Matches the flow state / sign in request to the corresponding endpoint.
       security:
         - APIKeyAuth: []
       responses:

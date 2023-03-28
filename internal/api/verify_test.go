@@ -129,6 +129,12 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecoveryPKCE() {
 	assert.True(ts.T(), u.IsConfirmed())
 	// TODO check that there's an auth code returned
 }
+func (ts *VerifyTestSuite) TestVerifyGetPKCESignup() {
+	// Create User
+	_, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+}
 
 func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)

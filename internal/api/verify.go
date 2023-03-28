@@ -45,12 +45,13 @@ const singleConfirmationAccepted = "Confirmation link accepted. Please proceed t
 
 // VerifyParams are the parameters the Verify endpoint accepts
 type VerifyParams struct {
-	Type       string `json:"type"`
-	Token      string `json:"token"`
-	Email      string `json:"email"`
-	Phone      string `json:"phone"`
-	FlowType   string `json:"flow_type"`
-	RedirectTo string `json:"redirect_to"`
+	Type        string `json:"type"`
+	Token       string `json:"token"`
+	Email       string `json:"email"`
+	Phone       string `json:"phone"`
+	FlowType    string `json:"flow_type"`
+	RedirectTo  string `json:"redirect_to"`
+	FlowStateID string `json:"flow_state_id"`
 }
 
 func (p *VerifyParams) Validate() error {
@@ -87,9 +88,10 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 	params := &VerifyParams{}
 	params.Token = r.FormValue("token")
-	params.FlowType = r.FormValue("flow_type")
 	params.Type = r.FormValue("type")
 	params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
+	params.FlowStateID = r.FormValue("flow_state_id")
+	isPKCE := params.FlowStateID != ""
 
 	var (
 		user        *models.User
@@ -133,14 +135,16 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		}
 		// TODO (joel) if isPKCE redirect to the given URL without issuing token, also set auth code
 		// which is obtained by searching for flow state
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
+		if !isPKCE {
+			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 
-		if terr != nil {
-			return terr
-		}
+			if terr != nil {
+				return terr
+			}
 
-		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-			return internalServerError("Failed to set JWT cookie. %s", terr)
+			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+				return internalServerError("Failed to set JWT cookie. %s", terr)
+			}
 		}
 		return nil
 	})
@@ -155,11 +159,22 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	rurl := params.RedirectTo
-	if token != nil {
+	if token != nil && !isPKCE {
 		q := url.Values{}
 		q.Set("type", params.Type)
 
 		rurl = token.AsRedirectURL(rurl, q)
+	} else if isPKCE {
+		q := url.Values{}
+		q.Set("type", params.Type)
+		flowState, err := models.FindFlowStateByID(db, params.FlowStateID)
+		if err != nil {
+			return err
+		}
+		q.Set("code", flowState.AuthCode)
+	} else {
+		// TODO(joel) - better error message here
+		return internalServerError("failed to redirect")
 	}
 
 	http.Redirect(w, r, rurl, http.StatusSeeOther)
@@ -427,6 +442,11 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 
 	var user *models.User
 	var err error
+	// TODO - Update here to handle PKCE case
+	// Add additional checks for code verifier
+	//
+	//
+	// if code verifier is valid, then append pkce_ to the token param
 
 	switch params.Type {
 	case signupVerification, inviteVerification:
@@ -463,6 +483,7 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 	if isExpired {
 		return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(errRedirectWithQuery)
 	}
+
 	return user, nil
 }
 
