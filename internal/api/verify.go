@@ -97,16 +97,16 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 	}
 }
 
-// func isPKCEFlow(flowType, flowStateID string, db *storage.Connection) (bool, error) {
-// 	if flowStateID == "" {
-// 		return false, nil
-// 	}
-// 	flowState, err := models.FindFlowStateByID(db, flowStateID)
-// 	if models.IsNotFoundError(err) {
-// 		return false, err
-// 	}
-// 	return strings.ToLower(flowType) == models.PKCEFlow.String() && flowState.AuthCode != "", err
-// }
+func isPKCEFlow(flowType, flowStateID string, db *storage.Connection) (bool, error) {
+	if flowStateID == "" {
+		return false, nil
+	}
+	flowState, err := models.FindFlowStateByID(db, flowStateID)
+	if models.IsNotFoundError(err) {
+		return false, err
+	}
+	return strings.ToLower(flowType) == models.PKCEFlow.String() && flowState.AuthCode != "", err
+}
 
 func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -133,11 +133,10 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	isPKCE := false
-	//isPKCEFlow(params.FlowType, params.FlowStateID,  db)
-	//if err != nil {
-	//	return err
-	// }
+	isPKCE, err := isPKCEFlow(params.FlowType, params.FlowStateID, db)
+	if err != nil {
+		return err
+	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -169,8 +168,6 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		// TODO (joel) if isPKCE redirect to the given URL without issuing token, also set auth code
-		// which is obtained by searching for flow state
 		if !isPKCE {
 			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 
