@@ -614,7 +614,7 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	} else if err != nil {
 		return err
 	}
-	if flowState.CreatedAt.After(time.Now().Add(a.config.External.FlowStateExpiryDuration)) {
+	if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
 		return forbiddenError("invalid oauth state, oauth state has expired")
 	}
 
