@@ -8,7 +8,6 @@ import (
 
 	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/gotrue/internal/api/sms_provider"
-	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
 )
