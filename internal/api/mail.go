@@ -233,6 +233,7 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 	if u.ConfirmationSentAt != nil && !u.ConfirmationSentAt.Add(maxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
 	}
+	// TODO - change what's sent based on type of email
 	oldToken := u.ConfirmationToken
 	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
@@ -250,6 +251,7 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 
 func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, referrerURL string, otpLength int) error {
 	var err error
+	// TODO - Don't add PKCE to this now
 	oldToken := u.ConfirmationToken
 	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
@@ -277,6 +279,7 @@ func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, maile
 	if err != nil {
 		return err
 	}
+	// todo - modify token based on type
 	u.RecoveryToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	now := time.Now()
 	if err := mailer.RecoveryMail(u, otp, referrerURL); err != nil {

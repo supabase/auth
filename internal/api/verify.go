@@ -63,10 +63,16 @@ func (p *VerifyParams) Validate() error {
 		return badRequestError("Verify requires a verification type")
 	}
 
-	// TODO (Joel) - Change this to throw an error if not speicifed
-	if p.FlowType == "" {
-		p.FlowType = "implicit"
+	// TODO (Joel) - Change this to throw an error if not specified
+	switch true {
+	case p.Type == inviteVerification && p.FlowType == "pkce":
+		return badRequestError("PKCE flow not supported on invite at the moment")
+	case p.Type == recoveryVerification && p.FlowType == "pkce":
+		return badRequestError("PKCE flow not supported on recovery at the moment")
+	case p.Type == emailChangeVerification && p.FlowType == "pkce":
+		return badRequestError("PKCE flow not supported on email change at the moment")
 	}
+
 	return nil
 }
 
@@ -114,9 +120,6 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	// TODO - Add a check for expiry on PKCE flowState
-
-
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -230,6 +233,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		aud := a.requestAud(ctx, r)
+		// Find by flowState.ID, check if has expired
 		user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
 		if terr != nil {
 			return terr
