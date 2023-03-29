@@ -45,6 +45,23 @@ func (authMethod CodeChallengeMethod) String() string {
 	return ""
 }
 
+type FlowType int
+
+const (
+	PKCEFlow FlowType = iota
+	ImplicitFlow
+)
+
+func (flowType FlowType) String() string {
+	switch flowType {
+	case PKCEFlow:
+		return "pkce"
+	case ImplicitFlow:
+		return "implicit"
+	}
+	return ""
+}
+
 func (FlowState) TableName() string {
 	tableName := "flow_state"
 	return tableName

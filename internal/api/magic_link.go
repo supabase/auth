@@ -31,7 +31,9 @@ func (p *MagicLinkParams) Validate() error {
 	if err != nil {
 		return err
 	}
-	// TODO: Validate flow type here
+	if p.FlowType != models.ImplicitFlow.String() && p.FlowType != models.PKCEFlow.String() {
+		return badRequestError(InvalidFlowTypeErrorMessage)
+	}
 
 	return nil
 }
@@ -51,6 +53,9 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	err := jsonDecoder.Decode(params)
 	if err != nil {
 		return badRequestError("Could not read verification params: %v", err)
+	}
+	if params.FlowType == "" {
+		params.FlowType = models.ImplicitFlow.String()
 	}
 	if err := params.Validate(); err != nil {
 		return err

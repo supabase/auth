@@ -207,7 +207,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	config := a.config
 	params := &VerifyParams{}
-	isPKCE := params.FlowType == "pkce"
+	isPKCE := params.FlowType == models.PKCEFlow.String()
 
 	body, err := getBodyBytes(r)
 	if err != nil {
@@ -273,7 +273,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
 		}
-		// TODO(Joel) - include else caluse here which checks for flow state as well as the method
+		// TODO(Joel) - include else clause here which checks for flow state as well as the method
 		return nil
 	})
 
@@ -281,7 +281,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if isPKCE {
-		// TODO (Joel) - Check if it makes sense to return on the POST /verify case
+		// TODO - return flow state(?)
 		return sendJSON(w, http.StatusOK, map[string]string{
 			"token": "test",
 		})

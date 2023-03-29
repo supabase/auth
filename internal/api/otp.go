@@ -33,12 +33,17 @@ type SmsParams struct {
 	FlowType string                 `json:"flow_type"`
 }
 
+const InvalidFlowTypeErrorMessage = "Invalid flow type. Flow Type must be either implicit or pkce"
+
 func (p *OtpParams) Validate() error {
 	if p.Email != "" && p.Phone != "" {
 		return badRequestError("Only an email address or phone number should be provided")
 	}
 	if p.Email != "" && p.Channel != "" {
 		return badRequestError("Channel should only be specified with Phone OTP")
+	}
+	if p.FlowType != models.PKCEFlow.String() && p.FlowType != models.ImplicitFlow.String() {
+		return badRequestError(InvalidFlowTypeErrorMessage)
 	}
 	return nil
 }
@@ -65,9 +70,8 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
 	}
-	// TODO(Joel)- Change this to be a hard requirement and move to Validate() function
 	if params.FlowType == "" {
-		params.FlowType = "implicit"
+		params.FlowType = models.ImplicitFlow.String()
 	}
 
 	body, err := getBodyBytes(r)
@@ -77,6 +81,9 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 
 	if err = json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
+	}
+	if params.FlowType == "" {
+		params.FlowType = models.ImplicitFlow.String()
 	}
 
 	if err := params.Validate(); err != nil {
