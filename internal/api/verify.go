@@ -114,6 +114,9 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	// TODO - Add a check for expiry on PKCE flowState
+
+
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -201,6 +204,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	config := a.config
 	params := &VerifyParams{}
+	isPKCE := params.FlowType == "pkce"
 
 	body, err := getBodyBytes(r)
 	if err != nil {
@@ -255,7 +259,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		// TODO create flow state and store type of flow state. If flow state is PKCE, return here and don't proceed with issuing a refresh
 		// token. The client will need to call the token endpoint to get a refresh token.
 
-		if params.FlowType == "implicit" {
+		if !isPKCE {
 			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 			if terr != nil {
 				return terr
@@ -272,7 +276,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if params.FlowType == "pkce" {
+	if isPKCE {
 		// TODO (Joel) - Check if it makes sense to return on the POST /verify case
 		return sendJSON(w, http.StatusOK, map[string]string{
 			"token": "test",
@@ -509,13 +513,8 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		if err != nil {
 			return nil, err
 		}
-		if params.FlowType == "pkce" {
-			tokenHash = fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
-		} else {
-			// Generate PKCE token or non-pkce token depending on flowType
-			tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
-		}
-
+		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
+		tokenHash = addPrefixToToken(tokenHash, params.FlowType)
 		switch params.Type {
 		case phoneChangeVerification:
 			user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
@@ -529,12 +528,8 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		if err != nil {
 			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}
-		if params.FlowType == "pkce" {
-			tokenHash = fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))
-		} else {
-			// Generate PKCE token or non-pkce token depending on flowType
-			tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))
-		}
+		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))
+		tokenHash = addPrefixToToken(tokenHash, params.FlowType)
 		switch params.Type {
 		case emailChangeVerification:
 			user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
