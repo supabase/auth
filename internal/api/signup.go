@@ -28,6 +28,19 @@ type SignupParams struct {
 	Channel  string                 `json:"channel"`
 }
 
+func (p *SignupParams) Validate(passwordMinLength int) error {
+	if p.Password == "" {
+		return unprocessableEntityError("Signup requires a valid password")
+	}
+	if len(p.Password) < passwordMinLength {
+		return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", passwordMinLength))
+	}
+	if p.Email != "" && p.Phone != "" {
+		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
+	}
+	return nil
+}
+
 // Signup is the endpoint for registering a new user
 func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -49,15 +62,10 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read Signup params: %v", err)
 	}
 
-	if params.Password == "" {
-		return unprocessableEntityError("Signup requires a valid password")
+	if err := params.Validate(a.config.PasswordMinLength); err != nil {
+		return err
 	}
-	if len(params.Password) < config.PasswordMinLength {
-		return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", config.PasswordMinLength))
-	}
-	if params.Email != "" && params.Phone != "" {
-		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
-	}
+
 	if params.Email != "" {
 		params.Provider = "email"
 	} else if params.Phone != "" {
@@ -72,7 +80,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		params.Channel = sms_provider.SMSProvider
 	}
 
-	if params.Provider == "phone" && !sms_provider.IsValidMessageChannel(params.Channel, *config) {
+	if params.Provider == "phone" && !sms_provider.IsValidMessageChannel(params.Channel, config.Sms.Provider) {
 		return badRequestError(InvalidChannelError)
 	}
 

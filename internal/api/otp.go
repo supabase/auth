@@ -40,7 +40,7 @@ func (p *OtpParams) Validate() error {
 }
 
 func (p *SmsParams) Validate(config conf.GlobalConfiguration) error {
-	if p.Phone != "" && !sms_provider.IsValidMessageChannel(p.Channel, config) {
+	if p.Phone != "" && !sms_provider.IsValidMessageChannel(p.Channel, config.Sms.Provider) {
 		return badRequestError(InvalidChannelError)
 	}
 
