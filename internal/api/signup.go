@@ -26,6 +26,7 @@ type SignupParams struct {
 	Provider string                 `json:"-"`
 	Aud      string                 `json:"-"`
 	Channel  string                 `json:"channel"`
+	FlowType string                 `json:"flow_type"`
 }
 
 // Signup is the endpoint for registering a new user
@@ -47,6 +48,12 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read Signup params: %v", err)
+	}
+	if params.FlowType == "" {
+		params.FlowType = models.ImplicitFlow.String()
+	}
+	if params.FlowType != models.ImplicitFlow.String() && params.FlowType != models.PKCEFlow.String() {
+		return badRequestError(InvalidFlowTypeErrorMessage)
 	}
 
 	if params.Password == "" {
