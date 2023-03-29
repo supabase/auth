@@ -67,12 +67,19 @@ func (p *VerifyParams) Validate() error {
 	}
 
 	switch true {
-	case p.Type == inviteVerification && p.FlowType == "pkce":
-		return badRequestError("PKCE flow not supported on invite at the moment")
-	case p.Type == recoveryVerification && p.FlowType == "pkce":
+	case p.FlowType == models.ImplicitFlow.String():
+		break
+	case p.Type == magicLinkVerification && p.FlowType == models.PKCEFlow.String():
+		break
+	case p.Type == recoveryVerification && p.FlowType == models.PKCEFlow.String():
 		return badRequestError("PKCE flow not supported on recovery at the moment")
-	case p.Type == emailChangeVerification && p.FlowType == "pkce":
+	case p.Type == emailChangeVerification && p.FlowType == models.PKCEFlow.String():
 		return badRequestError("PKCE flow not supported on email change at the moment")
+	case p.Type == smsVerification && p.FlowType == models.PKCEFlow.String():
+		break
+	default:
+		return badRequestError("flow not supported with PKCE at this time")
+
 	}
 
 	return nil

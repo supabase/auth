@@ -58,6 +58,9 @@ func (p *SmsParams) Validate(config conf.GlobalConfiguration) error {
 	if err != nil {
 		return err
 	}
+	if p.FlowType != models.PKCEFlow.String() && p.FlowType != models.ImplicitFlow.String() {
+		return badRequestError(InvalidFlowTypeErrorMessage)
+	}
 
 	return nil
 }
@@ -132,6 +135,9 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	// For backwards compatibility, we default to SMS if params Channel is not specified
 	if params.Phone != "" && params.Channel == "" {
 		params.Channel = sms_provider.SMSProvider
+	}
+	if params.FlowType == "" {
+		params.FlowType = models.ImplicitFlow.String()
 	}
 
 	if err := params.Validate(*config); err != nil {
