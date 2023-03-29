@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/storage"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -43,6 +44,16 @@ func (authMethod CodeChallengeMethod) String() string {
 		return "plain"
 	}
 	return ""
+}
+
+func ParseCodeChallengeMethod(authMethod string) (CodeChallengeMethod, error) {
+	switch strings.ToLower(authMethod) {
+	case "s256":
+		return SHA256, nil
+	case "plain":
+		return Plain, nil
+	}
+	return -1, errors.New("invalid code challenge method")
 }
 
 type FlowType int
