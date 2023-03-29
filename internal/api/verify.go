@@ -62,6 +62,9 @@ func (p *VerifyParams) Validate() error {
 	if p.Type == "" {
 		return badRequestError("Verify requires a verification type")
 	}
+	if p.FlowType != models.PKCEFlow.String() && p.FlowType != models.ImplicitFlow.String() {
+		return badRequestError(InvalidFlowTypeErrorMessage)
+	}
 
 	switch true {
 	case p.Type == inviteVerification && p.FlowType == "pkce":
@@ -216,7 +219,9 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
-
+	if params.FlowType == "" {
+		params.FlowType = models.ImplicitFlow.String()
+	}
 	if err := params.Validate(); err != nil {
 		return err
 	}
@@ -228,6 +233,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		grantParams models.GrantParams
 		token       *AccessTokenResponse
 	)
+	var flowState *models.FlowState
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -236,6 +242,15 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
 		if terr != nil {
 			return terr
+		}
+		// Still possible to check if token is valid before flow state is expired
+		flowState, err := models.FindFlowStateByUserID(db, user.ID.String())
+		if err != nil {
+			return err
+		}
+
+		if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
+			return badRequestError("Flow state is expired")
 		}
 
 		switch params.Type {
@@ -275,11 +290,12 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	if isPKCE {
-		// TODO - return auth code and possibly flow_state?
+	if isPKCE && flowState.AuthCode != "" {
 		return sendJSON(w, http.StatusOK, map[string]string{
-			"code": "test",
+			"code": flowState.AuthCode,
 		})
+	} else if isPKCE {
+		return internalServerError("failed to generate authcode")
 	}
 	return sendJSON(w, http.StatusOK, token)
 }
