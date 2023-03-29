@@ -62,7 +62,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read Signup params: %v", err)
 	}
 
-	if err := params.Validate(a.config.PasswordMinLength); err != nil {
+	if err := params.Validate(config.PasswordMinLength); err != nil {
 		return err
 	}
 
