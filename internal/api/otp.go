@@ -39,8 +39,8 @@ func (p *OtpParams) Validate() error {
 	return nil
 }
 
-func (p *SmsParams) Validate(config conf.GlobalConfiguration) error {
-	if p.Phone != "" && !sms_provider.IsValidMessageChannel(p.Channel, config.Sms.Provider) {
+func (p *SmsParams) Validate(smsProvider string) error {
+	if p.Phone != "" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
 		return badRequestError(InvalidChannelError)
 	}
 
@@ -119,7 +119,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		params.Channel = sms_provider.SMSProvider
 	}
 
-	if err := params.Validate(*config); err != nil {
+	if err := params.Validate(config.Sms.Provider); err != nil {
 		return err
 	}
 
