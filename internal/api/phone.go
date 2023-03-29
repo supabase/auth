@@ -43,7 +43,7 @@ func formatPhoneNumber(phone string) string {
 }
 
 // sendPhoneConfirmation sends an otp to the user's phone number
-func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string) error {
+func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string, flowType models.FlowType) error {
 	config := a.config
 
 	var token *string
@@ -77,7 +77,12 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	if err != nil {
 		return internalServerError("error generating otp").WithInternalError(err)
 	}
-	*token = fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
+	tempToken := fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
+	fmt.Println("here")
+	fmt.Println(tempToken)
+	fmt.Println(flowType.String())
+	*token = addPrefixToToken(tempToken, flowType.String())
+	fmt.Println(tempToken)
 
 	var message string
 	if config.Sms.Template == "" {

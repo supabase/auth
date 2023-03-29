@@ -143,6 +143,10 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	if err := params.Validate(*config); err != nil {
 		return err
 	}
+	flowType, err := models.ParseFlowType(params.FlowType)
+	if err != nil {
+		return err
+	}
 
 	var isNewUser bool
 	aud := a.requestAud(ctx, r)
@@ -213,7 +217,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return badRequestError("Error sending sms: %v", terr)
 		}
-		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); err != nil {
+		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel, flowType); err != nil {
 			return badRequestError("Error sending sms otp: %v", err)
 		}
 		return nil

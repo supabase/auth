@@ -73,6 +73,16 @@ func (flowType FlowType) String() string {
 	return ""
 }
 
+func ParseFlowType(flowType string) (FlowType, error) {
+	switch strings.ToLower(flowType) {
+	case "pkce":
+		return PKCEFlow, nil
+	case "implicit":
+		return ImplicitFlow, nil
+	}
+	return -1, errors.New("invalid flow type")
+}
+
 func (FlowState) TableName() string {
 	tableName := "flow_state"
 	return tableName
