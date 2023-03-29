@@ -127,11 +127,11 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 		flowStateID := ""
-		if params.FlowType == "pkce" {
+		if params.FlowType == models.PKCEFlow.String() {
 			// TODO (joel) handle the conversion from string to enum
 			codeChallengeMethod := models.SHA256
 			// TODO - figure out what's a reasonabl filler value for provider type
-			providerType := "gotrue"
+			providerType := "magiclink"
 			flowState, err := models.NewFlowState(providerType, params.CodeChallenge, codeChallengeMethod)
 			if err != nil {
 				return err

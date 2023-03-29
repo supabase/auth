@@ -233,7 +233,6 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 	if u.ConfirmationSentAt != nil && !u.ConfirmationSentAt.Add(maxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
 	}
-	// TODO - change what's sent based on type of email
 	oldToken := u.ConfirmationToken
 	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
@@ -251,7 +250,6 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 
 func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, referrerURL string, otpLength int) error {
 	var err error
-	// TODO - Don't add PKCE to this now
 	oldToken := u.ConfirmationToken
 	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
@@ -279,7 +277,6 @@ func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, maile
 	if err != nil {
 		return err
 	}
-	// todo - modify token based on type
 	u.RecoveryToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	now := time.Now()
 	if err := mailer.RecoveryMail(u, otp, referrerURL); err != nil {
@@ -328,11 +325,11 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 	}
 	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	var flowType string
-	// TODO(Joel): Find a way to refactor this
+	// TODO probably pass
 	if flowStateID != "" {
-		flowType = "pkce"
+		flowType = models.PKCEFlow.String()
 	} else {
-		flowType = "implicit"
+		flowType = models.ImplicitFlow.String()
 	}
 	u.RecoveryToken = addPrefixToToken(token, flowType)
 	now := time.Now()
@@ -346,7 +343,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int, flowType string) error {
+func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int) error {
 	// Remove this when we alter the /resend endpoint
 	var err error
 	otpNew, err := crypto.GenerateOtp(otpLength)
@@ -355,8 +352,7 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfigu
 	}
 	u.EmailChange = email
 
-	emailChangeToken := fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+otpNew)))
-	u.EmailChangeTokenNew = addPrefixToToken(emailChangeToken, flowType)
+	u.EmailChangeTokenNew = fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+otpNew)))
 
 	otpCurrent := ""
 	if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
@@ -364,8 +360,7 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfigu
 		if err != nil {
 			return err
 		}
-		emailChangeTokenCurrent := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otpCurrent)))
-		u.EmailChangeTokenCurrent = addPrefixToToken(emailChangeTokenCurrent, flowType)
+		u.EmailChangeTokenCurrent = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otpCurrent)))
 		if err != nil {
 			return err
 		}

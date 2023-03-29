@@ -77,7 +77,6 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	if err != nil {
 		return internalServerError("error generating otp").WithInternalError(err)
 	}
-	// TODO (joel) - Add prefix to the token
 	*token = fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
 
 	var message string

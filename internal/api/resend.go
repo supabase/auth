@@ -131,7 +131,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			}
 			return a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, sms_provider.SMSProvider)
 		case emailChangeVerification:
-			return a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, config.Mailer.OtpLength, "implicit")
+			return a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, config.Mailer.OtpLength)
 		case phoneChangeVerification:
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)
 			if terr != nil {
