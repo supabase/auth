@@ -199,8 +199,12 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
-				// TODO(Joel): Convert to switch between PKCE and Implicit
-				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel, models.ImplicitFlow); terr != nil {
+				flowType, terr := models.ParseFlowType(params.FlowType)
+				if terr != nil {
+					return terr
+				}
+
+				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel, flowType); terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
 			}
