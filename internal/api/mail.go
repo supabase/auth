@@ -344,14 +344,12 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 
 // sendEmailChange sends out an email change token to the new email.
 func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int) error {
-	// Remove this when we alter the /resend endpoint
 	var err error
 	otpNew, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		return err
 	}
 	u.EmailChange = email
-
 	u.EmailChangeTokenNew = fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+otpNew)))
 
 	otpCurrent := ""

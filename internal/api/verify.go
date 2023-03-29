@@ -63,7 +63,6 @@ func (p *VerifyParams) Validate() error {
 		return badRequestError("Verify requires a verification type")
 	}
 
-	// TODO (Joel) - Change this to throw an error if not specified
 	switch true {
 	case p.Type == inviteVerification && p.FlowType == "pkce":
 		return badRequestError("PKCE flow not supported on invite at the moment")
@@ -96,7 +95,7 @@ func isPKCEFlow(flowType, flowStateID string, db *storage.Connection) (bool, err
 	if models.IsNotFoundError(err) {
 		return false, err
 	}
-	return strings.ToLower(flowType) == "pkce" && flowState.AuthCode != "", err
+	return strings.ToLower(flowType) == models.PKCEFlow.String() && flowState.AuthCode != "", err
 }
 
 func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
@@ -260,9 +259,6 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		// TODO create flow state and store type of flow state. If flow state is PKCE, return here and don't proceed with issuing a refresh
-		// token. The client will need to call the token endpoint to get a refresh token.
-
 		if !isPKCE {
 			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 			if terr != nil {
@@ -273,7 +269,6 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
 		}
-		// TODO(Joel) - include else clause here which checks for flow state as well as the method
 		return nil
 	})
 
@@ -281,9 +276,9 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if isPKCE {
-		// TODO - return flow state(?)
+		// TODO - return auth code and possibly flow_state?
 		return sendJSON(w, http.StatusOK, map[string]string{
-			"token": "test",
+			"code": "test",
 		})
 	}
 	return sendJSON(w, http.StatusOK, token)
