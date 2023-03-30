@@ -205,7 +205,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Post("/generate_link", api.GenerateLink)
 
 			r.Route("/sso", func(r *router) {
-				r.Use(api.requireSAMLEnabled)
 				r.Route("/providers", func(r *router) {
 					r.Get("/", api.adminSSOProvidersList)
 					r.Post("/", api.adminSSOProvidersCreate)
