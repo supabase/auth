@@ -44,12 +44,12 @@ func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
 	}
 }
 
-func IsValidMessageChannel(channel string, config conf.GlobalConfiguration) bool {
+func IsValidMessageChannel(channel string, smsProvider string) bool {
 	switch channel {
 	case SMSProvider:
 		return true
 	case WhatsappProvider:
-		return config.Sms.Provider == "twilio"
+		return smsProvider == "twilio"
 	default:
 		return false
 	}
