@@ -21,7 +21,6 @@ type ProviderSettings struct {
 	Twitter   bool `json:"twitter"`
 	Email     bool `json:"email"`
 	Phone     bool `json:"phone"`
-	SAML      bool `json:"saml"`
 	Zoom      bool `json:"zoom"`
 }
 
@@ -32,6 +31,7 @@ type Settings struct {
 	PhoneAutoconfirm  bool             `json:"phone_autoconfirm"`
 	SmsProvider       string           `json:"sms_provider"`
 	MFAEnabled        bool             `json:"mfa_enabled"`
+	SAMLEnabled       bool             `json:"saml_enabled"`
 }
 
 func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
@@ -65,5 +65,6 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 		PhoneAutoconfirm:  config.Sms.Autoconfirm,
 		SmsProvider:       config.Sms.Provider,
 		MFAEnabled:        config.MFA.Enabled,
+		SAMLEnabled:       config.SAML.Enabled,
 	})
 }

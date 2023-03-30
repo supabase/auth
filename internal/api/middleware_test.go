@@ -198,6 +198,36 @@ func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
 	}
 }
 
+func (ts *MiddlewareTestSuite) TestRequireSAMLEnabled() {
+	cases := []struct {
+		desc        string
+		isEnabled   bool
+		expectedErr error
+	}{
+		{
+			desc:        "SAML not enabled",
+			isEnabled:   false,
+			expectedErr: notFoundError("SAML 2.0 is disabled"),
+		},
+		{
+			desc:        "SAML enabled",
+			isEnabled:   true,
+			expectedErr: nil,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			ts.Config.SAML.Enabled = c.isEnabled
+			req := httptest.NewRequest("GET", "http://localhost", nil)
+			w := httptest.NewRecorder()
+
+			_, err := ts.API.requireSAMLEnabled(w, req)
+			require.Equal(ts.T(), c.expectedErr, err)
+		})
+	}
+}
+
 func TestFunctionHooksUnmarshalJSON(t *testing.T) {
 	tests := []struct {
 		in string
