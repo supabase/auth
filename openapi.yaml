@@ -1099,6 +1099,9 @@ paths:
                       properties:
                         actor_id:
                           type: string
+                        actor_via_sso:
+                          type: boolean
+                          description: Whether the actor used a SSO protocol (like SAML 2.0 or OIDC) to authenticate.
                         actor_username:
                           type: string
                         actor_name:

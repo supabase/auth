@@ -103,6 +103,7 @@ func NewAuditLogEntry(r *http.Request, tx *storage.Connection, actor *User, acti
 
 	payload := map[string]interface{}{
 		"actor_id":       actor.ID,
+		"actor_via_sso":  actor.IsSSOUser,
 		"actor_username": username,
 		"action":         action,
 		"log_type":       ActionLogTypeMap[action],
