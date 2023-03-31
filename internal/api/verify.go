@@ -68,22 +68,6 @@ func (p *VerifyParams) Validate() error {
 		return badRequestError(InvalidFlowTypeErrorMessage)
 	}
 
-	switch true {
-	case p.FlowType == models.ImplicitFlow.String():
-		break
-	case p.Type == magicLinkVerification && p.FlowType == models.PKCEFlow.String():
-		break
-	case p.Type == recoveryVerification && p.FlowType == models.PKCEFlow.String():
-		return badRequestError("PKCE flow not supported on recovery at the moment")
-	case p.Type == emailChangeVerification && p.FlowType == models.PKCEFlow.String():
-		return badRequestError("PKCE flow not supported on email change at the moment")
-	case p.Type == smsVerification && p.FlowType == models.PKCEFlow.String():
-		break
-	default:
-		return badRequestError("flow not supported with PKCE at this time")
-
-	}
-
 	return nil
 }
 
@@ -262,7 +246,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		}
 		// Still possible to check if token is valid before flow state is expired
 		if isPKCE {
-			flowState, err := models.FindFlowStateByUserID(db, user.ID.String())
+			flowState, err = models.FindFlowStateByUserID(db, user.ID.String())
 			if err != nil {
 				return err
 			}

@@ -659,6 +659,11 @@ func (ts *VerifyTestSuite) TestVerifyValidPKCEOtp() {
 	codeChallenge := "testtesttesttestesttestesttestesttestesttesttttttesttest"
 	codeChallengeMethod := "s256"
 	pkceFlow := models.PKCEFlow.String()
+	// TODO - Replace this with something more reflective
+	flowState, err := models.NewFlowState("magiclink", codeChallenge, models.SHA256)
+	flowState.UserID = &(u.ID)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(flowState))
 
 	type expected struct {
 		code int
