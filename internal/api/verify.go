@@ -128,6 +128,9 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		err         error
 		token       *AccessTokenResponse
 	)
+	if err := params.Validate(); err != nil {
+		return err
+	}
 
 	if err := params.Validate(); err != nil {
 		return err

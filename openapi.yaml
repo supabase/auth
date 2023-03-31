@@ -1692,7 +1692,11 @@ paths:
                   mfa_enabled:
                     type: boolean
                     example: true
-                    description: Whether MFA is enabled on this API server. Typically true.
+                    description: Whether MFA is enabled on this API server. Defaults to false.
+                  saml_enabled:
+                    type: boolean
+                    example: true
+                    description: Whether SAML is enabled on this API server. Defaults to false.
                   external:
                     type: object
                     description: Which external identity providers are enabled.
