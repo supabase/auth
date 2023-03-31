@@ -492,7 +492,11 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 
 	var user *models.User
 	var err error
-	token := addPrefixToToken(params.Token, params.FlowType)
+	flowType, err := models.ParseFlowType(params.FlowType)
+	if err != nil {
+		return nil, err
+	}
+	token := addPrefixToToken(params.Token, flowType)
 	switch params.Type {
 	case signupVerification, inviteVerification:
 		user, err = models.FindUserByConfirmationToken(conn, token)
@@ -539,13 +543,17 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	var user *models.User
 	var err error
 	var tokenHash string
+	flowType, err := models.ParseFlowType(params.FlowType)
+	if err != nil {
+		return nil, err
+	}
 	if isPhoneOtpVerification(params) {
 		params.Phone, err = validatePhone(params.Phone)
 		if err != nil {
 			return nil, err
 		}
 		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
-		tokenHash = addPrefixToToken(tokenHash, params.FlowType)
+		tokenHash = addPrefixToToken(tokenHash, flowType)
 		switch params.Type {
 		case phoneChangeVerification:
 			user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
@@ -560,7 +568,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}
 		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))
-		tokenHash = addPrefixToToken(tokenHash, params.FlowType)
+		tokenHash = addPrefixToToken(tokenHash, flowType)
 		switch params.Type {
 		case emailChangeVerification:
 			user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
