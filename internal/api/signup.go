@@ -76,6 +76,19 @@ func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error
 	return nil
 }
 
+func (p *SignupParams) Validate(passwordMinLength int) error {
+	if p.Password == "" {
+		return unprocessableEntityError("Signup requires a valid password")
+	}
+	if len(p.Password) < passwordMinLength {
+		return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", passwordMinLength))
+	}
+	if p.Email != "" && p.Phone != "" {
+		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
+	}
+	return nil
+}
+
 // Signup is the endpoint for registering a new user
 func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
