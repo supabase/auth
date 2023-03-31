@@ -28,7 +28,7 @@ type SignupParams struct {
 	Channel  string                 `json:"channel"`
 }
 
-func (p *SignupParams) Validate(passwordMinLength int) error {
+func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error {
 	if p.Password == "" {
 		return unprocessableEntityError("Signup requires a valid password")
 	}
@@ -38,7 +38,26 @@ func (p *SignupParams) Validate(passwordMinLength int) error {
 	if p.Email != "" && p.Phone != "" {
 		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
 	}
+	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
+		return badRequestError(InvalidChannelError)
+	}
 	return nil
+}
+
+func (p *SignupParams) ConfigureDefaults() {
+	if p.Email != "" {
+		p.Provider = "email"
+	} else if p.Phone != "" {
+		p.Provider = "phone"
+	}
+	if p.Data == nil {
+		p.Data = make(map[string]interface{})
+	}
+
+	// For backwards compatibility, we default to SMS if params Channel is not specified
+	if p.Phone != "" && p.Channel == "" {
+		p.Channel = sms_provider.SMSProvider
+	}
 }
 
 // Signup is the endpoint for registering a new user
@@ -61,27 +80,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read Signup params: %v", err)
 	}
-
-	if err := params.Validate(config.PasswordMinLength); err != nil {
+	params.ConfigureDefaults()
+	if err := params.Validate(config.PasswordMinLength, config.Sms.Provider); err != nil {
 		return err
-	}
-
-	if params.Email != "" {
-		params.Provider = "email"
-	} else if params.Phone != "" {
-		params.Provider = "phone"
-	}
-	if params.Data == nil {
-		params.Data = make(map[string]interface{})
-	}
-
-	// For backwards compatibility, we default to SMS if params Channel is not specified
-	if params.Phone != "" && params.Channel == "" {
-		params.Channel = sms_provider.SMSProvider
-	}
-
-	if params.Provider == "phone" && !sms_provider.IsValidMessageChannel(params.Channel, config.Sms.Provider) {
-		return badRequestError(InvalidChannelError)
 	}
 
 	var user *models.User
