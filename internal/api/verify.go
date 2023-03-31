@@ -45,13 +45,15 @@ const singleConfirmationAccepted = "Confirmation link accepted. Please proceed t
 
 // VerifyParams are the parameters the Verify endpoint accepts
 type VerifyParams struct {
-	Type        string `json:"type"`
-	Token       string `json:"token"`
-	Email       string `json:"email"`
-	Phone       string `json:"phone"`
-	FlowType    string `json:"flow_type"`
-	RedirectTo  string `json:"redirect_to"`
-	FlowStateID string `json:"flow_state_id"`
+	Type                string `json:"type"`
+	Token               string `json:"token"`
+	Email               string `json:"email"`
+	Phone               string `json:"phone"`
+	FlowType            string `json:"flow_type"`
+	RedirectTo          string `json:"redirect_to"`
+	FlowStateID         string `json:"flow_state_id"`
+	CodeChallenge       string `json:"code_challenge"`
+	CodeChallengeMethod string `json:"code_challenge_method"`
 }
 
 func (p *VerifyParams) Validate() error {
@@ -223,7 +225,6 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	config := a.config
 	params := &VerifyParams{}
-	isPKCE := params.FlowType == models.PKCEFlow.String()
 
 	body, err := getBodyBytes(r)
 	if err != nil {
@@ -233,6 +234,8 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
+	isPKCE := params.FlowType == models.PKCEFlow.String()
+
 	if params.FlowType == "" {
 		params.FlowType = models.ImplicitFlow.String()
 	}

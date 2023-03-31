@@ -129,50 +129,6 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecoveryPKCE() {
 	assert.True(ts.T(), u.IsConfirmed())
 	// TODO check that there's an auth code returned
 }
-func (ts *VerifyTestSuite) TestMagicLinkPKCE() {
-	// Create User
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), u.Confirm(ts.API.db))
-
-	// Request body
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"email":                 "test@example.com",
-		"flow_type":             "pkce",
-		"code_challenge_method": "S256",
-		"code_challenge":        "testtesttesttesttesttesttesttest",
-	}))
-
-	// Setup request
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/otp", &buffer)
-	req.Header.Set("Content-Type", "application/json")
-
-	// Setup response recorder
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusOK, w.Code)
-
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-
-	_, err = models.FindFlowStateByUserID(ts.API.db, u.ID.String())
-	require.NoError(ts.T(), err)
-
-	// reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s&flow_type=pkce&flow_state_id=%s", magicLinkVerification, "123456", flowState.ID)
-	// req = httptest.NewRequest(http.MethodGet, reqURL, nil)
-
-	// w = httptest.NewRecorder()
-	// ts.API.handler.ServeHTTP(w, req)
-	// assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
-
-	// u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	// require.NoError(ts.T(), err)
-	// assert.True(ts.T(), u.IsConfirmed())
-	// _, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	// require.NoError(ts.T(), err)
-
-}
 
 func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
@@ -695,31 +651,141 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 func (ts *VerifyTestSuite) TestVerifyValidPKCEOtp() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-
 	u.EmailChange = "new@example.com"
 	u.Phone = "12345678"
 	u.PhoneChange = "1234567890"
-	u.ConfirmationToken = fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetEmail()+"123456")))
-	sentTime := time.Now()
-	u.ConfirmationSentAt = &sentTime
-
 	require.NoError(ts.T(), ts.API.db.Update(u))
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"type":      emailOTPVerification,
-		"flow_type": "pkce",
-		"token":     "123456",
-		"email":     u.GetEmail(),
-	}))
 
-	// Setup request
-	//req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
-	//req.Header.Set("Content-Type", "application/json")
+	codeChallenge := "testtesttesttestesttestesttestesttestesttesttttttesttest"
+	codeChallengeMethod := "s256"
+	pkceFlow := models.PKCEFlow.String()
 
-	//Setup response recorder
-	//w := httptest.NewRecorder()
-	//ts.API.handler.ServeHTTP(w, req)
-	// assert.Equal(ts.T(), http.StatusOK, w.Code)
+	type expected struct {
+		code int
+	}
+
+	expectedResponse := expected{
+		code: http.StatusOK,
+	}
+
+	cases := []struct {
+		desc     string
+		sentTime time.Time
+		body     map[string]interface{}
+		expected
+	}{
+		{
+			desc:     "Valid SMS OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":                  smsVerification,
+				"tokenHash":             fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetPhone()+"123456"))),
+				"token":                 "123456",
+				"phone":                 u.GetPhone(),
+				"flow_type":             pkceFlow,
+				"code_challenge":        codeChallenge,
+				"code_challenge_method": codeChallengeMethod,
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Valid Confirmation OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":                  signupVerification,
+				"tokenHash":             fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+				"token":                 "123456",
+				"email":                 u.GetEmail(),
+				"flow_type":             pkceFlow,
+				"code_challenge":        codeChallenge,
+				"code_challenge_method": codeChallengeMethod,
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Valid Recovery OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":                  recoveryVerification,
+				"tokenHash":             fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+				"token":                 "123456",
+				"email":                 u.GetEmail(),
+				"flow_type":             pkceFlow,
+				"code_challenge":        codeChallenge,
+				"code_challenge_method": codeChallengeMethod,
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Valid Email OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":                  emailOTPVerification,
+				"tokenHash":             fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+				"token":                 "123456",
+				"email":                 u.GetEmail(),
+				"flow_type":             pkceFlow,
+				"code_challenge":        codeChallenge,
+				"code_challenge_method": codeChallengeMethod,
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Valid Email Change OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":                  emailChangeVerification,
+				"tokenHash":             fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.EmailChange+"123456"))),
+				"token":                 "123456",
+				"email":                 u.EmailChange,
+				"flow_type":             pkceFlow,
+				"code_challenge":        codeChallenge,
+				"code_challenge_method": codeChallengeMethod,
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Valid Phone Change OTP",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":                  phoneChangeVerification,
+				"tokenHash":             fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.PhoneChange+"123456"))),
+				"token":                 "123456",
+				"phone":                 u.PhoneChange,
+				"flow_type":             pkceFlow,
+				"code_challenge":        codeChallenge,
+				"code_challenge_method": codeChallengeMethod,
+			},
+			expected: expectedResponse,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			// create user
+			u.ConfirmationSentAt = &c.sentTime
+			u.RecoverySentAt = &c.sentTime
+			u.EmailChangeSentAt = &c.sentTime
+			u.PhoneChangeSentAt = &c.sentTime
+			u.ConfirmationToken = c.body["tokenHash"].(string)
+			u.RecoveryToken = c.body["tokenHash"].(string)
+			u.EmailChangeTokenNew = c.body["tokenHash"].(string)
+			u.PhoneChangeToken = c.body["tokenHash"].(string)
+			require.NoError(ts.T(), ts.API.db.Update(u))
+
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+
+			// Setup request
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			// Setup response recorder
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), c.expected.code, w.Code)
+		})
+	}
 }
 
 func (ts *VerifyTestSuite) TestVerifyValidOtp() {
