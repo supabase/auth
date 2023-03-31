@@ -90,12 +90,12 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		err         error
 		token       *AccessTokenResponse
 	)
+	if err := params.Validate(); err != nil {
+		return err
+	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr := params.Validate(); terr != nil {
-			return terr
-		}
 
 		params.Token = strings.ReplaceAll(params.Token, "-", "")
 		aud := a.requestAud(ctx, r)
