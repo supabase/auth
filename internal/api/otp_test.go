@@ -38,8 +38,6 @@ func (ts *OtpTestSuite) SetupTest() {
 
 }
 
-// TODO (Joel) - Add a case for otp with pkce - it should generate  a valid magic link
-// TODO (Joel) - write a custom .Validate() method for PKCE speicfic set of params`
 func (ts *OtpTestSuite) TestOtpPKCE() {
 	ts.Config.External.Phone.Enabled = true
 	// Code Verifier must be specified with Code Challenge
