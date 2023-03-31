@@ -192,12 +192,13 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	rurl := params.RedirectTo
+	// Convert to switch statemetn
 	if token != nil && !isPKCE {
 		q := url.Values{}
 		q.Set("type", params.Type)
 
 		rurl = token.AsRedirectURL(rurl, q)
-	} else if isPKCE {
+	} else if token == nil && isPKCE {
 		q := url.Values{}
 		q.Set("type", params.Type)
 		flowState, err := models.FindFlowStateByID(db, params.FlowStateID)
@@ -206,8 +207,8 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		}
 		q.Set("code", flowState.AuthCode)
 	} else {
-		// TODO(joel) - better error message here
-		return internalServerError("failed to redirect")
+		// This shouldn't happen
+		return internalServerError("PKCE error - token is not nil")
 	}
 
 	http.Redirect(w, r, rurl, http.StatusSeeOther)

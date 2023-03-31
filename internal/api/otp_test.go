@@ -40,8 +40,9 @@ func (ts *OtpTestSuite) SetupTest() {
 
 func (ts *OtpTestSuite) TestOtpPKCE() {
 	ts.Config.External.Phone.Enabled = true
-	// Code Verifier must be specified with Code Challenge
+	// Test the various OTP cases
 	var buffer bytes.Buffer
+	// cases := []struct {}
 	params := OtpParams{
 		Email:      "test@example.com",
 		CreateUser: true,

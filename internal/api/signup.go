@@ -111,6 +111,13 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	var codeChallengeMethod models.CodeChallengeMethod
+	if params.FlowType == models.PKCEFlow.String() && params.CodeChallengeMethod != "" {
+		codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
+		if err != nil {
+			return err
+		}
+	}
 
 	switch params.Provider {
 	case "email":
@@ -183,6 +190,13 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
+				flowState, err := models.NewFlowState(params.Provider, params.CodeChallenge, codeChallengeMethod)
+				if err != nil {
+					return err
+				}
+				if err := tx.Create(flowState); err != nil {
+					return err
+				}
 				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, flowType); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {
 						now := time.Now()
@@ -215,6 +229,13 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				smsProvider, terr := sms_provider.GetSmsProvider(*config)
 				if terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
+				}
+				flowState, err := models.NewFlowState(params.Provider, params.CodeChallenge, codeChallengeMethod)
+				if err != nil {
+					return err
+				}
+				if err := tx.Create(flowState); err != nil {
+					return err
 				}
 
 				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel, flowType); terr != nil {
