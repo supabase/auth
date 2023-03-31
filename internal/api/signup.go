@@ -19,19 +19,38 @@ import (
 
 // SignupParams are the parameters the Signup endpoint accepts
 type SignupParams struct {
-	Email    string                 `json:"email"`
-	Phone    string                 `json:"phone"`
-	Password string                 `json:"password"`
-	Data     map[string]interface{} `json:"data"`
-	Provider string                 `json:"-"`
-	Aud      string                 `json:"-"`
-	Channel  string                 `json:"channel"`
-	FlowType string                 `json:"flow_type"`
-	CodeChallengeMethod string       `json:"code_challenge_method"`
-	CodeChallenge string             `json:"code_challenge"`
+	Email               string                 `json:"email"`
+	Phone               string                 `json:"phone"`
+	Password            string                 `json:"password"`
+	Data                map[string]interface{} `json:"data"`
+	Provider            string                 `json:"-"`
+	Aud                 string                 `json:"-"`
+	Channel             string                 `json:"channel"`
+	FlowType            string                 `json:"flow_type"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
+	CodeChallenge       string                 `json:"code_challenge"`
 }
 
-func (p *SignupParams) Validate(passwordMinLength int) error {
+func (p *SignupParams) ConfigureDefaults() {
+	if p.Email != "" {
+		p.Provider = "email"
+	} else if p.Phone != "" {
+		p.Provider = "phone"
+	}
+	if p.Data == nil {
+		p.Data = make(map[string]interface{})
+	}
+
+	// For backwards compatibility, we default to SMS if params Channel is not specified
+	if p.Phone != "" && p.Channel == "" {
+		p.Channel = sms_provider.SMSProvider
+	}
+	if p.FlowType == "" {
+		p.FlowType = models.ImplicitFlow.String()
+	}
+}
+
+func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error {
 	if p.Password == "" {
 		return unprocessableEntityError("Signup requires a valid password")
 	}
@@ -46,6 +65,13 @@ func (p *SignupParams) Validate(passwordMinLength int) error {
 		if p.CodeChallengeMethod == "" || p.CodeChallenge == "" {
 			return unprocessableEntityError("PKCE flow requires code_challenge_method and code_challenge")
 		}
+	}
+	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
+		return badRequestError(InvalidChannelError)
+	}
+
+	if p.FlowType != models.ImplicitFlow.String() && p.FlowType != models.PKCEFlow.String() {
+		return badRequestError(InvalidFlowTypeErrorMessage)
 	}
 	return nil
 }
@@ -70,33 +96,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read Signup params: %v", err)
 	}
-	if params.FlowType == "" {
-		params.FlowType = models.ImplicitFlow.String()
-	}
-	if params.FlowType != models.ImplicitFlow.String() && params.FlowType != models.PKCEFlow.String() {
-		return badRequestError(InvalidFlowTypeErrorMessage)
-	}
 
-	if err := params.Validate(config.PasswordMinLength); err != nil {
+	params.ConfigureDefaults()
+
+	if err := params.Validate(config.PasswordMinLength, config.Sms.Provider); err != nil {
 		return err
-	}
-
-	if params.Email != "" {
-		params.Provider = "email"
-	} else if params.Phone != "" {
-		params.Provider = "phone"
-	}
-	if params.Data == nil {
-		params.Data = make(map[string]interface{})
-	}
-
-	// For backwards compatibility, we default to SMS if params Channel is not specified
-	if params.Phone != "" && params.Channel == "" {
-		params.Channel = sms_provider.SMSProvider
-	}
-
-	if params.Provider == "phone" && !sms_provider.IsValidMessageChannel(params.Channel, config.Sms.Provider) {
-		return badRequestError(InvalidChannelError)
 	}
 
 	var user *models.User
