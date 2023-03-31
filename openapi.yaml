@@ -73,7 +73,7 @@ paths:
               - refresh_token
               - id_token
               - oauth_pkce
-              - magic_link_pkce
+              - pkce
       security:
         - APIKeyAuth: []
       requestBody:
@@ -200,7 +200,7 @@ paths:
               - implicit
           description: >
            Can be implicit or PKCE. TODO - touch up on this description
-        - FlowStateID: string
+        - name: flow_state_id
           in: query
           schema:
             type: string

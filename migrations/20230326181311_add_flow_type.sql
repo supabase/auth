@@ -2,5 +2,5 @@
 
 create type flow_type as enum('oauth', 'pkce_phone_signup', 'pkce_email_signup', 'pkce_recovery', 'pkce_email_change', 'pkce_invite', 'pkce_phone_change');
 
-alter table {{index .Options "Namespace" }}.flow_type
+alter table {{index .Options "Namespace" }}.flow_state
 add column flow_type flow_type not null;

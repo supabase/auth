@@ -27,6 +27,8 @@ type SignupParams struct {
 	Aud      string                 `json:"-"`
 	Channel  string                 `json:"channel"`
 	FlowType string                 `json:"flow_type"`
+	CodeChallengeMethod string       `json:"code_challenge_method"`
+	CodeChallenge string             `json:"code_challenge"`
 }
 
 func (p *SignupParams) Validate(passwordMinLength int) error {
@@ -38,6 +40,12 @@ func (p *SignupParams) Validate(passwordMinLength int) error {
 	}
 	if p.Email != "" && p.Phone != "" {
 		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
+	}
+	// PKCE validation
+	if p.FlowType == models.PKCEFlow.String() {
+		if p.CodeChallengeMethod == "" || p.CodeChallenge == "" {
+			return unprocessableEntityError("PKCE flow requires code_challenge_method and code_challenge")
+		}
 	}
 	return nil
 }
