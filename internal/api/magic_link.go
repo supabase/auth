@@ -86,9 +86,12 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		signUpParams := &SignupParams{
-			Email:    params.Email,
-			Password: password,
-			Data:     params.Data,
+			Email:               params.Email,
+			Password:            password,
+			Data:                params.Data,
+			FlowType:            params.FlowType,
+			CodeChallenge:       params.CodeChallenge,
+			CodeChallengeMethod: params.CodeChallengeMethod,
 		}
 		newBodyContent, err := json.Marshal(signUpParams)
 		if err != nil {
@@ -104,8 +107,11 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			newBodyContent := &SignupParams{
-				Email: params.Email,
-				Data:  params.Data,
+				Email:               params.Email,
+				Data:                params.Data,
+				FlowType:            params.FlowType,
+				CodeChallenge:       params.CodeChallenge,
+				CodeChallengeMethod: params.CodeChallengeMethod,
 			}
 			metadata, err := json.Marshal(newBodyContent)
 			if err != nil {

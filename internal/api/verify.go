@@ -206,9 +206,9 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		q.Set("code", flowState.AuthCode)
-	} else {
+	} else if token != nil && isPKCE {
 		// This shouldn't happen
-		return internalServerError("PKCE error - token is not nil")
+		return internalServerError("token cannot be non-nil when PKCE flow is used")
 	}
 
 	http.Redirect(w, r, rurl, http.StatusSeeOther)

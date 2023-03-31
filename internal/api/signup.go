@@ -63,7 +63,7 @@ func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error
 	// PKCE validation
 	if p.FlowType == models.PKCEFlow.String() {
 		if p.CodeChallengeMethod == "" || p.CodeChallenge == "" {
-			return unprocessableEntityError("PKCE flow requires code_challenge_method and code_challenge")
+			return badRequestError("PKCE flow requires code_challenge_method and code_challenge")
 		}
 	}
 	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {

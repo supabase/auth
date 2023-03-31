@@ -40,31 +40,110 @@ func (ts *OtpTestSuite) SetupTest() {
 
 func (ts *OtpTestSuite) TestOtpPKCE() {
 	ts.Config.External.Phone.Enabled = true
+	ts.Config.RateLimitSmsSent = 50 / (60 * 60)
 	// Test the various OTP cases
 	var buffer bytes.Buffer
-	// cases := []struct {}
-	params := OtpParams{
-		Email:      "test@example.com",
-		CreateUser: true,
-		FlowType:   "pkce",
-		Data: map[string]interface{}{
-			"somedata": "metadata",
+	cases := []struct {
+		desc     string
+		params   OtpParams
+		expected struct {
+			code     int
+			response map[string]interface{}
+		}
+	}{
+		{
+			desc: "Test (PKCE) Success Magiclink Otp",
+			params: OtpParams{
+				Email:               "test@example.com",
+				CreateUser:          true,
+				FlowType:            "pkce",
+				CodeChallengeMethod: "s256",
+				CodeChallenge:       "testtesttesttesttesttestteststeststesttesttesttest",
+			},
+			expected: struct {
+				code     int
+				response map[string]interface{}
+			}{
+				http.StatusOK,
+				make(map[string]interface{}),
+			},
+		},
+		{
+			desc: "Test (PKCE) Failure, no code challenge",
+			params: OtpParams{
+				Email:               "test@example.com",
+				CreateUser:          true,
+				FlowType:            "pkce",
+				CodeChallengeMethod: "s256",
+			},
+			expected: struct {
+				code     int
+				response map[string]interface{}
+			}{
+				http.StatusBadRequest,
+				map[string]interface{}{
+					"code": float64(http.StatusBadRequest),
+					"msg":  "PKCE flow requires code_challenge_method and code_challenge",
+				},
+			},
+		},
+		{
+			desc: "Test (PKCE) Failure, no code challenge method",
+			params: OtpParams{
+				Email:         "test@example.com",
+				CreateUser:    true,
+				FlowType:      "pkce",
+				CodeChallenge: "testtesttesttesttesttesttestteststeststesttesttesttest",
+			},
+			expected: struct {
+				code     int
+				response map[string]interface{}
+			}{
+				http.StatusBadRequest,
+				map[string]interface{}{
+					"code": float64(http.StatusBadRequest),
+					"msg":  "PKCE flow requires code_challenge_method and code_challenge",
+				},
+			},
+		},
+		{
+			desc: "Test (PKCE) Success, phone with valid params",
+			params: OtpParams{
+				Phone:               "123456789",
+				CreateUser:          true,
+				FlowType:            "pkce",
+				CodeChallengeMethod: "s256",
+				CodeChallenge:       "testtesttesttesttesttesttestteststeststesttesttesttest",
+			},
+			expected: struct {
+				code     int
+				response map[string]interface{}
+			}{
+				http.StatusBadRequest,
+				map[string]interface{}{
+					"code": float64(http.StatusBadRequest),
+					"msg":  "Error sending sms:",
+				},
+			},
 		},
 	}
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(params))
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
 
-	req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.params))
 
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
+			req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+			req.Header.Set("Content-Type", "application/json")
 
-	require.Equal(ts.T(), http.StatusOK, w.Code)
-	data := make(map[string]interface{})
-	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
 
-	// TODO (Joel) - Possibly remove this later since these are implementation details
-	// Check that code has been created with pkce_ prefix
+			require.Equal(ts.T(), c.expected.code, w.Code)
+			data := make(map[string]interface{})
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+		})
+	}
 
 }
 

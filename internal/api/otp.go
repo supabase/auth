@@ -26,10 +26,12 @@ type OtpParams struct {
 
 // SmsParams contains the request body params for sms otp
 type SmsParams struct {
-	Phone    string                 `json:"phone"`
-	Channel  string                 `json:"channel"`
-	Data     map[string]interface{} `json:"data"`
-	FlowType string                 `json:"flow_type"`
+	Phone               string                 `json:"phone"`
+	Channel             string                 `json:"channel"`
+	Data                map[string]interface{} `json:"data"`
+	FlowType            string                 `json:"flow_type"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
+	CodeChallenge       string                 `json:"code_challenge"`
 }
 
 const InvalidFlowTypeErrorMessage = "Invalid flow type. Flow Type must be either implicit or pkce"
@@ -169,11 +171,13 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		signUpParams := &SignupParams{
-			Phone:    params.Phone,
-			Password: password,
-			Data:     params.Data,
-			Channel:  params.Channel,
-			FlowType: params.FlowType,
+			Phone:               params.Phone,
+			Password:            password,
+			Data:                params.Data,
+			Channel:             params.Channel,
+			FlowType:            params.FlowType,
+			CodeChallenge:       params.CodeChallenge,
+			CodeChallengeMethod: params.CodeChallengeMethod,
 		}
 		newBodyContent, err := json.Marshal(signUpParams)
 		if err != nil {
@@ -190,9 +194,11 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			}
 
 			signUpParams := &SignupParams{
-				Phone:    params.Phone,
-				Channel:  params.Channel,
-				FlowType: params.FlowType,
+				Phone:               params.Phone,
+				Channel:             params.Channel,
+				FlowType:            params.FlowType,
+				CodeChallenge:       params.CodeChallenge,
+				CodeChallengeMethod: params.CodeChallengeMethod,
 			}
 			newBodyContent, err := json.Marshal(signUpParams)
 			if err != nil {
