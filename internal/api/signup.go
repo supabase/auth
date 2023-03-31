@@ -107,6 +107,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	var grantParams models.GrantParams
 	params.Aud = a.requestAud(ctx, r)
 
+	flowType, err := models.ParseFlowType(params.FlowType)
+	if err != nil {
+		return err
+	}
+
 	switch params.Provider {
 	case "email":
 		if !config.External.Email.Enabled {
@@ -178,7 +183,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, flowType); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {
 						now := time.Now()
 						left := user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency).Sub(now) / time.Second
@@ -210,10 +215,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				smsProvider, terr := sms_provider.GetSmsProvider(*config)
 				if terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
-				}
-				flowType, terr := models.ParseFlowType(params.FlowType)
-				if terr != nil {
-					return terr
 				}
 
 				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel, flowType); terr != nil {
