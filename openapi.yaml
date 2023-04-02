@@ -157,7 +157,7 @@ paths:
           UserAuth: []
       responses:
         204:
-          description: No content returned on successfull logout.
+          description: No content returned on successful logout.
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
 
