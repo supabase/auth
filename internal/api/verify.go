@@ -123,7 +123,6 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		case recoveryVerification, magicLinkVerification:
 			user, terr = a.recoverVerify(r, ctx, tx, user)
 		case emailChangeVerification:
-			// TODO: handle email change flow
 			user, terr = a.emailChangeVerify(r, ctx, tx, params, user)
 			if user == nil && terr == nil {
 				// when double confirmation is required
@@ -229,7 +228,6 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		case recoveryVerification, magicLinkVerification:
 			user, terr = a.recoverVerify(r, ctx, tx, user)
 		case emailChangeVerification:
-			// TODO (joel): Figure out how to handle email change
 			user, terr = a.emailChangeVerify(r, ctx, tx, params, user)
 			if user == nil && terr == nil {
 				return sendJSON(w, http.StatusOK, map[string]string{

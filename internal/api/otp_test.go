@@ -40,7 +40,9 @@ func (ts *OtpTestSuite) SetupTest() {
 
 func (ts *OtpTestSuite) TestOtpPKCE() {
 	ts.Config.External.Phone.Enabled = true
-	ts.Config.RateLimitSmsSent = 50 / (60 * 60)
+
+	testCodeChallenge := "testtesttesttesttesttesttestteststeststesttesttesttest"
+
 	// Test the various OTP cases
 	var buffer bytes.Buffer
 	cases := []struct {
@@ -56,9 +58,9 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 			params: OtpParams{
 				Email:               "test@example.com",
 				CreateUser:          true,
-				FlowType:            "pkce",
+				FlowType:            PKCE,
 				CodeChallengeMethod: "s256",
-				CodeChallenge:       "testtesttesttesttesttestteststeststesttesttesttest",
+				CodeChallenge:       testCodeChallenge,
 			},
 			expected: struct {
 				code     int
@@ -73,7 +75,7 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 			params: OtpParams{
 				Email:               "test@example.com",
 				CreateUser:          true,
-				FlowType:            "pkce",
+				FlowType:            PKCE,
 				CodeChallengeMethod: "s256",
 			},
 			expected: struct {
@@ -92,8 +94,8 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 			params: OtpParams{
 				Email:         "test@example.com",
 				CreateUser:    true,
-				FlowType:      "pkce",
-				CodeChallenge: "testtesttesttesttesttesttestteststeststesttesttesttest",
+				FlowType:      PKCE,
+				CodeChallenge: testCodeChallenge,
 			},
 			expected: struct {
 				code     int
@@ -113,7 +115,7 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 				CreateUser:          true,
 				FlowType:            "pkce",
 				CodeChallengeMethod: "s256",
-				CodeChallenge:       "testtesttesttesttesttesttestteststeststesttesttesttest",
+				CodeChallenge:       testCodeChallenge,
 			},
 			expected: struct {
 				code     int

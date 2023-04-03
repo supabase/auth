@@ -733,7 +733,7 @@ func (ts *VerifyTestSuite) TestVerifyValidPKCEOtp() {
 			assert.Equal(ts.T(), c.expected.code, w.Code)
 			verifyPostResp := &VerifyPostResponse{}
 			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(verifyPostResp))
-			// TODO - amend this after handling email change
+			// Email change only returns code on second confirmation
 			if c.body["type"] != emailChangeVerification {
 				require.NotEmpty(ts.T(), verifyPostResp.AuthCode)
 			}

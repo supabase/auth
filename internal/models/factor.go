@@ -55,6 +55,22 @@ func (authMethod AuthenticationMethod) String() string {
 	return ""
 }
 
+func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) {
+	switch authMethod {
+	case "oauth":
+		return OAuth, nil
+	case "password":
+		return PasswordGrant, nil
+	case "otp":
+		return OTP, nil
+	case "totp":
+		return TOTPSignIn, nil
+	case "sso/saml":
+		return SSOSAML, nil
+	}
+	return -1, errors.New("Invalid authentication method")
+}
+
 type Factor struct {
 	ID           uuid.UUID   `json:"id" db:"id"`
 	User         User        `json:"-" belongs_to:"user"`

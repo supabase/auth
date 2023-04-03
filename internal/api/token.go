@@ -606,7 +606,6 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	}
 
 	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
-	// TODO(Joel) - Add additional check to ensure that flow state type matches
 	// Sanity check in case user ID was not set properly
 	if models.IsNotFoundError(err) || flowState.UserID == nil {
 		return forbiddenError("invalid oauth state, please ensure oauth redirect has successfully completed")
@@ -628,7 +627,11 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+		authMethod, err := models.ParseAuthenticationMethod(flowState.AuthenticationMethod)
+		if err != nil {
+			return err
+		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, authMethod, grantParams)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
