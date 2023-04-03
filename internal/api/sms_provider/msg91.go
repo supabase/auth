@@ -43,7 +43,7 @@ func (t *Msg91Provider) SendMessage(phone string, message string, channel string
 	case SMSProvider:
 		return t.SendSms(phone, message)
 	default:
-		return "", fmt.Errorf("channel type %q is not supported for Msg91", channel)
+		return "", fmt.Errorf("msg91: channel type %q is not supported", channel)
 	}
 }
 
@@ -57,40 +57,38 @@ func (t *Msg91Provider) SendSms(phone string, message string) (string, error) {
 		"response": {"json"},
 	}
 
-	// DLT template ID is only required for Indian Users , to comply with government regulations
-	// Indian users have to get their sms template approved by DLT authorities before using it.
-	// DLT template ID is provided by Authorities after the template is approved.
+	// DLT template ID is only required for Indian users, to comply with
+	// government regulations Indian users have to get their sms template
+	// approved by DLT authorities before using it. DLT template ID is
+	// provided by Authorities after the template is approved.
 	if t.Config.DltTemplateId != nil && *t.Config.DltTemplateId != "" {
 		body.Set("DLT_TE_ID", *t.Config.DltTemplateId)
 	}
 
-	client := &http.Client{Timeout: defaultTimeout}
-
 	bodyBuffer := bytes.NewBufferString(body.Encode())
 
-	r, err := http.NewRequest("POST", t.APIPath, bodyBuffer)
+	client := &http.Client{Timeout: defaultTimeout}
+	req, err := http.NewRequest(http.MethodPost, t.APIPath, bodyBuffer)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("msg91 error: unable to create request %w", err)
 	}
 
-	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
-	res, err := client.Do(r)
+	res, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("msg91 error: failed to execute request %w", err)
 	}
-
 	defer utilities.SafeClose(res.Body)
 
-	resp := &Msg91Response{}
-	derr := json.NewDecoder(res.Body).Decode(resp)
-	if derr != nil {
-		return "", derr
+	var resp Msg91Response
+	if err := json.NewDecoder(res.Body).Decode(&resp); err != nil {
+		return "", fmt.Errorf("msg91 error: failed to parse JSON response body (status code %v): %w", res.StatusCode, err)
 	}
 
-	if resp.Type == "success" {
-		return "", nil
-	} else {
-		return "", fmt.Errorf("Msg91 error: %v (code: %v)", resp.Message, res.StatusCode)
+	if resp.Type != "success" {
+		return resp.Message, fmt.Errorf("msg91 error: expected \"success\" but got %q with message %q (code: %v)", resp.Type, resp.Message, res.StatusCode)
 	}
+
+	return resp.Message, nil
 }

@@ -233,8 +233,8 @@ type TextlocalProviderConfiguration struct {
 }
 
 type Msg91ProviderConfiguration struct {
-	AuthKey       string `json:"auth_key" split_words:"true"`
-	SenderId      string `json:"sender_id" split_words:"true"`
+	AuthKey       string  `json:"auth_key" split_words:"true"`
+	SenderId      string  `json:"sender_id" split_words:"true"`
 	DltTemplateId *string `json:"dlt_template_id,omitempty" split_words:"true"`
 }
 

@@ -292,9 +292,14 @@ func (ts *SmsProviderTestSuite) TestTwilioVerifySendSms() {
 
 func (ts *SmsProviderTestSuite) TestMsg91SendSms() {
 	defer gock.Off()
+
 	provider, err := NewMsg91Provider(ts.Config.Sms.Msg91)
 	require.NoError(ts.T(), err)
-	msg91Provider, ok := provider.(*Msg91Provider)
+
+	msg91Provider, _ := provider.(*Msg91Provider)
+
+	phone := "123456789"
+	message := "This is the sms code: 123456"
 
 	body := url.Values{
 		"authkey":  {msg91Provider.Config.AuthKey},
@@ -312,6 +317,6 @@ func (ts *SmsProviderTestSuite) TestMsg91SendSms() {
 		Type: "success",
 	})
 
-	err = msg91Provider.SendSms(phone, message)
+	_, err = msg91Provider.SendSms(phone, message)
 	require.NoError(ts.T(), err)
 }
