@@ -176,7 +176,7 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 				"code_verifier": v.codeVerifier,
 				"auth_code":     v.authCode,
 			}))
-			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=oauth_pkce", &buffer)
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=pkce", &buffer)
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
