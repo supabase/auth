@@ -191,21 +191,6 @@ paths:
           schema:
             type: string
             format: uri
-        - name: flow_type
-          in: query
-          schema:
-            type: string
-            enum:
-              - pkce
-              - implicit
-          description: >
-           Can be implicit or PKCE. TODO - touch up on this description
-        - name: flow_state_id
-          in: query
-          schema:
-            type: string
-          description: >
-            (Optional) Matches the flow state / sign in request to the corresponding endpoint.
       security:
         - APIKeyAuth: []
       responses:
@@ -256,7 +241,7 @@ paths:
                     - pkce
                     - implicit
                   description: >
-                    (Optional) defaults to implicit -> Add more
+                    (Optional) defaults to the implicit flow. Where possible, we recommend using the PKCE due to the enhanced security provided by the flow.
       responses:
         200:
           description: An access and refresh token.

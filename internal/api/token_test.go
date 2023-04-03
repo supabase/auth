@@ -201,8 +201,6 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenGrantFailure() {
 	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
 }
 
-// TODO (Joel) - add test to ensure magic link signup follower by oauth token exchange does not grant token
-
 func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
 	u, err := models.NewUser("", "foo@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
@@ -353,5 +351,3 @@ func (ts *TokenTestSuite) TestTokenRefreshWithUnexpiredSession() {
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 }
-
-// TODO (Joel)  - add an end to end test here

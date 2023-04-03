@@ -86,49 +86,7 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 	assert.True(ts.T(), u.IsConfirmed())
 }
 
-// TODO(Joel) - test password recovyer with PKCE - this should be merged with above
-// Verification should return an auth code
-func (ts *VerifyTestSuite) TestVerifyPasswordRecoveryPKCE() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	u.RecoverySentAt = &time.Time{}
-	require.NoError(ts.T(), ts.API.db.Update(u))
 
-	// Request body
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"email": "test@example.com",
-	}))
-
-	// Setup request
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/recover", &buffer)
-	req.Header.Set("Content-Type", "application/json")
-
-	// Setup response recorder
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusOK, w.Code)
-
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-
-	assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
-	assert.False(ts.T(), u.IsConfirmed())
-
-	// TODO (Joel) - change this to take in PKCE
-	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", recoveryVerification, u.RecoveryToken)
-	req = httptest.NewRequest(http.MethodGet, reqURL, nil)
-
-	w = httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
-
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	// TODO this should be false
-	assert.True(ts.T(), u.IsConfirmed())
-	// TODO check that there's an auth code returned
-}
 
 func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
@@ -232,7 +190,6 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	assert.Equal(ts.T(), "unauthorized_client", f.Get("error"))
 }
 
-// TODO(Joel) - include PKCE cases
 func (ts *VerifyTestSuite) TestInvalidOtp() {
 	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "12345678", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
