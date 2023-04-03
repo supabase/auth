@@ -46,6 +46,12 @@ func (p *OtpParams) Validate() error {
 	if p.FlowType != models.PKCEFlow.String() && p.FlowType != models.ImplicitFlow.String() {
 		return badRequestError(InvalidFlowTypeErrorMessage)
 	}
+	if p.FlowType == models.PKCEFlow.String() {
+		if p.CodeChallengeMethod == "" || p.CodeChallenge == "" {
+			return badRequestError("PKCE flow requires code_challenge_method and code_challenge")
+		}
+	}
+
 	return nil
 }
 

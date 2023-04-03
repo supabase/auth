@@ -18,7 +18,7 @@ type Mailer interface {
 	InviteMail(user *models.User, otp, referrerURL string) error
 	ConfirmationMail(user *models.User, otp, referrerURL string) error
 	RecoveryMail(user *models.User, otp, referrerURL string) error
-	MagicLinkMail(user *models.User, otp, referrerURL, flowStateID string) error
+	MagicLinkMail(user *models.User, otp, referrerURL string) error
 	EmailChangeMail(user *models.User, otpNew, otpCurrent, referrerURL string) error
 	ReauthenticateMail(user *models.User, otp string) error
 	ValidateEmail(email string) error
