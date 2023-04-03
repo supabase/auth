@@ -252,7 +252,7 @@ func isValidCodeChallenge(codeChallenge string) (bool, error) {
 	}
 }
 
-func addPrefixToToken(token string, flowType models.FlowType) string {
+func addFlowPrefixToToken(token string, flowType models.FlowType) string {
 	if flowType == models.PKCEFlow {
 		return models.PKCEFlow.String() + "_" + token
 	} else if flowType == models.ImplicitFlow {

@@ -43,6 +43,10 @@ const (
 // Only applicable when SECURE_EMAIL_CHANGE_ENABLED
 const singleConfirmationAccepted = "Confirmation link accepted. Please proceed to confirm link sent to the other email"
 
+type VerifyPostResponse struct {
+	AuthCode string `json:"auth_code"`
+}
+
 // VerifyParams are the parameters the Verify endpoint accepts
 type VerifyParams struct {
 	Type                string `json:"type"`
@@ -88,10 +92,10 @@ func isPKCEFlow(flowType, flowStateID string, db *storage.Connection) (bool, err
 		return false, nil
 	}
 	flowState, err := models.FindFlowStateByID(db, flowStateID)
-	if models.IsNotFoundError(err) {
+	if err != nil {
 		return false, err
 	}
-	return strings.ToLower(flowType) == models.PKCEFlow.String() && flowState.AuthCode != "", err
+	return strings.ToLower(flowType) == models.PKCEFlow.String() && flowState != nil, err
 }
 
 func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
@@ -143,6 +147,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		case recoveryVerification, magicLinkVerification:
 			user, terr = a.recoverVerify(r, ctx, tx, user)
 		case emailChangeVerification:
+			// TODO: handle email change flow
 			user, terr = a.emailChangeVerify(r, ctx, tx, params, user)
 			if user == nil && terr == nil {
 				// when double confirmation is required
@@ -262,6 +267,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		case recoveryVerification, magicLinkVerification:
 			user, terr = a.recoverVerify(r, ctx, tx, user)
 		case emailChangeVerification:
+			// TODO (joel): Figure out how to handle email change
 			user, terr = a.emailChangeVerify(r, ctx, tx, params, user)
 			if user == nil && terr == nil {
 				return sendJSON(w, http.StatusOK, map[string]string{
@@ -294,8 +300,8 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if isPKCE && flowState.AuthCode != "" {
-		return sendJSON(w, http.StatusOK, map[string]string{
-			"code": flowState.AuthCode,
+		return sendJSON(w, http.StatusOK, VerifyPostResponse{
+			AuthCode: flowState.AuthCode,
 		})
 	} else if isPKCE {
 		return internalServerError("failed to generate authcode")
@@ -483,7 +489,7 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 	if err != nil {
 		return nil, err
 	}
-	token := addPrefixToToken(params.Token, flowType)
+	token := addFlowPrefixToToken(params.Token, flowType)
 	switch params.Type {
 	case signupVerification, inviteVerification:
 		user, err = models.FindUserByConfirmationToken(conn, token)
@@ -540,7 +546,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			return nil, err
 		}
 		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
-		tokenHash = addPrefixToToken(tokenHash, flowType)
+		tokenHash = addFlowPrefixToToken(tokenHash, flowType)
 		switch params.Type {
 		case phoneChangeVerification:
 			user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
@@ -555,7 +561,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}
 		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))
-		tokenHash = addPrefixToToken(tokenHash, flowType)
+		tokenHash = addFlowPrefixToToken(tokenHash, flowType)
 		switch params.Type {
 		case emailChangeVerification:
 			user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)

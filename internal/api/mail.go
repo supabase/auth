@@ -239,7 +239,7 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 		return err
 	}
 	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
-	u.ConfirmationToken = addPrefixToToken(token, flowType)
+	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
 	if err := mailer.ConfirmationMail(u, otp, referrerURL); err != nil {
 		u.ConfirmationToken = oldToken
@@ -332,7 +332,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 	} else {
 		flowType = models.ImplicitFlow
 	}
-	u.RecoveryToken = addPrefixToToken(token, flowType)
+	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
 	if err := mailer.MagicLinkMail(u, otp, referrerURL, flowStateID); err != nil {
 		u.RecoveryToken = oldToken

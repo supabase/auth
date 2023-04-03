@@ -144,7 +144,6 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 
 		})
 	}
-
 }
 
 func (ts *OtpTestSuite) TestOtp() {

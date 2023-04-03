@@ -789,6 +789,12 @@ func (ts *VerifyTestSuite) TestVerifyValidPKCEOtp() {
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
 			assert.Equal(ts.T(), c.expected.code, w.Code)
+			verifyPostResp := &VerifyPostResponse{}
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(verifyPostResp))
+			// TODO - amend this after handling email change
+			if c.body["type"] != emailChangeVerification {
+				require.NotEmpty(ts.T(), verifyPostResp.AuthCode)
+			}
 		})
 	}
 }

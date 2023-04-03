@@ -78,7 +78,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		return internalServerError("error generating otp").WithInternalError(err)
 	}
 	tempToken := fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
-	*token = addPrefixToToken(tempToken, flowType)
+	*token = addFlowPrefixToToken(tempToken, flowType)
 
 	var message string
 	if config.Sms.Template == "" {
