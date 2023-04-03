@@ -72,7 +72,6 @@ paths:
               - password
               - refresh_token
               - id_token
-              - oauth_pkce
               - pkce
       security:
         - APIKeyAuth: []
@@ -87,7 +86,7 @@ paths:
               grant_type=refresh_token:
                 value:
                   refresh_token: 4nYUCw0wZR_DNOTSDbSGMQ
-              grant_type=oauth_pkce:
+              grant_type=pkce:
                 value:
                   auth_code: 009e5066-fc11-4eca-8c8c-6fd82aa263f2
                   code_verifier: ktPNXpR65N6JtgzQA8_5HHtH6PBSAahMNoLKRzQEa0Tzgl.vdV~b6lPk004XOd.4lR0inCde.NoQx5K63xPfzL8o7tJAjXncnhw5Niv9ycQ.QRV9JG.y3VapqbgLfIrJ
@@ -158,7 +157,7 @@ paths:
           UserAuth: []
       responses:
         204:
-          description: No content returned on successfull logout.
+          description: No content returned on successful logout.
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
 
