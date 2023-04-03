@@ -173,8 +173,8 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 		return a.RefreshTokenGrant(ctx, w, r)
 	case "id_token":
 		return a.IdTokenGrant(ctx, w, r)
-	case "oauth_pkce":
-		return a.OAuthPKCE(ctx, w, r)
+	case "pkce":
+		return a.PKCE(ctx, w, r)
 	default:
 		return oauthError("unsupported_grant_type", "")
 	}
@@ -587,7 +587,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	var grantParams models.GrantParams
 
