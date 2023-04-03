@@ -20,6 +20,7 @@ type FlowState struct {
 	ID                   uuid.UUID  `json:"id" db:"id"`
 	UserID               *uuid.UUID `json:"user_id,omitempty" db:"user_id"`
 	AuthCode             string     `json:"auth_code" db:"auth_code"`
+	AuthenticationMethod string     `json:"authentication_method" db:"authentication_method"`
 	CodeChallenge        string     `json:"code_challenge" db:"code_challenge"`
 	CodeChallengeMethod  string     `json:"code_challenge_method" db:"code_challenge_method"`
 	ProviderType         string     `json:"provider_type" db:"provider_type"`
@@ -88,18 +89,19 @@ func (FlowState) TableName() string {
 	return tableName
 }
 
-func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod) (*FlowState, error) {
+func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod) (*FlowState, error) {
 	id, err := uuid.NewV4()
 	if err != nil {
 		return nil, errors.New("error generating unique oauth state verifier")
 	}
 	authCode := uuid.Must(uuid.NewV4())
 	oauth := &FlowState{
-		ID:                  id,
-		ProviderType:        providerType,
-		CodeChallenge:       codeChallenge,
-		CodeChallengeMethod: codeChallengeMethod.String(),
-		AuthCode:            authCode.String(),
+		ID:                   id,
+		ProviderType:         providerType,
+		CodeChallenge:        codeChallenge,
+		CodeChallengeMethod:  codeChallengeMethod.String(),
+		AuthCode:             authCode.String(),
+		AuthenticationMethod: authenticationMethod.String(),
 	}
 	return oauth, nil
 }

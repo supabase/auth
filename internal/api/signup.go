@@ -190,7 +190,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				flowState, err := models.NewFlowState(params.Provider, params.CodeChallenge, codeChallengeMethod)
+				flowState, err := models.NewFlowState(params.Provider, params.CodeChallenge, codeChallengeMethod, models.OTP)
 				if err != nil {
 					return err
 				}
@@ -230,7 +230,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
-				flowState, err := models.NewFlowState(params.Provider, params.CodeChallenge, codeChallengeMethod)
+				flowState, err := models.NewFlowState(params.Provider, params.CodeChallenge, codeChallengeMethod, models.OTP)
 				if err != nil {
 					return err
 				}

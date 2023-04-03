@@ -88,7 +88,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		if valid, err := isValidCodeChallenge(codeChallenge); !valid {
 			return err
 		}
-		flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethod)
+		flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethod, models.OAuth)
 		if err != nil {
 			return err
 		}

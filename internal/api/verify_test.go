@@ -613,8 +613,8 @@ func (ts *VerifyTestSuite) TestVerifyValidPKCEOtp() {
 
 	codeChallenge := "testtesttesttestesttestesttestesttestesttesttttttesttest"
 	pkceFlow := models.PKCEFlow.String()
-	// TODO - Replace this with something more reflective
-	flowState, err := models.NewFlowState("magiclink", codeChallenge, models.SHA256)
+
+	flowState, err := models.NewFlowState(models.OTP.String(), codeChallenge, models.SHA256, models.OTP)
 	flowState.UserID = &(u.ID)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Create(flowState))
