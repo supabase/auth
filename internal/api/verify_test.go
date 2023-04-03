@@ -86,8 +86,6 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 	assert.True(ts.T(), u.IsConfirmed())
 }
 
-
-
 func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
@@ -614,7 +612,6 @@ func (ts *VerifyTestSuite) TestVerifyValidPKCEOtp() {
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
 	codeChallenge := "testtesttesttestesttestesttestesttestesttesttttttesttest"
-	codeChallengeMethod := "s256"
 	pkceFlow := models.PKCEFlow.String()
 	// TODO - Replace this with something more reflective
 	flowState, err := models.NewFlowState("magiclink", codeChallenge, models.SHA256)
@@ -640,13 +637,11 @@ func (ts *VerifyTestSuite) TestVerifyValidPKCEOtp() {
 			desc:     "Valid SMS OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":                  smsVerification,
-				"tokenHash":             fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetPhone()+"123456"))),
-				"token":                 "123456",
-				"phone":                 u.GetPhone(),
-				"flow_type":             pkceFlow,
-				"code_challenge":        codeChallenge,
-				"code_challenge_method": codeChallengeMethod,
+				"type":      smsVerification,
+				"tokenHash": fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetPhone()+"123456"))),
+				"token":     "123456",
+				"phone":     u.GetPhone(),
+				"flow_type": pkceFlow,
 			},
 			expected: expectedResponse,
 		},
@@ -654,13 +649,11 @@ func (ts *VerifyTestSuite) TestVerifyValidPKCEOtp() {
 			desc:     "Valid Confirmation OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":                  signupVerification,
-				"tokenHash":             fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
-				"token":                 "123456",
-				"email":                 u.GetEmail(),
-				"flow_type":             pkceFlow,
-				"code_challenge":        codeChallenge,
-				"code_challenge_method": codeChallengeMethod,
+				"type":      signupVerification,
+				"tokenHash": fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+				"token":     "123456",
+				"email":     u.GetEmail(),
+				"flow_type": pkceFlow,
 			},
 			expected: expectedResponse,
 		},
@@ -668,13 +661,11 @@ func (ts *VerifyTestSuite) TestVerifyValidPKCEOtp() {
 			desc:     "Valid Recovery OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":                  recoveryVerification,
-				"tokenHash":             fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
-				"token":                 "123456",
-				"email":                 u.GetEmail(),
-				"flow_type":             pkceFlow,
-				"code_challenge":        codeChallenge,
-				"code_challenge_method": codeChallengeMethod,
+				"type":      recoveryVerification,
+				"tokenHash": fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+				"token":     "123456",
+				"email":     u.GetEmail(),
+				"flow_type": pkceFlow,
 			},
 			expected: expectedResponse,
 		},
@@ -682,13 +673,11 @@ func (ts *VerifyTestSuite) TestVerifyValidPKCEOtp() {
 			desc:     "Valid Email OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":                  emailOTPVerification,
-				"tokenHash":             fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
-				"token":                 "123456",
-				"email":                 u.GetEmail(),
-				"flow_type":             pkceFlow,
-				"code_challenge":        codeChallenge,
-				"code_challenge_method": codeChallengeMethod,
+				"type":      emailOTPVerification,
+				"tokenHash": fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+				"token":     "123456",
+				"email":     u.GetEmail(),
+				"flow_type": pkceFlow,
 			},
 			expected: expectedResponse,
 		},
@@ -696,13 +685,11 @@ func (ts *VerifyTestSuite) TestVerifyValidPKCEOtp() {
 			desc:     "Valid Email Change OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":                  emailChangeVerification,
-				"tokenHash":             fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.EmailChange+"123456"))),
-				"token":                 "123456",
-				"email":                 u.EmailChange,
-				"flow_type":             pkceFlow,
-				"code_challenge":        codeChallenge,
-				"code_challenge_method": codeChallengeMethod,
+				"type":      emailChangeVerification,
+				"tokenHash": fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.EmailChange+"123456"))),
+				"token":     "123456",
+				"email":     u.EmailChange,
+				"flow_type": pkceFlow,
 			},
 			expected: expectedResponse,
 		},
@@ -710,13 +697,11 @@ func (ts *VerifyTestSuite) TestVerifyValidPKCEOtp() {
 			desc:     "Valid Phone Change OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":                  phoneChangeVerification,
-				"tokenHash":             fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.PhoneChange+"123456"))),
-				"token":                 "123456",
-				"phone":                 u.PhoneChange,
-				"flow_type":             pkceFlow,
-				"code_challenge":        codeChallenge,
-				"code_challenge_method": codeChallengeMethod,
+				"type":      phoneChangeVerification,
+				"tokenHash": fmt.Sprintf("pkce_%x", sha256.Sum224([]byte(u.PhoneChange+"123456"))),
+				"token":     "123456",
+				"phone":     u.PhoneChange,
+				"flow_type": pkceFlow,
 			},
 			expected: expectedResponse,
 		},

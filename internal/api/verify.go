@@ -49,15 +49,12 @@ type VerifyPostResponse struct {
 
 // VerifyParams are the parameters the Verify endpoint accepts
 type VerifyParams struct {
-	Type                string `json:"type"`
-	Token               string `json:"token"`
-	Email               string `json:"email"`
-	Phone               string `json:"phone"`
-	FlowType            string `json:"flow_type"`
-	RedirectTo          string `json:"redirect_to"`
-	FlowStateID         string `json:"flow_state_id"`
-	CodeChallenge       string `json:"code_challenge"`
-	CodeChallengeMethod string `json:"code_challenge_method"`
+	Type       string `json:"type"`
+	Token      string `json:"token"`
+	Email      string `json:"email"`
+	Phone      string `json:"phone"`
+	FlowType   string `json:"flow_type"`
+	RedirectTo string `json:"redirect_to"`
 }
 
 func (p *VerifyParams) Validate() error {
@@ -87,17 +84,6 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 	}
 }
 
-func isPKCEFlow(flowType, flowStateID string, db *storage.Connection) (bool, error) {
-	if flowStateID == "" {
-		return false, nil
-	}
-	flowState, err := models.FindFlowStateByID(db, flowStateID)
-	if err != nil {
-		return false, err
-	}
-	return strings.ToLower(flowType) == models.PKCEFlow.String() && flowState != nil, err
-}
-
 func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -106,7 +92,6 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	params.Token = r.FormValue("token")
 	params.Type = r.FormValue("type")
 	params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
-	params.FlowStateID = r.FormValue("flow_state_id")
 	params.FlowType = r.FormValue("flow_type")
 	if params.FlowType == "" {
 		params.FlowType = models.ImplicitFlow.String()
@@ -119,15 +104,6 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		token       *AccessTokenResponse
 	)
 	if err := params.Validate(); err != nil {
-		return err
-	}
-
-	if err := params.Validate(); err != nil {
-		return err
-	}
-
-	isPKCE, err := isPKCEFlow(params.FlowType, params.FlowStateID, db)
-	if err != nil {
 		return err
 	}
 
@@ -162,16 +138,14 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		if !isPKCE {
-			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 
-			if terr != nil {
-				return terr
-			}
+		if terr != nil {
+			return terr
+		}
 
-			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-				return internalServerError("Failed to set JWT cookie. %s", terr)
-			}
+		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
 		return nil
 	})
@@ -187,24 +161,12 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 
 	rurl := params.RedirectTo
 	// Convert to switch statemetn
-	if token != nil && !isPKCE {
+	if token != nil {
 		q := url.Values{}
 		q.Set("type", params.Type)
 
 		rurl = token.AsRedirectURL(rurl, q)
-	} else if token == nil && isPKCE {
-		q := url.Values{}
-		q.Set("type", params.Type)
-		flowState, err := models.FindFlowStateByID(db, params.FlowStateID)
-		if err != nil {
-			return err
-		}
-		q.Set("code", flowState.AuthCode)
-	} else if token != nil && isPKCE {
-		// This shouldn't happen
-		return internalServerError("token cannot be non-nil when PKCE flow is used")
 	}
-
 	http.Redirect(w, r, rurl, http.StatusSeeOther)
 	return nil
 }
