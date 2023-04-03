@@ -61,7 +61,7 @@ func TestGetPath(t *testing.T) {
 
 	for _, c := range cases {
 		u, err := url.ParseRequestURI(c.SiteURL)
-		assert.NoError(t, err, "error here")
+		assert.NoError(t, err, "error parsing URI request")
 
 		path, err := getPath(c.Path, c.Fragment)
 
