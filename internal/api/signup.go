@@ -194,6 +194,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				if err != nil {
 					return err
 				}
+				flowState.UserID = &(user.ID)
 				if err := tx.Create(flowState); err != nil {
 					return err
 				}
@@ -234,6 +235,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				if err != nil {
 					return err
 				}
+				flowState.UserID = &(user.ID)
 				if err := tx.Create(flowState); err != nil {
 					return err
 				}
@@ -263,6 +265,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return err
 			}
+
 			if config.Mailer.Autoconfirm || config.Sms.Autoconfirm {
 				return badRequestError("User already registered")
 			}
@@ -305,7 +308,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		metering.RecordLogin("password", user.ID)
 		return sendJSON(w, http.StatusOK, token)
 	}
-
+	if params.FlowType == models.PKCEFlow.String() {
+		return sendJSON(w, http.StatusOK, map[string]interface{}{})
+	}
 	return sendJSON(w, http.StatusOK, user)
 }
 

@@ -608,7 +608,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
 	// Sanity check in case user ID was not set properly
 	if models.IsNotFoundError(err) || flowState.UserID == nil {
-		return forbiddenError("invalid oauth state, please ensure oauth redirect has successfully completed")
+		return forbiddenError("invalid flow state, no valid flow state found")
 	} else if err != nil {
 		return err
 	}
