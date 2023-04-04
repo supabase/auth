@@ -620,7 +620,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		return err
 	}
-	if err := flowState.VerifyPKCE(flowState.CodeChallenge, params.CodeVerifier); err != nil {
+	if err := flowState.VerifyPKCE(params.CodeVerifier); err != nil {
 		return forbiddenError(err.Error())
 	}
 

@@ -219,12 +219,29 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		}
 		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
+	var flowState *models.FlowState
+	if params.FlowType == models.PKCEFlow.String() {
+		codeChallengeMethod, err := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
+		if err != nil {
+			return err
+		}
+		flowState, err = models.NewFlowState(models.OTP.String(), params.CodeChallenge, codeChallengeMethod, models.OTP)
+		if err != nil {
+			return err
+		}
+		flowState.UserID = &(user.ID)
+	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if err := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", map[string]interface{}{
 			"channel": params.Channel,
 		}); err != nil {
 			return err
+		}
+		if params.FlowType == models.PKCEFlow.String() {
+			if err := tx.Create(flowState); err != nil {
+				return err
+			}
 		}
 		smsProvider, terr := sms_provider.GetSmsProvider(*config)
 		if terr != nil {
