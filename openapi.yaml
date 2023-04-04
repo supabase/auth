@@ -555,11 +555,6 @@ paths:
                   type: boolean
                 data:
                   type: object
-                flow_type:
-                  type: string
-                  enum:
-                    - pkce
-                    - implicit
                 code_challenge_method:
                   type: enum
                   enum:

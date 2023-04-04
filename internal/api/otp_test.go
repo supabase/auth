@@ -58,7 +58,6 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 			params: OtpParams{
 				Email:               "test@example.com",
 				CreateUser:          true,
-				FlowType:            PKCE,
 				CodeChallengeMethod: "s256",
 				CodeChallenge:       testCodeChallenge,
 			},
@@ -75,7 +74,6 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 			params: OtpParams{
 				Email:               "test@example.com",
 				CreateUser:          true,
-				FlowType:            PKCE,
 				CodeChallengeMethod: "s256",
 			},
 			expected: struct {
@@ -94,7 +92,6 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 			params: OtpParams{
 				Email:         "test@example.com",
 				CreateUser:    true,
-				FlowType:      PKCE,
 				CodeChallenge: testCodeChallenge,
 			},
 			expected: struct {
@@ -113,7 +110,6 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 			params: OtpParams{
 				Phone:               "123456789",
 				CreateUser:          true,
-				FlowType:            "pkce",
 				CodeChallengeMethod: "s256",
 				CodeChallenge:       testCodeChallenge,
 			},

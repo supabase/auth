@@ -17,7 +17,6 @@ type OtpParams struct {
 	Email               string                 `json:"email"`
 	Phone               string                 `json:"phone"`
 	CreateUser          bool                   `json:"create_user"`
-	FlowType            string                 `json:"flow_type"`
 	Data                map[string]interface{} `json:"data"`
 	Channel             string                 `json:"channel"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
@@ -29,7 +28,6 @@ type SmsParams struct {
 	Phone               string                 `json:"phone"`
 	Channel             string                 `json:"channel"`
 	Data                map[string]interface{} `json:"data"`
-	FlowType            string                 `json:"flow_type"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 	CodeChallenge       string                 `json:"code_challenge"`
 }
@@ -43,13 +41,8 @@ func (p *OtpParams) Validate() error {
 	if p.Email != "" && p.Channel != "" {
 		return badRequestError("Channel should only be specified with Phone OTP")
 	}
-	if p.FlowType != models.PKCEFlow.String() && p.FlowType != models.ImplicitFlow.String() {
-		return badRequestError(InvalidFlowTypeErrorMessage)
-	}
-	if p.FlowType == models.PKCEFlow.String() {
-		if p.CodeChallengeMethod == "" || p.CodeChallenge == "" {
-			return badRequestError("PKCE flow requires code_challenge_method and code_challenge")
-		}
+	if (p.CodeChallengeMethod == "" && p.CodeChallenge != "") || (p.CodeChallengeMethod != "" && p.CodeChallenge == "") {
+		return badRequestError("PKCE flow requires code_challenge_method and code_challenge")
 	}
 
 	return nil
@@ -65,8 +58,9 @@ func (p *SmsParams) Validate(smsProvider string) error {
 	if err != nil {
 		return err
 	}
-	if p.FlowType != models.PKCEFlow.String() && p.FlowType != models.ImplicitFlow.String() {
-		return badRequestError(InvalidFlowTypeErrorMessage)
+
+	if (p.CodeChallengeMethod == "" && p.CodeChallenge != "") || (p.CodeChallengeMethod != "" && p.CodeChallenge == "") {
+		return badRequestError("PKCE flow requires code_challenge_method and code_challenge")
 	}
 
 	return nil
@@ -80,9 +74,6 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
 	}
-	if params.FlowType == "" {
-		params.FlowType = models.ImplicitFlow.String()
-	}
 
 	body, err := getBodyBytes(r)
 	if err != nil {
@@ -91,9 +82,6 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 
 	if err = json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
-	}
-	if params.FlowType == "" {
-		params.FlowType = models.ImplicitFlow.String()
 	}
 
 	if err := params.Validate(); err != nil {
@@ -143,16 +131,13 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	if params.Phone != "" && params.Channel == "" {
 		params.Channel = sms_provider.SMSProvider
 	}
-	if params.FlowType == "" {
-		params.FlowType = models.ImplicitFlow.String()
-	}
-
 	if err := params.Validate(config.Sms.Provider); err != nil {
 		return err
 	}
-	flowType, err := models.ParseFlowType(params.FlowType)
-	if err != nil {
-		return err
+
+	var flowType models.FlowType
+	if params.CodeChallenge == "" {
+		flowType = models.ImplicitFlow
 	}
 
 	var isNewUser bool
@@ -181,7 +166,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			Password:            password,
 			Data:                params.Data,
 			Channel:             params.Channel,
-			FlowType:            params.FlowType,
+			FlowType:            flowType.String(),
 			CodeChallenge:       params.CodeChallenge,
 			CodeChallengeMethod: params.CodeChallengeMethod,
 		}
@@ -202,7 +187,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			signUpParams := &SignupParams{
 				Phone:               params.Phone,
 				Channel:             params.Channel,
-				FlowType:            params.FlowType,
+				FlowType:            flowType.String(),
 				CodeChallenge:       params.CodeChallenge,
 				CodeChallengeMethod: params.CodeChallengeMethod,
 			}
@@ -220,7 +205,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
 	var flowState *models.FlowState
-	if params.FlowType == models.PKCEFlow.String() {
+	if flowType == models.PKCEFlow {
 		codeChallengeMethod, err := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
 		if err != nil {
 			return err
@@ -238,7 +223,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		}); err != nil {
 			return err
 		}
-		if params.FlowType == models.PKCEFlow.String() {
+		if flowType == models.PKCEFlow {
 			if err := tx.Create(flowState); err != nil {
 				return err
 			}
