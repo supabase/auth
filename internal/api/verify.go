@@ -92,10 +92,6 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	params.Token = r.FormValue("token")
 	params.Type = r.FormValue("type")
 	params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
-	params.FlowType = r.FormValue("flow_type")
-	if params.FlowType == "" {
-		params.FlowType = models.ImplicitFlow.String()
-	}
 
 	var (
 		user        *models.User
@@ -159,7 +155,6 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	rurl := params.RedirectTo
-	// Convert to switch statemetn
 	if token != nil {
 		q := url.Values{}
 		q.Set("type", params.Type)
@@ -188,6 +183,10 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	if params.FlowType == "" {
 		params.FlowType = models.ImplicitFlow.String()
 	}
+	flowType, err := models.ParseFlowType(params.FlowType)
+	if err != nil {
+		return err
+	}
 	if err := params.Validate(); err != nil {
 		return err
 	}
@@ -203,7 +202,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		aud := a.requestAud(ctx, r)
-		user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
+		user, terr = a.verifyUserAndToken(ctx, tx, params, aud, flowType)
 		if terr != nil {
 			return terr
 		}
@@ -229,7 +228,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		if params.FlowType == models.ImplicitFlow.String() {
+		if flowType == models.ImplicitFlow {
 			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 			if terr != nil {
 				return terr
@@ -237,7 +236,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
-		} else if params.FlowType == models.PKCEFlow.String() {
+		} else if flowType == models.PKCEFlow {
 			authCode, terr := issueAuthCode(tx, user, a.config.External.FlowStateExpiryDuration)
 			if terr != nil {
 				return terr
@@ -430,18 +429,13 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 
 	var user *models.User
 	var err error
-	flowType, err := models.ParseFlowType(params.FlowType)
-	if err != nil {
-		return nil, err
-	}
-	token := addFlowPrefixToToken(params.Token, flowType)
 	switch params.Type {
 	case signupVerification, inviteVerification:
-		user, err = models.FindUserByConfirmationToken(conn, token)
+		user, err = models.FindUserByConfirmationToken(conn, params.Token)
 	case recoveryVerification, magicLinkVerification:
-		user, err = models.FindUserByRecoveryToken(conn, token)
+		user, err = models.FindUserByRecoveryToken(conn, params.Token)
 	case emailChangeVerification:
-		user, err = models.FindUserByEmailChangeToken(conn, token)
+		user, err = models.FindUserByEmailChangeToken(conn, params.Token)
 	default:
 		return nil, badRequestError("Invalid email verification type")
 	}
@@ -475,17 +469,12 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 }
 
 // verifyUserAndToken verifies the token associated to the user based on the verify type
-func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string, flowType models.FlowType) (*models.User, error) {
 	config := a.config
 
 	var user *models.User
 	var err error
 	var tokenHash string
-
-	flowType, err := models.ParseFlowType(params.FlowType)
-	if err != nil {
-		return nil, err
-	}
 
 	if isPhoneOtpVerification(params) {
 		params.Phone, err = validatePhone(params.Phone)
