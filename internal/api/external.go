@@ -21,8 +21,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const PKCE = "pkce"
-
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
 type ExternalProviderClaims struct {
 	NetlifyMicroserviceClaims
