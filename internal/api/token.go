@@ -3,8 +3,6 @@ package api
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -88,7 +86,6 @@ type PKCEGrantParams struct {
 
 const useCookieHeader = "x-use-cookie"
 const InvalidLoginMessage = "Invalid login credentials"
-const InvalidCodeChallengeError = "code challenge does not match previously saved code verifier"
 
 func (p *IdTokenGrantParams) getVerifier(ctx context.Context, config *conf.GlobalConfiguration) (*oidc.IDTokenVerifier, error) {
 	var provider *oidc.Provider
@@ -176,8 +173,8 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 		return a.RefreshTokenGrant(ctx, w, r)
 	case "id_token":
 		return a.IdTokenGrant(ctx, w, r)
-	case "oauth_pkce":
-		return a.OAuthPKCE(ctx, w, r)
+	case "pkce":
+		return a.PKCE(ctx, w, r)
 	default:
 		return oauthError("unsupported_grant_type", "")
 	}
@@ -591,7 +588,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	var grantParams models.GrantParams
 
@@ -616,7 +613,7 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	} else if err != nil {
 		return err
 	}
-	if flowState.CreatedAt.After(time.Now().Add(a.config.External.FlowStateExpiryDuration)) {
+	if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
 		return forbiddenError("invalid oauth state, oauth state has expired")
 	}
 
@@ -624,24 +621,8 @@ func (a *API) OAuthPKCE(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return err
 	}
-
-	codeChallenge := flowState.CodeChallenge
-	codeVerifier := params.CodeVerifier
-
-	switch flowState.CodeChallengeMethod {
-	case models.SHA256.String():
-		hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
-		encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
-		if subtle.ConstantTimeCompare([]byte(codeChallenge), []byte(encodedCodeVerifier)) != 1 {
-			return forbiddenError(InvalidCodeChallengeError)
-		}
-	case models.Plain.String():
-		if subtle.ConstantTimeCompare([]byte(codeChallenge), []byte(codeVerifier)) != 1 {
-			return forbiddenError(InvalidCodeChallengeError)
-		}
-	default:
-		return forbiddenError("code challenge method not supported")
-
+	if err := flowState.VerifyPKCE(flowState.CodeChallenge, params.CodeVerifier); err != nil {
+		return forbiddenError(err.Error())
 	}
 
 	var token *AccessTokenResponse

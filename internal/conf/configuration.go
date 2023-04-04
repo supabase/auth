@@ -11,7 +11,6 @@ import (
 	"github.com/gobwas/glob"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
-	"github.com/sirupsen/logrus"
 )
 
 const defaultMinPasswordLength int = 6
@@ -312,8 +311,6 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 	}
 
 	if config.SAML.Enabled {
-		logrus.Warn("WARNING: SAML is an incomplete feature and should not be enabled for production use!")
-
 		if err := config.SAML.PopulateFields(config.API.ExternalURL); err != nil {
 			return nil, err
 		}

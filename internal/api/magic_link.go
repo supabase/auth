@@ -19,6 +19,19 @@ type MagicLinkParams struct {
 	Data  map[string]interface{} `json:"data"`
 }
 
+func (p *MagicLinkParams) Validate() error {
+	if p.Email == "" {
+		return unprocessableEntityError("Password recovery requires an email")
+	}
+	var err error
+	p.Email, err = validateEmail(p.Email)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // MagicLink sends a recovery email
 func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -36,18 +49,13 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
-	if params.Data == nil {
-		params.Data = make(map[string]interface{})
-	}
-
-	if params.Email == "" {
-		return unprocessableEntityError("Password recovery requires an email")
-	}
-	params.Email, err = validateEmail(params.Email)
-	if err != nil {
+	if err := params.Validate(); err != nil {
 		return err
 	}
 
+	if params.Data == nil {
+		params.Data = make(map[string]interface{})
+	}
 	var isNewUser bool
 	aud := a.requestAud(ctx, r)
 	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)

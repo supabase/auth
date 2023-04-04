@@ -52,6 +52,17 @@ type VerifyParams struct {
 	RedirectTo string `json:"redirect_to"`
 }
 
+func (p *VerifyParams) Validate() error {
+	if p.Token == "" {
+		return badRequestError("Verify requires a token")
+	}
+
+	if p.Type == "" {
+		return badRequestError("Verify requires a verification type")
+	}
+	return nil
+}
+
 // Verify exchanges a confirmation or recovery token to a refresh token
 func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 	switch r.Method {
@@ -79,17 +90,14 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		err         error
 		token       *AccessTokenResponse
 	)
+	if err := params.Validate(); err != nil {
+		return err
+	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if params.Token == "" {
-			return badRequestError("Verify requires a token")
-		}
-		params.Token = strings.ReplaceAll(params.Token, "-", "")
 
-		if params.Type == "" {
-			return badRequestError("Verify requires a verification type")
-		}
+		params.Token = strings.ReplaceAll(params.Token, "-", "")
 		aud := a.requestAud(ctx, r)
 		user, terr = a.verifyEmailLink(ctx, tx, params, aud)
 		if terr != nil {
@@ -165,14 +173,11 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
-	if params.Token == "" {
-		return badRequestError("Verify requires a token")
+	if err := params.Validate(); err != nil {
+		return err
 	}
-	params.Token = strings.ReplaceAll(params.Token, "-", "")
 
-	if params.Type == "" {
-		return badRequestError("Verify requires a verification type")
-	}
+	params.Token = strings.ReplaceAll(params.Token, "-", "")
 
 	var (
 		user        *models.User

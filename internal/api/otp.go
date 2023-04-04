@@ -28,6 +28,30 @@ type SmsParams struct {
 	Data    map[string]interface{} `json:"data"`
 }
 
+func (p *OtpParams) Validate() error {
+	if p.Email != "" && p.Phone != "" {
+		return badRequestError("Only an email address or phone number should be provided")
+	}
+	if p.Email != "" && p.Channel != "" {
+		return badRequestError("Channel should only be specified with Phone OTP")
+	}
+	return nil
+}
+
+func (p *SmsParams) Validate(smsProvider string) error {
+	if p.Phone != "" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
+		return badRequestError(InvalidChannelError)
+	}
+
+	var err error
+	p.Phone, err = validatePhone(p.Phone)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // Otp returns the MagicLink or SmsOtp handler based on the request body params
 func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	params := &OtpParams{
@@ -45,11 +69,12 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	if err = json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
-	if params.Email != "" && params.Phone != "" {
-		return badRequestError("Only an email address or phone number should be provided")
+
+	if err := params.Validate(); err != nil {
+		return err
 	}
-	if params.Email != "" && params.Channel != "" {
-		return badRequestError("Channel should only be specified with Phone OTP")
+	if params.Data == nil {
+		params.Data = make(map[string]interface{})
 	}
 
 	if ok, err := a.shouldCreateUser(r, params); !ok {
@@ -92,16 +117,8 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	if params.Phone != "" && params.Channel == "" {
 		params.Channel = sms_provider.SMSProvider
 	}
-	if params.Phone != "" && !sms_provider.IsValidMessageChannel(params.Channel, *config) {
-		return badRequestError(InvalidChannelError)
-	}
 
-	if params.Data == nil {
-		params.Data = make(map[string]interface{})
-	}
-
-	params.Phone, err = validatePhone(params.Phone)
-	if err != nil {
+	if err := params.Validate(config.Sms.Provider); err != nil {
 		return err
 	}
 

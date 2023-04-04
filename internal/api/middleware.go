@@ -192,3 +192,11 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 	}
 	return withExternalHost(ctx, u), nil
 }
+
+func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !a.config.SAML.Enabled {
+		return nil, notFoundError("SAML 2.0 is disabled")
+	}
+	return ctx, nil
+}
