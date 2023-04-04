@@ -26,7 +26,6 @@ type SignupParams struct {
 	Provider            string                 `json:"-"`
 	Aud                 string                 `json:"-"`
 	Channel             string                 `json:"channel"`
-	FlowType            string                 `json:"flow_type"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 	CodeChallenge       string                 `json:"code_challenge"`
 }
@@ -45,9 +44,6 @@ func (p *SignupParams) ConfigureDefaults() {
 	if p.Phone != "" && p.Channel == "" {
 		p.Channel = sms_provider.SMSProvider
 	}
-	if p.FlowType == "" {
-		p.FlowType = models.ImplicitFlow.String()
-	}
 }
 
 func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error {
@@ -60,19 +56,15 @@ func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error
 	if p.Email != "" && p.Phone != "" {
 		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
 	}
-	// PKCE validation
-	if p.FlowType == models.PKCEFlow.String() {
-		if p.CodeChallengeMethod == "" || p.CodeChallenge == "" {
-			return badRequestError("PKCE flow requires code_challenge_method and code_challenge")
-		}
+
+	if (p.CodeChallengeMethod == "" && p.CodeChallenge != "") || (p.CodeChallengeMethod != "" && p.CodeChallenge == "") {
+		return badRequestError("PKCE flow requires code_challenge_method and code_challenge")
 	}
+
 	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
 		return badRequestError(InvalidChannelError)
 	}
 
-	if p.FlowType != models.ImplicitFlow.String() && p.FlowType != models.PKCEFlow.String() {
-		return badRequestError(InvalidFlowTypeErrorMessage)
-	}
 	return nil
 }
 
@@ -106,13 +98,13 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	var user *models.User
 	var grantParams models.GrantParams
 	params.Aud = a.requestAud(ctx, r)
-
-	flowType, err := models.ParseFlowType(params.FlowType)
-	if err != nil {
-		return err
+	flowType := models.ImplicitFlow
+	if params.CodeChallenge != "" {
+		flowType = models.PKCEFlow
 	}
+
 	var codeChallengeMethod models.CodeChallengeMethod
-	if params.FlowType == models.PKCEFlow.String() && params.CodeChallengeMethod != "" {
+	if flowType == models.PKCEFlow && params.CodeChallengeMethod != "" {
 		codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
 		if err != nil {
 			return err
@@ -308,7 +300,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		metering.RecordLogin("password", user.ID)
 		return sendJSON(w, http.StatusOK, token)
 	}
-	if params.FlowType == models.PKCEFlow.String() {
+	if flowType == models.PKCEFlow {
 		return sendJSON(w, http.StatusOK, map[string]interface{}{})
 	}
 	return sendJSON(w, http.StatusOK, user)

@@ -166,7 +166,6 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			Password:            password,
 			Data:                params.Data,
 			Channel:             params.Channel,
-			FlowType:            flowType.String(),
 			CodeChallenge:       params.CodeChallenge,
 			CodeChallengeMethod: params.CodeChallengeMethod,
 		}
@@ -187,7 +186,6 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			signUpParams := &SignupParams{
 				Phone:               params.Phone,
 				Channel:             params.Channel,
-				FlowType:            flowType.String(),
 				CodeChallenge:       params.CodeChallenge,
 				CodeChallengeMethod: params.CodeChallengeMethod,
 			}

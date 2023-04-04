@@ -336,14 +336,12 @@ paths:
                 value:
                   email: user@example.com
                   password: password1
-                  flow_type: pkce
                   code_challenge_method: s256
                   code_challenge: elU6u5zyqQT2f92GRQUq6PautAeNDf4DQPayyR0ek_c&
               "phone+password+pkce":
                 value:
                   phone: "+1234567890"
                   password: password1
-                  flow_type: pkce
                   code_challenge_method: s256
                   code_challenge: elU6u5zyqQT2f92GRQUq6PautAeNDf4DQPayyR0ek_c&
             schema:
@@ -364,11 +362,6 @@ paths:
                   type: string
                 data:
                   type: object
-                flow_type:
-                  type: string
-                  enum:
-                    - implicit
-                    - pkce
                 code_challenge:
                   type: string
                 code_challenge_method:
