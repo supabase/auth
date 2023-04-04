@@ -184,7 +184,6 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
-	isPKCE := params.FlowType == models.PKCEFlow.String()
 
 	if params.FlowType == "" {
 		params.FlowType = models.ImplicitFlow.String()
@@ -205,21 +204,9 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		aud := a.requestAud(ctx, r)
-		// Find by flowState.ID, check if has expired
-		user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
+		user, flowState, terr = a.verifyUserAndToken(ctx, tx, params, aud)
 		if terr != nil {
 			return terr
-		}
-		// Still possible to check if token is valid before flow state is expired
-		if isPKCE {
-			flowState, err = models.FindFlowStateByUserID(db, user.ID.String())
-			if err != nil {
-				return err
-			}
-
-			if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
-				return badRequestError("Flow state is expired")
-			}
 		}
 
 		switch params.Type {
@@ -243,27 +230,26 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		if !isPKCE {
+		if params.FlowType == models.ImplicitFlow.String() {
 			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 			if terr != nil {
 				return terr
 			}
-
 			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
 		}
 		return nil
 	})
-
 	if err != nil {
 		return err
 	}
-	if isPKCE && flowState.AuthCode != "" {
+	isValidPKCEFlow := flowState != nil
+	if isValidPKCEFlow && flowState.AuthCode != "" {
 		return sendJSON(w, http.StatusOK, VerifyPostResponse{
 			AuthCode: flowState.AuthCode,
 		})
-	} else if isPKCE {
+	} else if isValidPKCEFlow {
 		return internalServerError("failed to generate authcode")
 	}
 	return sendJSON(w, http.StatusOK, token)
@@ -490,20 +476,22 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 }
 
 // verifyUserAndToken verifies the token associated to the user based on the verify type
-func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, *models.FlowState, error) {
 	config := a.config
 
 	var user *models.User
 	var err error
 	var tokenHash string
+	var flowState *models.FlowState
+
 	flowType, err := models.ParseFlowType(params.FlowType)
 	if err != nil {
-		return nil, err
+		return nil, flowState, err
 	}
 	if isPhoneOtpVerification(params) {
 		params.Phone, err = validatePhone(params.Phone)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
 		tokenHash = addFlowPrefixToToken(tokenHash, flowType)
@@ -513,12 +501,12 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		case smsVerification:
 			user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
 		default:
-			return nil, badRequestError("Invalid sms verification type")
+			return nil, nil, badRequestError("Invalid sms verification type")
 		}
 	} else if isEmailOtpVerification(params) {
 		params.Email, err = validateEmail(params.Email)
 		if err != nil {
-			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
+			return nil, nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}
 		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))
 		tokenHash = addFlowPrefixToToken(tokenHash, flowType)
@@ -529,18 +517,30 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			user, err = models.FindUserByEmailAndAudience(conn, params.Email, aud)
 		}
 	} else {
-		return nil, badRequestError("Only an email address or phone number should be provided on verify")
+		return nil, nil, badRequestError("Only an email address or phone number should be provided on verify")
 	}
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, notFoundError(err.Error()).WithInternalError(errRedirectWithQuery)
+			return nil, nil, notFoundError(err.Error()).WithInternalError(errRedirectWithQuery)
 		}
-		return nil, internalServerError("Database error finding user").WithInternalError(err)
+		return nil, nil, internalServerError("Database error finding user").WithInternalError(err)
 	}
 
 	if user.IsBanned() {
-		return nil, unauthorizedError("Error confirming user").WithInternalError(errRedirectWithQuery)
+		return nil, nil, unauthorizedError("Error confirming user").WithInternalError(errRedirectWithQuery)
+	}
+	if flowType == models.PKCEFlow {
+		flowState, err = models.FindFlowStateByUserID(a.db, user.ID.String())
+		if models.IsNotFoundError(err) {
+			return nil, nil, badRequestError("No valid flow state found for user.")
+		} else if err != nil {
+			return nil, nil, err
+		}
+
+		if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
+			return nil, nil, badRequestError("Flow state is expired")
+		}
 	}
 
 	var isValid bool
@@ -570,9 +570,9 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	}
 
 	if !isValid || err != nil {
-		return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(errRedirectWithQuery)
+		return nil, nil, expiredTokenError("Token has expired or is invalid").WithInternalError(errRedirectWithQuery)
 	}
-	return user, nil
+	return user, flowState, nil
 }
 
 // isOtpValid checks the actual otp sent against the expected otp and ensures that it's within the valid window
