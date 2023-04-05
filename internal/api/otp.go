@@ -59,10 +59,6 @@ func (p *SmsParams) Validate(smsProvider string) error {
 		return err
 	}
 
-	if (p.CodeChallengeMethod == "" && p.CodeChallenge != "") || (p.CodeChallengeMethod != "" && p.CodeChallenge == "") {
-		return badRequestError("PKCE flow requires code_challenge_method and code_challenge")
-	}
-
 	return nil
 }
 
@@ -135,11 +131,6 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	var flowType models.FlowType
-	if params.CodeChallenge == "" {
-		flowType = models.ImplicitFlow
-	}
-
 	var isNewUser bool
 	aud := a.requestAud(ctx, r)
 	user, err := models.FindUserByPhoneAndAudience(db, params.Phone, aud)
@@ -198,18 +189,6 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		}
 		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
-	var flowState *models.FlowState
-	if flowType == models.PKCEFlow {
-		codeChallengeMethod, err := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
-		if err != nil {
-			return err
-		}
-		flowState, err = models.NewFlowState(models.OTP.String(), params.CodeChallenge, codeChallengeMethod, models.OTP)
-		if err != nil {
-			return err
-		}
-		flowState.UserID = &(user.ID)
-	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if err := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", map[string]interface{}{
@@ -217,11 +196,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		}); err != nil {
 			return err
 		}
-		if flowType == models.PKCEFlow {
-			if err := tx.Create(flowState); err != nil {
-				return err
-			}
-		}
+
 		smsProvider, terr := sms_provider.GetSmsProvider(*config)
 		if terr != nil {
 			return badRequestError("Error sending sms: %v", terr)

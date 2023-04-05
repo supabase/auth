@@ -15,8 +15,10 @@ import (
 
 // MagicLinkParams holds the parameters for a magic link request
 type MagicLinkParams struct {
-	Email string                 `json:"email"`
-	Data  map[string]interface{} `json:"data"`
+	Email               string                 `json:"email"`
+	Data                map[string]interface{} `json:"data"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
+	CodeChallenge       string                 `json:"code_challenge"`
 }
 
 func (p *MagicLinkParams) Validate() error {
@@ -27,6 +29,9 @@ func (p *MagicLinkParams) Validate() error {
 	p.Email, err = validateEmail(p.Email)
 	if err != nil {
 		return err
+	}
+	if (p.CodeChallengeMethod == "" && p.CodeChallenge != "") || (p.CodeChallengeMethod != "" && p.CodeChallenge == "") {
+		return badRequestError("PKCE flow requires code_challenge_method and code_challenge")
 	}
 
 	return nil
@@ -55,6 +60,11 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
+	}
+
+	var flowType models.FlowType
+	if params.CodeChallenge == "" {
+		flowType = models.ImplicitFlow
 	}
 	var isNewUser bool
 	aud := a.requestAud(ctx, r)
@@ -114,9 +124,28 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
 
+	var flowState *models.FlowState
+	if flowType == models.PKCEFlow {
+		codeChallengeMethod, err := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
+		if err != nil {
+			return err
+		}
+		flowState, err = models.NewFlowState(models.OTP.String(), params.CodeChallenge, codeChallengeMethod, models.OTP)
+		if err != nil {
+			return err
+		}
+		flowState.UserID = &(user.ID)
+	}
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
+		}
+
+		if flowType == models.PKCEFlow {
+			if err := tx.Create(flowState); err != nil {
+				return err
+			}
 		}
 
 		mailer := a.Mailer(ctx)
