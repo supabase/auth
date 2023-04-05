@@ -228,9 +228,6 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 func (m *TemplateMailer) RecoveryMail(user *models.User, otp, referrerURL string) error {
 	redirectParam := encodeRedirectParam(referrerURL)
 	fragment := "token=" + user.RecoveryToken + "&type=recovery" + redirectParam
-	if flowType == models.PKCEFlow {
-		fragment += "&flow_type=pkce"
-	}
 	url, err := getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, fragment)
 	if err != nil {
 		return err
