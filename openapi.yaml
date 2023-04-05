@@ -335,6 +335,13 @@ paths:
                   phone: "+1234567890"
                   password: password1
                   channel: whatsapp
+              "email+password+pkce":
+                value:
+                  email: user@example.com
+                  password: password1
+                  flow_type: pkce
+                  code_challenge_method: s256
+                  code_challenge: elU6u5zyqQT2f92GRQUq6PautAeNDf4DQPayyR0ek_c&
             schema:
               type: object
               properties:
