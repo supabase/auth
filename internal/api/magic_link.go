@@ -91,6 +91,9 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			Email:    params.Email,
 			Password: password,
 			Data:     params.Data,
+			CodeChallengeMethod: params.CodeChallengeMethod,
+			CodeChallenge: params.CodeChallenge,
+
 		}
 		newBodyContent, err := json.Marshal(signUpParams)
 		if err != nil {
@@ -108,6 +111,8 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			newBodyContent := &SignupParams{
 				Email: params.Email,
 				Data:  params.Data,
+				CodeChallengeMethod: params.CodeChallengeMethod,
+				CodeChallenge: params.CodeChallenge,
 			}
 			metadata, err := json.Marshal(newBodyContent)
 			if err != nil {
@@ -150,7 +155,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
-		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength)
+		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, flowType)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {
