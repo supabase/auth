@@ -98,16 +98,23 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		err         error
 		token       *AccessTokenResponse
 	)
+
+	flowType, err := models.ParseFlowType(params.FlowType)
+	if err != nil {
+		return err
+	}
+
 	if err := params.Validate(); err != nil {
 		return err
 	}
+	var authCode string
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 
 		params.Token = strings.ReplaceAll(params.Token, "-", "")
 		aud := a.requestAud(ctx, r)
-		user, terr = a.verifyEmailLink(ctx, tx, params, aud)
+		user, terr = a.verifyEmailLink(ctx, tx, params, aud, flowType)
 		if terr != nil {
 			return terr
 		}
@@ -132,14 +139,21 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
+		if flowType == models.ImplicitFlow {
+			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 
-		if terr != nil {
-			return terr
-		}
+			if terr != nil {
+				return terr
+			}
 
-		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-			return internalServerError("Failed to set JWT cookie. %s", terr)
+			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+				return internalServerError("Failed to set JWT cookie. %s", terr)
+			}
+		} else if flowType == models.PKCEFlow {
+			authCode, terr = issueAuthCode(tx, user, a.config.External.FlowStateExpiryDuration)
+			if terr != nil {
+				return terr
+			}
 		}
 		return nil
 	})
@@ -152,13 +166,15 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			return nil
 		}
 	}
-
 	rurl := params.RedirectTo
-	if token != nil {
+	if flowType == models.ImplicitFlow && token != nil {
 		q := url.Values{}
 		q.Set("type", params.Type)
 
 		rurl = token.AsRedirectURL(rurl, q)
+	} else if flowType == models.PKCEFlow {
+		q := url.Values{}
+		q.Set("code", authCode)
 	}
 	http.Redirect(w, r, rurl, http.StatusSeeOther)
 	return nil
@@ -410,18 +426,19 @@ func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *stor
 	return user, nil
 }
 
-func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string, flowType models.FlowType) (*models.User, error) {
 	config := a.config
 
 	var user *models.User
 	var err error
+	token := addFlowPrefixToToken(params.Token, flowType)
 	switch params.Type {
 	case signupVerification, inviteVerification:
-		user, err = models.FindUserByConfirmationToken(conn, params.Token)
+		user, err = models.FindUserByConfirmationToken(conn, token)
 	case recoveryVerification, magicLinkVerification:
-		user, err = models.FindUserByRecoveryToken(conn, params.Token)
+		user, err = models.FindUserByRecoveryToken(conn, token)
 	case emailChangeVerification:
-		user, err = models.FindUserByEmailChangeToken(conn, params.Token)
+		user, err = models.FindUserByEmailChangeToken(conn, token)
 	default:
 		return nil, badRequestError("Invalid email verification type")
 	}
