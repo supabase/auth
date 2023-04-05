@@ -16,9 +16,9 @@ import (
 type Mailer interface {
 	Send(user *models.User, subject, body string, data map[string]interface{}) error
 	InviteMail(user *models.User, otp, referrerURL string) error
-	ConfirmationMail(user *models.User, otp, referrerURL string) error
+	ConfirmationMail(user *models.User, otp, referrerURL string, flowType models.FlowType) error
 	RecoveryMail(user *models.User, otp, referrerURL string) error
-	MagicLinkMail(user *models.User, otp, referrerURL string) error
+	MagicLinkMail(user *models.User, otp, referrerURL string, flowType models.FlowType) error
 	EmailChangeMail(user *models.User, otpNew, otpCurrent, referrerURL string) error
 	ReauthenticateMail(user *models.User, otp string) error
 	ValidateEmail(email string) error
