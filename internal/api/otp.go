@@ -162,12 +162,10 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		signUpParams := &SignupParams{
-			Phone:               params.Phone,
-			Password:            password,
-			Data:                params.Data,
-			Channel:             params.Channel,
-			CodeChallenge:       params.CodeChallenge,
-			CodeChallengeMethod: params.CodeChallengeMethod,
+			Phone:    params.Phone,
+			Password: password,
+			Data:     params.Data,
+			Channel:  params.Channel,
 		}
 		newBodyContent, err := json.Marshal(signUpParams)
 		if err != nil {
@@ -184,10 +182,8 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			}
 
 			signUpParams := &SignupParams{
-				Phone:               params.Phone,
-				Channel:             params.Channel,
-				CodeChallenge:       params.CodeChallenge,
-				CodeChallengeMethod: params.CodeChallengeMethod,
+				Phone:   params.Phone,
+				Channel: params.Channel,
 			}
 			newBodyContent, err := json.Marshal(signUpParams)
 			if err != nil {
@@ -230,7 +226,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return badRequestError("Error sending sms: %v", terr)
 		}
-		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel, flowType); err != nil {
+		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); err != nil {
 			return badRequestError("Error sending sms otp: %v", err)
 		}
 		return nil

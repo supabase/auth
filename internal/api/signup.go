@@ -19,15 +19,29 @@ import (
 
 // SignupParams are the parameters the Signup endpoint accepts
 type SignupParams struct {
-	Email               string                 `json:"email"`
-	Phone               string                 `json:"phone"`
-	Password            string                 `json:"password"`
-	Data                map[string]interface{} `json:"data"`
-	Provider            string                 `json:"-"`
-	Aud                 string                 `json:"-"`
-	Channel             string                 `json:"channel"`
-	CodeChallengeMethod string                 `json:"code_challenge_method"`
-	CodeChallenge       string                 `json:"code_challenge"`
+	Email    string                 `json:"email"`
+	Phone    string                 `json:"phone"`
+	Password string                 `json:"password"`
+	Data     map[string]interface{} `json:"data"`
+	Provider string                 `json:"-"`
+	Aud      string                 `json:"-"`
+	Channel  string                 `json:"channel"`
+}
+
+func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error {
+	if p.Password == "" {
+		return unprocessableEntityError("Signup requires a valid password")
+	}
+	if len(p.Password) < passwordMinLength {
+		return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", passwordMinLength))
+	}
+	if p.Email != "" && p.Phone != "" {
+		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
+	}
+	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
+		return badRequestError(InvalidChannelError)
+	}
+	return nil
 }
 
 func (p *SignupParams) ConfigureDefaults() {
@@ -44,28 +58,6 @@ func (p *SignupParams) ConfigureDefaults() {
 	if p.Phone != "" && p.Channel == "" {
 		p.Channel = sms_provider.SMSProvider
 	}
-}
-
-func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error {
-	if p.Password == "" {
-		return unprocessableEntityError("Signup requires a valid password")
-	}
-	if len(p.Password) < passwordMinLength {
-		return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", passwordMinLength))
-	}
-	if p.Email != "" && p.Phone != "" {
-		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
-	}
-
-	if (p.CodeChallengeMethod == "" && p.CodeChallenge != "") || (p.CodeChallengeMethod != "" && p.CodeChallenge == "") {
-		return badRequestError("PKCE flow requires code_challenge_method and code_challenge")
-	}
-
-	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
-		return badRequestError(InvalidChannelError)
-	}
-
-	return nil
 }
 
 // Signup is the endpoint for registering a new user
@@ -88,9 +80,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read Signup params: %v", err)
 	}
-
 	params.ConfigureDefaults()
-
 	if err := params.Validate(config.PasswordMinLength, config.Sms.Provider); err != nil {
 		return err
 	}
@@ -98,18 +88,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	var user *models.User
 	var grantParams models.GrantParams
 	params.Aud = a.requestAud(ctx, r)
-	flowType := models.ImplicitFlow
-	if params.CodeChallenge != "" {
-		flowType = models.PKCEFlow
-	}
-
-	var codeChallengeMethod models.CodeChallengeMethod
-	if flowType == models.PKCEFlow && params.CodeChallengeMethod != "" {
-		codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
-		if err != nil {
-			return err
-		}
-	}
 
 	switch params.Provider {
 	case "email":
@@ -182,15 +160,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				flowState, err := models.NewFlowState(params.Provider, params.CodeChallenge, codeChallengeMethod, models.OTP)
-				if err != nil {
-					return err
-				}
-				flowState.UserID = &(user.ID)
-				if err := tx.Create(flowState); err != nil {
-					return err
-				}
-				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, flowType); terr != nil {
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {
 						now := time.Now()
 						left := user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency).Sub(now) / time.Second
@@ -223,16 +193,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
-				flowState, err := models.NewFlowState(params.Provider, params.CodeChallenge, codeChallengeMethod, models.OTP)
-				if err != nil {
-					return err
-				}
-				flowState.UserID = &(user.ID)
-				if err := tx.Create(flowState); err != nil {
-					return err
-				}
-
-				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel, flowType); terr != nil {
+				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
 			}
@@ -257,7 +218,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return err
 			}
-
 			if config.Mailer.Autoconfirm || config.Sms.Autoconfirm {
 				return badRequestError("User already registered")
 			}
@@ -300,9 +260,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		metering.RecordLogin("password", user.ID)
 		return sendJSON(w, http.StatusOK, token)
 	}
-	if flowType == models.PKCEFlow {
-		return sendJSON(w, http.StatusOK, map[string]interface{}{})
-	}
+
 	return sendJSON(w, http.StatusOK, user)
 }
 
