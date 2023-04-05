@@ -107,11 +107,11 @@ func (m *TemplateMailer) InviteMail(user *models.User, otp, referrerURL string) 
 // ConfirmationMail sends a signup confirmation mail to a new user
 func (m *TemplateMailer) ConfirmationMail(user *models.User, otp, referrerURL string, flowType models.FlowType) error {
 	redirectParam := encodeRedirectParam(referrerURL)
-	fragment := "token="+user.ConfirmationToken+"&type=signup"+redirectParam+"&flow_type="
+	fragment := "token=" + user.ConfirmationToken + "&type=signup" + redirectParam
 	if flowType == models.PKCEFlow {
 		fragment += "&flow_type=pkce"
 	}
-	url, err := getSiteURL(referrerURL, m.Config.API.ExternalURL,m.Config.Mailer.URLPaths.Confirmation,fragment)
+	url, err := getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Confirmation, fragment)
 	if err != nil {
 		return err
 	}
@@ -227,8 +227,11 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 // RecoveryMail sends a password recovery mail
 func (m *TemplateMailer) RecoveryMail(user *models.User, otp, referrerURL string) error {
 	redirectParam := encodeRedirectParam(referrerURL)
-
-	url, err := getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=recovery"+redirectParam)
+	fragment := "token=" + user.RecoveryToken + "&type=recovery" + redirectParam
+	if flowType == models.PKCEFlow {
+		fragment += "&flow_type=pkce"
+	}
+	url, err := getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, fragment)
 	if err != nil {
 		return err
 	}
@@ -253,7 +256,7 @@ func (m *TemplateMailer) RecoveryMail(user *models.User, otp, referrerURL string
 // MagicLinkMail sends a login link mail
 func (m *TemplateMailer) MagicLinkMail(user *models.User, otp, referrerURL string, flowType models.FlowType) error {
 	redirectParam := encodeRedirectParam(referrerURL)
-	fragment := "token="+user.ConfirmationToken+"&type=signup"+redirectParam+"&flow_type="
+	fragment := "token=" + user.ConfirmationToken + "&type=signup" + redirectParam
 	if flowType == models.PKCEFlow {
 		fragment += "&flow_type=pkce"
 	}
