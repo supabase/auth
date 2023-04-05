@@ -190,6 +190,15 @@ paths:
           schema:
             type: string
             format: uri
+        - name: flow_type:
+          in: query
+          description: >
+            (Optional) defaults to the implicit flow. Where possible, we recommend using the PKCE due to the enhanced security provided by the flow.
+          schema:
+            type: string
+            enum:
+              - pkce
+              - implicit
       security:
         - APIKeyAuth: []
       responses:
@@ -234,13 +243,7 @@ paths:
                   format: uri
                   description: >
                     (Optional) URL to redirect back into the app on after verification completes successfully. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
-                flow_type:
-                  type: string
-                  enum:
-                    - pkce
-                    - implicit
-                  description: >
-                    (Optional) defaults to the implicit flow. Where possible, we recommend using the PKCE due to the enhanced security provided by the flow.
+
       responses:
         200:
           description: An access and refresh token.
@@ -332,18 +335,6 @@ paths:
                   phone: "+1234567890"
                   password: password1
                   channel: whatsapp
-              "email+password+pkce":
-                value:
-                  email: user@example.com
-                  password: password1
-                  code_challenge_method: s256
-                  code_challenge: elU6u5zyqQT2f92GRQUq6PautAeNDf4DQPayyR0ek_c&
-              "phone+password+pkce":
-                value:
-                  phone: "+1234567890"
-                  password: password1
-                  code_challenge_method: s256
-                  code_challenge: elU6u5zyqQT2f92GRQUq6PautAeNDf4DQPayyR0ek_c&
             schema:
               type: object
               properties:
