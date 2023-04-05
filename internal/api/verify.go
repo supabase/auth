@@ -43,10 +43,6 @@ const (
 // Only applicable when SECURE_EMAIL_CHANGE_ENABLED
 const singleConfirmationAccepted = "Confirmation link accepted. Please proceed to confirm link sent to the other email"
 
-type VerifyPostResponse struct {
-	AuthCode string `json:"auth_code"`
-}
-
 // VerifyParams are the parameters the Verify endpoint accepts
 type VerifyParams struct {
 	Type       string `json:"type"`
@@ -186,10 +182,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	if params.FlowType == "" {
 		params.FlowType = models.ImplicitFlow.String()
 	}
-	flowType, err := models.ParseFlowType(params.FlowType)
-	if err != nil {
-		return err
-	}
+
 	if err := params.Validate(); err != nil {
 		return err
 	}
@@ -205,7 +198,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		aud := a.requestAud(ctx, r)
-		user, terr = a.verifyUserAndToken(ctx, tx, params, aud, flowType)
+		user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
 		if terr != nil {
 			return terr
 		}
@@ -231,22 +224,12 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		if flowType == models.ImplicitFlow {
-			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
-			if terr != nil {
-				return terr
-			}
-			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-				return internalServerError("Failed to set JWT cookie. %s", terr)
-			}
-		} else if flowType == models.PKCEFlow {
-			authCode, terr := issueAuthCode(tx, user, a.config.External.FlowStateExpiryDuration)
-			if terr != nil {
-				return terr
-			}
-			return sendJSON(w, http.StatusOK, VerifyPostResponse{
-				AuthCode: authCode,
-			})
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
+		if terr != nil {
+			return terr
+		}
+		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
 		return nil
 	})
@@ -472,7 +455,7 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 }
 
 // verifyUserAndToken verifies the token associated to the user based on the verify type
-func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string, flowType models.FlowType) (*models.User, error) {
+func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
 	config := a.config
 
 	var user *models.User
@@ -485,7 +468,6 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			return nil, err
 		}
 		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
-		tokenHash = addFlowPrefixToToken(tokenHash, flowType)
 		switch params.Type {
 		case phoneChangeVerification:
 			user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
@@ -500,7 +482,6 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
 		}
 		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))
-		tokenHash = addFlowPrefixToToken(tokenHash, flowType)
 		switch params.Type {
 		case emailChangeVerification:
 			user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
