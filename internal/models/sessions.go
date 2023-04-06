@@ -73,10 +73,7 @@ func (Session) TableName() string {
 }
 
 func NewSession() (*Session, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return nil, errors.Wrap(err, "Error generating unique session id")
-	}
+	id := uuid.Must(uuid.NewV4())
 
 	defaultAAL := AAL1.String()
 

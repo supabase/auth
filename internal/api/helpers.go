@@ -28,10 +28,7 @@ func addRequestID(globalConfig *conf.GlobalConfiguration) middlewareHandler {
 			id = r.Header.Get(globalConfig.API.RequestIDHeader)
 		}
 		if id == "" {
-			uid, err := uuid.NewV4()
-			if err != nil {
-				return nil, err
-			}
+			uid := uuid.Must(uuid.NewV4())
 			id = uid.String()
 		}
 
