@@ -89,9 +89,6 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	params.Type = r.FormValue("type")
 	params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
 	params.FlowType = r.FormValue("flow_type")
-	if params.FlowType == "" {
-		params.FlowType = models.ImplicitFlow.String()
-	}
 
 	var (
 		user        *models.User

@@ -40,10 +40,8 @@ func (ts *OtpTestSuite) SetupTest() {
 
 func (ts *OtpTestSuite) TestOtpPKCE() {
 	ts.Config.External.Phone.Enabled = true
-
 	testCodeChallenge := "testtesttesttesttesttesttestteststeststesttesttesttest"
 
-	// Test the various OTP cases
 	var buffer bytes.Buffer
 	cases := []struct {
 		desc     string
@@ -127,7 +125,6 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.params))
 
 			req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)

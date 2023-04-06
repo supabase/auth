@@ -124,6 +124,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	if params.Phone != "" && params.Channel == "" {
 		params.Channel = sms_provider.SMSProvider
 	}
+
 	if err := params.Validate(config.Sms.Provider); err != nil {
 		return err
 	}
@@ -193,7 +194,6 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		}); err != nil {
 			return err
 		}
-
 		smsProvider, terr := sms_provider.GetSmsProvider(*config)
 		if terr != nil {
 			return badRequestError("Error sending sms: %v", terr)

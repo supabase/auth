@@ -43,6 +43,7 @@ func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error
 	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
 		return badRequestError(InvalidChannelError)
 	}
+	// PKCE not needed as phone signups already return access token in body
 	if p.Phone != "" && p.CodeChallenge != "" {
 		return badRequestError("PKCE not supported for phone signups")
 	}
@@ -101,13 +102,14 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		flowType = models.PKCEFlow
 	}
 
-	if isPKCEFlow(flowType) && params.CodeChallengeMethod != "" {
+	if isPKCEFlow(flowType) {
 		if codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod); err != nil {
 			return err
 		}
-	}
-	if isPKCEFlow(flowType) && config.Mailer.Autoconfirm {
-		return badRequestError("PKCE flow is not supported on signups with autoconfirm enabled")
+		// PKCE not needed as autoconfirm returns access token in body
+		if config.Mailer.Autoconfirm {
+			return badRequestError("PKCE flow is not supported on signups with autoconfirm enabled")
+		}
 	}
 
 	var user *models.User
