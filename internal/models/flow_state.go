@@ -143,7 +143,6 @@ func FindFlowStateByUserID(tx *storage.Connection, id string) (*FlowState, error
 }
 
 func (f *FlowState) VerifyPKCE(codeVerifier string) error {
-
 	switch f.CodeChallengeMethod {
 	case SHA256.String():
 		hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
