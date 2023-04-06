@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -350,4 +352,71 @@ func (ts *TokenTestSuite) TestTokenRefreshWithUnexpiredSession() {
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
+func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
+	var buffer bytes.Buffer
+	// Send OTP
+	//
+	codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
+	codeChallenge := sha256.Sum256([]byte(codeVerifier))
+	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
+
+	req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(OtpParams{
+		Email:               "test@example.com",
+		CreateUser:          true,
+		CodeChallengeMethod: "s256",
+		CodeChallenge:       challenge,
+	}))
+	req = httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	// Verify OTP
+	requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v&flow_type=%v", "magiclink", u.RecoveryToken, models.PKCEFlow.String())
+	req = httptest.NewRequest(http.MethodGet, requestUrl, &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
+	rURL, _ := w.Result().Location()
+
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	assert.True(ts.T(), u.IsConfirmed())
+
+	f, err := url.ParseQuery(rURL.RawQuery)
+	require.NoError(ts.T(), err)
+	authCode := f.Get("code")
+	assert.NotEmpty(ts.T(), authCode)
+	// Extract token and sign in
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"code_verifier": codeVerifier,
+		"auth_code":     authCode,
+	}))
+	req = httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=pkce", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+}
+
+func (ts *TokenTestSuite) TestSignUpPKCE() {
+	// Sign up with PKCE
+
+	// confirm the user manually
+
+	// Verify given OTP
+
+	// extract token, check session
+
 }
