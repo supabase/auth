@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"fmt"
 	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/storage"
 	"strings"
