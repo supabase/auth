@@ -227,8 +227,7 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 // RecoveryMail sends a password recovery mail
 func (m *TemplateMailer) RecoveryMail(user *models.User, otp, referrerURL string) error {
 	redirectParam := encodeRedirectParam(referrerURL)
-	fragment := "token=" + user.RecoveryToken + "&type=recovery" + redirectParam
-	url, err := getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, fragment)
+	url, err := getSiteURL(referrerURL, m.Config.API.ExternalURL, m.Config.Mailer.URLPaths.Recovery, "token="+user.RecoveryToken+"&type=recovery"+redirectParam)
 	if err != nil {
 		return err
 	}
@@ -262,6 +261,7 @@ func (m *TemplateMailer) MagicLinkMail(user *models.User, otp, referrerURL strin
 	if err != nil {
 		return err
 	}
+
 	data := map[string]interface{}{
 		"SiteURL":         m.Config.SiteURL,
 		"ConfirmationURL": url,

@@ -98,6 +98,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		grantParams models.GrantParams
 		err         error
 		token       *AccessTokenResponse
+		authCode    string
 	)
 
 	flowType, err := models.ParseFlowType(params.FlowType)
@@ -108,7 +109,6 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	if err := params.Validate(); err != nil {
 		return err
 	}
-	var authCode string
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -140,7 +140,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		if isImplicitFlow(models.ImplicitFlow) {
+		if isImplicitFlow(flowType) {
 			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 
 			if terr != nil {
@@ -151,9 +151,8 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
 		} else if isPKCEFlow(flowType) {
-			authCode, terr = issueAuthCode(tx, user, a.config.External.FlowStateExpiryDuration)
-			if terr != nil {
-				return terr
+			if authCode, terr = issueAuthCode(tx, user, a.config.External.FlowStateExpiryDuration); terr != nil {
+				return badRequestError("No associated flow state found. %s", terr)
 			}
 		}
 		return nil
@@ -175,7 +174,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	} else if isPKCEFlow(flowType) {
 		q := url.Values{}
 		q.Set("code", authCode)
-		rurl += q.Encode()
+		rurl += "?" + q.Encode()
 	}
 	http.Redirect(w, r, rurl, http.StatusSeeOther)
 	return nil
