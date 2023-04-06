@@ -12,6 +12,9 @@ const PKCE = "pkce"
 const MinCodeChallengeLength = 43
 const MaxCodeChallengeLength = 128
 
+const InvalidFlowTypeErrorMessage = "Invalid flow type. Flow Type must be either implicit or pkce"
+const InvalidPKCEParamsErrorMessage = "PKCE flow requires code_challenge_method and code_challenge"
+
 var codeChallengePattern = regexp.MustCompile("^[a-zA-Z-._~0-9]+$")
 
 func isValidCodeChallenge(codeChallenge string) (bool, error) {

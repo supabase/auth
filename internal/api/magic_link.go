@@ -30,8 +30,17 @@ func (p *MagicLinkParams) Validate() error {
 	if err != nil {
 		return err
 	}
-	if (p.CodeChallengeMethod == "" && p.CodeChallenge != "") || (p.CodeChallengeMethod != "" && p.CodeChallenge == "") {
-		return badRequestError("PKCE flow requires code_challenge_method and code_challenge")
+	switch true {
+	case p.CodeChallenge == "" && p.CodeChallengeMethod != "":
+		return badRequestError(InvalidPKCEParamsErrorMessage)
+	case p.CodeChallengeMethod != "" && p.CodeChallenge == "":
+		return badRequestError(InvalidPKCEParamsErrorMessage)
+	case p.CodeChallengeMethod != "" && p.CodeChallenge != "":
+		break
+	case p.CodeChallengeMethod == "" && p.CodeChallenge == "":
+		break
+	default:
+		return badRequestError(InvalidPKCEParamsErrorMessage)
 	}
 
 	return nil

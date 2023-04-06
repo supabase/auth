@@ -32,8 +32,6 @@ type SmsParams struct {
 	CodeChallenge       string                 `json:"code_challenge"`
 }
 
-const InvalidFlowTypeErrorMessage = "Invalid flow type. Flow Type must be either implicit or pkce"
-
 func (p *OtpParams) Validate() error {
 	if p.Email != "" && p.Phone != "" {
 		return badRequestError("Only an email address or phone number should be provided")
