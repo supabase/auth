@@ -60,3 +60,19 @@ func isPKCEFlow(flowType models.FlowType) bool {
 func isImplicitFlow(flowType models.FlowType) bool {
 	return flowType == models.ImplicitFlow
 }
+
+func validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
+	switch true {
+	case codeChallenge == "" && codeChallengeMethod != "":
+		return badRequestError(InvalidPKCEParamsErrorMessage)
+	case codeChallenge != "" && codeChallengeMethod == "":
+		return badRequestError(InvalidPKCEParamsErrorMessage)
+	case codeChallenge != "" && codeChallengeMethod != "":
+		break
+	case codeChallenge == "" && codeChallengeMethod == "":
+		break
+	default:
+		return badRequestError(InvalidPKCEParamsErrorMessage)
+	}
+	return nil
+}

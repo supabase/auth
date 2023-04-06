@@ -39,10 +39,9 @@ func (p *OtpParams) Validate() error {
 	if p.Email != "" && p.Channel != "" {
 		return badRequestError("Channel should only be specified with Phone OTP")
 	}
-	if (p.CodeChallengeMethod == "" && p.CodeChallenge != "") || (p.CodeChallengeMethod != "" && p.CodeChallenge == "") {
-		return badRequestError("PKCE flow requires code_challenge_method and code_challenge")
+	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+		return err
 	}
-
 	return nil
 }
 
