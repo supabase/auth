@@ -32,7 +32,7 @@ func isValidCodeChallenge(codeChallenge string) (bool, error) {
 
 func addFlowPrefixToToken(token string, flowType models.FlowType) string {
 	if isPKCEFlow(flowType) {
-		return models.PKCEFlow.String() + "_" + token
+		return flowType.String() + "_" + token
 	} else if isImplicitFlow(flowType) {
 		return token
 	}

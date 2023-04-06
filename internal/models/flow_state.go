@@ -80,8 +80,6 @@ func ParseFlowType(flowType string) (FlowType, error) {
 		return PKCEFlow, nil
 	case "implicit":
 		return ImplicitFlow, nil
-	case "":
-		return ImplicitFlow, nil
 	}
 	return -1, errors.New("invalid flow type")
 }

@@ -102,7 +102,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		flowType = models.PKCEFlow
 	}
 
-	if isPKCEFlow(flowType) {
+	if isPKCEFlow(flowType) && params.CodeChallengeMethod != "" {
 		if codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod); err != nil {
 			return err
 		}
