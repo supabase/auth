@@ -267,7 +267,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 // sanitizeUser removes all user sensitive information from the user object
 // Should be used whenever we want to prevent information about whether a user is registered or not from leaking
 func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
-	var err error
 	now := time.Now()
 
 	u.ID = uuid.Must(uuid.NewV4())
