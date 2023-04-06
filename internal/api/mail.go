@@ -238,8 +238,7 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 	if err != nil {
 		return err
 	}
-	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
-	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
+	u.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	now := time.Now()
 	if err := mailer.ConfirmationMail(u, otp, referrerURL, flowType); err != nil {
 		u.ConfirmationToken = oldToken
