@@ -120,6 +120,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", nil); terr != nil {
 				return terr
 			}
+			// PKCE not implemented yet
 			return sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, models.ImplicitFlow)
 		case smsVerification:
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {

@@ -43,16 +43,13 @@ func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error
 	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
 		return badRequestError(InvalidChannelError)
 	}
-
-	// This is a PKCE flow
-	if p.CodeChallenge != "" {
-		if p.CodeChallengeMethod == "" || p.CodeChallenge == "" {
-			return badRequestError("PKCE flow requires code_challenge_method and code_challenge")
-		}
-		if p.Phone != "" {
-			return badRequestError("pkce not supported for phone signups")
-		}
+	if p.Phone != "" && p.CodeChallenge != "" {
+		return badRequestError("PKCE not supported for phone signups")
 	}
+	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+		return err
+	}
+
 	return nil
 }
 
