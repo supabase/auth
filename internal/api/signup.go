@@ -104,7 +104,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 	var codeChallengeMethod models.CodeChallengeMethod
 
-	if flowType == models.PKCEFlow && params.CodeChallengeMethod != "" {
+	if isPKCEFlow(flowType) && params.CodeChallengeMethod != "" {
 		codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
 		if err != nil {
 			return err
@@ -294,7 +294,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		metering.RecordLogin("password", user.ID)
 		return sendJSON(w, http.StatusOK, token)
 	}
-	if flowType == models.PKCEFlow {
+	if isPKCEFlow(flowType) {
 		return sendJSON(w, http.StatusOK, map[string]interface{}{})
 	}
 	return sendJSON(w, http.StatusOK, user)

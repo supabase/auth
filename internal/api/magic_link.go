@@ -88,12 +88,11 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		signUpParams := &SignupParams{
-			Email:    params.Email,
-			Password: password,
-			Data:     params.Data,
+			Email:               params.Email,
+			Password:            password,
+			Data:                params.Data,
 			CodeChallengeMethod: params.CodeChallengeMethod,
-			CodeChallenge: params.CodeChallenge,
-
+			CodeChallenge:       params.CodeChallenge,
 		}
 		newBodyContent, err := json.Marshal(signUpParams)
 		if err != nil {
@@ -109,10 +108,10 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			newBodyContent := &SignupParams{
-				Email: params.Email,
-				Data:  params.Data,
+				Email:               params.Email,
+				Data:                params.Data,
 				CodeChallengeMethod: params.CodeChallengeMethod,
-				CodeChallenge: params.CodeChallenge,
+				CodeChallenge:       params.CodeChallenge,
 			}
 			metadata, err := json.Marshal(newBodyContent)
 			if err != nil {
@@ -130,7 +129,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var flowState *models.FlowState
-	if flowType == models.PKCEFlow {
+	if isPKCEFlow(models.PKCEFlow) {
 		codeChallengeMethod, err := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
 		if err != nil {
 			return err
@@ -147,7 +146,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		if flowType == models.PKCEFlow {
+		if isPKCEFlow(flowType) {
 			if err := tx.Create(flowState); err != nil {
 				return err
 			}

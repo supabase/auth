@@ -140,7 +140,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		if flowType == models.ImplicitFlow {
+		if isImplicitFlow(models.ImplicitFlow) {
 			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 
 			if terr != nil {
@@ -150,7 +150,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
-		} else if flowType == models.PKCEFlow {
+		} else if isPKCEFlow(flowType) {
 			authCode, terr = issueAuthCode(tx, user, a.config.External.FlowStateExpiryDuration)
 			if terr != nil {
 				return terr
@@ -168,11 +168,11 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	rurl := params.RedirectTo
-	if flowType == models.ImplicitFlow && token != nil {
+	if isImplicitFlow(flowType) && token != nil {
 		q := url.Values{}
 		q.Set("type", params.Type)
 		rurl = token.AsRedirectURL(rurl, q)
-	} else if flowType == models.PKCEFlow {
+	} else if isPKCEFlow(flowType) {
 		q := url.Values{}
 		q.Set("code", authCode)
 		rurl += q.Encode()

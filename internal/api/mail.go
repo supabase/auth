@@ -328,7 +328,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 
 	now := time.Now()
-	if err := mailer.MagicLinkMail(u, otp, referrerURL,flowType); err != nil {
+	if err := mailer.MagicLinkMail(u, otp, referrerURL, flowType); err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending magic link email")
 	}

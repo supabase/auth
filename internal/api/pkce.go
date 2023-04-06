@@ -49,3 +49,11 @@ func issueAuthCode(tx *storage.Connection, user *models.User, expiryDuration tim
 	}
 	return flowState.AuthCode, nil
 }
+
+func isPKCEFlow(flowType models.FlowType) bool {
+	return flowType == models.PKCEFlow
+}
+
+func isImplicitFlow(flowType models.FlowType) bool {
+	return flowType == models.ImplicitFlow
+}
