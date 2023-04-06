@@ -182,7 +182,6 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 
 	f, err := url.ParseQuery(rurl.Fragment)
 	require.NoError(ts.T(), err)
-	fmt.Println(f)
 	assert.Equal(ts.T(), "401", f.Get("error_code"))
 	assert.Equal(ts.T(), "Email link is invalid or has expired", f.Get("error_description"))
 	assert.Equal(ts.T(), "unauthorized_client", f.Get("error"))

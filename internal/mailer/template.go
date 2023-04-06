@@ -253,7 +253,7 @@ func (m *TemplateMailer) RecoveryMail(user *models.User, otp, referrerURL string
 // MagicLinkMail sends a login link mail
 func (m *TemplateMailer) MagicLinkMail(user *models.User, otp, referrerURL string, flowType models.FlowType) error {
 	redirectParam := encodeRedirectParam(referrerURL)
-	fragment := "token=" + user.RecoveryToken + "&type=signup" + redirectParam
+	fragment := "token=" + user.RecoveryToken + "&type=magiclink" + redirectParam
 	if flowType == models.PKCEFlow {
 		fragment += "&flow_type=pkce"
 	}

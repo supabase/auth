@@ -92,6 +92,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	if params.FlowType == "" {
 		params.FlowType = models.ImplicitFlow.String()
 	}
+
 	var (
 		user        *models.User
 		grantParams models.GrantParams
@@ -170,11 +171,11 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	if flowType == models.ImplicitFlow && token != nil {
 		q := url.Values{}
 		q.Set("type", params.Type)
-
 		rurl = token.AsRedirectURL(rurl, q)
 	} else if flowType == models.PKCEFlow {
 		q := url.Values{}
 		q.Set("code", authCode)
+		rurl += q.Encode()
 	}
 	http.Redirect(w, r, rurl, http.StatusSeeOther)
 	return nil
@@ -431,14 +432,13 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 
 	var user *models.User
 	var err error
-	token := addFlowPrefixToToken(params.Token, flowType)
 	switch params.Type {
 	case signupVerification, inviteVerification:
-		user, err = models.FindUserByConfirmationToken(conn, token)
+		user, err = models.FindUserByConfirmationToken(conn, params.Token)
 	case recoveryVerification, magicLinkVerification:
-		user, err = models.FindUserByRecoveryToken(conn, token)
+		user, err = models.FindUserByRecoveryToken(conn, params.Token)
 	case emailChangeVerification:
-		user, err = models.FindUserByEmailChangeToken(conn, token)
+		user, err = models.FindUserByEmailChangeToken(conn, params.Token)
 	default:
 		return nil, badRequestError("Invalid email verification type")
 	}
