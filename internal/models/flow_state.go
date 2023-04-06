@@ -72,7 +72,7 @@ func FindFlowStateByAuthCode(tx *storage.Connection, authCode string) (*FlowStat
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, FlowStateNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding oauth state")
+		return nil, errors.Wrap(err, "error finding flow state")
 	}
 
 	return obj, nil
@@ -84,22 +84,22 @@ func FindFlowStateByID(tx *storage.Connection, id string) (*FlowState, error) {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, FlowStateNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding oauth state")
+		return nil, errors.Wrap(err, "error finding flow state")
 	}
 
 	return obj, nil
 }
 
-func (f *FlowState) VerifyPKCE(codeChallenge, codeVerifier string) error {
+func (f *FlowState) VerifyPKCE(codeVerifier string) error {
 	switch f.CodeChallengeMethod {
 	case SHA256.String():
 		hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
 		encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
-		if subtle.ConstantTimeCompare([]byte(codeChallenge), []byte(encodedCodeVerifier)) != 1 {
+		if subtle.ConstantTimeCompare([]byte(f.CodeChallenge), []byte(encodedCodeVerifier)) != 1 {
 			return errors.New(InvalidCodeChallengeError)
 		}
 	case Plain.String():
-		if subtle.ConstantTimeCompare([]byte(codeChallenge), []byte(codeVerifier)) != 1 {
+		if subtle.ConstantTimeCompare([]byte(f.CodeChallenge), []byte(codeVerifier)) != 1 {
 			return errors.New(InvalidCodeChallengeError)
 		}
 	default:
