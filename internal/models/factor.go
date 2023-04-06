@@ -69,7 +69,7 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 	case "sso/saml":
 		return SSOSAML, nil
 	}
-	return -1, errors.New("Invalid authentication method")
+	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }
 
 type Factor struct {

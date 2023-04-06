@@ -55,7 +55,7 @@ func ParseCodeChallengeMethod(authMethod string) (CodeChallengeMethod, error) {
 	case "plain":
 		return Plain, nil
 	}
-	return -1, errors.New("invalid code challenge method")
+	return 0, fmt.Errorf("unsupported code_challenge method %q", authMethod)
 }
 
 type FlowType int
@@ -82,7 +82,7 @@ func ParseFlowType(flowType string) (FlowType, error) {
 	case "implicit":
 		return ImplicitFlow, nil
 	}
-	return -1, errors.New("invalid flow type")
+	return 0, fmt.Errorf("unsupported flow type %q", flowType)
 }
 
 func (FlowState) TableName() string {
