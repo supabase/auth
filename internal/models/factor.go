@@ -38,6 +38,8 @@ const (
 	OTP
 	TOTPSignIn
 	SSOSAML
+	Recovery
+	Invite
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -50,6 +52,10 @@ func (authMethod AuthenticationMethod) String() string {
 		return "otp"
 	case TOTPSignIn:
 		return "totp"
+	case Recovery:
+		return "recovery"
+	case Invite:
+		return "invite"
 	case SSOSAML:
 		return "sso/saml"
 	}
@@ -66,6 +72,10 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return OTP, nil
 	case "totp":
 		return TOTPSignIn, nil
+	case "recovery":
+		return Recovery, nil
+	case "invite":
+		return Invite, nil
 	case "sso/saml":
 		return SSOSAML, nil
 	}
