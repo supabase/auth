@@ -24,6 +24,9 @@ func (p *RecoverParams) Validate() error {
 	if p.Email, err = validateEmail(p.Email); err != nil {
 		return err
 	}
+	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+		return err
+	}
 	return nil
 }
 
