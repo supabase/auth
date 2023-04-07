@@ -91,10 +91,8 @@ func (Factor) TableName() string {
 }
 
 func NewFactor(user *User, friendlyName string, factorType string, state FactorState, secret string) (*Factor, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return nil, errors.Wrap(err, "Error generating unique id")
-	}
+	id := uuid.Must(uuid.NewV4())
+
 	factor := &Factor{
 		UserID:       user.ID,
 		ID:           id,
