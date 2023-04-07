@@ -78,3 +78,11 @@ func validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
 	}
 	return nil
 }
+
+func getFlowFromChallenge(codeChallenge string) models.FlowType {
+	if codeChallenge != "" {
+		return models.PKCEFlow
+	} else {
+		return models.ImplicitFlow
+	}
+}

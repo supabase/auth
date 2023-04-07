@@ -96,11 +96,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	flowType := models.ImplicitFlow
 	var codeChallengeMethod models.CodeChallengeMethod
-	if params.CodeChallenge != "" {
-		flowType = models.PKCEFlow
-	}
+	flowType := getFlowFromChallenge(params.CodeChallenge)
 
 	if isPKCEFlow(flowType) {
 		if codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod); err != nil {

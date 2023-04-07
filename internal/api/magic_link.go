@@ -61,12 +61,8 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		params.Data = make(map[string]interface{})
 	}
 
-	var flowType models.FlowType
-	if params.CodeChallenge == "" {
-		flowType = models.ImplicitFlow
-	} else {
-		flowType = models.PKCEFlow
-	}
+	flowType := getFlowFromChallenge(params.CodeChallenge)
+
 	var isNewUser bool
 	aud := a.requestAud(ctx, r)
 	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
