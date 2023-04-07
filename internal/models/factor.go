@@ -42,8 +42,6 @@ const (
 	Invite
 	MagicLink
 	EmailSignup
-  Recovery
-	Invite
 )
 
 func (authMethod AuthenticationMethod) String() string {
