@@ -284,7 +284,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
-		if errors.Is(err, invalidPasswordLengthError(config)) {
+		if errors.Is(err, invalidPasswordLengthError(config.PasswordMinLength)) {
 			return err
 		}
 		return internalServerError("Error updating user").WithInternalError(err)
