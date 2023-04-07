@@ -184,11 +184,10 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				flowState, err := models.NewFlowState(params.Provider, params.CodeChallenge, codeChallengeMethod, models.MagicLink)
+				flowState, err := models.NewFlowStateWithUserID(params.Provider, params.CodeChallenge, codeChallengeMethod, models.MagicLink, &user.ID)
 				if err != nil {
 					return err
 				}
-				flowState.UserID = &(user.ID)
 				if err := tx.Create(flowState); err != nil {
 					return err
 				}

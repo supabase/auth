@@ -124,17 +124,16 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 
 		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
-	var flowState *models.FlowState
+	var (
+		flowState           *models.FlowState
+		codeChallengeMethod models.CodeChallengeMethod
+	)
 	if isPKCEFlow(models.PKCEFlow) {
-		codeChallengeMethod, err := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
+		codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
 		if err != nil {
 			return err
 		}
 
-		if flowState, err = models.NewFlowState(models.MagicLink.String(), params.CodeChallenge, codeChallengeMethod, models.MagicLink); err != nil {
-			return err
-		}
-		flowState.UserID = &(user.ID)
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
@@ -143,6 +142,9 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if isPKCEFlow(flowType) {
+			if flowState, err = models.NewFlowStateWithUserID(models.MagicLink.String(), params.CodeChallenge, codeChallengeMethod, models.MagicLink, &user.ID); err != nil {
+				return err
+			}
 			if err := tx.Create(flowState); err != nil {
 				return err
 			}
