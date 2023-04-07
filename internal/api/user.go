@@ -7,6 +7,7 @@ import (
 	"github.com/fatih/structs"
 	"github.com/supabase/gotrue/internal/api/provider"
 	"github.com/supabase/gotrue/internal/api/sms_provider"
+	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
@@ -21,6 +22,36 @@ type UserUpdateParams struct {
 	AppData  map[string]interface{} `json:"app_metadata,omitempty"`
 	Phone    string                 `json:"phone"`
 	Channel  string                 `json:"channel"`
+}
+
+func (p *UserUpdateParams) Validate(user *models.User, config *conf.GlobalConfiguration) error {
+	var err error
+	if user.IsSSOUser {
+		if (p.Password != nil && *p.Password != "") || p.Email != "" || p.Phone != "" || p.Nonce != "" {
+			return unprocessableEntityError("Updating email, phone, password of a SSO account only possible via SSO")
+		}
+	}
+	if p.Password != nil {
+		if len(*p.Password) < config.PasswordMinLength {
+			return invalidPasswordLengthError(config.PasswordMinLength)
+		}
+	}
+	if p.Phone != "" && p.Phone != user.GetPhone() {
+		p.Phone, err = validatePhone(p.Phone)
+		if err != nil {
+			return err
+		}
+	}
+	if p.Email != "" && p.Email != user.GetEmail() {
+		p.Email, err = validateEmail(p.Email)
+		if err != nil {
+			return err
+		}
+	}
+	if p.Phone != "" && !sms_provider.IsValidMessageChannel(p.Channel, config.Sms.Provider) {
+		return badRequestError(InvalidChannelError)
+	}
+	return nil
 }
 
 // UserGet returns a user
@@ -64,10 +95,6 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	log.Debugf("Checking params for token %v", params)
 
 	if params.Email != "" && params.Email != user.GetEmail() {
-		params.Email, err = validateEmail(params.Email)
-		if err != nil {
-			return err
-		}
 		var duplicateUser *models.User
 		if duplicateUser, err = models.IsDuplicatedEmail(a.db, params.Email, aud); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
@@ -78,15 +105,11 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	if params.Phone != "" && params.Channel == "" {
 		params.Channel = sms_provider.SMSProvider
 	}
-	if params.Phone != "" && !sms_provider.IsValidMessageChannel(params.Channel, config.Sms.Provider) {
-		return badRequestError(InvalidChannelError)
+	if err := params.Validate(user, config); err != nil {
+		return err
 	}
 
 	if params.Phone != "" && params.Phone != user.GetPhone() {
-		params.Phone, err = validatePhone(params.Phone)
-		if err != nil {
-			return err
-		}
 		var exists bool
 		if exists, err = models.IsDuplicatedPhone(a.db, params.Phone, aud); err != nil {
 			return internalServerError("Database error checking phone").WithInternalError(err)
@@ -95,19 +118,16 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	if user.IsSSOUser {
-		if (params.Password != nil && *params.Password != "") || params.Email != "" || params.Phone != "" || params.Nonce != "" {
-			return unprocessableEntityError("Updating email, phone, password of a SSO account only possible via SSO")
+	if params.AppData != nil {
+		if !a.isAdmin(ctx, user, config.JWT.Aud) {
+			return unauthorizedError("Updating app_metadata requires admin privileges")
 		}
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if params.Password != nil {
-			if len(*params.Password) < config.PasswordMinLength {
-				return invalidPasswordLengthError(config)
-			}
 
+		if params.Password != nil {
 			isPasswordUpdated := false
 			if !config.Security.UpdatePasswordRequireReauthentication {
 				if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
@@ -150,10 +170,6 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.AppData != nil {
-			if !a.isAdmin(ctx, user, config.JWT.Aud) {
-				return unauthorizedError("Updating app_metadata requires admin privileges")
-			}
-
 			if terr = user.UpdateAppMetaData(tx, params.AppData); terr != nil {
 				return internalServerError("Error updating user").WithInternalError(terr)
 			}
