@@ -182,7 +182,6 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 
 	f, err := url.ParseQuery(rurl.Fragment)
 	require.NoError(ts.T(), err)
-	fmt.Println(f)
 	assert.Equal(ts.T(), "401", f.Get("error_code"))
 	assert.Equal(ts.T(), "Email link is invalid or has expired", f.Get("error_description"))
 	assert.Equal(ts.T(), "unauthorized_client", f.Get("error"))
@@ -521,6 +520,67 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 			assert.True(ts.T(), u.IsConfirmed())
 		})
 	}
+}
+
+func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	u.ConfirmationToken = "pkce_confirmation_token"
+	u.RecoveryToken = "pkce_recovery_token"
+	t := time.Now()
+	u.ConfirmationSentAt = &t
+	u.RecoverySentAt = &t
+	u.EmailChangeSentAt = &t
+
+	require.NoError(ts.T(), ts.API.db.Update(u))
+
+	cases := []struct {
+		desc    string
+		payload *VerifyParams
+	}{
+		{
+			desc: "Verify banned user on signup",
+			payload: &VerifyParams{
+				Type:  "signup",
+				Token: u.ConfirmationToken,
+			},
+		},
+		{
+			desc: "Verify magiclink",
+			payload: &VerifyParams{
+				Type:  "magiclink",
+				Token: u.RecoveryToken,
+			},
+		},
+	}
+	for _, c := range cases {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.payload))
+		codeChallenge := "codechallengecodechallengcodechallengcodechallengcodechallenge" + c.payload.Type
+		flowState, err := models.NewFlowState(models.MagicLink.String(), codeChallenge, models.SHA256, models.MagicLink)
+		require.NoError(ts.T(), err)
+		flowState.UserID = &(u.ID)
+		require.NoError(ts.T(), ts.API.db.Create(flowState))
+
+		requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", c.payload.Type, c.payload.Token)
+		req := httptest.NewRequest(http.MethodGet, requestUrl, &buffer)
+		req.Header.Set("Content-Type", "application/json")
+
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
+		rURL, _ := w.Result().Location()
+
+		u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+		require.NoError(ts.T(), err)
+		assert.True(ts.T(), u.IsConfirmed())
+
+		f, err := url.ParseQuery(rURL.RawQuery)
+		require.NoError(ts.T(), err)
+		assert.NotEmpty(ts.T(), f.Get("code"))
+	}
+
 }
 
 func (ts *VerifyTestSuite) TestVerifyBannedUser() {

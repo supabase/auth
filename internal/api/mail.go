@@ -228,7 +228,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, resp)
 }
 
-func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int) error {
+func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int, flowType models.FlowType) error {
 	var err error
 	if u.ConfirmationSentAt != nil && !u.ConfirmationSentAt.Add(maxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
@@ -238,7 +238,8 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 	if err != nil {
 		return err
 	}
-	u.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
 	if err := mailer.ConfirmationMail(u, otp, referrerURL); err != nil {
 		u.ConfirmationToken = oldToken
@@ -311,7 +312,7 @@ func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, ma
 	return errors.Wrap(tx.UpdateOnly(u, "reauthentication_token", "reauthentication_sent_at"), "Database error updating user for reauthentication")
 }
 
-func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int) error {
+func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int, flowType models.FlowType) error {
 	var err error
 	// since Magic Link is just a recovery with a different template and behaviour
 	// around new users we will reuse the recovery db timer to prevent potential abuse
@@ -323,7 +324,9 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 	if err != nil {
 		return err
 	}
-	u.RecoveryToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
+
 	now := time.Now()
 	if err := mailer.MagicLinkMail(u, otp, referrerURL); err != nil {
 		u.RecoveryToken = oldToken

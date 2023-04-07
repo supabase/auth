@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/gobuffalo/pop/v5"
@@ -37,6 +38,8 @@ const (
 	OTP
 	TOTPSignIn
 	SSOSAML
+	MagicLink
+	EmailSignup
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -51,8 +54,32 @@ func (authMethod AuthenticationMethod) String() string {
 		return "totp"
 	case SSOSAML:
 		return "sso/saml"
+	case MagicLink:
+		return "magiclink"
+	case EmailSignup:
+		return "email/signup"
 	}
 	return ""
+}
+
+func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) {
+	switch authMethod {
+	case "oauth":
+		return OAuth, nil
+	case "password":
+		return PasswordGrant, nil
+	case "otp":
+		return OTP, nil
+	case "totp":
+		return TOTPSignIn, nil
+	case "sso/saml":
+		return SSOSAML, nil
+	case "magiclink":
+		return MagicLink, nil
+	case "email/signup":
+		return EmailSignup, nil
+	}
+	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }
 
 type Factor struct {

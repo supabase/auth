@@ -1,13 +1,20 @@
 package api
 
 import (
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/storage"
 	"regexp"
+	"time"
 )
 
-const PKCE = "pkce"
-
-const MinCodeChallengeLength = 43
-const MaxCodeChallengeLength = 128
+const (
+	PKCE                          = "pkce"
+	PKCEPrefix                    = "pkce_"
+	MinCodeChallengeLength        = 43
+	MaxCodeChallengeLength        = 128
+	InvalidFlowTypeErrorMessage   = "Invalid flow type. Flow Type must be either implicit or pkce"
+	InvalidPKCEParamsErrorMessage = "PKCE flow requires code_challenge_method and code_challenge"
+)
 
 var codeChallengePattern = regexp.MustCompile("^[a-zA-Z._~0-9-]+$")
 
@@ -21,5 +28,61 @@ func isValidCodeChallenge(codeChallenge string) (bool, error) {
 		return false, badRequestError("code challenge can only contain alphanumeric characters, hyphens, periods, underscores and tildes")
 	default:
 		return true, nil
+	}
+}
+
+func addFlowPrefixToToken(token string, flowType models.FlowType) string {
+	if isPKCEFlow(flowType) {
+		return flowType.String() + "_" + token
+	} else if isImplicitFlow(flowType) {
+		return token
+	}
+	return token
+}
+
+func issueAuthCode(tx *storage.Connection, user *models.User, expiryDuration time.Duration) (string, error) {
+	flowState, err := models.FindFlowStateByUserID(tx, user.ID.String())
+	if models.IsNotFoundError(err) {
+		return "", badRequestError("No valid flow state found for user.")
+	} else if err != nil {
+		return "", err
+	}
+
+	if flowState.IsExpired(expiryDuration) {
+		return "", badRequestError("Flow state is expired")
+	}
+	return flowState.AuthCode, nil
+}
+
+func isPKCEFlow(flowType models.FlowType) bool {
+	return flowType == models.PKCEFlow
+}
+
+func isImplicitFlow(flowType models.FlowType) bool {
+	return flowType == models.ImplicitFlow
+}
+
+func validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
+	switch true {
+	// Explicitly spell out each case
+	case codeChallenge == "" && codeChallengeMethod != "":
+		return badRequestError(InvalidPKCEParamsErrorMessage)
+	case codeChallenge != "" && codeChallengeMethod == "":
+		return badRequestError(InvalidPKCEParamsErrorMessage)
+	case codeChallenge != "" && codeChallengeMethod != "":
+		break
+	case codeChallenge == "" && codeChallengeMethod == "":
+		break
+	default:
+		return badRequestError(InvalidPKCEParamsErrorMessage)
+	}
+	return nil
+}
+
+func getFlowFromChallenge(codeChallenge string) models.FlowType {
+	if codeChallenge != "" {
+		return models.PKCEFlow
+	} else {
+		return models.ImplicitFlow
 	}
 }

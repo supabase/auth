@@ -234,6 +234,7 @@ paths:
                   format: uri
                   description: >
                     (Optional) URL to redirect back into the app on after verification completes successfully. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
+
       responses:
         200:
           description: An access and refresh token.
@@ -325,6 +326,13 @@ paths:
                   phone: "+1234567890"
                   password: password1
                   channel: whatsapp
+              "email+password+pkce":
+                value:
+                  email: user@example.com
+                  password: password1
+                  flow_type: pkce
+                  code_challenge_method: s256
+                  code_challenge: elU6u5zyqQT2f92GRQUq6PautAeNDf4DQPayyR0ek_c&
             schema:
               type: object
               properties:
@@ -343,6 +351,13 @@ paths:
                   type: string
                 data:
                   type: object
+                code_challenge:
+                  type: string
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - plain
+                    - s256
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:
@@ -522,6 +537,13 @@ paths:
                   type: boolean
                 data:
                   type: object
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - s256
+                    - plain
+                code_challenge:
+                  type: string
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:

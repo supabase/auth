@@ -86,7 +86,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		if valid, err := isValidCodeChallenge(codeChallenge); !valid {
 			return err
 		}
-		flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethod)
+		flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethod, models.OAuth)
 		if err != nil {
 			return err
 		}
@@ -390,7 +390,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		if !emailData.Verified && !config.Mailer.Autoconfirm {
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)
-			if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {
+			if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
 					return nil, tooManyRequestsError("For security purposes, you can only request this once every minute")
 				}

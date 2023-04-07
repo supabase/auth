@@ -19,13 +19,15 @@ import (
 
 // SignupParams are the parameters the Signup endpoint accepts
 type SignupParams struct {
-	Email    string                 `json:"email"`
-	Phone    string                 `json:"phone"`
-	Password string                 `json:"password"`
-	Data     map[string]interface{} `json:"data"`
-	Provider string                 `json:"-"`
-	Aud      string                 `json:"-"`
-	Channel  string                 `json:"channel"`
+	Email               string                 `json:"email"`
+	Phone               string                 `json:"phone"`
+	Password            string                 `json:"password"`
+	Data                map[string]interface{} `json:"data"`
+	Provider            string                 `json:"-"`
+	Aud                 string                 `json:"-"`
+	Channel             string                 `json:"channel"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
+	CodeChallenge       string                 `json:"code_challenge"`
 }
 
 func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error {
@@ -41,6 +43,14 @@ func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error
 	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
 		return badRequestError(InvalidChannelError)
 	}
+	// PKCE not needed as phone signups already return access token in body
+	if p.Phone != "" && p.CodeChallenge != "" {
+		return badRequestError("PKCE not supported for phone signups")
+	}
+	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -58,6 +68,7 @@ func (p *SignupParams) ConfigureDefaults() {
 	if p.Phone != "" && p.Channel == "" {
 		p.Channel = sms_provider.SMSProvider
 	}
+
 }
 
 // Signup is the endpoint for registering a new user
@@ -83,6 +94,19 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	params.ConfigureDefaults()
 	if err := params.Validate(config.PasswordMinLength, config.Sms.Provider); err != nil {
 		return err
+	}
+
+	var codeChallengeMethod models.CodeChallengeMethod
+	flowType := getFlowFromChallenge(params.CodeChallenge)
+
+	if isPKCEFlow(flowType) {
+		if codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod); err != nil {
+			return err
+		}
+		// PKCE not needed as autoconfirm returns access token in body
+		if config.Mailer.Autoconfirm {
+			return badRequestError("PKCE flow is not supported on signups with autoconfirm enabled")
+		}
 	}
 
 	var user *models.User
@@ -160,7 +184,14 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {
+				flowState, err := models.NewFlowStateWithUserID(params.Provider, params.CodeChallenge, codeChallengeMethod, models.MagicLink, &user.ID)
+				if err != nil {
+					return err
+				}
+				if err := tx.Create(flowState); err != nil {
+					return err
+				}
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, flowType); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {
 						now := time.Now()
 						left := user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency).Sub(now) / time.Second
@@ -260,7 +291,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		metering.RecordLogin("password", user.ID)
 		return sendJSON(w, http.StatusOK, token)
 	}
-
+	if isPKCEFlow(flowType) {
+		return sendJSON(w, http.StatusOK, map[string]interface{}{})
+	}
 	return sendJSON(w, http.StatusOK, user)
 }
 

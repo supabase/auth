@@ -15,8 +15,10 @@ import (
 
 // MagicLinkParams holds the parameters for a magic link request
 type MagicLinkParams struct {
-	Email string                 `json:"email"`
-	Data  map[string]interface{} `json:"data"`
+	Email               string                 `json:"email"`
+	Data                map[string]interface{} `json:"data"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
+	CodeChallenge       string                 `json:"code_challenge"`
 }
 
 func (p *MagicLinkParams) Validate() error {
@@ -28,7 +30,9 @@ func (p *MagicLinkParams) Validate() error {
 	if err != nil {
 		return err
 	}
-
+	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -56,6 +60,9 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
 	}
+
+	flowType := getFlowFromChallenge(params.CodeChallenge)
+
 	var isNewUser bool
 	aud := a.requestAud(ctx, r)
 	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
@@ -78,9 +85,11 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		signUpParams := &SignupParams{
-			Email:    params.Email,
-			Password: password,
-			Data:     params.Data,
+			Email:               params.Email,
+			Password:            password,
+			Data:                params.Data,
+			CodeChallengeMethod: params.CodeChallengeMethod,
+			CodeChallenge:       params.CodeChallenge,
 		}
 		newBodyContent, err := json.Marshal(signUpParams)
 		if err != nil {
@@ -96,8 +105,10 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			newBodyContent := &SignupParams{
-				Email: params.Email,
-				Data:  params.Data,
+				Email:               params.Email,
+				Data:                params.Data,
+				CodeChallengeMethod: params.CodeChallengeMethod,
+				CodeChallenge:       params.CodeChallenge,
 			}
 			metadata, err := json.Marshal(newBodyContent)
 			if err != nil {
@@ -113,15 +124,35 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 
 		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
+	var (
+		flowState           *models.FlowState
+		codeChallengeMethod models.CodeChallengeMethod
+	)
+	if isPKCEFlow(models.PKCEFlow) {
+		codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
+		if err != nil {
+			return err
+		}
+
+	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
 
+		if isPKCEFlow(flowType) {
+			if flowState, err = models.NewFlowStateWithUserID(models.MagicLink.String(), params.CodeChallenge, codeChallengeMethod, models.MagicLink, &user.ID); err != nil {
+				return err
+			}
+			if err := tx.Create(flowState); err != nil {
+				return err
+			}
+		}
+
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
-		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength)
+		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, flowType)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {

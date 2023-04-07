@@ -538,7 +538,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 				mailer := a.Mailer(ctx)
 				referrer := a.getReferrer(r)
-				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
 					return internalServerError("Error sending confirmation mail").WithInternalError(terr)
 				}
 				return unauthorizedError("Error unverified email")
@@ -608,7 +608,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
 	// Sanity check in case user ID was not set properly
 	if models.IsNotFoundError(err) || flowState.UserID == nil {
-		return forbiddenError("invalid oauth state, please ensure oauth redirect has successfully completed")
+		return forbiddenError("invalid flow state, no valid flow state found")
 	} else if err != nil {
 		return err
 	}
@@ -627,7 +627,11 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+		authMethod, err := models.ParseAuthenticationMethod(flowState.AuthenticationMethod)
+		if err != nil {
+			return err
+		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, authMethod, grantParams)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
