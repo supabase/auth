@@ -8,6 +8,7 @@ import (
 )
 
 const PKCE = "pkce"
+const PKCEPrefix = "pkce_"
 
 const MinCodeChallengeLength = 43
 const MaxCodeChallengeLength = 128

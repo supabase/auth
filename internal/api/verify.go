@@ -49,7 +49,6 @@ type VerifyParams struct {
 	Token      string `json:"token"`
 	Email      string `json:"email"`
 	Phone      string `json:"phone"`
-	FlowType   string `json:"flow_type"`
 	RedirectTo string `json:"redirect_to"`
 }
 
@@ -61,10 +60,6 @@ func (p *VerifyParams) Validate() error {
 	if p.Type == "" {
 		return badRequestError("Verify requires a verification type")
 	}
-	if p.FlowType != models.PKCEFlow.String() && p.FlowType != models.ImplicitFlow.String() {
-		return badRequestError(InvalidFlowTypeErrorMessage)
-	}
-
 	return nil
 }
 
@@ -88,10 +83,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	params.Token = r.FormValue("token")
 	params.Type = r.FormValue("type")
 	params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
-	params.FlowType = r.FormValue("flow_type")
-	if params.FlowType == "" {
-		params.FlowType = models.ImplicitFlow.String()
-	}
+
 	var (
 		user        *models.User
 		grantParams models.GrantParams
@@ -99,12 +91,12 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		token       *AccessTokenResponse
 		authCode    string
 	)
-
-	flowType, err := models.ParseFlowType(params.FlowType)
-	if err != nil {
-		return err
+	var flowType models.FlowType
+	if firstN(params.Token, 5) == PKCEPrefix {
+		flowType = models.PKCEFlow
+	} else {
+		flowType = models.ImplicitFlow
 	}
-
 	if err := params.Validate(); err != nil {
 		return err
 	}
@@ -192,10 +184,6 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
-	}
-
-	if params.FlowType == "" {
-		params.FlowType = models.ImplicitFlow.String()
 	}
 
 	if err := params.Validate(); err != nil {

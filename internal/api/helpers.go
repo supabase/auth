@@ -232,3 +232,10 @@ func isStringInSlice(checkValue string, list []string) bool {
 func getBodyBytes(req *http.Request) ([]byte, error) {
 	return utilities.GetBodyBytes(req)
 }
+
+func firstN(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
+}

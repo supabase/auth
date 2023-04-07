@@ -526,16 +526,14 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	u.ConfirmationToken = "confirmation_token"
-	u.RecoveryToken = "recovery_token"
+	u.ConfirmationToken = "pkce_confirmation_token"
+	u.RecoveryToken = "pkce_recovery_token"
 	t := time.Now()
 	u.ConfirmationSentAt = &t
 	u.RecoverySentAt = &t
 	u.EmailChangeSentAt = &t
 
 	require.NoError(ts.T(), ts.API.db.Update(u))
-
-	flowType := models.PKCEFlow.String()
 
 	cases := []struct {
 		desc    string
@@ -544,17 +542,15 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 		{
 			desc: "Verify banned user on signup",
 			payload: &VerifyParams{
-				Type:     "signup",
-				Token:    u.ConfirmationToken,
-				FlowType: flowType,
+				Type:  "signup",
+				Token: u.ConfirmationToken,
 			},
 		},
 		{
 			desc: "Verify magiclink",
 			payload: &VerifyParams{
-				Type:     "magiclink",
-				Token:    u.RecoveryToken,
-				FlowType: flowType,
+				Type:  "magiclink",
+				Token: u.RecoveryToken,
 			},
 		},
 	}
@@ -567,7 +563,7 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 		flowState.UserID = &(u.ID)
 		require.NoError(ts.T(), ts.API.db.Create(flowState))
 
-		requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v&flow_type=%v", c.payload.Type, c.payload.Token, c.payload.FlowType)
+		requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", c.payload.Type, c.payload.Token)
 		req := httptest.NewRequest(http.MethodGet, requestUrl, &buffer)
 		req.Header.Set("Content-Type", "application/json")
 
@@ -576,7 +572,6 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 		assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
 		rURL, _ := w.Result().Location()
 
-		assert.Equal(ts.T(), rURL.Hostname(), rURL.Hostname())
 		u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 		require.NoError(ts.T(), err)
 		assert.True(ts.T(), u.IsConfirmed())

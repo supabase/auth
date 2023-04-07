@@ -190,15 +190,6 @@ paths:
           schema:
             type: string
             format: uri
-        - name: flow_type:
-          in: query
-          description: >
-            (Optional) defaults to the implicit flow. Where possible, we recommend using the PKCE due to the enhanced security provided by the flow.
-          schema:
-            type: string
-            enum:
-              - pkce
-              - implicit
       security:
         - APIKeyAuth: []
       responses:
