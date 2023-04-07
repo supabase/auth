@@ -83,7 +83,7 @@ func (FlowState) TableName() string {
 func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod) (*FlowState, error) {
 	id := uuid.Must(uuid.NewV4())
 	authCode := uuid.Must(uuid.NewV4())
-	oauth := &FlowState{
+	flowState := &FlowState{
 		ID:                   id,
 		ProviderType:         providerType,
 		CodeChallenge:        codeChallenge,
@@ -91,7 +91,21 @@ func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeCh
 		AuthCode:             authCode.String(),
 		AuthenticationMethod: authenticationMethod.String(),
 	}
-	return oauth, nil
+	return flowState, nil
+}
+
+func NewFlowStateWithUserID(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID) (*FlowState, error) {
+	id := uuid.Must(uuid.NewV4())
+	authCode := uuid.Must(uuid.NewV4())
+	flowState := &FlowState{
+		ID:                   id,
+		ProviderType:         providerType,
+		CodeChallenge:        codeChallenge,
+		CodeChallengeMethod:  codeChallengeMethod.String(),
+		AuthCode:             authCode.String(),
+		AuthenticationMethod: authenticationMethod.String(),
+	}
+	return flowState, nil
 }
 
 func FindFlowStateByAuthCode(tx *storage.Connection, authCode string) (*FlowState, error) {

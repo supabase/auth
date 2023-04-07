@@ -267,7 +267,7 @@ func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, re
 	return errors.Wrap(tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at", "invited_at"), "Database error updating user for invite")
 }
 
-func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int) error {
+func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int, flowType models.FlowType) error {
 	var err error
 	if u.RecoverySentAt != nil && !u.RecoverySentAt.Add(maxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
@@ -278,7 +278,8 @@ func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, maile
 	if err != nil {
 		return err
 	}
-	u.RecoveryToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
 	if err := mailer.RecoveryMail(u, otp, referrerURL); err != nil {
 		u.RecoveryToken = oldToken
