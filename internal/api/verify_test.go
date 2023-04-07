@@ -558,7 +558,7 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.payload))
 		codeChallenge := "codechallengecodechallengcodechallengcodechallengcodechallenge" + c.payload.Type
-		flowState, err := models.NewFlowState(models.OTP.String(), codeChallenge, models.SHA256, models.OTP)
+		flowState, err := models.NewFlowState(models.MagicLink.String(), codeChallenge, models.SHA256, models.MagicLink)
 		require.NoError(ts.T(), err)
 		flowState.UserID = &(u.ID)
 		require.NoError(ts.T(), ts.API.db.Create(flowState))

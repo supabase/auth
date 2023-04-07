@@ -184,7 +184,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				flowState, err := models.NewFlowState(params.Provider, params.CodeChallenge, codeChallengeMethod, models.OTP)
+				flowState, err := models.NewFlowState(params.Provider, params.CodeChallenge, codeChallengeMethod, models.MagicLink)
 				if err != nil {
 					return err
 				}

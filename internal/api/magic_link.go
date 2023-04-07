@@ -131,7 +131,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		if flowState, err = models.NewFlowState(models.OTP.String(), params.CodeChallenge, codeChallengeMethod, models.OTP); err != nil {
+		if flowState, err = models.NewFlowState(models.MagicLink.String(), params.CodeChallenge, codeChallengeMethod, models.MagicLink); err != nil {
 			return err
 		}
 		flowState.UserID = &(user.ID)

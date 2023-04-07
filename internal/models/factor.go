@@ -38,6 +38,8 @@ const (
 	OTP
 	TOTPSignIn
 	SSOSAML
+	MagicLink
+	EmailSignup
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -52,6 +54,10 @@ func (authMethod AuthenticationMethod) String() string {
 		return "totp"
 	case SSOSAML:
 		return "sso/saml"
+	case MagicLink:
+		return "magiclink"
+	case EmailSignup:
+		return "email/signup"
 	}
 	return ""
 }
@@ -68,6 +74,10 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return TOTPSignIn, nil
 	case "sso/saml":
 		return SSOSAML, nil
+	case "magiclink":
+		return MagicLink, nil
+	case "email/signup":
+		return EmailSignup, nil
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }
