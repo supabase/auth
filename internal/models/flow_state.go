@@ -51,10 +51,8 @@ func (FlowState) TableName() string {
 }
 
 func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod) (*FlowState, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return nil, errors.New("error generating unique oauth state verifier")
-	}
+	id := uuid.Must(uuid.NewV4())
+
 	authCode := uuid.Must(uuid.NewV4())
 	oauth := &FlowState{
 		ID:                  id,

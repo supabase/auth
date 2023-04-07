@@ -25,10 +25,8 @@ func (Challenge) TableName() string {
 const ChallengePrefix = "challenge"
 
 func NewChallenge(factor *Factor, ipAddress string) (*Challenge, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return nil, errors.Wrap(err, "Error generating unique id")
-	}
+	id := uuid.Must(uuid.NewV4())
+
 	challenge := &Challenge{
 		ID:        id,
 		FactorID:  factor.ID,
