@@ -92,7 +92,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		authCode    string
 	)
 	var flowType models.FlowType
-	if firstN(params.Token, 5) == PKCEPrefix {
+	if strings.HasPrefix(params.Token, PKCEPrefix) {
 		flowType = models.PKCEFlow
 	} else {
 		flowType = models.ImplicitFlow
