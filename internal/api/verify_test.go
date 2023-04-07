@@ -48,42 +48,81 @@ func (ts *VerifyTestSuite) SetupTest() {
 }
 
 func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
+	// modify config so we don't hit rate limit from requesting recovery twice in 60s
+	ts.Config.SMTP.MaxFrequency = 60
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.RecoverySentAt = &time.Time{}
 	require.NoError(ts.T(), ts.API.db.Update(u))
+	testEmail := "test@example.com"
 
-	// Request body
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"email": "test@example.com",
-	}))
+	cases := []struct {
+		desc   string
+		body   map[string]interface{}
+		isPKCE bool
+	}{
+		{
+			desc: "Implict Flow Recovery",
+			body: map[string]interface{}{
+				"email": testEmail,
+			},
+			isPKCE: false,
+		},
+		{
+			desc: "PKCE Flow",
+			body: map[string]interface{}{
+				"email":                 testEmail,
+				"code_challenge":        "6b151854-cc15-4e29-8db7-3d3a9f15b306",
+				"code_challenge_method": models.SHA256.String(),
+			},
+			isPKCE: true,
+		},
+	}
 
-	// Setup request
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/recover", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			// Reset user
+			u.EmailConfirmedAt = nil
+			require.NoError(ts.T(), ts.API.db.Update(u))
+			// Request body
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
 
-	// Setup response recorder
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusOK, w.Code)
+			// Setup request
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/recover", &buffer)
+			req.Header.Set("Content-Type", "application/json")
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
+			// Setup response recorder
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-	assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
-	assert.False(ts.T(), u.IsConfirmed())
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
 
-	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", recoveryVerification, u.RecoveryToken)
-	req = httptest.NewRequest(http.MethodGet, reqURL, nil)
+			assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
+			assert.False(ts.T(), u.IsConfirmed())
 
-	w = httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
+			reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", recoveryVerification, u.RecoveryToken)
+			req = httptest.NewRequest(http.MethodGet, reqURL, nil)
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	assert.True(ts.T(), u.IsConfirmed())
+			w = httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
+
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+			assert.True(ts.T(), u.IsConfirmed())
+
+			if c.isPKCE {
+				rURL, _ := w.Result().Location()
+
+				f, err := url.ParseQuery(rURL.RawQuery)
+				require.NoError(ts.T(), err)
+				assert.NotEmpty(ts.T(), f.Get("code"))
+			}
+		})
+	}
 }
 
 func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {

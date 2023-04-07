@@ -11,7 +11,23 @@ import (
 
 // RecoverParams holds the parameters for a password recovery request
 type RecoverParams struct {
-	Email string `json:"email"`
+	Email               string `json:"email"`
+	CodeChallenge       string `json:"code_challenge"`
+	CodeChallengeMethod string `json:"code_challenge_method"`
+}
+
+func (p *RecoverParams) Validate() error {
+	if p.Email == "" {
+		return unprocessableEntityError("Password recovery requires an email")
+	}
+	var err error
+	if p.Email, err = validateEmail(p.Email); err != nil {
+		return err
+	}
+	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Recover sends a recovery email
@@ -30,19 +46,16 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
-	if params.Email == "" {
-		return unprocessableEntityError("Password recovery requires an email")
+	var codeChallengeMethod models.CodeChallengeMethod
+	flowType := getFlowFromChallenge(params.CodeChallenge)
+	if err := params.Validate(); err != nil {
+		return err
 	}
 
 	var user *models.User
 	aud := a.requestAud(ctx, r)
 
-	params.Email, err = validateEmail(params.Email)
-	if err != nil {
-		return err
-	}
 	user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
-
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return sendJSON(w, http.StatusOK, map[string]string{})
@@ -56,7 +69,16 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		}
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
-		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength)
+		if isPKCEFlow(flowType) {
+			flowState, terr := models.NewFlowStateWithUserID(models.Recovery.String(), params.CodeChallenge, codeChallengeMethod, models.Recovery, &(user.ID))
+			if terr != nil {
+				return terr
+			}
+			if terr := tx.Create(flowState); terr != nil {
+				return terr
+			}
+		}
+		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, flowType)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {

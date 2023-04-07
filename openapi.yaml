@@ -395,6 +395,13 @@ paths:
                 email:
                   type: string
                   format: email
+                code_challenge:
+                  type: string
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - plain
+                    - s256
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:

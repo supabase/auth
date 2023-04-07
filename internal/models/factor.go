@@ -38,6 +38,8 @@ const (
 	OTP
 	TOTPSignIn
 	SSOSAML
+	Recovery
+	Invite
 	MagicLink
 	EmailSignup
 )
@@ -52,6 +54,10 @@ func (authMethod AuthenticationMethod) String() string {
 		return "otp"
 	case TOTPSignIn:
 		return "totp"
+	case Recovery:
+		return "recovery"
+	case Invite:
+		return "invite"
 	case SSOSAML:
 		return "sso/saml"
 	case MagicLink:
@@ -72,6 +78,10 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return OTP, nil
 	case "totp":
 		return TOTPSignIn, nil
+	case "recovery":
+		return Recovery, nil
+	case "invite":
+		return Invite, nil
 	case "sso/saml":
 		return SSOSAML, nil
 	case "magiclink":
