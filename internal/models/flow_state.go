@@ -104,6 +104,7 @@ func NewFlowStateWithUserID(providerType, codeChallenge string, codeChallengeMet
 		CodeChallengeMethod:  codeChallengeMethod.String(),
 		AuthCode:             authCode.String(),
 		AuthenticationMethod: authenticationMethod.String(),
+		UserID:               userID,
 	}
 	return flowState, nil
 }
