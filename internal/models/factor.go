@@ -40,6 +40,10 @@ const (
 	SSOSAML
 	Recovery
 	Invite
+	MagicLink
+	EmailSignup
+  Recovery
+	Invite
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -58,6 +62,10 @@ func (authMethod AuthenticationMethod) String() string {
 		return "invite"
 	case SSOSAML:
 		return "sso/saml"
+	case MagicLink:
+		return "magiclink"
+	case EmailSignup:
+		return "email/signup"
 	}
 	return ""
 }
@@ -78,6 +86,10 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return Invite, nil
 	case "sso/saml":
 		return SSOSAML, nil
+	case "magiclink":
+		return MagicLink, nil
+	case "email/signup":
+		return EmailSignup, nil
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }
