@@ -989,8 +989,16 @@ paths:
               properties:
                 email:
                   type: string
+                code_challenge:
+                  type: string
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - plain
+                    - s256
                 data:
                   type: object
+
       responses:
         200:
           description: An invitation has been sent to the user.
