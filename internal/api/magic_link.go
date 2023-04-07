@@ -64,6 +64,8 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	var flowType models.FlowType
 	if params.CodeChallenge == "" {
 		flowType = models.ImplicitFlow
+	} else {
+		flowType = models.PKCEFlow
 	}
 	var isNewUser bool
 	aud := a.requestAud(ctx, r)

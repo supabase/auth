@@ -7,16 +7,16 @@ import (
 	"time"
 )
 
-const PKCE = "pkce"
-const PKCEPrefix = "pkce_"
-
-const MinCodeChallengeLength = 43
-const MaxCodeChallengeLength = 128
+const (
+	PKCE                          = "pkce"
+	PKCEPrefix                    = "pkce_"
+	MinCodeChallengeLength        = 43
+	MaxCodeChallengeLength        = 128
+	InvalidFlowTypeErrorMessage   = "Invalid flow type. Flow Type must be either implicit or pkce"
+	InvalidPKCEParamsErrorMessage = "PKCE flow requires code_challenge_method and code_challenge"
+)
 
 var codeChallengePattern = regexp.MustCompile("^[a-zA-Z._~0-9-]+$")
-
-const InvalidFlowTypeErrorMessage = "Invalid flow type. Flow Type must be either implicit or pkce"
-const InvalidPKCEParamsErrorMessage = "PKCE flow requires code_challenge_method and code_challenge"
 
 func isValidCodeChallenge(codeChallenge string) (bool, error) {
 	// See RFC 7636 Section 4.2: https://www.rfc-editor.org/rfc/rfc7636#section-4.2
