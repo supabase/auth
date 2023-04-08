@@ -991,6 +991,13 @@ paths:
                   type: string
                 data:
                   type: object
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - s256
+                    - plain
+                code_challenge:
+                  type: string
       responses:
         200:
           description: An invitation has been sent to the user.

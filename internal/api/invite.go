@@ -12,8 +12,24 @@ import (
 
 // InviteParams are the parameters the Signup endpoint accepts
 type InviteParams struct {
-	Email string                 `json:"email"`
-	Data  map[string]interface{} `json:"data"`
+	Email               string                 `json:"email"`
+	Data                map[string]interface{} `json:"data"`
+	CodeChallenge       string                 `json:"code_challenge"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
+}
+
+func (p *InviteParams) Validate() error {
+	if p.Email == "" {
+		return unprocessableEntityError("Invitation email is required")
+	}
+	var err error
+	if p.Email, err = validateEmail(p.Email); err != nil {
+		return err
+	}
+	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Invite is the endpoint for inviting a new user
@@ -33,8 +49,9 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read Invite params: %v", err)
 	}
 
-	params.Email, err = validateEmail(params.Email)
-	if err != nil {
+	var codeChallengeMethod models.CodeChallengeMethod
+	flowType := getFlowFromChallenge(params.CodeChallenge)
+	if err := params.Validate(); err != nil {
 		return err
 	}
 
@@ -79,13 +96,26 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
-		if err := sendInvite(tx, user, mailer, referrer, config.Mailer.OtpLength); err != nil {
+		if isPKCEFlow(flowType) {
+
+			flowState, terr := models.NewFlowStateWithUserID(models.Invite.String(), params.CodeChallenge, codeChallengeMethod, models.Invite, &(user.ID))
+			if terr != nil {
+				return terr
+			}
+			if terr := tx.Create(flowState); terr != nil {
+				return terr
+			}
+		}
+		if err := sendInvite(tx, user, mailer, referrer, config.Mailer.OtpLength, flowType); err != nil {
 			return internalServerError("Error inviting user").WithInternalError(err)
 		}
 		return nil
 	})
 	if err != nil {
 		return err
+	}
+	if isPKCEFlow(flowType) {
+		return sendJSON(w, http.StatusOK, map[string]interface{}{})
 	}
 
 	return sendJSON(w, http.StatusOK, user)

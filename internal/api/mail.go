@@ -249,14 +249,15 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 	return errors.Wrap(tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at"), "Database error updating user for confirmation")
 }
 
-func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, referrerURL string, otpLength int) error {
+func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, referrerURL string, otpLength int, flowType models.FlowType) error {
 	var err error
 	oldToken := u.ConfirmationToken
 	otp, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		return err
 	}
-	u.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
 	if err := mailer.InviteMail(u, otp, referrerURL); err != nil {
 		u.ConfirmationToken = oldToken
