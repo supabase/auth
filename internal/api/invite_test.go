@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -74,14 +75,84 @@ func (ts *InviteTestSuite) makeSuperAdmin(email string) string {
 
 func (ts *InviteTestSuite) TestInvite() {
 	// Request body
+	testCodeChallenge := "fe1cb900-47eb-42f0-8527-0f8da7ba19f8"
+	cases := []struct {
+		desc        string
+		requestBody map[string]interface{}
+		expected    int
+	}{
+		{
+			desc: "(Implicit) invite user, valid",
+			requestBody: map[string]interface{}{
+				"email": "test@example.com",
+				"data": map[string]interface{}{
+					"a": 1,
+				},
+			},
+			expected: http.StatusOK,
+		},
+		{
+			desc: "(PKCE) invite user, valid",
+			requestBody: map[string]interface{}{
+				"email": "test@example.com",
+				"data": map[string]interface{}{
+					"a": 1,
+				},
+				"code_challenge_method": "s256",
+				"code_challenge":        testCodeChallenge,
+			},
+			expected: http.StatusOK,
+		},
+		{
+			desc: "(PKCE) invite user, invalid, missing code_challenge",
+			requestBody: map[string]interface{}{
+				"email":                 "test@example.com",
+				"code_challenge_method": "s256",
+			},
+			expected: http.StatusBadRequest,
+		},
+		{
+			desc: "(PKCE) invite user, missing code_challenge_method",
+			requestBody: map[string]interface{}{
+				"email":          "test@example.com",
+				"code_challenge": testCodeChallenge,
+			},
+			expected: http.StatusBadRequest,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.requestBody))
+			// Setup request
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/invite", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+			// Setup response recorder
+			w := httptest.NewRecorder()
+
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), c.expected, w.Code)
+		})
+	}
+}
+
+func (ts *InviteTestSuite) TestInvitePKCE() {
+	codeVerifier := "4a9505b9-0857-42bb-ab3c-098b4d28ddc2"
+	codeChallenge := sha256.Sum256([]byte(codeVerifier))
+	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"email": "test@example.com",
 		"data": map[string]interface{}{
 			"a": 1,
 		},
+		"code_challenge_method": "s256",
+		"code_challenge":        challenge,
 	}))
-
 	// Setup request
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/invite", &buffer)
 	req.Header.Set("Content-Type", "application/json")
@@ -91,7 +162,41 @@ func (ts *InviteTestSuite) TestInvite() {
 	w := httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusOK, w.Code)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+
+	// Verify OTP
+	requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", "invite", u.ConfirmationToken)
+	req = httptest.NewRequest(http.MethodGet, requestUrl, &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
+	rURL, _ := w.Result().Location()
+
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	assert.True(ts.T(), u.IsConfirmed())
+
+	f, err := url.ParseQuery(rURL.RawQuery)
+	require.NoError(ts.T(), err)
+	authCode := f.Get("code")
+	assert.NotEmpty(ts.T(), authCode)
+	// Extract token and sign in
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"code_verifier": codeVerifier,
+		"auth_code":     authCode,
+	}))
+	req = httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=pkce", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	verifyResp := &AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&verifyResp))
+	require.NotEmpty(ts.T(), verifyResp.Token)
 }
 
 func (ts *InviteTestSuite) TestInvite_WithoutAccess() {

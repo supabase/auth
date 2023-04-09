@@ -579,7 +579,7 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 		payload *VerifyParams
 	}{
 		{
-			desc: "Verify banned user on signup",
+			desc: "Verify user on signup",
 			payload: &VerifyParams{
 				Type:  "signup",
 				Token: u.ConfirmationToken,
