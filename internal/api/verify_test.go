@@ -72,7 +72,7 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 			desc: "PKCE Flow",
 			body: map[string]interface{}{
 				"email":                 testEmail,
-				"code_challenge":        "6b151854-cc15-4e29-8db7-3d3a9f15b306",
+				"code_challenge":        "6b151854-cc15-4e29-8db7-3d3a9f15b3066b151854-cc15-4e29-8db7-3d3a9f15b306",
 				"code_challenge_method": models.SHA256.String(),
 			},
 			isPKCE: true,
