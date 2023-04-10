@@ -38,8 +38,8 @@ const (
 	Plain
 )
 
-func (authMethod CodeChallengeMethod) String() string {
-	switch authMethod {
+func (codeChallengeMethod CodeChallengeMethod) String() string {
+	switch codeChallengeMethod {
 	case SHA256:
 		return "s256"
 	case Plain:
@@ -48,14 +48,14 @@ func (authMethod CodeChallengeMethod) String() string {
 	return ""
 }
 
-func ParseCodeChallengeMethod(authMethod string) (CodeChallengeMethod, error) {
-	switch strings.ToLower(authMethod) {
+func ParseCodeChallengeMethod(codeChallengeMethod string) (CodeChallengeMethod, error) {
+	switch strings.ToLower(codeChallengeMethod) {
 	case "s256":
 		return SHA256, nil
 	case "plain":
 		return Plain, nil
 	}
-	return 0, fmt.Errorf("unsupported code_challenge method %q", authMethod)
+	return 0, fmt.Errorf("unsupported code_challenge method %q", codeChallengeMethod)
 }
 
 type FlowType int

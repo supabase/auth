@@ -380,7 +380,7 @@ func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
 	require.NoError(ts.T(), err)
 
 	// Verify OTP
-	requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v&flow_type=%v", "magiclink", u.RecoveryToken, models.PKCEFlow.String())
+	requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", "magiclink", u.RecoveryToken)
 	req = httptest.NewRequest(http.MethodGet, requestUrl, &buffer)
 	req.Header.Set("Content-Type", "application/json")
 
