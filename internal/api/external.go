@@ -45,9 +45,8 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	query := r.URL.Query()
 	providerType := query.Get("provider")
 	scopes := query.Get("scopes")
-	flowType := query.Get("flow_type")
 	codeChallenge := query.Get("code_challenge")
-	codeChallengeMethodParam := query.Get("code_challenge_method")
+	codeChallengeMethod := query.Get("code_challenge_method")
 
 	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
@@ -68,25 +67,18 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	redirectURL := a.getRedirectURLOrReferrer(r, query.Get("redirect_to"))
 	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
+	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
+		return err
+	}
+	flowType := getFlowFromChallenge(codeChallenge)
 
 	flowStateID := ""
-	switch true {
-	case flowType == PKCE && (codeChallenge == "" || codeChallengeMethodParam == ""):
-		return badRequestError("code challenge and code challenge method are required to perform PKCE")
-	case flowType == PKCE && codeChallenge != "" && codeChallengeMethodParam != "":
-		var codeChallengeMethod models.CodeChallengeMethod
-		switch strings.ToLower(codeChallengeMethodParam) {
-		case "plain":
-			codeChallengeMethod = models.Plain
-		case "s256":
-			codeChallengeMethod = models.SHA256
-		default:
-			return badRequestError("code challenge method is unsupported")
-		}
-		if valid, err := isValidCodeChallenge(codeChallenge); !valid {
+	var codeChallengeMethodType models.CodeChallengeMethod
+	if flowType == models.PKCEFlow {
+		if codeChallengeMethodType, err = models.ParseCodeChallengeMethod(codeChallengeMethod); err != nil {
 			return err
 		}
-		flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethod, models.OAuth)
+		flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethodType, models.OAuth)
 		if err != nil {
 			return err
 		}
@@ -94,12 +86,6 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 			return err
 		}
 		flowStateID = flowState.ID.String()
-	// Implicit Flow
-	case flowType == "":
-		break
-	default:
-		// Should not reach here
-		return badRequestError("invalid request parameters")
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
