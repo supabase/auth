@@ -65,15 +65,16 @@ func (t *TwilioProvider) SendMessage(phone string, message string, channel strin
 
 // Send an SMS containing the OTP with Twilio's API
 func (t *TwilioProvider) SendSms(phone, message, channel string) error {
+	sender := t.Config.MessageServiceSid
+	receiver := "+" + phone
 	if channel == WhatsappProvider {
-		phone = "whatsapp:" + "+" + phone
-	} else if channel == SMSProvider {
-		phone = "+" + phone
+		receiver = channel + ":" + receiver
+		sender = channel + ":" + sender
 	}
 	body := url.Values{
-		"To":      {phone}, // twilio api requires "+" extension to be included
+		"To":      {receiver}, // twilio api requires "+" extension to be included
 		"Channel": {channel},
-		"From":    {t.Config.MessageServiceSid},
+		"From":    {sender},
 		"Body":    {message},
 	}
 	client := &http.Client{Timeout: defaultTimeout}
