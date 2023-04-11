@@ -314,11 +314,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	var latestValidToken *models.RefreshToken
 	if token.Revoked {
 		a.clearCookieTokens(config, w)
-		/**
-		For a revoked refresh token to be reused, it has to fulfil 2 conditions:
-			1. The revoked refresh token has to be the parent of the most recently issued valid refresh token.
-			2. The revoked refresh token has to fall within the reuse interval.
-		**/
+		// For a revoked refresh token to be reused, it has to fall within the reuse interval.
 		err = db.Transaction(func(tx *storage.Connection) error {
 			validChildToken, terr := models.GetValidChildToken(tx, token)
 			if terr != nil {
@@ -328,14 +324,10 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				}
 				return terr
 			}
-			// check if the parent of the child token is the revoked token being used
-			// validChildToken.Parent and token.Token will never be null here
-			if validChildToken.Parent == storage.NullString(token.Token) {
-				refreshTokenReuseWindow := token.UpdatedAt.Add(time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
-				// check if the revoked token falls within the reuse interval
-				if time.Now().Before(refreshTokenReuseWindow) {
-					latestValidToken = validChildToken
-				}
+			refreshTokenReuseWindow := token.UpdatedAt.Add(time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
+			// check if the revoked token falls within the reuse interval
+			if time.Now().Before(refreshTokenReuseWindow) {
+				latestValidToken = validChildToken
 			}
 			return nil
 		})
@@ -357,7 +349,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 					return internalServerError(err.Error())
 				}
 			}
-			return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", r)
+			return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", token.ID)
 		}
 	}
 
