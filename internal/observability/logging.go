@@ -5,8 +5,8 @@ import (
 	"sync"
 
 	"github.com/bombsimon/logrusr/v3"
-	"github.com/gobuffalo/pop/v5"
-	"github.com/gobuffalo/pop/v5/logging"
+	"github.com/gobuffalo/pop/v6"
+	"github.com/gobuffalo/pop/v6/logging"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/gotrue/internal/conf"
 	"go.opentelemetry.io/otel"
