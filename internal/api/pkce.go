@@ -66,11 +66,13 @@ func validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
 	// Explicitly spell out each case
 	case codeChallenge == "" && codeChallengeMethod != "":
 		return badRequestError(InvalidPKCEParamsErrorMessage)
-	case codeChallenge != "" && codeChallengeMethod == "":
-		return badRequestError(InvalidPKCEParamsErrorMessage)
-	case codeChallenge != "" && codeChallengeMethod != "":
-		if valid, err := isValidCodeChallenge(codeChallenge); !valid {
-			return err
+	case codeChallenge != "":
+		if codeChallengeMethod == "" {
+			return badRequestError(InvalidPKCEParamsErrorMessage)
+		} else {
+			if valid, err := isValidCodeChallenge(codeChallenge); !valid {
+				return err
+			}
 		}
 	case codeChallenge == "" && codeChallengeMethod == "":
 		break
