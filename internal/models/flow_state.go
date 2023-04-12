@@ -136,7 +136,7 @@ func FindFlowStateByID(tx *storage.Connection, id string) (*FlowState, error) {
 
 func FindFlowStateByUserID(tx *storage.Connection, id string) (*FlowState, error) {
 	obj := &FlowState{}
-	if err := tx.Eager().Q().Where("user_id = ?", id).Order("created_at asc").First(obj); err != nil {
+	if err := tx.Eager().Q().Where("user_id = ?", id).Order("created_at desc").First(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, FlowStateNotFoundError{}
 		}
