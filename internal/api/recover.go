@@ -70,11 +70,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
 		if isPKCEFlow(flowType) {
-			flowState, terr := models.NewFlowStateWithUserID(models.Recovery.String(), params.CodeChallenge, codeChallengeMethod, models.Recovery, &(user.ID))
-			if terr != nil {
-				return terr
-			}
-			if terr := tx.Create(flowState); terr != nil {
+			if terr := models.NewFlowStateWithUserID(tx, models.Recovery.String(), params.CodeChallenge, codeChallengeMethod, models.Recovery, &(user.ID)); terr != nil {
 				return terr
 			}
 		}

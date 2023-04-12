@@ -6,10 +6,11 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/supabase/gotrue/internal/storage"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+	"github.com/supabase/gotrue/internal/storage"
 
 	"github.com/gofrs/uuid"
 )
@@ -94,7 +95,7 @@ func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeCh
 	return flowState, nil
 }
 
-func NewFlowStateWithUserID(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID) (*FlowState, error) {
+func NewFlowStateWithUserID(tx *storage.Connection, providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID) error {
 	id := uuid.Must(uuid.NewV4())
 	authCode := uuid.Must(uuid.NewV4())
 	flowState := &FlowState{
@@ -106,7 +107,7 @@ func NewFlowStateWithUserID(providerType, codeChallenge string, codeChallengeMet
 		AuthenticationMethod: authenticationMethod.String(),
 		UserID:               userID,
 	}
-	return flowState, nil
+	return tx.Create(flowState)
 }
 
 func FindFlowStateByAuthCode(tx *storage.Connection, authCode string) (*FlowState, error) {
