@@ -128,7 +128,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		flowState           *models.FlowState
 		codeChallengeMethod models.CodeChallengeMethod
 	)
-	if isPKCEFlow(models.PKCEFlow) {
+	if isPKCEFlow(flowType) {
 		codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
 		if err != nil {
 			return err
