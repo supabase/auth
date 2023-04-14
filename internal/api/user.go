@@ -105,7 +105,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		if params.Password != nil {
 			if len(*params.Password) < config.PasswordMinLength {
-				return invalidPasswordLengthError(config)
+				return invalidPasswordLengthError(config.PasswordMinLength)
 			}
 
 			isPasswordUpdated := false
