@@ -289,9 +289,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		metering.RecordLogin("password", user.ID)
 		return sendJSON(w, http.StatusOK, token)
 	}
-	if isPKCEFlow(flowType) {
-		return sendJSON(w, http.StatusOK, map[string]interface{}{})
-	}
 	return sendJSON(w, http.StatusOK, user)
 }
 
