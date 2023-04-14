@@ -338,14 +338,15 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int) error {
+func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int, flowType models.FlowType) error {
 	var err error
 	otpNew, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		return err
 	}
 	u.EmailChange = email
-	u.EmailChangeTokenNew = fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+otpNew)))
+	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+otpNew)))
+	u.EmailChangeTokenNew = addFlowPrefixToToken(token, flowType)
 
 	otpCurrent := ""
 	if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
@@ -353,7 +354,8 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfigu
 		if err != nil {
 			return err
 		}
-		u.EmailChangeTokenCurrent = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otpCurrent)))
+		currentToken := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otpCurrent)))
+		u.EmailChangeTokenCurrent = addFlowPrefixToToken(currentToken, flowType)
 		if err != nil {
 			return err
 		}
