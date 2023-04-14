@@ -46,7 +46,6 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
-	var codeChallengeMethod models.CodeChallengeMethod
 	flowType := getFlowFromChallenge(params.CodeChallenge)
 	if err := params.Validate(); err != nil {
 		return err
@@ -70,6 +69,10 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
 		if isPKCEFlow(flowType) {
+			codeChallengeMethod, terr := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
+			if terr != nil {
+				return terr
+			}
 			if terr := models.NewFlowStateWithUserID(tx, models.Recovery.String(), params.CodeChallenge, codeChallengeMethod, models.Recovery, &(user.ID)); terr != nil {
 				return terr
 			}
