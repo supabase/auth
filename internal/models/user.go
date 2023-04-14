@@ -291,6 +291,12 @@ func (u *User) ConfirmEmailChange(tx *storage.Connection, status int) error {
 		return err
 	}
 
+	if !u.IsConfirmed() {
+		if err := u.Confirm(tx); err != nil {
+			return err
+		}
+	}
+
 	identity, err := FindIdentityByIdAndProvider(tx, u.ID.String(), "email")
 	if err != nil {
 		if IsNotFoundError(err) {
