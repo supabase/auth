@@ -1,10 +1,11 @@
 package api
 
 import (
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
 	"regexp"
 	"time"
+
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 const (
@@ -39,11 +40,12 @@ func addFlowPrefixToToken(token string, flowType models.FlowType) string {
 	return token
 }
 
-func issueAuthCode(tx *storage.Connection, user *models.User, expiryDuration time.Duration) (string, error) {
-	flowState, err := models.FindFlowStateByUserID(tx, user.ID.String())
-	if models.IsNotFoundError(err) {
-		return "", badRequestError("No valid flow state found for user.")
-	} else if err != nil {
+func issueAuthCode(tx *storage.Connection, user *models.User, expiryDuration time.Duration, authenticationMethod models.AuthenticationMethod) (string, error) {
+	flowState, err := models.FindFlowStateByUserID(tx, user.ID.String(), authenticationMethod)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return "", badRequestError("No valid flow state found for user.")
+		}
 		return "", err
 	}
 
