@@ -92,8 +92,13 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		authCode    string
 	)
 	var flowType models.FlowType
+	var authenticationMethod models.AuthenticationMethod
 	if strings.HasPrefix(params.Token, PKCEPrefix) {
 		flowType = models.PKCEFlow
+		authenticationMethod, err = models.ParseAuthenticationMethod(params.Type)
+		if err != nil {
+			return err
+		}
 	} else {
 		flowType = models.ImplicitFlow
 	}
@@ -107,11 +112,6 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		params.Token = strings.ReplaceAll(params.Token, "-", "")
 		aud := a.requestAud(ctx, r)
 		user, terr = a.verifyEmailLink(ctx, tx, params, aud, flowType)
-		if terr != nil {
-			return terr
-		}
-
-		authenticationMethod, terr := models.ParseAuthenticationMethod(params.Type)
 		if terr != nil {
 			return terr
 		}
