@@ -366,7 +366,7 @@ func (a *API) prepRedirectURL(message string, rurl string) string {
 	return rurl + "#" + q.Encode()
 }
 
-func (a *API) prepPKCERedirectURL(code, rurl string) string {
+func (a *API) prepPKCERedirectURL(rurl, code string) string {
 	q := url.Values{}
 	q.Set("code", code)
 	return rurl + "?" + q.Encode()
