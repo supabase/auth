@@ -73,9 +73,9 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	flowType := getFlowFromChallenge(codeChallenge)
 
 	flowStateID := ""
-	var codeChallengeMethodType models.CodeChallengeMethod
 	if flowType == models.PKCEFlow {
-		if codeChallengeMethodType, err = models.ParseCodeChallengeMethod(codeChallengeMethod); err != nil {
+		codeChallengeMethodType, err := models.ParseCodeChallengeMethod(codeChallengeMethod)
+		if err != nil {
 			return err
 		}
 		flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethodType, models.OAuth)

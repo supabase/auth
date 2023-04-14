@@ -134,9 +134,9 @@ func FindFlowStateByID(tx *storage.Connection, id string) (*FlowState, error) {
 	return obj, nil
 }
 
-func FindFlowStateByUserID(tx *storage.Connection, id string) (*FlowState, error) {
+func FindFlowStateByUserID(tx *storage.Connection, id string, authenticationMethod AuthenticationMethod) (*FlowState, error) {
 	obj := &FlowState{}
-	if err := tx.Eager().Q().Where("user_id = ?", id).Last(obj); err != nil {
+	if err := tx.Eager().Q().Where("user_id = ? and authentication_method = ?", id, authenticationMethod).Last(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, FlowStateNotFoundError{}
 		}

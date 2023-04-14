@@ -184,8 +184,10 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				if terr := models.NewFlowStateWithUserID(tx, params.Provider, params.CodeChallenge, codeChallengeMethod, models.EmailSignup, &user.ID); terr != nil {
-					return terr
+				if ok := isPKCEFlow(flowType); ok {
+					if terr := models.NewFlowStateWithUserID(tx, params.Provider, params.CodeChallenge, codeChallengeMethod, models.EmailSignup, &user.ID); terr != nil {
+						return terr
+					}
 				}
 				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, flowType); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {
@@ -286,9 +288,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		}
 		metering.RecordLogin("password", user.ID)
 		return sendJSON(w, http.StatusOK, token)
-	}
-	if isPKCEFlow(flowType) {
-		return sendJSON(w, http.StatusOK, map[string]interface{}{})
 	}
 	return sendJSON(w, http.StatusOK, user)
 }
