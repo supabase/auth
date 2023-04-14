@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/XSAM/otelsql"
-	"github.com/gobuffalo/pop/v5"
-	"github.com/gobuffalo/pop/v5/columns"
+	"github.com/gobuffalo/pop/v6"
+	"github.com/gobuffalo/pop/v6/columns"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"

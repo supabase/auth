@@ -311,32 +311,16 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		}
 	}
 
-	var newToken *models.RefreshToken
 	if token.Revoked {
 		a.clearCookieTokens(config, w)
-		err = db.Transaction(func(tx *storage.Connection) error {
-			validToken, terr := models.GetValidChildToken(tx, token)
-			if terr != nil {
-				if errors.Is(terr, models.RefreshTokenNotFoundError{}) {
-					// revoked token has no descendants
-					return nil
-				}
-				return terr
-			}
-			// check if token is the last previous revoked token
-			if validToken.Parent == storage.NullString(token.Token) {
-				refreshTokenReuseWindow := token.UpdatedAt.Add(time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
-				if time.Now().Before(refreshTokenReuseWindow) {
-					newToken = validToken
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return internalServerError("Error validating reuse interval").WithInternalError(err)
-		}
+		// For a revoked refresh token to be reused, it has to fall within the reuse interval.
 
-		if newToken == nil {
+		reuseUntil := token.UpdatedAt.Add(
+			time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
+
+		if time.Now().After(reuseUntil) {
+			// not OK to reuse this token
+
 			if config.Security.RefreshTokenRotationEnabled {
 				// Revoke all tokens in token family
 				err = db.Transaction(func(tx *storage.Connection) error {
@@ -350,7 +334,8 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 					return internalServerError(err.Error())
 				}
 			}
-			return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", r)
+
+			return oauthError("invalid_grant", "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID)
 		}
 	}
 
@@ -363,12 +348,14 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return terr
 		}
 
-		if newToken == nil {
-			newToken, terr = models.GrantRefreshTokenSwap(r, tx, user, token)
-			if terr != nil {
-				return internalServerError(terr.Error())
-			}
+		// a new refresh token is generated and explicitly not reusing
+		// a previous one as it could have already been revoked while
+		// this handler was running
+		newToken, terr := models.GrantRefreshTokenSwap(r, tx, user, token)
+		if terr != nil {
+			return terr
 		}
+
 		tokenString, terr = generateAccessToken(tx, user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 
 		if terr != nil {

@@ -6,10 +6,11 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"fmt"
-	"github.com/pkg/errors"
-	"github.com/supabase/gotrue/internal/storage"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
+	"github.com/supabase/gotrue/internal/storage"
 
 	"github.com/gofrs/uuid"
 )
@@ -38,8 +39,8 @@ const (
 	Plain
 )
 
-func (authMethod CodeChallengeMethod) String() string {
-	switch authMethod {
+func (codeChallengeMethod CodeChallengeMethod) String() string {
+	switch codeChallengeMethod {
 	case SHA256:
 		return "s256"
 	case Plain:
@@ -48,14 +49,14 @@ func (authMethod CodeChallengeMethod) String() string {
 	return ""
 }
 
-func ParseCodeChallengeMethod(authMethod string) (CodeChallengeMethod, error) {
-	switch strings.ToLower(authMethod) {
+func ParseCodeChallengeMethod(codeChallengeMethod string) (CodeChallengeMethod, error) {
+	switch strings.ToLower(codeChallengeMethod) {
 	case "s256":
 		return SHA256, nil
 	case "plain":
 		return Plain, nil
 	}
-	return 0, fmt.Errorf("unsupported code_challenge method %q", authMethod)
+	return 0, fmt.Errorf("unsupported code_challenge method %q", codeChallengeMethod)
 }
 
 type FlowType int
@@ -94,7 +95,7 @@ func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeCh
 	return flowState, nil
 }
 
-func NewFlowStateWithUserID(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID) (*FlowState, error) {
+func NewFlowStateWithUserID(tx *storage.Connection, providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID) error {
 	id := uuid.Must(uuid.NewV4())
 	authCode := uuid.Must(uuid.NewV4())
 	flowState := &FlowState{
@@ -106,7 +107,7 @@ func NewFlowStateWithUserID(providerType, codeChallenge string, codeChallengeMet
 		AuthenticationMethod: authenticationMethod.String(),
 		UserID:               userID,
 	}
-	return flowState, nil
+	return tx.Create(flowState)
 }
 
 func FindFlowStateByAuthCode(tx *storage.Connection, authCode string) (*FlowState, error) {
@@ -135,7 +136,7 @@ func FindFlowStateByID(tx *storage.Connection, id string) (*FlowState, error) {
 
 func FindFlowStateByUserID(tx *storage.Connection, id string) (*FlowState, error) {
 	obj := &FlowState{}
-	if err := tx.Eager().Q().Where("user_id = ?", id).Order("created_at asc").First(obj); err != nil {
+	if err := tx.Eager().Q().Where("user_id = ?", id).Last(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, FlowStateNotFoundError{}
 		}

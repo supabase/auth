@@ -184,12 +184,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				flowState, err := models.NewFlowStateWithUserID(params.Provider, params.CodeChallenge, codeChallengeMethod, models.EmailSignup, &user.ID)
-				if err != nil {
-					return err
-				}
-				if err := tx.Create(flowState); err != nil {
-					return err
+				if terr := models.NewFlowStateWithUserID(tx, params.Provider, params.CodeChallenge, codeChallengeMethod, models.EmailSignup, &user.ID); terr != nil {
+					return terr
 				}
 				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, flowType); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {

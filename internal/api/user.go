@@ -126,7 +126,10 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-
+		if params.Password != nil {
+			if len(*params.Password) < config.PasswordMinLength {
+				return invalidPasswordLengthError(config.PasswordMinLength)
+			}
 		if params.Password != nil {
 			isPasswordUpdated := false
 			if !config.Security.UpdatePasswordRequireReauthentication {
