@@ -35,7 +35,7 @@ func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error
 		return unprocessableEntityError("Signup requires a valid password")
 	}
 	if len(p.Password) < passwordMinLength {
-		return invalidPasswordError(passwordMinLength)
+		return invalidPasswordLengthError(passwordMinLength)
 	}
 	if p.Email != "" && p.Phone != "" {
 		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
