@@ -111,6 +111,10 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
+		authenticationMethod, terr := models.ParseAuthenticationMethod(params.Type)
+		if terr != nil {
+			return terr
+		}
 		switch params.Type {
 		case signupVerification, inviteVerification:
 			user, terr = a.signupVerify(r, ctx, tx, user)
@@ -142,7 +146,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
 		} else if isPKCEFlow(flowType) {
-			if authCode, terr = issueAuthCode(tx, user, a.config.External.FlowStateExpiryDuration); terr != nil {
+			if authCode, terr = issueAuthCode(tx, user, a.config.External.FlowStateExpiryDuration, authenticationMethod); terr != nil {
 				return badRequestError("No associated flow state found. %s", terr)
 			}
 		}
