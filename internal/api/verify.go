@@ -549,7 +549,7 @@ func isOtpValid(actual, expected string, sentAt *time.Time, otpExp uint) bool {
 	if expected == "" || sentAt == nil {
 		return false
 	}
-	return !isOtpExpired(sentAt, otpExp) && (actual == expected)
+	return !isOtpExpired(sentAt, otpExp) && ((actual == expected) || ("pkce_"+actual == expected))
 }
 
 func isOtpExpired(sentAt *time.Time, otpExp uint) bool {
