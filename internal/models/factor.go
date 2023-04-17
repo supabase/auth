@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gobuffalo/pop/v6"
@@ -72,6 +73,9 @@ func (authMethod AuthenticationMethod) String() string {
 }
 
 func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) {
+	if strings.HasSuffix(authMethod, "signup") {
+		authMethod = "email/signup"
+	}
 	switch authMethod {
 	case "oauth":
 		return OAuth, nil

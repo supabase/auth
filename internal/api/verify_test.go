@@ -616,8 +616,9 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
 	cases := []struct {
-		desc    string
-		payload *VerifyParams
+		desc                 string
+		payload              *VerifyParams
+		authenticationMethod models.AuthenticationMethod
 	}{
 		{
 			desc: "Verify banned user on signup",
@@ -625,6 +626,7 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 				Type:  "signup",
 				Token: u.ConfirmationToken,
 			},
+			authenticationMethod: models.EmailSignup,
 		},
 		{
 			desc: "Verify magiclink",
@@ -632,33 +634,34 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 				Type:  "magiclink",
 				Token: u.RecoveryToken,
 			},
+			authenticationMethod: models.MagicLink,
 		},
 	}
 	for _, c := range cases {
-		var buffer bytes.Buffer
-		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.payload))
-		codeChallenge := "codechallengecodechallengcodechallengcodechallengcodechallenge" + c.payload.Type
-		flowState, err := models.NewFlowState(models.MagicLink.String(), codeChallenge, models.SHA256, models.MagicLink)
-		require.NoError(ts.T(), err)
-		flowState.UserID = &(u.ID)
-		require.NoError(ts.T(), ts.API.db.Create(flowState))
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.payload))
+			codeChallenge := "codechallengecodechallengcodechallengcodechallengcodechallenge" + c.payload.Type
+			err := models.NewFlowStateWithUserID(ts.API.db, c.authenticationMethod.String(), codeChallenge, models.SHA256, c.authenticationMethod, &u.ID)
+			require.NoError(ts.T(), err)
 
-		requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", c.payload.Type, c.payload.Token)
-		req := httptest.NewRequest(http.MethodGet, requestUrl, &buffer)
-		req.Header.Set("Content-Type", "application/json")
+			requestUrl := fmt.Sprintf("http://localhost/verify?type=%v&token=%v", c.payload.Type, c.payload.Token)
+			req := httptest.NewRequest(http.MethodGet, requestUrl, &buffer)
+			req.Header.Set("Content-Type", "application/json")
 
-		w := httptest.NewRecorder()
-		ts.API.handler.ServeHTTP(w, req)
-		assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
-		rURL, _ := w.Result().Location()
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
+			rURL, _ := w.Result().Location()
 
-		u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-		require.NoError(ts.T(), err)
-		assert.True(ts.T(), u.IsConfirmed())
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+			assert.True(ts.T(), u.IsConfirmed())
 
-		f, err := url.ParseQuery(rURL.RawQuery)
-		require.NoError(ts.T(), err)
-		assert.NotEmpty(ts.T(), f.Get("code"))
+			f, err := url.ParseQuery(rURL.RawQuery)
+			require.NoError(ts.T(), err)
+			assert.NotEmpty(ts.T(), f.Get("code"))
+		})
 	}
 
 }
