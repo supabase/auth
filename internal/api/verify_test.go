@@ -232,7 +232,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 			ts.Require().NotEmpty(v.Get("code"))
 		}
 
-		// user's email should've been updated to new@example.com
+		// user's email should've been updated to newEmail
 		u, err = models.FindUserByEmailAndAudience(ts.API.db, c.newEmail, ts.Config.JWT.Aud)
 		require.NoError(ts.T(), err)
 		require.Equal(ts.T(), zeroConfirmation, u.EmailChangeConfirmStatus)
