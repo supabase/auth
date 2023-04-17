@@ -199,6 +199,14 @@ func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {
 	return updateFactorAssociatedSessions(tx, f.UserID, f.ID, AAL1.String())
 }
 
+func (f *Factor) IsOwnedBy(user *User) bool {
+	return f.UserID == user.ID
+}
+
+func (f *Factor) IsVerified() bool {
+	return f.Status == FactorStateVerified.String()
+}
+
 func DeleteFactorsByUserId(tx *storage.Connection, userId uuid.UUID) error {
 	if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Factor{}}).TableName()+" WHERE user_id = ?", userId).Exec(); err != nil {
 		return err
