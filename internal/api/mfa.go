@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"net/url"
 
@@ -189,11 +188,9 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	creationTime := challenge.CreatedAt
-	expiryTime := creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration))
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
-		ExpiresAt: expiryTime.Unix(),
+		ExpiresAt: challenge.GetExpiryTime(config.MFA.ChallengeExpiryDuration).Unix(),
 	})
 }
 

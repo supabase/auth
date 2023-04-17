@@ -51,7 +51,11 @@ func (c *Challenge) Verify(tx *storage.Connection) error {
 }
 
 func (c *Challenge) HasExpired(expiryDuration float64) bool {
-	return time.Now().After(c.CreatedAt.Add(time.Second * time.Duration(expiryDuration)))
+	return time.Now().After(c.GetExpiryTime(expiryDuration))
+}
+
+func (c *Challenge) GetExpiryTime(expiryDuration float64) time.Time {
+	return c.CreatedAt.Add(time.Second * time.Duration(expiryDuration))
 }
 
 func findChallenge(tx *storage.Connection, query string, args ...interface{}) (*Challenge, error) {
