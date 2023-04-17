@@ -22,8 +22,6 @@ func (Challenge) TableName() string {
 	return tableName
 }
 
-const ChallengePrefix = "challenge"
-
 func NewChallenge(factor *Factor, ipAddress string) (*Challenge, error) {
 	id := uuid.Must(uuid.NewV4())
 
