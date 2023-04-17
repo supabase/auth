@@ -164,6 +164,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 	for _, c := range cases {
 		u, err := models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
 		require.NoError(ts.T(), err)
+
 		u.EmailChangeSentAt = &time.Time{}
 		require.NoError(ts.T(), ts.API.db.Update(u))
 
@@ -236,6 +237,11 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 		u, err = models.FindUserByEmailAndAudience(ts.API.db, c.newEmail, ts.Config.JWT.Aud)
 		require.NoError(ts.T(), err)
 		require.Equal(ts.T(), zeroConfirmation, u.EmailChangeConfirmStatus)
+
+		// Reset confirmation status after each test
+		u.EmailConfirmedAt = nil
+		require.NoError(ts.T(), ts.API.db.Update(u))
+
 	}
 }
 
