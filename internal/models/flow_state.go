@@ -166,5 +166,5 @@ func (f *FlowState) VerifyPKCE(codeVerifier string) error {
 }
 
 func (f *FlowState) IsExpired(expiryDuration time.Duration) bool {
-	return f.CreatedAt.After(time.Now().Add(expiryDuration))
+	return time.Now().After(f.CreatedAt.Add(expiryDuration))
 }
