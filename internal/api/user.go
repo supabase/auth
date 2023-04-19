@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/fatih/structs"
@@ -176,6 +177,9 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)
 			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, config.Mailer.OtpLength); terr != nil {
+				if errors.Is(terr, MaxFrequencyLimitError) {
+					return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
+				}
 				return internalServerError("Error sending change email").WithInternalError(terr)
 			}
 		}
