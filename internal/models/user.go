@@ -529,7 +529,7 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *U
 	userIDs := make(map[string]uuid.UUID)
 	for _, identity := range identities {
 		if !identity.IsForSSOProvider() {
-			if (currentUser != nil && currentUser.ID != identity.UserID) && (currentUser == nil) {
+			if (currentUser != nil && currentUser.ID != identity.UserID) || (currentUser == nil) {
 				userIDs[identity.UserID.String()] = identity.UserID
 			}
 		}
