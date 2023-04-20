@@ -639,7 +639,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 			return err
 		}
 		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
-			"provider": flowState.ProviderType,
+			"provider_type": flowState.ProviderType,
 		}); terr != nil {
 			return terr
 		}
