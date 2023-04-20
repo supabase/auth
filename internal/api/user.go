@@ -70,7 +70,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		var duplicateUser *models.User
-		if duplicateUser, err = models.IsDuplicatedEmail(a.db, params.Email, aud); err != nil {
+		if duplicateUser, err = models.IsDuplicatedEmail(a.db, params.Email, aud, user); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
 		} else if duplicateUser != nil {
 			return unprocessableEntityError(DuplicateEmailMsg)
