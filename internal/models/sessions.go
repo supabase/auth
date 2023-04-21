@@ -201,3 +201,7 @@ func (s *Session) GetAAL() string {
 	}
 	return *(s.AAL)
 }
+
+func (s *Session) IsAAL2() bool {
+	return s.GetAAL() == AAL2.String()
+}

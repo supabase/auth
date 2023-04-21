@@ -137,7 +137,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			factors, err := models.FindFactorsByUser(ts.API.db, user)
 			ts.Require().NoError(err)
 			latestFactor := factors[len(factors)-1]
-			require.Equal(ts.T(), models.FactorStateUnverified.String(), latestFactor.Status)
+			require.False(ts.T(), latestFactor.IsVerified())
 			if c.friendlyName != "" && c.expectedCode == http.StatusOK {
 				require.Equal(ts.T(), c.friendlyName, latestFactor.FriendlyName)
 			}
@@ -402,7 +402,7 @@ func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
 	require.NoError(ts.T(), err)
 	ctx, err = ts.API.maybeLoadUserOrSession(ctx)
 	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), models.AAL2.String(), getSession(ctx).GetAAL())
+	require.True(ts.T(), getSession(ctx).IsAAL2())
 }
 
 // Performing MFA Verification followed by a sign in should return an AAL1 session and an AAL2 session
@@ -431,7 +431,7 @@ func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
 	require.Equal(ts.T(), models.AAL1.String(), getSession(ctx).GetAAL())
 	session, err := models.FindSessionByUserID(ts.API.db, token.User.ID)
 	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), models.AAL2.String(), session.GetAAL())
+	require.True(ts.T(), session.IsAAL2())
 }
 
 func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenResponse) {

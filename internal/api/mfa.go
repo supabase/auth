@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"net/url"
 
@@ -78,8 +77,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return unprocessableEntityError("MFA enrollment only supported for non-SSO users at this time")
 	}
 
-	factorType := params.FactorType
-	if factorType != models.TOTP {
+	if params.FactorType != models.TOTP {
 		return badRequestError("factor_type needs to be totp")
 	}
 
@@ -105,7 +103,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	numVerifiedFactors := 0
 	for _, factor := range factors {
-		if factor.Status == models.FactorStateVerified.String() {
+		if factor.IsVerified() {
 			numVerifiedFactors += 1
 		}
 	}
@@ -190,11 +188,9 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	creationTime := challenge.CreatedAt
-	expiryTime := creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration))
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
-		ExpiresAt: expiryTime.Unix(),
+		ExpiresAt: challenge.GetExpiryTime(config.MFA.ChallengeExpiryDuration).Unix(),
 	})
 }
 
@@ -217,7 +213,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 
-	if factor.UserID != user.ID {
+	if !factor.IsOwnedBy(user) {
 		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
 
@@ -233,8 +229,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Challenge and verify IP addresses mismatch")
 	}
 
-	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
-	if hasExpired {
+	if challenge.HasExpired(config.MFA.ChallengeExpiryDuration) {
 		err := a.db.Transaction(func(tx *storage.Connection) error {
 			if terr := tx.Destroy(challenge); terr != nil {
 				return internalServerError("Database error deleting challenge").WithInternalError(terr)
@@ -264,7 +259,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = challenge.Verify(tx); terr != nil {
 			return terr
 		}
-		if factor.Status != models.FactorStateVerified.String() {
+		if !factor.IsVerified() {
 			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
 				return terr
 			}
@@ -306,10 +301,10 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	factor := getFactor(ctx)
 	session := getSession(ctx)
 
-	if factor.Status == models.FactorStateVerified.String() && session.GetAAL() != models.AAL2.String() {
+	if factor.IsVerified() && !session.IsAAL2() {
 		return badRequestError("AAL2 required to unenroll verified factor")
 	}
-	if factor.UserID != user.ID {
+	if !factor.IsOwnedBy(user) {
 		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
 
