@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	HCaptchaSecret   string = "0x0000000000000000000000000000000000000000"
-	HCaptchaResponse string = "10000000-aaaa-bbbb-cccc-000000000001"
+	HCaptchaSecret         string = "0x0000000000000000000000000000000000000000"
+	CaptchaResponse        string = "10000000-aaaa-bbbb-cccc-000000000001"
+	TurnstileCaptchaSecret string = "1x0000000000000000000000000000000AA"
 )
 
 type MiddlewareTestSuite struct {
@@ -42,8 +43,6 @@ func TestMiddlewareFunctions(t *testing.T) {
 
 func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 	ts.Config.Security.Captcha.Enabled = true
-	ts.Config.Security.Captcha.Provider = "hcaptcha"
-	ts.Config.Security.Captcha.Secret = HCaptchaSecret
 
 	adminClaims := &GoTrueClaims{
 		Role: "supabase_admin",
@@ -51,22 +50,44 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 	adminJwt, err := jwt.NewWithClaims(jwt.SigningMethodHS256, adminClaims).SignedString([]byte(ts.Config.JWT.Secret))
 	require.NoError(ts.T(), err)
 	cases := []struct {
-		desc          string
-		adminJwt      string
-		captcha_token string
+		desc             string
+		adminJwt         string
+		captcha_token    string
+		captcha_provider string
 	}{
 		{
 			"Valid captcha response",
 			"",
-			HCaptchaResponse,
+			CaptchaResponse,
+			"hcaptcha",
+		},
+		{
+			"Valid captcha response",
+			"",
+			CaptchaResponse,
+			"turnstile",
 		},
 		{
 			"Ignore captcha if admin role is present",
 			adminJwt,
 			"",
+			"hcaptcha",
+		},
+		{
+			"Ignore captcha if admin role is present",
+			adminJwt,
+			"",
+			"turnstile",
 		},
 	}
 	for _, c := range cases {
+		ts.Config.Security.Captcha.Provider = c.captcha_provider
+		if c.captcha_provider == "turnstile" {
+			ts.Config.Security.Captcha.Secret = TurnstileCaptchaSecret
+		} else if c.captcha_provider == "hcaptcha" {
+			ts.Config.Security.Captcha.Secret = HCaptchaSecret
+		}
+
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 			"email":    "test@example.com",
@@ -143,7 +164,7 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 				"email":    "test@example.com",
 				"password": "secret",
 				"gotrue_meta_security": map[string]interface{}{
-					"captcha_token": HCaptchaResponse,
+					"captcha_token": CaptchaResponse,
 				},
 			}))
 			req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)
