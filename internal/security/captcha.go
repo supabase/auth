@@ -60,7 +60,7 @@ func VerifyRequest(r *http.Request, secretKey, captchaProvider string) (Verifica
 	captchaResponse := strings.TrimSpace(requestBody.Security.Token)
 
 	if captchaResponse == "" {
-		return VerificationResponse{}, errors.New("no hCaptcha response (captcha_token) found in request")
+		return VerificationResponse{}, errors.New("no captcha response (captcha_token) found in request")
 	}
 
 	clientIP := utilities.GetIPAddress(r)
@@ -81,20 +81,20 @@ func verifyCaptchaCode(token, secretKey, clientIP, captchaURL string) (Verificat
 
 	r, err := http.NewRequest("POST", captchaURL, strings.NewReader(data.Encode()))
 	if err != nil {
-		return VerificationResponse{}, errors.Wrap(err, "couldn't initialize request object for hcaptcha check")
+		return VerificationResponse{}, errors.Wrap(err, "couldn't initialize request object for captcha check")
 	}
 	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
 	res, err := Client.Do(r)
 	if err != nil {
-		return VerificationResponse{}, errors.Wrap(err, "failed to verify hcaptcha response")
+		return VerificationResponse{}, errors.Wrap(err, "failed to verify captcha response")
 	}
 	defer utilities.SafeClose(res.Body)
 
 	var verificationResponse VerificationResponse
 
 	if err := json.NewDecoder(res.Body).Decode(&verificationResponse); err != nil {
-		return VerificationResponse{}, errors.Wrap(err, "failed to decode hcaptcha response: not JSON")
+		return VerificationResponse{}, errors.Wrap(err, "failed to decode captcha response: not JSON")
 	}
 
 	return verificationResponse, nil

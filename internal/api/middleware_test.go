@@ -122,7 +122,17 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 				Secret:   "test",
 			},
 			http.StatusBadRequest,
-			"hCaptcha protection: request disallowed (not-using-dummy-secret)",
+			"captcha protection: request disallowed (not-using-dummy-secret)",
+		},
+		{
+			"Captcha validation failed",
+			&conf.CaptchaConfiguration{
+				Enabled:  true,
+				Provider: "turnstile",
+				Secret:   "anothertest",
+			},
+			http.StatusBadRequest,
+			"captcha protection: request disallowed (invalid-input-secret)",
 		},
 	}
 	for _, c := range cases {

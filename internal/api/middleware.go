@@ -160,11 +160,11 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 
 	verificationResult, err := security.VerifyRequest(req, strings.TrimSpace(config.Security.Captcha.Secret), config.Security.Captcha.Provider)
 	if err != nil {
-		return nil, internalServerError("hCaptcha verification process failed").WithInternalError(err)
+		return nil, internalServerError("captcha verification process failed").WithInternalError(err)
 	}
 
 	if !verificationResult.Success {
-		return nil, badRequestError("hCaptcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
+		return nil, badRequestError("captcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
 
 	}
 
