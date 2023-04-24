@@ -107,6 +107,6 @@ func GetCaptchaURL(captchaProvider string) (string, error) {
 	case "turnstile":
 		return "https://challenges.cloudflare.com/turnstile/v0/siteverify", nil
 	default:
-		return "", fmt.Errorf("Captcha Provider %q could not be found", captchaProvider)
+		return "", fmt.Errorf("captcha Provider %q could not be found", captchaProvider)
 	}
 }
