@@ -15,13 +15,15 @@ import (
 
 // UserUpdateParams parameters for updating a user
 type UserUpdateParams struct {
-	Email    string                 `json:"email"`
-	Password *string                `json:"password"`
-	Nonce    string                 `json:"nonce"`
-	Data     map[string]interface{} `json:"data"`
-	AppData  map[string]interface{} `json:"app_metadata,omitempty"`
-	Phone    string                 `json:"phone"`
-	Channel  string                 `json:"channel"`
+	Email               string                 `json:"email"`
+	Password            *string                `json:"password"`
+	Nonce               string                 `json:"nonce"`
+	Data                map[string]interface{} `json:"data"`
+	AppData             map[string]interface{} `json:"app_metadata,omitempty"`
+	Phone               string                 `json:"phone"`
+	Channel             string                 `json:"channel"`
+	CodeChallenge       string                 `json:"code_challenge"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
 }
 
 // UserGet returns a user
@@ -176,7 +178,17 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)
-			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, config.Mailer.OtpLength); terr != nil {
+			flowType := getFlowFromChallenge(params.CodeChallenge)
+			if isPKCEFlow(flowType) {
+				codeChallengeMethod, terr := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
+				if terr != nil {
+					return terr
+				}
+				if terr := models.NewFlowStateWithUserID(tx, models.EmailChange.String(), params.CodeChallenge, codeChallengeMethod, models.EmailChange, &user.ID); terr != nil {
+					return terr
+				}
+			}
+			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, config.Mailer.OtpLength, flowType); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
 					return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
 				}

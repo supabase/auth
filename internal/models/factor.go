@@ -43,6 +43,7 @@ const (
 	Invite
 	MagicLink
 	EmailSignup
+	EmailChange
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -65,6 +66,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "magiclink"
 	case EmailSignup:
 		return "email/signup"
+	case EmailChange:
+		return "email_change"
 	}
 	return ""
 }
@@ -92,6 +95,8 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return MagicLink, nil
 	case "email/signup":
 		return EmailSignup, nil
+	case "email_change":
+		return EmailChange, nil
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }
