@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/fatih/structs"
@@ -71,7 +72,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		var duplicateUser *models.User
-		if duplicateUser, err = models.IsDuplicatedEmail(a.db, params.Email, aud); err != nil {
+		if duplicateUser, err = models.IsDuplicatedEmail(a.db, params.Email, aud, user); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
 		} else if duplicateUser != nil {
 			return unprocessableEntityError(DuplicateEmailMsg)
@@ -188,6 +189,9 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				}
 			}
 			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, config.Mailer.OtpLength, flowType); terr != nil {
+				if errors.Is(terr, MaxFrequencyLimitError) {
+					return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
+				}
 				return internalServerError("Error sending change email").WithInternalError(terr)
 			}
 		}

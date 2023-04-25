@@ -149,7 +149,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return unprocessableEntityError("Signup requires a valid password")
 				}
 				if len(params.Password) < config.PasswordMinLength {
-					return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", config.PasswordMinLength))
+					return invalidPasswordLengthError(config.PasswordMinLength)
 				}
 				signupParams := &SignupParams{
 					Email:    params.Email,
@@ -182,7 +182,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return unprocessableEntityError("The new email address provided is invalid")
 			}
-			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud); terr != nil {
+			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud, user); terr != nil {
 				return internalServerError("Database error checking email").WithInternalError(terr)
 			} else if duplicateUser != nil {
 				return unprocessableEntityError(DuplicateEmailMsg)
@@ -340,6 +340,9 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 // sendEmailChange sends out an email change token to the new email.
 func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int, flowType models.FlowType) error {
 	var err error
+	if u.EmailChangeSentAt != nil && !u.EmailChangeSentAt.Add(config.SMTP.MaxFrequency).Before(time.Now()) {
+		return MaxFrequencyLimitError
+	}
 	otpNew, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
 		return err

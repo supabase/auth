@@ -16,5 +16,5 @@ create table if not exists {{ index .Options "Namespace" }}.flow_state(
        created_at timestamptz null,
        updated_at timestamptz null
 );
-create index idx_auth_code on {{ index .Options "Namespace" }}.flow_state(auth_code);
-comment on table {{ index .Options "Namespace" }}.flow_state is 'stores metadata for oauth provider logins';
+create index if not exists idx_auth_code on {{ index .Options "Namespace" }}.flow_state(auth_code);
+comment on table {{ index .Options "Namespace" }}.flow_state is 'stores metadata for pkce logins';

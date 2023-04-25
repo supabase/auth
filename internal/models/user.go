@@ -514,7 +514,8 @@ func FindUserByPhoneChangeAndAudience(tx *storage.Connection, phone, aud string)
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and audience.
-func IsDuplicatedEmail(tx *storage.Connection, email, aud string) (*User, error) {
+// If a currentUser is provided, we will need to filter out any identities that belong to the current user.
+func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *User) (*User, error) {
 	var identities []Identity
 
 	if err := tx.Eager().Q().Where("email = ?", strings.ToLower(email)).All(&identities); err != nil {
@@ -528,7 +529,9 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string) (*User, error)
 	userIDs := make(map[string]uuid.UUID)
 	for _, identity := range identities {
 		if !identity.IsForSSOProvider() {
-			userIDs[identity.UserID.String()] = identity.UserID
+			if (currentUser != nil && currentUser.ID != identity.UserID) || (currentUser == nil) {
+				userIDs[identity.UserID.String()] = identity.UserID
+			}
 		}
 	}
 

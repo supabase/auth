@@ -320,7 +320,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if user, err := models.IsDuplicatedEmail(db, params.Email, aud); err != nil {
+		if user, err := models.IsDuplicatedEmail(db, params.Email, aud, nil); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
 		} else if user != nil {
 			return unprocessableEntityError(DuplicateEmailMsg)

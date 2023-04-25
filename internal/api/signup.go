@@ -35,7 +35,7 @@ func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error
 		return unprocessableEntityError("Signup requires a valid password")
 	}
 	if len(p.Password) < passwordMinLength {
-		return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", passwordMinLength))
+		return invalidPasswordLengthError(passwordMinLength)
 	}
 	if p.Email != "" && p.Phone != "" {
 		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
@@ -122,7 +122,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud)
+		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud, nil)
 	case "phone":
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone signups are disabled")
