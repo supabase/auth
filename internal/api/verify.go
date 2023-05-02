@@ -167,7 +167,10 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		q.Set("type", params.Type)
 		rurl = token.AsRedirectURL(rurl, q)
 	} else if isPKCEFlow(flowType) {
-		rurl = a.prepPKCERedirectURL(rurl, authCode)
+		rurl, err = a.prepPKCERedirectURL(rurl, authCode)
+		if err != nil {
+			return err
+		}
 	}
 	http.Redirect(w, r, rurl, http.StatusSeeOther)
 	return nil
@@ -370,10 +373,14 @@ func (a *API) prepRedirectURL(message string, rurl string) string {
 	return rurl + "#" + q.Encode()
 }
 
-func (a *API) prepPKCERedirectURL(rurl, code string) string {
-	q := url.Values{}
+func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
+	u, err := url.Parse(rurl)
+	if err != nil {
+		return "", err
+	}
+	q := u.Query()
 	q.Set("code", code)
-	return rurl + "?" + q.Encode()
+	return u.String(), nil
 }
 
 func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
