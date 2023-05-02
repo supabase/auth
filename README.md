@@ -707,7 +707,7 @@ Or Messagebird credentials, which can be obtained in the [Dashboard](https://das
 
 ### CAPTCHA
 
-- If enabled, CAPTCHA will check the request body for the `hcaptcha_token` field and make a verification request to the CAPTCHA provider.
+- If enabled, CAPTCHA will check the request body for the `captcha_token` field and make a verification request to the CAPTCHA provider.
 
 `SECURITY_CAPTCHA_ENABLED` - `string`
 
@@ -715,12 +715,12 @@ Whether captcha middleware is enabled
 
 `SECURITY_CAPTCHA_PROVIDER` - `string`
 
-for now the only option supported is: `hcaptcha`
+for now the only options supported are: `hcaptcha` and `turnstile`
 
 - `SECURITY_CAPTCHA_SECRET` - `string`
 - `SECURITY_CAPTCHA_TIMEOUT` - `string`
 
-Retrieve from hcaptcha account
+Retrieve from hcaptcha or turnstile account
 
 ### Reauthentication
 

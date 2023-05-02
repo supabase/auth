@@ -235,14 +235,14 @@ func (c *CaptchaConfiguration) Validate() error {
 		return nil
 	}
 
-	if c.Provider != "hcaptcha" {
+	if c.Provider != "hcaptcha" && c.Provider != "turnstile" {
 		return fmt.Errorf("unsupported captcha provider: %s", c.Provider)
 	}
 
 	c.Secret = strings.TrimSpace(c.Secret)
 
 	if c.Secret == "" {
-		return errors.New("hcaptcha provider secret is empty")
+		return errors.New("captcha provider secret is empty")
 	}
 
 	return nil
