@@ -380,6 +380,7 @@ func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
 	}
 	q := u.Query()
 	q.Set("code", code)
+	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
 
