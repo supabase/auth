@@ -225,7 +225,10 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	if flowState != nil {
 		// This means that the callback is using PKCE
 		// Set the flowState.AuthCode to the query param here
-		rurl = a.prepPKCERedirectURL(rurl, flowState.AuthCode)
+		rurl, err = a.prepPKCERedirectURL(rurl, flowState.AuthCode)
+		if err != nil {
+			return err
+		}
 	} else if token != nil {
 		q := url.Values{}
 		q.Set("provider_token", providerAccessToken)

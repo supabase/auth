@@ -279,6 +279,7 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 	}
 
 	modified := false
+	updateSAMLProvider := false
 
 	provider := getSSOProvider(ctx)
 
@@ -298,6 +299,7 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 		}
 
 		provider.SAMLProvider.MetadataXML = string(rawMetadata)
+		updateSAMLProvider = true
 		modified = true
 	}
 
@@ -360,7 +362,7 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 				}
 			}
 
-			if updateAttributeMapping {
+			if updateAttributeMapping || updateSAMLProvider {
 				if terr := tx.Eager().Update(&provider.SAMLProvider); terr != nil {
 					return terr
 				}

@@ -619,6 +619,11 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		if err != nil {
 			return err
 		}
+		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+			"provider_type": flowState.ProviderType,
+		}); terr != nil {
+			return terr
+		}
 		token, terr = a.issueRefreshToken(ctx, tx, user, authMethod, grantParams)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
