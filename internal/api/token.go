@@ -311,32 +311,16 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		}
 	}
 
-	var newToken *models.RefreshToken
 	if token.Revoked {
 		a.clearCookieTokens(config, w)
-		err = db.Transaction(func(tx *storage.Connection) error {
-			validToken, terr := models.GetValidChildToken(tx, token)
-			if terr != nil {
-				if errors.Is(terr, models.RefreshTokenNotFoundError{}) {
-					// revoked token has no descendants
-					return nil
-				}
-				return terr
-			}
-			// check if token is the last previous revoked token
-			if validToken.Parent == storage.NullString(token.Token) {
-				refreshTokenReuseWindow := token.UpdatedAt.Add(time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
-				if time.Now().Before(refreshTokenReuseWindow) {
-					newToken = validToken
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return internalServerError("Error validating reuse interval").WithInternalError(err)
-		}
+		// For a revoked refresh token to be reused, it has to fall within the reuse interval.
 
-		if newToken == nil {
+		reuseUntil := token.UpdatedAt.Add(
+			time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
+
+		if time.Now().After(reuseUntil) {
+			// not OK to reuse this token
+
 			if config.Security.RefreshTokenRotationEnabled {
 				// Revoke all tokens in token family
 				err = db.Transaction(func(tx *storage.Connection) error {
@@ -350,7 +334,8 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 					return internalServerError(err.Error())
 				}
 			}
-			return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", r)
+
+			return oauthError("invalid_grant", "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID)
 		}
 	}
 
@@ -363,12 +348,14 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return terr
 		}
 
-		if newToken == nil {
-			newToken, terr = models.GrantRefreshTokenSwap(r, tx, user, token)
-			if terr != nil {
-				return internalServerError(terr.Error())
-			}
+		// a new refresh token is generated and explicitly not reusing
+		// a previous one as it could have already been revoked while
+		// this handler was running
+		newToken, terr := models.GrantRefreshTokenSwap(r, tx, user, token)
+		if terr != nil {
+			return terr
 		}
+
 		tokenString, terr = generateAccessToken(tx, user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 
 		if terr != nil {
@@ -539,7 +526,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 				mailer := a.Mailer(ctx)
 				referrer := a.getReferrer(r)
 				externalURL := getExternalHost(ctx)
-				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength); terr != nil {
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
 					return internalServerError("Error sending confirmation mail").WithInternalError(terr)
 				}
 				return unauthorizedError("Error unverified email")
@@ -609,26 +596,30 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
 	// Sanity check in case user ID was not set properly
 	if models.IsNotFoundError(err) || flowState.UserID == nil {
-		return forbiddenError("invalid oauth state, please ensure oauth redirect has successfully completed")
+		return forbiddenError("invalid flow state, no valid flow state found")
 	} else if err != nil {
 		return err
 	}
 	if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
-		return forbiddenError("invalid oauth state, oauth state has expired")
+		return forbiddenError("invalid flow state, flow state has expired")
 	}
 
 	user, err := models.FindUserByID(db, *flowState.UserID)
 	if err != nil {
 		return err
 	}
-	if err := flowState.VerifyPKCE(flowState.CodeChallenge, params.CodeVerifier); err != nil {
+	if err := flowState.VerifyPKCE(params.CodeVerifier); err != nil {
 		return forbiddenError(err.Error())
 	}
 
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+		authMethod, err := models.ParseAuthenticationMethod(flowState.AuthenticationMethod)
+		if err != nil {
+			return err
+		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, authMethod, grantParams)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}

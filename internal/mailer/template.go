@@ -255,6 +255,7 @@ func (m *TemplateMailer) MagicLinkMail(user *models.User, otp, referrerURL strin
 	if err != nil {
 		return err
 	}
+
 	data := map[string]interface{}{
 		"SiteURL":         m.Config.SiteURL,
 		"ConfirmationURL": externalURL.ResolveReference(path).String(),

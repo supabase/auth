@@ -38,6 +38,109 @@ func (ts *OtpTestSuite) SetupTest() {
 
 }
 
+func (ts *OtpTestSuite) TestOtpPKCE() {
+	ts.Config.External.Phone.Enabled = true
+	testCodeChallenge := "testtesttesttesttesttesttestteststeststesttesttesttest"
+
+	var buffer bytes.Buffer
+	cases := []struct {
+		desc     string
+		params   OtpParams
+		expected struct {
+			code     int
+			response map[string]interface{}
+		}
+	}{
+		{
+			desc: "Test (PKCE) Success Magiclink Otp",
+			params: OtpParams{
+				Email:               "test@example.com",
+				CreateUser:          true,
+				CodeChallengeMethod: "s256",
+				CodeChallenge:       testCodeChallenge,
+			},
+			expected: struct {
+				code     int
+				response map[string]interface{}
+			}{
+				http.StatusOK,
+				make(map[string]interface{}),
+			},
+		},
+		{
+			desc: "Test (PKCE) Failure, no code challenge",
+			params: OtpParams{
+				Email:               "test@example.com",
+				CreateUser:          true,
+				CodeChallengeMethod: "s256",
+			},
+			expected: struct {
+				code     int
+				response map[string]interface{}
+			}{
+				http.StatusBadRequest,
+				map[string]interface{}{
+					"code": float64(http.StatusBadRequest),
+					"msg":  "PKCE flow requires code_challenge_method and code_challenge",
+				},
+			},
+		},
+		{
+			desc: "Test (PKCE) Failure, no code challenge method",
+			params: OtpParams{
+				Email:         "test@example.com",
+				CreateUser:    true,
+				CodeChallenge: testCodeChallenge,
+			},
+			expected: struct {
+				code     int
+				response map[string]interface{}
+			}{
+				http.StatusBadRequest,
+				map[string]interface{}{
+					"code": float64(http.StatusBadRequest),
+					"msg":  "PKCE flow requires code_challenge_method and code_challenge",
+				},
+			},
+		},
+		{
+			desc: "Test (PKCE) Success, phone with valid params",
+			params: OtpParams{
+				Phone:               "123456789",
+				CreateUser:          true,
+				CodeChallengeMethod: "s256",
+				CodeChallenge:       testCodeChallenge,
+			},
+			expected: struct {
+				code     int
+				response map[string]interface{}
+			}{
+				http.StatusBadRequest,
+				map[string]interface{}{
+					"code": float64(http.StatusBadRequest),
+					"msg":  "Error sending sms:",
+				},
+			},
+		},
+	}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.params))
+
+			req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+
+			require.Equal(ts.T(), c.expected.code, w.Code)
+			data := make(map[string]interface{})
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+		})
+	}
+}
+
 func (ts *OtpTestSuite) TestOtp() {
 	// Configured to allow testing of invalid channel params
 	ts.Config.External.Phone.Enabled = true

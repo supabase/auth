@@ -2,9 +2,11 @@ package models
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 	"time"
 
-	"github.com/gobuffalo/pop/v5"
+	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/storage"
@@ -37,6 +39,11 @@ const (
 	OTP
 	TOTPSignIn
 	SSOSAML
+	Recovery
+	Invite
+	MagicLink
+	EmailSignup
+	EmailChange
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -49,10 +56,49 @@ func (authMethod AuthenticationMethod) String() string {
 		return "otp"
 	case TOTPSignIn:
 		return "totp"
+	case Recovery:
+		return "recovery"
+	case Invite:
+		return "invite"
 	case SSOSAML:
 		return "sso/saml"
+	case MagicLink:
+		return "magiclink"
+	case EmailSignup:
+		return "email/signup"
+	case EmailChange:
+		return "email_change"
 	}
 	return ""
+}
+
+func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) {
+	if strings.HasSuffix(authMethod, "signup") {
+		authMethod = "email/signup"
+	}
+	switch authMethod {
+	case "oauth":
+		return OAuth, nil
+	case "password":
+		return PasswordGrant, nil
+	case "otp":
+		return OTP, nil
+	case "totp":
+		return TOTPSignIn, nil
+	case "recovery":
+		return Recovery, nil
+	case "invite":
+		return Invite, nil
+	case "sso/saml":
+		return SSOSAML, nil
+	case "magiclink":
+		return MagicLink, nil
+	case "email/signup":
+		return EmailSignup, nil
+	case "email_change":
+		return EmailChange, nil
+	}
+	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }
 
 type Factor struct {
@@ -74,10 +120,8 @@ func (Factor) TableName() string {
 }
 
 func NewFactor(user *User, friendlyName string, factorType string, state FactorState, secret string) (*Factor, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return nil, errors.Wrap(err, "Error generating unique id")
-	}
+	id := uuid.Must(uuid.NewV4())
+
 	factor := &Factor{
 		UserID:       user.ID,
 		ID:           id,
@@ -158,6 +202,14 @@ func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {
 		}
 	}
 	return updateFactorAssociatedSessions(tx, f.UserID, f.ID, AAL1.String())
+}
+
+func (f *Factor) IsOwnedBy(user *User) bool {
+	return f.UserID == user.ID
+}
+
+func (f *Factor) IsVerified() bool {
+	return f.Status == FactorStateVerified.String()
 }
 
 func DeleteFactorsByUserId(tx *storage.Connection, userId uuid.UUID) error {

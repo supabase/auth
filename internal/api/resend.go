@@ -121,7 +121,8 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", nil); terr != nil {
 				return terr
 			}
-			return sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength)
+			// PKCE not implemented yet
+			return sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow)
 		case smsVerification:
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
@@ -132,7 +133,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			}
 			return a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, sms_provider.SMSProvider)
 		case emailChangeVerification:
-			return a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, externalURL, config.Mailer.OtpLength)
+			return a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow)
 		case phoneChangeVerification:
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)
 			if terr != nil {

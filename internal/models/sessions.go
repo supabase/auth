@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gobuffalo/pop/v5"
+	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/storage"
@@ -73,10 +73,7 @@ func (Session) TableName() string {
 }
 
 func NewSession() (*Session, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return nil, errors.Wrap(err, "Error generating unique session id")
-	}
+	id := uuid.Must(uuid.NewV4())
 
 	defaultAAL := AAL1.String()
 
@@ -203,4 +200,8 @@ func (s *Session) GetAAL() string {
 		return ""
 	}
 	return *(s.AAL)
+}
+
+func (s *Session) IsAAL2() bool {
+	return s.GetAAL() == AAL2.String()
 }

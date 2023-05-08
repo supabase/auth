@@ -5,9 +5,12 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"fmt"
+	"strings"
+	"time"
+
 	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/storage"
-	"time"
 
 	"github.com/gofrs/uuid"
 )
@@ -19,6 +22,7 @@ type FlowState struct {
 	ID                   uuid.UUID  `json:"id" db:"id"`
 	UserID               *uuid.UUID `json:"user_id,omitempty" db:"user_id"`
 	AuthCode             string     `json:"auth_code" db:"auth_code"`
+	AuthenticationMethod string     `json:"authentication_method" db:"authentication_method"`
 	CodeChallenge        string     `json:"code_challenge" db:"code_challenge"`
 	CodeChallengeMethod  string     `json:"code_challenge_method" db:"code_challenge_method"`
 	ProviderType         string     `json:"provider_type" db:"provider_type"`
@@ -35,12 +39,39 @@ const (
 	Plain
 )
 
-func (authMethod CodeChallengeMethod) String() string {
-	switch authMethod {
+func (codeChallengeMethod CodeChallengeMethod) String() string {
+	switch codeChallengeMethod {
 	case SHA256:
 		return "s256"
 	case Plain:
 		return "plain"
+	}
+	return ""
+}
+
+func ParseCodeChallengeMethod(codeChallengeMethod string) (CodeChallengeMethod, error) {
+	switch strings.ToLower(codeChallengeMethod) {
+	case "s256":
+		return SHA256, nil
+	case "plain":
+		return Plain, nil
+	}
+	return 0, fmt.Errorf("unsupported code_challenge method %q", codeChallengeMethod)
+}
+
+type FlowType int
+
+const (
+	PKCEFlow FlowType = iota
+	ImplicitFlow
+)
+
+func (flowType FlowType) String() string {
+	switch flowType {
+	case PKCEFlow:
+		return "pkce"
+	case ImplicitFlow:
+		return "implicit"
 	}
 	return ""
 }
@@ -50,20 +81,33 @@ func (FlowState) TableName() string {
 	return tableName
 }
 
-func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod) (*FlowState, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return nil, errors.New("error generating unique oauth state verifier")
-	}
+func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod) (*FlowState, error) {
+	id := uuid.Must(uuid.NewV4())
 	authCode := uuid.Must(uuid.NewV4())
-	oauth := &FlowState{
-		ID:                  id,
-		ProviderType:        providerType,
-		CodeChallenge:       codeChallenge,
-		CodeChallengeMethod: codeChallengeMethod.String(),
-		AuthCode:            authCode.String(),
+	flowState := &FlowState{
+		ID:                   id,
+		ProviderType:         providerType,
+		CodeChallenge:        codeChallenge,
+		CodeChallengeMethod:  codeChallengeMethod.String(),
+		AuthCode:             authCode.String(),
+		AuthenticationMethod: authenticationMethod.String(),
 	}
-	return oauth, nil
+	return flowState, nil
+}
+
+func NewFlowStateWithUserID(tx *storage.Connection, providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID) error {
+	id := uuid.Must(uuid.NewV4())
+	authCode := uuid.Must(uuid.NewV4())
+	flowState := &FlowState{
+		ID:                   id,
+		ProviderType:         providerType,
+		CodeChallenge:        codeChallenge,
+		CodeChallengeMethod:  codeChallengeMethod.String(),
+		AuthCode:             authCode.String(),
+		AuthenticationMethod: authenticationMethod.String(),
+		UserID:               userID,
+	}
+	return tx.Create(flowState)
 }
 
 func FindFlowStateByAuthCode(tx *storage.Connection, authCode string) (*FlowState, error) {
@@ -72,7 +116,7 @@ func FindFlowStateByAuthCode(tx *storage.Connection, authCode string) (*FlowStat
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, FlowStateNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding oauth state")
+		return nil, errors.Wrap(err, "error finding flow state")
 	}
 
 	return obj, nil
@@ -84,22 +128,34 @@ func FindFlowStateByID(tx *storage.Connection, id string) (*FlowState, error) {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, FlowStateNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding oauth state")
+		return nil, errors.Wrap(err, "error finding flow state")
 	}
 
 	return obj, nil
 }
 
-func (f *FlowState) VerifyPKCE(codeChallenge, codeVerifier string) error {
+func FindFlowStateByUserID(tx *storage.Connection, id string, authenticationMethod AuthenticationMethod) (*FlowState, error) {
+	obj := &FlowState{}
+	if err := tx.Eager().Q().Where("user_id = ? and authentication_method = ?", id, authenticationMethod).Last(obj); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, FlowStateNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding flow state")
+	}
+
+	return obj, nil
+}
+
+func (f *FlowState) VerifyPKCE(codeVerifier string) error {
 	switch f.CodeChallengeMethod {
 	case SHA256.String():
 		hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
 		encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
-		if subtle.ConstantTimeCompare([]byte(codeChallenge), []byte(encodedCodeVerifier)) != 1 {
+		if subtle.ConstantTimeCompare([]byte(f.CodeChallenge), []byte(encodedCodeVerifier)) != 1 {
 			return errors.New(InvalidCodeChallengeError)
 		}
 	case Plain.String():
-		if subtle.ConstantTimeCompare([]byte(codeChallenge), []byte(codeVerifier)) != 1 {
+		if subtle.ConstantTimeCompare([]byte(f.CodeChallenge), []byte(codeVerifier)) != 1 {
 			return errors.New(InvalidCodeChallengeError)
 		}
 	default:
@@ -110,5 +166,5 @@ func (f *FlowState) VerifyPKCE(codeChallenge, codeVerifier string) error {
 }
 
 func (f *FlowState) IsExpired(expiryDuration time.Duration) bool {
-	return f.CreatedAt.After(time.Now().Add(expiryDuration))
+	return time.Now().After(f.CreatedAt.Add(expiryDuration))
 }

@@ -77,7 +77,7 @@ func performAuthorizationRequest(ts *ExternalTestSuite, provider string, inviteT
 }
 
 func performPKCEAuthorizationRequest(ts *ExternalTestSuite, provider, codeChallenge, codeChallengeMethod string) *httptest.ResponseRecorder {
-	authorizeURL := "http://localhost/authorize?flow_type=pkce&provider=" + provider
+	authorizeURL := "http://localhost/authorize?provider=" + provider
 	if codeChallenge != "" {
 		authorizeURL = authorizeURL + "&code_challenge=" + codeChallenge + "&code_challenge_method=" + codeChallengeMethod
 	}

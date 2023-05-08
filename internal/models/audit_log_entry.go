@@ -90,10 +90,7 @@ func (AuditLogEntry) TableName() string {
 }
 
 func NewAuditLogEntry(r *http.Request, tx *storage.Connection, actor *User, action AuditAction, ipAddress string, traits map[string]interface{}) error {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return errors.Wrap(err, "Error generating unique id")
-	}
+	id := uuid.Must(uuid.NewV4())
 
 	username := actor.GetEmail()
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gobuffalo/pop/v5"
+	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/crypto"
@@ -71,10 +71,7 @@ type User struct {
 
 // NewUser initializes a new user from an email, password and user data.
 func NewUser(phone, email, password, aud string, userData map[string]interface{}) (*User, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return nil, errors.Wrap(err, "Error generating unique id")
-	}
+	id := uuid.Must(uuid.NewV4())
 	pw, err := crypto.GenerateFromPassword(context.Background(), password)
 	if err != nil {
 		return nil, err
@@ -294,6 +291,12 @@ func (u *User) ConfirmEmailChange(tx *storage.Connection, status int) error {
 		return err
 	}
 
+	if !u.IsConfirmed() {
+		if err := u.Confirm(tx); err != nil {
+			return err
+		}
+	}
+
 	identity, err := FindIdentityByIdAndProvider(tx, u.ID.String(), "email")
 	if err != nil {
 		if IsNotFoundError(err) {
@@ -511,7 +514,8 @@ func FindUserByPhoneChangeAndAudience(tx *storage.Connection, phone, aud string)
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and audience.
-func IsDuplicatedEmail(tx *storage.Connection, email, aud string) (*User, error) {
+// If a currentUser is provided, we will need to filter out any identities that belong to the current user.
+func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *User) (*User, error) {
 	var identities []Identity
 
 	if err := tx.Eager().Q().Where("email = ?", strings.ToLower(email)).All(&identities); err != nil {
@@ -525,7 +529,9 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string) (*User, error)
 	userIDs := make(map[string]uuid.UUID)
 	for _, identity := range identities {
 		if !identity.IsForSSOProvider() {
-			userIDs[identity.UserID.String()] = identity.UserID
+			if (currentUser != nil && currentUser.ID != identity.UserID) || (currentUser == nil) {
+				userIDs[identity.UserID.String()] = identity.UserID
+			}
 		}
 	}
 

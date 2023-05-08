@@ -19,13 +19,15 @@ import (
 
 // SignupParams are the parameters the Signup endpoint accepts
 type SignupParams struct {
-	Email    string                 `json:"email"`
-	Phone    string                 `json:"phone"`
-	Password string                 `json:"password"`
-	Data     map[string]interface{} `json:"data"`
-	Provider string                 `json:"-"`
-	Aud      string                 `json:"-"`
-	Channel  string                 `json:"channel"`
+	Email               string                 `json:"email"`
+	Phone               string                 `json:"phone"`
+	Password            string                 `json:"password"`
+	Data                map[string]interface{} `json:"data"`
+	Provider            string                 `json:"-"`
+	Aud                 string                 `json:"-"`
+	Channel             string                 `json:"channel"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
+	CodeChallenge       string                 `json:"code_challenge"`
 }
 
 func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error {
@@ -33,7 +35,7 @@ func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error
 		return unprocessableEntityError("Signup requires a valid password")
 	}
 	if len(p.Password) < passwordMinLength {
-		return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", passwordMinLength))
+		return invalidPasswordLengthError(passwordMinLength)
 	}
 	if p.Email != "" && p.Phone != "" {
 		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
@@ -41,6 +43,14 @@ func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error
 	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
 		return badRequestError(InvalidChannelError)
 	}
+	// PKCE not needed as phone signups already return access token in body
+	if p.Phone != "" && p.CodeChallenge != "" {
+		return badRequestError("PKCE not supported for phone signups")
+	}
+	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -58,6 +68,7 @@ func (p *SignupParams) ConfigureDefaults() {
 	if p.Phone != "" && p.Channel == "" {
 		p.Channel = sms_provider.SMSProvider
 	}
+
 }
 
 // Signup is the endpoint for registering a new user
@@ -85,6 +96,19 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	var codeChallengeMethod models.CodeChallengeMethod
+	flowType := getFlowFromChallenge(params.CodeChallenge)
+
+	if isPKCEFlow(flowType) {
+		if codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod); err != nil {
+			return err
+		}
+		// PKCE not needed as autoconfirm returns access token in body
+		if config.Mailer.Autoconfirm {
+			return badRequestError("PKCE flow is not supported on signups with autoconfirm enabled")
+		}
+	}
+
 	var user *models.User
 	var grantParams models.GrantParams
 	params.Aud = a.requestAud(ctx, r)
@@ -98,7 +122,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud)
+		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud, nil)
 	case "phone":
 		if !config.External.Phone.Enabled {
 			return badRequestError("Phone signups are disabled")
@@ -160,8 +184,13 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
+				if ok := isPKCEFlow(flowType); ok {
+					if terr := models.NewFlowStateWithUserID(tx, params.Provider, params.CodeChallenge, codeChallengeMethod, models.EmailSignup, &user.ID); terr != nil {
+						return terr
+					}
+				}
 				externalURL := getExternalHost(ctx)
-				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength); terr != nil {
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, flowType); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {
 						now := time.Now()
 						left := user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency).Sub(now) / time.Second
@@ -261,20 +290,16 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		metering.RecordLogin("password", user.ID)
 		return sendJSON(w, http.StatusOK, token)
 	}
-
 	return sendJSON(w, http.StatusOK, user)
 }
 
 // sanitizeUser removes all user sensitive information from the user object
 // Should be used whenever we want to prevent information about whether a user is registered or not from leaking
 func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
-	var err error
 	now := time.Now()
 
-	u.ID, err = uuid.NewV4()
-	if err != nil {
-		return nil, errors.Wrap(err, "Error generating unique id")
-	}
+	u.ID = uuid.Must(uuid.NewV4())
+
 	u.CreatedAt, u.UpdatedAt, u.ConfirmationSentAt = now, now, &now
 	u.LastSignInAt, u.ConfirmedAt, u.EmailConfirmedAt, u.PhoneConfirmedAt = nil, nil, nil, nil
 	u.Identities = make([]models.Identity, 0)

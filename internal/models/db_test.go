@@ -3,7 +3,7 @@ package models_test
 import (
 	"testing"
 
-	"github.com/gobuffalo/pop/v5"
+	"github.com/gobuffalo/pop/v6"
 	"github.com/stretchr/testify/assert"
 	"github.com/supabase/gotrue/internal/models"
 )

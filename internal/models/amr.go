@@ -3,9 +3,8 @@ package models
 import (
 	"time"
 
-	"github.com/gobuffalo/pop/v5"
+	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
-	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/storage"
 )
 
@@ -23,10 +22,8 @@ func (AMRClaim) TableName() string {
 }
 
 func AddClaimToSession(tx *storage.Connection, session *Session, authenticationMethod AuthenticationMethod) error {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return errors.Wrap(err, "Error generating unique claim id")
-	}
+	id := uuid.Must(uuid.NewV4())
+
 	currentTime := time.Now()
 	return tx.RawQuery("INSERT INTO "+(&pop.Model{Value: AMRClaim{}}).TableName()+
 		`(id, session_id, created_at, updated_at, authentication_method) values (?, ?, ?, ?, ?)

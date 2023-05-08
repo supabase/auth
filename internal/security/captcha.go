@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"fmt"
 	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/utilities"
 )
@@ -44,7 +45,7 @@ func init() {
 	Client = &http.Client{Timeout: defaultTimeout}
 }
 
-func VerifyRequest(r *http.Request, secretKey string) (VerificationResponse, error) {
+func VerifyRequest(r *http.Request, secretKey, captchaProvider string) (VerificationResponse, error) {
 	bodyBytes, err := utilities.GetBodyBytes(r)
 	if err != nil {
 		return VerificationResponse{}, err
@@ -59,38 +60,53 @@ func VerifyRequest(r *http.Request, secretKey string) (VerificationResponse, err
 	captchaResponse := strings.TrimSpace(requestBody.Security.Token)
 
 	if captchaResponse == "" {
-		return VerificationResponse{}, errors.New("no hCaptcha response (captcha_token) found in request")
+		return VerificationResponse{}, errors.New("no captcha response (captcha_token) found in request")
 	}
 
 	clientIP := utilities.GetIPAddress(r)
+	captchaURL, err := GetCaptchaURL(captchaProvider)
+	if err != nil {
+		return VerificationResponse{}, err
+	}
 
-	return verifyCaptchaCode(captchaResponse, secretKey, clientIP)
+	return verifyCaptchaCode(captchaResponse, secretKey, clientIP, captchaURL)
 }
 
-func verifyCaptchaCode(token string, secretKey string, clientIP string) (VerificationResponse, error) {
+func verifyCaptchaCode(token, secretKey, clientIP, captchaURL string) (VerificationResponse, error) {
 	data := url.Values{}
 	data.Set("secret", secretKey)
 	data.Set("response", token)
 	data.Set("remoteip", clientIP)
 	// TODO (darora): pipe through sitekey
 
-	r, err := http.NewRequest("POST", "https://hcaptcha.com/siteverify", strings.NewReader(data.Encode()))
+	r, err := http.NewRequest("POST", captchaURL, strings.NewReader(data.Encode()))
 	if err != nil {
-		return VerificationResponse{}, errors.Wrap(err, "couldn't initialize request object for hcaptcha check")
+		return VerificationResponse{}, errors.Wrap(err, "couldn't initialize request object for captcha check")
 	}
 	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Add("Content-Length", strconv.Itoa(len(data.Encode())))
 	res, err := Client.Do(r)
 	if err != nil {
-		return VerificationResponse{}, errors.Wrap(err, "failed to verify hcaptcha response")
+		return VerificationResponse{}, errors.Wrap(err, "failed to verify captcha response")
 	}
 	defer utilities.SafeClose(res.Body)
 
 	var verificationResponse VerificationResponse
 
 	if err := json.NewDecoder(res.Body).Decode(&verificationResponse); err != nil {
-		return VerificationResponse{}, errors.Wrap(err, "failed to decode hcaptcha response: not JSON")
+		return VerificationResponse{}, errors.Wrap(err, "failed to decode captcha response: not JSON")
 	}
 
 	return verificationResponse, nil
+}
+
+func GetCaptchaURL(captchaProvider string) (string, error) {
+	switch captchaProvider {
+	case "hcaptcha":
+		return "https://hcaptcha.com/siteverify", nil
+	case "turnstile":
+		return "https://challenges.cloudflare.com/turnstile/v0/siteverify", nil
+	default:
+		return "", fmt.Errorf("captcha Provider %q could not be found", captchaProvider)
+	}
 }

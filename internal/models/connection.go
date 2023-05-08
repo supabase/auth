@@ -1,7 +1,7 @@
 package models
 
 import (
-	"github.com/gobuffalo/pop/v5"
+	"github.com/gobuffalo/pop/v6"
 	"github.com/supabase/gotrue/internal/storage"
 )
 
