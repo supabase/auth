@@ -183,7 +183,7 @@ func (ts *SSOTestSuite) TestIsStaleSAMLMetadata() {
 			provider.UpdatedAt = currentTime.Add(-time.Minute * 59)
 		}
 
-		require.Equal(ts.T(), example.IsStale, IsMetadataStale(metadata, provider))
+		require.Equal(ts.T(), example.IsStale, IsSAMLMetadataStale(metadata, provider))
 	}
 
 }
