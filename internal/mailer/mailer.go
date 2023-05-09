@@ -64,18 +64,19 @@ func withDefault(value, defaultValue string) string {
 	return value
 }
 
-func getPath(filepath, params string) (*url.URL, error) {
-	var path *url.URL
-	var err error
+func getPath(filepath string, params map[string]string) (*url.URL, error) {
+	path := &url.URL{}
 	if filepath != "" {
-		path, err = url.Parse(filepath)
-		if err != nil {
+		if p, err := url.Parse(filepath); err != nil {
 			return nil, err
+		} else {
+			path = p
 		}
-	} else {
-		p := url.URL{}
-		path = &p
 	}
-	path.RawQuery = params
+	v := url.Values{}
+	for key, val := range params {
+		v.Add(key, val)
+	}
+	path.RawQuery = v.Encode()
 	return path, nil
 }

@@ -18,44 +18,42 @@ func TestGetPath(t *testing.T) {
 	cases := []struct {
 		SiteURL  string
 		Path     string
-		Fragment string
+		Params   map[string]string
 		Expected string
 	}{
 		{
 			SiteURL:  "https://test.example.com",
 			Path:     "/templates/confirm.html",
-			Fragment: "",
+			Params:   nil,
 			Expected: "https://test.example.com/templates/confirm.html",
 		},
 		{
 			SiteURL:  "https://test.example.com/removedpath",
 			Path:     "/templates/confirm.html",
-			Fragment: "",
+			Params:   nil,
 			Expected: "https://test.example.com/templates/confirm.html",
 		},
 		{
 			SiteURL:  "https://test.example.com/",
 			Path:     "/trailingslash/",
-			Fragment: "",
+			Params:   nil,
 			Expected: "https://test.example.com/trailingslash/",
 		},
 		{
-			SiteURL:  "https://test.example.com",
-			Path:     "f",
-			Fragment: "fragment",
-			Expected: "https://test.example.com/f?fragment",
+			SiteURL: "https://test.example.com",
+			Path:    "f",
+			Params: map[string]string{
+				"key": "val",
+			},
+			Expected: "https://test.example.com/f?key=val",
 		},
 		{
-			SiteURL:  "https://test.example.com",
-			Path:     "f",
-			Fragment: "fragment",
-			Expected: "https://test.example.com/f?fragment",
-		},
-		{
-			SiteURL:  "https://test.example.com",
-			Path:     "",
-			Fragment: "fragment",
-			Expected: "https://test.example.com?fragment",
+			SiteURL: "https://test.example.com",
+			Path:    "",
+			Params: map[string]string{
+				"key": "val",
+			},
+			Expected: "https://test.example.com?key=val",
 		},
 	}
 
@@ -63,7 +61,7 @@ func TestGetPath(t *testing.T) {
 		u, err := url.ParseRequestURI(c.SiteURL)
 		assert.NoError(t, err, "error parsing URI request")
 
-		path, err := getPath(c.Path, c.Fragment)
+		path, err := getPath(c.Path, c.Params)
 
 		assert.NoError(t, err, c.Expected)
 		assert.Equal(t, c.Expected, u.ResolveReference(path).String())
