@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/security"
 
@@ -185,4 +186,28 @@ func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (cont
 		return nil, notFoundError("SAML 2.0 is disabled")
 	}
 	return ctx, nil
+}
+
+func (a *API) databaseCleanup(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			// continue
+
+		default:
+			return
+		}
+
+		db := a.db.WithContext(r.Context())
+		log := observability.GetLogEntry(r)
+
+		affectedRows, err := models.Cleanup(db)
+		if err != nil {
+			log.WithError(err).WithField("affected_rows", affectedRows).Warn("database cleanup failed")
+		} else if affectedRows > 0 {
+			log.WithField("affected_rows", affectedRows).Debug("cleaned up expired or stale rows")
+		}
+	})
 }
