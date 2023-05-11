@@ -15,8 +15,25 @@ import (
 
 // MagicLinkParams holds the parameters for a magic link request
 type MagicLinkParams struct {
-	Email string                 `json:"email"`
-	Data  map[string]interface{} `json:"data"`
+	Email               string                 `json:"email"`
+	Data                map[string]interface{} `json:"data"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
+	CodeChallenge       string                 `json:"code_challenge"`
+}
+
+func (p *MagicLinkParams) Validate() error {
+	if p.Email == "" {
+		return unprocessableEntityError("Password recovery requires an email")
+	}
+	var err error
+	p.Email, err = validateEmail(p.Email)
+	if err != nil {
+		return err
+	}
+	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+		return err
+	}
+	return nil
 }
 
 // MagicLink sends a recovery email
@@ -36,17 +53,15 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
+	if err := params.Validate(); err != nil {
+		return err
+	}
+
 	if params.Data == nil {
 		params.Data = make(map[string]interface{})
 	}
 
-	if params.Email == "" {
-		return unprocessableEntityError("Password recovery requires an email")
-	}
-	params.Email, err = validateEmail(params.Email)
-	if err != nil {
-		return err
-	}
+	flowType := getFlowFromChallenge(params.CodeChallenge)
 
 	var isNewUser bool
 	aud := a.requestAud(ctx, r)
@@ -70,9 +85,11 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		signUpParams := &SignupParams{
-			Email:    params.Email,
-			Password: password,
-			Data:     params.Data,
+			Email:               params.Email,
+			Password:            password,
+			Data:                params.Data,
+			CodeChallengeMethod: params.CodeChallengeMethod,
+			CodeChallenge:       params.CodeChallenge,
 		}
 		newBodyContent, err := json.Marshal(signUpParams)
 		if err != nil {
@@ -88,8 +105,10 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			newBodyContent := &SignupParams{
-				Email: params.Email,
-				Data:  params.Data,
+				Email:               params.Email,
+				Data:                params.Data,
+				CodeChallengeMethod: params.CodeChallengeMethod,
+				CodeChallenge:       params.CodeChallenge,
 			}
 			metadata, err := json.Marshal(newBodyContent)
 			if err != nil {
@@ -111,9 +130,19 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
+		if isPKCEFlow(flowType) {
+			codeChallengeMethod, terr := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
+			if terr != nil {
+				return terr
+			}
+			if terr := models.NewFlowStateWithUserID(tx, models.MagicLink.String(), params.CodeChallenge, codeChallengeMethod, models.MagicLink, &user.ID); terr != nil {
+				return terr
+			}
+		}
+
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
-		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength)
+		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, flowType)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {

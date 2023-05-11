@@ -27,6 +27,7 @@ type ExternalProviderClaims struct {
 	Provider    string `json:"provider"`
 	InviteToken string `json:"invite_token,omitempty"`
 	Referrer    string `json:"referrer,omitempty"`
+	FlowStateID string `json:"flow_state_id"`
 }
 
 // ExternalSignupParams are the parameters the Signup endpoint accepts
@@ -44,6 +45,8 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	query := r.URL.Query()
 	providerType := query.Get("provider")
 	scopes := query.Get("scopes")
+	codeChallenge := query.Get("code_challenge")
+	codeChallengeMethod := query.Get("code_challenge_method")
 
 	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
@@ -64,6 +67,26 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	redirectURL := a.getRedirectURLOrReferrer(r, query.Get("redirect_to"))
 	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
+	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
+		return err
+	}
+	flowType := getFlowFromChallenge(codeChallenge)
+
+	flowStateID := ""
+	if flowType == models.PKCEFlow {
+		codeChallengeMethodType, err := models.ParseCodeChallengeMethod(codeChallengeMethod)
+		if err != nil {
+			return err
+		}
+		flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethodType, models.OAuth)
+		if err != nil {
+			return err
+		}
+		if err := a.db.Create(flowState); err != nil {
+			return err
+		}
+		flowStateID = flowState.ID.String()
+	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
 		NetlifyMicroserviceClaims: NetlifyMicroserviceClaims{
@@ -76,6 +99,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		Provider:    providerType,
 		InviteToken: inviteToken,
 		Referrer:    redirectURL,
+		FlowStateID: flowStateID,
 	})
 	tokenString, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
@@ -85,6 +109,8 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
 	query.Del("scopes")
 	query.Del("provider")
+	query.Del("code_challenge")
+	query.Del("code_challenge_method")
 	for key := range query {
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get
@@ -93,6 +119,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam(key, query.Get(key)))
 		}
 	}
+
 	var authURL string
 	switch externalProvider := p.(type) {
 	case *provider.TwitterProvider:
@@ -128,6 +155,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var providerAccessToken string
 	var providerRefreshToken string
 	var grantParams models.GrantParams
+	var err error
 
 	if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
@@ -147,9 +175,18 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		providerRefreshToken = oAuthResponseData.refreshToken
 	}
 
+	var flowState *models.FlowState
+	// if there's a non-empty FlowStateID we perform PKCE Flow
+	if flowStateID := getFlowStateID(ctx); flowStateID != "" {
+		flowState, err = models.FindFlowStateByID(a.db, flowStateID)
+		if err != nil {
+			return err
+		}
+	}
+
 	var user *models.User
 	var token *AccessTokenResponse
-	err := db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		inviteToken := getInviteToken(ctx)
 		if inviteToken != "" {
@@ -165,7 +202,15 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				return terr
 			}
 		}
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+		if flowState != nil {
+			// This means that the callback is using PKCE
+			flowState.ProviderAccessToken = providerAccessToken
+			flowState.ProviderRefreshToken = providerRefreshToken
+			flowState.UserID = &(user.ID)
+			terr = tx.Update(flowState)
+		} else {
+			token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
+		}
 
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
@@ -177,7 +222,14 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	}
 
 	rurl := a.getExternalRedirectURL(r)
-	if token != nil {
+	if flowState != nil {
+		// This means that the callback is using PKCE
+		// Set the flowState.AuthCode to the query param here
+		rurl, err = a.prepPKCERedirectURL(rurl, flowState.AuthCode)
+		if err != nil {
+			return err
+		}
+	} else if token != nil {
 		q := url.Values{}
 		q.Set("provider_token", providerAccessToken)
 		// Because not all providers give out a refresh token
@@ -325,7 +377,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		if !emailData.Verified && !config.Mailer.Autoconfirm {
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)
-			if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {
+			if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
 					return nil, tooManyRequestsError("For security purposes, you can only request this once every minute")
 				}
@@ -447,7 +499,9 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	if claims.Referrer != "" {
 		ctx = withExternalReferrer(ctx, claims.Referrer)
 	}
-
+	if claims.FlowStateID != "" {
+		ctx = withFlowStateID(ctx, claims.FlowStateID)
+	}
 	ctx = withExternalProviderType(ctx, claims.Provider)
 	return withSignature(ctx, state), nil
 }

@@ -31,10 +31,16 @@ func (a *API) samlDestroyRelayState(ctx context.Context, relayState *models.SAML
 	})
 }
 
-func IsMetadataStale(idpMetadata *saml.EntityDescriptor, samlProvider models.SAMLProvider) bool {
-	hasIDPMetadataExpired := !idpMetadata.ValidUntil.IsZero() && idpMetadata.ValidUntil.Before(time.Now())
-	hasCacheDurationExceeded := idpMetadata.CacheDuration != 0 && samlProvider.UpdatedAt.Add(idpMetadata.CacheDuration).Before(time.Now())
-	return hasIDPMetadataExpired || hasCacheDurationExceeded
+func IsSAMLMetadataStale(idpMetadata *saml.EntityDescriptor, samlProvider models.SAMLProvider) bool {
+	now := time.Now()
+
+	hasValidityExpired := !idpMetadata.ValidUntil.IsZero() && now.After(idpMetadata.ValidUntil)
+	hasCacheDurationExceeded := idpMetadata.CacheDuration != 0 && now.After(samlProvider.UpdatedAt.Add(idpMetadata.CacheDuration))
+
+	// if metadata XML does not publish validity or caching information, update once in 24 hours
+	needsForceUpdate := idpMetadata.ValidUntil.IsZero() && idpMetadata.CacheDuration == 0 && now.After(samlProvider.UpdatedAt.Add(24*time.Hour))
+
+	return hasValidityExpired || hasCacheDurationExceeded || needsForceUpdate
 }
 
 // SAMLACS implements the main Assertion Consumer Service endpoint behavior.
@@ -154,7 +160,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 
 			logentry.Warn("SAML Metadata for identity provider will expire soon! Update its metadata_xml!")
 		}
-	} else if *ssoProvider.SAMLProvider.MetadataURL != "" && IsMetadataStale(idpMetadata, ssoProvider.SAMLProvider) {
+	} else if *ssoProvider.SAMLProvider.MetadataURL != "" && IsSAMLMetadataStale(idpMetadata, ssoProvider.SAMLProvider) {
 		rawMetadata, err := fetchSAMLMetadata(ctx, *ssoProvider.SAMLProvider.MetadataURL)
 		if err != nil {
 			// Fail silently but raise warning and continue with existing metadata

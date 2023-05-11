@@ -15,8 +15,9 @@ import (
 	"github.com/supabase/gotrue/internal/storage"
 )
 
-const e164Format = `^[1-9]\d{1,14}$`
 const defaultSmsMessage = "Your code is %v"
+
+var e164Format = regexp.MustCompile("^[1-9][0-9]{1,14}$")
 
 const (
 	phoneConfirmationOtp     = "confirmation"
@@ -26,25 +27,23 @@ const (
 func validatePhone(phone string) (string, error) {
 	phone = formatPhoneNumber(phone)
 	if isValid := validateE164Format(phone); !isValid {
-		return "", unprocessableEntityError("Invalid phone number format")
+		return "", unprocessableEntityError("Invalid phone number format (E.164 required)")
 	}
 	return phone, nil
 }
 
 // validateE164Format checks if phone number follows the E.164 format
 func validateE164Format(phone string) bool {
-	// match should never fail as long as regexp is valid
-	matched, _ := regexp.Match(e164Format, []byte(phone))
-	return matched
+	return e164Format.MatchString(phone)
 }
 
 // formatPhoneNumber removes "+" and whitespaces in a phone number
 func formatPhoneNumber(phone string) string {
-	return strings.ReplaceAll(strings.Trim(phone, "+"), " ", "")
+	return strings.ReplaceAll(strings.TrimPrefix(phone, "+"), " ", "")
 }
 
 // sendPhoneConfirmation sends an otp to the user's phone number
-func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider) error {
+func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string) error {
 	config := a.config
 
 	var token *string
@@ -87,7 +86,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		message = strings.Replace(config.Sms.Template, "{{ .Code }}", otp, -1)
 	}
 
-	if serr := smsProvider.SendSms(phone, message); serr != nil {
+	if serr := smsProvider.SendMessage(phone, message, channel); serr != nil {
 		*token = oldToken
 		return serr
 	}

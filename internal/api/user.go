@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/fatih/structs"
@@ -14,12 +15,15 @@ import (
 
 // UserUpdateParams parameters for updating a user
 type UserUpdateParams struct {
-	Email    string                 `json:"email"`
-	Password *string                `json:"password"`
-	Nonce    string                 `json:"nonce"`
-	Data     map[string]interface{} `json:"data"`
-	AppData  map[string]interface{} `json:"app_metadata,omitempty"`
-	Phone    string                 `json:"phone"`
+	Email               string                 `json:"email"`
+	Password            *string                `json:"password"`
+	Nonce               string                 `json:"nonce"`
+	Data                map[string]interface{} `json:"data"`
+	AppData             map[string]interface{} `json:"app_metadata,omitempty"`
+	Phone               string                 `json:"phone"`
+	Channel             string                 `json:"channel"`
+	CodeChallenge       string                 `json:"code_challenge"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
 }
 
 // UserGet returns a user
@@ -68,11 +72,17 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		var duplicateUser *models.User
-		if duplicateUser, err = models.IsDuplicatedEmail(a.db, params.Email, aud); err != nil {
+		if duplicateUser, err = models.IsDuplicatedEmail(a.db, params.Email, aud, user); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
 		} else if duplicateUser != nil {
 			return unprocessableEntityError(DuplicateEmailMsg)
 		}
+	}
+	if params.Phone != "" && params.Channel == "" {
+		params.Channel = sms_provider.SMSProvider
+	}
+	if params.Phone != "" && !sms_provider.IsValidMessageChannel(params.Channel, config.Sms.Provider) {
+		return badRequestError(InvalidChannelError)
 	}
 
 	if params.Phone != "" && params.Phone != user.GetPhone() {
@@ -98,7 +108,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		if params.Password != nil {
 			if len(*params.Password) < config.PasswordMinLength {
-				return invalidPasswordLengthError(config)
+				return invalidPasswordLengthError(config.PasswordMinLength)
 			}
 
 			isPasswordUpdated := false
@@ -168,7 +178,20 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)
-			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, config.Mailer.OtpLength); terr != nil {
+			flowType := getFlowFromChallenge(params.CodeChallenge)
+			if isPKCEFlow(flowType) {
+				codeChallengeMethod, terr := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
+				if terr != nil {
+					return terr
+				}
+				if terr := models.NewFlowStateWithUserID(tx, models.EmailChange.String(), params.CodeChallenge, codeChallengeMethod, models.EmailChange, &user.ID); terr != nil {
+					return terr
+				}
+			}
+			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, config.Mailer.OtpLength, flowType); terr != nil {
+				if errors.Is(terr, MaxFrequencyLimitError) {
+					return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
+				}
 				return internalServerError("Error sending change email").WithInternalError(terr)
 			}
 		}
@@ -193,7 +216,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return badRequestError("Error sending sms: %v", terr)
 				}
-				if terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeVerification, smsProvider); terr != nil {
+				if terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeVerification, smsProvider, params.Channel); terr != nil {
 					return internalServerError("Error sending phone change otp").WithInternalError(terr)
 				}
 			}

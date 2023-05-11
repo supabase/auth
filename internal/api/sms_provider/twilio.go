@@ -54,12 +54,27 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 	}, nil
 }
 
+func (t *TwilioProvider) SendMessage(phone string, message string, channel string) error {
+	switch channel {
+	case SMSProvider, WhatsappProvider:
+		return t.SendSms(phone, message, channel)
+	default:
+		return fmt.Errorf("channel type %q is not supported for Twilio", channel)
+	}
+}
+
 // Send an SMS containing the OTP with Twilio's API
-func (t *TwilioProvider) SendSms(phone string, message string) error {
+func (t *TwilioProvider) SendSms(phone, message, channel string) error {
+	sender := t.Config.MessageServiceSid
+	receiver := "+" + phone
+	if channel == WhatsappProvider {
+		receiver = channel + ":" + receiver
+		sender = channel + ":" + sender
+	}
 	body := url.Values{
-		"To":      {"+" + phone}, // twilio api requires "+" extension to be included
-		"Channel": {"sms"},
-		"From":    {t.Config.MessageServiceSid},
+		"To":      {receiver}, // twilio api requires "+" extension to be included
+		"Channel": {channel},
+		"From":    {sender},
 		"Body":    {message},
 	}
 	client := &http.Client{Timeout: defaultTimeout}
@@ -70,18 +85,17 @@ func (t *TwilioProvider) SendSms(phone string, message string) error {
 	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	r.SetBasicAuth(t.Config.AccountSid, t.Config.AuthToken)
 	res, err := client.Do(r)
+	defer utilities.SafeClose(res.Body)
 	if err != nil {
 		return err
 	}
-	if res.StatusCode/100 != 2 {
+	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
 		resp := &twilioErrResponse{}
 		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
 			return err
 		}
 		return resp
 	}
-	defer utilities.SafeClose(res.Body)
-
 	// validate sms status
 	resp := &SmsStatus{}
 	derr := json.NewDecoder(res.Body).Decode(resp)

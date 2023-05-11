@@ -12,8 +12,8 @@ GoTrue is a user management and authentication server written in Go that powers
 - Sign in with external providers (Google, Apple, Facebook, Discord, ...)
 
 It is originally based on the excellent
-[GoTrue](https://github.com/supabase/gotrue) codebase by
-[Netlify](https://netlify.com), however both have diverged significantly in
+[GoTrue codebase by
+Netlify](https://github.com/netlify/gotrue), however both have diverged significantly in
 features and capabilities.
 
 ## Quick Start
@@ -707,7 +707,7 @@ Or Messagebird credentials, which can be obtained in the [Dashboard](https://das
 
 ### CAPTCHA
 
-- If enabled, CAPTCHA will check the request body for the `hcaptcha_token` field and make a verification request to the CAPTCHA provider.
+- If enabled, CAPTCHA will check the request body for the `captcha_token` field and make a verification request to the CAPTCHA provider.
 
 `SECURITY_CAPTCHA_ENABLED` - `string`
 
@@ -715,12 +715,12 @@ Whether captcha middleware is enabled
 
 `SECURITY_CAPTCHA_PROVIDER` - `string`
 
-for now the only option supported is: `hcaptcha`
+for now the only options supported are: `hcaptcha` and `turnstile`
 
 - `SECURITY_CAPTCHA_SECRET` - `string`
 - `SECURITY_CAPTCHA_TIMEOUT` - `string`
 
-Retrieve from hcaptcha account
+Retrieve from hcaptcha or turnstile account
 
 ### Reauthentication
 
@@ -768,7 +768,7 @@ Creates (POST) or Updates (PUT) the user based on the `user_id` specified. The `
 ```js
 headers:
 {
-  "Authorization": "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO" // admin role required
+  "Authorization": "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO" // requires a role claim that can be set in the GOTRUE_JWT_ADMIN_ROLES env var
 }
 
 body:

@@ -66,14 +66,14 @@ func (ts *ResendTestSuite) TestResendValidation() {
 			},
 		},
 		{
-			desc: "Type & phone mismatch",
+			desc: "Phone & email change type",
 			params: map[string]interface{}{
 				"type":  "email_change",
 				"phone": "+123456789",
 			},
 			expected: map[string]interface{}{
-				"code":    http.StatusBadRequest,
-				"message": "Type provided requires an email address",
+				"code":    http.StatusOK,
+				"message": nil,
 			},
 		},
 		{

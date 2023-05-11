@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"net/url"
 
@@ -53,6 +52,11 @@ type UnenrollFactorResponse struct {
 	ID uuid.UUID `json:"id"`
 }
 
+const (
+	InvalidFactorOwnerErrorMessage = "Factor does not belong to user"
+	QRCodeGenerationErrorMessage   = "Error generating QR Code"
+)
+
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
@@ -73,8 +77,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return unprocessableEntityError("MFA enrollment only supported for non-SSO users at this time")
 	}
 
-	factorType := params.FactorType
-	if factorType != models.TOTP {
+	if params.FactorType != models.TOTP {
 		return badRequestError("factor_type needs to be totp")
 	}
 
@@ -97,13 +100,14 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if len(factors) >= int(config.MFA.MaxEnrolledFactors) {
 		return forbiddenError("Enrolled factors exceed allowed limit, unenroll to continue")
 	}
-	numVerifiedFactors := 0
 
+	numVerifiedFactors := 0
 	for _, factor := range factors {
-		if factor.Status == models.FactorStateVerified.String() {
+		if factor.IsVerified() {
 			numVerifiedFactors += 1
 		}
 	}
+
 	if numVerifiedFactors >= config.MFA.MaxVerifiedFactors {
 		return forbiddenError("Maximum number of enrolled factors reached, unenroll to continue")
 	}
@@ -113,7 +117,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		AccountName: user.GetEmail(),
 	})
 	if err != nil {
-		return internalServerError("error generating QR Code secret key").WithInternalError(err)
+		return internalServerError(QRCodeGenerationErrorMessage).WithInternalError(err)
 	}
 	var buf bytes.Buffer
 	svgData := svg.New(&buf)
@@ -121,7 +125,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	qs := goqrsvg.NewQrSVG(qrCode, DefaultQRSize)
 	qs.StartQrSVG(svgData)
 	if err = qs.WriteQrSVG(svgData); err != nil {
-		return internalServerError("error writing to QR Code").WithInternalError(err)
+		return internalServerError(QRCodeGenerationErrorMessage).WithInternalError(err)
 	}
 	svgData.End()
 
@@ -184,11 +188,9 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	creationTime := challenge.CreatedAt
-	expiryTime := creationTime.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration))
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
-		ExpiresAt: expiryTime.Unix(),
+		ExpiresAt: challenge.GetExpiryTime(config.MFA.ChallengeExpiryDuration).Unix(),
 	})
 }
 
@@ -211,8 +213,8 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 
-	if factor.UserID != user.ID {
-		return internalServerError("user needs to own factor to verify")
+	if !factor.IsOwnedBy(user) {
+		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
 
 	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
@@ -227,8 +229,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Challenge and verify IP addresses mismatch")
 	}
 
-	hasExpired := time.Now().After(challenge.CreatedAt.Add(time.Second * time.Duration(config.MFA.ChallengeExpiryDuration)))
-	if hasExpired {
+	if challenge.HasExpired(config.MFA.ChallengeExpiryDuration) {
 		err := a.db.Transaction(func(tx *storage.Connection) error {
 			if terr := tx.Destroy(challenge); terr != nil {
 				return internalServerError("Database error deleting challenge").WithInternalError(terr)
@@ -258,7 +259,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = challenge.Verify(tx); terr != nil {
 			return terr
 		}
-		if factor.Status != models.FactorStateVerified.String() {
+		if !factor.IsVerified() {
 			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
 				return terr
 			}
@@ -299,12 +300,15 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	session := getSession(ctx)
+	if factor == nil || session == nil || user == nil {
+		return internalServerError("A valid session and factor are required to unenroll a factor")
+	}
 
-	if factor.Status == models.FactorStateVerified.String() && session.GetAAL() != models.AAL2.String() {
+	if factor.IsVerified() && !session.IsAAL2() {
 		return badRequestError("AAL2 required to unenroll verified factor")
 	}
-	if factor.UserID != user.ID {
-		return internalServerError("user must own factor to unenroll")
+	if !factor.IsOwnedBy(user) {
+		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {

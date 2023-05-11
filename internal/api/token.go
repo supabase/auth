@@ -14,6 +14,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
+
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/metering"
 	"github.com/supabase/gotrue/internal/models"
@@ -36,11 +37,13 @@ type GoTrueClaims struct {
 
 // AccessTokenResponse represents an OAuth2 success response
 type AccessTokenResponse struct {
-	Token        string       `json:"access_token"`
-	TokenType    string       `json:"token_type"` // Bearer
-	ExpiresIn    int          `json:"expires_in"`
-	RefreshToken string       `json:"refresh_token"`
-	User         *models.User `json:"user"`
+	Token                string       `json:"access_token"`
+	TokenType            string       `json:"token_type"` // Bearer
+	ExpiresIn            int          `json:"expires_in"`
+	RefreshToken         string       `json:"refresh_token"`
+	User                 *models.User `json:"user"`
+	ProviderAccessToken  string       `json:"provider_token,omitempty"`
+	ProviderRefreshToken string       `json:"provider_refresh_token,omitempty"`
 }
 
 // AsRedirectURL encodes the AccessTokenResponse as a redirect URL that
@@ -73,6 +76,12 @@ type IdTokenGrantParams struct {
 	Provider string `json:"provider"`
 	ClientID string `json:"client_id"`
 	Issuer   string `json:"issuer"`
+}
+
+// PKCEGrantParams are the parameters the PKCEGrant method accepts
+type PKCEGrantParams struct {
+	AuthCode     string `json:"auth_code"`
+	CodeVerifier string `json:"code_verifier"`
 }
 
 const useCookieHeader = "x-use-cookie"
@@ -157,7 +166,6 @@ func getEmailVerified(v interface{}) bool {
 func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	grantType := r.FormValue("grant_type")
-
 	switch grantType {
 	case "password":
 		return a.ResourceOwnerPasswordGrant(ctx, w, r)
@@ -165,6 +173,8 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 		return a.RefreshTokenGrant(ctx, w, r)
 	case "id_token":
 		return a.IdTokenGrant(ctx, w, r)
+	case "pkce":
+		return a.PKCE(ctx, w, r)
 	default:
 		return oauthError("unsupported_grant_type", "")
 	}
@@ -301,32 +311,16 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		}
 	}
 
-	var newToken *models.RefreshToken
 	if token.Revoked {
 		a.clearCookieTokens(config, w)
-		err = db.Transaction(func(tx *storage.Connection) error {
-			validToken, terr := models.GetValidChildToken(tx, token)
-			if terr != nil {
-				if errors.Is(terr, models.RefreshTokenNotFoundError{}) {
-					// revoked token has no descendants
-					return nil
-				}
-				return terr
-			}
-			// check if token is the last previous revoked token
-			if validToken.Parent == storage.NullString(token.Token) {
-				refreshTokenReuseWindow := token.UpdatedAt.Add(time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
-				if time.Now().Before(refreshTokenReuseWindow) {
-					newToken = validToken
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return internalServerError("Error validating reuse interval").WithInternalError(err)
-		}
+		// For a revoked refresh token to be reused, it has to fall within the reuse interval.
 
-		if newToken == nil {
+		reuseUntil := token.UpdatedAt.Add(
+			time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
+
+		if time.Now().After(reuseUntil) {
+			// not OK to reuse this token
+
 			if config.Security.RefreshTokenRotationEnabled {
 				// Revoke all tokens in token family
 				err = db.Transaction(func(tx *storage.Connection) error {
@@ -340,7 +334,8 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 					return internalServerError(err.Error())
 				}
 			}
-			return oauthError("invalid_grant", "Invalid Refresh Token").WithInternalMessage("Possible abuse attempt: %v", r)
+
+			return oauthError("invalid_grant", "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID)
 		}
 	}
 
@@ -353,12 +348,14 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return terr
 		}
 
-		if newToken == nil {
-			newToken, terr = models.GrantRefreshTokenSwap(r, tx, user, token)
-			if terr != nil {
-				return internalServerError(terr.Error())
-			}
+		// a new refresh token is generated and explicitly not reusing
+		// a previous one as it could have already been revoked while
+		// this handler was running
+		newToken, terr := models.GrantRefreshTokenSwap(r, tx, user, token)
+		if terr != nil {
+			return terr
 		}
+
 		tokenString, terr = generateAccessToken(tx, user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
 
 		if terr != nil {
@@ -528,7 +525,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 				mailer := a.Mailer(ctx)
 				referrer := a.getReferrer(r)
-				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength); terr != nil {
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
 					return internalServerError("Error sending confirmation mail").WithInternalError(terr)
 				}
 				return unauthorizedError("Error unverified email")
@@ -575,6 +572,78 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	metering.RecordLogin("id_token", user.ID)
 	return sendJSON(w, http.StatusOK, token)
+}
+
+func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	db := a.db.WithContext(ctx)
+	var grantParams models.GrantParams
+
+	params := &PKCEGrantParams{}
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return internalServerError("Could not read body").WithInternalError(err)
+	}
+
+	if err = json.Unmarshal(body, params); err != nil {
+		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
+	}
+
+	if params.AuthCode == "" || params.CodeVerifier == "" {
+		return badRequestError("invalid request: both auth code and code verifier should be non-empty")
+	}
+
+	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
+	// Sanity check in case user ID was not set properly
+	if models.IsNotFoundError(err) || flowState.UserID == nil {
+		return forbiddenError("invalid flow state, no valid flow state found")
+	} else if err != nil {
+		return err
+	}
+	if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
+		return forbiddenError("invalid flow state, flow state has expired")
+	}
+
+	user, err := models.FindUserByID(db, *flowState.UserID)
+	if err != nil {
+		return err
+	}
+	if err := flowState.VerifyPKCE(params.CodeVerifier); err != nil {
+		return forbiddenError(err.Error())
+	}
+
+	var token *AccessTokenResponse
+	err = db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		authMethod, err := models.ParseAuthenticationMethod(flowState.AuthenticationMethod)
+		if err != nil {
+			return err
+		}
+		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+			"provider_type": flowState.ProviderType,
+		}); terr != nil {
+			return terr
+		}
+		token, terr = a.issueRefreshToken(ctx, tx, user, authMethod, grantParams)
+		if terr != nil {
+			return oauthError("server_error", terr.Error())
+		}
+		token.ProviderAccessToken = flowState.ProviderAccessToken
+		// Because not all providers give out a refresh token
+		// See corresponding OAuth2 spec: <https://www.rfc-editor.org/rfc/rfc6749.html#section-5.1>
+		if flowState.ProviderRefreshToken != "" {
+			token.ProviderRefreshToken = flowState.ProviderRefreshToken
+		}
+		if terr = tx.Destroy(flowState); terr != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return sendJSON(w, http.StatusOK, token)
+
 }
 
 func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string) (string, error) {

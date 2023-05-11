@@ -24,10 +24,7 @@ func addRequestID(globalConfig *conf.GlobalConfiguration) middlewareHandler {
 			id = r.Header.Get(globalConfig.API.RequestIDHeader)
 		}
 		if id == "" {
-			uid, err := uuid.NewV4()
-			if err != nil {
-				return nil, err
-			}
+			uid := uuid.Must(uuid.NewV4())
 			id = uid.String()
 		}
 
@@ -69,7 +66,7 @@ func (a *API) requestAud(ctx context.Context, r *http.Request) string {
 		return claims.Audience
 	}
 
-	// Finally, return the default of none of the above methods are successful
+	// Finally, return the default if none of the above methods are successful
 	return config.JWT.Aud
 }
 

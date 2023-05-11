@@ -44,6 +44,15 @@ func NewVonageProvider(config conf.VonageProviderConfiguration) (SmsProvider, er
 	}, nil
 }
 
+func (t *VonageProvider) SendMessage(phone string, message string, channel string) error {
+	switch channel {
+	case SMSProvider:
+		return t.SendSms(phone, message)
+	default:
+		return fmt.Errorf("channel type %q is not supported for Vonage", channel)
+	}
+}
+
 // Send an SMS containing the OTP with Vonage's API
 func (t *VonageProvider) SendSms(phone string, message string) error {
 	body := url.Values{

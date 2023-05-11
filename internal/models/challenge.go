@@ -22,13 +22,9 @@ func (Challenge) TableName() string {
 	return tableName
 }
 
-const ChallengePrefix = "challenge"
-
 func NewChallenge(factor *Factor, ipAddress string) (*Challenge, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return nil, errors.Wrap(err, "Error generating unique id")
-	}
+	id := uuid.Must(uuid.NewV4())
+
 	challenge := &Challenge{
 		ID:        id,
 		FactorID:  factor.ID,
@@ -46,10 +42,18 @@ func FindChallengeByChallengeID(tx *storage.Connection, challengeID uuid.UUID) (
 }
 
 // Update the verification timestamp
-func (f *Challenge) Verify(tx *storage.Connection) error {
+func (c *Challenge) Verify(tx *storage.Connection) error {
 	now := time.Now()
-	f.VerifiedAt = &now
-	return tx.UpdateOnly(f, "verified_at")
+	c.VerifiedAt = &now
+	return tx.UpdateOnly(c, "verified_at")
+}
+
+func (c *Challenge) HasExpired(expiryDuration float64) bool {
+	return time.Now().After(c.GetExpiryTime(expiryDuration))
+}
+
+func (c *Challenge) GetExpiryTime(expiryDuration float64) time.Time {
+	return c.CreatedAt.Add(time.Second * time.Duration(expiryDuration))
 }
 
 func findChallenge(tx *storage.Connection, query string, args ...interface{}) (*Challenge, error) {

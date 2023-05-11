@@ -27,10 +27,10 @@ func (p *ResendConfirmationParams) Validate() error {
 		return badRequestError("Missing one of these types: signup, email_change, sms, phone_change")
 
 	}
-	if p.Email == "" && (p.Type == signupVerification || p.Type == emailChangeVerification) {
+	if p.Email == "" && p.Type == signupVerification {
 		return badRequestError("Type provided requires an email address")
 	}
-	if p.Phone == "" && (p.Type == smsVerification || p.Type == phoneChangeVerification) {
+	if p.Phone == "" && p.Type == smsVerification {
 		return badRequestError("Type provided requires a phone number")
 	}
 
@@ -120,7 +120,8 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", nil); terr != nil {
 				return terr
 			}
-			return sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength)
+			// PKCE not implemented yet
+			return sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, models.ImplicitFlow)
 		case smsVerification:
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
@@ -129,15 +130,15 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
-			return a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider)
+			return a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, sms_provider.SMSProvider)
 		case emailChangeVerification:
-			return a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, config.Mailer.OtpLength)
+			return a.sendEmailChange(tx, config, user, mailer, user.EmailChange, referrer, config.Mailer.OtpLength, models.ImplicitFlow)
 		case phoneChangeVerification:
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)
 			if terr != nil {
 				return terr
 			}
-			return a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeVerification, smsProvider)
+			return a.sendPhoneConfirmation(ctx, tx, user, user.PhoneChange, phoneChangeVerification, smsProvider, sms_provider.SMSProvider)
 		}
 		return nil
 	})

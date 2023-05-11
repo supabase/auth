@@ -1,7 +1,7 @@
 package models
 
 import (
-	"github.com/gobuffalo/pop/v5"
+	"github.com/gobuffalo/pop/v6"
 	"github.com/supabase/gotrue/internal/storage"
 )
 
@@ -47,6 +47,7 @@ func TruncateAll(conn *storage.Connection) error {
 			(&pop.Model{Value: SSODomain{}}).TableName(),
 			(&pop.Model{Value: SAMLProvider{}}).TableName(),
 			(&pop.Model{Value: SAMLRelayState{}}).TableName(),
+			(&pop.Model{Value: FlowState{}}).TableName(),
 		}
 
 		for _, tableName := range tables {

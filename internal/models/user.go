@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	"fmt"
+	"encoding/base64"
 	"strings"
 	"time"
 
-	"github.com/gobuffalo/pop/v5"
+	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/crypto"
@@ -71,10 +71,7 @@ type User struct {
 
 // NewUser initializes a new user from an email, password and user data.
 func NewUser(phone, email, password, aud string, userData map[string]interface{}) (*User, error) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return nil, errors.Wrap(err, "Error generating unique id")
-	}
+	id := uuid.Must(uuid.NewV4())
 	pw, err := crypto.GenerateFromPassword(context.Background(), password)
 	if err != nil {
 		return nil, err
@@ -294,6 +291,12 @@ func (u *User) ConfirmEmailChange(tx *storage.Connection, status int) error {
 		return err
 	}
 
+	if !u.IsConfirmed() {
+		if err := u.Confirm(tx); err != nil {
+			return err
+		}
+	}
+
 	identity, err := FindIdentityByIdAndProvider(tx, u.ID.String(), "email")
 	if err != nil {
 		if IsNotFoundError(err) {
@@ -511,7 +514,8 @@ func FindUserByPhoneChangeAndAudience(tx *storage.Connection, phone, aud string)
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and audience.
-func IsDuplicatedEmail(tx *storage.Connection, email, aud string) (*User, error) {
+// If a currentUser is provided, we will need to filter out any identities that belong to the current user.
+func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *User) (*User, error) {
 	var identities []Identity
 
 	if err := tx.Eager().Q().Where("email = ?", strings.ToLower(email)).All(&identities); err != nil {
@@ -525,7 +529,9 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string) (*User, error)
 	userIDs := make(map[string]uuid.UUID)
 	for _, identity := range identities {
 		if !identity.IsForSSOProvider() {
-			userIDs[identity.UserID.String()] = identity.UserID
+			if (currentUser != nil && currentUser.ID != identity.UserID) || (currentUser == nil) {
+				userIDs[identity.UserID.String()] = identity.UserID
+			}
 		}
 	}
 
@@ -643,10 +649,10 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection) error {
 
 // SoftDeleteUser performs a soft deletion on the user by obfuscating and clearing certain fields
 func (u *User) SoftDeleteUser(tx *storage.Connection) error {
-	u.Email = storage.NullString(obfuscateFieldForSoftDelete(u.GetEmail()))
-	u.Phone = storage.NullString(obfuscateFieldForSoftDelete(u.GetPhone()))
-	u.EmailChange = obfuscateFieldForSoftDelete(u.EmailChange)
-	u.PhoneChange = obfuscateFieldForSoftDelete(u.PhoneChange)
+	u.Email = storage.NullString(obfuscateEmail(u, u.GetEmail()))
+	u.Phone = storage.NullString(obfuscatePhone(u, u.GetPhone()))
+	u.EmailChange = obfuscateEmail(u, u.EmailChange)
+	u.PhoneChange = obfuscatePhone(u, u.PhoneChange)
 	u.EncryptedPassword = ""
 	u.ConfirmationToken = ""
 	u.RecoveryToken = ""
@@ -720,7 +726,7 @@ func (u *User) SoftDeleteUserIdentities(tx *storage.Connection) error {
 			"update "+
 				(&pop.Model{Value: Identity{}}).TableName()+
 				" set id = ? where id = ? and provider = ?",
-			obfuscateFieldForSoftDelete(identity.ID),
+			obfuscateIdentityId(identity),
 			identity.ID,
 			identity.Provider,
 		).Exec(); err != nil {
@@ -730,10 +736,20 @@ func (u *User) SoftDeleteUserIdentities(tx *storage.Connection) error {
 	return nil
 }
 
-func obfuscateFieldForSoftDelete(field string) string {
-	if field != "" {
-		softDeleteId, _ := crypto.GenerateNanoId(5)
-		return fmt.Sprintf("%s-%x", softDeleteId, sha256.Sum256([]byte(field)))
-	}
-	return field
+func obfuscateValue(id uuid.UUID, value string) string {
+	hash := sha256.Sum256([]byte(id.String() + value))
+	return base64.RawURLEncoding.EncodeToString(hash[:])
+}
+
+func obfuscateEmail(u *User, email string) string {
+	return obfuscateValue(u.ID, email)
+}
+
+func obfuscatePhone(u *User, phone string) string {
+	// Field converted from VARCHAR(15) to text
+	return obfuscateValue(u.ID, phone)[:15]
+}
+
+func obfuscateIdentityId(identity *Identity) string {
+	return obfuscateValue(identity.UserID, identity.Provider+":"+identity.ID)
 }

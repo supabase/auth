@@ -20,6 +20,8 @@ var (
 	UserExistsError   error = errors.New("user already exists")
 )
 
+const InvalidChannelError = "Invalid channel, supported values are 'sms' or 'whatsapp'"
+
 var oauthErrorMap = map[int]string{
 	http.StatusBadRequest:          "invalid_request",
 	http.StatusUnauthorized:        "unauthorized_client",
@@ -63,8 +65,8 @@ func (e *OAuthError) Cause() error {
 	return e
 }
 
-func invalidPasswordLengthError(config *conf.GlobalConfiguration) *HTTPError {
-	return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", config.PasswordMinLength))
+func invalidPasswordLengthError(passwordMinLength int) *HTTPError {
+	return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", passwordMinLength))
 }
 
 func invalidSignupError(config *conf.GlobalConfiguration) *HTTPError {

@@ -14,16 +14,49 @@ import (
 
 // OtpParams contains the request body params for the otp endpoint
 type OtpParams struct {
-	Email      string                 `json:"email"`
-	Phone      string                 `json:"phone"`
-	CreateUser bool                   `json:"create_user"`
-	Data       map[string]interface{} `json:"data"`
+	Email               string                 `json:"email"`
+	Phone               string                 `json:"phone"`
+	CreateUser          bool                   `json:"create_user"`
+	Data                map[string]interface{} `json:"data"`
+	Channel             string                 `json:"channel"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
+	CodeChallenge       string                 `json:"code_challenge"`
 }
 
 // SmsParams contains the request body params for sms otp
 type SmsParams struct {
-	Phone string                 `json:"phone"`
-	Data  map[string]interface{} `json:"data"`
+	Phone               string                 `json:"phone"`
+	Channel             string                 `json:"channel"`
+	Data                map[string]interface{} `json:"data"`
+	CodeChallengeMethod string                 `json:"code_challenge_method"`
+	CodeChallenge       string                 `json:"code_challenge"`
+}
+
+func (p *OtpParams) Validate() error {
+	if p.Email != "" && p.Phone != "" {
+		return badRequestError("Only an email address or phone number should be provided")
+	}
+	if p.Email != "" && p.Channel != "" {
+		return badRequestError("Channel should only be specified with Phone OTP")
+	}
+	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *SmsParams) Validate(smsProvider string) error {
+	if p.Phone != "" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
+		return badRequestError(InvalidChannelError)
+	}
+
+	var err error
+	p.Phone, err = validatePhone(p.Phone)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Otp returns the MagicLink or SmsOtp handler based on the request body params
@@ -43,8 +76,12 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	if err = json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read verification params: %v", err)
 	}
-	if params.Email != "" && params.Phone != "" {
-		return badRequestError("Only an email address or phone number should be provided")
+
+	if err := params.Validate(); err != nil {
+		return err
+	}
+	if params.Data == nil {
+		params.Data = make(map[string]interface{})
 	}
 
 	if ok, err := a.shouldCreateUser(r, params); !ok {
@@ -83,12 +120,12 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read sms otp params: %v", err)
 	}
-	if params.Data == nil {
-		params.Data = make(map[string]interface{})
+	// For backwards compatibility, we default to SMS if params Channel is not specified
+	if params.Phone != "" && params.Channel == "" {
+		params.Channel = sms_provider.SMSProvider
 	}
 
-	params.Phone, err = validatePhone(params.Phone)
-	if err != nil {
+	if err := params.Validate(config.Sms.Provider); err != nil {
 		return err
 	}
 
@@ -117,6 +154,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			Phone:    params.Phone,
 			Password: password,
 			Data:     params.Data,
+			Channel:  params.Channel,
 		}
 		newBodyContent, err := json.Marshal(signUpParams)
 		if err != nil {
@@ -133,7 +171,8 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			}
 
 			signUpParams := &SignupParams{
-				Phone: params.Phone,
+				Phone:   params.Phone,
+				Channel: params.Channel,
 			}
 			newBodyContent, err := json.Marshal(signUpParams)
 			if err != nil {
@@ -150,14 +189,16 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
-		if err := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); err != nil {
+		if err := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", map[string]interface{}{
+			"channel": params.Channel,
+		}); err != nil {
 			return err
 		}
 		smsProvider, terr := sms_provider.GetSmsProvider(*config)
 		if terr != nil {
 			return badRequestError("Error sending sms: %v", terr)
 		}
-		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider); err != nil {
+		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); err != nil {
 			return badRequestError("Error sending sms otp: %v", err)
 		}
 		return nil

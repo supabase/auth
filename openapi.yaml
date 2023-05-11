@@ -72,6 +72,7 @@ paths:
               - password
               - refresh_token
               - id_token
+              - pkce
       security:
         - APIKeyAuth: []
       requestBody:
@@ -85,6 +86,10 @@ paths:
               grant_type=refresh_token:
                 value:
                   refresh_token: 4nYUCw0wZR_DNOTSDbSGMQ
+              grant_type=pkce:
+                value:
+                  auth_code: 009e5066-fc11-4eca-8c8c-6fd82aa263f2
+                  code_verifier: ktPNXpR65N6JtgzQA8_5HHtH6PBSAahMNoLKRzQEa0Tzgl.vdV~b6lPk004XOd.4lR0inCde.NoQx5K63xPfzL8o7tJAjXncnhw5Niv9ycQ.QRV9JG.y3VapqbgLfIrJ
             schema:
               type: object
               description: |-
@@ -117,6 +122,11 @@ paths:
                   type: string
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
+                auth_code:
+                  type: string
+                  format: uuid
+                code_verifier:
+                  type: string
       responses:
         200:
           description: >
@@ -147,7 +157,7 @@ paths:
           UserAuth: []
       responses:
         204:
-          description: No content returned on successfull logout.
+          description: No content returned on successful logout.
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
 
@@ -224,6 +234,7 @@ paths:
                   format: uri
                   description: >
                     (Optional) URL to redirect back into the app on after verification completes successfully. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
+
       responses:
         200:
           description: An access and refresh token.
@@ -269,6 +280,14 @@ paths:
           schema:
             type: string
             format: uri
+        - name: code_challenge_method
+          in: query
+          description: (Optional) Method used to encrypt the verifier. Can be `plain` (no transformation) or `s256` (where SHA-256 is used). It is always recommended that `s256` is used.
+          schema:
+            type: string
+            enum:
+              - plain
+              - s256
       responses:
         302:
           $ref: "#/components/responses/OAuthAuthorizeRedirectResponse"
@@ -294,6 +313,17 @@ paths:
                 value:
                   phone: "+1234567890"
                   password: password1
+              "phone+password+whatsapp":
+                value:
+                  phone: "+1234567890"
+                  password: password1
+                  channel: whatsapp
+              "email+password+pkce":
+                value:
+                  email: user@example.com
+                  password: password1
+                  code_challenge_method: s256
+                  code_challenge: elU6u5zyqQT2f92GRQUq6PautAeNDf4DQPayyR0ek_c&
             schema:
               type: object
               properties:
@@ -303,10 +333,22 @@ paths:
                 phone:
                   type: string
                   format: phone
+                channel:
+                  type: string
+                  enum:
+                    - sms
+                    - whatsapp
                 password:
                   type: string
                 data:
                   type: object
+                code_challenge:
+                  type: string
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - plain
+                    - s256
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:
@@ -344,6 +386,13 @@ paths:
                 email:
                   type: string
                   format: email
+                code_challenge:
+                  type: string
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - plain
+                    - s256
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:
@@ -477,10 +526,22 @@ paths:
                 phone:
                   type: string
                   format: phone
+                channel:
+                  type: string
+                  enum:
+                    - sms
+                    - whatsapp
                 create_user:
                   type: boolean
                 data:
                   type: object
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - s256
+                    - plain
+                code_challenge:
+                  type: string
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:
@@ -543,6 +604,11 @@ paths:
                   type: object
                 app_metadata:
                   type: object
+                channel:
+                  type: string
+                  enum:
+                    - sms
+                    - whatsapp
       responses:
         200:
           description: User's updated account information.
@@ -1053,6 +1119,9 @@ paths:
                       properties:
                         actor_id:
                           type: string
+                        actor_via_sso:
+                          type: boolean
+                          description: Whether the actor used a SSO protocol (like SAML 2.0 or OIDC) to authenticate.
                         actor_username:
                           type: string
                         actor_name:
@@ -1582,7 +1651,11 @@ paths:
                   mfa_enabled:
                     type: boolean
                     example: true
-                    description: Whether MFA is enabled on this API server. Typically true.
+                    description: Whether MFA is enabled on this API server. Defaults to false.
+                  saml_enabled:
+                    type: boolean
+                    example: true
+                    description: Whether SAML is enabled on this API server. Defaults to false.
                   external:
                     type: object
                     description: Which external identity providers are enabled.
