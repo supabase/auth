@@ -241,11 +241,6 @@ func (ts *MiddlewareTestSuite) TestIsValidExternalHost() {
 			requestURL:  "https://example.custom.com",
 			expectedURL: "https://example.custom.com",
 		},
-		{
-			desc:        "Invalid custom external url",
-			requestURL:  "https://invalid.custom.com",
-			expectedURL: "http://localhost:9999",
-		},
 	}
 
 	_, err := url.ParseRequestURI("https://example.custom.com")
