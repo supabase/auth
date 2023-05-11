@@ -301,7 +301,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	factor := getFactor(ctx)
 	session := getSession(ctx)
 	if factor == nil || session == nil || user == nil {
-		return badRequestError("A valid session and factor are required to unenroll a factor")
+		return internalServerError("A valid session and factor are required to unenroll a factor")
 	}
 
 	if factor.IsVerified() && !session.IsAAL2() {
