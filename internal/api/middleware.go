@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -183,12 +184,22 @@ func isIgnoreCaptchaRoute(req *http.Request) bool {
 func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	config := a.config
-	u, ok := config.API.DomainAllowListMap[req.Host]
-	if !ok {
-		var err error
-		if u, err = url.ParseRequestURI(config.API.ExternalURL); err != nil {
-			return ctx, err
+
+	var u *url.URL
+	var err error
+	if req.URL.Scheme != "" && req.URL.Hostname() != "" {
+		baseUrl := fmt.Sprintf("%s://%s", req.URL.Scheme, req.URL.Hostname())
+		if u, err = url.ParseRequestURI(baseUrl); err != nil {
+			// fallback to the default hostname
+			log := observability.GetLogEntry(req)
+			log.WithField("request_url", baseUrl).Warn(err)
+			u, err = url.ParseRequestURI(config.API.ExternalURL)
 		}
+	} else {
+		u, err = url.ParseRequestURI(config.API.ExternalURL)
+	}
+	if err != nil {
+		return ctx, err
 	}
 	return withExternalHost(ctx, u), nil
 }

@@ -248,14 +248,8 @@ func (ts *MiddlewareTestSuite) TestIsValidExternalHost() {
 		},
 	}
 
-	ts.Config.API.DomainAllowList = []string{"https://example.custom.com"}
-
-	u, err := url.ParseRequestURI("https://example.custom.com")
+	_, err := url.ParseRequestURI("https://example.custom.com")
 	require.NoError(ts.T(), err)
-
-	ts.Config.API.DomainAllowListMap = map[string]*url.URL{
-		u.Host: u,
-	}
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {

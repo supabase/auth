@@ -117,12 +117,6 @@ func (ts *MailTestSuite) TestGenerateLink() {
 	customDomainUrl, err := url.ParseRequestURI("https://example.gotrue.com")
 	require.NoError(ts.T(), err)
 
-	// add custom host domain to the allow list
-	ts.Config.API.DomainAllowList = []string{customDomainUrl.String()}
-	ts.Config.API.DomainAllowListMap = map[string]*url.URL{
-		customDomainUrl.Host: customDomainUrl,
-	}
-
 	for _, c := range cases {
 		ts.Run(c.Desc, func() {
 			var buffer bytes.Buffer
