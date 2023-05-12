@@ -188,7 +188,8 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			}
-			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, config.Mailer.OtpLength, flowType); terr != nil {
+			externalURL := getExternalHost(ctx)
+			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, externalURL, config.Mailer.OtpLength, flowType); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
 					return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
 				}

@@ -525,7 +525,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 				mailer := a.Mailer(ctx)
 				referrer := a.getReferrer(r)
-				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
+				externalURL := getExternalHost(ctx)
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
 					return internalServerError("Error sending confirmation mail").WithInternalError(terr)
 				}
 				return unauthorizedError("Error unverified email")

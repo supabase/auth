@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -205,7 +206,8 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		url, terr = mailer.GetEmailActionLink(user, params.Type, referrer)
+		externalURL := getExternalHost(ctx)
+		url, terr = mailer.GetEmailActionLink(user, params.Type, referrer, externalURL)
 		if terr != nil {
 			return terr
 		}
@@ -228,7 +230,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, resp)
 }
 
-func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int, flowType models.FlowType) error {
+func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, externalURL *url.URL, otpLength int, flowType models.FlowType) error {
 	var err error
 	if u.ConfirmationSentAt != nil && !u.ConfirmationSentAt.Add(maxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
@@ -241,7 +243,7 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
-	if err := mailer.ConfirmationMail(u, otp, referrerURL); err != nil {
+	if err := mailer.ConfirmationMail(u, otp, referrerURL, externalURL); err != nil {
 		u.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending confirmation email")
 	}
@@ -249,7 +251,7 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 	return errors.Wrap(tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at"), "Database error updating user for confirmation")
 }
 
-func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, referrerURL string, otpLength int) error {
+func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, referrerURL string, externalURL *url.URL, otpLength int) error {
 	var err error
 	oldToken := u.ConfirmationToken
 	otp, err := crypto.GenerateOtp(otpLength)
@@ -258,7 +260,7 @@ func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, re
 	}
 	u.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	now := time.Now()
-	if err := mailer.InviteMail(u, otp, referrerURL); err != nil {
+	if err := mailer.InviteMail(u, otp, referrerURL, externalURL); err != nil {
 		u.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending invite email")
 	}
@@ -267,7 +269,7 @@ func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, re
 	return errors.Wrap(tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at", "invited_at"), "Database error updating user for invite")
 }
 
-func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int, flowType models.FlowType) error {
+func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, externalURL *url.URL, otpLength int, flowType models.FlowType) error {
 	var err error
 	if u.RecoverySentAt != nil && !u.RecoverySentAt.Add(maxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
@@ -281,7 +283,7 @@ func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, maile
 	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
-	if err := mailer.RecoveryMail(u, otp, referrerURL); err != nil {
+	if err := mailer.RecoveryMail(u, otp, referrerURL, externalURL); err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending recovery email")
 	}
@@ -313,7 +315,7 @@ func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, ma
 	return errors.Wrap(tx.UpdateOnly(u, "reauthentication_token", "reauthentication_sent_at"), "Database error updating user for reauthentication")
 }
 
-func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, otpLength int, flowType models.FlowType) error {
+func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, externalURL *url.URL, otpLength int, flowType models.FlowType) error {
 	var err error
 	// since Magic Link is just a recovery with a different template and behaviour
 	// around new users we will reuse the recovery db timer to prevent potential abuse
@@ -329,7 +331,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 
 	now := time.Now()
-	if err := mailer.MagicLinkMail(u, otp, referrerURL); err != nil {
+	if err := mailer.MagicLinkMail(u, otp, referrerURL, externalURL); err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending magic link email")
 	}
@@ -338,7 +340,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, mailer mailer.Mailer, email string, referrerURL string, otpLength int, flowType models.FlowType) error {
+func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, mailer mailer.Mailer, email, referrerURL string, externalURL *url.URL, otpLength int, flowType models.FlowType) error {
 	var err error
 	if u.EmailChangeSentAt != nil && !u.EmailChangeSentAt.Add(config.SMTP.MaxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
@@ -366,7 +368,7 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfigu
 
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
-	if err := mailer.EmailChangeMail(u, otpNew, otpCurrent, referrerURL); err != nil {
+	if err := mailer.EmailChangeMail(u, otpNew, otpCurrent, referrerURL, externalURL); err != nil {
 		return err
 	}
 

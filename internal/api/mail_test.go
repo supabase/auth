@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/golang-jwt/jwt"
@@ -39,6 +40,11 @@ func (ts *MailTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
 	ts.Config.Mailer.SecureEmailChangeEnabled = true
+
+	// Create User
+	u, err := models.NewUser("12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating new user model")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new user")
 }
 
 func (ts *MailTestSuite) TestGenerateLink() {
@@ -108,11 +114,14 @@ func (ts *MailTestSuite) TestGenerateLink() {
 		},
 	}
 
+	customDomainUrl, err := url.ParseRequestURI("https://example.gotrue.com")
+	require.NoError(ts.T(), err)
+
 	for _, c := range cases {
 		ts.Run(c.Desc, func() {
 			var buffer bytes.Buffer
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.Body))
-			req := httptest.NewRequest(http.MethodPost, "/admin/generate_link", &buffer)
+			req := httptest.NewRequest(http.MethodPost, customDomainUrl.String()+"/admin/generate_link", &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 			w := httptest.NewRecorder()
 
@@ -131,6 +140,11 @@ func (ts *MailTestSuite) TestGenerateLink() {
 
 			// check if hashed_token matches hash function of email and the raw otp
 			require.Equal(ts.T(), data["hashed_token"], fmt.Sprintf("%x", sha256.Sum224([]byte(c.Body.Email+data["email_otp"].(string)))))
+
+			// check if the host used in the email link matches the initial request host
+			u, err := url.ParseRequestURI(data["action_link"].(string))
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), req.Host, u.Host)
 		})
 	}
 }

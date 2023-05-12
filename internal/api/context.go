@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"net/url"
 
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/supabase/gotrue/internal/models"
@@ -28,6 +29,7 @@ const (
 	oauthTokenKey           = contextKey("oauth_token") // for OAuth1.0, also known as request token
 	oauthVerifierKey        = contextKey("oauth_verifier")
 	ssoProviderKey          = contextKey("sso_provider")
+	externalHostKey         = contextKey("external_host")
 	flowStateKey            = contextKey("flow_state_id")
 )
 
@@ -234,4 +236,16 @@ func getSSOProvider(ctx context.Context) *models.SSOProvider {
 		return nil
 	}
 	return obj.(*models.SSOProvider)
+}
+
+func withExternalHost(ctx context.Context, u *url.URL) context.Context {
+	return context.WithValue(ctx, externalHostKey, u)
+}
+
+func getExternalHost(ctx context.Context) *url.URL {
+	obj := ctx.Value(externalHostKey)
+	if obj == nil {
+		return nil
+	}
+	return obj.(*url.URL)
 }

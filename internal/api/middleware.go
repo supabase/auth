@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -178,6 +180,32 @@ func isIgnoreCaptchaRoute(req *http.Request) bool {
 		return true
 	}
 	return false
+}
+
+func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	config := a.config
+
+	var u *url.URL
+	var err error
+
+	baseUrl := config.API.ExternalURL
+	xForwardedHost := req.Header.Get("X-Forwarded-Host")
+	xForwardedProto := req.Header.Get("X-Forwarded-Proto")
+	if xForwardedHost != "" && xForwardedProto != "" {
+		baseUrl = fmt.Sprintf("%s://%s", xForwardedProto, xForwardedHost)
+	} else if req.URL.Scheme != "" && req.URL.Hostname() != "" {
+		baseUrl = fmt.Sprintf("%s://%s", req.URL.Scheme, req.URL.Hostname())
+	}
+	if u, err = url.ParseRequestURI(baseUrl); err != nil {
+		// fallback to the default hostname
+		log := observability.GetLogEntry(req)
+		log.WithField("request_url", baseUrl).Warn(err)
+		if u, err = url.ParseRequestURI(config.API.ExternalURL); err != nil {
+			return ctx, err
+		}
+	}
+	return withExternalHost(ctx, u), nil
 }
 
 func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {

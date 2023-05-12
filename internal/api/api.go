@@ -89,6 +89,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 	r.Route("/callback", func(r *router) {
 		r.UseBypass(logger)
+		r.Use(api.isValidExternalHost)
 		r.Use(api.loadFlowState)
 
 		r.Get("/", api.ExternalProviderCallback)
@@ -97,6 +98,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 	r.Route("/", func(r *router) {
 		r.UseBypass(logger)
+		r.Use(api.isValidExternalHost)
 
 		r.Get("/settings", api.Settings)
 
