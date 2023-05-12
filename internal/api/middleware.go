@@ -187,19 +187,22 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 
 	var u *url.URL
 	var err error
-	if req.URL.Scheme != "" && req.URL.Hostname() != "" {
-		baseUrl := fmt.Sprintf("%s://%s", req.URL.Scheme, req.URL.Hostname())
-		if u, err = url.ParseRequestURI(baseUrl); err != nil {
-			// fallback to the default hostname
-			log := observability.GetLogEntry(req)
-			log.WithField("request_url", baseUrl).Warn(err)
-			u, err = url.ParseRequestURI(config.API.ExternalURL)
-		}
-	} else {
-		u, err = url.ParseRequestURI(config.API.ExternalURL)
+
+	baseUrl := config.API.ExternalURL
+	xForwardedHost := req.Header.Get("X-Forwarded-Host")
+	xForwardedProto := req.Header.Get("X-Forwarded-Proto")
+	if xForwardedHost != "" && xForwardedProto != "" {
+		baseUrl = fmt.Sprintf("%s://%s", xForwardedProto, xForwardedHost)
+	} else if req.URL.Scheme != "" && req.URL.Hostname() != "" {
+		baseUrl = fmt.Sprintf("%s://%s", req.URL.Scheme, req.URL.Hostname())
 	}
-	if err != nil {
-		return ctx, err
+	if u, err = url.ParseRequestURI(baseUrl); err != nil {
+		// fallback to the default hostname
+		log := observability.GetLogEntry(req)
+		log.WithField("request_url", baseUrl).Warn(err)
+		if u, err = url.ParseRequestURI(config.API.ExternalURL); err != nil {
+			return ctx, err
+		}
 	}
 	return withExternalHost(ctx, u), nil
 }
