@@ -12,6 +12,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const IssuerFacebook = "https://www.facebook.com"
+
 const (
 	defaultFacebookAuthBase  = "www.facebook.com"
 	defaultFacebookTokenBase = "graph.facebook.com" //#nosec G101 -- Not a secret value.

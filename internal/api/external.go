@@ -514,7 +514,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 
 	switch name {
 	case "apple":
-		return provider.NewAppleProvider(config.External.Apple)
+		return provider.NewAppleProvider(ctx, config.External.Apple)
 	case "azure":
 		return provider.NewAzureProvider(config.External.Azure, scopes)
 	case "bitbucket":

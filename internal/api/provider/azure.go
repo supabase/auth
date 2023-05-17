@@ -9,6 +9,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const IssuerAzure = "https://login.microsoftonline.com/common/v2.0"
+
 const (
 	defaultAzureAuthBase = "login.microsoftonline.com/common"
 	defaultAzureAPIBase  = "graph.microsoft.com"

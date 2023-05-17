@@ -74,23 +74,6 @@ type PKCEGrantParams struct {
 const useCookieHeader = "x-use-cookie"
 const InvalidLoginMessage = "Invalid login credentials"
 
-func getEmailVerified(v interface{}) bool {
-	var emailVerified bool
-	var err error
-	switch v := v.(type) {
-	case string:
-		emailVerified, err = strconv.ParseBool(v)
-	case bool:
-		emailVerified = v
-	default:
-		emailVerified = false
-	}
-	if err != nil {
-		return false
-	}
-	return emailVerified
-}
-
 // Token is the endpoint for OAuth access token requests
 func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()

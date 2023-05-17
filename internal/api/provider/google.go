@@ -28,80 +28,12 @@ func (u googleUser) IsEmailVerified() bool {
 	return u.VerifiedEmail || u.EmailVerified
 }
 
-type GoogleOIDCProvider struct {
-	*oidc.Provider
-}
-
-// ParseIDToken parses a Google issued OIDC ID token. You should verify the aud
-// claim on your own!
-func (p *GoogleOIDCProvider) ParseIDToken(ctx context.Context, idToken string) (*oidc.IDToken, *UserProvidedData, error) {
-	verifier := p.Verifier(&oidc.Config{
-		// aud claim check to be performed by other flows
-		SkipClientIDCheck: true,
-	})
-
-	token, err := verifier.Verify(ctx, idToken)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var claims googleUser
-	if err := token.Claims(&claims); err != nil {
-		return nil, nil, err
-	}
-
-	var data UserProvidedData
-
-	if claims.Email != "" {
-		data.Emails = append(data.Emails, Email{
-			Email:    claims.Email,
-			Verified: claims.IsEmailVerified(),
-			Primary:  true,
-		})
-	}
-
-	if len(data.Emails) <= 0 {
-		return nil, nil, errors.New("provider: Google ID token must contain an email address")
-	}
-
-	data.Metadata = &Claims{
-		Issuer:        claims.Issuer,
-		Subject:       claims.Subject,
-		Name:          claims.Name,
-		Picture:       claims.AvatarURL,
-		Email:         claims.Email,
-		EmailVerified: claims.IsEmailVerified(),
-
-		// To be deprecated
-		AvatarURL:  claims.AvatarURL,
-		FullName:   claims.Name,
-		ProviderId: claims.Subject,
-	}
-
-	if claims.HostedDomain != "" {
-		data.Metadata.CustomClaims = map[string]any{
-			"hd": claims.HostedDomain,
-		}
-	}
-
-	return token, &data, nil
-}
-
-// NewGoogleOIDCProvider creates a new ODIC provider with
-// https://accounts.google.com as the issuer.
-func NewGoogleOIDCProvider(ctx context.Context) (*GoogleOIDCProvider, error) {
-	provider, err := oidc.NewProvider(ctx, "https://accounts.google.com")
-	if err != nil {
-		return nil, err
-	}
-
-	return &GoogleOIDCProvider{provider}, nil
-}
+const IssuerGoogle = "https://accounts.google.com"
 
 type googleProvider struct {
 	*oauth2.Config
 
-	oidc *GoogleOIDCProvider
+	oidc *oidc.Provider
 }
 
 // NewGoogleProvider creates a Google OAuth2 identity provider.
@@ -123,7 +55,7 @@ func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration,
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	oidcProvider, err := NewGoogleOIDCProvider(ctx)
+	oidcProvider, err := oidc.NewProvider(ctx, IssuerGoogle)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +80,9 @@ const oauthGoogleUserInfoEndpoint = "https://www.googleapis.com/userinfo/v2/me"
 
 func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	if idToken := tok.Extra("id_token"); idToken != nil {
-		token, data, err := g.oidc.ParseIDToken(ctx, idToken.(string))
+		token, data, err := ParseIDToken(ctx, g.oidc, nil, idToken.(string), ParseIDTokenOptions{
+			AccessToken: tok.AccessToken,
+		})
 		if err != nil {
 			return nil, err
 		}
