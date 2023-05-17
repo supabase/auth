@@ -4,7 +4,7 @@ import "net/http"
 
 type ProviderSettings struct {
 	Apple     bool `json:"apple"`
-	Azure     bool `json:"azure"`
+	Microsoft bool `json:"microsoft"`
 	Bitbucket bool `json:"bitbucket"`
 	Discord   bool `json:"discord"`
 	GitHub    bool `json:"github"`
@@ -41,7 +41,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, &Settings{
 		ExternalProviders: ProviderSettings{
 			Apple:     config.External.Apple.Enabled,
-			Azure:     config.External.Azure.Enabled,
+			Microsoft:     config.External.Microsoft.Enabled,
 			Bitbucket: config.External.Bitbucket.Enabled,
 			Discord:   config.External.Discord.Enabled,
 			GitHub:    config.External.Github.Enabled,

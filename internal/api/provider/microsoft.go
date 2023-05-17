@@ -10,29 +10,29 @@ import (
 )
 
 const (
-	defaultAzureAuthBase = "login.microsoftonline.com/common"
-	defaultAzureAPIBase  = "graph.microsoft.com"
+	defaultMicrosoftAuthBase = "login.microsoftonline.com/common"
+	defaultMicrosoftAPIBase  = "graph.microsoft.com"
 )
 
-type azureProvider struct {
+type microsoftProvider struct {
 	*oauth2.Config
 	APIPath string
 }
 
-type azureUser struct {
+type microsoftUser struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
 	Sub   string `json:"sub"`
 }
 
-// NewAzureProvider creates a Azure account provider.
-func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+// NewMicrosoftProvider creates a Microsoft account provider.
+func NewMicrosoftProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.Validate(); err != nil {
 		return nil, err
 	}
 
-	authHost := chooseHost(ext.URL, defaultAzureAuthBase)
-	apiPath := chooseHost(ext.ApiURL, defaultAzureAPIBase)
+	authHost := chooseHost(ext.URL, defaultMicrosoftAuthBase)
+	apiPath := chooseHost(ext.ApiURL, defaultMicrosoftAPIBase)
 
 	oauthScopes := []string{"openid"}
 
@@ -40,7 +40,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	return &azureProvider{
+	return &microsoftProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID,
 			ClientSecret: ext.Secret,
@@ -55,18 +55,18 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	}, nil
 }
 
-func (g azureProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (g microsoftProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 
-func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	var u azureUser
+func (g microsoftProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
+	var u microsoftUser
 	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/oidc/userinfo", &u); err != nil {
 		return nil, err
 	}
 
 	if u.Email == "" {
-		return nil, errors.New("unable to find email with Azure provider")
+		return nil, errors.New("unable to find email with Microsoft provider")
 	}
 
 	return &UserProvidedData{

@@ -138,7 +138,7 @@ type EmailContentConfiguration struct {
 
 type ProviderConfiguration struct {
 	Apple                   OAuthProviderConfiguration `json:"apple"`
-	Azure                   OAuthProviderConfiguration `json:"azure"`
+	Microsoft                   OAuthProviderConfiguration `json:"microsoft"`
 	Bitbucket               OAuthProviderConfiguration `json:"bitbucket"`
 	Discord                 OAuthProviderConfiguration `json:"discord"`
 	Facebook                OAuthProviderConfiguration `json:"facebook"`

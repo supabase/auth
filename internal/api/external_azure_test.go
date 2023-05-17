@@ -10,20 +10,20 @@ import (
 )
 
 const (
-	azureUser        string = `{"name":"Azure Test","email":"azure@example.com","sub":"azuretestid"}`
-	azureUserNoEmail string = `{"name":"Azure Test","sub":"azuretestid"}`
+	microsoftUser        string = `{"name":"Microsoft Test","email":"microsoft@example.com","sub":"microsofttestid"}`
+	microsoftUserNoEmail string = `{"name":"Microsoft Test","sub":"microsofttestid"}`
 )
 
-func (ts *ExternalTestSuite) TestSignupExternalAzure() {
-	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=azure", nil)
+func (ts *ExternalTestSuite) TestSignupExternalMicrosoft() {
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=microsoft", nil)
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	ts.Require().Equal(http.StatusFound, w.Code)
 	u, err := url.Parse(w.Header().Get("Location"))
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
-	ts.Equal(ts.Config.External.Azure.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Azure.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Microsoft.RedirectURI, q.Get("redirect_uri"))
+	ts.Equal(ts.Config.External.Microsoft.ClientID, q.Get("client_id"))
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("openid", q.Get("scope"))
 
@@ -34,137 +34,137 @@ func (ts *ExternalTestSuite) TestSignupExternalAzure() {
 	})
 	ts.Require().NoError(err)
 
-	ts.Equal("azure", claims.Provider)
+	ts.Equal("microsoft", claims.Provider)
 	ts.Equal(ts.Config.SiteURL, claims.SiteURL)
 }
 
-func AzureTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int, code string, user string) *httptest.Server {
+func MicrosoftTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int, code string, user string) *httptest.Server {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/oauth2/v2.0/token":
 			*tokenCount++
 			ts.Equal(code, r.FormValue("code"))
 			ts.Equal("authorization_code", r.FormValue("grant_type"))
-			ts.Equal(ts.Config.External.Azure.RedirectURI, r.FormValue("redirect_uri"))
+			ts.Equal(ts.Config.External.Microsoft.RedirectURI, r.FormValue("redirect_uri"))
 
 			w.Header().Add("Content-Type", "application/json")
-			fmt.Fprint(w, `{"access_token":"azure_token","expires_in":100000}`)
+			fmt.Fprint(w, `{"access_token":"microsoft_token","expires_in":100000}`)
 		case "/oidc/userinfo":
 			*userCount++
 			w.Header().Add("Content-Type", "application/json")
 			fmt.Fprint(w, user)
 		default:
 			w.WriteHeader(500)
-			ts.Fail("unknown azure oauth call %s", r.URL.Path)
+			ts.Fail("unknown microsoft oauth call %s", r.URL.Path)
 		}
 	}))
 
-	ts.Config.External.Azure.URL = server.URL
-	ts.Config.External.Azure.ApiURL = server.URL
+	ts.Config.External.Microsoft.URL = server.URL
+	ts.Config.External.Microsoft.ApiURL = server.URL
 
 	return server
 }
 
-func (ts *ExternalTestSuite) TestSignupExternalAzure_AuthorizationCode() {
+func (ts *ExternalTestSuite) TestSignupExternalMicrosoft_AuthorizationCode() {
 	ts.Config.DisableSignup = false
 	tokenCount, userCount := 0, 0
 	code := "authcode"
-	server := AzureTestSignupSetup(ts, &tokenCount, &userCount, code, azureUser)
+	server := MicrosoftTestSignupSetup(ts, &tokenCount, &userCount, code, microsoftUser)
 	defer server.Close()
 
-	u := performAuthorization(ts, "azure", code, "")
+	u := performAuthorization(ts, "microsoft", code, "")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "azure@example.com", "Azure Test", "azuretestid", "")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "microsoft@example.com", "Microsoft Test", "microsofttestid", "")
 }
 
-func (ts *ExternalTestSuite) TestSignupExternalAzureDisableSignupErrorWhenNoUser() {
+func (ts *ExternalTestSuite) TestSignupExternalMicrosoftDisableSignupErrorWhenNoUser() {
 	ts.Config.DisableSignup = true
 	tokenCount, userCount := 0, 0
 	code := "authcode"
-	server := AzureTestSignupSetup(ts, &tokenCount, &userCount, code, azureUser)
+	server := MicrosoftTestSignupSetup(ts, &tokenCount, &userCount, code, microsoftUser)
 	defer server.Close()
 
-	u := performAuthorization(ts, "azure", code, "")
+	u := performAuthorization(ts, "microsoft", code, "")
 
-	assertAuthorizationFailure(ts, u, "Signups not allowed for this instance", "access_denied", "azure@example.com")
+	assertAuthorizationFailure(ts, u, "Signups not allowed for this instance", "access_denied", "microsoft@example.com")
 }
 
-func (ts *ExternalTestSuite) TestSignupExternalAzureDisableSignupErrorWhenNoEmail() {
+func (ts *ExternalTestSuite) TestSignupExternalMicrosoftDisableSignupErrorWhenNoEmail() {
 	ts.Config.DisableSignup = true
 	tokenCount, userCount := 0, 0
 	code := "authcode"
-	server := AzureTestSignupSetup(ts, &tokenCount, &userCount, code, azureUserNoEmail)
+	server := MicrosoftTestSignupSetup(ts, &tokenCount, &userCount, code, microsoftUserNoEmail)
 	defer server.Close()
 
-	u := performAuthorization(ts, "azure", code, "")
+	u := performAuthorization(ts, "microsoft", code, "")
 
-	assertAuthorizationFailure(ts, u, "Error getting user email from external provider", "server_error", "azure@example.com")
+	assertAuthorizationFailure(ts, u, "Error getting user email from external provider", "server_error", "microsoft@example.com")
 
 }
 
-func (ts *ExternalTestSuite) TestSignupExternalAzureDisableSignupSuccessWithPrimaryEmail() {
+func (ts *ExternalTestSuite) TestSignupExternalMicrosoftDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("azuretestid", "azure@example.com", "Azure Test", "http://example.com/avatar", "")
+	ts.createUser("microsofttestid", "microsoft@example.com", "Microsoft Test", "http://example.com/avatar", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
-	server := AzureTestSignupSetup(ts, &tokenCount, &userCount, code, azureUser)
+	server := MicrosoftTestSignupSetup(ts, &tokenCount, &userCount, code, microsoftUser)
 	defer server.Close()
 
-	u := performAuthorization(ts, "azure", code, "")
+	u := performAuthorization(ts, "microsoft", code, "")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "azure@example.com", "Azure Test", "azuretestid", "http://example.com/avatar")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "microsoft@example.com", "Microsoft Test", "microsofttestid", "http://example.com/avatar")
 }
 
-func (ts *ExternalTestSuite) TestInviteTokenExternalAzureSuccessWhenMatchingToken() {
-	// name should be populated from Azure API
-	ts.createUser("azuretestid", "azure@example.com", "", "http://example.com/avatar", "invite_token")
+func (ts *ExternalTestSuite) TestInviteTokenExternalMicrosoftSuccessWhenMatchingToken() {
+	// name should be populated from Microsoft API
+	ts.createUser("microsofttestid", "microsoft@example.com", "", "http://example.com/avatar", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
-	server := AzureTestSignupSetup(ts, &tokenCount, &userCount, code, azureUser)
+	server := MicrosoftTestSignupSetup(ts, &tokenCount, &userCount, code, microsoftUser)
 	defer server.Close()
 
-	u := performAuthorization(ts, "azure", code, "invite_token")
+	u := performAuthorization(ts, "microsoft", code, "invite_token")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "azure@example.com", "Azure Test", "azuretestid", "http://example.com/avatar")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "microsoft@example.com", "Microsoft Test", "microsofttestid", "http://example.com/avatar")
 }
 
-func (ts *ExternalTestSuite) TestInviteTokenExternalAzureErrorWhenNoMatchingToken() {
+func (ts *ExternalTestSuite) TestInviteTokenExternalMicrosoftErrorWhenNoMatchingToken() {
 	tokenCount, userCount := 0, 0
 	code := "authcode"
-	azureUser := `{"name":"Azure Test","avatar":{"href":"http://example.com/avatar"}}`
-	server := AzureTestSignupSetup(ts, &tokenCount, &userCount, code, azureUser)
+	microsoftUser := `{"name":"Microsoft Test","avatar":{"href":"http://example.com/avatar"}}`
+	server := MicrosoftTestSignupSetup(ts, &tokenCount, &userCount, code, microsoftUser)
 	defer server.Close()
 
-	w := performAuthorizationRequest(ts, "azure", "invite_token")
+	w := performAuthorizationRequest(ts, "microsoft", "invite_token")
 	ts.Require().Equal(http.StatusNotFound, w.Code)
 }
 
-func (ts *ExternalTestSuite) TestInviteTokenExternalAzureErrorWhenWrongToken() {
-	ts.createUser("azuretestid", "azure@example.com", "", "", "invite_token")
+func (ts *ExternalTestSuite) TestInviteTokenExternalMicrosoftErrorWhenWrongToken() {
+	ts.createUser("microsofttestid", "microsoft@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
-	azureUser := `{"name":"Azure Test","avatar":{"href":"http://example.com/avatar"}}`
-	server := AzureTestSignupSetup(ts, &tokenCount, &userCount, code, azureUser)
+	microsoftUser := `{"name":"Microsoft Test","avatar":{"href":"http://example.com/avatar"}}`
+	server := MicrosoftTestSignupSetup(ts, &tokenCount, &userCount, code, microsoftUser)
 	defer server.Close()
 
-	w := performAuthorizationRequest(ts, "azure", "wrong_token")
+	w := performAuthorizationRequest(ts, "microsoft", "wrong_token")
 	ts.Require().Equal(http.StatusNotFound, w.Code)
 }
 
-func (ts *ExternalTestSuite) TestInviteTokenExternalAzureErrorWhenEmailDoesntMatch() {
-	ts.createUser("azuretestid", "azure@example.com", "", "", "invite_token")
+func (ts *ExternalTestSuite) TestInviteTokenExternalMicrosoftErrorWhenEmailDoesntMatch() {
+	ts.createUser("microsofttestid", "microsoft@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
-	azureUser := `{"name":"Azure Test", "email":"other@example.com", "avatar":{"href":"http://example.com/avatar"}}`
-	server := AzureTestSignupSetup(ts, &tokenCount, &userCount, code, azureUser)
+	microsoftUser := `{"name":"Microsoft Test", "email":"other@example.com", "avatar":{"href":"http://example.com/avatar"}}`
+	server := MicrosoftTestSignupSetup(ts, &tokenCount, &userCount, code, microsoftUser)
 	defer server.Close()
 
-	u := performAuthorization(ts, "azure", code, "invite_token")
+	u := performAuthorization(ts, "microsoft", code, "invite_token")
 
 	assertAuthorizationFailure(ts, u, "Invited email does not match emails from external provider", "invalid_request", "")
 }

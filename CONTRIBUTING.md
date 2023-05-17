@@ -244,7 +244,7 @@ To see the current settings, make a request to `http://localhost:9999/settings` 
 {
   "external": {
     "apple": false,
-    "azure": false,
+    "microsoft": false,
     "bitbucket": false,
     "discord": false,
     "github": false,

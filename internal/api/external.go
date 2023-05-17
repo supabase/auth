@@ -517,9 +517,9 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	case "apple":
 		config.External.Apple.RedirectURI = callbackURL
 		return provider.NewAppleProvider(config.External.Apple)
-	case "azure":
-		config.External.Azure.RedirectURI = callbackURL
-		return provider.NewAzureProvider(config.External.Azure, scopes)
+	case "microsoft":
+		config.External.Microsoft.RedirectURI = callbackURL
+		return provider.NewMicrosoftProvider(config.External.Microsoft, scopes)
 	case "bitbucket":
 		config.External.Bitbucket.RedirectURI = callbackURL
 		return provider.NewBitbucketProvider(config.External.Bitbucket)

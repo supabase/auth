@@ -100,8 +100,8 @@ func (p *IdTokenGrantParams) getVerifier(ctx context.Context, config *conf.Globa
 			oAuthProviderClientId = oAuthProvider.ClientID
 		}
 		provider, err = oidc.NewProvider(ctx, "https://appleid.apple.com")
-	case "azure":
-		oAuthProvider = config.External.Azure
+	case "microsoft":
+		oAuthProvider = config.External.Microsoft
 		oAuthProviderClientId = oAuthProvider.ClientID
 		url := oAuthProvider.URL
 		if url == "" {
