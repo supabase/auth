@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -47,18 +48,31 @@ func (ts *LogoutTestSuite) SetupTest() {
 }
 
 func (ts *LogoutTestSuite) TestLogoutSuccess() {
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/logout", nil)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
-	w := httptest.NewRecorder()
+	for _, scope := range []string{"", "global", "local", "others"} {
+		ts.SetupTest()
 
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+		reqURL, err := url.ParseRequestURI("http://localhost/logout")
+		require.NoError(ts.T(), err)
 
-	accessTokenKey := fmt.Sprintf("%v-access-token", ts.Config.Cookie.Key)
-	refreshTokenKey := fmt.Sprintf("%v-refresh-token", ts.Config.Cookie.Key)
-	for _, c := range w.Result().Cookies() {
-		if c.Name == accessTokenKey || c.Name == refreshTokenKey {
-			require.Equal(ts.T(), "", c.Value)
+		if scope != "" {
+			query := reqURL.Query()
+			query.Set("scope", scope)
+			reqURL.RawQuery = query.Encode()
+		}
+
+		req := httptest.NewRequest(http.MethodPost, reqURL.String(), nil)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		w := httptest.NewRecorder()
+
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+		accessTokenKey := fmt.Sprintf("%v-access-token", ts.Config.Cookie.Key)
+		refreshTokenKey := fmt.Sprintf("%v-refresh-token", ts.Config.Cookie.Key)
+		for _, c := range w.Result().Cookies() {
+			if c.Name == accessTokenKey || c.Name == refreshTokenKey {
+				require.Equal(ts.T(), "", c.Value)
+			}
 		}
 	}
 }
