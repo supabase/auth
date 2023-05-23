@@ -31,6 +31,7 @@ func init() {
 	tableSessions := Session{}.TableName()
 	tableRelayStates := SAMLRelayState{}.TableName()
 	tableFlowStates := FlowState{}.TableName()
+	tableMFAChallenges := Challenge{}.TableName()
 
 	// These statements intentionally use SELECT ... FOR UPDATE SKIP LOCKED
 	// as this makes sure that only rows that are not being used in another
@@ -45,6 +46,7 @@ func init() {
 		fmt.Sprintf("delete from %q where id in (select id from %q where not_after < now() - interval '72 hours' limit 10 for update skip locked);", tableSessions, tableSessions),
 		fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '24 hours' limit 100 for update skip locked);", tableRelayStates, tableRelayStates),
 		fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '24 hours' limit 100 for update skip locked);", tableFlowStates, tableFlowStates),
+		fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '24 hours' limit 100 for update skip locked);", tableMFAChallenges, tableMFAChallenges),
 	)
 
 	var err error
