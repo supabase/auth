@@ -15,7 +15,3 @@ create index if not exists
 create index if not exists
   sessions_not_after_idx
   on {{ index .Options "Namespace" }}.sessions (not_after desc);
-
-create index if not exists
-  mfa_challenge_created_at_idx
-  on {{ index .Options "Namespace" }}.mfa_challenges (created_at desc);
