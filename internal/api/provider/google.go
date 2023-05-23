@@ -30,6 +30,8 @@ func (u googleUser) IsEmailVerified() bool {
 
 const IssuerGoogle = "https://accounts.google.com"
 
+var internalIssuerGoogle = IssuerGoogle
+
 type googleProvider struct {
 	*oauth2.Config
 
@@ -55,7 +57,7 @@ func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration,
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	oidcProvider, err := oidc.NewProvider(ctx, IssuerGoogle)
+	oidcProvider, err := oidc.NewProvider(ctx, internalIssuerGoogle)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +78,9 @@ func (g googleProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 
-const oauthGoogleUserInfoEndpoint = "https://www.googleapis.com/userinfo/v2/me"
+const UserInfoEndpointGoogle = "https://www.googleapis.com/userinfo/v2/me"
+
+var internalUserInfoEndpointGoogle = UserInfoEndpointGoogle
 
 func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	if idToken := tok.Extra("id_token"); idToken != nil {
@@ -108,7 +112,7 @@ func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	logrus.Info("Using Google OAuth2 user info endpoint, an ID token was not returned by Google")
 
 	var u googleUser
-	if err := makeRequest(ctx, tok, g.Config, oauthGoogleUserInfoEndpoint, &u); err != nil {
+	if err := makeRequest(ctx, tok, g.Config, internalUserInfoEndpointGoogle, &u); err != nil {
 		return nil, err
 	}
 
@@ -127,7 +131,7 @@ func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	}
 
 	data.Metadata = &Claims{
-		Issuer:        oauthGoogleUserInfoEndpoint,
+		Issuer:        internalUserInfoEndpointGoogle,
 		Subject:       u.ID,
 		Name:          u.Name,
 		Picture:       u.AvatarURL,
@@ -141,4 +145,16 @@ func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	}
 
 	return &data, nil
+}
+
+// ResetGoogleProvider should only be used in tests!
+func ResetGoogleProvider() {
+	internalIssuerGoogle = IssuerGoogle
+	internalUserInfoEndpointGoogle = UserInfoEndpointGoogle
+}
+
+// OverrideGoogleProvider should only be used in tests!
+func OverrideGoogleProvider(issuer, userInfo string) {
+	internalIssuerGoogle = issuer
+	internalUserInfoEndpointGoogle = userInfo
 }
