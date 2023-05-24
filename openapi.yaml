@@ -1036,6 +1036,8 @@ paths:
                 redirect_to:
                   type: string
                   format: uri
+                create_user:
+                  type: boolean
       responses:
         200:
           description: User profile and generated link information.

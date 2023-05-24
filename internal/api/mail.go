@@ -32,6 +32,7 @@ type GenerateLinkParams struct {
 	Password   string                 `json:"password"`
 	Data       map[string]interface{} `json:"data"`
 	RedirectTo string                 `json:"redirect_to"`
+	CreateUser bool                   `json:"create_user"`
 }
 
 type GenerateLinkResponse struct {
@@ -50,7 +51,9 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	mailer := a.Mailer(ctx)
 	adminUser := getAdminUser(ctx)
 
-	params := &GenerateLinkParams{}
+	params := &GenerateLinkParams{
+		CreateUser: true,
+	}
 
 	body, err := getBodyBytes(r)
 	if err != nil {
@@ -69,7 +72,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	aud := a.requestAud(ctx, r)
 	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil {
-		if models.IsNotFoundError(err) {
+		if models.IsNotFoundError(err) && params.CreateUser {
 			if params.Type == magicLinkVerification {
 				params.Type = signupVerification
 				params.Password, err = password.Generate(64, 10, 0, false, true)
