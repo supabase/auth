@@ -25,7 +25,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGithub() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Github.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Github.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Github.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("user:email", q.Get("scope"))
 

@@ -29,7 +29,7 @@ type azureUser struct {
 
 // NewAzureProvider creates a Azure account provider.
 func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -44,7 +44,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 
 	return &azureProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  authHost + "/oauth2/v2.0/authorize",

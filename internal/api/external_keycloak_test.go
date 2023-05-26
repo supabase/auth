@@ -23,7 +23,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKeycloak() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Keycloak.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Keycloak.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Keycloak.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("profile email", q.Get("scope"))
 

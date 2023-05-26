@@ -31,7 +31,7 @@ type zoomUser struct {
 
 // NewZoomProvider creates a Zoom account provider.
 func NewZoomProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -40,7 +40,7 @@ func NewZoomProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error)
 
 	return &zoomProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  authPath + "/authorize",

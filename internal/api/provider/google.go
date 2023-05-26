@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -40,7 +39,7 @@ type googleProvider struct {
 
 // NewGoogleProvider creates a Google OAuth2 identity provider.
 func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -64,7 +63,7 @@ func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration,
 
 	return &googleProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint:     oidcProvider.Endpoint(),
 			Scopes:       oauthScopes,
@@ -84,26 +83,16 @@ var internalUserInfoEndpointGoogle = UserInfoEndpointGoogle
 
 func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	if idToken := tok.Extra("id_token"); idToken != nil {
-		token, data, err := ParseIDToken(ctx, g.oidc, nil, idToken.(string), ParseIDTokenOptions{
+		_, data, err := ParseIDToken(ctx, g.oidc, &oidc.Config{
+			ClientID: g.Config.ClientID,
+		}, idToken.(string), ParseIDTokenOptions{
 			AccessToken: tok.AccessToken,
 		})
 		if err != nil {
 			return nil, err
 		}
 
-		matchesAudience := false
-		for _, aud := range token.Audience {
-			if g.Config.ClientID == aud {
-				matchesAudience = true
-				break
-			}
-		}
-
-		if !matchesAudience {
-			return nil, fmt.Errorf("provider: Google ID token issued for audience(s) %q but expected %q", strings.Join(token.Audience, ", "), g.Config.ClientID)
-		}
-
-		return data, err
+		return data, nil
 	}
 
 	// This whole section offers legacy support in case the Google OAuth2

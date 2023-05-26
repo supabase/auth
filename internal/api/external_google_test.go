@@ -29,7 +29,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGoogle() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Google.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Google.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Google.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("email profile", q.Get("scope"))
 

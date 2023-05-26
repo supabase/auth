@@ -29,45 +29,45 @@ type IdTokenGrantParams struct {
 func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, string, []string, error) {
 	log := observability.GetLogEntry(r)
 
-	enabled := true
+	var cfg *conf.OAuthProviderConfiguration
 	var issuer string
 	var providerType string
 	var acceptableClientIDs []string
 
 	switch true {
 	case p.Provider == "apple" || p.Issuer == provider.IssuerApple:
-		enabled = config.External.Apple.Enabled
+		cfg = &config.External.Apple
 		providerType = "apple"
 		issuer = provider.IssuerApple
-		acceptableClientIDs = []string{config.External.Apple.ClientID}
+		acceptableClientIDs = append(acceptableClientIDs, config.External.Apple.ClientID...)
 
 		if config.External.IosBundleId != "" {
 			acceptableClientIDs = append(acceptableClientIDs, config.External.IosBundleId)
 		}
 
 	case p.Provider == "google" || p.Issuer == provider.IssuerGoogle:
-		enabled = config.External.Google.Enabled
+		cfg = &config.External.Google
 		providerType = "google"
 		issuer = provider.IssuerGoogle
-		acceptableClientIDs = []string{config.External.Google.ClientID}
+		acceptableClientIDs = append(acceptableClientIDs, config.External.Google.ClientID...)
 
 	case p.Provider == "azure" || p.Issuer == provider.IssuerAzure:
-		enabled = config.External.Azure.Enabled
+		cfg = &config.External.Azure
 		providerType = "azure"
 		issuer = provider.IssuerAzure
-		acceptableClientIDs = []string{config.External.Azure.ClientID}
+		acceptableClientIDs = append(acceptableClientIDs, config.External.Azure.ClientID...)
 
 	case p.Provider == "facebook" || p.Issuer == provider.IssuerFacebook:
-		enabled = config.External.Facebook.Enabled
+		cfg = &config.External.Facebook
 		providerType = "facebook"
 		issuer = provider.IssuerFacebook
-		acceptableClientIDs = []string{config.External.Facebook.ClientID}
+		acceptableClientIDs = append(acceptableClientIDs, config.External.Facebook.ClientID...)
 
 	case p.Provider == "keycloak" || (config.External.Keycloak.Enabled && config.External.Keycloak.URL != "" && p.Issuer == config.External.Keycloak.URL):
-		enabled = config.External.Keycloak.Enabled
+		cfg = &config.External.Keycloak
 		providerType = "keycloak"
 		issuer = config.External.Keycloak.URL
-		acceptableClientIDs = []string{config.External.Keycloak.ClientID}
+		acceptableClientIDs = append(acceptableClientIDs, config.External.Keycloak.ClientID...)
 
 	default:
 		log.WithField("issuer", p.Issuer).WithField("client_id", p.ClientID).Warn("Use of POST /token with arbitrary issuer and client_id is deprecated for security reasons. Please switch to using the API with provider only!")
@@ -88,7 +88,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		}
 	}
 
-	if !enabled {
+	if cfg != nil && !cfg.Enabled {
 		return nil, "", nil, badRequestError(fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
 	}
 
@@ -145,6 +145,10 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	correctAudience := false
 	for _, clientID := range acceptableClientIDs {
+		if clientID == "" {
+			continue
+		}
+
 		for _, aud := range idToken.Audience {
 			if aud == clientID {
 				correctAudience = true

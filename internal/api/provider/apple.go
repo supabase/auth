@@ -33,7 +33,7 @@ type appleUser struct {
 
 // NewAppleProvider creates a Apple account provider.
 func NewAppleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -48,7 +48,7 @@ func NewAppleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration) 
 
 	return &AppleProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint:     oidcProvider.Endpoint(),
 			Scopes: []string{
