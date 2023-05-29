@@ -178,6 +178,8 @@ func isIgnoreCaptchaRoute(req *http.Request) bool {
 	// captcha shouldn't be enabled on requests to refresh the token
 	if req.URL.Path == "/token" && req.FormValue("grant_type") == "refresh_token" {
 		return true
+	} else if req.URL.Path == "/token" && req.FormValue("grant_type") == "pkce" {
+		return true
 	}
 	return false
 }
