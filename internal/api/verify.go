@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sethvargo/go-password/password"
+	"github.com/supabase/gotrue/internal/api/sms_provider"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
@@ -337,9 +338,11 @@ func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Conn
 		}
 
 		if otpType == smsVerification {
+
 			if terr = user.ConfirmPhone(tx); terr != nil {
 				return internalServerError("Error confirming user").WithInternalError(terr)
 			}
+
 		} else if otpType == phoneChangeVerification {
 			if terr = user.ConfirmPhoneChange(tx); terr != nil {
 				return internalServerError("Error confirming user").WithInternalError(terr)
@@ -493,6 +496,12 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		case phoneChangeVerification:
 			user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
 		case smsVerification:
+			smsProvider, _ := sms_provider.GetSmsProvider(*config)
+			if config.Sms.Provider == "twilio" && config.Sms.Twilio.VerifyEnabled {
+				if err := smsProvider.VerifyOTP(params.Phone, params.Token); err != nil {
+					return nil, err
+				}
+			}
 			user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
 		default:
 			return nil, badRequestError("Invalid sms verification type")
