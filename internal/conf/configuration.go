@@ -205,6 +205,7 @@ type SmsProviderConfiguration struct {
 }
 
 type TwilioProviderConfiguration struct {
+	VerifyEnabled     bool   `json:"verify_enabled" split_words:"true"`
 	AccountSid        string `json:"account_sid" split_words:"true"`
 	AuthToken         string `json:"auth_token" split_words:"true"`
 	MessageServiceSid string `json:"message_service_sid" split_words:"true"`
