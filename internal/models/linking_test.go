@@ -125,12 +125,6 @@ func (ts *AccountLinkingTestSuite) TestLinkAccountExists() {
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(identityA))
 
-	// link decision because the below described identity is in the default linking domain but uses "other-provider" instead of "provder"
-	decision, err := DetermineAccountLinking(ts.db, "other-provider", userA.ID.String(), []string{"test@example.com"})
-	require.NoError(ts.T(), err)
-
-	require.Equal(ts.T(), decision.Decision, LinkAccount)
-
 	userB, err := NewUser("", "test@samltest.id", "", "authenticated", nil)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(userB))
@@ -142,11 +136,46 @@ func (ts *AccountLinkingTestSuite) TestLinkAccountExists() {
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(identityB))
 
-	// no link decision because the SSO linking domain is scoped to the provider unique ID
-	decision, err = DetermineAccountLinking(ts.db, "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387", userB.ID.String(), []string{"test@samltest.id"})
-	require.NoError(ts.T(), err)
+	cases := []struct {
+		desc     string
+		email    string
+		sub      string
+		provider string
+		decision AccountLinkingDecision
+	}{
+		{
+			// link decision because the below described identity is in the default linking domain but uses "other-provider" instead of "provder"
+			desc:     "same email address",
+			email:    "test@example.com",
+			sub:      userA.ID.String(),
+			provider: "other-provider",
+			decision: LinkAccount,
+		},
+		{
+			desc:     "same email address in uppercase",
+			email:    "TEST@example.com",
+			sub:      userA.ID.String(),
+			provider: "other-provider",
+			decision: LinkAccount,
+		},
+		{
+			desc:     "no link decision because the SSO linking domain is scoped to the provider unique ID",
+			email:    "test@samltest.id",
+			sub:      userB.ID.String(),
+			provider: "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387",
+			decision: AccountExists,
+		},
+	}
 
-	require.NotEqual(ts.T(), decision.Decision, LinkAccount)
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			decision, err := DetermineAccountLinking(ts.db, c.provider, c.sub, []string{c.email})
+			require.NoError(ts.T(), err)
+
+			require.Equal(ts.T(), decision.Decision, c.decision)
+		})
+	}
+
 }
 
 func (ts *AccountLinkingTestSuite) TestMultipleAccounts() {
