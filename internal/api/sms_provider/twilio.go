@@ -79,6 +79,46 @@ func (t *TwilioProvider) SendMessage(phone string, message string, channel strin
 	}
 }
 
+func (t *TwilioProvider) SendVerifySMS(receiver, channel, message string) error {
+	// Separate the two since they are not guaranteed to return the  same response type
+
+	body := url.Values{
+		"To":      {receiver}, // twilio api requires "+" extension to be included
+		"Channel": {channel},
+	}
+	client := &http.Client{Timeout: defaultTimeout}
+	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
+	if err != nil {
+		return err
+	}
+	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	r.SetBasicAuth(t.Config.AccountSid, t.Config.AuthToken)
+	res, err := client.Do(r)
+	defer utilities.SafeClose(res.Body)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
+		resp := &twilioErrResponse{}
+		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
+			return err
+		}
+		return resp
+	}
+	// validate sms status
+	resp := &SmsStatus{}
+	derr := json.NewDecoder(res.Body).Decode(resp)
+	if derr != nil {
+		return derr
+	}
+
+	if resp.Status == "failed" || resp.Status == "undelivered" {
+		return fmt.Errorf("twilio error: %v %v", resp.ErrorMessage, resp.ErrorCode)
+	}
+
+	return nil
+}
+
 // Send an SMS containing the OTP with Twilio's API
 func (t *TwilioProvider) SendSms(phone, message, channel string) error {
 	sender := t.Config.MessageServiceSid
@@ -136,17 +176,18 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) error {
 }
 
 func (t *TwilioProvider) VerifyOTP(phone, channel, code string) error {
+	receiver := "+" + phone
 	if !t.Config.VerifyEnabled {
 		return fmt.Errorf("twilio verify is not enabled")
 	}
+	verifyPath := verifyApiBase + "/" + "Services" + "/" + t.Config.MessageServiceSid + "/VerificationCheck"
 
 	body := url.Values{
-		"To":      {phone}, // twilio api requires "+" extension to be included
-		"Channel": {channel},
-		"Code":    {code},
+		"To":   {receiver}, // twilio api requires "+" extension to be included
+		"Code": {code},
 	}
 	client := &http.Client{Timeout: defaultTimeout}
-	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
+	r, err := http.NewRequest("POST", verifyPath, strings.NewReader(body.Encode()))
 	if err != nil {
 		return err
 	}
@@ -172,45 +213,6 @@ func (t *TwilioProvider) VerifyOTP(phone, channel, code string) error {
 
 	if resp.Status != "approved" {
 		return fmt.Errorf("twilio error: %v %v", resp.ErrorMessage, resp.Status)
-	}
-
-	return nil
-}
-
-func (t *TwilioProvider) SendVerifySMS(receiver, channel, message string) error {
-	// Separate the two since they are not guaranteed to return the  same response type
-	body := url.Values{
-		"To":      {receiver}, // twilio api requires "+" extension to be included
-		"Channel": {channel},
-	}
-	client := &http.Client{Timeout: defaultTimeout}
-	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
-	if err != nil {
-		return err
-	}
-	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	r.SetBasicAuth(t.Config.AccountSid, t.Config.AuthToken)
-	res, err := client.Do(r)
-	defer utilities.SafeClose(res.Body)
-	if err != nil {
-		return err
-	}
-	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
-		resp := &twilioErrResponse{}
-		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
-			return err
-		}
-		return resp
-	}
-	// validate sms status
-	resp := &SmsStatus{}
-	derr := json.NewDecoder(res.Body).Decode(resp)
-	if derr != nil {
-		return derr
-	}
-
-	if resp.Status == "failed" || resp.Status == "undelivered" {
-		return fmt.Errorf("twilio error: %v %v", resp.ErrorMessage, resp.ErrorCode)
 	}
 
 	return nil
