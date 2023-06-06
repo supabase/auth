@@ -31,6 +31,16 @@ type SmsStatus struct {
 	Body         string `json:"body"`
 }
 
+// TODO (Joel): Rename this and alter fields
+type VerifyStatus struct {
+	To           string `json:"to"`
+	From         string `json:"from"`
+	Status       string `json:"status"`
+	ErrorCode    string `json:"error_code"`
+	ErrorMessage string `json:"error_message"`
+	Body         string `json:"body"`
+}
+
 type twilioErrResponse struct {
 	Code     int    `json:"code"`
 	Message  string `json:"message"`
@@ -154,16 +164,15 @@ func (t *TwilioProvider) VerifyOTP(phone, channel, code string) error {
 		}
 		return resp
 	}
-	// validate sms status
-	// resp := &VerifyStatus{}
-	// derr := json.NewDecoder(res.Body).Decode(resp)
-	// if derr != nil {
-	// 	return derr
-	// }
+	resp := &VerifyStatus{}
+	derr := json.NewDecoder(res.Body).Decode(resp)
+	if derr != nil {
+		return derr
+	}
 
-	// if resp.Status != "approved"  {
-	// 	return fmt.Errorf("twilio error: %v %v", resp.Message, resp.Status)
-	// }
+	if resp.Status != "approved" {
+		return fmt.Errorf("twilio error: %v %v", resp.ErrorMessage, resp.Status)
+	}
 
 	return nil
 }
