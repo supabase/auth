@@ -124,7 +124,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			user, terr = a.emailChangeVerify(r, ctx, tx, params, user)
 			if user == nil && terr == nil {
 				// when double confirmation is required
-				rurl := a.prepRedirectURL(singleConfirmationAccepted, params.RedirectTo)
+				rurl := a.prepRedirectURL(singleConfirmationAccepted, params.RedirectTo, flowType)
 				http.Redirect(w, r, rurl, http.StatusSeeOther)
 				return nil
 			}
@@ -156,7 +156,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		var herr *HTTPError
 		if errors.As(err, &herr) {
-			rurl := a.prepErrorRedirectURL(herr, w, r, params.RedirectTo)
+			rurl := a.prepErrorRedirectURL(herr, w, r, params.RedirectTo, flowType)
 			http.Redirect(w, r, rurl, http.StatusSeeOther)
 			return nil
 		}
@@ -353,7 +353,8 @@ func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Conn
 	return user, nil
 }
 
-func (a *API) prepErrorRedirectURL(err *HTTPError, w http.ResponseWriter, r *http.Request, rurl string) string {
+func (a *API) prepErrorRedirectURL(err *HTTPError, w http.ResponseWriter, r *http.Request, rurl string, flowType models.FlowType) string {
+	var fragmentDelimiter string
 	q := url.Values{}
 	log := observability.GetLogEntry(r)
 	errorID := getRequestID(r.Context())
@@ -364,13 +365,25 @@ func (a *API) prepErrorRedirectURL(err *HTTPError, w http.ResponseWriter, r *htt
 	}
 	q.Set("error_code", strconv.Itoa(err.Code))
 	q.Set("error_description", err.Message)
-	return rurl + "#" + q.Encode()
+	if flowType == models.PKCEFlow {
+		fragmentDelimiter = "?"
+	} else {
+		fragmentDelimiter = "#"
+	}
+	return rurl + fragmentDelimiter + q.Encode()
 }
 
-func (a *API) prepRedirectURL(message string, rurl string) string {
+func (a *API) prepRedirectURL(message string, rurl string, flowType models.FlowType) string {
 	q := url.Values{}
 	q.Set("message", message)
-	return rurl + "#" + q.Encode()
+	var fragmentDelimiter string
+
+	if flowType == models.PKCEFlow {
+		fragmentDelimiter = "?"
+	} else {
+		fragmentDelimiter = "#"
+	}
+	return rurl + fragmentDelimiter + q.Encode()
 }
 
 func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
