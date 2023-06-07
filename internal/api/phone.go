@@ -72,23 +72,23 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		return MaxFrequencyLimitError
 	}
 
-	// If not Twilio Verify
-	var oldToken string
-	var otp string
+	var message string
+	oldToken := *token
 	if !a.config.Sms.Twilio.VerifyEnabled {
-		oldToken = *token
 		otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
 		if err != nil {
 			return internalServerError("error generating otp").WithInternalError(err)
 		}
 		*token = fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
 
-	}
-	var message string
-	if config.Sms.Template == "" {
-		message = fmt.Sprintf(defaultSmsMessage, otp)
+		if config.Sms.Template == "" {
+			message = fmt.Sprintf(defaultSmsMessage, otp)
+		} else {
+			message = strings.Replace(config.Sms.Template, "{{ .Code }}", otp, -1)
+		}
 	} else {
-		message = strings.Replace(config.Sms.Template, "{{ .Code }}", otp, -1)
+		// Message is configurd on Twilio when using Twilio Verify
+		message = ""
 	}
 
 	if serr := smsProvider.SendMessage(phone, message, channel); serr != nil {
