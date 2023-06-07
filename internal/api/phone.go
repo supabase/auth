@@ -86,7 +86,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		} else {
 			message = strings.Replace(config.Sms.Template, "{{ .Code }}", otp, -1)
 		}
-	} else {
+	} else if a.config.Sms.Twilio.VerifyEnabled && a.config.Sms.Provider == "twilio" {
 		// Message is configurd on Twilio when using Twilio Verify
 		message = ""
 	}

@@ -31,11 +31,11 @@ type SmsStatus struct {
 	Body         string `json:"body"`
 }
 
-// TODO (Joel): Rename this and alter fields
 type VerifyStatus struct {
 	To           string `json:"to"`
-	From         string `json:"from"`
 	Status       string `json:"status"`
+	Channel      string `json:"channel"`
+	Valid        string `json:"valid"`
 	ErrorCode    string `json:"error_code"`
 	ErrorMessage string `json:"error_message"`
 	Body         string `json:"body"`
@@ -171,8 +171,8 @@ func (t *TwilioProvider) VerifyOTP(phone, code string) error {
 		return derr
 	}
 
-	if resp.Status != "approved" {
-		return fmt.Errorf("twilio error: %v %v", resp.ErrorMessage, resp.Status)
+	if resp.Status != "approved" || resp.Valid != "true" {
+		return fmt.Errorf("twilio verification error: %v %v", resp.ErrorMessage, resp.Status)
 	}
 
 	return nil
