@@ -45,7 +45,7 @@ type twitchUsers struct {
 
 // NewTwitchProvider creates a Twitch account provider.
 func NewTwitchProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -62,7 +62,7 @@ func NewTwitchProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 
 	return &twitchProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  authHost + "/oauth2/authorize",

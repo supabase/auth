@@ -35,14 +35,14 @@ type workosUser struct {
 
 // NewWorkOSProvider creates a WorkOS account provider.
 func NewWorkOSProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 	apiPath := chooseHost(ext.URL, defaultWorkOSAPIBase)
 
 	return &workosProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  apiPath + "/sso/authorize",

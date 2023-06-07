@@ -9,6 +9,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const IssuerAzure = "https://login.microsoftonline.com/common/v2.0"
+
 const (
 	defaultAzureAuthBase = "login.microsoftonline.com/common"
 	defaultAzureAPIBase  = "graph.microsoft.com"
@@ -27,7 +29,7 @@ type azureUser struct {
 
 // NewAzureProvider creates a Azure account provider.
 func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -42,7 +44,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 
 	return &azureProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  authHost + "/oauth2/v2.0/authorize",

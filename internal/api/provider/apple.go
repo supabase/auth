@@ -2,37 +2,23 @@ package provider
 
 import (
 	"context"
-	"crypto/rsa"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 
-	"github.com/golang-jwt/jwt"
-	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/gotrue/internal/conf"
 	"golang.org/x/oauth2"
 )
 
-const (
-	defaultAppleAPIBase = "appleid.apple.com"
-	authEndpoint        = "/auth/authorize"
-	tokenEndpoint       = "/auth/token" //#nosec G101 -- Not a secret value.
-
-	scopeEmail = "email"
-	scopeName  = "name"
-
-	appleAudOrIss                  = "https://appleid.apple.com"
-	idTokenVerificationKeyEndpoint = "/auth/keys" //#nosec G101 -- Not a secret value.
-)
+const IssuerApple = "https://appleid.apple.com"
 
 // AppleProvider stores the custom config for apple provider
 type AppleProvider struct {
 	*oauth2.Config
-	UserInfoURL string
+
+	oidc *oidc.Provider
 }
 
 type appleName struct {
@@ -45,38 +31,33 @@ type appleUser struct {
 	Email string    `json:"email"`
 }
 
-type idTokenClaims struct {
-	jwt.StandardClaims
-	AccessTokenHash string `json:"at_hash"`
-	AuthTime        int    `json:"auth_time"`
-	Email           string `json:"email"`
-	IsPrivateEmail  bool   `json:"is_private_email,string"`
-	Sub             string `json:"sub"`
-}
-
 // NewAppleProvider creates a Apple account provider.
-func NewAppleProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+func NewAppleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
-	authHost := chooseHost(ext.URL, defaultAppleAPIBase)
+	if ext.URL != "" {
+		logrus.Warn("Apple OAuth provider has URL config set which is ignored (check GOTRUE_EXTERNAL_APPLE_URL)")
+	}
+
+	oidcProvider, err := oidc.NewProvider(ctx, IssuerApple)
+	if err != nil {
+		return nil, err
+	}
 
 	return &AppleProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
-			Endpoint: oauth2.Endpoint{
-				AuthURL:  authHost + authEndpoint,
-				TokenURL: authHost + tokenEndpoint,
-			},
+			Endpoint:     oidcProvider.Endpoint(),
 			Scopes: []string{
-				scopeEmail,
-				scopeName,
+				"email",
+				"name",
 			},
 			RedirectURL: ext.RedirectURI,
 		},
-		UserInfoURL: authHost + idTokenVerificationKeyEndpoint,
+		oidc: oidcProvider,
 	}, nil
 }
 
@@ -104,73 +85,22 @@ func (p AppleProvider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption) 
 
 // GetUserData returns the user data fetched from the apple provider
 func (p AppleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	var user *UserProvidedData
-	if tok.AccessToken == "" {
+	idToken := tok.Extra("id_token")
+	if tok.AccessToken == "" || idToken == nil {
+		// Apple returns user data only the first time
 		return &UserProvidedData{}, nil
 	}
-	if idToken := tok.Extra("id_token"); idToken != nil {
-		idToken, err := jwt.ParseWithClaims(idToken.(string), &idTokenClaims{}, func(t *jwt.Token) (interface{}, error) {
-			kid := t.Header["kid"].(string)
-			claims := t.Claims.(*idTokenClaims)
-			vErr := new(jwt.ValidationError)
-			if !claims.VerifyAudience(p.ClientID, true) {
-				vErr.Inner = fmt.Errorf("incorrect audience")
-				vErr.Errors |= jwt.ValidationErrorAudience
-			}
-			if !claims.VerifyIssuer(appleAudOrIss, true) {
-				vErr.Inner = fmt.Errorf("incorrect issuer")
-				vErr.Errors |= jwt.ValidationErrorIssuer
-			}
-			if vErr.Errors > 0 {
-				return nil, vErr
-			}
 
-			// per OpenID Connect Core 1.0 §3.2.2.9, Access Token Validation
-			hash := sha256.Sum256([]byte(tok.AccessToken))
-			halfHash := hash[0:(len(hash) / 2)]
-			encodedHalfHash := base64.RawURLEncoding.EncodeToString(halfHash)
-			if encodedHalfHash != claims.AccessTokenHash {
-				vErr.Inner = fmt.Errorf(`invalid identity token`)
-				vErr.Errors |= jwt.ValidationErrorClaimsInvalid
-				return nil, vErr
-			}
-
-			// get the public key for verifying the identity token signature
-			set, err := jwk.Fetch(ctx, p.UserInfoURL, jwk.WithHTTPClient(http.DefaultClient))
-			if err != nil {
-				return nil, err
-			}
-			selectedKey, ok := set.LookupKeyID(kid)
-			if !ok {
-				return nil, fmt.Errorf("unable to lookup Apple ID key with kid = %q", kid)
-			}
-			var pubKey rsa.PublicKey
-			if err := selectedKey.Raw(&pubKey); err != nil {
-				return nil, fmt.Errorf("expected RSA public key from %q with kid %q", p.UserInfoURL, kid)
-			}
-			return &pubKey, nil
-		})
-		if err != nil {
-			return &UserProvidedData{}, err
-		}
-		user = &UserProvidedData{
-			Emails: []Email{{
-				Email:    idToken.Claims.(*idTokenClaims).Email,
-				Verified: true,
-				Primary:  true,
-			}},
-			Metadata: &Claims{
-				Issuer:        p.UserInfoURL,
-				Subject:       idToken.Claims.(*idTokenClaims).Sub,
-				Email:         idToken.Claims.(*idTokenClaims).Email,
-				EmailVerified: true,
-
-				// To be deprecated
-				ProviderId: idToken.Claims.(*idTokenClaims).Sub,
-			},
-		}
+	_, data, err := ParseIDToken(ctx, p.oidc, &oidc.Config{
+		ClientID: p.ClientID,
+	}, idToken.(string), ParseIDTokenOptions{
+		AccessToken: tok.AccessToken,
+	})
+	if err != nil {
+		return nil, err
 	}
-	return user, nil
+
+	return data, nil
 }
 
 // ParseUser parses the apple user's info

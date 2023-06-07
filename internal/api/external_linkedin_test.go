@@ -25,7 +25,7 @@ func (ts *ExternalTestSuite) TestSignupExternalLinkedin() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Linkedin.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Linkedin.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Linkedin.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("r_emailaddress r_liteprofile", q.Get("scope"))
 

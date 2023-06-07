@@ -34,7 +34,7 @@ type gitlabUserEmail struct {
 
 // NewGitlabProvider creates a Gitlab account provider.
 func NewGitlabProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -49,7 +49,7 @@ func NewGitlabProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 	host := chooseHost(ext.URL, defaultGitLabAuthBase)
 	return &gitlabProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  host + "/oauth/authorize",

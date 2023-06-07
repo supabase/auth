@@ -109,6 +109,9 @@ paths:
                   format: phone
                 id_token:
                   type: string
+                access_token:
+                  type: string
+                  description: Provide only when `grant_type` is `id_token` and the provided ID token requires the presence of an access token to be accepted (usually by having an `at_hash` claim).
                 nonce:
                   type: string
                 provider:
