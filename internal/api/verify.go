@@ -497,8 +497,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
 			smsProvider, _ := sms_provider.GetSmsProvider(*config)
 			if config.Sms.Provider == "twilio" && config.Sms.Twilio.VerifyEnabled {
-				// TODO (Joel): Decide whether to support other channels
-				if err := smsProvider.VerifyOTP(params.Phone, "sms", params.Token); err != nil {
+				if err := smsProvider.VerifyOTP(params.Phone, params.Token); err != nil {
 					return nil, err
 				}
 				return user, nil

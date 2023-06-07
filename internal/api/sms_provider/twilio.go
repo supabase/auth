@@ -135,7 +135,7 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) error {
 
 }
 
-func (t *TwilioProvider) VerifyOTP(phone, channel, code string) error {
+func (t *TwilioProvider) VerifyOTP(phone, code string) error {
 	receiver := "+" + phone
 	if !t.Config.VerifyEnabled {
 		return fmt.Errorf("twilio verify is not enabled")
