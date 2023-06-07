@@ -338,11 +338,9 @@ func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Conn
 		}
 
 		if otpType == smsVerification {
-
 			if terr = user.ConfirmPhone(tx); terr != nil {
 				return internalServerError("Error confirming user").WithInternalError(terr)
 			}
-
 		} else if otpType == phoneChangeVerification {
 			if terr = user.ConfirmPhoneChange(tx); terr != nil {
 				return internalServerError("Error confirming user").WithInternalError(terr)

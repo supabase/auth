@@ -13,7 +13,7 @@ import (
 
 const (
 	defaultTwilioApiBase = "https://api.twilio.com"
-	verifyApiBase        = "https://verify.twilio.com/v2"
+	verifyApiBase        = "https://verify.twilio.com/v2/Services/"
 	apiVersion           = "2010-04-01"
 )
 
@@ -59,7 +59,7 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 	}
 	var apiPath string
 	if config.VerifyEnabled {
-		apiPath = verifyApiBase + "/" + "Services" + "/" + config.MessageServiceSid + "/Verifications"
+		apiPath = verifyApiBase + config.MessageServiceSid + "/Verifications"
 	} else {
 		apiPath = defaultTwilioApiBase + "/" + apiVersion + "/" + "Accounts" + "/" + config.AccountSid + "/Messages.json"
 	}
@@ -77,46 +77,6 @@ func (t *TwilioProvider) SendMessage(phone string, message string, channel strin
 	default:
 		return fmt.Errorf("channel type %q is not supported for Twilio", channel)
 	}
-}
-
-func (t *TwilioProvider) SendVerifySMS(receiver, channel, message string) error {
-	// Separate the two since they are not guaranteed to return the  same response type
-
-	body := url.Values{
-		"To":      {receiver}, // twilio api requires "+" extension to be included
-		"Channel": {channel},
-	}
-	client := &http.Client{Timeout: defaultTimeout}
-	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
-	if err != nil {
-		return err
-	}
-	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	r.SetBasicAuth(t.Config.AccountSid, t.Config.AuthToken)
-	res, err := client.Do(r)
-	defer utilities.SafeClose(res.Body)
-	if err != nil {
-		return err
-	}
-	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
-		resp := &twilioErrResponse{}
-		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
-			return err
-		}
-		return resp
-	}
-	// validate sms status
-	resp := &SmsStatus{}
-	derr := json.NewDecoder(res.Body).Decode(resp)
-	if derr != nil {
-		return derr
-	}
-
-	if resp.Status == "failed" || resp.Status == "undelivered" {
-		return fmt.Errorf("twilio error: %v %v", resp.ErrorMessage, resp.ErrorCode)
-	}
-
-	return nil
 }
 
 // Send an SMS containing the OTP with Twilio's API
