@@ -31,14 +31,22 @@ type SmsStatus struct {
 	Body         string `json:"body"`
 }
 
-type VerifyStatus struct {
+type VerificationResponse struct {
 	To           string `json:"to"`
 	Status       string `json:"status"`
 	Channel      string `json:"channel"`
 	Valid        bool   `json:"valid"`
 	ErrorCode    string `json:"error_code"`
 	ErrorMessage string `json:"error_message"`
-	Body         string `json:"body"`
+}
+
+type VerificationCheckResponse struct {
+	To           string `json:"to"`
+	Status       string `json:"status"`
+	Channel      string `json:"channel"`
+	Valid        bool   `json:"valid"`
+	ErrorCode    string `json:"error_code"`
+	ErrorMessage string `json:"error_message"`
 }
 
 type twilioErrResponse struct {
@@ -128,49 +136,6 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) error {
 
 }
 
-func (t *TwilioProvider) VerifyOTP(phone, code string) error {
-	receiver := "+" + phone
-	if !t.Config.VerifyEnabled {
-		return fmt.Errorf("twilio verify is not enabled")
-	}
-	verifyPath := verifyApiBase + t.Config.MessageServiceSid + "/VerificationCheck"
-
-	body := url.Values{
-		"To":   {receiver}, // twilio api requires "+" extension to be included
-		"Code": {code},
-	}
-	client := &http.Client{Timeout: defaultTimeout}
-	r, err := http.NewRequest("POST", verifyPath, strings.NewReader(body.Encode()))
-	if err != nil {
-		return err
-	}
-	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	r.SetBasicAuth(t.Config.AccountSid, t.Config.AuthToken)
-	res, err := client.Do(r)
-	defer utilities.SafeClose(res.Body)
-	if err != nil {
-		return err
-	}
-	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
-		resp := &twilioErrResponse{}
-		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
-			return err
-		}
-		return resp
-	}
-	resp := &VerifyStatus{}
-	derr := json.NewDecoder(res.Body).Decode(resp)
-	if derr != nil {
-		return derr
-	}
-
-	if resp.Status != "approved" || !resp.Valid {
-		return fmt.Errorf("twilio verification error: %v %v", resp.ErrorMessage, resp.Status)
-	}
-
-	return nil
-}
-
 func (t *TwilioProvider) SendVerification(phone, channel string) error {
 	sender := t.Config.MessageServiceSid
 	receiver := "+" + phone
@@ -203,7 +168,7 @@ func (t *TwilioProvider) SendVerification(phone, channel string) error {
 		return resp
 	}
 	// validate sms status
-	resp := &SmsStatus{}
+	resp := &VerificationResponse{}
 	derr := json.NewDecoder(res.Body).Decode(resp)
 	if derr != nil {
 		return derr
@@ -211,6 +176,49 @@ func (t *TwilioProvider) SendVerification(phone, channel string) error {
 
 	if resp.Status == "failed" || resp.Status == "undelivered" {
 		return fmt.Errorf("twilio error: %v %v", resp.ErrorMessage, resp.ErrorCode)
+	}
+
+	return nil
+}
+
+func (t *TwilioProvider) VerifyOTP(phone, code string) error {
+	receiver := "+" + phone
+	if !t.Config.VerifyEnabled {
+		return fmt.Errorf("twilio verify is not enabled")
+	}
+	verifyPath := verifyApiBase + t.Config.MessageServiceSid + "/VerificationCheck"
+
+	body := url.Values{
+		"To":   {receiver}, // twilio api requires "+" extension to be included
+		"Code": {code},
+	}
+	client := &http.Client{Timeout: defaultTimeout}
+	r, err := http.NewRequest("POST", verifyPath, strings.NewReader(body.Encode()))
+	if err != nil {
+		return err
+	}
+	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	r.SetBasicAuth(t.Config.AccountSid, t.Config.AuthToken)
+	res, err := client.Do(r)
+	defer utilities.SafeClose(res.Body)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
+		resp := &twilioErrResponse{}
+		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
+			return err
+		}
+		return resp
+	}
+	resp := &VerificationCheckResponse{}
+	derr := json.NewDecoder(res.Body).Decode(resp)
+	if derr != nil {
+		return derr
+	}
+
+	if resp.Status != "approved" || !resp.Valid {
+		return fmt.Errorf("twilio verification error: %v %v", resp.ErrorMessage, resp.Status)
 	}
 
 	return nil

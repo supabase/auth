@@ -498,7 +498,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			smsProvider, _ := sms_provider.GetSmsProvider(*config)
 			if config.Sms.Provider == "twilio" && config.Sms.Twilio.VerifyEnabled {
 				if err := smsProvider.VerifyOTP(params.Phone, params.Token); err != nil {
-					return nil, err
+					return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
 				}
 				return user, nil
 			}
