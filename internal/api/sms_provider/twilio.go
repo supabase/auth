@@ -167,17 +167,6 @@ func (t *TwilioProvider) SendVerification(phone, channel string) error {
 		}
 		return resp
 	}
-	// validate sms status
-	resp := &VerificationResponse{}
-	derr := json.NewDecoder(res.Body).Decode(resp)
-	if derr != nil {
-		return derr
-	}
-
-	if resp.Status == "failed" || resp.Status == "undelivered" {
-		return fmt.Errorf("twilio error: %v %v", resp.ErrorMessage, resp.ErrorCode)
-	}
-
 	return nil
 }
 
