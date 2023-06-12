@@ -88,18 +88,11 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) error {
 		sender = channel + ":" + sender
 	}
 	var body url.Values
-	if !t.Config.VerifyEnabled {
-		body = url.Values{
-			"To":      {receiver}, // twilio api requires "+" extension to be included
-			"Channel": {channel},
-			"From":    {sender},
-			"Body":    {message},
-		}
-	} else {
-		body = url.Values{
-			"To":      {receiver}, // twilio api requires "+" extension to be included
-			"Channel": {channel},
-		}
+	body = url.Values{
+		"To":      {receiver}, // twilio api requires "+" extension to be included
+		"Channel": {channel},
+		"From":    {sender},
+		"Body":    {message},
 	}
 	client := &http.Client{Timeout: defaultTimeout}
 	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
@@ -173,6 +166,51 @@ func (t *TwilioProvider) VerifyOTP(phone, code string) error {
 
 	if resp.Status != "approved" || resp.Valid != "true" {
 		return fmt.Errorf("twilio verification error: %v %v", resp.ErrorMessage, resp.Status)
+	}
+
+	return nil
+}
+
+func (t *TwilioProvider) SendVerification(phone, channel string) error {
+	sender := t.Config.MessageServiceSid
+	receiver := "+" + phone
+	if channel == WhatsappProvider {
+		receiver = channel + ":" + receiver
+		sender = channel + ":" + sender
+	}
+	var body url.Values
+	body = url.Values{
+		"To":      {receiver}, // twilio api requires "+" extension to be included
+		"Channel": {channel},
+	}
+	client := &http.Client{Timeout: defaultTimeout}
+	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
+	if err != nil {
+		return err
+	}
+	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	r.SetBasicAuth(t.Config.AccountSid, t.Config.AuthToken)
+	res, err := client.Do(r)
+	defer utilities.SafeClose(res.Body)
+	if err != nil {
+		return err
+	}
+	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
+		resp := &twilioErrResponse{}
+		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
+			return err
+		}
+		return resp
+	}
+	// validate sms status
+	resp := &SmsStatus{}
+	derr := json.NewDecoder(res.Body).Decode(resp)
+	if derr != nil {
+		return derr
+	}
+
+	if resp.Status == "failed" || resp.Status == "undelivered" {
+		return fmt.Errorf("twilio error: %v %v", resp.ErrorMessage, resp.ErrorCode)
 	}
 
 	return nil

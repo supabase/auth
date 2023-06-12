@@ -110,5 +110,8 @@ func (t *MessagebirdProvider) SendSms(phone string, message string) error {
 }
 
 func (t *MessagebirdProvider) VerifyOTP(phone, code string) error {
-	return fmt.Errorf("OTP Verification not supported for Messagebird")
+	return fmt.Errorf("Remote OTP Verification not supported for Messagebird")
+}
+func (t *MessagebirdProvider) SendVerification(phone, channel string) error {
+	return fmt.Errorf("Remote OTP Verification not supported for Messagebird")
 }

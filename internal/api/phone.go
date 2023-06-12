@@ -73,8 +73,14 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	}
 
 	var message string
-	oldToken := *token
-	if !a.config.Sms.Twilio.VerifyEnabled {
+	var oldToken string
+	if a.config.Sms.Twilio.VerifyEnabled && config.Sms.Provider == "twilio" {
+		if serr := smsProvider.SendVerification(phone, channel); serr != nil {
+			return serr
+		}
+
+	} else if !a.config.Sms.Twilio.VerifyEnabled {
+		oldToken = *token
 		otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
 		if err != nil {
 			return internalServerError("error generating otp").WithInternalError(err)
@@ -86,14 +92,10 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		} else {
 			message = strings.Replace(config.Sms.Template, "{{ .Code }}", otp, -1)
 		}
-	} else if a.config.Sms.Twilio.VerifyEnabled && a.config.Sms.Provider == "twilio" {
-		// Message is configurd on Twilio when using Twilio Verify
-		message = ""
-	}
-
-	if serr := smsProvider.SendMessage(phone, message, channel); serr != nil {
-		*token = oldToken
-		return serr
+		if serr := smsProvider.SendMessage(phone, message, channel); serr != nil {
+			*token = oldToken
+			return serr
+		}
 	}
 
 	now := time.Now()

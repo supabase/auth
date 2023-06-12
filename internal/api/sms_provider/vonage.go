@@ -100,5 +100,9 @@ func (t *VonageProvider) SendSms(phone string, message string) error {
 }
 
 func (t *VonageProvider) VerifyOTP(phone, code string) error {
-	return fmt.Errorf("OTP Verification not supported for Vonage")
+	return fmt.Errorf("Remote OTP Verification not supported for Vonage")
+}
+
+func (t *VonageProvider) SendVerification(phone, channel string) error {
+	return fmt.Errorf("Remote OTP Verification not supported for Vonage")
 }

@@ -27,6 +27,7 @@ func init() {
 
 type SmsProvider interface {
 	SendMessage(phone, message, channel string) error
+	SendVerification(phone, channel string) error
 	VerifyOTP(phone, otp string) error
 }
 
