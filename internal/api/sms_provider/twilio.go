@@ -35,7 +35,7 @@ type VerifyStatus struct {
 	To           string `json:"to"`
 	Status       string `json:"status"`
 	Channel      string `json:"channel"`
-	Valid        string `json:"valid"`
+	Valid        bool   `json:"valid"`
 	ErrorCode    string `json:"error_code"`
 	ErrorMessage string `json:"error_message"`
 	Body         string `json:"body"`
@@ -133,7 +133,7 @@ func (t *TwilioProvider) VerifyOTP(phone, code string) error {
 	if !t.Config.VerifyEnabled {
 		return fmt.Errorf("twilio verify is not enabled")
 	}
-	verifyPath := verifyApiBase + "/" + "Services" + "/" + t.Config.MessageServiceSid + "/VerificationCheck"
+	verifyPath := verifyApiBase + t.Config.MessageServiceSid + "/VerificationCheck"
 
 	body := url.Values{
 		"To":   {receiver}, // twilio api requires "+" extension to be included
@@ -164,7 +164,7 @@ func (t *TwilioProvider) VerifyOTP(phone, code string) error {
 		return derr
 	}
 
-	if resp.Status != "approved" || resp.Valid != "true" {
+	if resp.Status != "approved" || !resp.Valid {
 		return fmt.Errorf("twilio verification error: %v %v", resp.ErrorMessage, resp.Status)
 	}
 
