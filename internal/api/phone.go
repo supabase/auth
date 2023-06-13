@@ -72,15 +72,14 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		return MaxFrequencyLimitError
 	}
 
-	var message string
-	var oldToken string
 	if a.config.Sms.Twilio.VerifyEnabled && config.Sms.Provider == "twilio" {
 		if serr := smsProvider.SendVerification(phone, channel); serr != nil {
 			return serr
 		}
 
 	} else if !a.config.Sms.Twilio.VerifyEnabled {
-		oldToken = *token
+		var message string
+		oldToken := *token
 		otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
 		if err != nil {
 			return internalServerError("error generating otp").WithInternalError(err)
