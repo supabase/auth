@@ -12,6 +12,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const IssuerFacebook = "https://www.facebook.com"
+
 const (
 	defaultFacebookAuthBase  = "www.facebook.com"
 	defaultFacebookTokenBase = "graph.facebook.com" //#nosec G101 -- Not a secret value.
@@ -38,7 +40,7 @@ type facebookUser struct {
 
 // NewFacebookProvider creates a Facebook account provider.
 func NewFacebookProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -56,7 +58,7 @@ func NewFacebookProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 
 	return &facebookProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			RedirectURL:  ext.RedirectURI,
 			Endpoint: oauth2.Endpoint{

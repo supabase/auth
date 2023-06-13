@@ -24,7 +24,7 @@ func (ts *ExternalTestSuite) TestSignupExternalNotion() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Notion.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Notion.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Notion.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 
 	claims := ExternalProviderClaims{}

@@ -74,14 +74,14 @@ func DetermineAccountLinking(tx *storage.Connection, provider, sub string, email
 	var similarUsers []*User
 
 	if len(emails) > 0 {
-		if terr := tx.Q().Eager().Where("email in (?)", emails).All(&similarIdentities); terr != nil {
+		if terr := tx.Q().Eager().Where("email ilike any (?)", emails).All(&similarIdentities); terr != nil {
 			return AccountLinkingResult{}, terr
 		}
 
 		if !strings.HasPrefix(provider, "sso:") {
 			// there can be multiple user accounts with the same email when is_sso_user is true
 			// so we just do not consider those similar user accounts
-			if terr := tx.Q().Eager().Where("email in (?) and is_sso_user is false", emails).All(&similarUsers); terr != nil {
+			if terr := tx.Q().Eager().Where("email ilike any (?) and is_sso_user is false", emails).All(&similarUsers); terr != nil {
 				return AccountLinkingResult{}, terr
 			}
 		}

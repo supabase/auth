@@ -19,12 +19,12 @@ const defaultFlowStateExpiryDuration time.Duration = 300 * time.Second
 
 // OAuthProviderConfiguration holds all config related to external account providers.
 type OAuthProviderConfiguration struct {
-	ClientID    string `json:"client_id" split_words:"true"`
-	Secret      string `json:"secret"`
-	RedirectURI string `json:"redirect_uri" split_words:"true"`
-	URL         string `json:"url"`
-	ApiURL      string `json:"api_url" split_words:"true"`
-	Enabled     bool   `json:"enabled"`
+	ClientID    []string `json:"client_id" split_words:"true"`
+	Secret      string   `json:"secret"`
+	RedirectURI string   `json:"redirect_uri" split_words:"true"`
+	URL         string   `json:"url"`
+	ApiURL      string   `json:"api_url" split_words:"true"`
+	Enabled     bool     `json:"enabled"`
 }
 
 type EmailProviderConfiguration struct {
@@ -452,15 +452,15 @@ func (c *GlobalConfiguration) Validate() error {
 	return nil
 }
 
-func (o *OAuthProviderConfiguration) Validate() error {
+func (o *OAuthProviderConfiguration) ValidateOAuth() error {
 	if !o.Enabled {
 		return errors.New("provider is not enabled")
 	}
-	if o.ClientID == "" {
-		return errors.New("missing Oauth client ID")
+	if len(o.ClientID) == 0 {
+		return errors.New("missing OAuth client ID")
 	}
 	if o.Secret == "" {
-		return errors.New("missing Oauth secret")
+		return errors.New("missing OAuth secret")
 	}
 	if o.RedirectURI == "" {
 		return errors.New("missing redirect URI")

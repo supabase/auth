@@ -9,6 +9,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
+const IssuerAzure = "https://login.microsoftonline.com/common/v2.0"
+
 const (
 	defaultAzureAuthBase = "login.microsoftonline.com/common"
 	defaultAzureAPIBase  = "graph.microsoft.com"
@@ -20,14 +22,15 @@ type azureProvider struct {
 }
 
 type azureUser struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Sub   string `json:"sub"`
+	Name       string   `json:"name"`
+	Email      string   `json:"email"`
+	Sub        string   `json:"sub"`
+	OtherMails []string `json:"otherMails"`
 }
 
 // NewAzureProvider creates a Azure account provider.
 func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -42,7 +45,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 
 	return &azureProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  authHost + "/oauth2/v2.0/authorize",
@@ -65,26 +68,44 @@ func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 		return nil, err
 	}
 
-	if u.Email == "" {
+	var data UserProvidedData
+
+	data.Metadata = &Claims{
+		Issuer:  g.APIPath,
+		Subject: u.Sub,
+		Name:    u.Name,
+
+		// To be deprecated
+		FullName:   u.Name,
+		ProviderId: u.Sub,
+	}
+
+	if u.Email != "" {
+		data.Emails = append(data.Emails, Email{
+			Email:    u.Email,
+			Verified: true,
+		})
+	}
+
+	if u.OtherMails != nil {
+		for _, mail := range u.OtherMails {
+			if mail != "" {
+				data.Emails = append(data.Emails, Email{
+					Email:    mail,
+					Verified: false,
+				})
+			}
+		}
+	}
+
+	if len(data.Emails) == 0 {
 		return nil, errors.New("unable to find email with Azure provider")
 	}
 
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        g.APIPath,
-			Subject:       u.Sub,
-			Name:          u.Name,
-			Email:         u.Email,
-			EmailVerified: true,
+	data.Emails[0].Primary = true
 
-			// To be deprecated
-			FullName:   u.Name,
-			ProviderId: u.Sub,
-		},
-		Emails: []Email{{
-			Email:    u.Email,
-			Verified: true,
-			Primary:  true,
-		}},
-	}, nil
+	data.Metadata.Email = data.Emails[0].Email
+	data.Metadata.EmailVerified = data.Emails[0].Verified
+
+	return &data, nil
 }

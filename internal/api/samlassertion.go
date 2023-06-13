@@ -96,6 +96,7 @@ func (a *SAMLAssertion) Email() string {
 		"http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
 		"http://schemas.xmlsoap.org/claims/EmailAddress",
 		"mail",
+		"Mail",
 		"email",
 	}
 

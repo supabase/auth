@@ -23,7 +23,7 @@ func (ts *ExternalTestSuite) TestSignupExternalTwitch() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Twitch.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Twitch.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Twitch.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("user:read:email", q.Get("scope"))
 

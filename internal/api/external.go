@@ -271,7 +271,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 
 	for _, email := range userData.Emails {
 		if email.Verified || config.Mailer.Autoconfirm {
-			emails = append(emails, email.Email)
+			emails = append(emails, strings.ToLower(email.Email))
 		}
 	}
 
@@ -514,7 +514,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 
 	switch name {
 	case "apple":
-		return provider.NewAppleProvider(config.External.Apple)
+		return provider.NewAppleProvider(ctx, config.External.Apple)
 	case "azure":
 		return provider.NewAzureProvider(config.External.Azure, scopes)
 	case "bitbucket":
@@ -526,7 +526,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	case "gitlab":
 		return provider.NewGitlabProvider(config.External.Gitlab, scopes)
 	case "google":
-		return provider.NewGoogleProvider(config.External.Google, scopes)
+		return provider.NewGoogleProvider(ctx, config.External.Google, scopes)
 	case "kakao":
 		return provider.NewKakaoProvider(config.External.Kakao, scopes)
 	case "keycloak":

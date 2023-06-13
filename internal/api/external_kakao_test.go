@@ -23,7 +23,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKakao() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Kakao.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Kakao.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Kakao.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 
 	claims := ExternalProviderClaims{}
