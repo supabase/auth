@@ -203,9 +203,16 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 		require.Equal(ts.T(), http.StatusSeeOther, w.Code)
 		urlVal, err := url.Parse(w.Result().Header.Get("Location"))
 		ts.Require().NoError(err, "redirect url parse failed")
-		v, err := url.ParseQuery(urlVal.Fragment)
-		ts.Require().NoError(err)
-		ts.Require().NotEmpty(v.Get("message"))
+		var v url.Values
+		if !c.isPKCE {
+			v, err = url.ParseQuery(urlVal.Fragment)
+			ts.Require().NoError(err)
+			ts.Require().NotEmpty(v.Get("message"))
+		} else if c.isPKCE {
+			v, err = url.ParseQuery(urlVal.RawQuery)
+			ts.Require().NoError(err)
+			ts.Require().NotEmpty(v.Get("message"))
+		}
 
 		u, err = models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
 		require.NoError(ts.T(), err)
