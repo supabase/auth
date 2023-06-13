@@ -13,7 +13,7 @@ import (
 
 const (
 	defaultTwilioApiBase = "https://api.twilio.com"
-	verifyApiBase        = "https://verify.twilio.com/v2/Services/"
+	verifyServiceApiBase = "https://verify.twilio.com/v2/Services/"
 	apiVersion           = "2010-04-01"
 )
 
@@ -40,6 +40,7 @@ type VerificationResponse struct {
 	ErrorMessage string `json:"error_message"`
 }
 
+// See: https://www.twilio.com/docs/verify/api/verification-check
 type VerificationCheckResponse struct {
 	To           string `json:"to"`
 	Status       string `json:"status"`
@@ -67,7 +68,7 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 	}
 	var apiPath string
 	if config.VerifyEnabled {
-		apiPath = verifyApiBase + config.MessageServiceSid + "/Verifications"
+		apiPath = verifyServiceApiBase + config.MessageServiceSid + "/Verifications"
 	} else {
 		apiPath = defaultTwilioApiBase + "/" + apiVersion + "/" + "Accounts" + "/" + config.AccountSid + "/Messages.json"
 	}
@@ -136,12 +137,10 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) error {
 }
 
 func (t *TwilioProvider) SendVerification(phone, channel string) error {
-	receiver := "+" + phone
-	if channel == WhatsappProvider {
-		receiver = channel + ":" + receiver
-	}
+	// Unlike Programmable Messaging, Verify does not require a prefix for channel
+	// E164 format is also guaranteed by the time this function is called
 	body := url.Values{
-		"To":      {receiver}, // twilio api requires "+" extension to be included
+		"To":      {phone},
 		"Channel": {channel},
 	}
 	client := &http.Client{Timeout: defaultTimeout}
@@ -167,14 +166,14 @@ func (t *TwilioProvider) SendVerification(phone, channel string) error {
 }
 
 func (t *TwilioProvider) VerifyOTP(phone, code string) error {
-	receiver := "+" + phone
+	// Additional guard check
 	if !t.Config.VerifyEnabled {
 		return fmt.Errorf("twilio verify is not enabled")
 	}
-	verifyPath := verifyApiBase + t.Config.MessageServiceSid + "/VerificationCheck"
+	verifyPath := verifyServiceApiBase + t.Config.MessageServiceSid + "/VerificationCheck"
 
 	body := url.Values{
-		"To":   {receiver}, // twilio api requires "+" extension to be included
+		"To":   {phone}, // twilio api requires "+" extension to be included
 		"Code": {code},
 	}
 	client := &http.Client{Timeout: defaultTimeout}
