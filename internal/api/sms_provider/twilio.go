@@ -128,17 +128,17 @@ func (t *TwilioProvider) VerifyOTP(phone, code string) error {
 		"Code": {code},
 	}
 	client := &http.Client{Timeout: defaultTimeout}
-	r, err := http.NewRequest("POST", verifyPath, strings.NewReader(body.Encode()))
+	r, err := http.NewRequest(http.MethodPost, verifyPath, strings.NewReader(body.Encode()))
 	if err != nil {
 		return err
 	}
 	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	r.SetBasicAuth(t.Config.AccountSid, t.Config.AuthToken)
 	res, err := client.Do(r)
-	defer utilities.SafeClose(res.Body)
 	if err != nil {
 		return err
 	}
+	defer utilities.SafeClose(res.Body)
 	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
 		resp := &twilioErrResponse{}
 		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
