@@ -263,7 +263,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 
 	var token *AccessTokenResponse
 	if samlMetadataModified {
-		if err := a.db.Update(ssoProvider.SAMLProvider); err != nil {
+		if err := db.UpdateColumns(&ssoProvider.SAMLProvider, "metadata_xml", "updated_at"); err != nil {
 			return err
 		}
 	}
