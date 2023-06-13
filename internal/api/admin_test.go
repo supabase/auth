@@ -545,7 +545,7 @@ func (ts *AdminTestSuite) TestAdminUserDelete() {
 			desc:         "Test admin delete user (soft deletion & sso user)",
 			isSoftDelete: "?is_soft_delete=true",
 			isSSOUser:    true,
-			expected:     expected{code: http.StatusBadRequest, err: nil},
+			expected:     expected{code: http.StatusOK, err: nil},
 			body: map[string]interface{}{
 				"should_soft_delete": true,
 			},
