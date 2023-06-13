@@ -38,6 +38,11 @@ func TestSmsProvider(t *testing.T) {
 					AuthToken:         "test_auth_token",
 					MessageServiceSid: "test_message_service_id",
 				},
+				TwilioVerify: conf.TwilioVerifyProviderConfiguration{
+					AccountSid:        "test_account_sid",
+					AuthToken:         "test_auth_token",
+					MessageServiceSid: "test_message_service_id",
+				},
 				Messagebird: conf.MessagebirdProviderConfiguration{
 					AccessKey:  "test_access_key",
 					Originator: "test_originator",
@@ -213,4 +218,7 @@ func (ts *SmsProviderTestSuite) TestTextLocalSendSms() {
 
 	err = textlocalProvider.SendSms(phone, message)
 	require.NoError(ts.T(), err)
+}
+
+func (ts *SmsProviderTestSuite) TestTwilioVerifySendSms() {
 }

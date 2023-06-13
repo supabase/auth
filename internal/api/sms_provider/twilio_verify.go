@@ -16,7 +16,7 @@ const (
 )
 
 type TwilioVerifyProvider struct {
-	Config  *conf.TwilioProviderConfiguration
+	Config  *conf.TwilioVerifyProviderConfiguration
 	APIPath string
 }
 
@@ -40,16 +40,11 @@ type VerificationCheckResponse struct {
 }
 
 // Creates a SmsProvider with the Twilio Config
-func NewTwilioVerifyProvider(config conf.TwilioProviderConfiguration) (SmsProvider, error) {
+func NewTwilioVerifyProvider(config conf.TwilioVerifyProviderConfiguration) (SmsProvider, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-	var apiPath string
-	if config.VerifyEnabled {
-		apiPath = verifyServiceApiBase + config.MessageServiceSid + "/Verifications"
-	} else {
-		apiPath = defaultTwilioApiBase + "/" + apiVersion + "/" + "Accounts" + "/" + config.AccountSid + "/Messages.json"
-	}
+	apiPath := verifyServiceApiBase + config.MessageServiceSid + "/Verifications"
 
 	return &TwilioVerifyProvider{
 		Config:  &config,
@@ -98,10 +93,6 @@ func (t *TwilioVerifyProvider) SendSms(phone, message, channel string) error {
 }
 
 func (t *TwilioVerifyProvider) VerifyOTP(phone, code string) error {
-	// Additional guard check
-	if !t.Config.VerifyEnabled {
-		return fmt.Errorf("twilio verify is not enabled")
-	}
 	verifyPath := verifyServiceApiBase + t.Config.MessageServiceSid + "/VerificationCheck"
 
 	body := url.Values{

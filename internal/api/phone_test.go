@@ -33,12 +33,6 @@ type TestSmsProvider struct {
 func (t *TestSmsProvider) SendMessage(phone string, message string, channel string) error {
 	return nil
 }
-func (t *TestSmsProvider) VerifyOTP(phone, code string) error {
-	return nil
-}
-func (t *TestSmsProvider) SendVerification(phone, channel string) error {
-	return nil
-}
 
 func TestPhone(t *testing.T) {
 	api, config, err := setupAPIForTest()
