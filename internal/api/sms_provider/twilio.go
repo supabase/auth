@@ -95,8 +95,7 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) error {
 		receiver = channel + ":" + receiver
 		sender = channel + ":" + sender
 	}
-	var body url.Values
-	body = url.Values{
+	body := url.Values{
 		"To":      {receiver}, // twilio api requires "+" extension to be included
 		"Channel": {channel},
 		"From":    {sender},
@@ -137,14 +136,11 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) error {
 }
 
 func (t *TwilioProvider) SendVerification(phone, channel string) error {
-	sender := t.Config.MessageServiceSid
 	receiver := "+" + phone
 	if channel == WhatsappProvider {
 		receiver = channel + ":" + receiver
-		sender = channel + ":" + sender
 	}
-	var body url.Values
-	body = url.Values{
+	body := url.Values{
 		"To":      {receiver}, // twilio api requires "+" extension to be included
 		"Channel": {channel},
 	}

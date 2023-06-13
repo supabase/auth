@@ -93,9 +93,9 @@ func (t *TextlocalProvider) SendSms(phone string, message string) error {
 }
 
 func (t *TextlocalProvider) VerifyOTP(phone, code string) error {
-	return fmt.Errorf("Remote OTP Verification not supported for Textlocal")
+	return fmt.Errorf(VerifyUnsupportedError)
 }
 
 func (t *TextlocalProvider) SendVerification(phone, channel string) error {
-	return fmt.Errorf("Remote OTP Verification not supported for Textlocal")
+	return fmt.Errorf(VerifyUnsupportedError)
 }
