@@ -98,11 +98,3 @@ func (t *VonageProvider) SendSms(phone string, message string) error {
 
 	return nil
 }
-
-func (t *VonageProvider) VerifyOTP(phone, code string) error {
-	return fmt.Errorf(VerifyUnsupportedError)
-}
-
-func (t *VonageProvider) SendVerification(phone, channel string) error {
-	return fmt.Errorf(VerifyUnsupportedError)
-}

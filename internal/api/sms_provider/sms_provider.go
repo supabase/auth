@@ -29,8 +29,6 @@ func init() {
 
 type SmsProvider interface {
 	SendMessage(phone, message, channel string) error
-	SendVerification(phone, channel string) error
-	VerifyOTP(phone, otp string) error
 }
 
 func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
@@ -43,6 +41,8 @@ func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
 		return NewTextlocalProvider(config.Sms.Textlocal)
 	case "vonage":
 		return NewVonageProvider(config.Sms.Vonage)
+	case "twilioverify":
+		return NewTwilioVerifyProvider(config.Sms.Twilio)
 	default:
 		return nil, fmt.Errorf("sms Provider %s could not be found", name)
 	}

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/sethvargo/go-password/password"
-	"github.com/supabase/gotrue/internal/api/sms_provider"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
@@ -495,14 +494,6 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
 		case smsVerification:
 			user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
-			smsProvider, _ := sms_provider.GetSmsProvider(*config)
-			if config.Sms.Provider == "twilio" && config.Sms.Twilio.VerifyEnabled {
-				if err := smsProvider.VerifyOTP(params.Phone, params.Token); err != nil {
-					return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
-				}
-				return user, nil
-			}
-
 		default:
 			return nil, badRequestError("Invalid sms verification type")
 		}
@@ -556,6 +547,13 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	case phoneChangeVerification:
 		isValid = isOtpValid(tokenHash, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
 	case smsVerification:
+		// smsProvider, _ := sms_provider.GetSmsProvider(*config)
+		// if config.Sms.Provider == "twilio" && config.Sms.Twilio.VerifyEnabled {
+		// 	if err := smsProvider.VerifyOTP(params.Phone, params.Token); err != nil {
+		// 		return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
+		// 	}
+		// 	return user, nil
+		// }
 		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Sms.OtpExp)
 	}
 

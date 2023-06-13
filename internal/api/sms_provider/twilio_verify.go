@@ -12,37 +12,35 @@ import (
 )
 
 const (
-	defaultTwilioApiBase = "https://api.twilio.com"
-	apiVersion           = "2010-04-01"
+	verifyServiceApiBase = "https://verify.twilio.com/v2/Services/"
 )
 
-type TwilioProvider struct {
+type TwilioVerifyProvider struct {
 	Config  *conf.TwilioProviderConfiguration
 	APIPath string
 }
 
-type SmsStatus struct {
+type VerificationResponse struct {
 	To           string `json:"to"`
-	From         string `json:"from"`
 	Status       string `json:"status"`
+	Channel      string `json:"channel"`
+	Valid        bool   `json:"valid"`
 	ErrorCode    string `json:"error_code"`
 	ErrorMessage string `json:"error_message"`
-	Body         string `json:"body"`
 }
 
-type twilioErrResponse struct {
-	Code     int    `json:"code"`
-	Message  string `json:"message"`
-	MoreInfo string `json:"more_info"`
-	Status   int    `json:"status"`
-}
-
-func (t twilioErrResponse) Error() string {
-	return fmt.Sprintf("%s More information: %s", t.Message, t.MoreInfo)
+// See: https://www.twilio.com/docs/verify/api/verification-check
+type VerificationCheckResponse struct {
+	To           string `json:"to"`
+	Status       string `json:"status"`
+	Channel      string `json:"channel"`
+	Valid        bool   `json:"valid"`
+	ErrorCode    string `json:"error_code"`
+	ErrorMessage string `json:"error_message"`
 }
 
 // Creates a SmsProvider with the Twilio Config
-func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, error) {
+func NewTwilioVerifyProvider(config conf.TwilioProviderConfiguration) (SmsProvider, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -53,13 +51,13 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 		apiPath = defaultTwilioApiBase + "/" + apiVersion + "/" + "Accounts" + "/" + config.AccountSid + "/Messages.json"
 	}
 
-	return &TwilioProvider{
+	return &TwilioVerifyProvider{
 		Config:  &config,
 		APIPath: apiPath,
 	}, nil
 }
 
-func (t *TwilioProvider) SendMessage(phone string, message string, channel string) error {
+func (t *TwilioVerifyProvider) SendMessage(phone string, message string, channel string) error {
 	switch channel {
 	case SMSProvider, WhatsappProvider:
 		return t.SendSms(phone, message, channel)
@@ -69,18 +67,13 @@ func (t *TwilioProvider) SendMessage(phone string, message string, channel strin
 }
 
 // Send an SMS containing the OTP with Twilio's API
-func (t *TwilioProvider) SendSms(phone, message, channel string) error {
-	sender := t.Config.MessageServiceSid
-	receiver := "+" + phone
-	if channel == WhatsappProvider {
-		receiver = channel + ":" + receiver
-		sender = channel + ":" + sender
-	}
+func (t *TwilioVerifyProvider) SendSms(phone, message, channel string) error {
+
+	// Unlike Programmable Messaging, Verify does not require a prefix for channel
+	// E164 format is also guaranteed by the time this function is called
 	body := url.Values{
-		"To":      {receiver}, // twilio api requires "+" extension to be included
+		"To":      {phone},
 		"Channel": {channel},
-		"From":    {sender},
-		"Body":    {message},
 	}
 	client := &http.Client{Timeout: defaultTimeout}
 	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
@@ -94,29 +87,17 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) error {
 	if err != nil {
 		return err
 	}
-	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
+	if !(res.StatusCode == http.StatusOK || res.StatusCode == http.StatusCreated) {
 		resp := &twilioErrResponse{}
 		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
 			return err
 		}
 		return resp
 	}
-	// validate sms status
-	resp := &SmsStatus{}
-	derr := json.NewDecoder(res.Body).Decode(resp)
-	if derr != nil {
-		return derr
-	}
-
-	if resp.Status == "failed" || resp.Status == "undelivered" {
-		return fmt.Errorf("twilio error: %v %v", resp.ErrorMessage, resp.ErrorCode)
-	}
-
 	return nil
-
 }
 
-func (t *TwilioProvider) VerifyOTP(phone, code string) error {
+func (t *TwilioVerifyProvider) VerifyOTP(phone, code string) error {
 	// Additional guard check
 	if !t.Config.VerifyEnabled {
 		return fmt.Errorf("twilio verify is not enabled")
