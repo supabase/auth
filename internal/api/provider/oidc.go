@@ -14,6 +14,11 @@ type ParseIDTokenOptions struct {
 	AccessToken          string
 }
 
+// OverrideVerifiers can be used to set a custom verifier for an OIDC provider
+// (identified by the provider's Endpoint().AuthURL string). Should only be
+// used in tests.
+var OverrideVerifiers = make(map[string]func(context.Context, *oidc.Config) *oidc.IDTokenVerifier)
+
 func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Config, idToken string, options ParseIDTokenOptions) (*oidc.IDToken, *UserProvidedData, error) {
 	if config == nil {
 		config = &oidc.Config{
@@ -23,6 +28,10 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 	}
 
 	verifier := provider.VerifierContext(ctx, config)
+	overrideVerifier, ok := OverrideVerifiers[provider.Endpoint().AuthURL]
+	if ok && overrideVerifier != nil {
+		verifier = overrideVerifier(ctx, config)
+	}
 
 	token, err := verifier.Verify(ctx, idToken)
 	if err != nil {

@@ -459,10 +459,6 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
 
-	if user.IsSSOUser {
-		return badRequestError("user should be removed via identity provider instead")
-	}
-
 	var err error
 	params := &adminUserDeleteParams{}
 	body, err := getBodyBytes(r)
