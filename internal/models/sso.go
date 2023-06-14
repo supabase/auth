@@ -154,8 +154,9 @@ type SAMLRelayState struct {
 
 	RedirectTo string `db:"redirect_to"`
 
-	CreatedAt time.Time `db:"created_at" json:"-"`
-	UpdatedAt time.Time `db:"updated_at" json:"-"`
+	CreatedAt   time.Time `db:"created_at" json:"-"`
+	UpdatedAt   time.Time `db:"updated_at" json:"-"`
+	FlowStateID string    `db:"flow_state_id" json:"-"`
 }
 
 func (s SAMLRelayState) TableName() string {

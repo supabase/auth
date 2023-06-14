@@ -60,6 +60,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	redirectTo := ""
 	var requestIds []string
 
+	var flowState *models.FlowState
 	if relayStateUUID != uuid.Nil {
 		// relay state is a valid UUID, therefore this is likely a SP initiated flow
 
@@ -84,6 +85,13 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 			}
 
 			return badRequestError("SAML RelayState comes from another IP address, try logging in again?")
+		}
+
+		if relayState.FlowStateID != "" {
+			flowState, err = models.FindFlowStateByID(a.db, relayState.FlowStateID)
+			if err != nil {
+				return err
+			}
 		}
 
 		// TODO: add abuse detection to bind the RelayState UUID with a
@@ -272,6 +280,14 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		var user *models.User
 
+		if flowState != nil {
+			// This means that the callback is using PKCE
+			flowState.UserID = &(user.ID)
+			if terr := tx.Update(flowState); terr !=nil {
+				return terr
+			}
+		}
+
 		// accounts potentially created via SAML can contain non-unique email addresses in the auth.users table
 		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, "sso:"+ssoProvider.ID.String()); terr != nil {
 			return terr
@@ -295,8 +311,19 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	if !isRedirectURLValid(config, redirectTo) {
 		redirectTo = config.SiteURL
 	}
+	if flowState != nil {
+		// This means that the callback is using PKCE
+		// Set the flowState.AuthCode to the query param here
+		redirectTo, err = a.prepPKCERedirectURL(redirectTo, flowState.AuthCode)
+		if err != nil {
+			return err
+		}
+		http.Redirect(w, r, token.AsRedirectURL(redirectTo, url.Values{}), http.StatusFound)
 
-	http.Redirect(w, r, token.AsRedirectURL(redirectTo, url.Values{}), http.StatusFound)
+	} else {
+
+		http.Redirect(w, r, token.AsRedirectURL(redirectTo, url.Values{}), http.StatusFound)
+	}
 
 	return nil
 }
