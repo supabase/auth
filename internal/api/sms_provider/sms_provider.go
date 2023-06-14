@@ -14,7 +14,6 @@ var defaultTimeout time.Duration = time.Second * 10
 const SMSProvider = "sms"
 const WhatsappProvider = "whatsapp"
 
-const VerifyUnsupportedError = "external otp verification is not supported for this provider"
 
 func init() {
 	timeoutStr := os.Getenv("GOTRUE_INTERNAL_HTTP_TIMEOUT")
