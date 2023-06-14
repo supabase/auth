@@ -283,7 +283,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		if flowState != nil {
 			// This means that the callback is using PKCE
 			flowState.UserID = &(user.ID)
-			if terr := tx.Update(flowState); terr !=nil {
+			if terr := tx.Update(flowState); terr != nil {
 				return terr
 			}
 		}
