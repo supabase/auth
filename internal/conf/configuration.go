@@ -199,7 +199,7 @@ type SmsProviderConfiguration struct {
 	Provider     string                            `json:"provider"`
 	Template     string                            `json:"template"`
 	Twilio       TwilioProviderConfiguration       `json:"twilio"`
-	TwilioVerify TwilioVerifyProviderConfiguration `json:"twilio_verify"`
+	TwilioVerify TwilioVerifyProviderConfiguration `json:"twilio_verify" split_words:"true"`
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`

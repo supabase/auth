@@ -63,11 +63,10 @@ func (t *TwilioVerifyProvider) SendMessage(phone string, message string, channel
 
 // Send an SMS containing the OTP with Twilio's API
 func (t *TwilioVerifyProvider) SendSms(phone, message, channel string) error {
-
 	// Unlike Programmable Messaging, Verify does not require a prefix for channel
-	// E164 format is also guaranteed by the time this function is called
+	receiver := "+" + phone
 	body := url.Values{
-		"To":      {phone},
+		"To":      {receiver},
 		"Channel": {channel},
 	}
 	client := &http.Client{Timeout: defaultTimeout}
@@ -94,9 +93,10 @@ func (t *TwilioVerifyProvider) SendSms(phone, message, channel string) error {
 
 func (t *TwilioVerifyProvider) VerifyOTP(phone, code string) error {
 	verifyPath := verifyServiceApiBase + t.Config.MessageServiceSid + "/VerificationCheck"
+	receiver := "+" + phone
 
 	body := url.Values{
-		"To":   {phone}, // twilio api requires "+" extension to be included
+		"To":   {receiver}, // twilio api requires "+" extension to be included
 		"Code": {code},
 	}
 	client := &http.Client{Timeout: defaultTimeout}

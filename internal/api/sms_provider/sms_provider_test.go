@@ -219,6 +219,64 @@ func (ts *SmsProviderTestSuite) TestTextLocalSendSms() {
 	err = textlocalProvider.SendSms(phone, message)
 	require.NoError(ts.T(), err)
 }
-
 func (ts *SmsProviderTestSuite) TestTwilioVerifySendSms() {
+	defer gock.Off()
+	provider, err := NewTwilioVerifyProvider(ts.Config.Sms.TwilioVerify)
+	require.NoError(ts.T(), err)
+
+	twilioVerifyProvider, ok := provider.(*TwilioVerifyProvider)
+	require.Equal(ts.T(), true, ok)
+
+	phone := "123456789"
+	message := "This is the sms code: 123456"
+
+	body := url.Values{
+		"To":      {"+" + phone},
+		"Channel": {"sms"},
+	}
+
+	cases := []struct {
+		Desc           string
+		TwilioResponse *gock.Response
+		ExpectedError  error
+	}{
+		{
+			Desc: "Successfully sent sms",
+			TwilioResponse: gock.New(twilioVerifyProvider.APIPath).Post("").
+				MatchHeader("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(twilioVerifyProvider.Config.AccountSid+":"+twilioVerifyProvider.Config.AuthToken))).
+				MatchType("url").BodyString(body.Encode()).
+				Reply(200).JSON(SmsStatus{
+				To:     "+" + phone,
+				From:   twilioVerifyProvider.Config.MessageServiceSid,
+				Status: "sent",
+				Body:   message,
+			}),
+			ExpectedError: nil,
+		},
+		{
+			Desc: "Non-2xx status code returned",
+			TwilioResponse: gock.New(twilioVerifyProvider.APIPath).Post("").
+				MatchHeader("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(twilioVerifyProvider.Config.AccountSid+":"+twilioVerifyProvider.Config.AuthToken))).
+				MatchType("url").BodyString(body.Encode()).
+				Reply(500).JSON(twilioErrResponse{
+				Code:     500,
+				Message:  "Internal server error",
+				MoreInfo: "error",
+				Status:   500,
+			}),
+			ExpectedError: &twilioErrResponse{
+				Code:     500,
+				Message:  "Internal server error",
+				MoreInfo: "error",
+				Status:   500,
+			},
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.Desc, func() {
+			err = twilioVerifyProvider.SendSms(phone, message, SMSProvider)
+			require.Equal(ts.T(), c.ExpectedError, err)
+		})
+	}
 }
