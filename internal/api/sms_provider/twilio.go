@@ -46,8 +46,8 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-	apiPath := defaultTwilioApiBase + "/" + apiVersion + "/" + "Accounts" + "/" + config.AccountSid + "/Messages.json"
 
+	apiPath := defaultTwilioApiBase + "/" + apiVersion + "/" + "Accounts" + "/" + config.AccountSid + "/Messages.json"
 	return &TwilioProvider{
 		Config:  &config,
 		APIPath: apiPath,
@@ -108,5 +108,4 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) error {
 	}
 
 	return nil
-
 }

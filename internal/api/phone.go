@@ -71,13 +71,6 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	if sentAt != nil && !sentAt.Add(config.Sms.MaxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
 	}
-
-	// if a.config.Sms.Twilio.VerifyEnabled && config.Sms.Provider == "twilio" {
-	// 	if serr := smsProvider.SendVerification(phone, channel); serr != nil {
-	// 		return serr
-	// 	}
-
-	// } else if !a.config.Sms.Twilio.VerifyEnabled {
 	var message string
 	oldToken := *token
 	otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
@@ -95,7 +88,6 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		*token = oldToken
 		return serr
 	}
-	//}
 
 	now := time.Now()
 

@@ -91,11 +91,3 @@ func (t *TextlocalProvider) SendSms(phone string, message string) error {
 
 	return nil
 }
-
-func (t *TextlocalProvider) VerifyOTP(phone, code string) error {
-	return fmt.Errorf(VerifyUnsupportedError)
-}
-
-func (t *TextlocalProvider) SendVerification(phone, channel string) error {
-	return fmt.Errorf(VerifyUnsupportedError)
-}
