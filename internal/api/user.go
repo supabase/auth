@@ -164,18 +164,29 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		var identities []models.Identity
 		if params.Email != "" && params.Email != user.GetEmail() {
-			if user.GetEmail() == "" {
-				// if the user doesn't have an existing email
+			var identity *models.Identity
+			if user.GetEmail() == "" && user.EmailChange == "" {
+				// if the user doesn't have an existing email or email_change
 				// then updating the user's email should create a new email identity
-				identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+				identity, terr = a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
 					Subject: user.ID.String(),
 					Email:   params.Email,
 				}))
 				if terr != nil {
 					return terr
 				}
-				identities = append(identities, *identity)
+			} else {
+				identity, terr = models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email")
+				if terr != nil {
+					return terr
+				}
+				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
+					"email": params.Email,
+				}); terr != nil {
+					return terr
+				}
 			}
+			identities = append(identities, *identity)
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)
 			flowType := getFlowFromChallenge(params.CodeChallenge)
@@ -198,18 +209,30 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Phone != "" && params.Phone != user.GetPhone() {
-			if user.GetPhone() == "" {
-				// if the user doesn't have an existing phone
+			var identity *models.Identity
+			if user.GetPhone() == "" && user.PhoneChange == "" {
+				// if the user doesn't have an existing phone or phone_change
 				// then updating the user's phone should create a new phone identity
-				identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+				identity, terr = a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
 					Subject: user.ID.String(),
 					Phone:   params.Phone,
 				}))
 				if terr != nil {
 					return terr
 				}
-				identities = append(identities, *identity)
+
+			} else {
+				identity, terr = models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone")
+				if terr != nil {
+					return terr
+				}
+				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
+					"phone": params.Phone,
+				}); terr != nil {
+					return terr
+				}
 			}
+			identities = append(identities, *identity)
 			if config.Sms.Autoconfirm {
 				return user.UpdatePhone(tx, params.Phone)
 			} else {
