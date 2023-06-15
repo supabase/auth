@@ -142,6 +142,7 @@ type ProviderConfiguration struct {
 	Bitbucket               OAuthProviderConfiguration `json:"bitbucket"`
 	Discord                 OAuthProviderConfiguration `json:"discord"`
 	Facebook                OAuthProviderConfiguration `json:"facebook"`
+	Figma                   OAuthProviderConfiguration `json:"figma"`
 	Github                  OAuthProviderConfiguration `json:"github"`
 	Gitlab                  OAuthProviderConfiguration `json:"gitlab"`
 	Google                  OAuthProviderConfiguration `json:"google"`

@@ -7,13 +7,14 @@ type ProviderSettings struct {
 	Azure     bool `json:"azure"`
 	Bitbucket bool `json:"bitbucket"`
 	Discord   bool `json:"discord"`
+	Facebook  bool `json:"facebook"`
+	Figma     bool `json:"figma"`
 	GitHub    bool `json:"github"`
 	GitLab    bool `json:"gitlab"`
-	Keycloak  bool `json:"keycloak"`
 	Google    bool `json:"google"`
+	Keycloak  bool `json:"keycloak"`
 	Kakao     bool `json:"kakao"`
 	Linkedin  bool `json:"linkedin"`
-	Facebook  bool `json:"facebook"`
 	Notion    bool `json:"notion"`
 	Spotify   bool `json:"spotify"`
 	Slack     bool `json:"slack"`
@@ -44,13 +45,14 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Azure:     config.External.Azure.Enabled,
 			Bitbucket: config.External.Bitbucket.Enabled,
 			Discord:   config.External.Discord.Enabled,
+			Facebook:  config.External.Facebook.Enabled,
+			Figma:     config.External.Figma.Enabled,
 			GitHub:    config.External.Github.Enabled,
 			GitLab:    config.External.Gitlab.Enabled,
 			Google:    config.External.Google.Enabled,
 			Kakao:     config.External.Kakao.Enabled,
 			Keycloak:  config.External.Keycloak.Enabled,
 			Linkedin:  config.External.Linkedin.Enabled,
-			Facebook:  config.External.Facebook.Enabled,
 			Notion:    config.External.Notion.Enabled,
 			Spotify:   config.External.Spotify.Enabled,
 			Slack:     config.External.Slack.Enabled,
