@@ -860,6 +860,13 @@ paths:
                 skip_http_redirect:
                   type: boolean
                   description: Set to `true` if the response to this request should not be a HTTP 303 redirect -- useful for browser-based applications.
+                code_challenge:
+                  type: string
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - plain
+                    - s256
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:
