@@ -89,7 +89,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	}
 
 	if serr := smsProvider.SendMessage(phone, message, channel); serr != nil {
-		if config.Sms.IsTwilioVerifyProvider(){
+		if config.Sms.IsTwilioVerifyProvider() {
 			*token = oldToken
 		}
 		return serr
