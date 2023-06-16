@@ -45,12 +45,8 @@ func sendJSON(w http.ResponseWriter, status int, obj interface{}) error {
 	return err
 }
 
-func (a *API) isAdmin(ctx context.Context, u *models.User, aud string) bool {
-	config := a.config
-	if aud == "" {
-		aud = config.JWT.Aud
-	}
-	return aud == u.Aud && u.HasRole(config.JWT.AdminGroupName)
+func isAdmin(u *models.User, config *conf.GlobalConfiguration) bool {
+	return config.JWT.Aud == u.Aud && u.HasRole(config.JWT.AdminGroupName)
 }
 
 func (a *API) requestAud(ctx context.Context, r *http.Request) string {
