@@ -99,6 +99,10 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	return otpError("unsupported_otp_type", "")
 }
 
+type SmsOtpResponse struct {
+	MessageID string `json:"message_id,omitempty"`
+}
+
 // SmsOtp sends the user an otp via sms
 func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -188,6 +192,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
 
+	messageID := ""
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if err := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", map[string]interface{}{
 			"channel": params.Channel,
@@ -198,9 +203,11 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return badRequestError("Error sending sms: %v", terr)
 		}
-		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); err != nil {
-			return badRequestError("Error sending sms otp: %v", err)
+		mID, serr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel)
+		if serr != nil {
+			return badRequestError("Error sending sms OTP: %v", err)
 		}
+		messageID = mID
 		return nil
 	})
 
@@ -208,7 +215,9 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, make(map[string]string))
+	return sendJSON(w, http.StatusOK, SmsOtpResponse{
+		MessageID: messageID,
+	})
 }
 
 func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) (bool, error) {

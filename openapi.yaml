@@ -457,6 +457,10 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  message_id:
+                    type: string
+                    description: Unique ID of the message as reported by the SMS sending provider. Useful for tracking deliverability problems.
         400:
           $ref: "#/components/responses/BadRequestResponse"
         422:
@@ -554,6 +558,10 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  message_id:
+                    type: string
+                    description: Unique ID of the message as reported by the SMS sending provider. Useful for tracking deliverability problems.
         400:
           $ref: "#/components/responses/BadRequestResponse"
         422:
