@@ -164,10 +164,12 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		var identities []models.Identity
 		if params.Email != "" && params.Email != user.GetEmail() {
-			var identity *models.Identity
-			if user.GetEmail() == "" && user.EmailChange == "" {
-				// if the user doesn't have an existing email or email_change
-				// then updating the user's email should create a new email identity
+			identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email")
+			if terr != nil {
+				if !models.IsNotFoundError(terr) {
+					return terr
+				}
+				// updating the user's email should create a new email identity since the user doesn't have one
 				identity, terr = a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
 					Subject: user.ID.String(),
 					Email:   params.Email,
@@ -176,10 +178,6 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			} else {
-				identity, terr = models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email")
-				if terr != nil {
-					return terr
-				}
 				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
 					"email": params.Email,
 				}); terr != nil {
@@ -209,10 +207,12 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Phone != "" && params.Phone != user.GetPhone() {
-			var identity *models.Identity
-			if user.GetPhone() == "" && user.PhoneChange == "" {
-				// if the user doesn't have an existing phone or phone_change
-				// then updating the user's phone should create a new phone identity
+			identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone")
+			if terr != nil {
+				if !models.IsNotFoundError(terr) {
+					return terr
+				}
+				// updating the user's phone should create a new phone identity since the user doesn't have one
 				identity, terr = a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
 					Subject: user.ID.String(),
 					Phone:   params.Phone,
@@ -220,12 +220,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return terr
 				}
-
 			} else {
-				identity, terr = models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone")
-				if terr != nil {
-					return terr
-				}
 				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
 					"phone": params.Phone,
 				}); terr != nil {
