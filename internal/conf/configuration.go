@@ -526,3 +526,7 @@ func (t *VonageProviderConfiguration) Validate() error {
 	}
 	return nil
 }
+
+func (t *SmsProviderConfiguration) IsTwilioVerifyProvider() bool {
+	return t.Provider == "twilio_verify"
+}

@@ -73,7 +73,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	}
 	var oldToken string
 	var message string
-	if config.Sms.Provider == "twilio_verify" {
+	if config.Sms.IsTwilioVerifyProvider() {
 		oldToken = *token
 		otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
 		if err != nil {
@@ -89,7 +89,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	}
 
 	if serr := smsProvider.SendMessage(phone, message, channel); serr != nil {
-		if config.Sms.Provider == "twilio_verify" {
+		if config.Sms.IsTwilioVerifyProvider(){
 			*token = oldToken
 		}
 		return serr
