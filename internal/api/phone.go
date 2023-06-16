@@ -71,22 +71,27 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	if sentAt != nil && !sentAt.Add(config.Sms.MaxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
 	}
+	var oldToken string
 	var message string
-	oldToken := *token
-	otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
-	if err != nil {
-		return internalServerError("error generating otp").WithInternalError(err)
-	}
-	*token = fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
+	if config.Sms.Provider == "twilio_verify" {
+		oldToken = *token
+		otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
+		if err != nil {
+			return internalServerError("error generating otp").WithInternalError(err)
+		}
+		*token = fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
 
-	if config.Sms.Template == "" {
-		message = fmt.Sprintf(defaultSmsMessage, otp)
-	} else {
-		message = strings.Replace(config.Sms.Template, "{{ .Code }}", otp, -1)
+		if config.Sms.Template == "" {
+			message = fmt.Sprintf(defaultSmsMessage, otp)
+		} else {
+			message = strings.Replace(config.Sms.Template, "{{ .Code }}", otp, -1)
+		}
 	}
-	fmt.Println(smsProvider)
+
 	if serr := smsProvider.SendMessage(phone, message, channel); serr != nil {
-		*token = oldToken
+		if config.Sms.Provider == "twilio_verify" {
+			*token = oldToken
+		}
 		return serr
 	}
 
