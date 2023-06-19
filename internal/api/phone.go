@@ -43,7 +43,7 @@ func formatPhoneNumber(phone string) string {
 }
 
 // sendPhoneConfirmation sends an otp to the user's phone number
-func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string) error {
+func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string) (string, error) {
 	config := a.config
 
 	var token *string
@@ -65,19 +65,22 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		sentAt = user.ReauthenticationSentAt
 		includeFields = append(includeFields, "reauthentication_token", "reauthentication_sent_at")
 	default:
-		return internalServerError("invalid otp type")
+		return "", internalServerError("invalid otp type")
 	}
 
 	if sentAt != nil && !sentAt.Add(config.Sms.MaxFrequency).Before(time.Now()) {
-		return MaxFrequencyLimitError
+		return "", MaxFrequencyLimitError
 	}
-	var oldToken string
-	var message string
+	var (
+		oldToken string
+		message  string
+	)
+	messageID := ""
 	if !config.Sms.IsTwilioVerifyProvider() {
 		oldToken = *token
 		otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
 		if err != nil {
-			return internalServerError("error generating otp").WithInternalError(err)
+			return "", internalServerError("error generating otp").WithInternalError(err)
 		}
 		*token = fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
 
@@ -88,11 +91,11 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		}
 	}
 
-	if serr := smsProvider.SendMessage(phone, message, channel); serr != nil {
+	if messageID, serr := smsProvider.SendMessage(phone, message, channel); serr != nil {
 		if !config.Sms.IsTwilioVerifyProvider() {
 			*token = oldToken
 		}
-		return serr
+		return messageID, serr
 	}
 
 	now := time.Now()
@@ -106,5 +109,5 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		user.ReauthenticationSentAt = &now
 	}
 
-	return errors.Wrap(tx.UpdateOnly(user, includeFields...), "Database error updating user for confirmation")
+	return messageID, errors.Wrap(tx.UpdateOnly(user, includeFields...), "Database error updating user for confirmation")
 }

@@ -52,12 +52,12 @@ func NewTwilioVerifyProvider(config conf.TwilioVerifyProviderConfiguration) (Sms
 	}, nil
 }
 
-func (t *TwilioVerifyProvider) SendMessage(phone string, message string, channel string) error {
+func (t *TwilioVerifyProvider) SendMessage(phone string, message string, channel string) (string, error) {
 	switch channel {
 	case SMSProvider, WhatsappProvider:
-		return t.SendSms(phone, message, channel)
+		return "", t.SendSms(phone, message, channel)
 	default:
-		return fmt.Errorf("channel type %q is not supported for Twilio", channel)
+		return "", fmt.Errorf("channel type %q is not supported for Twilio", channel)
 	}
 }
 

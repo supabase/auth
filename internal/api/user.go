@@ -8,6 +8,7 @@ import (
 	"github.com/fatih/structs"
 	"github.com/supabase/gotrue/internal/api/provider"
 	"github.com/supabase/gotrue/internal/api/sms_provider"
+	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
@@ -24,6 +25,59 @@ type UserUpdateParams struct {
 	Channel             string                 `json:"channel"`
 	CodeChallenge       string                 `json:"code_challenge"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
+}
+
+func (p *UserUpdateParams) Validate(conn *storage.Connection, user *models.User, aud string, config *conf.GlobalConfiguration) error {
+	var err error
+	if p.Email != "" && p.Email != user.GetEmail() {
+		p.Email, err = validateEmail(p.Email)
+		if err != nil {
+			return err
+		}
+		if duplicateUser, err := models.IsDuplicatedEmail(conn, p.Email, aud, user); err != nil {
+			return internalServerError("Database error checking email").WithInternalError(err)
+		} else if duplicateUser != nil {
+			return unprocessableEntityError(DuplicateEmailMsg)
+		}
+	}
+	if p.Phone != "" {
+		if p.Channel == "" {
+			p.Channel = sms_provider.SMSProvider
+		}
+		if !sms_provider.IsValidMessageChannel(p.Channel, config.Sms.Provider) {
+			return badRequestError(InvalidChannelError)
+		}
+		if p.Phone != user.GetPhone() {
+			if p.Phone, err = validatePhone(p.Phone); err != nil {
+				return err
+			}
+			if exists, err := models.IsDuplicatedPhone(conn, p.Phone, aud); err != nil {
+				return internalServerError("Database error checking phone").WithInternalError(err)
+			} else if exists {
+				return unprocessableEntityError(DuplicatePhoneMsg)
+			}
+		}
+	}
+	if user.IsSSOUser {
+		if (p.Password != nil && *p.Password != "") || p.Email != "" || p.Phone != "" || p.Nonce != "" {
+			return unprocessableEntityError("Updating email, phone, password of a SSO account only possible via SSO")
+		}
+	}
+	if p.Password != nil {
+		if len(*p.Password) < config.PasswordMinLength {
+			return invalidPasswordLengthError(config.PasswordMinLength)
+		}
+		// if password reauthentication is enabled, user can only update password together with a nonce sent
+		if config.Security.UpdatePasswordRequireReauthentication && p.Nonce == "" {
+			return unauthorizedError("Password update requires reauthentication.")
+		}
+	}
+	if p.AppData != nil {
+		if !isAdmin(user, config) {
+			return unauthorizedError("Updating app_metadata requires admin privileges")
+		}
+	}
+	return nil
 }
 
 // UserGet returns a user
@@ -66,82 +120,32 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	log := observability.GetLogEntry(r)
 	log.Debugf("Checking params for token %v", params)
 
-	if params.Email != "" && params.Email != user.GetEmail() {
-		params.Email, err = validateEmail(params.Email)
-		if err != nil {
-			return err
-		}
-		var duplicateUser *models.User
-		if duplicateUser, err = models.IsDuplicatedEmail(a.db, params.Email, aud, user); err != nil {
-			return internalServerError("Database error checking email").WithInternalError(err)
-		} else if duplicateUser != nil {
-			return unprocessableEntityError(DuplicateEmailMsg)
-		}
-	}
-	if params.Phone != "" && params.Channel == "" {
-		params.Channel = sms_provider.SMSProvider
-	}
-	if params.Phone != "" && !sms_provider.IsValidMessageChannel(params.Channel, config.Sms.Provider) {
-		return badRequestError(InvalidChannelError)
-	}
-
-	if params.Phone != "" && params.Phone != user.GetPhone() {
-		params.Phone, err = validatePhone(params.Phone)
-		if err != nil {
-			return err
-		}
-		var exists bool
-		if exists, err = models.IsDuplicatedPhone(a.db, params.Phone, aud); err != nil {
-			return internalServerError("Database error checking phone").WithInternalError(err)
-		} else if exists {
-			return unprocessableEntityError(DuplicatePhoneMsg)
-		}
-	}
-
-	if user.IsSSOUser {
-		if (params.Password != nil && *params.Password != "") || params.Email != "" || params.Phone != "" || params.Nonce != "" {
-			return unprocessableEntityError("Updating email, phone, password of a SSO account only possible via SSO")
-		}
+	if err := params.Validate(a.db, user, aud, config); err != nil {
+		return err
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if params.Password != nil {
-			if len(*params.Password) < config.PasswordMinLength {
-				return invalidPasswordLengthError(config.PasswordMinLength)
-			}
-
-			isPasswordUpdated := false
-			if !config.Security.UpdatePasswordRequireReauthentication {
-				if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
-					return internalServerError("Error during password storage").WithInternalError(terr)
-				}
-				isPasswordUpdated = true
-			} else if params.Nonce == "" {
-				return unauthorizedError("Password update requires reauthentication.")
-			} else {
+			if config.Security.UpdatePasswordRequireReauthentication {
 				if terr = a.verifyReauthentication(params.Nonce, tx, config, user); terr != nil {
 					return terr
 				}
-				if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
-					return internalServerError("Error during password storage").WithInternalError(terr)
-				}
-				isPasswordUpdated = true
 			}
-
-			if isPasswordUpdated {
-				if terr := models.NewAuditLogEntry(r, tx, user, models.UserUpdatePasswordAction, "", nil); terr != nil {
+			if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
+				return internalServerError("Error during password storage").WithInternalError(terr)
+			}
+			if terr := models.NewAuditLogEntry(r, tx, user, models.UserUpdatePasswordAction, "", nil); terr != nil {
+				return terr
+			}
+			if session != nil {
+				if terr = models.LogoutAllExceptMe(tx, session.ID, user.ID); terr != nil {
 					return terr
 				}
-				if session != nil {
-					if terr = models.LogoutAllExceptMe(tx, session.ID, user.ID); terr != nil {
-						return terr
-					}
-				} else {
-					// logout all sessions if session id is missing
-					if terr = models.Logout(tx, user.ID); terr != nil {
-						return terr
-					}
+			} else {
+				// logout all sessions if session id is missing
+				if terr = models.Logout(tx, user.ID); terr != nil {
+					return terr
 				}
 			}
 		}
@@ -153,10 +157,6 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.AppData != nil {
-			if !a.isAdmin(ctx, user, config.JWT.Aud) {
-				return unauthorizedError("Updating app_metadata requires admin privileges")
-			}
-
 			if terr = user.UpdateAppMetaData(tx, params.AppData); terr != nil {
 				return internalServerError("Error updating user").WithInternalError(terr)
 			}
@@ -164,18 +164,27 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		var identities []models.Identity
 		if params.Email != "" && params.Email != user.GetEmail() {
-			if user.GetEmail() == "" {
-				// if the user doesn't have an existing email
-				// then updating the user's email should create a new email identity
-				identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+			identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email")
+			if terr != nil {
+				if !models.IsNotFoundError(terr) {
+					return terr
+				}
+				// updating the user's email should create a new email identity since the user doesn't have one
+				identity, terr = a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
 					Subject: user.ID.String(),
 					Email:   params.Email,
 				}))
 				if terr != nil {
 					return terr
 				}
-				identities = append(identities, *identity)
+			} else {
+				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
+					"email": params.Email,
+				}); terr != nil {
+					return terr
+				}
 			}
+			identities = append(identities, *identity)
 			mailer := a.Mailer(ctx)
 			referrer := a.getReferrer(r)
 			flowType := getFlowFromChallenge(params.CodeChallenge)
@@ -198,18 +207,27 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Phone != "" && params.Phone != user.GetPhone() {
-			if user.GetPhone() == "" {
-				// if the user doesn't have an existing phone
-				// then updating the user's phone should create a new phone identity
-				identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+			identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone")
+			if terr != nil {
+				if !models.IsNotFoundError(terr) {
+					return terr
+				}
+				// updating the user's phone should create a new phone identity since the user doesn't have one
+				identity, terr = a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
 					Subject: user.ID.String(),
 					Phone:   params.Phone,
 				}))
 				if terr != nil {
 					return terr
 				}
-				identities = append(identities, *identity)
+			} else {
+				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
+					"phone": params.Phone,
+				}); terr != nil {
+					return terr
+				}
 			}
+			identities = append(identities, *identity)
 			if config.Sms.Autoconfirm {
 				return user.UpdatePhone(tx, params.Phone)
 			} else {
@@ -217,7 +235,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return badRequestError("Error sending sms: %v", terr)
 				}
-				if terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeVerification, smsProvider, params.Channel); terr != nil {
+				if _, terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeVerification, smsProvider, params.Channel); terr != nil {
 					return internalServerError("Error sending phone change otp").WithInternalError(terr)
 				}
 			}
