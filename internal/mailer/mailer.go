@@ -28,8 +28,13 @@ type Mailer interface {
 // NewMailer returns a new gotrue mailer
 func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
 	mail := gomail.NewMessage()
-
-	// so that messages are not grouped under each other
+	
+	mail.SetHeaders(map[string][]string{
+		// Make the emails explicitly set to be HTML formatted (to cover older email clients)
+        	"Content-Type": {"text/html; charset=utf-8"},
+		// so that messages are not grouped under each other
+        	"Message-ID":   {fmt.Sprintf("<%s@gotrue-mailer>", uuid.Must(uuid.NewV4()).String())},
+    	})
 	mail.SetHeader("Message-ID", fmt.Sprintf("<%s@gotrue-mailer>", uuid.Must(uuid.NewV4()).String()))
 
 	from := mail.FormatAddress(globalConfig.SMTP.AdminEmail, globalConfig.SMTP.SenderName)
