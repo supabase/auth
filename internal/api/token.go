@@ -381,11 +381,15 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 		}
 	}
 
+	issuedAt := time.Now().UTC()
+
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
 			Audience:  user.Aud,
-			ExpiresAt: time.Now().Add(expiresIn).Unix(),
+			IssuedAt:  issuedAt.Unix(),
+			ExpiresAt: issuedAt.Add(expiresIn).Unix(),
+			Issuer:    config.Issuer,
 		},
 		Email:                         user.GetEmail(),
 		Phone:                         user.GetPhone(),
@@ -398,6 +402,15 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	if config.KeyID != "" {
+		if token.Header == nil {
+			token.Header = make(map[string]interface{})
+		}
+
+		token.Header["kid"] = config.KeyID
+	}
+
 	return token.SignedString([]byte(config.Secret))
 }
 
