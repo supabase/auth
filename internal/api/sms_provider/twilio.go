@@ -24,6 +24,7 @@ type TwilioProvider struct {
 type SmsStatus struct {
 	To           string `json:"to"`
 	From         string `json:"from"`
+	MessageSID   string `json:"sid"`
 	Status       string `json:"status"`
 	ErrorCode    string `json:"error_code"`
 	ErrorMessage string `json:"error_message"`
@@ -54,17 +55,17 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 	}, nil
 }
 
-func (t *TwilioProvider) SendMessage(phone string, message string, channel string) error {
+func (t *TwilioProvider) SendMessage(phone string, message string, channel string) (string, error) {
 	switch channel {
 	case SMSProvider, WhatsappProvider:
 		return t.SendSms(phone, message, channel)
 	default:
-		return fmt.Errorf("channel type %q is not supported for Twilio", channel)
+		return "", fmt.Errorf("channel type %q is not supported for Twilio", channel)
 	}
 }
 
 // Send an SMS containing the OTP with Twilio's API
-func (t *TwilioProvider) SendSms(phone, message, channel string) error {
+func (t *TwilioProvider) SendSms(phone, message, channel string) (string, error) {
 	sender := t.Config.MessageServiceSid
 	receiver := "+" + phone
 	if channel == WhatsappProvider {
@@ -80,32 +81,32 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) error {
 	client := &http.Client{Timeout: defaultTimeout}
 	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
 	if err != nil {
-		return err
+		return "", err
 	}
 	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	r.SetBasicAuth(t.Config.AccountSid, t.Config.AuthToken)
 	res, err := client.Do(r)
 	defer utilities.SafeClose(res.Body)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
 		resp := &twilioErrResponse{}
 		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
-			return err
+			return "", err
 		}
-		return resp
+		return "", resp
 	}
 	// validate sms status
 	resp := &SmsStatus{}
 	derr := json.NewDecoder(res.Body).Decode(resp)
 	if derr != nil {
-		return derr
+		return "", derr
 	}
 
 	if resp.Status == "failed" || resp.Status == "undelivered" {
-		return fmt.Errorf("twilio error: %v %v", resp.ErrorMessage, resp.ErrorCode)
+		return resp.MessageSID, fmt.Errorf("twilio error: %v %v for message %s", resp.ErrorMessage, resp.ErrorCode, resp.MessageSID)
 	}
 
-	return nil
+	return resp.MessageSID, nil
 }

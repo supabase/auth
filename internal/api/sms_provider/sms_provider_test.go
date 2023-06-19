@@ -86,10 +86,11 @@ func (ts *SmsProviderTestSuite) TestTwilioSendSms() {
 				MatchHeader("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(twilioProvider.Config.AccountSid+":"+twilioProvider.Config.AuthToken))).
 				MatchType("url").BodyString(body.Encode()).
 				Reply(200).JSON(SmsStatus{
-				To:     "+" + phone,
-				From:   twilioProvider.Config.MessageServiceSid,
-				Status: "sent",
-				Body:   message,
+				To:         "+" + phone,
+				From:       twilioProvider.Config.MessageServiceSid,
+				Status:     "sent",
+				Body:       message,
+				MessageSID: "abcdef",
 			}),
 			ExpectedError: nil,
 		},
@@ -102,8 +103,9 @@ func (ts *SmsProviderTestSuite) TestTwilioSendSms() {
 				ErrorMessage: "failed to send sms",
 				ErrorCode:    "401",
 				Status:       "failed",
+				MessageSID:   "abcdef",
 			}),
-			ExpectedError: fmt.Errorf("twilio error: %v %v", "failed to send sms", "401"),
+			ExpectedError: fmt.Errorf("twilio error: %v %v for message %v", "failed to send sms", "401", "abcdef"),
 		},
 		{
 			Desc: "Non-2xx status code returned",
@@ -127,7 +129,7 @@ func (ts *SmsProviderTestSuite) TestTwilioSendSms() {
 
 	for _, c := range cases {
 		ts.Run(c.Desc, func() {
-			err = twilioProvider.SendSms(phone, message, SMSProvider)
+			_, err = twilioProvider.SendSms(phone, message, SMSProvider)
 			require.Equal(ts.T(), c.ExpectedError, err)
 		})
 	}
@@ -156,7 +158,7 @@ func (ts *SmsProviderTestSuite) TestMessagebirdSendSms() {
 		},
 	})
 
-	err = messagebirdProvider.SendSms(phone, message)
+	_, err = messagebirdProvider.SendSms(phone, message)
 	require.NoError(ts.T(), err)
 }
 
@@ -185,7 +187,7 @@ func (ts *SmsProviderTestSuite) TestVonageSendSms() {
 		},
 	})
 
-	err = vonageProvider.SendSms(phone, message)
+	_, err = vonageProvider.SendSms(phone, message)
 	require.NoError(ts.T(), err)
 }
 
@@ -211,6 +213,6 @@ func (ts *SmsProviderTestSuite) TestTextLocalSendSms() {
 		Errors: []TextlocalError{},
 	})
 
-	err = textlocalProvider.SendSms(phone, message)
+	_, err = textlocalProvider.SendSms(phone, message)
 	require.NoError(ts.T(), err)
 }
