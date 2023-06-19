@@ -48,22 +48,36 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 
 	var token *string
 	var sentAt *time.Time
+	isTwilioVerifyProvider := config.Sms.IsTwilioVerifyProvider()
 
 	includeFields := []string{}
 	switch otpType {
+	// When using Twilio Verify, Twilio handles the token
 	case phoneChangeVerification:
-		token = &user.PhoneChangeToken
 		sentAt = user.PhoneChangeSentAt
 		user.PhoneChange = phone
-		includeFields = append(includeFields, "phone_change", "phone_change_token", "phone_change_sent_at")
+		if isTwilioVerifyProvider {
+			includeFields = append(includeFields, "phone_change", "phone_change_sent_at")
+		} else {
+			token = &user.PhoneChangeToken
+			includeFields = append(includeFields, "phone_change", "phone_change_token", "phone_change_sent_at")
+		}
 	case phoneConfirmationOtp:
-		token = &user.ConfirmationToken
 		sentAt = user.ConfirmationSentAt
-		includeFields = append(includeFields, "confirmation_token", "confirmation_sent_at")
+		if isTwilioVerifyProvider {
+			includeFields = append(includeFields, "confirmation_sent_at")
+		} else {
+			token = &user.ConfirmationToken
+			includeFields = append(includeFields, "confirmation_token", "confirmation_sent_at")
+		}
 	case phoneReauthenticationOtp:
-		token = &user.ReauthenticationToken
 		sentAt = user.ReauthenticationSentAt
-		includeFields = append(includeFields, "reauthentication_token", "reauthentication_sent_at")
+		if isTwilioVerifyProvider {
+			includeFields = append(includeFields, "reauthentication_sent_at")
+		} else {
+			token = &user.ReauthenticationToken
+			includeFields = append(includeFields, "reauthentication_token", "reauthentication_sent_at")
+		}
 	default:
 		return "", internalServerError("invalid otp type")
 	}
@@ -76,7 +90,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		message  string
 	)
 	messageID := ""
-	if !config.Sms.IsTwilioVerifyProvider() {
+	if !isTwilioVerifyProvider {
 		oldToken = *token
 		otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
 		if err != nil {
@@ -92,7 +106,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	}
 
 	if messageID, serr := smsProvider.SendMessage(phone, message, channel); serr != nil {
-		if !config.Sms.IsTwilioVerifyProvider() {
+		if !isTwilioVerifyProvider {
 			*token = oldToken
 		}
 		return messageID, serr
