@@ -35,7 +35,6 @@ func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
 		// so that messages are not grouped under each other
 		"Message-ID": {fmt.Sprintf("<%s@gotrue-mailer>", uuid.Must(uuid.NewV4()).String())},
 	})
-	mail.SetHeader("Message-ID", fmt.Sprintf("<%s@gotrue-mailer>", uuid.Must(uuid.NewV4()).String()))
 
 	from := mail.FormatAddress(globalConfig.SMTP.AdminEmail, globalConfig.SMTP.SenderName)
 
