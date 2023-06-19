@@ -87,8 +87,8 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 			return badRequestError("SAML RelayState comes from another IP address, try logging in again?")
 		}
 
-		if relayState.FlowStateID != "" {
-			flowState, err = models.FindFlowStateByID(a.db, relayState.FlowStateID)
+		if relayState.FlowStateID != uuid.Nil {
+			flowState, err = models.FindFlowStateByID(a.db, relayState.FlowStateID.String())
 			if err != nil {
 				return err
 			}

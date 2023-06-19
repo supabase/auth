@@ -65,20 +65,20 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	flowType := getFlowFromChallenge(params.CodeChallenge)
-	flowStateID := ""
+	flowStateID := uuid.Nil
 	if flowType == models.PKCEFlow {
 		codeChallengeMethodType, err := models.ParseCodeChallengeMethod(codeChallengeMethod)
 		if err != nil {
 			return err
 		}
-		flowState, err := models.NewFlowState("sso", codeChallenge, codeChallengeMethodType, models.OAuth)
+		flowState, err := models.NewFlowState("sso", codeChallenge, codeChallengeMethodType, models.SSOSAML)
 		if err != nil {
 			return err
 		}
 		if err := a.db.Create(flowState); err != nil {
 			return err
 		}
-		flowStateID = flowState.ID.String()
+		flowStateID = flowState.ID
 	}
 
 	var ssoProvider *models.SSOProvider

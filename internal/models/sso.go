@@ -156,7 +156,7 @@ type SAMLRelayState struct {
 
 	CreatedAt   time.Time `db:"created_at" json:"-"`
 	UpdatedAt   time.Time `db:"updated_at" json:"-"`
-	FlowStateID string    `db:"flow_state_id" json:"-"`
+	FlowStateID uuid.UUID `db:"flow_state_id" json:"flow_state_id,omitempty"`
 }
 
 func (s SAMLRelayState) TableName() string {
