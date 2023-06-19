@@ -58,6 +58,7 @@ type JWTConfiguration struct {
 	AdminGroupName   string   `json:"admin_group_name" split_words:"true"`
 	AdminRoles       []string `json:"admin_roles" split_words:"true"`
 	DefaultGroupName string   `json:"default_group_name" split_words:"true"`
+	Issuer           string   `json:"issuer"`
 }
 
 // MFAConfiguration holds all the MFA related Configuration

@@ -124,7 +124,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			user, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			ts.Require().NoError(err)
 
-			token, err := generateAccessToken(ts.API.db, user, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+			token, err := generateAccessToken(ts.API.db, user, nil, time.Second*time.Duration(ts.Config.JWT.Exp), &ts.Config.JWT)
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
