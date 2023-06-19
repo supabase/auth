@@ -35,6 +35,9 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		if !user.IsPhoneConfirmed() {
 			return badRequestError("Please verify your phone first.")
 		}
+		if config.Sms.IsTwilioVerifyProvider() {
+			return badRequestError("Reauthentication via phone is not supported for twilio verify")
+		}
 	}
 
 	messageID := ""
@@ -85,6 +88,9 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+nonce)))
 		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
 	} else if user.GetPhone() != "" {
+		if config.Sms.IsTwilioVerifyProvider() {
+			return fmt.Errorf("reauthentication via phone is not supported for twilio verify")
+		}
 		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetPhone()+nonce)))
 		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
 	} else {

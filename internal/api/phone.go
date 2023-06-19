@@ -72,12 +72,8 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		}
 	case phoneReauthenticationOtp:
 		sentAt = user.ReauthenticationSentAt
-		if isTwilioVerifyProvider {
-			includeFields = append(includeFields, "reauthentication_sent_at")
-		} else {
-			token = &user.ReauthenticationToken
-			includeFields = append(includeFields, "reauthentication_token", "reauthentication_sent_at")
-		}
+		token = &user.ReauthenticationToken
+		includeFields = append(includeFields, "reauthentication_token", "reauthentication_sent_at")
 	default:
 		return "", internalServerError("invalid otp type")
 	}
