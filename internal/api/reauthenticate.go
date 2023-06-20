@@ -78,12 +78,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 // verifyReauthentication checks if the nonce provided is valid
 func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.GlobalConfiguration, user *models.User) error {
 	// Ignore token check for twilio Verify user with only Phone registered
-	if config.Sms.IsTwilioVerifyProvider() && user.GetEmail() == "" && user.GetPhone() != "" {
-	} else if user.ReauthenticationToken == "" && !config.Sms.IsTwilioVerifyProvider() {
-		return badRequestError(InvalidNonceMessage)
-	}
-
-	if user.ReauthenticationSentAt == nil {
+	if user.ReauthenticationToken == "" || user.ReauthenticationSentAt == nil {
 		return badRequestError(InvalidNonceMessage)
 	}
 
