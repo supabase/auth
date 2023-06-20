@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/netlify/gotrue/internal/utilities"
 	"github.com/spf13/cobra"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 var versionCmd = cobra.Command{

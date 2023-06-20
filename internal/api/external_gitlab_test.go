@@ -24,7 +24,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitlab() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Gitlab.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Gitlab.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Gitlab.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("read_user", q.Get("scope"))
 

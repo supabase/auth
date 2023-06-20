@@ -11,10 +11,6 @@ func IsNotFoundError(err error) bool {
 		return true
 	case RefreshTokenNotFoundError, *RefreshTokenNotFoundError:
 		return true
-	case InstanceNotFoundError, *InstanceNotFoundError:
-		return true
-	case TotpSecretNotFoundError, *TotpSecretNotFoundError:
-		return true
 	case IdentityNotFoundError, *IdentityNotFoundError:
 		return true
 	case ChallengeNotFoundError, *ChallengeNotFoundError:
@@ -24,6 +20,8 @@ func IsNotFoundError(err error) bool {
 	case SSOProviderNotFoundError, *SSOProviderNotFoundError:
 		return true
 	case SAMLRelayStateNotFoundError, *SAMLRelayStateNotFoundError:
+		return true
+	case FlowStateNotFoundError, *FlowStateNotFoundError:
 		return true
 	}
 	return false
@@ -63,13 +61,6 @@ func (e RefreshTokenNotFoundError) Error() string {
 	return "Refresh Token not found"
 }
 
-// InstanceNotFoundError represents when an instance is not found.
-type InstanceNotFoundError struct{}
-
-func (e InstanceNotFoundError) Error() string {
-	return "Instance not found"
-}
-
 // FactorNotFoundError represents when a user is not found.
 type FactorNotFoundError struct{}
 
@@ -82,12 +73,6 @@ type ChallengeNotFoundError struct{}
 
 func (e ChallengeNotFoundError) Error() string {
 	return "Challenge not found"
-}
-
-type TotpSecretNotFoundError struct{}
-
-func (e TotpSecretNotFoundError) Error() string {
-	return "Totp Secret not found"
 }
 
 // SSOProviderNotFoundError represents an error when a SSO Provider can't be
@@ -104,4 +89,12 @@ type SAMLRelayStateNotFoundError struct{}
 
 func (e SAMLRelayStateNotFoundError) Error() string {
 	return "SAML RelayState not found"
+}
+
+// FlowStateNotFoundError represents an error when an FlowState can't be
+// found.
+type FlowStateNotFoundError struct{}
+
+func (e FlowStateNotFoundError) Error() string {
+	return "Flow State not found"
 }

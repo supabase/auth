@@ -2,9 +2,10 @@ package api
 
 import (
 	"context"
+	"net/url"
 
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/netlify/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/models"
 )
 
 type contextKey string
@@ -28,6 +29,8 @@ const (
 	oauthTokenKey           = contextKey("oauth_token") // for OAuth1.0, also known as request token
 	oauthVerifierKey        = contextKey("oauth_verifier")
 	ssoProviderKey          = contextKey("sso_provider")
+	externalHostKey         = contextKey("external_host")
+	flowStateKey            = contextKey("flow_state_id")
 )
 
 // withToken adds the JWT token to the context.
@@ -123,6 +126,18 @@ func withSignature(ctx context.Context, id string) context.Context {
 
 func withInviteToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, inviteTokenKey, token)
+}
+
+func withFlowStateID(ctx context.Context, FlowStateID string) context.Context {
+	return context.WithValue(ctx, flowStateKey, FlowStateID)
+}
+
+func getFlowStateID(ctx context.Context) string {
+	obj := ctx.Value(flowStateKey)
+	if obj == nil {
+		return ""
+	}
+	return obj.(string)
 }
 
 func getInviteToken(ctx context.Context) string {
@@ -221,4 +236,16 @@ func getSSOProvider(ctx context.Context) *models.SSOProvider {
 		return nil
 	}
 	return obj.(*models.SSOProvider)
+}
+
+func withExternalHost(ctx context.Context, u *url.URL) context.Context {
+	return context.WithValue(ctx, externalHostKey, u)
+}
+
+func getExternalHost(ctx context.Context) *url.URL {
+	obj := ctx.Value(externalHostKey)
+	if obj == nil {
+		return nil
+	}
+	return obj.(*url.URL)
 }

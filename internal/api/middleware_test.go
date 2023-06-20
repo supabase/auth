@@ -7,18 +7,20 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/netlify/gotrue/internal/conf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/gotrue/internal/conf"
 )
 
 const (
-	HCaptchaSecret   string = "0x0000000000000000000000000000000000000000"
-	HCaptchaResponse string = "10000000-aaaa-bbbb-cccc-000000000001"
+	HCaptchaSecret         string = "0x0000000000000000000000000000000000000000"
+	CaptchaResponse        string = "10000000-aaaa-bbbb-cccc-000000000001"
+	TurnstileCaptchaSecret string = "1x0000000000000000000000000000000AA"
 )
 
 type MiddlewareTestSuite struct {
@@ -42,8 +44,6 @@ func TestMiddlewareFunctions(t *testing.T) {
 
 func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 	ts.Config.Security.Captcha.Enabled = true
-	ts.Config.Security.Captcha.Provider = "hcaptcha"
-	ts.Config.Security.Captcha.Secret = HCaptchaSecret
 
 	adminClaims := &GoTrueClaims{
 		Role: "supabase_admin",
@@ -51,22 +51,44 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 	adminJwt, err := jwt.NewWithClaims(jwt.SigningMethodHS256, adminClaims).SignedString([]byte(ts.Config.JWT.Secret))
 	require.NoError(ts.T(), err)
 	cases := []struct {
-		desc          string
-		adminJwt      string
-		captcha_token string
+		desc             string
+		adminJwt         string
+		captcha_token    string
+		captcha_provider string
 	}{
 		{
 			"Valid captcha response",
 			"",
-			HCaptchaResponse,
+			CaptchaResponse,
+			"hcaptcha",
+		},
+		{
+			"Valid captcha response",
+			"",
+			CaptchaResponse,
+			"turnstile",
 		},
 		{
 			"Ignore captcha if admin role is present",
 			adminJwt,
 			"",
+			"hcaptcha",
+		},
+		{
+			"Ignore captcha if admin role is present",
+			adminJwt,
+			"",
+			"turnstile",
 		},
 	}
 	for _, c := range cases {
+		ts.Config.Security.Captcha.Provider = c.captcha_provider
+		if c.captcha_provider == "turnstile" {
+			ts.Config.Security.Captcha.Secret = TurnstileCaptchaSecret
+		} else if c.captcha_provider == "hcaptcha" {
+			ts.Config.Security.Captcha.Secret = HCaptchaSecret
+		}
+
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 			"email":    "test@example.com",
@@ -122,7 +144,17 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 				Secret:   "test",
 			},
 			http.StatusBadRequest,
-			"hCaptcha protection: request disallowed (not-using-dummy-secret)",
+			"captcha protection: request disallowed (not-using-dummy-secret)",
+		},
+		{
+			"Captcha validation failed",
+			&conf.CaptchaConfiguration{
+				Enabled:  true,
+				Provider: "turnstile",
+				Secret:   "anothertest",
+			},
+			http.StatusBadRequest,
+			"captcha protection: request disallowed (invalid-input-secret)",
 		},
 	}
 	for _, c := range cases {
@@ -133,7 +165,7 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 				"email":    "test@example.com",
 				"password": "secret",
 				"gotrue_meta_security": map[string]interface{}{
-					"captcha_token": HCaptchaResponse,
+					"captcha_token": CaptchaResponse,
 				},
 			}))
 			req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)
@@ -194,6 +226,65 @@ func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
 			_, err := limiter(w, req)
 			require.Error(ts.T(), err)
 			require.Equal(ts.T(), c.expectedErrorMsg, err.Error())
+		})
+	}
+}
+
+func (ts *MiddlewareTestSuite) TestIsValidExternalHost() {
+	cases := []struct {
+		desc        string
+		requestURL  string
+		expectedURL string
+	}{
+		{
+			desc:        "Valid custom external url",
+			requestURL:  "https://example.custom.com",
+			expectedURL: "https://example.custom.com",
+		},
+	}
+
+	_, err := url.ParseRequestURI("https://example.custom.com")
+	require.NoError(ts.T(), err)
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			req := httptest.NewRequest(http.MethodPost, c.requestURL, nil)
+			w := httptest.NewRecorder()
+			ctx, err := ts.API.isValidExternalHost(w, req)
+			require.NoError(ts.T(), err)
+
+			externalURL := getExternalHost(ctx)
+			require.Equal(ts.T(), c.expectedURL, externalURL.String())
+		})
+	}
+}
+
+func (ts *MiddlewareTestSuite) TestRequireSAMLEnabled() {
+	cases := []struct {
+		desc        string
+		isEnabled   bool
+		expectedErr error
+	}{
+		{
+			desc:        "SAML not enabled",
+			isEnabled:   false,
+			expectedErr: notFoundError("SAML 2.0 is disabled"),
+		},
+		{
+			desc:        "SAML enabled",
+			isEnabled:   true,
+			expectedErr: nil,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			ts.Config.SAML.Enabled = c.isEnabled
+			req := httptest.NewRequest("GET", "http://localhost", nil)
+			w := httptest.NewRecorder()
+
+			_, err := ts.API.requireSAMLEnabled(w, req)
+			require.Equal(ts.T(), c.expectedErr, err)
 		})
 	}
 }

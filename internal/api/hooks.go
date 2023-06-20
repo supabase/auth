@@ -18,9 +18,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 type HookEvent string
@@ -233,7 +234,7 @@ func triggerHook(ctx context.Context, hookURL *url.URL, secret string, conn *sto
 
 	body, err := w.trigger()
 	if body != nil {
-		defer body.Close()
+		defer utilities.SafeClose(body)
 	}
 	if err == nil && body != nil {
 		webhookRsp := &WebhookResponse{}

@@ -3,13 +3,13 @@ package models
 import (
 	"testing"
 
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/crypto"
-	"github.com/netlify/gotrue/internal/storage"
-	"github.com/netlify/gotrue/internal/storage/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/crypto"
+	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/storage/test"
 )
 
 const modelsTestConfig = "../../hack/test.env"
@@ -162,19 +162,19 @@ func (ts *UserTestSuite) TestFindUserWithRefreshToken() {
 func (ts *UserTestSuite) TestIsDuplicatedEmail() {
 	_ = ts.createUserWithEmail("david.calavera@netlify.com")
 
-	e, err := IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "test")
+	e, err := IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "test", nil)
 	require.NoError(ts.T(), err)
 	require.NotNil(ts.T(), e, "expected email to be duplicated")
 
-	e, err = IsDuplicatedEmail(ts.db, "davidcalavera@netlify.com", "test")
+	e, err = IsDuplicatedEmail(ts.db, "davidcalavera@netlify.com", "test", nil)
 	require.NoError(ts.T(), err)
-	require.Nil(ts.T(), e, "expected email to not be duplicated")
+	require.Nil(ts.T(), e, "expected email to not be duplicated", nil)
 
-	e, err = IsDuplicatedEmail(ts.db, "david@netlify.com", "test")
+	e, err = IsDuplicatedEmail(ts.db, "david@netlify.com", "test", nil)
 	require.NoError(ts.T(), err)
-	require.Nil(ts.T(), e, "expected same email to not be duplicated")
+	require.Nil(ts.T(), e, "expected same email to not be duplicated", nil)
 
-	e, err = IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "other-aud")
+	e, err = IsDuplicatedEmail(ts.db, "david.calavera@netlify.com", "other-aud", nil)
 	require.NoError(ts.T(), err)
 	require.Nil(ts.T(), e, "expected same email to not be duplicated")
 }

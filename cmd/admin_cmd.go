@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/storage"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 var autoconfirm, isAdmin bool
@@ -66,7 +66,7 @@ func adminCreateUser(config *conf.GlobalConfiguration, args []string) {
 	defer db.Close()
 
 	aud := getAudience(config)
-	if user, err := models.IsDuplicatedEmail(db, args[0], aud); user != nil {
+	if user, err := models.IsDuplicatedEmail(db, args[0], aud, nil); user != nil {
 		logrus.Fatalf("Error creating new user: user already exists")
 	} else if err != nil {
 		logrus.Fatalf("Error checking user email: %+v", err)

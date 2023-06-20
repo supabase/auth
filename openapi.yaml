@@ -72,6 +72,7 @@ paths:
               - password
               - refresh_token
               - id_token
+              - pkce
       security:
         - APIKeyAuth: []
       requestBody:
@@ -85,6 +86,10 @@ paths:
               grant_type=refresh_token:
                 value:
                   refresh_token: 4nYUCw0wZR_DNOTSDbSGMQ
+              grant_type=pkce:
+                value:
+                  auth_code: 009e5066-fc11-4eca-8c8c-6fd82aa263f2
+                  code_verifier: ktPNXpR65N6JtgzQA8_5HHtH6PBSAahMNoLKRzQEa0Tzgl.vdV~b6lPk004XOd.4lR0inCde.NoQx5K63xPfzL8o7tJAjXncnhw5Niv9ycQ.QRV9JG.y3VapqbgLfIrJ
             schema:
               type: object
               description: |-
@@ -104,6 +109,9 @@ paths:
                   format: phone
                 id_token:
                   type: string
+                access_token:
+                  type: string
+                  description: Provide only when `grant_type` is `id_token` and the provided ID token requires the presence of an access token to be accepted (usually by having an `at_hash` claim).
                 nonce:
                   type: string
                 provider:
@@ -116,7 +124,12 @@ paths:
                 issuer:
                   type: string
                 gotrue_meta_security:
-                  $ref: '#/components/schemas/GoTrueMetaSecurity'
+                  $ref: "#/components/schemas/GoTrueMetaSecurity"
+                auth_code:
+                  type: string
+                  format: uuid
+                code_verifier:
+                  type: string
       responses:
         200:
           description: >
@@ -124,18 +137,18 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AccessTokenResponseSchema'
+                $ref: "#/components/schemas/AccessTokenResponseSchema"
 
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         401:
-          $ref: '#/components/responses/ForbiddenResponse'
+          $ref: "#/components/responses/ForbiddenResponse"
         403:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         500:
-          $ref: '#/components/responses/InternalServerErrorResponse'
+          $ref: "#/components/responses/InternalServerErrorResponse"
         429:
-          $ref: '#/components/responses/RateLimitResponse'
+          $ref: "#/components/responses/RateLimitResponse"
 
   /logout:
     post:
@@ -147,9 +160,9 @@ paths:
           UserAuth: []
       responses:
         204:
-          description: No content returned on successfull logout.
+          description: No content returned on successful logout.
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
 
   /verify:
     get:
@@ -184,7 +197,7 @@ paths:
         - APIKeyAuth: []
       responses:
         302:
-          $ref: '#/components/responses/AccessRefreshTokenRedirectResponse'
+          $ref: "#/components/responses/AccessRefreshTokenRedirectResponse"
     post:
       summary: Authenticate by verifying the posession of a one-time token.
       tags:
@@ -218,21 +231,22 @@ paths:
                   type: string
                   format: phone
                   description: >
-                    Applicable only if `type` is with regards to an email address.
+                    Applicable only if `type` is with regards to an phone number.
                 redirect_to:
                   type: string
                   format: uri
                   description: >
                     (Optional) URL to redirect back into the app on after verification completes successfully. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
+
       responses:
         200:
           description: An access and refresh token.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AccessTokenResponseSchema'
+                $ref: "#/components/schemas/AccessTokenResponseSchema"
         429:
-          $ref: '#/components/responses/RateLimitResponse'
+          $ref: "#/components/responses/RateLimitResponse"
 
   /authorize:
     get:
@@ -249,14 +263,14 @@ paths:
           required: true
           schema:
             type: string
-            pattern: '[^a-zA-Z0-9]+'
+            pattern: "[^a-zA-Z0-9]+"
         - name: scopes
           in: query
           required: true
           description: Space separated list of OAuth scopes to pass on to `provider`.
           schema:
             type: string
-            pattern: '[^ ]+( +[^ ]+)*'
+            pattern: "[^ ]+( +[^ ]+)*"
         - name: invite_token
           in: query
           description: (Optional) A token representing a previous invitation of the user. A successful sign-in with OAuth will mark the invitation as completed.
@@ -269,9 +283,17 @@ paths:
           schema:
             type: string
             format: uri
+        - name: code_challenge_method
+          in: query
+          description: (Optional) Method used to encrypt the verifier. Can be `plain` (no transformation) or `s256` (where SHA-256 is used). It is always recommended that `s256` is used.
+          schema:
+            type: string
+            enum:
+              - plain
+              - s256
       responses:
         302:
-          $ref: '#/components/responses/OAuthAuthorizeRedirectResponse'
+          $ref: "#/components/responses/OAuthAuthorizeRedirectResponse"
 
   /signup:
     post:
@@ -294,6 +316,17 @@ paths:
                 value:
                   phone: "+1234567890"
                   password: password1
+              "phone+password+whatsapp":
+                value:
+                  phone: "+1234567890"
+                  password: password1
+                  channel: whatsapp
+              "email+password+pkce":
+                value:
+                  email: user@example.com
+                  password: password1
+                  code_challenge_method: s256
+                  code_challenge: elU6u5zyqQT2f92GRQUq6PautAeNDf4DQPayyR0ek_c&
             schema:
               type: object
               properties:
@@ -303,12 +336,24 @@ paths:
                 phone:
                   type: string
                   format: phone
+                channel:
+                  type: string
+                  enum:
+                    - sms
+                    - whatsapp
                 password:
                   type: string
                 data:
                   type: object
+                code_challenge:
+                  type: string
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - plain
+                    - s256
                 gotrue_meta_security:
-                  $ref: '#/components/schemas/GoTrueMetaSecurity'
+                  $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:
         200:
           description: >
@@ -317,12 +362,12 @@ paths:
             application/json:
               schema:
                 oneOf:
-                  - $ref: '#/components/schemas/AccessTokenResponseSchema'
-                  - $ref: '#/components/schemas/UserSchema'
+                  - $ref: "#/components/schemas/AccessTokenResponseSchema"
+                  - $ref: "#/components/schemas/UserSchema"
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         429:
-          $ref: '#/components/responses/RateLimitResponse'
+          $ref: "#/components/responses/RateLimitResponse"
 
   /recover:
     post:
@@ -344,8 +389,15 @@ paths:
                 email:
                   type: string
                   format: email
+                code_challenge:
+                  type: string
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - plain
+                    - s256
                 gotrue_meta_security:
-                  $ref: '#/components/schemas/GoTrueMetaSecurity'
+                  $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:
         200:
           description: A recovery email has been sent to the address. An empty JSON object is returned. To obfuscate whether such an email address already exists in the system this response is sent regardless whether the address exists or not.
@@ -354,15 +406,71 @@ paths:
               schema:
                 type: object
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         422:
           description: Returned when unable to validate the email address.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
         429:
-          $ref: '#/components/responses/RateLimitResponse'
+          $ref: "#/components/responses/RateLimitResponse"
+
+  /resend:
+    post:
+      summary: Resends a one-time password (OTP) through email or SMS.
+      description: >
+        Allows a user to resend an existing signup, sms, email_change or phone_change OTP.
+      tags:
+        - auth
+      security:
+        - APIKeyAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: >
+                    Applicable only if `type` is with regards to an email address.
+                phone:
+                  type: string
+                  format: phone
+                  description: >
+                    Applicable only if `type` is with regards to an phone number.
+                type:
+                  type: string
+                  enum:
+                    - signup
+                    - email_change
+                    - sms
+                    - phone_change
+                gotrue_meta_security:
+                  $ref: "#/components/schemas/GoTrueMetaSecurity"
+      responses:
+        200:
+          description: A One-Time Password was sent to the email or phone. To obfuscate whether such an address or number already exists in the system this response is sent in both cases.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message_id:
+                    type: string
+                    description: Unique ID of the message as reported by the SMS sending provider. Useful for tracking deliverability problems.
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        422:
+          description: Returned when unable to validate the email address or phone number.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        429:
+          $ref: "#/components/responses/RateLimitResponse"
 
   /magiclink:
     post:
@@ -387,7 +495,7 @@ paths:
                 data:
                   type: object
                 gotrue_meta_security:
-                  $ref: '#/components/schemas/GoTrueMetaSecurity'
+                  $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:
         200:
           description: A recovery email has been sent to the address. An empty JSON object is returned. To obfuscate whether such an email address already exists in the system this response is sent regardless whether the address exists or not.
@@ -396,15 +504,15 @@ paths:
               schema:
                 type: object
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         422:
           description: Returned when unable to validate the email address.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
         429:
-          $ref: '#/components/responses/RateLimitResponse'
+          $ref: "#/components/responses/RateLimitResponse"
 
   /otp:
     post:
@@ -425,12 +533,24 @@ paths:
                 phone:
                   type: string
                   format: phone
+                channel:
+                  type: string
+                  enum:
+                    - sms
+                    - whatsapp
                 create_user:
                   type: boolean
                 data:
                   type: object
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - s256
+                    - plain
+                code_challenge:
+                  type: string
                 gotrue_meta_security:
-                  $ref: '#/components/schemas/GoTrueMetaSecurity'
+                  $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:
         200:
           description: A One-Time Password was sent to the email or phone. To obfuscate whether such an address or number already exists in the system this response is sent in both cases.
@@ -438,16 +558,20 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  message_id:
+                    type: string
+                    description: Unique ID of the message as reported by the SMS sending provider. Useful for tracking deliverability problems.
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         422:
           description: Returned when unable to validate the email or phone number.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
         429:
-          $ref: '#/components/responses/RateLimitResponse'
+          $ref: "#/components/responses/RateLimitResponse"
 
   /user:
     get:
@@ -463,7 +587,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserSchema'
+                $ref: "#/components/schemas/UserSchema"
     put:
       summary: Update certain properties of the current user account.
       tags:
@@ -491,17 +615,22 @@ paths:
                   type: object
                 app_metadata:
                   type: object
+                channel:
+                  type: string
+                  enum:
+                    - sms
+                    - whatsapp
       responses:
         200:
           description: User's updated account information.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserSchema'
+                $ref: "#/components/schemas/UserSchema"
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         429:
-          $ref: '#/components/responses/RateLimitResponse'
+          $ref: "#/components/responses/RateLimitResponse"
 
   /reauthenticate:
     post:
@@ -521,9 +650,9 @@ paths:
               schema:
                 type: object
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         429:
-          $ref: '#/components/responses/RateLimitResponse'
+          $ref: "#/components/responses/RateLimitResponse"
 
   /factors:
     post:
@@ -575,7 +704,7 @@ paths:
                       uri:
                         type: string
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
 
   /factors/{factorId}/challenge:
     post:
@@ -612,9 +741,9 @@ paths:
                     example: 1674840917
                     description: UNIX seconds of the timestamp past which the challenge should not be verified.
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         429:
-          $ref: '#/components/responses/RateLimitResponse'
+          $ref: "#/components/responses/RateLimitResponse"
 
   /factors/{factorId}/verify:
     post:
@@ -652,11 +781,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AccessTokenResponseSchema'
+                $ref: "#/components/schemas/AccessTokenResponseSchema"
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         429:
-          $ref: '#/components/responses/RateLimitResponse'
+          $ref: "#/components/responses/RateLimitResponse"
 
   /factors/{factorId}:
     delete:
@@ -688,7 +817,7 @@ paths:
                     format: uuid
                     example: 2b306a77-21dc-4110-ba71-537cb56b9e98
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
 
   /callback:
     get:
@@ -701,7 +830,7 @@ paths:
         - APIKeyAuth: []
       responses:
         302:
-          $ref: '#/components/responses/OAuthCallbackRedirectResponse'
+          $ref: "#/components/responses/OAuthCallbackRedirectResponse"
     post:
       summary: Redirects OAuth flow errors to the frontend app.
       description: >
@@ -710,7 +839,7 @@ paths:
         - oauth
       responses:
         302:
-          $ref: '#/components/responses/OAuthCallbackRedirectResponse'
+          $ref: "#/components/responses/OAuthCallbackRedirectResponse"
 
   /sso:
     post:
@@ -740,7 +869,7 @@ paths:
                   type: boolean
                   description: Set to `true` if the response to this request should not be a HTTP 303 redirect -- useful for browser-based applications.
                 gotrue_meta_security:
-                  $ref: '#/components/schemas/GoTrueMetaSecurity'
+                  $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:
         200:
           description: >
@@ -762,14 +891,14 @@ paths:
                 type: string
                 format: uri
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         404:
           description: >
             Returned when the SSO provider could not be identified.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
 
   /saml/metadata:
     get:
@@ -837,11 +966,11 @@ paths:
             type: string
       responses:
         302:
-          $ref: '#/components/responses/AccessRefreshTokenRedirectResponse'
+          $ref: "#/components/responses/AccessRefreshTokenRedirectResponse"
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         429:
-          $ref: '#/components/responses/RateLimitResponse'
+          $ref: "#/components/responses/RateLimitResponse"
 
   /invite:
     post:
@@ -870,15 +999,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserSchema'
+                $ref: "#/components/schemas/UserSchema"
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         422:
           description: User already exists and has confirmed their address.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
 
   /generate_link:
     post:
@@ -940,17 +1069,17 @@ paths:
                     type: string
                     format: uri
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         403:
-          $ref: '#/components/responses/ForbiddenResponse'
+          $ref: "#/components/responses/ForbiddenResponse"
         404:
           description: There is no such user.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
         422:
           description: >
             Has multiple meanings:
@@ -960,7 +1089,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
 
   /admin/audit:
     get:
@@ -1001,6 +1130,9 @@ paths:
                       properties:
                         actor_id:
                           type: string
+                        actor_via_sso:
+                          type: boolean
+                          description: Whether the actor used a SSO protocol (like SAML 2.0 or OIDC) to authenticate.
                         actor_username:
                           type: string
                         actor_name:
@@ -1050,9 +1182,9 @@ paths:
                     ip_address:
                       type: string
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         403:
-          $ref: '#/components/responses/ForbiddenResponse'
+          $ref: "#/components/responses/ForbiddenResponse"
 
   /admin/users:
     get:
@@ -1089,12 +1221,11 @@ paths:
                   users:
                     type: array
                     items:
-                      $ref: '#/components/schemas/UserSchema'
+                      $ref: "#/components/schemas/UserSchema"
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         403:
-          $ref: '#/components/responses/ForbiddenResponse'
-
+          $ref: "#/components/responses/ForbiddenResponse"
 
   /admin/users/{userId}:
     parameters:
@@ -1117,17 +1248,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserSchema'
+                $ref: "#/components/schemas/UserSchema"
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         403:
-          $ref: '#/components/responses/ForbiddenResponse'
+          $ref: "#/components/responses/ForbiddenResponse"
         404:
           description: There is no such user.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
     put:
       summary: Update user's account data.
       tags:
@@ -1139,24 +1270,24 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UserSchema'
+              $ref: "#/components/schemas/UserSchema"
       responses:
         200:
           description: User's account data was updated.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserSchema'
+                $ref: "#/components/schemas/UserSchema"
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         403:
-          $ref: '#/components/responses/ForbiddenResponse'
+          $ref: "#/components/responses/ForbiddenResponse"
         404:
           description: There is no such user.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
     delete:
       summary: Delete a user.
       tags:
@@ -1170,17 +1301,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserSchema'
+                $ref: "#/components/schemas/UserSchema"
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         403:
-          $ref: '#/components/responses/ForbiddenResponse'
+          $ref: "#/components/responses/ForbiddenResponse"
         404:
           description: There is no such user.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
 
   /admin/users/{userId}/factors:
     parameters:
@@ -1205,17 +1336,17 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/MFAFactorSchema'
+                  $ref: "#/components/schemas/MFAFactorSchema"
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         403:
-          $ref: '#/components/responses/ForbiddenResponse'
+          $ref: "#/components/responses/ForbiddenResponse"
         404:
           description: There is no such user.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
 
   /admin/users/{userId}/factors/{factorId}:
     parameters:
@@ -1249,17 +1380,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MFAFactorSchema'
+                $ref: "#/components/schemas/MFAFactorSchema"
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         403:
-          $ref: '#/components/responses/ForbiddenResponse'
+          $ref: "#/components/responses/ForbiddenResponse"
         404:
           description: There is no such user and/or factor.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
     delete:
       summary: Remove a user's MFA factor.
       tags:
@@ -1273,17 +1404,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MFAFactorSchema'
+                $ref: "#/components/schemas/MFAFactorSchema"
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         403:
-          $ref: '#/components/responses/ForbiddenResponse'
+          $ref: "#/components/responses/ForbiddenResponse"
         404:
           description: There is no such user and/or factor.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
 
   /admin/sso/providers:
     get:
@@ -1304,7 +1435,7 @@ paths:
                   items:
                     type: array
                     items:
-                      $ref: '#/components/schemas/SSOProviderSchema'
+                      $ref: "#/components/schemas/SSOProviderSchema"
     post:
       summary: Register a new SSO provider.
       tags:
@@ -1335,20 +1466,20 @@ paths:
                     type: string
                     format: hostname
                 attribute_mapping:
-                  $ref: '#/components/schemas/SAMLAttributeMappingSchema'
+                  $ref: "#/components/schemas/SAMLAttributeMappingSchema"
       responses:
         200:
           description: SSO provider was created.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SSOProviderSchema'
+                $ref: "#/components/schemas/SSOProviderSchema"
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         403:
-          $ref: '#/components/responses/ForbiddenResponse'
+          $ref: "#/components/responses/ForbiddenResponse"
 
   /admin/sso/providers/{ssoProviderId}:
     parameters:
@@ -1371,17 +1502,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SSOProviderSchema'
+                $ref: "#/components/schemas/SSOProviderSchema"
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         403:
-          $ref: '#/components/responses/ForbiddenResponse'
+          $ref: "#/components/responses/ForbiddenResponse"
         404:
           description: A provider with this UUID does not exist.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
     put:
       summary: Update details about a SSO provider.
       description: >
@@ -1408,26 +1539,26 @@ paths:
                     type: string
                     pattern: "[a-z0-9-]+([.][a-z0-9-]+)*"
                 attribute_mapping:
-                  $ref: '#/components/schemas/SAMLAttributeMappingSchema'
+                  $ref: "#/components/schemas/SAMLAttributeMappingSchema"
       responses:
         200:
           description: SSO provider details were updated.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SSOProviderSchema'
+                $ref: "#/components/schemas/SSOProviderSchema"
         400:
-          $ref: '#/components/responses/BadRequestResponse'
+          $ref: "#/components/responses/BadRequestResponse"
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         403:
-          $ref: '#/components/responses/ForbiddenResponse'
+          $ref: "#/components/responses/ForbiddenResponse"
         404:
           description: A provider with this UUID does not exist.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
     delete:
       summary: Remove an SSO provider.
       tags:
@@ -1441,17 +1572,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SSOProviderSchema'
+                $ref: "#/components/schemas/SSOProviderSchema"
         401:
-          $ref: '#/components/responses/UnauthorizedResponse'
+          $ref: "#/components/responses/UnauthorizedResponse"
         403:
-          $ref: '#/components/responses/ForbiddenResponse'
+          $ref: "#/components/responses/ForbiddenResponse"
         404:
           description: A provider with this UUID does not exist.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorSchema'
+                $ref: "#/components/schemas/ErrorSchema"
 
   /health:
     get:
@@ -1531,7 +1662,11 @@ paths:
                   mfa_enabled:
                     type: boolean
                     example: true
-                    description: Whether MFA is enabled on this API server. Typically true.
+                    description: Whether MFA is enabled on this API server. Defaults to false.
+                  saml_enabled:
+                    type: boolean
+                    example: true
+                    description: Whether SAML is enabled on this API server. Defaults to false.
                   external:
                     type: object
                     description: Which external identity providers are enabled.
@@ -1662,7 +1797,7 @@ components:
         factors:
           type: array
           items:
-            $ref: '#/components/schemas/MFAFactorSchema'
+            $ref: "#/components/schemas/MFAFactorSchema"
         identities:
           type: array
           items:
@@ -1726,7 +1861,7 @@ components:
             metadata_url:
               type: string
             attribute_mapping:
-              $ref: '#/components/schemas/SAMLAttributeMappingSchema'
+              $ref: "#/components/schemas/SAMLAttributeMappingSchema"
 
     AccessTokenResponseSchema:
       type: object
@@ -1744,7 +1879,7 @@ components:
           type: integer
           description: Number of seconds after which the `access_token` should be renewed by using the refresh token with the `refresh_token` grant type.
         user:
-          $ref: '#/components/schemas/UserSchema'
+          $ref: "#/components/schemas/UserSchema"
 
     MFAFactorSchema:
       type: object
@@ -1813,7 +1948,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorSchema'
+            $ref: "#/components/schemas/ErrorSchema"
 
     UnauthorizedResponse:
       description: >
@@ -1821,7 +1956,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorSchema'
+            $ref: "#/components/schemas/ErrorSchema"
 
     ForbiddenResponse:
       description: >
@@ -1829,7 +1964,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorSchema'
+            $ref: "#/components/schemas/ErrorSchema"
 
     InternalServerErrorResponse:
       description: >
@@ -1837,7 +1972,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorSchema'
+            $ref: "#/components/schemas/ErrorSchema"
 
     AccessRefreshTokenRedirectResponse:
       description: >
@@ -1848,4 +1983,3 @@ components:
             type: string
             format: uri
             example: https://example.com/#access_token=...&refresh_token=...&expires_in=...
-

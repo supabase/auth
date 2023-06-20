@@ -12,11 +12,11 @@ import (
 	"github.com/crewjam/saml"
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/internal/api/provider"
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/observability"
-	"github.com/netlify/gotrue/internal/storage"
-	"github.com/netlify/gotrue/internal/utilities"
+	"github.com/supabase/gotrue/internal/api/provider"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 func (a *API) samlDestroyRelayState(ctx context.Context, relayState *models.SAMLRelayState) error {
@@ -31,10 +31,16 @@ func (a *API) samlDestroyRelayState(ctx context.Context, relayState *models.SAML
 	})
 }
 
-func IsMetadataStale(idpMetadata *saml.EntityDescriptor, samlProvider models.SAMLProvider) bool {
-	hasIDPMetadataExpired := !idpMetadata.ValidUntil.IsZero() && idpMetadata.ValidUntil.Before(time.Now())
-	hasCacheDurationExceeded := idpMetadata.CacheDuration != 0 && samlProvider.UpdatedAt.Add(idpMetadata.CacheDuration).Before(time.Now())
-	return hasIDPMetadataExpired || hasCacheDurationExceeded
+func IsSAMLMetadataStale(idpMetadata *saml.EntityDescriptor, samlProvider models.SAMLProvider) bool {
+	now := time.Now()
+
+	hasValidityExpired := !idpMetadata.ValidUntil.IsZero() && now.After(idpMetadata.ValidUntil)
+	hasCacheDurationExceeded := idpMetadata.CacheDuration != 0 && now.After(samlProvider.UpdatedAt.Add(idpMetadata.CacheDuration))
+
+	// if metadata XML does not publish validity or caching information, update once in 24 hours
+	needsForceUpdate := idpMetadata.ValidUntil.IsZero() && idpMetadata.CacheDuration == 0 && now.After(samlProvider.UpdatedAt.Add(24*time.Hour))
+
+	return hasValidityExpired || hasCacheDurationExceeded || needsForceUpdate
 }
 
 // SAMLACS implements the main Assertion Consumer Service endpoint behavior.
@@ -143,6 +149,8 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	samlMetadataModified := false
+
 	if ssoProvider.SAMLProvider.MetadataURL == nil {
 		if !idpMetadata.ValidUntil.IsZero() && time.Until(idpMetadata.ValidUntil) <= (30*24*60)*time.Second {
 			logentry := log.WithField("sso_provider_id", ssoProvider.ID.String())
@@ -152,11 +160,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 
 			logentry.Warn("SAML Metadata for identity provider will expire soon! Update its metadata_xml!")
 		}
-	}
-
-	var samlMetadataModified bool
-	samlMetadataModified = false
-	if *ssoProvider.SAMLProvider.MetadataURL != "" && IsMetadataStale(idpMetadata, ssoProvider.SAMLProvider) {
+	} else if *ssoProvider.SAMLProvider.MetadataURL != "" && IsSAMLMetadataStale(idpMetadata, ssoProvider.SAMLProvider) {
 		rawMetadata, err := fetchSAMLMetadata(ctx, *ssoProvider.SAMLProvider.MetadataURL)
 		if err != nil {
 			// Fail silently but raise warning and continue with existing metadata
@@ -169,7 +173,6 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 			ssoProvider.SAMLProvider.MetadataXML = string(rawMetadata)
 			samlMetadataModified = true
 		}
-
 	}
 
 	serviceProvider := a.getSAMLServiceProvider(idpMetadata, initiatedBy == "idp")
@@ -260,7 +263,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 
 	var token *AccessTokenResponse
 	if samlMetadataModified {
-		if err := a.db.Update(ssoProvider.SAMLProvider); err != nil {
+		if err := db.UpdateColumns(&ssoProvider.SAMLProvider, "metadata_xml", "updated_at"); err != nil {
 			return err
 		}
 	}

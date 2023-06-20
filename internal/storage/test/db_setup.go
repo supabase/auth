@@ -1,8 +1,8 @@
 package test
 
 import (
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 func SetupDBConnection(globalConfig *conf.GlobalConfiguration) (*storage.Connection, error) {

@@ -3,12 +3,15 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
-	"github.com/netlify/gotrue/internal/observability"
-	"github.com/netlify/gotrue/internal/security"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/gotrue/internal/security"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
@@ -158,13 +161,13 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 		return ctx, nil
 	}
 
-	verificationResult, err := security.VerifyRequest(req, strings.TrimSpace(config.Security.Captcha.Secret))
+	verificationResult, err := security.VerifyRequest(req, strings.TrimSpace(config.Security.Captcha.Secret), config.Security.Captcha.Provider)
 	if err != nil {
-		return nil, internalServerError("hCaptcha verification process failed").WithInternalError(err)
+		return nil, internalServerError("captcha verification process failed").WithInternalError(err)
 	}
 
 	if !verificationResult.Success {
-		return nil, badRequestError("hCaptcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
+		return nil, badRequestError("captcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
 
 	}
 
@@ -173,8 +176,66 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 
 func isIgnoreCaptchaRoute(req *http.Request) bool {
 	// captcha shouldn't be enabled on requests to refresh the token
-	if req.URL.Path == "/token" && req.FormValue("grant_type") == "refresh_token" {
+	if req.URL.Path == "/token" && (req.FormValue("grant_type") == "refresh_token" || req.FormValue("grant_type") == "pkce") {
 		return true
 	}
 	return false
+}
+
+func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	config := a.config
+
+	var u *url.URL
+	var err error
+
+	baseUrl := config.API.ExternalURL
+	xForwardedHost := req.Header.Get("X-Forwarded-Host")
+	xForwardedProto := req.Header.Get("X-Forwarded-Proto")
+	if xForwardedHost != "" && xForwardedProto != "" {
+		baseUrl = fmt.Sprintf("%s://%s", xForwardedProto, xForwardedHost)
+	} else if req.URL.Scheme != "" && req.URL.Hostname() != "" {
+		baseUrl = fmt.Sprintf("%s://%s", req.URL.Scheme, req.URL.Hostname())
+	}
+	if u, err = url.ParseRequestURI(baseUrl); err != nil {
+		// fallback to the default hostname
+		log := observability.GetLogEntry(req)
+		log.WithField("request_url", baseUrl).Warn(err)
+		if u, err = url.ParseRequestURI(config.API.ExternalURL); err != nil {
+			return ctx, err
+		}
+	}
+	return withExternalHost(ctx, u), nil
+}
+
+func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !a.config.SAML.Enabled {
+		return nil, notFoundError("SAML 2.0 is disabled")
+	}
+	return ctx, nil
+}
+
+func (a *API) databaseCleanup(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+
+		switch r.Method {
+		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+			// continue
+
+		default:
+			return
+		}
+
+		db := a.db.WithContext(r.Context())
+		log := observability.GetLogEntry(r)
+
+		affectedRows, err := models.Cleanup(db)
+		if err != nil {
+			log.WithError(err).WithField("affected_rows", affectedRows).Warn("database cleanup failed")
+		} else if affectedRows > 0 {
+			log.WithField("affected_rows", affectedRows).Debug("cleaned up expired or stale rows")
+		}
+	})
 }

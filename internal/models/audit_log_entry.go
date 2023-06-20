@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/netlify/gotrue/internal/observability"
-	"github.com/netlify/gotrue/internal/storage"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 type AuditAction string
@@ -90,10 +90,7 @@ func (AuditLogEntry) TableName() string {
 }
 
 func NewAuditLogEntry(r *http.Request, tx *storage.Connection, actor *User, action AuditAction, ipAddress string, traits map[string]interface{}) error {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return errors.Wrap(err, "Error generating unique id")
-	}
+	id := uuid.Must(uuid.NewV4())
 
 	username := actor.GetEmail()
 
@@ -103,6 +100,7 @@ func NewAuditLogEntry(r *http.Request, tx *storage.Connection, actor *User, acti
 
 	payload := map[string]interface{}{
 		"actor_id":       actor.ID,
+		"actor_via_sso":  actor.IsSSOUser,
 		"actor_username": username,
 		"action":         action,
 		"log_type":       ActionLogTypeMap[action],

@@ -1,7 +1,6 @@
 # CONTRIBUTING
 
 We would love to have contributions from each and every one of you in the community be it big or small and you are the ones who motivate us to do better than what we do today.
-Docs aren't perfect and so we're here to help. If you're stuck on setup for more than thirty minutes please feel free to reach out on the `#gotrue` channel on [the Supabase discord](https://discord.gg/tNy8sVEf)
 
 ## Code Of Conduct
 

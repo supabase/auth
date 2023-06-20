@@ -3,7 +3,7 @@ package models
 import (
 	"strings"
 
-	"github.com/netlify/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 // GetAccountLinkingDomain returns a string that describes the account linking
@@ -71,16 +71,24 @@ func DetermineAccountLinking(tx *storage.Connection, provider, sub string, email
 	// account does not exist, identity and user not immediately
 	// identifiable, look for similar identities based on email
 	var similarIdentities []*Identity
+	var similarUsers []*User
 
 	if len(emails) > 0 {
-		if terr := tx.Q().Eager().Where("email in (?)", emails).All(&similarIdentities); terr != nil {
+		if terr := tx.Q().Eager().Where("email ilike any (?)", emails).All(&similarIdentities); terr != nil {
 			return AccountLinkingResult{}, terr
+		}
+
+		if !strings.HasPrefix(provider, "sso:") {
+			// there can be multiple user accounts with the same email when is_sso_user is true
+			// so we just do not consider those similar user accounts
+			if terr := tx.Q().Eager().Where("email ilike any (?) and is_sso_user is false", emails).All(&similarUsers); terr != nil {
+				return AccountLinkingResult{}, terr
+			}
 		}
 	}
 
 	// TODO: determine linking behavior over phone too
-
-	if len(similarIdentities) == 0 {
+	if len(similarIdentities) == 0 && len(similarUsers) == 0 {
 		// there are no similar identities, clearly we have to create a new account
 
 		return AccountLinkingResult{
@@ -108,12 +116,31 @@ func DetermineAccountLinking(tx *storage.Connection, provider, sub string, email
 	}
 
 	if len(linkingIdentities) == 0 {
-		// there are no identities in the linking domain, we have to
-		// create a new identity and new user
-		return AccountLinkingResult{
-			Decision:      CreateAccount,
-			LinkingDomain: newAccountLinkingDomain,
-		}, nil
+		if len(similarUsers) == 1 {
+			// no similarIdentities but a user with the same email exists
+			// so we link this new identity to the user
+			// TODO: Backfill the missing identity for the user
+			return AccountLinkingResult{
+				Decision:      LinkAccount,
+				User:          similarUsers[0],
+				Identities:    linkingIdentities,
+				LinkingDomain: newAccountLinkingDomain,
+			}, nil
+		} else if len(similarUsers) > 1 {
+			// this shouldn't happen since there is a partial unique index on (email and is_sso_user = false)
+			return AccountLinkingResult{
+				Decision:      MultipleAccounts,
+				Identities:    linkingIdentities,
+				LinkingDomain: newAccountLinkingDomain,
+			}, nil
+		} else {
+			// there are no identities in the linking domain, we have to
+			// create a new identity and new user
+			return AccountLinkingResult{
+				Decision:      CreateAccount,
+				LinkingDomain: newAccountLinkingDomain,
+			}, nil
+		}
 	}
 
 	// there is at least one identity in the linking domain let's do a

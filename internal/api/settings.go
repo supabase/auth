@@ -11,6 +11,7 @@ type ProviderSettings struct {
 	GitLab    bool `json:"gitlab"`
 	Keycloak  bool `json:"keycloak"`
 	Google    bool `json:"google"`
+	Kakao     bool `json:"kakao"`
 	Linkedin  bool `json:"linkedin"`
 	Facebook  bool `json:"facebook"`
 	Notion    bool `json:"notion"`
@@ -21,7 +22,6 @@ type ProviderSettings struct {
 	Twitter   bool `json:"twitter"`
 	Email     bool `json:"email"`
 	Phone     bool `json:"phone"`
-	SAML      bool `json:"saml"`
 	Zoom      bool `json:"zoom"`
 }
 
@@ -32,6 +32,7 @@ type Settings struct {
 	PhoneAutoconfirm  bool             `json:"phone_autoconfirm"`
 	SmsProvider       string           `json:"sms_provider"`
 	MFAEnabled        bool             `json:"mfa_enabled"`
+	SAMLEnabled       bool             `json:"saml_enabled"`
 }
 
 func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
@@ -46,6 +47,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			GitHub:    config.External.Github.Enabled,
 			GitLab:    config.External.Gitlab.Enabled,
 			Google:    config.External.Google.Enabled,
+			Kakao:     config.External.Kakao.Enabled,
 			Keycloak:  config.External.Keycloak.Enabled,
 			Linkedin:  config.External.Linkedin.Enabled,
 			Facebook:  config.External.Facebook.Enabled,
@@ -65,5 +67,6 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 		PhoneAutoconfirm:  config.Sms.Autoconfirm,
 		SmsProvider:       config.Sms.Provider,
 		MFAEnabled:        config.MFA.Enabled,
+		SAMLEnabled:       config.SAML.Enabled,
 	})
 }

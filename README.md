@@ -12,8 +12,8 @@ GoTrue is a user management and authentication server written in Go that powers
 - Sign in with external providers (Google, Apple, Facebook, Discord, ...)
 
 It is originally based on the excellent
-[GoTrue](https://github.com/netlify/gotrue) codebase by
-[Netlify](https://netlify.com), however both have diverged significantly in
+[GoTrue codebase by
+Netlify](https://github.com/netlify/gotrue), however both have diverged significantly in
 features and capabilities.
 
 ## Quick Start
@@ -577,7 +577,7 @@ Email subject to use for email change confirmation. Defaults to `Confirm Email C
 
 `MAILER_TEMPLATES_INVITE` - `string`
 
-URL path to an email template to use when inviting a user.
+URL path to an email template to use when inviting a user. (e.g. `https://www.example.com/path-to-email-template.html`)
 `SiteURL`, `Email`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
@@ -594,7 +594,7 @@ Default Content (if template is unavailable):
 
 `MAILER_TEMPLATES_CONFIRMATION` - `string`
 
-URL path to an email template to use when confirming a signup.
+URL path to an email template to use when confirming a signup. (e.g. `https://www.example.com/path-to-email-template.html`)
 `SiteURL`, `Email`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
@@ -608,7 +608,7 @@ Default Content (if template is unavailable):
 
 `MAILER_TEMPLATES_RECOVERY` - `string`
 
-URL path to an email template to use when resetting a password.
+URL path to an email template to use when resetting a password. (e.g. `https://www.example.com/path-to-email-template.html`)
 `SiteURL`, `Email`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
@@ -622,7 +622,7 @@ Default Content (if template is unavailable):
 
 `MAILER_TEMPLATES_MAGIC_LINK` - `string`
 
-URL path to an email template to use when sending magic link.
+URL path to an email template to use when sending magic link. (e.g. `https://www.example.com/path-to-email-template.html`)
 `SiteURL`, `Email`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
@@ -636,7 +636,7 @@ Default Content (if template is unavailable):
 
 `MAILER_TEMPLATES_EMAIL_CHANGE` - `string`
 
-URL path to an email template to use when confirming the change of an email address.
+URL path to an email template to use when confirming the change of an email address. (e.g. `https://www.example.com/path-to-email-template.html`)
 `SiteURL`, `Email`, `NewEmail`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
@@ -722,7 +722,7 @@ GoTrue will only consider the HTTP code returned from your SMS gateway; it ignor
 
 ### CAPTCHA
 
-- If enabled, CAPTCHA will check the request body for the `hcaptcha_token` field and make a verification request to the CAPTCHA provider.
+- If enabled, CAPTCHA will check the request body for the `captcha_token` field and make a verification request to the CAPTCHA provider.
 
 `SECURITY_CAPTCHA_ENABLED` - `string`
 
@@ -730,12 +730,12 @@ Whether captcha middleware is enabled
 
 `SECURITY_CAPTCHA_PROVIDER` - `string`
 
-for now the only option supported is: `hcaptcha`
+for now the only options supported are: `hcaptcha` and `turnstile`
 
 - `SECURITY_CAPTCHA_SECRET` - `string`
 - `SECURITY_CAPTCHA_TIMEOUT` - `string`
 
-Retrieve from hcaptcha account
+Retrieve from hcaptcha or turnstile account
 
 ### Reauthentication
 
@@ -783,7 +783,7 @@ Creates (POST) or Updates (PUT) the user based on the `user_id` specified. The `
 ```js
 headers:
 {
-  "Authorization": "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO" // admin role required
+  "Authorization": "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO" // requires a role claim that can be set in the GOTRUE_JWT_ADMIN_ROLES env var
 }
 
 body:

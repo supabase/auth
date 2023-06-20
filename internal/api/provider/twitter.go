@@ -11,7 +11,8 @@ import (
 	"strings"
 
 	"github.com/mrjones/oauth"
-	"github.com/netlify/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/utilities"
 	"golang.org/x/oauth2"
 )
 
@@ -45,12 +46,12 @@ type twitterUser struct {
 
 // NewTwitterProvider creates a Twitter account provider.
 func NewTwitterProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 	authHost := chooseHost(ext.URL, defaultTwitterAPIBase)
 	p := &TwitterProvider{
-		ClientKey:   ext.ClientID,
+		ClientKey:   ext.ClientID[0],
 		Secret:      ext.Secret,
 		CallbackURL: ext.RedirectURI,
 		UserInfoURL: authHost + endpointProfile,
@@ -80,7 +81,7 @@ func (t TwitterProvider) FetchUserData(ctx context.Context, tok *oauth.AccessTok
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer utilities.SafeClose(resp.Body)
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return &UserProvidedData{}, fmt.Errorf("a %v error occurred with retrieving user from twitter", resp.StatusCode)
 	}

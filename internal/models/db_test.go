@@ -1,10 +1,9 @@
-package models_test
+package models
 
 import (
 	"testing"
 
-	"github.com/gobuffalo/pop/v5"
-	"github.com/netlify/gotrue/internal/models"
+	"github.com/gobuffalo/pop/v6"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -13,9 +12,9 @@ func TestTableNameNamespacing(t *testing.T) {
 		expected string
 		value    interface{}
 	}{
-		{expected: "audit_log_entries", value: []*models.AuditLogEntry{}},
-		{expected: "refresh_tokens", value: []*models.RefreshToken{}},
-		{expected: "users", value: []*models.User{}},
+		{expected: "audit_log_entries", value: []*AuditLogEntry{}},
+		{expected: "refresh_tokens", value: []*RefreshToken{}},
+		{expected: "users", value: []*User{}},
 	}
 
 	for _, tc := range cases {

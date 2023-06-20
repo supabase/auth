@@ -1,12 +1,15 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 
 	jwt "github.com/golang-jwt/jwt"
+	"github.com/stretchr/testify/require"
+	"github.com/supabase/gotrue/internal/api/provider"
 )
 
 const (
@@ -16,6 +19,8 @@ const (
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalGoogle() {
+	provider.ResetGoogleProvider()
+
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=google", nil)
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
@@ -24,7 +29,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGoogle() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Google.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Google.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Google.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("email profile", q.Get("scope"))
 
@@ -40,8 +45,17 @@ func (ts *ExternalTestSuite) TestSignupExternalGoogle() {
 }
 
 func GoogleTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int, code string, user string) *httptest.Server {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	provider.ResetGoogleProvider()
+
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/.well-known/openid-configuration":
+			w.Header().Add("Content-Type", "application/json")
+			require.NoError(ts.T(), json.NewEncoder(w).Encode(map[string]any{
+				"issuer":         server.URL,
+				"token_endpoint": server.URL + "/o/oauth2/token",
+			}))
 		case "/o/oauth2/token":
 			*tokenCount++
 			ts.Equal(code, r.FormValue("code"))
@@ -60,7 +74,7 @@ func GoogleTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *in
 		}
 	}))
 
-	ts.Config.External.Google.URL = server.URL
+	provider.OverrideGoogleProvider(server.URL, server.URL+"/userinfo/v2/me")
 
 	return server
 }

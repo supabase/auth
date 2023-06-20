@@ -11,20 +11,20 @@ import (
 	"github.com/gobwas/glob"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
-	"github.com/sirupsen/logrus"
 )
 
 const defaultMinPasswordLength int = 6
 const defaultChallengeExpiryDuration float64 = 300
+const defaultFlowStateExpiryDuration time.Duration = 300 * time.Second
 
 // OAuthProviderConfiguration holds all config related to external account providers.
 type OAuthProviderConfiguration struct {
-	ClientID    string `json:"client_id" split_words:"true"`
-	Secret      string `json:"secret"`
-	RedirectURI string `json:"redirect_uri" split_words:"true"`
-	URL         string `json:"url"`
-	ApiURL      string `json:"api_url" split_words:"true"`
-	Enabled     bool   `json:"enabled"`
+	ClientID    []string `json:"client_id" split_words:"true"`
+	Secret      string   `json:"secret"`
+	RedirectURI string   `json:"redirect_uri" split_words:"true"`
+	URL         string   `json:"url"`
+	ApiURL      string   `json:"api_url" split_words:"true"`
+	Enabled     bool     `json:"enabled"`
 }
 
 type EmailProviderConfiguration struct {
@@ -43,6 +43,7 @@ type DBConfiguration struct {
 	ConnMaxIdleTime   time.Duration `json:"conn_max_idle_time,omitempty" split_words:"true"`
 	HealthCheckPeriod time.Duration `json:"health_check_period" split_words:"true"`
 	MigrationsPath    string        `json:"migrations_path" split_words:"true" default:"./migrations"`
+	CleanupEnabled    bool          `json:"cleanup_enabled" split_words:"true" default:"false"`
 }
 
 func (c *DBConfiguration) Validate() error {
@@ -136,28 +137,30 @@ type EmailContentConfiguration struct {
 }
 
 type ProviderConfiguration struct {
-	Apple                 OAuthProviderConfiguration `json:"apple"`
-	Azure                 OAuthProviderConfiguration `json:"azure"`
-	Bitbucket             OAuthProviderConfiguration `json:"bitbucket"`
-	Discord               OAuthProviderConfiguration `json:"discord"`
-	Facebook              OAuthProviderConfiguration `json:"facebook"`
-	Github                OAuthProviderConfiguration `json:"github"`
-	Gitlab                OAuthProviderConfiguration `json:"gitlab"`
-	Google                OAuthProviderConfiguration `json:"google"`
-	Notion                OAuthProviderConfiguration `json:"notion"`
-	Keycloak              OAuthProviderConfiguration `json:"keycloak"`
-	Linkedin              OAuthProviderConfiguration `json:"linkedin"`
-	Spotify               OAuthProviderConfiguration `json:"spotify"`
-	Slack                 OAuthProviderConfiguration `json:"slack"`
-	Twitter               OAuthProviderConfiguration `json:"twitter"`
-	Twitch                OAuthProviderConfiguration `json:"twitch"`
-	WorkOS                OAuthProviderConfiguration `json:"workos"`
-	Email                 EmailProviderConfiguration `json:"email"`
-	Phone                 PhoneProviderConfiguration `json:"phone"`
-	Zoom                  OAuthProviderConfiguration `json:"zoom"`
-	IosBundleId           string                     `json:"ios_bundle_id" split_words:"true"`
-	RedirectURL           string                     `json:"redirect_url"`
-	AllowedIdTokenIssuers []string                   `json:"allowed_id_token_issuers" split_words:"true"`
+	Apple                   OAuthProviderConfiguration `json:"apple"`
+	Azure                   OAuthProviderConfiguration `json:"azure"`
+	Bitbucket               OAuthProviderConfiguration `json:"bitbucket"`
+	Discord                 OAuthProviderConfiguration `json:"discord"`
+	Facebook                OAuthProviderConfiguration `json:"facebook"`
+	Github                  OAuthProviderConfiguration `json:"github"`
+	Gitlab                  OAuthProviderConfiguration `json:"gitlab"`
+	Google                  OAuthProviderConfiguration `json:"google"`
+	Kakao                   OAuthProviderConfiguration `json:"kakao"`
+	Notion                  OAuthProviderConfiguration `json:"notion"`
+	Keycloak                OAuthProviderConfiguration `json:"keycloak"`
+	Linkedin                OAuthProviderConfiguration `json:"linkedin"`
+	Spotify                 OAuthProviderConfiguration `json:"spotify"`
+	Slack                   OAuthProviderConfiguration `json:"slack"`
+	Twitter                 OAuthProviderConfiguration `json:"twitter"`
+	Twitch                  OAuthProviderConfiguration `json:"twitch"`
+	WorkOS                  OAuthProviderConfiguration `json:"workos"`
+	Email                   EmailProviderConfiguration `json:"email"`
+	Phone                   PhoneProviderConfiguration `json:"phone"`
+	Zoom                    OAuthProviderConfiguration `json:"zoom"`
+	IosBundleId             string                     `json:"ios_bundle_id" split_words:"true"`
+	RedirectURL             string                     `json:"redirect_url"`
+	AllowedIdTokenIssuers   []string                   `json:"allowed_id_token_issuers" split_words:"true"`
+	FlowStateExpiryDuration time.Duration              `json:"flow_state_expiry_duration" split_words:"true"`
 }
 
 type SMTPConfiguration struct {
@@ -241,14 +244,14 @@ func (c *CaptchaConfiguration) Validate() error {
 		return nil
 	}
 
-	if c.Provider != "hcaptcha" {
+	if c.Provider != "hcaptcha" && c.Provider != "turnstile" {
 		return fmt.Errorf("unsupported captcha provider: %s", c.Provider)
 	}
 
 	c.Secret = strings.TrimSpace(c.Secret)
 
 	if c.Secret == "" {
-		return errors.New("hcaptcha provider secret is empty")
+		return errors.New("captcha provider secret is empty")
 	}
 
 	return nil
@@ -315,8 +318,6 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 	}
 
 	if config.SAML.Enabled {
-		logrus.Warn("WARNING: SAML is an incomplete feature and should not be enabled for production use!")
-
 		if err := config.SAML.PopulateFields(config.API.ExternalURL); err != nil {
 			return nil, err
 		}
@@ -417,6 +418,9 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.MFA.ChallengeExpiryDuration < defaultChallengeExpiryDuration {
 		config.MFA.ChallengeExpiryDuration = defaultChallengeExpiryDuration
 	}
+	if config.External.FlowStateExpiryDuration < defaultFlowStateExpiryDuration {
+		config.External.FlowStateExpiryDuration = defaultFlowStateExpiryDuration
+	}
 
 	if len(config.External.AllowedIdTokenIssuers) == 0 {
 		config.External.AllowedIdTokenIssuers = append(config.External.AllowedIdTokenIssuers, "https://appleid.apple.com", "https://accounts.google.com")
@@ -448,15 +452,15 @@ func (c *GlobalConfiguration) Validate() error {
 	return nil
 }
 
-func (o *OAuthProviderConfiguration) Validate() error {
+func (o *OAuthProviderConfiguration) ValidateOAuth() error {
 	if !o.Enabled {
 		return errors.New("provider is not enabled")
 	}
-	if o.ClientID == "" {
-		return errors.New("missing Oauth client ID")
+	if len(o.ClientID) == 0 {
+		return errors.New("missing OAuth client ID")
 	}
 	if o.Secret == "" {
-		return errors.New("missing Oauth secret")
+		return errors.New("missing OAuth secret")
 	}
 	if o.RedirectURI == "" {
 		return errors.New("missing redirect URI")

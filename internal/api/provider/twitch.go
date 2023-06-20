@@ -10,7 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netlify/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/utilities"
 	"golang.org/x/oauth2"
 )
 
@@ -44,7 +45,7 @@ type twitchUsers struct {
 
 // NewTwitchProvider creates a Twitch account provider.
 func NewTwitchProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -61,7 +62,7 @@ func NewTwitchProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 
 	return &twitchProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  authHost + "/oauth2/authorize",
@@ -97,7 +98,7 @@ func (t twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer utilities.SafeClose(resp.Body)
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return nil, fmt.Errorf("a %v error occurred with retrieving user from twitch", resp.StatusCode)

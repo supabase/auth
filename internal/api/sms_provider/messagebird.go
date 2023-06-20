@@ -7,7 +7,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/netlify/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 const (
@@ -24,6 +25,7 @@ type MessagebirdResponseRecipients struct {
 }
 
 type MessagebirdResponse struct {
+	ID         string                        `json:"id"`
 	Recipients MessagebirdResponseRecipients `json:"recipients"`
 }
 
@@ -54,8 +56,17 @@ func NewMessagebirdProvider(config conf.MessagebirdProviderConfiguration) (SmsPr
 	}, nil
 }
 
+func (t *MessagebirdProvider) SendMessage(phone string, message string, channel string) (string, error) {
+	switch channel {
+	case SMSProvider:
+		return t.SendSms(phone, message)
+	default:
+		return "", fmt.Errorf("channel type %q is not supported for Messagebird", channel)
+	}
+}
+
 // Send an SMS containing the OTP with Messagebird's API
-func (t *MessagebirdProvider) SendSms(phone string, message string) error {
+func (t *MessagebirdProvider) SendSms(phone string, message string) (string, error) {
 	body := url.Values{
 		"originator": {t.Config.Originator},
 		"body":       {message},
@@ -67,34 +78,34 @@ func (t *MessagebirdProvider) SendSms(phone string, message string) error {
 	client := &http.Client{Timeout: defaultTimeout}
 	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
 	if err != nil {
-		return err
+		return "", err
 	}
 	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	r.Header.Add("Authorization", "AccessKey "+t.Config.AccessKey)
 	res, err := client.Do(r)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusForbidden || res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusUnprocessableEntity {
 		resp := &MessagebirdErrResponse{}
 		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
-			return err
+			return "", err
 		}
-		return resp
+		return "", resp
 	}
-	defer res.Body.Close()
+	defer utilities.SafeClose(res.Body)
 
 	// validate sms status
 	resp := &MessagebirdResponse{}
 	derr := json.NewDecoder(res.Body).Decode(resp)
 	if derr != nil {
-		return derr
+		return "", derr
 	}
 
 	if resp.Recipients.TotalSentCount == 0 {
-		return fmt.Errorf("messagebird error: total sent count is 0")
+		return "", fmt.Errorf("messagebird error: total sent count is 0")
 	}
 
-	return nil
+	return resp.ID, nil
 }

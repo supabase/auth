@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/netlify/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/models"
 )
 
 var filterColumnMap = map[string][]string{

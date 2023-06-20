@@ -6,10 +6,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/netlify/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/conf"
 )
 
 var defaultTimeout time.Duration = time.Second * 10
+
+const SMSProvider = "sms"
+const WhatsappProvider = "whatsapp"
 
 func init() {
 	timeoutStr := os.Getenv("GOTRUE_INTERNAL_HTTP_TIMEOUT")
@@ -23,7 +26,7 @@ func init() {
 }
 
 type SmsProvider interface {
-	SendSms(phone, message string) error
+	SendMessage(phone, message, channel string) (string, error)
 }
 
 func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
@@ -40,5 +43,16 @@ func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
 		return NewGatewayProvider(config.Sms.Gateway)
 	default:
 		return nil, fmt.Errorf("sms Provider %s could not be found", name)
+	}
+}
+
+func IsValidMessageChannel(channel string, smsProvider string) bool {
+	switch channel {
+	case SMSProvider:
+		return true
+	case WhatsappProvider:
+		return smsProvider == "twilio"
+	default:
+		return false
 	}
 }

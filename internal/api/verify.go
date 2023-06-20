@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netlify/gotrue/internal/models"
-	"github.com/netlify/gotrue/internal/observability"
-	"github.com/netlify/gotrue/internal/storage"
 	"github.com/sethvargo/go-password/password"
+	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 var (
@@ -52,6 +52,17 @@ type VerifyParams struct {
 	RedirectTo string `json:"redirect_to"`
 }
 
+func (p *VerifyParams) Validate() error {
+	if p.Token == "" {
+		return badRequestError("Verify requires a token")
+	}
+
+	if p.Type == "" {
+		return badRequestError("Verify requires a verification type")
+	}
+	return nil
+}
+
 // Verify exchanges a confirmation or recovery token to a refresh token
 func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 	switch r.Method {
@@ -78,24 +89,32 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		grantParams models.GrantParams
 		err         error
 		token       *AccessTokenResponse
+		authCode    string
 	)
+	var flowType models.FlowType
+	var authenticationMethod models.AuthenticationMethod
+	if strings.HasPrefix(params.Token, PKCEPrefix) {
+		flowType = models.PKCEFlow
+		authenticationMethod, err = models.ParseAuthenticationMethod(params.Type)
+		if err != nil {
+			return err
+		}
+	} else {
+		flowType = models.ImplicitFlow
+	}
+	if err := params.Validate(); err != nil {
+		return err
+	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if params.Token == "" {
-			return badRequestError("Verify requires a token")
-		}
-		params.Token = strings.ReplaceAll(params.Token, "-", "")
 
-		if params.Type == "" {
-			return badRequestError("Verify requires a verification type")
-		}
+		params.Token = strings.ReplaceAll(params.Token, "-", "")
 		aud := a.requestAud(ctx, r)
-		user, terr = a.verifyEmailLink(ctx, tx, params, aud)
+		user, terr = a.verifyEmailLink(ctx, tx, params, aud, flowType)
 		if terr != nil {
 			return terr
 		}
-
 		switch params.Type {
 		case signupVerification, inviteVerification:
 			user, terr = a.signupVerify(r, ctx, tx, user)
@@ -116,15 +135,20 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
+		if isImplicitFlow(flowType) {
+			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
+			if terr != nil {
+				return terr
+			}
 
-		if terr != nil {
-			return terr
-		}
-
-		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-			return internalServerError("Failed to set JWT cookie. %s", terr)
+			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+				return internalServerError("Failed to set JWT cookie. %s", terr)
+			}
+		} else if isPKCEFlow(flowType) {
+			if authCode, terr = issueAuthCode(tx, user, a.config.External.FlowStateExpiryDuration, authenticationMethod); terr != nil {
+				return badRequestError("No associated flow state found. %s", terr)
+			}
 		}
 		return nil
 	})
@@ -137,15 +161,17 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			return nil
 		}
 	}
-
 	rurl := params.RedirectTo
-	if token != nil {
+	if isImplicitFlow(flowType) && token != nil {
 		q := url.Values{}
 		q.Set("type", params.Type)
-
 		rurl = token.AsRedirectURL(rurl, q)
+	} else if isPKCEFlow(flowType) {
+		rurl, err = a.prepPKCERedirectURL(rurl, authCode)
+		if err != nil {
+			return err
+		}
 	}
-
 	http.Redirect(w, r, rurl, http.StatusSeeOther)
 	return nil
 }
@@ -165,14 +191,11 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read verification params: %v", err)
 	}
 
-	if params.Token == "" {
-		return badRequestError("Verify requires a token")
+	if err := params.Validate(); err != nil {
+		return err
 	}
-	params.Token = strings.ReplaceAll(params.Token, "-", "")
 
-	if params.Type == "" {
-		return badRequestError("Verify requires a verification type")
-	}
+	params.Token = strings.ReplaceAll(params.Token, "-", "")
 
 	var (
 		user        *models.User
@@ -220,7 +243,6 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
-
 	if err != nil {
 		return err
 	}
@@ -351,6 +373,17 @@ func (a *API) prepRedirectURL(message string, rurl string) string {
 	return rurl + "#" + q.Encode()
 }
 
+func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
+	u, err := url.Parse(rurl)
+	if err != nil {
+		return "", err
+	}
+	q := u.Query()
+	q.Set("code", code)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
+}
+
 func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
 	config := a.config
 
@@ -398,12 +431,11 @@ func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *stor
 	return user, nil
 }
 
-func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string, flowType models.FlowType) (*models.User, error) {
 	config := a.config
 
 	var user *models.User
 	var err error
-
 	switch params.Type {
 	case signupVerification, inviteVerification:
 		user, err = models.FindUserByConfirmationToken(conn, params.Token)
@@ -439,6 +471,7 @@ func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, par
 	if isExpired {
 		return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(errRedirectWithQuery)
 	}
+
 	return user, nil
 }
 
@@ -449,6 +482,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	var user *models.User
 	var err error
 	var tokenHash string
+
 	if isPhoneOtpVerification(params) {
 		params.Phone, err = validatePhone(params.Phone)
 		if err != nil {
@@ -527,7 +561,7 @@ func isOtpValid(actual, expected string, sentAt *time.Time, otpExp uint) bool {
 	if expected == "" || sentAt == nil {
 		return false
 	}
-	return !isOtpExpired(sentAt, otpExp) && (actual == expected)
+	return !isOtpExpired(sentAt, otpExp) && ((actual == expected) || ("pkce_"+actual == expected))
 }
 
 func isOtpExpired(sentAt *time.Time, otpExp uint) bool {

@@ -7,10 +7,10 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/netlify/gotrue/internal/conf"
-	"github.com/netlify/gotrue/internal/observability"
-	"github.com/netlify/gotrue/internal/utilities"
 	"github.com/pkg/errors"
+	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 // Common error messages during signup flow
@@ -19,6 +19,8 @@ var (
 	DuplicatePhoneMsg       = "A user with this phone number has already been registered"
 	UserExistsError   error = errors.New("user already exists")
 )
+
+const InvalidChannelError = "Invalid channel, supported values are 'sms' or 'whatsapp'"
 
 var oauthErrorMap = map[int]string{
 	http.StatusBadRequest:          "invalid_request",
@@ -63,8 +65,8 @@ func (e *OAuthError) Cause() error {
 	return e
 }
 
-func invalidPasswordLengthError(config *conf.GlobalConfiguration) *HTTPError {
-	return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", config.PasswordMinLength))
+func invalidPasswordLengthError(passwordMinLength int) *HTTPError {
+	return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", passwordMinLength))
 }
 
 func invalidSignupError(config *conf.GlobalConfiguration) *HTTPError {
