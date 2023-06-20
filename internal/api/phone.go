@@ -48,22 +48,21 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 
 	var token *string
 	var sentAt *time.Time
+
 	includeFields := []string{}
 	switch otpType {
-	// When using Twilio Verify, Twilio handles the token
 	case phoneChangeVerification:
+		token = &user.PhoneChangeToken
 		sentAt = user.PhoneChangeSentAt
 		user.PhoneChange = phone
-		token = &user.PhoneChangeToken
 		includeFields = append(includeFields, "phone_change", "phone_change_token", "phone_change_sent_at")
 	case phoneConfirmationOtp:
-		sentAt = user.ConfirmationSentAt
 		token = &user.ConfirmationToken
+		sentAt = user.ConfirmationSentAt
 		includeFields = append(includeFields, "confirmation_token", "confirmation_sent_at")
-
 	case phoneReauthenticationOtp:
-		sentAt = user.ReauthenticationSentAt
 		token = &user.ReauthenticationToken
+		sentAt = user.ReauthenticationSentAt
 		includeFields = append(includeFields, "reauthentication_token", "reauthentication_sent_at")
 	default:
 		return "", internalServerError("invalid otp type")
@@ -72,7 +71,6 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	if sentAt != nil && !sentAt.Add(config.Sms.MaxFrequency).Before(time.Now()) {
 		return "", MaxFrequencyLimitError
 	}
-	var message string
 	messageID := ""
 	oldToken := *token
 	otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
@@ -81,13 +79,15 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	}
 	*token = fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
 
+	var message string
 	if config.Sms.Template == "" {
 		message = fmt.Sprintf(defaultSmsMessage, otp)
 	} else {
 		message = strings.Replace(config.Sms.Template, "{{ .Code }}", otp, -1)
 	}
 
-	if messageID, serr := smsProvider.SendMessage(phone, message, channel); serr != nil {
+	messageID, serr := smsProvider.SendMessage(phone, message, channel)
+	if serr != nil {
 		*token = oldToken
 		return messageID, serr
 	}
