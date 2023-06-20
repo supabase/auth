@@ -277,7 +277,7 @@ func (ts *SmsProviderTestSuite) TestTwilioVerifySendSms() {
 
 	for _, c := range cases {
 		ts.Run(c.Desc, func() {
-			err = twilioVerifyProvider.SendSms(phone, message, SMSProvider)
+			_, err = twilioVerifyProvider.SendSms(phone, message, SMSProvider)
 			require.Equal(ts.T(), c.ExpectedError, err)
 		})
 	}
