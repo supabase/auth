@@ -116,31 +116,67 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	// Avoid max freq limit error
 	now := time.Now().Add(-1 * time.Minute)
 
+	// disable secure email change
+	ts.Config.Mailer.SecureEmailChangeEnabled = false
+
 	u.ConfirmationToken = "123456"
 	u.ConfirmationSentAt = &now
 	u.EmailChange = "bar@example.com"
 	u.EmailChangeSentAt = &now
-	u.EmailChangeTokenCurrent = "123456"
 	u.EmailChangeTokenNew = "123456"
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+
+	phoneUser, err := models.NewUser("1234567890", "", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	phoneUser.EmailChange = "bar@example.com"
+	phoneUser.EmailChangeSentAt = &now
+	phoneUser.EmailChangeTokenNew = "123456"
+	require.NoError(ts.T(), ts.API.db.Create(phoneUser), "Error saving new test user")
+
+	emailUser, err := models.NewUser("", "bar@example.com", "password", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	phoneUser.PhoneChange = "1234567890"
+	phoneUser.PhoneChangeSentAt = &now
+	phoneUser.PhoneChangeToken = "123456"
+	require.NoError(ts.T(), ts.API.db.Create(emailUser), "Error saving new test user")
 
 	cases := []struct {
 		desc   string
 		params map[string]interface{}
+		// expected map[string]interface{}
+		user *models.User
 	}{
 		{
 			desc: "Resend signup confirmation",
 			params: map[string]interface{}{
 				"type":  "signup",
-				"email": "foo@example.com",
+				"email": u.GetEmail(),
 			},
+			user: u,
 		},
 		{
 			desc: "Resend email change",
 			params: map[string]interface{}{
 				"type":  "email_change",
-				"email": "foo@example.com",
+				"email": u.GetEmail(),
 			},
+			user: u,
+		},
+		{
+			desc: "Resend email change for phone user",
+			params: map[string]interface{}{
+				"type":  "email_change",
+				"phone": phoneUser.GetPhone(),
+			},
+			user: phoneUser,
+		},
+		{
+			desc: "Resend phone change for email user",
+			params: map[string]interface{}{
+				"type":  "phone_change",
+				"email": emailUser.GetEmail(),
+			},
+			user: emailUser,
 		},
 	}
 
@@ -157,16 +193,16 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 
 			switch c.params["type"] {
 			case signupVerification, emailChangeVerification:
-				u, err := models.FindUserByEmailAndAudience(ts.API.db, c.params["email"].(string), ts.Config.JWT.Aud)
+				dbUser, err := models.FindUserByID(ts.API.db, c.user.ID)
 				require.NoError(ts.T(), err)
-				require.NotEmpty(ts.T(), u)
+				require.NotEmpty(ts.T(), dbUser)
+
 				if c.params["type"] == signupVerification {
-					require.NotEqual(ts.T(), "123456", u.ConfirmationToken)
-					require.NotEqual(ts.T(), now, u.ConfirmationSentAt)
+					require.NotEqual(ts.T(), dbUser.ConfirmationToken, c.user.ConfirmationToken)
+					require.NotEqual(ts.T(), dbUser.ConfirmationSentAt, c.user.ConfirmationSentAt)
 				} else if c.params["type"] == emailChangeVerification {
-					require.NotEqual(ts.T(), "123456", u.EmailChangeTokenCurrent)
-					require.NotEqual(ts.T(), "123456", u.EmailChangeTokenNew)
-					require.NotEqual(ts.T(), now, u.EmailChangeSentAt)
+					require.NotEqual(ts.T(), dbUser.EmailChangeTokenNew, c.user.EmailChangeTokenNew)
+					require.NotEqual(ts.T(), dbUser.EmailChangeSentAt, c.user.EmailChangeSentAt)
 				}
 			}
 		})
