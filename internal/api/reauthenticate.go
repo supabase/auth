@@ -79,7 +79,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.GlobalConfiguration, user *models.User) error {
 	// Ignore token check for twilio Verify user with only Phone registered
 	if config.Sms.IsTwilioVerifyProvider() && user.GetEmail() == "" && user.GetPhone() != "" {
-	} else if user.ReauthenticationToken == "" {
+	} else if user.ReauthenticationToken == "" && !config.Sms.IsTwilioVerifyProvider() {
 		return badRequestError(InvalidNonceMessage)
 	}
 
@@ -92,11 +92,17 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+nonce)))
 		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
 	} else if user.GetPhone() != "" {
-		if config.Sms.IsTwilioVerifyProvider() {
-			return fmt.Errorf("reauthentication via phone is not supported for twilio verify")
+		if !config.Sms.IsTwilioVerifyProvider() {
+			tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetPhone()+nonce)))
+			isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
+		} else {
+			smsProvider, _ := sms_provider.GetSmsProvider(*config)
+			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(string(user.Phone), nonce); err != nil {
+				return expiredTokenError("Token has expired or is invalid").WithInternalError(err)
+			}
+			return nil
+
 		}
-		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetPhone()+nonce)))
-		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
 	} else {
 		return unprocessableEntityError("Reauthentication requires an email or a phone number")
 	}
