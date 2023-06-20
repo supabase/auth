@@ -85,16 +85,15 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+nonce)))
 		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
 	} else if user.GetPhone() != "" {
-		if !config.Sms.IsTwilioVerifyProvider() {
-			tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetPhone()+nonce)))
-			isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
-		} else {
+		if config.Sms.IsTwilioVerifyProvider() {
 			smsProvider, _ := sms_provider.GetSmsProvider(*config)
 			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(string(user.Phone), nonce); err != nil {
 				return expiredTokenError("Token has expired or is invalid").WithInternalError(err)
 			}
 			return nil
-
+		} else {
+			tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetPhone()+nonce)))
+			isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
 		}
 	} else {
 		return unprocessableEntityError("Reauthentication requires an email or a phone number")
