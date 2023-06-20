@@ -35,9 +35,6 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		if !user.IsPhoneConfirmed() {
 			return badRequestError("Please verify your phone first.")
 		}
-		if config.Sms.IsTwilioVerifyProvider() {
-			return badRequestError("Reauthentication via phone is not supported for twilio verify")
-		}
 	}
 
 	messageID := ""
@@ -80,9 +77,16 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 
 // verifyReauthentication checks if the nonce provided is valid
 func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.GlobalConfiguration, user *models.User) error {
-	if user.ReauthenticationToken == "" || user.ReauthenticationSentAt == nil {
+	// Ignore token check for twilio Verify user with only Phone registered
+	if config.Sms.IsTwilioVerifyProvider() && user.GetEmail() == "" && user.GetPhone() != "" {
+	} else if user.ReauthenticationToken == "" {
 		return badRequestError(InvalidNonceMessage)
 	}
+
+	if user.ReauthenticationSentAt == nil {
+		return badRequestError(InvalidNonceMessage)
+	}
+
 	var isValid bool
 	if user.GetEmail() != "" {
 		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+nonce)))
