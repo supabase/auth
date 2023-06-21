@@ -77,6 +77,7 @@ func getPath(filepath string, params map[string]string) (*url.URL, error) {
 	for key, val := range params {
 		v.Add(key, val)
 	}
+	// this should never return an error because we're always encoding the values first
 	path.RawQuery, _ = url.QueryUnescape(v.Encode())
 	return path, nil
 }
