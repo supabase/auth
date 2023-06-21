@@ -186,7 +186,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	var user *models.User
 	var token *AccessTokenResponse
-	flowType := models.ImplicitFlow
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		inviteToken := getInviteToken(ctx)
@@ -209,7 +208,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			flowState.ProviderRefreshToken = providerRefreshToken
 			flowState.UserID = &(user.ID)
 			terr = tx.Update(flowState)
-			flowType = models.PKCEFlow
 		} else {
 			token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)
 		}
@@ -246,8 +244,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
 	} else {
-		// OAuth flow assumed to be conducted
-		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl, flowType)
+		// Left as hash fragment to comply with spec
+		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl, models.ImplicitFlow)
 	}
 
 	http.Redirect(w, r, rurl, http.StatusFound)

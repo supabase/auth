@@ -212,6 +212,10 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 			v, err = url.ParseQuery(urlVal.RawQuery)
 			ts.Require().NoError(err)
 			ts.Require().NotEmpty(v.Get("message"))
+
+			v, err = url.ParseQuery(urlVal.Fragment)
+			ts.Require().NoError(err)
+			ts.Require().NotEmpty(v.Get("message"))
 		}
 
 		u, err = models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)

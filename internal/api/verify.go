@@ -125,6 +125,10 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 			if user == nil && terr == nil {
 				// when double confirmation is required
 				rurl := a.prepRedirectURL(singleConfirmationAccepted, params.RedirectTo, flowType)
+				if flowType == models.PKCEFlow {
+					// For backward compatibility with client library, we append both hash and query param
+					rurl = a.prepRedirectURL(singleConfirmationAccepted, rurl, models.ImplicitFlow)
+				}
 				http.Redirect(w, r, rurl, http.StatusSeeOther)
 				return nil
 			}
@@ -157,6 +161,10 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		var herr *HTTPError
 		if errors.As(err, &herr) {
 			rurl := a.prepErrorRedirectURL(herr, w, r, params.RedirectTo, flowType)
+			if flowType == models.PKCEFlow {
+				// For backward compatibility with client library, we append both hash and query param
+				rurl = a.prepErrorRedirectURL(herr, w, r, rurl, flowType)
+			}
 			http.Redirect(w, r, rurl, http.StatusSeeOther)
 			return nil
 		}
