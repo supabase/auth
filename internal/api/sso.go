@@ -71,7 +71,7 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		flowState, err := models.NewFlowState("sso", codeChallenge, codeChallengeMethodType, models.SSOSAML)
+		flowState, err := models.NewFlowState(models.SSOSAML.String(), codeChallenge, codeChallengeMethodType, models.SSOSAML)
 		if err != nil {
 			return err
 		}
@@ -122,7 +122,7 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		RequestID:     authnRequest.ID,
 		FromIPAddress: utilities.GetIPAddress(r),
 		RedirectTo:    params.RedirectTo,
-		FlowStateID:   flowStateID,
+		FlowStateID:   &flowStateID,
 	}
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
