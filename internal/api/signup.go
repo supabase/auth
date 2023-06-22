@@ -339,12 +339,10 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 		// handles external provider case
 		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
 	}
-
-	user.IsSSOUser = isSSOUser
-
 	if err != nil {
 		return nil, internalServerError("Database error creating user").WithInternalError(err)
 	}
+	user.IsSSOUser = isSSOUser
 	if user.AppMetaData == nil {
 		user.AppMetaData = make(map[string]interface{})
 	}
