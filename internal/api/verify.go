@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sethvargo/go-password/password"
+	"github.com/supabase/gotrue/internal/api/sms_provider"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
@@ -525,6 +526,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	}
 
 	var isValid bool
+	smsProvider, _ := sms_provider.GetSmsProvider(*config)
 	switch params.Type {
 	case emailOTPVerification:
 		// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
@@ -545,8 +547,20 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
 			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
 	case phoneChangeVerification:
+		if config.Sms.IsTwilioVerifyProvider() {
+			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(user.PhoneChange, params.Token); err != nil {
+				return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
+			}
+			return user, nil
+		}
 		isValid = isOtpValid(tokenHash, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
 	case smsVerification:
+		if config.Sms.IsTwilioVerifyProvider() {
+			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(params.Phone, params.Token); err != nil {
+				return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
+			}
+			return user, nil
+		}
 		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Sms.OtpExp)
 	}
 

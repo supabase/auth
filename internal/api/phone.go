@@ -71,7 +71,6 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	if sentAt != nil && !sentAt.Add(config.Sms.MaxFrequency).Before(time.Now()) {
 		return "", MaxFrequencyLimitError
 	}
-
 	oldToken := *token
 	otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
 	if err != nil {

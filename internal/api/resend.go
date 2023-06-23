@@ -138,7 +138,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			}
 			messageID = mID
 		case emailChangeVerification:
-			return a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow)
+			return a.sendEmailChange(tx, config, user, mailer, user.EmailChange, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow)
 		case phoneChangeVerification:
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)
 			if terr != nil {

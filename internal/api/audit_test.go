@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/assert"
@@ -49,7 +48,7 @@ func (ts *AuditTestSuite) makeSuperAdmin(email string) string {
 	u.Role = "supabase_admin"
 
 	var token string
-	token, err = generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	token, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
 	require.NoError(ts.T(), err, "Error generating access token")
 
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}

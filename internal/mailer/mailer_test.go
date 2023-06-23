@@ -55,6 +55,15 @@ func TestGetPath(t *testing.T) {
 			},
 			Expected: "https://test.example.com?key=val",
 		},
+		{
+			SiteURL: "https://test.example.com",
+			Path:    "",
+			Params: map[string]string{
+				"key":         "val",
+				"redirect_to": "http://localhost:3000?param=foo",
+			},
+			Expected: "https://test.example.com?key=val&redirect_to=http://localhost:3000?param=foo",
+		},
 	}
 
 	for _, c := range cases {
@@ -63,7 +72,7 @@ func TestGetPath(t *testing.T) {
 
 		path, err := getPath(c.Path, c.Params)
 
-		assert.NoError(t, err, c.Expected)
+		assert.NoError(t, err)
 		assert.Equal(t, c.Expected, u.ResolveReference(path).String())
 	}
 }
