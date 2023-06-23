@@ -195,19 +195,26 @@ type PhoneProviderConfiguration struct {
 }
 
 type SmsProviderConfiguration struct {
-	Autoconfirm  bool                             `json:"autoconfirm"`
-	MaxFrequency time.Duration                    `json:"max_frequency" split_words:"true"`
-	OtpExp       uint                             `json:"otp_exp" split_words:"true"`
-	OtpLength    int                              `json:"otp_length" split_words:"true"`
-	Provider     string                           `json:"provider"`
-	Template     string                           `json:"template"`
-	Twilio       TwilioProviderConfiguration      `json:"twilio"`
-	Messagebird  MessagebirdProviderConfiguration `json:"messagebird"`
-	Textlocal    TextlocalProviderConfiguration   `json:"textlocal"`
-	Vonage       VonageProviderConfiguration      `json:"vonage"`
+	Autoconfirm  bool                              `json:"autoconfirm"`
+	MaxFrequency time.Duration                     `json:"max_frequency" split_words:"true"`
+	OtpExp       uint                              `json:"otp_exp" split_words:"true"`
+	OtpLength    int                               `json:"otp_length" split_words:"true"`
+	Provider     string                            `json:"provider"`
+	Template     string                            `json:"template"`
+	Twilio       TwilioProviderConfiguration       `json:"twilio"`
+	TwilioVerify TwilioVerifyProviderConfiguration `json:"twilio_verify" split_words:"true"`
+	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
+	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
+	Vonage       VonageProviderConfiguration       `json:"vonage"`
 }
 
 type TwilioProviderConfiguration struct {
+	AccountSid        string `json:"account_sid" split_words:"true"`
+	AuthToken         string `json:"auth_token" split_words:"true"`
+	MessageServiceSid string `json:"message_service_sid" split_words:"true"`
+}
+
+type TwilioVerifyProviderConfiguration struct {
 	AccountSid        string `json:"account_sid" split_words:"true"`
 	AuthToken         string `json:"auth_token" split_words:"true"`
 	MessageServiceSid string `json:"message_service_sid" split_words:"true"`
@@ -477,6 +484,19 @@ func (t *TwilioProviderConfiguration) Validate() error {
 	return nil
 }
 
+func (t *TwilioVerifyProviderConfiguration) Validate() error {
+	if t.AccountSid == "" {
+		return errors.New("missing Twilio account SID")
+	}
+	if t.AuthToken == "" {
+		return errors.New("missing Twilio auth token")
+	}
+	if t.MessageServiceSid == "" {
+		return errors.New("missing Twilio message service SID or Twilio phone number")
+	}
+	return nil
+}
+
 func (t *MessagebirdProviderConfiguration) Validate() error {
 	if t.AccessKey == "" {
 		return errors.New("missing Messagebird access key")
@@ -508,4 +528,8 @@ func (t *VonageProviderConfiguration) Validate() error {
 		return errors.New("missing Vonage 'from' parameter")
 	}
 	return nil
+}
+
+func (t *SmsProviderConfiguration) IsTwilioVerifyProvider() bool {
+	return t.Provider == "twilio_verify"
 }
