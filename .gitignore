@@ -2,6 +2,7 @@
 vendor/
 gotrue
 gotrue-arm64
+gotrue.exe
 
 coverage.out
 
