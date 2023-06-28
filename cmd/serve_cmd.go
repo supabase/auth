@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"net"
+	"time"
 
 	"net/http"
 
@@ -40,7 +41,14 @@ func serve(ctx context.Context) {
 	// Run separate server for profiler
 	if config.Profiler.Enabled {
 		go func() {
-			logrus.Warning("error running profiler: ", http.ListenAndServe(config.Profiler.Addr, nil))
+			server := &http.Server{
+				Addr:              config.Profiler.Addr,
+				ReadHeaderTimeout: 2 * time.Second,
+			}
+			err := server.ListenAndServe()
+			if err != nil {
+				logrus.Warning("error running profiler: ", err)
+			}
 		}()
 	}
 	api := api.NewAPIWithVersion(ctx, config, db, utilities.Version)
