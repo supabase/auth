@@ -30,7 +30,7 @@ require (
 	github.com/rs/cors v1.6.0
 	github.com/sebest/xff v0.0.0-20160910043805-6c115e0ffa35
 	github.com/sethvargo/go-password v0.2.0
-	github.com/sirupsen/logrus v1.9.0
+	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/cobra v1.6.1
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/crypto v0.9.0
@@ -41,6 +41,7 @@ require (
 require (
 	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
 	github.com/gobuffalo/nulls v0.4.2 // indirect
+	github.com/supabase/mailme v0.0.0-20230628061017-01f68480c747 // indirect
 )
 
 require (
