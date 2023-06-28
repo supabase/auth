@@ -49,7 +49,7 @@ func main() {
 	go func() {
 		defer wg.Done()
 
-		// wait for metrics and trace exporters to shut down gracefully
+		// wait for profiler, metrics and trace exporters to shut down gracefully
 		observability.WaitForCleanup(shutdownCtx)
 	}()
 
