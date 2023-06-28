@@ -5,6 +5,8 @@ import (
 	"net"
 
 	"net/http"
+
+	// #nosec
 	_ "net/http/pprof"
 
 	"github.com/sirupsen/logrus"
