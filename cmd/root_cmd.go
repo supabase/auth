@@ -49,6 +49,9 @@ func loadGlobalConfig(ctx context.Context) *conf.GlobalConfiguration {
 		logrus.WithError(err).Error("unable to configure metrics")
 	}
 
+	if err := observability.ConfigureProfiler(ctx, &config.Profiler); err != nil {
+		logrus.WithError(err).Error("unable to configure profiler")
+	}
 	return config
 }
 
