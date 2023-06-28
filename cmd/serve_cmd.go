@@ -4,6 +4,9 @@ import (
 	"context"
 	"net"
 
+	"net/http"
+	_ "net/http/pprof"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/supabase/gotrue/internal/api"
@@ -32,6 +35,12 @@ func serve(ctx context.Context) {
 	}
 	defer db.Close()
 
+	// Run separate server for profiler
+	if config.Profiler.Enabled {
+		go func() {
+			logrus.Warning("error running profiler: ", http.ListenAndServe(config.Profiler.Addr, nil))
+		}()
+	}
 	api := api.NewAPIWithVersion(ctx, config, db, utilities.Version)
 
 	addr := net.JoinHostPort(config.API.Host, config.API.Port)

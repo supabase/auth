@@ -97,8 +97,9 @@ type GlobalConfiguration struct {
 	API                   APIConfiguration
 	DB                    DBConfiguration
 	External              ProviderConfiguration
-	Logging               LoggingConfig `envconfig:"LOG"`
-	OperatorToken         string        `split_words:"true" required:"false"`
+	Logging               LoggingConfig  `envconfig:"LOG"`
+	Profiler              ProfilerConfig `envconfig:"PROFILER"`
+	OperatorToken         string         `split_words:"true" required:"false"`
 	Tracing               TracingConfig
 	Metrics               MetricsConfig
 	SMTP                  SMTPConfiguration
