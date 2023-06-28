@@ -280,17 +280,16 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		var user *models.User
 
+		// accounts potentially created via SAML can contain non-unique email addresses in the auth.users table
+		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, "sso:"+ssoProvider.ID.String()); terr != nil {
+			return terr
+		}
 		if flowState != nil {
 			// This means that the callback is using PKCE
 			flowState.UserID = &(user.ID)
 			if terr := tx.Update(flowState); terr != nil {
 				return terr
 			}
-		}
-
-		// accounts potentially created via SAML can contain non-unique email addresses in the auth.users table
-		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, "sso:"+ssoProvider.ID.String()); terr != nil {
-			return terr
 		}
 
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.SSOSAML, grantParams)
@@ -319,6 +318,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		http.Redirect(w, r, token.AsRedirectURL(redirectTo, url.Values{}), http.StatusFound)
+		return nil
 
 	} else {
 
