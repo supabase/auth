@@ -3,12 +3,6 @@ package cmd
 import (
 	"context"
 	"net"
-	"time"
-
-	"net/http"
-
-	// #nosec
-	_ "net/http/pprof"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -38,19 +32,6 @@ func serve(ctx context.Context) {
 	}
 	defer db.Close()
 
-	// Run separate server for profiler
-	if config.Profiler.Enabled {
-		go func() {
-			server := &http.Server{
-				Addr:              config.Profiler.Addr,
-				ReadHeaderTimeout: 2 * time.Second,
-			}
-			err := server.ListenAndServe()
-			if err != nil {
-				logrus.Warning("error running profiler: ", err)
-			}
-		}()
-	}
 	api := api.NewAPIWithVersion(ctx, config, db, utilities.Version)
 
 	addr := net.JoinHostPort(config.API.Host, config.API.Port)
