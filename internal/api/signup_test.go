@@ -127,10 +127,6 @@ func (ts *SignupTestSuite) TestWebhookTriggered() {
 	}))
 	defer svr.Close()
 
-	// Allowing connection to localhost for the tests only
-	localhost := removeLocalhostFromPrivateIPBlock()
-	defer unshiftPrivateIPBlock(localhost)
-
 	ts.Config.Webhook = conf.WebhookConfig{
 		URL:        svr.URL,
 		Retries:    1,

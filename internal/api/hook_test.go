@@ -47,10 +47,6 @@ func TestSignupHookSendInstanceID(t *testing.T) {
 	}))
 	defer svr.Close()
 
-	// Allowing connection to localhost for the tests only
-	localhost := removeLocalhostFromPrivateIPBlock()
-	defer unshiftPrivateIPBlock(localhost)
-
 	config := &conf.GlobalConfiguration{
 		Webhook: conf.WebhookConfig{
 			URL:    svr.URL,
@@ -88,10 +84,6 @@ func TestSignupHookFromClaims(t *testing.T) {
 	}))
 	defer svr.Close()
 
-	// Allowing connection to localhost for the tests only
-	localhost := removeLocalhostFromPrivateIPBlock()
-	defer unshiftPrivateIPBlock(localhost)
-
 	config := &conf.GlobalConfiguration{
 		Webhook: conf.WebhookConfig{
 			Events: []string{"signup"},
@@ -120,9 +112,6 @@ func TestHookRetry(t *testing.T) {
 		}
 	}))
 	defer svr.Close()
-	// Allowing connection to localhost for the tests only
-	localhost := removeLocalhostFromPrivateIPBlock()
-	defer unshiftPrivateIPBlock(localhost)
 
 	config := &conf.WebhookConfig{
 		URL:     svr.URL,
@@ -157,10 +146,6 @@ func TestHookTimeout(t *testing.T) {
 		mu.Unlock()
 		time.Sleep(20 * time.Millisecond)
 	}))
-
-	// Allowing connection to localhost for the tests only
-	localhost := removeLocalhostFromPrivateIPBlock()
-	defer unshiftPrivateIPBlock(localhost)
 
 	config := &conf.WebhookConfig{
 		URL:     svr.URL,
