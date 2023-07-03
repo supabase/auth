@@ -222,13 +222,23 @@ func (u *User) SetPhone(tx *storage.Connection, phone string) error {
 }
 
 // UpdatePassword updates the user's password
-func (u *User) UpdatePassword(tx *storage.Connection, password string) error {
+func (u *User) UpdatePassword(tx *storage.Connection, password string, sessionID *uuid.UUID) error {
 	pw, err := crypto.GenerateFromPassword(context.Background(), password)
 	if err != nil {
 		return err
 	}
 	u.EncryptedPassword = pw
-	return tx.UpdateOnly(u, "encrypted_password")
+	if err := tx.UpdateOnly(u, "encrypted_password"); err != nil {
+		return err
+	}
+
+	if sessionID == nil {
+		// log out user from all sessions to ensure reauthentication after password change
+		return Logout(tx, u.ID)
+	} else {
+		// log out user from all other sessions to ensure reauthentication after password change
+		return LogoutAllExceptMe(tx, *sessionID, u.ID)
+	}
 }
 
 // UpdatePhone updates the user's phone
