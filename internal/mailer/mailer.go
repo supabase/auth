@@ -25,6 +25,12 @@ type Mailer interface {
 	GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error)
 }
 
+type EmailParams struct {
+	Token      string
+	Type       string
+	RedirectTo string
+}
+
 // NewMailer returns a new gotrue mailer
 func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
 	mail := gomail.NewMessage()
@@ -64,7 +70,7 @@ func withDefault(value, defaultValue string) string {
 	return value
 }
 
-func getPath(filepath string, params map[string]string) (*url.URL, error) {
+func getPath(filepath string, params *EmailParams) (*url.URL, error) {
 	path := &url.URL{}
 	if filepath != "" {
 		if p, err := url.Parse(filepath); err != nil {
@@ -73,11 +79,8 @@ func getPath(filepath string, params map[string]string) (*url.URL, error) {
 			path = p
 		}
 	}
-	v := url.Values{}
-	for key, val := range params {
-		v.Add(key, val)
+	if params != nil {
+		path.RawQuery = fmt.Sprintf("token=%s&type=%s&redirect_to=%s", url.QueryEscape(params.Token), url.QueryEscape(params.Type), encodeRedirectURL(params.RedirectTo))
 	}
-	// this should never return an error because we're always encoding the values first
-	path.RawQuery, _ = url.QueryUnescape(v.Encode())
 	return path, nil
 }
