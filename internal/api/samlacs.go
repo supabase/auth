@@ -320,10 +320,8 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		http.Redirect(w, r, redirectTo, http.StatusFound)
 		return nil
 
-	} else {
-
-		http.Redirect(w, r, token.AsRedirectURL(redirectTo, url.Values{}), http.StatusFound)
 	}
+	http.Redirect(w, r, token.AsRedirectURL(redirectTo, url.Values{}), http.StatusFound)
 
 	return nil
 }
