@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
@@ -68,10 +69,6 @@ func (p *UserUpdateParams) Validate(conn *storage.Connection, user *models.User,
 		if len(*p.Password) < config.PasswordMinLength {
 			return invalidPasswordLengthError(config.PasswordMinLength)
 		}
-		// if password reauthentication is enabled, user can only update password together with a nonce sent
-		if config.Security.UpdatePasswordRequireReauthentication && p.Nonce == "" {
-			return unauthorizedError("Password update requires reauthentication.")
-		}
 	}
 	if p.AppData != nil {
 		if !isAdmin(user, config) {
@@ -129,8 +126,15 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		if params.Password != nil {
 			if config.Security.UpdatePasswordRequireReauthentication {
-				if terr = a.verifyReauthentication(params.Nonce, tx, config, user); terr != nil {
-					return terr
+				now := time.Now()
+				// we require reauthentication if the user hasn't signed in recently in the current session
+				if session == nil || now.After(session.CreatedAt.Add(24*time.Hour)) {
+					if len(params.Nonce) == 0 {
+						return badRequestError("Password update requires reauthentication")
+					}
+					if terr = a.verifyReauthentication(params.Nonce, tx, config, user); terr != nil {
+						return terr
+					}
 				}
 			}
 
