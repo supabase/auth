@@ -29,14 +29,14 @@ type UserUpdateParams struct {
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 }
 
-func (p *UserUpdateParams) Validate(conn *storage.Connection, user *models.User, aud string, config *conf.GlobalConfiguration) error {
+func (p *UserUpdateParams) Validate(tx *storage.Connection, user *models.User, aud string, config *conf.GlobalConfiguration) error {
 	var err error
 	if p.Email != "" && p.Email != user.GetEmail() {
 		p.Email, err = validateEmail(p.Email)
 		if err != nil {
 			return err
 		}
-		if duplicateUser, err := models.IsDuplicatedEmail(conn, p.Email, aud, user); err != nil {
+		if duplicateUser, err := models.IsDuplicatedEmail(tx, p.Email, aud, user); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
 		} else if duplicateUser != nil {
 			return unprocessableEntityError(DuplicateEmailMsg)
@@ -53,7 +53,7 @@ func (p *UserUpdateParams) Validate(conn *storage.Connection, user *models.User,
 			if p.Phone, err = validatePhone(p.Phone); err != nil {
 				return err
 			}
-			if exists, err := models.IsDuplicatedPhone(conn, p.Phone, aud); err != nil {
+			if exists, err := models.IsDuplicatedPhone(tx, p.Phone, aud); err != nil {
 				return internalServerError("Database error checking phone").WithInternalError(err)
 			} else if exists {
 				return unprocessableEntityError(DuplicatePhoneMsg)
@@ -66,8 +66,14 @@ func (p *UserUpdateParams) Validate(conn *storage.Connection, user *models.User,
 		}
 	}
 	if p.Password != nil {
-		if len(*p.Password) < config.PasswordMinLength {
+		password := *p.Password
+
+		if len(password) < config.PasswordMinLength {
 			return invalidPasswordLengthError(config.PasswordMinLength)
+		}
+
+		if user.EncryptedPassword != "" && user.Authenticate(password) {
+			return unprocessableEntityError("New password should be different from the old password.")
 		}
 	}
 	if p.AppData != nil {
