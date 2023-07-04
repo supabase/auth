@@ -72,11 +72,6 @@ func (p *UserUpdateParams) Validate(tx *storage.Connection, user *models.User, a
 			return invalidPasswordLengthError(config.PasswordMinLength)
 		}
 
-		// if password reauthentication is enabled, user can only update password together with a nonce sent
-		if config.Security.UpdatePasswordRequireReauthentication && p.Nonce == "" {
-			return unauthorizedError("Password update requires reauthentication.")
-		}
-
 		if user.EncryptedPassword != "" && user.Authenticate(password) {
 			return unprocessableEntityError("New password should be different from the old password.")
 		}
