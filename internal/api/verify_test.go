@@ -761,11 +761,8 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
 	type expected struct {
-		code int
-	}
-
-	expectedResponse := expected{
-		code: http.StatusOK,
+		code      int
+		tokenHash string
 	}
 
 	cases := []struct {
@@ -783,7 +780,10 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 				"token":     "123456",
 				"phone":     u.GetPhone(),
 			},
-			expected: expectedResponse,
+			expected: expected{
+				code:      http.StatusOK,
+				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetPhone()+"123456"))),
+			},
 		},
 		{
 			desc:     "Valid Confirmation OTP",
@@ -794,7 +794,10 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 				"token":     "123456",
 				"email":     u.GetEmail(),
 			},
-			expected: expectedResponse,
+			expected: expected{
+				code:      http.StatusOK,
+				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+			},
 		},
 		{
 			desc:     "Valid Recovery OTP",
@@ -805,7 +808,10 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 				"token":     "123456",
 				"email":     u.GetEmail(),
 			},
-			expected: expectedResponse,
+			expected: expected{
+				code:      http.StatusOK,
+				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+			},
 		},
 		{
 			desc:     "Valid Email OTP",
@@ -816,7 +822,10 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 				"token":     "123456",
 				"email":     u.GetEmail(),
 			},
-			expected: expectedResponse,
+			expected: expected{
+				code:      http.StatusOK,
+				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+			},
 		},
 		{
 			desc:     "Valid Email Change OTP",
@@ -827,7 +836,10 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 				"token":     "123456",
 				"email":     u.EmailChange,
 			},
-			expected: expectedResponse,
+			expected: expected{
+				code:      http.StatusOK,
+				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+"123456"))),
+			},
 		},
 		{
 			desc:     "Valid Phone Change OTP",
@@ -838,7 +850,34 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 				"token":     "123456",
 				"phone":     u.PhoneChange,
 			},
-			expected: expectedResponse,
+			expected: expected{
+				code:      http.StatusOK,
+				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.PhoneChange+"123456"))),
+			},
+		},
+		{
+			desc:     "Valid Signup Token Hash",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":       signupVerification,
+				"token_hash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.Email+"123456"))),
+			},
+			expected: expected{
+				code:      http.StatusOK,
+				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.Email+"123456"))),
+			},
+		},
+		{
+			desc:     "Valid Email Change Token Hash",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":       emailChangeVerification,
+				"token_hash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+"123456"))),
+			},
+			expected: expected{
+				code:      http.StatusOK,
+				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+"123456"))),
+			},
 		},
 	}
 
@@ -849,10 +888,10 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			u.RecoverySentAt = &c.sentTime
 			u.EmailChangeSentAt = &c.sentTime
 			u.PhoneChangeSentAt = &c.sentTime
-			u.ConfirmationToken = c.body["tokenHash"].(string)
-			u.RecoveryToken = c.body["tokenHash"].(string)
-			u.EmailChangeTokenNew = c.body["tokenHash"].(string)
-			u.PhoneChangeToken = c.body["tokenHash"].(string)
+			u.ConfirmationToken = c.expected.tokenHash
+			u.RecoveryToken = c.expected.tokenHash
+			u.EmailChangeTokenNew = c.expected.tokenHash
+			u.PhoneChangeToken = c.expected.tokenHash
 			require.NoError(ts.T(), ts.API.db.Update(u))
 
 			var buffer bytes.Buffer
@@ -866,6 +905,81 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
 			assert.Equal(ts.T(), c.expected.code, w.Code)
+		})
+	}
+}
+
+func (ts *VerifyTestSuite) TestVerifyValidateParams() {
+	cases := []struct {
+		desc     string
+		params   *VerifyParams
+		method   string
+		expected error
+	}{
+		{
+			desc: "Successful GET Verify",
+			params: &VerifyParams{
+				Type:  "signup",
+				Token: "some-token-hash",
+			},
+			method:   http.MethodGet,
+			expected: nil,
+		},
+		{
+			desc: "Successful POST Verify (TokenHash)",
+			params: &VerifyParams{
+				Type:      "signup",
+				TokenHash: "some-token-hash",
+			},
+			method:   http.MethodPost,
+			expected: nil,
+		},
+		{
+			desc: "Successful POST Verify (Token)",
+			params: &VerifyParams{
+				Type:  "signup",
+				Token: "some-token",
+				Email: "email@example.com",
+			},
+			method:   http.MethodPost,
+			expected: nil,
+		},
+		// unsuccessful validations
+		{
+			desc: "Need to send email or phone number with token",
+			params: &VerifyParams{
+				Type:  "signup",
+				Token: "some-token",
+			},
+			method:   http.MethodPost,
+			expected: badRequestError("Only an email address or phone number should be provided on verify"),
+		},
+		{
+			desc: "Cannot send both TokenHash and Token",
+			params: &VerifyParams{
+				Type:      "signup",
+				Token:     "some-token",
+				TokenHash: "some-token-hash",
+			},
+			method:   http.MethodPost,
+			expected: badRequestError("Verify requires either a token or a token hash"),
+		},
+		{
+			desc: "No verification type specified",
+			params: &VerifyParams{
+				Token: "some-token",
+				Email: "email@example.com",
+			},
+			method:   http.MethodPost,
+			expected: badRequestError("Verify requires a verification type"),
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			req := httptest.NewRequest(c.method, "http://localhost", nil)
+			err := c.params.Validate(req)
+			require.Equal(ts.T(), c.expected, err)
 		})
 	}
 }
