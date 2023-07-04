@@ -263,7 +263,7 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 				if err != nil {
 					internalServerError("error creating user").WithInternalError(err)
 				}
-				if terr = user.UpdatePassword(tx, password); terr != nil {
+				if terr = user.UpdatePassword(tx, password, nil); terr != nil {
 					return internalServerError("Error storing password").WithInternalError(terr)
 				}
 			}

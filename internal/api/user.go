@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/fatih/structs"
+	"github.com/gofrs/uuid"
 	"github.com/supabase/gotrue/internal/api/provider"
 	"github.com/supabase/gotrue/internal/api/sms_provider"
 	"github.com/supabase/gotrue/internal/conf"
@@ -75,7 +77,7 @@ func (p *UserUpdateParams) Validate(tx *storage.Connection, user *models.User, a
 			return unauthorizedError("Password update requires reauthentication.")
 		}
 
-		if user.Authenticate(password) {
+		if user.EncryptedPassword != "" && user.Authenticate(password) {
 			return unprocessableEntityError("New password should be different from the old password.")
 		}
 	}
@@ -135,25 +137,28 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		if params.Password != nil {
 			if config.Security.UpdatePasswordRequireReauthentication {
-				if terr = a.verifyReauthentication(params.Nonce, tx, config, user); terr != nil {
-					return terr
+				now := time.Now()
+				// we require reauthentication if the user hasn't signed in recently in the current session
+				if session == nil || now.After(session.CreatedAt.Add(24*time.Hour)) {
+					if len(params.Nonce) == 0 {
+						return badRequestError("Password update requires reauthentication")
+					}
+					if terr = a.verifyReauthentication(params.Nonce, tx, config, user); terr != nil {
+						return terr
+					}
 				}
 			}
-			if terr = user.UpdatePassword(tx, *params.Password); terr != nil {
+
+			var sessionID *uuid.UUID
+			if session != nil {
+				sessionID = &session.ID
+			}
+
+			if terr = user.UpdatePassword(tx, *params.Password, sessionID); terr != nil {
 				return internalServerError("Error during password storage").WithInternalError(terr)
 			}
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserUpdatePasswordAction, "", nil); terr != nil {
 				return terr
-			}
-			if session != nil {
-				if terr = models.LogoutAllExceptMe(tx, session.ID, user.ID); terr != nil {
-					return terr
-				}
-			} else {
-				// logout all sessions if session id is missing
-				if terr = models.Logout(tx, user.ID); terr != nil {
-					return terr
-				}
 			}
 		}
 
