@@ -110,7 +110,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 			return badRequestError("Could not read body").WithInternalError(err)
 		}
 		if err := json.Unmarshal(body, params); err != nil {
-			return badRequestError("Could not read verification params: %v", err)
+			return badRequestError("Could not parse verification params: %v", err)
 		}
 		if err := params.Validate(r); err != nil {
 			return err
