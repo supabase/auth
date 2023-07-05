@@ -65,21 +65,15 @@ func isImplicitFlow(flowType models.FlowType) bool {
 
 func validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
 	switch true {
-	// Explicitly spell out each case
-	case codeChallenge == "" && codeChallengeMethod != "":
+	case (codeChallenge == "") != (codeChallengeMethod == ""):
 		return badRequestError(InvalidPKCEParamsErrorMessage)
 	case codeChallenge != "":
-		if codeChallengeMethod == "" {
-			return badRequestError(InvalidPKCEParamsErrorMessage)
-		} else {
-			if valid, err := isValidCodeChallenge(codeChallenge); !valid {
-				return err
-			}
+		if valid, err := isValidCodeChallenge(codeChallenge); !valid {
+			return err
 		}
-	case codeChallenge == "" && codeChallengeMethod == "":
-		break
 	default:
-		return badRequestError(InvalidPKCEParamsErrorMessage)
+		// if both params are empty, just return nil
+		return nil
 	}
 	return nil
 }
