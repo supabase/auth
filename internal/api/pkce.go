@@ -65,7 +65,6 @@ func isImplicitFlow(flowType models.FlowType) bool {
 
 func validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
 	switch true {
-	// Explicitly spell out each case
 	case (codeChallenge == "") != (codeChallengeMethod == ""):
 		return badRequestError(InvalidPKCEParamsErrorMessage)
 	case codeChallenge != "":
