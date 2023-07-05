@@ -233,6 +233,10 @@ paths:
                     - phone_change
                 token:
                   type: string
+                token_hash:
+                  type: string
+                  description: >
+                    The hashed value of token. Applicable only if used with `type` and nothing else.
                 email:
                   type: string
                   format: email
