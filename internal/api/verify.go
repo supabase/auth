@@ -64,6 +64,7 @@ func (p *VerifyParams) Validate(r *http.Request) error {
 		if p.Token == "" {
 			return badRequestError("Verify requires a token or a token hash")
 		}
+		// TODO: deprecate the token query param from GET /verify and use token_hash instead (breaking change)
 		p.TokenHash = p.Token
 	case http.MethodPost:
 		if (p.Token == "" && p.TokenHash == "") || (p.Token != "" && p.TokenHash != "") {
@@ -75,15 +76,19 @@ func (p *VerifyParams) Validate(r *http.Request) error {
 				if err != nil {
 					return err
 				}
-				p.TokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(p.Phone)+p.Token)))
+				p.TokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(p.Phone+p.Token)))
 			} else if isEmailOtpVerification(p) {
 				p.Email, err = validateEmail(p.Email)
 				if err != nil {
 					return unprocessableEntityError("Invalid email format").WithInternalError(err)
 				}
-				p.TokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(p.Email)+p.Token)))
+				p.TokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(p.Email+p.Token)))
 			} else {
 				return badRequestError("Only an email address or phone number should be provided on verify")
+			}
+		} else if p.TokenHash != "" {
+			if p.Email != "" || p.Phone != "" || p.RedirectTo != "" {
+				return badRequestError("Only the token_hash and type should be provided")
 			}
 		}
 	default:
