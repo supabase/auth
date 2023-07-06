@@ -999,6 +999,13 @@ func (ts *VerifyTestSuite) TestPrepErrorRedirectURL() {
 			flowType: models.ImplicitFlow,
 			expected: fmt.Sprintf("https://example.com/#%s", redirectError),
 		},
+		{
+			desc:     "(Implicit): query params preserved",
+			message:  DefaultError,
+			rurl:     "https://example.com/?test=param",
+			flowType: models.ImplicitFlow,
+			expected: fmt.Sprintf("https://example.com/?test=param#%s", redirectError),
+		},
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {

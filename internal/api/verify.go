@@ -392,22 +392,27 @@ func (a *API) prepErrorRedirectURL(err *HTTPError, w http.ResponseWriter, r *htt
 	if perr != nil {
 		return "", err
 	}
-	// Don't preserve query params for error
-	u.RawQuery = ""
-	q := url.Values{}
+	q := u.Query()
+
+	// Maintain separate query params for hash and query
+	hq := url.Values{}
 	log := observability.GetLogEntry(r)
 	errorID := getRequestID(r.Context())
 	err.ErrorID = errorID
 	log.WithError(err.Cause()).Info(err.Error())
 	if str, ok := oauthErrorMap[err.Code]; ok {
+		hq.Set("error", str)
 		q.Set("error", str)
 	}
+	hq.Set("error_code", strconv.Itoa(err.Code))
+	hq.Set("error_description", err.Message)
+
 	q.Set("error_code", strconv.Itoa(err.Code))
 	q.Set("error_description", err.Message)
 	if flowType == models.PKCEFlow {
 		u.RawQuery = q.Encode()
 	}
-	u.Fragment = q.Encode()
+	u.Fragment = hq.Encode()
 	return u.String(), nil
 }
 
@@ -416,12 +421,14 @@ func (a *API) prepRedirectURL(message string, rurl string, flowType models.FlowT
 	if perr != nil {
 		return "", perr
 	}
+	hq := url.Values{}
 	q := u.Query()
+	hq.Set("message", message)
 	if flowType == models.PKCEFlow {
 		q.Set("message", message)
 	}
 	u.RawQuery = q.Encode()
-	u.Fragment = fmt.Sprintf("message=%s", url.QueryEscape(message))
+	u.Fragment = hq.Encode()
 	return u.String(), nil
 }
 
