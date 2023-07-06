@@ -163,7 +163,10 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 			user, terr = a.emailChangeVerify(r, ctx, tx, params, user)
 			if user == nil && terr == nil {
 				// when double confirmation is required
-				rurl := a.prepRedirectURL(singleConfirmationAccepted, params.RedirectTo)
+				rurl, err := a.prepRedirectURL(singleConfirmationAccepted, params.RedirectTo, flowType)
+				if err != nil {
+					return err
+				}
 				http.Redirect(w, r, rurl, http.StatusSeeOther)
 				return nil
 			}
@@ -195,7 +198,10 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 	if err != nil {
 		var herr *HTTPError
 		if errors.As(err, &herr) {
-			rurl := a.prepErrorRedirectURL(herr, w, r, params.RedirectTo)
+			rurl, err := a.prepErrorRedirectURL(herr, w, r, params.RedirectTo, flowType)
+			if err != nil {
+				return err
+			}
 			http.Redirect(w, r, rurl, http.StatusSeeOther)
 			return nil
 		}
@@ -381,24 +387,49 @@ func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Conn
 	return user, nil
 }
 
-func (a *API) prepErrorRedirectURL(err *HTTPError, w http.ResponseWriter, r *http.Request, rurl string) string {
-	q := url.Values{}
+func (a *API) prepErrorRedirectURL(err *HTTPError, w http.ResponseWriter, r *http.Request, rurl string, flowType models.FlowType) (string, error) {
+	u, perr := url.Parse(rurl)
+	if perr != nil {
+		return "", err
+	}
+	q := u.Query()
+
+	// Maintain separate query params for hash and query
+	hq := url.Values{}
 	log := observability.GetLogEntry(r)
 	errorID := getRequestID(r.Context())
 	err.ErrorID = errorID
 	log.WithError(err.Cause()).Info(err.Error())
 	if str, ok := oauthErrorMap[err.Code]; ok {
+		hq.Set("error", str)
 		q.Set("error", str)
 	}
+	hq.Set("error_code", strconv.Itoa(err.Code))
+	hq.Set("error_description", err.Message)
+
 	q.Set("error_code", strconv.Itoa(err.Code))
 	q.Set("error_description", err.Message)
-	return rurl + "#" + q.Encode()
+	if flowType == models.PKCEFlow {
+		u.RawQuery = q.Encode()
+	}
+	u.Fragment = hq.Encode()
+	return u.String(), nil
 }
 
-func (a *API) prepRedirectURL(message string, rurl string) string {
-	q := url.Values{}
-	q.Set("message", message)
-	return rurl + "#" + q.Encode()
+func (a *API) prepRedirectURL(message string, rurl string, flowType models.FlowType) (string, error) {
+	u, perr := url.Parse(rurl)
+	if perr != nil {
+		return "", perr
+	}
+	hq := url.Values{}
+	q := u.Query()
+	hq.Set("message", message)
+	if flowType == models.PKCEFlow {
+		q.Set("message", message)
+	}
+	u.RawQuery = q.Encode()
+	u.Fragment = hq.Encode()
+	return u.String(), nil
 }
 
 func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
@@ -414,7 +445,6 @@ func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
 
 func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
 	config := a.config
-
 	if config.Mailer.SecureEmailChangeEnabled && user.EmailChangeConfirmStatus == zeroConfirmation && user.GetEmail() != "" {
 		err := conn.Transaction(func(tx *storage.Connection) error {
 			user.EmailChangeConfirmStatus = singleConfirmation

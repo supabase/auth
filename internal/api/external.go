@@ -244,7 +244,11 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
 	} else {
-		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
+		// Left as hash fragment to comply with spec. Additionally, may override existing error query param if set to PKCE.
+		rurl, err = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl, models.ImplicitFlow)
+		if err != nil {
+			return err
+		}
 	}
 
 	http.Redirect(w, r, rurl, http.StatusFound)

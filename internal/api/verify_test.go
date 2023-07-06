@@ -203,9 +203,20 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 		require.Equal(ts.T(), http.StatusSeeOther, w.Code)
 		urlVal, err := url.Parse(w.Result().Header.Get("Location"))
 		ts.Require().NoError(err, "redirect url parse failed")
-		v, err := url.ParseQuery(urlVal.Fragment)
-		ts.Require().NoError(err)
-		ts.Require().NotEmpty(v.Get("message"))
+		var v url.Values
+		if !c.isPKCE {
+			v, err = url.ParseQuery(urlVal.Fragment)
+			ts.Require().NoError(err)
+			ts.Require().NotEmpty(v.Get("message"))
+		} else if c.isPKCE {
+			v, err = url.ParseQuery(urlVal.RawQuery)
+			ts.Require().NoError(err)
+			ts.Require().NotEmpty(v.Get("message"))
+
+			v, err = url.ParseQuery(urlVal.Fragment)
+			ts.Require().NoError(err)
+			ts.Require().NotEmpty(v.Get("message"))
+		}
 
 		u, err = models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
 		require.NoError(ts.T(), err)
@@ -905,6 +916,104 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
 			assert.Equal(ts.T(), c.expected.code, w.Code)
+		})
+	}
+}
+
+func (ts *VerifyTestSuite) TestPrepRedirectURL() {
+	escapedMessage := url.QueryEscape(singleConfirmationAccepted)
+	cases := []struct {
+		desc     string
+		message  string
+		rurl     string
+		flowType models.FlowType
+		expected string
+	}{
+		{
+			desc:     "(PKCE): Redirect URL with additional query params",
+			message:  singleConfirmationAccepted,
+			rurl:     "https://example.com/?first=another&second=other",
+			flowType: models.PKCEFlow,
+			expected: fmt.Sprintf("https://example.com/?first=another&message=%s&second=other#message=%s", escapedMessage, escapedMessage),
+		},
+		{
+			desc:     "(PKCE): Query params in redirect url are overriden",
+			message:  singleConfirmationAccepted,
+			rurl:     "https://example.com/?message=Valid+redirect+URL",
+			flowType: models.PKCEFlow,
+			expected: fmt.Sprintf("https://example.com/?message=%s#message=%s", escapedMessage, escapedMessage),
+		},
+		{
+			desc:     "(Implicit): plain redirect url",
+			message:  singleConfirmationAccepted,
+			rurl:     "https://example.com/",
+			flowType: models.ImplicitFlow,
+			expected: fmt.Sprintf("https://example.com/#message=%s", escapedMessage),
+		},
+		{
+			desc:     "(Implicit): query params retained",
+			message:  singleConfirmationAccepted,
+			rurl:     "https://example.com/?first=another",
+			flowType: models.ImplicitFlow,
+			expected: fmt.Sprintf("https://example.com/?first=another#message=%s", escapedMessage),
+		},
+	}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			rurl, err := ts.API.prepRedirectURL(c.message, c.rurl, c.flowType)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), c.expected, rurl)
+		})
+	}
+}
+
+func (ts *VerifyTestSuite) TestPrepErrorRedirectURL() {
+	const DefaultError = "Invalid redirect URL"
+	redirectError := fmt.Sprintf("error=invalid_request&error_code=400&error_description=%s", url.QueryEscape(DefaultError))
+
+	cases := []struct {
+		desc     string
+		message  string
+		rurl     string
+		flowType models.FlowType
+		expected string
+	}{
+		{
+			desc:     "(PKCE): Error in both query params and hash fragment",
+			message:  "Valid redirect URL",
+			rurl:     "https://example.com/",
+			flowType: models.PKCEFlow,
+			expected: fmt.Sprintf("https://example.com/?%s#%s", redirectError, redirectError),
+		},
+		{
+			desc:     "(PKCE): Error with conflicting query params in redirect url",
+			message:  DefaultError,
+			rurl:     "https://example.com/?error=Error+to+be+overriden",
+			flowType: models.PKCEFlow,
+			expected: fmt.Sprintf("https://example.com/?%s#%s", redirectError, redirectError),
+		},
+		{
+			desc:     "(Implicit): plain redirect url",
+			message:  DefaultError,
+			rurl:     "https://example.com/",
+			flowType: models.ImplicitFlow,
+			expected: fmt.Sprintf("https://example.com/#%s", redirectError),
+		},
+		{
+			desc:     "(Implicit): query params preserved",
+			message:  DefaultError,
+			rurl:     "https://example.com/?test=param",
+			flowType: models.ImplicitFlow,
+			expected: fmt.Sprintf("https://example.com/?test=param#%s", redirectError),
+		},
+	}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+			rurl, err := ts.API.prepErrorRedirectURL(badRequestError(DefaultError), w, req, c.rurl, c.flowType)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), c.expected, rurl)
 		})
 	}
 }
