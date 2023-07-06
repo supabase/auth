@@ -920,7 +920,6 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 	}
 }
 
-<<<<<<< HEAD
 func (ts *VerifyTestSuite) TestPrepRedirectURL() {
 	cases := []struct {
 		desc     string
@@ -930,7 +929,7 @@ func (ts *VerifyTestSuite) TestPrepRedirectURL() {
 		expected string
 	}{
 		{
-			desc:     " (PKCE): Valid redirect url",
+			desc:     "(PKCE): Valid redirect url",
 			message:  "Valid redirect URL",
 			rurl:     "https://example.com?first=another&second=other",
 			flowType: models.PKCEFlow,
@@ -950,9 +949,52 @@ func (ts *VerifyTestSuite) TestPrepRedirectURL() {
 			flowType: models.ImplicitFlow,
 			expected: "https://example.com/#message=Confirmation+link+accepted.+Please+proceed+to+confirm+link+sent+to+the+other+email",
 		},
-		for _, c := range cases {
-			ts.Run(c.desc, func() {
+	}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
 			rurl, err := ts.API.prepRedirectURL(c.message, c.rurl, c.flowType)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), c.expected, rurl)
+		})
+	}
+}
+
+func (ts *VerifyTestSuite) TestPrepErrorRedirectURL() {
+	const DefaultError = "Invalid redirect URL"
+	cases := []struct {
+		desc     string
+		message  string
+		rurl     string
+		flowType models.FlowType
+		expected string
+	}{
+		{
+			desc:     "(PKCE): typical error",
+			message:  "Valid redirect URL",
+			rurl:     "https://example.com",
+			flowType: models.PKCEFlow,
+			expected: "https://example.com?error=invalid_request&error_code=400&error_description=Invalid+redirect+URL#error=invalid_request&error_code=400&error_description=Invalid+redirect+URL",
+		},
+		{
+			desc:     "(PKCE): error with overlapping query params",
+			message:  singleConfirmationAccepted,
+			rurl:     "https://example.com?error=Valid+redirect+URL",
+			flowType: models.PKCEFlow,
+			expected: "https://example.com?error=invalid_request&error_code=400&error_description=Invalid+redirect+URL#error=invalid_request&error_code=400&error_description=Invalid+redirect+URL",
+		},
+		{
+			desc:     "(Implicit): typical error",
+			message:  singleConfirmationAccepted,
+			rurl:     "https://example.com/",
+			flowType: models.ImplicitFlow,
+			expected: "https://example.com/#error=invalid_request&error_code=400&error_description=Invalid+redirect+URL",
+		},
+	}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+			rurl, err := ts.API.prepErrorRedirectURL(badRequestError(DefaultError), w, req, c.rurl, c.flowType)
 			require.NoError(ts.T(), err)
 			require.Equal(ts.T(), c.expected, rurl)
 		})
