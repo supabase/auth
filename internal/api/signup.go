@@ -223,7 +223,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
-				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); terr != nil {
+				if _, terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
 			}
@@ -339,12 +339,10 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 		// handles external provider case
 		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
 	}
-
-	user.IsSSOUser = isSSOUser
-
 	if err != nil {
 		return nil, internalServerError("Database error creating user").WithInternalError(err)
 	}
+	user.IsSSOUser = isSSOUser
 	if user.AppMetaData == nil {
 		user.AppMetaData = make(map[string]interface{})
 	}

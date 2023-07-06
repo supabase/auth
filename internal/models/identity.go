@@ -115,5 +115,11 @@ func (i *Identity) UpdateIdentityData(tx *storage.Connection, updates map[string
 			}
 		}
 	}
-	return tx.UpdateOnly(i, "identity_data")
+	// pop doesn't support updates on tables with composite primary keys so we use a raw query here.
+	return tx.RawQuery(
+		"update "+(&pop.Model{Value: Identity{}}).TableName()+" set identity_data = ? where provider = ? and id = ?",
+		i.IdentityData,
+		i.Provider,
+		i.ID,
+	).Exec()
 }

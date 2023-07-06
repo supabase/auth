@@ -75,7 +75,6 @@ func (w *Webhook) trigger() (io.ReadCloser, error) {
 	client := http.Client{
 		Timeout: timeout,
 	}
-	client.Transport = SafeRoundtripper(client.Transport, hooklog)
 
 	for i := 0; i < w.Retries; i++ {
 		hooklog = hooklog.WithField("attempt", i+1)

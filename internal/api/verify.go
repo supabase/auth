@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/sethvargo/go-password/password"
+	"github.com/supabase/gotrue/internal/api/sms_provider"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
@@ -47,42 +48,88 @@ const singleConfirmationAccepted = "Confirmation link accepted. Please proceed t
 type VerifyParams struct {
 	Type       string `json:"type"`
 	Token      string `json:"token"`
+	TokenHash  string `json:"token_hash"`
 	Email      string `json:"email"`
 	Phone      string `json:"phone"`
 	RedirectTo string `json:"redirect_to"`
 }
 
-func (p *VerifyParams) Validate() error {
-	if p.Token == "" {
-		return badRequestError("Verify requires a token")
-	}
-
+func (p *VerifyParams) Validate(r *http.Request) error {
+	var err error
 	if p.Type == "" {
 		return badRequestError("Verify requires a verification type")
+	}
+	switch r.Method {
+	case http.MethodGet:
+		if p.Token == "" {
+			return badRequestError("Verify requires a token or a token hash")
+		}
+		// TODO: deprecate the token query param from GET /verify and use token_hash instead (breaking change)
+		p.TokenHash = p.Token
+	case http.MethodPost:
+		if (p.Token == "" && p.TokenHash == "") || (p.Token != "" && p.TokenHash != "") {
+			return badRequestError("Verify requires either a token or a token hash")
+		}
+		if p.Token != "" {
+			if isPhoneOtpVerification(p) {
+				p.Phone, err = validatePhone(p.Phone)
+				if err != nil {
+					return err
+				}
+				p.TokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(p.Phone+p.Token)))
+			} else if isEmailOtpVerification(p) {
+				p.Email, err = validateEmail(p.Email)
+				if err != nil {
+					return unprocessableEntityError("Invalid email format").WithInternalError(err)
+				}
+				p.TokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(p.Email+p.Token)))
+			} else {
+				return badRequestError("Only an email address or phone number should be provided on verify")
+			}
+		} else if p.TokenHash != "" {
+			if p.Email != "" || p.Phone != "" || p.RedirectTo != "" {
+				return badRequestError("Only the token_hash and type should be provided")
+			}
+		}
+	default:
+		return nil
 	}
 	return nil
 }
 
 // Verify exchanges a confirmation or recovery token to a refresh token
 func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
+	params := &VerifyParams{}
 	switch r.Method {
 	case http.MethodGet:
-		return a.verifyGet(w, r)
+		params.Token = r.FormValue("token")
+		params.Type = r.FormValue("type")
+		params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
+		if err := params.Validate(r); err != nil {
+			return err
+		}
+		return a.verifyGet(w, r, params)
 	case http.MethodPost:
-		return a.verifyPost(w, r)
+		body, err := getBodyBytes(r)
+		if err != nil {
+			return badRequestError("Could not read body").WithInternalError(err)
+		}
+		if err := json.Unmarshal(body, params); err != nil {
+			return badRequestError("Could not parse verification params: %v", err)
+		}
+		if err := params.Validate(r); err != nil {
+			return err
+		}
+		return a.verifyPost(w, r, params)
 	default:
 		return unprocessableEntityError("Only GET and POST methods are supported.")
 	}
 }
 
-func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
+func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyParams) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
-	params := &VerifyParams{}
-	params.Token = r.FormValue("token")
-	params.Type = r.FormValue("type")
-	params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
 
 	var (
 		user        *models.User
@@ -91,7 +138,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		token       *AccessTokenResponse
 		authCode    string
 	)
-	var flowType models.FlowType
+	flowType := models.ImplicitFlow
 	var authenticationMethod models.AuthenticationMethod
 	if strings.HasPrefix(params.Token, PKCEPrefix) {
 		flowType = models.PKCEFlow
@@ -99,19 +146,11 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-	} else {
-		flowType = models.ImplicitFlow
 	}
-	if err := params.Validate(); err != nil {
-		return err
-	}
-
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-
-		params.Token = strings.ReplaceAll(params.Token, "-", "")
 		aud := a.requestAud(ctx, r)
-		user, terr = a.verifyEmailLink(ctx, tx, params, aud, flowType)
+		user, terr = a.verifyTokenHash(ctx, tx, params, aud)
 		if terr != nil {
 			return terr
 		}
@@ -182,26 +221,10 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
+func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyParams) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
-	params := &VerifyParams{}
-
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read verification params: %v", err)
-	}
-
-	if err := params.Validate(); err != nil {
-		return err
-	}
-
-	params.Token = strings.ReplaceAll(params.Token, "-", "")
 
 	var (
 		user        *models.User
@@ -209,10 +232,15 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request) error {
 		token       *AccessTokenResponse
 	)
 
-	err = db.Transaction(func(tx *storage.Connection) error {
+	err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		aud := a.requestAud(ctx, r)
-		user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
+
+		if isUsingTokenHash(params) {
+			user, terr = a.verifyTokenHash(ctx, tx, params, aud)
+		} else {
+			user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
+		}
 		if terr != nil {
 			return terr
 		}
@@ -268,7 +296,7 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 				if err != nil {
 					internalServerError("error creating user").WithInternalError(err)
 				}
-				if terr = user.UpdatePassword(tx, password); terr != nil {
+				if terr = user.UpdatePassword(tx, password, nil); terr != nil {
 					return internalServerError("Error storing password").WithInternalError(terr)
 				}
 			}
@@ -454,18 +482,18 @@ func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *stor
 	return user, nil
 }
 
-func (a *API) verifyEmailLink(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string, flowType models.FlowType) (*models.User, error) {
+func (a *API) verifyTokenHash(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
 	config := a.config
 
 	var user *models.User
 	var err error
 	switch params.Type {
 	case signupVerification, inviteVerification:
-		user, err = models.FindUserByConfirmationToken(conn, params.Token)
+		user, err = models.FindUserByConfirmationToken(conn, params.TokenHash)
 	case recoveryVerification, magicLinkVerification:
-		user, err = models.FindUserByRecoveryToken(conn, params.Token)
+		user, err = models.FindUserByRecoveryToken(conn, params.TokenHash)
 	case emailChangeVerification:
-		user, err = models.FindUserByEmailChangeToken(conn, params.Token)
+		user, err = models.FindUserByEmailChangeToken(conn, params.TokenHash)
 	default:
 		return nil, badRequestError("Invalid email verification type")
 	}
@@ -504,36 +532,17 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 
 	var user *models.User
 	var err error
-	var tokenHash string
+	tokenHash := params.TokenHash
 
-	if isPhoneOtpVerification(params) {
-		params.Phone, err = validatePhone(params.Phone)
-		if err != nil {
-			return nil, err
-		}
-		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Phone)+params.Token)))
-		switch params.Type {
-		case phoneChangeVerification:
-			user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
-		case smsVerification:
-			user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
-		default:
-			return nil, badRequestError("Invalid sms verification type")
-		}
-	} else if isEmailOtpVerification(params) {
-		params.Email, err = validateEmail(params.Email)
-		if err != nil {
-			return nil, unprocessableEntityError("Invalid email format").WithInternalError(err)
-		}
-		tokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(string(params.Email)+params.Token)))
-		switch params.Type {
-		case emailChangeVerification:
-			user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
-		default:
-			user, err = models.FindUserByEmailAndAudience(conn, params.Email, aud)
-		}
-	} else {
-		return nil, badRequestError("Only an email address or phone number should be provided on verify")
+	switch params.Type {
+	case phoneChangeVerification:
+		user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
+	case smsVerification:
+		user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
+	case emailChangeVerification:
+		user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
+	default:
+		user, err = models.FindUserByEmailAndAudience(conn, params.Email, aud)
 	}
 
 	if err != nil {
@@ -548,6 +557,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	}
 
 	var isValid bool
+	smsProvider, _ := sms_provider.GetSmsProvider(*config)
 	switch params.Type {
 	case emailOTPVerification:
 		// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
@@ -568,8 +578,20 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
 			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
 	case phoneChangeVerification:
+		if config.Sms.IsTwilioVerifyProvider() {
+			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(user.PhoneChange, params.Token); err != nil {
+				return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
+			}
+			return user, nil
+		}
 		isValid = isOtpValid(tokenHash, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
 	case smsVerification:
+		if config.Sms.IsTwilioVerifyProvider() {
+			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(params.Phone, params.Token); err != nil {
+				return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
+			}
+			return user, nil
+		}
 		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Sms.OtpExp)
 	}
 
@@ -599,4 +621,8 @@ func isPhoneOtpVerification(params *VerifyParams) bool {
 // isEmailOtpVerification checks if the verification came from an email otp
 func isEmailOtpVerification(params *VerifyParams) bool {
 	return params.Phone == "" && params.Email != ""
+}
+
+func isUsingTokenHash(params *VerifyParams) bool {
+	return params.TokenHash != "" && params.Token == "" && params.Phone == "" && params.Email == ""
 }

@@ -112,6 +112,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	messageID := ""
 	err = db.Transaction(func(tx *storage.Connection) error {
 		mailer := a.Mailer(ctx)
 		referrer := a.getReferrer(r)
@@ -131,15 +132,23 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
-			return a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, sms_provider.SMSProvider)
+			mID, terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, sms_provider.SMSProvider)
+			if terr != nil {
+				return terr
+			}
+			messageID = mID
 		case emailChangeVerification:
-			return a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow)
+			return a.sendEmailChange(tx, config, user, mailer, user.EmailChange, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow)
 		case phoneChangeVerification:
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)
 			if terr != nil {
 				return terr
 			}
-			return a.sendPhoneConfirmation(ctx, tx, user, user.PhoneChange, phoneChangeVerification, smsProvider, sms_provider.SMSProvider)
+			mID, terr := a.sendPhoneConfirmation(ctx, tx, user, user.PhoneChange, phoneChangeVerification, smsProvider, sms_provider.SMSProvider)
+			if terr != nil {
+				return terr
+			}
+			messageID = mID
 		}
 		return nil
 	})
@@ -151,5 +160,10 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Unable to process request").WithInternalError(err)
 	}
 
-	return sendJSON(w, http.StatusOK, map[string]string{})
+	ret := map[string]any{}
+	if messageID != "" {
+		ret["message_id"] = messageID
+	}
+
+	return sendJSON(w, http.StatusOK, ret)
 }

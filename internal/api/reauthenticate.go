@@ -37,6 +37,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	messageID := ""
 	err := db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserReauthenticateAction, "", nil); terr != nil {
 			return terr
@@ -49,7 +50,12 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return badRequestError("Error sending sms: %v", terr)
 			}
-			return a.sendPhoneConfirmation(ctx, tx, user, phone, phoneReauthenticationOtp, smsProvider, sms_provider.SMSProvider)
+			mID, err := a.sendPhoneConfirmation(ctx, tx, user, phone, phoneReauthenticationOtp, smsProvider, sms_provider.SMSProvider)
+			if err != nil {
+				return err
+			}
+
+			messageID = mID
 		}
 		return nil
 	})
@@ -60,7 +66,13 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, make(map[string]string))
+	ret := map[string]any{}
+	if messageID != "" {
+		ret["message_id"] = messageID
+
+	}
+
+	return sendJSON(w, http.StatusOK, ret)
 }
 
 // verifyReauthentication checks if the nonce provided is valid
@@ -73,8 +85,16 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+nonce)))
 		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
 	} else if user.GetPhone() != "" {
-		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetPhone()+nonce)))
-		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
+		if config.Sms.IsTwilioVerifyProvider() {
+			smsProvider, _ := sms_provider.GetSmsProvider(*config)
+			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(string(user.Phone), nonce); err != nil {
+				return expiredTokenError("Token has expired or is invalid").WithInternalError(err)
+			}
+			return nil
+		} else {
+			tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetPhone()+nonce)))
+			isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
+		}
 	} else {
 		return unprocessableEntityError("Reauthentication requires an email or a phone number")
 	}

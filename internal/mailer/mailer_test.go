@@ -15,10 +15,15 @@ func enforceRelativeURL(url string) string {
 }
 
 func TestGetPath(t *testing.T) {
+	params := EmailParams{
+		Token:      "token",
+		Type:       "signup",
+		RedirectTo: "https://example.com",
+	}
 	cases := []struct {
 		SiteURL  string
 		Path     string
-		Params   map[string]string
+		Params   *EmailParams
 		Expected string
 	}{
 		{
@@ -40,20 +45,16 @@ func TestGetPath(t *testing.T) {
 			Expected: "https://test.example.com/trailingslash/",
 		},
 		{
-			SiteURL: "https://test.example.com",
-			Path:    "f",
-			Params: map[string]string{
-				"key": "val",
-			},
-			Expected: "https://test.example.com/f?key=val",
+			SiteURL:  "https://test.example.com",
+			Path:     "f",
+			Params:   &params,
+			Expected: "https://test.example.com/f?token=token&type=signup&redirect_to=https://example.com",
 		},
 		{
-			SiteURL: "https://test.example.com",
-			Path:    "",
-			Params: map[string]string{
-				"key": "val",
-			},
-			Expected: "https://test.example.com?key=val",
+			SiteURL:  "https://test.example.com",
+			Path:     "",
+			Params:   &params,
+			Expected: "https://test.example.com?token=token&type=signup&redirect_to=https://example.com",
 		},
 	}
 
@@ -63,7 +64,7 @@ func TestGetPath(t *testing.T) {
 
 		path, err := getPath(c.Path, c.Params)
 
-		assert.NoError(t, err, c.Expected)
+		assert.NoError(t, err)
 		assert.Equal(t, c.Expected, u.ResolveReference(path).String())
 	}
 }
