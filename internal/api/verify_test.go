@@ -921,6 +921,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 }
 
 func (ts *VerifyTestSuite) TestPrepRedirectURL() {
+	escapedMessage := url.QueryEscape(singleConfirmationAccepted)
 	cases := []struct {
 		desc     string
 		message  string
@@ -929,25 +930,25 @@ func (ts *VerifyTestSuite) TestPrepRedirectURL() {
 		expected string
 	}{
 		{
-			desc:     "(PKCE): Message in Query Params and Hash fragment",
-			message:  "Valid redirect URL",
+			desc:     "(PKCE): Redirect URL with additional query params",
+			message:  singleConfirmationAccepted,
 			rurl:     "https://example.com?first=another&second=other",
 			flowType: models.PKCEFlow,
-			expected: "https://example.com?first=another&message=Valid+redirect+URL&second=other#message=Valid+redirect+URL",
+			expected: fmt.Sprintf("https://example.com?first=another&message=%s&second=other#message=%s", escapedMessage, escapedMessage),
 		},
 		{
 			desc:     "(PKCE): Query params in redirect url are overriden",
 			message:  singleConfirmationAccepted,
 			rurl:     "https://example.com?message=Valid+redirect+URL",
 			flowType: models.PKCEFlow,
-			expected: "https://example.com?message=Confirmation+link+accepted.+Please+proceed+to+confirm+link+sent+to+the+other+email#message=Confirmation+link+accepted.+Please+proceed+to+confirm+link+sent+to+the+other+email",
+			expected: fmt.Sprintf("https://example.com?message=%s#message=%s", escapedMessage, escapedMessage),
 		},
 		{
-			desc:     "(Implicit): Message in Hash Fragment Only",
+			desc:     "(Implicit): plain redirect url",
 			message:  singleConfirmationAccepted,
-			rurl:     "https://example.com/",
+			rurl:     "https://example.com",
 			flowType: models.ImplicitFlow,
-			expected: "https://example.com/#message=Confirmation+link+accepted.+Please+proceed+to+confirm+link+sent+to+the+other+email",
+			expected: fmt.Sprintf("https://example.com#message=%s", escapedMessage),
 		},
 	}
 	for _, c := range cases {
@@ -961,6 +962,8 @@ func (ts *VerifyTestSuite) TestPrepRedirectURL() {
 
 func (ts *VerifyTestSuite) TestPrepErrorRedirectURL() {
 	const DefaultError = "Invalid redirect URL"
+	redirectError := fmt.Sprintf("error=invalid_request&error_code=400&error_description=%s", url.QueryEscape(DefaultError))
+
 	cases := []struct {
 		desc     string
 		message  string
@@ -973,21 +976,21 @@ func (ts *VerifyTestSuite) TestPrepErrorRedirectURL() {
 			message:  "Valid redirect URL",
 			rurl:     "https://example.com",
 			flowType: models.PKCEFlow,
-			expected: "https://example.com?error=invalid_request&error_code=400&error_description=Invalid+redirect+URL#error=invalid_request&error_code=400&error_description=Invalid+redirect+URL",
+			expected: fmt.Sprintf("https://example.com?%s#%s", redirectError, redirectError),
 		},
 		{
 			desc:     "(PKCE): Error with conflicting query params in redirect url",
-			message:  singleConfirmationAccepted,
+			message:  DefaultError,
 			rurl:     "https://example.com?error=Error+to+be+overriden",
 			flowType: models.PKCEFlow,
-			expected: "https://example.com?error=invalid_request&error_code=400&error_description=Invalid+redirect+URL#error=invalid_request&error_code=400&error_description=Invalid+redirect+URL",
+			expected: fmt.Sprintf("https://example.com?%s#%s", redirectError, redirectError),
 		},
 		{
 			desc:     "(Implicit): Only hash fragment shows up",
-			message:  singleConfirmationAccepted,
-			rurl:     "https://example.com/",
+			message:  DefaultError,
+			rurl:     "https://example.com",
 			flowType: models.ImplicitFlow,
-			expected: "https://example.com/#error=invalid_request&error_code=400&error_description=Invalid+redirect+URL",
+			expected: fmt.Sprintf("https://example.com#%s", redirectError),
 		},
 	}
 	for _, c := range cases {
