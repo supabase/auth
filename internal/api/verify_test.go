@@ -932,23 +932,23 @@ func (ts *VerifyTestSuite) TestPrepRedirectURL() {
 		{
 			desc:     "(PKCE): Redirect URL with additional query params",
 			message:  singleConfirmationAccepted,
-			rurl:     "https://example.com?first=another&second=other",
+			rurl:     "https://example.com/?first=another&second=other",
 			flowType: models.PKCEFlow,
-			expected: fmt.Sprintf("https://example.com?first=another&message=%s&second=other#message=%s", escapedMessage, escapedMessage),
+			expected: fmt.Sprintf("https://example.com/?first=another&message=%s&second=other#message=%s", escapedMessage, escapedMessage),
 		},
 		{
 			desc:     "(PKCE): Query params in redirect url are overriden",
 			message:  singleConfirmationAccepted,
-			rurl:     "https://example.com?message=Valid+redirect+URL",
+			rurl:     "https://example.com/?message=Valid+redirect+URL",
 			flowType: models.PKCEFlow,
-			expected: fmt.Sprintf("https://example.com?message=%s#message=%s", escapedMessage, escapedMessage),
+			expected: fmt.Sprintf("https://example.com/?message=%s#message=%s", escapedMessage, escapedMessage),
 		},
 		{
 			desc:     "(Implicit): plain redirect url",
 			message:  singleConfirmationAccepted,
-			rurl:     "https://example.com",
+			rurl:     "https://example.com/",
 			flowType: models.ImplicitFlow,
-			expected: fmt.Sprintf("https://example.com#message=%s", escapedMessage),
+			expected: fmt.Sprintf("https://example.com/#message=%s", escapedMessage),
 		},
 	}
 	for _, c := range cases {
@@ -974,23 +974,23 @@ func (ts *VerifyTestSuite) TestPrepErrorRedirectURL() {
 		{
 			desc:     "(PKCE): Error in both query params and hash fragment",
 			message:  "Valid redirect URL",
-			rurl:     "https://example.com",
+			rurl:     "https://example.com/",
 			flowType: models.PKCEFlow,
-			expected: fmt.Sprintf("https://example.com?%s#%s", redirectError, redirectError),
+			expected: fmt.Sprintf("https://example.com/?%s#%s", redirectError, redirectError),
 		},
 		{
 			desc:     "(PKCE): Error with conflicting query params in redirect url",
 			message:  DefaultError,
-			rurl:     "https://example.com?error=Error+to+be+overriden",
+			rurl:     "https://example.com/?error=Error+to+be+overriden",
 			flowType: models.PKCEFlow,
-			expected: fmt.Sprintf("https://example.com?%s#%s", redirectError, redirectError),
+			expected: fmt.Sprintf("https://example.com/?%s#%s", redirectError, redirectError),
 		},
 		{
 			desc:     "(Implicit): Only hash fragment shows up",
 			message:  DefaultError,
-			rurl:     "https://example.com",
+			rurl:     "https://example.com/",
 			flowType: models.ImplicitFlow,
-			expected: fmt.Sprintf("https://example.com#%s", redirectError),
+			expected: fmt.Sprintf("https://example.com/#%s", redirectError),
 		},
 	}
 	for _, c := range cases {

@@ -404,10 +404,10 @@ func (a *API) prepErrorRedirectURL(err *HTTPError, w http.ResponseWriter, r *htt
 	}
 	q.Set("error_code", strconv.Itoa(err.Code))
 	q.Set("error_description", err.Message)
-	u.Fragment = q.Encode()
 	if flowType == models.PKCEFlow {
 		u.RawQuery = q.Encode()
 	}
+	u.Fragment = q.Encode()
 	return u.String(), nil
 }
 
