@@ -929,21 +929,21 @@ func (ts *VerifyTestSuite) TestPrepRedirectURL() {
 		expected string
 	}{
 		{
-			desc:     "(PKCE): Valid redirect url",
+			desc:     "(PKCE): Message in Query Params and Hash fragment",
 			message:  "Valid redirect URL",
 			rurl:     "https://example.com?first=another&second=other",
 			flowType: models.PKCEFlow,
-			expected: fmt.Sprintf("https://example.com?first=another&message=Valid+redirect+URL&second=other#message=Valid+redirect+URL"),
+			expected: "https://example.com?first=another&message=Valid+redirect+URL&second=other#message=Valid+redirect+URL",
 		},
 		{
-			desc:     "(PKCE): Overlapping query params",
+			desc:     "(PKCE): Query params in redirect url are overriden",
 			message:  singleConfirmationAccepted,
 			rurl:     "https://example.com?message=Valid+redirect+URL",
 			flowType: models.PKCEFlow,
 			expected: "https://example.com?message=Confirmation+link+accepted.+Please+proceed+to+confirm+link+sent+to+the+other+email#message=Confirmation+link+accepted.+Please+proceed+to+confirm+link+sent+to+the+other+email",
 		},
 		{
-			desc:     "(Implicit): Valid redirect url",
+			desc:     "(Implicit): Message in Hash Fragment Only",
 			message:  singleConfirmationAccepted,
 			rurl:     "https://example.com/",
 			flowType: models.ImplicitFlow,
@@ -969,21 +969,21 @@ func (ts *VerifyTestSuite) TestPrepErrorRedirectURL() {
 		expected string
 	}{
 		{
-			desc:     "(PKCE): typical error",
+			desc:     "(PKCE): Error in both query params and hash fragment",
 			message:  "Valid redirect URL",
 			rurl:     "https://example.com",
 			flowType: models.PKCEFlow,
 			expected: "https://example.com?error=invalid_request&error_code=400&error_description=Invalid+redirect+URL#error=invalid_request&error_code=400&error_description=Invalid+redirect+URL",
 		},
 		{
-			desc:     "(PKCE): error with overlapping query params",
+			desc:     "(PKCE): Error with conflicting query params in redirect url",
 			message:  singleConfirmationAccepted,
-			rurl:     "https://example.com?error=Valid+redirect+URL",
+			rurl:     "https://example.com?error=Error+to+be+overriden",
 			flowType: models.PKCEFlow,
 			expected: "https://example.com?error=invalid_request&error_code=400&error_description=Invalid+redirect+URL#error=invalid_request&error_code=400&error_description=Invalid+redirect+URL",
 		},
 		{
-			desc:     "(Implicit): typical error",
+			desc:     "(Implicit): Only hash fragment shows up",
 			message:  singleConfirmationAccepted,
 			rurl:     "https://example.com/",
 			flowType: models.ImplicitFlow,
