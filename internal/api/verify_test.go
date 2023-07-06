@@ -950,6 +950,13 @@ func (ts *VerifyTestSuite) TestPrepRedirectURL() {
 			flowType: models.ImplicitFlow,
 			expected: fmt.Sprintf("https://example.com/#message=%s", escapedMessage),
 		},
+		{
+			desc:     "(Implicit): query params retained",
+			message:  singleConfirmationAccepted,
+			rurl:     "https://example.com/?first=another",
+			flowType: models.ImplicitFlow,
+			expected: fmt.Sprintf("https://example.com/?first=another#message=%s", escapedMessage),
+		},
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
@@ -986,7 +993,7 @@ func (ts *VerifyTestSuite) TestPrepErrorRedirectURL() {
 			expected: fmt.Sprintf("https://example.com/?%s#%s", redirectError, redirectError),
 		},
 		{
-			desc:     "(Implicit): Only hash fragment shows up",
+			desc:     "(Implicit): plain redirect url",
 			message:  DefaultError,
 			rurl:     "https://example.com/",
 			flowType: models.ImplicitFlow,

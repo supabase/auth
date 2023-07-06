@@ -417,10 +417,10 @@ func (a *API) prepRedirectURL(message string, rurl string, flowType models.FlowT
 		return "", perr
 	}
 	q := u.Query()
-	q.Set("message", message)
 	if flowType == models.PKCEFlow {
-		u.RawQuery = q.Encode()
+		q.Set("message", message)
 	}
+	u.RawQuery = q.Encode()
 	u.Fragment = fmt.Sprintf("message=%s", url.QueryEscape(message))
 	return u.String(), nil
 }
