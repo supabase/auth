@@ -880,3 +880,46 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 		})
 	}
 }
+
+func (ts *VerifyTestSuite) TestPrepRedirectURL() {
+	cases := []struct {
+		desc     string
+		message  string
+		rurl     string
+		flowType models.FlowType
+		expected string
+	}{
+		{
+			desc:     " (PKCE): Valid redirect url",
+			message:  "Valid redirect URL",
+			rurl:     "https://example.com?first=another&second=other",
+			flowType: models.PKCEFlow,
+			expected: fmt.Sprintf("https://example.com?first=another&message=Valid+redirect+URL&second=other#message=Valid+redirect+URL"),
+		},
+		{
+			desc:     "(PKCE): Overlapping query params",
+			message:  singleConfirmationAccepted,
+			rurl:     "https://example.com?message=Valid+redirect+URL",
+			flowType: models.PKCEFlow,
+			expected: "https://example.com?message=Confirmation+link+accepted.+Please+proceed+to+confirm+link+sent+to+the+other+email#message=Confirmation+link+accepted.+Please+proceed+to+confirm+link+sent+to+the+other+email",
+		},
+		{
+			desc:     "(Implicit): Valid redirect url",
+			message:  singleConfirmationAccepted,
+			rurl:     "https://example.com/",
+			flowType: models.ImplicitFlow,
+			expected: "https://example.com/#message=Confirmation+link+accepted.+Please+proceed+to+confirm+link+sent+to+the+other+email",
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			rurl, err := ts.API.prepRedirectURL(c.message, c.rurl, c.flowType)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), c.expected, rurl)
+		})
+	}
+}
+
+func (ts *VerifyTestSuite) TestRedirectURL() {
+}

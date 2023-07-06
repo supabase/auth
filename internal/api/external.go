@@ -245,7 +245,10 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		}
 	} else {
 		// Left as hash fragment to comply with spec
-		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl, models.ImplicitFlow)
+		rurl, err = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl, models.ImplicitFlow)
+		if err != nil {
+			return err
+		}
 	}
 
 	http.Redirect(w, r, rurl, http.StatusFound)
