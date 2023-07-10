@@ -103,10 +103,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod); err != nil {
 			return err
 		}
-		// PKCE not needed as autoconfirm returns access token in body
-		if config.Mailer.Autoconfirm {
-			return badRequestError("PKCE flow is not supported on signups with autoconfirm enabled")
-		}
 	}
 
 	var user *models.User
