@@ -495,6 +495,9 @@ func (a *API) verifyTokenHash(ctx context.Context, conn *storage.Connection, par
 	var user *models.User
 	var err error
 	switch params.Type {
+	case emailOTPVerification:
+		// need to find user by confirmation token or recovery token with the token hash
+		user, err = models.FindUserByConfirmationOrRecoveryToken(conn, params.TokenHash)
 	case signupVerification, inviteVerification:
 		user, err = models.FindUserByConfirmationToken(conn, params.TokenHash)
 	case recoveryVerification, magicLinkVerification:
@@ -518,6 +521,14 @@ func (a *API) verifyTokenHash(ctx context.Context, conn *storage.Connection, par
 
 	var isExpired bool
 	switch params.Type {
+	case emailOTPVerification:
+		sentAt := user.ConfirmationSentAt
+		params.Type = "signup"
+		if user.RecoveryToken == params.TokenHash {
+			sentAt = user.RecoverySentAt
+			params.Type = "magiclink"
+		}
+		isExpired = isOtpExpired(sentAt, config.Mailer.OtpExp)
 	case signupVerification, inviteVerification:
 		isExpired = isOtpExpired(user.ConfirmationSentAt, config.Mailer.OtpExp)
 	case recoveryVerification, magicLinkVerification:
