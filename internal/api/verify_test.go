@@ -890,6 +890,18 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+"123456"))),
 			},
 		},
+		{
+			desc:     "Valid Email Verification Type",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":       emailOTPVerification,
+				"token_hash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.Email+"123456"))),
+			},
+			expected: expected{
+				code:      http.StatusOK,
+				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.Email+"123456"))),
+			},
+		},
 	}
 
 	for _, c := range cases {
