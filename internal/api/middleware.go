@@ -175,8 +175,9 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 }
 
 func isIgnoreCaptchaRoute(req *http.Request) bool {
-	// captcha shouldn't be enabled on requests to refresh the token
-	if req.URL.Path == "/token" && (req.FormValue("grant_type") == "refresh_token" || req.FormValue("grant_type") == "pkce") {
+	// captcha shouldn't be enabled on the following grant_types
+	// id_token, refresh_token, pkce
+	if req.URL.Path == "/token" && req.FormValue("grant_type") != "password" {
 		return true
 	}
 	return false
