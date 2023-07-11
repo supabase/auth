@@ -50,8 +50,6 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 	mailer := a.Mailer(ctx)
 	adminUser := getAdminUser(ctx)
-	referrer := utilities.GetReferrer(r, config)
-
 	params := &GenerateLinkParams{}
 
 	body, err := getBodyBytes(r)
@@ -66,6 +64,10 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	params.Email, err = validateEmail(params.Email)
 	if err != nil {
 		return err
+	}
+	referrer := utilities.GetReferrer(r, config)
+	if utilities.IsRedirectURLValid(config, params.RedirectTo) {
+		referrer = params.RedirectTo
 	}
 
 	aud := a.requestAud(ctx, r)
