@@ -392,6 +392,15 @@ func findUser(tx *storage.Connection, query string, args ...interface{}) (*User,
 }
 
 // FindUserByConfirmationToken finds users with the matching confirmation token.
+func FindUserByConfirmationOrRecoveryToken(tx *storage.Connection, token string) (*User, error) {
+	user, err := findUser(tx, "(confirmation_token = ? or recovery_token = ?) and is_sso_user = false", token, token)
+	if err != nil {
+		return nil, ConfirmationOrRecoveryTokenNotFoundError{}
+	}
+	return user, nil
+}
+
+// FindUserByConfirmationToken finds users with the matching confirmation token.
 func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, error) {
 	user, err := findUser(tx, "confirmation_token = ? and is_sso_user = false", token)
 	if err != nil {

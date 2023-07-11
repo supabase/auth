@@ -47,6 +47,13 @@ func (e IdentityNotFoundError) Error() string {
 	return "Identity not found"
 }
 
+// ConfirmationOrRecoveryTokenNotFoundError represents when a confirmation or recovery token is not found.
+type ConfirmationOrRecoveryTokenNotFoundError struct{}
+
+func (e ConfirmationOrRecoveryTokenNotFoundError) Error() string {
+	return "Confirmation or Recovery Token not found"
+}
+
 // ConfirmationTokenNotFoundError represents when a confirmation token is not found.
 type ConfirmationTokenNotFoundError struct{}
 
