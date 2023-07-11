@@ -64,7 +64,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		}
 	}
 
-	redirectURL := a.getRedirectURLOrReferrer(r, query.Get("redirect_to"))
+	redirectURL := utilities.GetReferrer(r, config)
 	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
@@ -380,7 +380,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	if !user.IsConfirmed() {
 		if !emailData.Verified && !config.Mailer.Autoconfirm {
 			mailer := a.Mailer(ctx)
-			referrer := a.getReferrer(r)
+			referrer := utilities.GetReferrer(r, config)
 			externalURL := getExternalHost(ctx)
 			if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {

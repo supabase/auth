@@ -17,6 +17,7 @@ import (
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 var (
@@ -104,7 +105,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 	case http.MethodGet:
 		params.Token = r.FormValue("token")
 		params.Type = r.FormValue("type")
-		params.RedirectTo = a.getRedirectURLOrReferrer(r, r.FormValue("redirect_to"))
+		params.RedirectTo = utilities.GetReferrer(r, a.config)
 		if err := params.Validate(r); err != nil {
 			return err
 		}

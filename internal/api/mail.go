@@ -19,6 +19,7 @@ import (
 	"github.com/supabase/gotrue/internal/mailer"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 var (
@@ -49,6 +50,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 	mailer := a.Mailer(ctx)
 	adminUser := getAdminUser(ctx)
+	referrer := utilities.GetReferrer(r, config)
 
 	params := &GenerateLinkParams{}
 
@@ -85,7 +87,6 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var url string
-	referrer := a.getRedirectURLOrReferrer(r, params.RedirectTo)
 	now := time.Now()
 	otp, err := crypto.GenerateOtp(config.Mailer.OtpLength)
 	if err != nil {

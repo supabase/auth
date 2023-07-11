@@ -15,6 +15,7 @@ import (
 	"github.com/supabase/gotrue/internal/metering"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 // SignupParams are the parameters the Signup endpoint accepts
@@ -178,7 +179,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}
 			} else {
 				mailer := a.Mailer(ctx)
-				referrer := a.getReferrer(r)
+				referrer := utilities.GetReferrer(r, config)
 				if terr = models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {

@@ -9,6 +9,7 @@ import (
 	"github.com/supabase/gotrue/internal/api/sms_provider"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 // ResendConfirmationParams holds the parameters for a resend request
@@ -113,10 +114,10 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	messageID := ""
+	mailer := a.Mailer(ctx)
+	referrer := utilities.GetReferrer(r, config)
+	externalURL := getExternalHost(ctx)
 	err = db.Transaction(func(tx *storage.Connection) error {
-		mailer := a.Mailer(ctx)
-		referrer := a.getReferrer(r)
-		externalURL := getExternalHost(ctx)
 		switch params.Type {
 		case signupVerification:
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", nil); terr != nil {
