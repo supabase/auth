@@ -59,7 +59,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	api.deprecationNotices(ctx)
 
 	xffmw, _ := xff.Default()
-	logger := observability.NewStructuredLogger(logrus.StandardLogger())
+	logger := observability.NewStructuredLogger(logrus.StandardLogger(), globalConfig)
 
 	r := newRouter()
 	r.Use(addRequestID(globalConfig))
