@@ -16,6 +16,13 @@ It is originally based on the excellent
 Netlify](https://github.com/netlify/gotrue), however both have diverged significantly in
 features and capabilities.
 
+## Table Of Contents
+
+- [Quick Start](#quick-start)
+- [Running in Production](#running-in-production)
+- [Configuration](#configuration)
+- [Endpoints](#endpoints)
+
 ## Quick Start
 
 Create a `.env` file to store your own custom env vars. See [`example.env`](example.env)
