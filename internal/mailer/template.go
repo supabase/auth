@@ -126,7 +126,7 @@ func (m *TemplateMailer) ConfirmationMail(user *models.User, otp, referrerURL st
 
 	return m.Mailer.Mail(
 		user.GetEmail(),
-		string(withDefault(m.Config.Mailer.Subjects.Confirmation, "Confirm Your Email")),
+		withDefault(m.Config.Mailer.Subjects.Confirmation, "Confirm Your Email"),
 		m.Config.Mailer.Templates.Confirmation,
 		defaultConfirmationMail,
 		data,
@@ -144,7 +144,7 @@ func (m *TemplateMailer) ReauthenticateMail(user *models.User, otp string) error
 
 	return m.Mailer.Mail(
 		user.GetEmail(),
-		string(withDefault(m.Config.Mailer.Subjects.Reauthentication, "Confirm reauthentication")),
+		withDefault(m.Config.Mailer.Subjects.Reauthentication, "Confirm reauthentication"),
 		m.Config.Mailer.Templates.Reauthentication,
 		defaultReauthenticateMail,
 		data,
@@ -206,7 +206,7 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 			}
 			errors <- m.Mailer.Mail(
 				address,
-				string(withDefault(m.Config.Mailer.Subjects.EmailChange, "Confirm Email Change")),
+				withDefault(m.Config.Mailer.Subjects.EmailChange, "Confirm Email Change"),
 				template,
 				defaultEmailChangeMail,
 				data,
@@ -245,7 +245,7 @@ func (m *TemplateMailer) RecoveryMail(user *models.User, otp, referrerURL string
 
 	return m.Mailer.Mail(
 		user.GetEmail(),
-		string(withDefault(m.Config.Mailer.Subjects.Recovery, "Reset Your Password")),
+		withDefault(m.Config.Mailer.Subjects.Recovery, "Reset Your Password"),
 		m.Config.Mailer.Templates.Recovery,
 		defaultRecoveryMail,
 		data,
@@ -274,7 +274,7 @@ func (m *TemplateMailer) MagicLinkMail(user *models.User, otp, referrerURL strin
 
 	return m.Mailer.Mail(
 		user.GetEmail(),
-		string(withDefault(m.Config.Mailer.Subjects.MagicLink, "Your Magic Link")),
+		withDefault(m.Config.Mailer.Subjects.MagicLink, "Your Magic Link"),
 		m.Config.Mailer.Templates.MagicLink,
 		defaultMagicLinkMail,
 		data,
