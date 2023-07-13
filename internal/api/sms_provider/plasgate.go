@@ -1,6 +1,7 @@
 package sms_provider
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -18,9 +19,14 @@ type PlasGateProvider struct {
 	APIPath string
 }
 
-type PlasGateResponse struct {
-	Error   string `json:"error"`
-	Message string `json:"message"`
+type PlasGateResponse map[string]string
+
+type PlasGateError struct {
+	Message string `json:"error"`
+}
+
+func (t PlasGateError) Error() string {
+	return t.Message
 }
 
 // Creates a SmsProvider with the PlasGate Config
@@ -63,10 +69,26 @@ func (t *PlasGateProvider) SendSms(phone string, message string) (string, error)
 
 	r.Header.Add("Content-Type", "application/json")
 	res, err := client.Do(r)
+	defer utilities.SafeClose(res.Body)
 	if err != nil {
 		return "", err
 	}
-	defer utilities.SafeClose(res.Body)
 
-	return "", nil
+	if res.StatusCode != http.StatusOK {
+		resp := &PlasGateError{}
+		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
+			return "", err
+		}
+		return "", resp
+	}
+
+	resp := PlasGateResponse{} // Ex: response {"+123456789":"1234567"}
+	derr := json.NewDecoder(res.Body).Decode(&resp)
+	if derr != nil {
+		return "", derr
+	}
+
+	messageID := resp[phone]
+
+	return messageID, nil
 }

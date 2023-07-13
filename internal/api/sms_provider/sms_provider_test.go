@@ -154,16 +154,15 @@ func (ts *SmsProviderTestSuite) TestPlasGateSendSms() {
 
 	phone := "123456789"
 	message := "This is the sms code: 123456"
-	body := url.Values{
-		"token":    {plasGateProvider.Config.Token},
-		"senderID": {plasGateProvider.Config.SenderId},
-		"phone":    {phone},
-		"text":     {message},
+	params := map[string]string{
+		"token":    plasGateProvider.Config.Token,
+		"senderID": plasGateProvider.Config.SenderId,
+		"phone":    phone,
+		"text":     message,
 	}
 
-	gock.New(plasGateProvider.APIPath).Get("").MatchType("url").BodyString(body.Encode()).Reply(200).JSON(PlasGateResponse{
-		Message: "success",
-		Error:   "Incorrect token",
+	gock.New(plasGateProvider.APIPath).Get("/send").MatchType("url").MatchParams(params).Reply(200).JSON(PlasGateResponse{
+		phone: "message id",
 	})
 
 	_, err = plasGateProvider.SendSms(phone, message)
