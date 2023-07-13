@@ -35,6 +35,8 @@ func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
 		return NewTwilioProvider(config.Sms.Twilio)
 	case "messagebird":
 		return NewMessagebirdProvider(config.Sms.Messagebird)
+	case "plasgate":
+		return NewPlasGateProvider(config.Sms.PlasGate)
 	case "textlocal":
 		return NewTextlocalProvider(config.Sms.Textlocal)
 	case "vonage":

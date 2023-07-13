@@ -47,6 +47,10 @@ func TestSmsProvider(t *testing.T) {
 					AccessKey:  "test_access_key",
 					Originator: "test_originator",
 				},
+				PlasGate: conf.PlasGateProviderConfiguration{
+					SenderId: "test_sender_id",
+					Token:    "test_token",
+				},
 				Vonage: conf.VonageProviderConfiguration{
 					ApiKey:    "test_api_key",
 					ApiSecret: "test_api_secret",
@@ -138,6 +142,32 @@ func (ts *SmsProviderTestSuite) TestTwilioSendSms() {
 			require.Equal(ts.T(), c.ExpectedError, err)
 		})
 	}
+}
+
+func (ts *SmsProviderTestSuite) TestPlasGateSendSms() {
+	defer gock.Off()
+	provider, err := NewPlasGateProvider(ts.Config.Sms.PlasGate)
+	require.NoError(ts.T(), err)
+
+	plasGateProvider, ok := provider.(*PlasGateProvider)
+	require.Equal(ts.T(), true, ok)
+
+	phone := "123456789"
+	message := "This is the sms code: 123456"
+	body := url.Values{
+		"token":    {plasGateProvider.Config.Token},
+		"senderID": {plasGateProvider.Config.SenderId},
+		"phone":    {phone},
+		"text":     {message},
+	}
+
+	gock.New(plasGateProvider.APIPath).Get("").MatchType("url").BodyString(body.Encode()).Reply(200).JSON(PlasGateResponse{
+		Message: "success",
+		Error:   "Incorrect token",
+	})
+
+	_, err = plasGateProvider.SendSms(phone, message)
+	require.NoError(ts.T(), err)
 }
 
 func (ts *SmsProviderTestSuite) TestMessagebirdSendSms() {

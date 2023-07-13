@@ -205,6 +205,7 @@ type SmsProviderConfiguration struct {
 	Twilio       TwilioProviderConfiguration       `json:"twilio"`
 	TwilioVerify TwilioVerifyProviderConfiguration `json:"twilio_verify" split_words:"true"`
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
+	PlasGate     PlasGateProviderConfiguration     `json:"plasgate"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
 }
@@ -224,6 +225,11 @@ type TwilioVerifyProviderConfiguration struct {
 type MessagebirdProviderConfiguration struct {
 	AccessKey  string `json:"access_key" split_words:"true"`
 	Originator string `json:"originator" split_words:"true"`
+}
+
+type PlasGateProviderConfiguration struct {
+	Token    string `json:"token" split_words:"true"`
+	SenderId string `json:"sender_id" split_words:"true"`
 }
 
 type TextlocalProviderConfiguration struct {
@@ -504,6 +510,16 @@ func (t *MessagebirdProviderConfiguration) Validate() error {
 	}
 	if t.Originator == "" {
 		return errors.New("missing Messagebird originator")
+	}
+	return nil
+}
+
+func (t *PlasGateProviderConfiguration) Validate() error {
+	if t.Token == "" {
+		return errors.New("missing PlasGate token")
+	}
+	if t.SenderId == "" {
+		return errors.New("missing PlasGate sender Id")
 	}
 	return nil
 }
