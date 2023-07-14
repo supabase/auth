@@ -103,13 +103,13 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 					return c, badRequestError("Error invalid request body").WithInternalError(err)
 				}
 
-				if requestBody.Email != "" {
+				if requestBody.Email != "" && config.External.Email.Enabled && !config.Mailer.Autoconfirm {
 					if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
 						return c, httpError(http.StatusTooManyRequests, "Email rate limit exceeded")
 					}
 				}
 
-				if requestBody.Phone != "" {
+				if requestBody.Phone != "" && config.External.Phone.Enabled {
 					if err := tollbooth.LimitByKeys(phoneLimiter, []string{"phone_functions"}); err != nil {
 						return c, httpError(http.StatusTooManyRequests, "Sms rate limit exceeded")
 					}
