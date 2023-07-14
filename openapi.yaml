@@ -1893,6 +1893,9 @@ components:
         expires_in:
           type: integer
           description: Number of seconds after which the `access_token` should be renewed by using the refresh token with the `refresh_token` grant type.
+        expires_at:
+          type: integer
+          description: UNIX timestamp after which the `access_token` should be renewed by using the refresh token with the `refresh_token` grant type.
         user:
           $ref: "#/components/schemas/UserSchema"
 
