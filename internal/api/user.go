@@ -14,6 +14,7 @@ import (
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 // UserUpdateParams parameters for updating a user
@@ -193,7 +194,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 			identities = append(identities, *identity)
 			mailer := a.Mailer(ctx)
-			referrer := a.getReferrer(r)
+			referrer := utilities.GetReferrer(r, config)
 			flowType := getFlowFromChallenge(params.CodeChallenge)
 			if isPKCEFlow(flowType) {
 				codeChallengeMethod, terr := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)

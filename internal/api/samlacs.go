@@ -292,7 +292,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Failed to set JWT cookie").WithInternalError(err)
 	}
 
-	if !isRedirectURLValid(config, redirectTo) {
+	if !utilities.IsRedirectURLValid(config, redirectTo) {
 		redirectTo = config.SiteURL
 	}
 
