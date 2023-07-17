@@ -186,6 +186,7 @@ func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
 	// Set up rate limit config for this test
 	ts.Config.RateLimitEmailSent = 5
 	ts.Config.RateLimitSmsSent = 5
+	ts.Config.External.Phone.Enabled = true
 
 	cases := []struct {
 		desc             string
