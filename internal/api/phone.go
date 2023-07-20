@@ -1,11 +1,13 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
 	"regexp"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/pkg/errors"
@@ -82,7 +84,12 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	if config.Sms.Template == "" {
 		message = fmt.Sprintf(defaultSmsMessage, otp)
 	} else {
-		message = strings.Replace(config.Sms.Template, "{{ .Code }}", otp, -1)
+		var tpl bytes.Buffer
+		t := template.Must(template.New("sms").Parse(config.Sms.Template))
+		t.Execute(&tpl, struct {
+			Code string
+		}{Code: otp})
+		message = tpl.String()
 	}
 
 	messageID, serr := smsProvider.SendMessage(phone, message, channel)
