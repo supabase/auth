@@ -361,6 +361,8 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.Mailer.URLPaths.EmailChange == "" {
 		config.Mailer.URLPaths.EmailChange = "/"
 	}
+	// TODO: Remove this line once GoTrue has moved to a config file which doesn't escape ''
+	config.Mailer.UnescapeMailSubjects()
 
 	if config.Mailer.OtpExp == 0 {
 		config.Mailer.OtpExp = 86400 // 1 day
@@ -533,4 +535,13 @@ func (t *VonageProviderConfiguration) Validate() error {
 
 func (t *SmsProviderConfiguration) IsTwilioVerifyProvider() bool {
 	return t.Provider == "twilio_verify"
+}
+
+func (m *MailerConfiguration) UnescapeMailSubjects() {
+	m.Subjects.Confirmation = strings.ReplaceAll(m.Subjects.Confirmation, "\\'", "'")
+	m.Subjects.EmailChange = strings.ReplaceAll(m.Subjects.EmailChange, "\\'", "'")
+	m.Subjects.Invite = strings.ReplaceAll(m.Subjects.Invite, "\\'", "'")
+	m.Subjects.MagicLink = strings.ReplaceAll(m.Subjects.MagicLink, "\\'", "'")
+	m.Subjects.Reauthentication = strings.ReplaceAll(m.Subjects.Reauthentication, "\\'", "'")
+	m.Subjects.Recovery = strings.ReplaceAll(m.Subjects.Recovery, "\\'", "'")
 }
