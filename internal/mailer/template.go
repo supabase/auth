@@ -97,7 +97,7 @@ func (m *TemplateMailer) InviteMail(user *models.User, otp, referrerURL string, 
 
 	return m.Mailer.Mail(
 		user.GetEmail(),
-		string(withDefault(m.Config.Mailer.Subjects.Invite, "You have been invited")),
+		withDefault(m.Config.Mailer.Subjects.Invite, "You have been invited"),
 		m.Config.Mailer.Templates.Invite,
 		defaultInviteMail,
 		data,
@@ -165,7 +165,7 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 			Address:   user.EmailChange,
 			Otp:       otpNew,
 			TokenHash: user.EmailChangeTokenNew,
-			Subject:   string(withDefault(m.Config.Mailer.Subjects.EmailChange, "Confirm Email Change")),
+			Subject:   withDefault(m.Config.Mailer.Subjects.EmailChange, "Confirm Email Change"),
 			Template:  m.Config.Mailer.Templates.EmailChange,
 		},
 	}
@@ -176,7 +176,7 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 			Address:   currentEmail,
 			Otp:       otpCurrent,
 			TokenHash: user.EmailChangeTokenCurrent,
-			Subject:   string(withDefault(m.Config.Mailer.Subjects.Confirmation, "Confirm Email Address")),
+			Subject:   withDefault(m.Config.Mailer.Subjects.Confirmation, "Confirm Email Address"),
 			Template:  m.Config.Mailer.Templates.EmailChange,
 		})
 	}
