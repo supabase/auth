@@ -36,7 +36,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return oauthError("invalid_request", "refresh_token required")
 	}
 
-	user, token, session, err := models.FindUserWithRefreshToken(db, params.RefreshToken)
+	user, _, session, err := models.FindUserWithRefreshToken(db, params.RefreshToken, false)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return oauthError("invalid_grant", "Invalid Refresh Token: Refresh Token Not Found")
@@ -60,39 +60,51 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		}
 	}
 
-	if token.Revoked {
-		a.clearCookieTokens(config, w)
-		// For a revoked refresh token to be reused, it has to fall within the reuse interval.
-
-		reuseUntil := token.UpdatedAt.Add(
-			time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
-
-		if time.Now().After(reuseUntil) {
-			// not OK to reuse this token
-
-			if config.Security.RefreshTokenRotationEnabled {
-				// Revoke all tokens in token family
-				err = db.Transaction(func(tx *storage.Connection) error {
-					var terr error
-					if terr = models.RevokeTokenFamily(tx, token); terr != nil {
-						return terr
-					}
-					return nil
-				})
-				if err != nil {
-					return internalServerError(err.Error())
-				}
-			}
-
-			return oauthError("invalid_grant", "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID)
-		}
-	}
+	// basic checks above passed, now we need to serialize access to the
+	// session in a transaction so that there's no concurrent modification
 
 	var tokenString string
 	var newTokenResponse *AccessTokenResponse
 
 	err = db.Transaction(func(tx *storage.Connection) error {
-		var terr error
+		user, token, _, terr := models.FindUserWithRefreshToken(db, params.RefreshToken, true /* forUpdate */)
+		if terr != nil {
+			if models.IsNotFoundError(terr) {
+				return oauthError("invalid_grant", "Invalid Refresh Token: Refresh Token Not Found")
+			}
+			return internalServerError(terr.Error())
+		}
+
+		// refresh token row and session are locked, cannot be concurrently refreshed
+
+		if token.Revoked {
+			a.clearCookieTokens(config, w)
+			// For a revoked refresh token to be reused, it has to fall within the reuse interval.
+
+			reuseUntil := token.UpdatedAt.Add(
+				time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
+
+			if time.Now().After(reuseUntil) {
+				// not OK to reuse this token
+
+				if config.Security.RefreshTokenRotationEnabled {
+					// Revoke all tokens in token family
+					err = db.Transaction(func(tx *storage.Connection) error {
+						var terr error
+						if terr = models.RevokeTokenFamily(tx, token); terr != nil {
+							return terr
+						}
+						return nil
+					})
+					if err != nil {
+						return internalServerError(err.Error())
+					}
+				}
+
+				return oauthError("invalid_grant", "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID)
+			}
+		}
+
 		if terr = models.NewAuditLogEntry(r, tx, user, models.TokenRefreshedAction, "", nil); terr != nil {
 			return terr
 		}

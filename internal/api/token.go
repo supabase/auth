@@ -251,7 +251,7 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 	sid := ""
 	if sessionId != nil {
 		sid = sessionId.String()
-		session, terr := models.FindSessionByID(tx, *sessionId)
+		session, terr := models.FindSessionByID(tx, *sessionId, false)
 		if terr != nil {
 			return "", terr
 		}
@@ -311,7 +311,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		session, terr := models.FindSessionByID(tx, *refreshToken.SessionId)
+		session, terr := models.FindSessionByID(tx, *refreshToken.SessionId, false)
 		if terr != nil {
 			return terr
 		}
@@ -350,7 +350,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		return nil, internalServerError("Cannot read SessionId claim as UUID").WithInternalError(err)
 	}
 	err = tx.Transaction(func(tx *storage.Connection) error {
-		session, terr := models.FindSessionByID(tx, sessionId)
+		session, terr := models.FindSessionByID(tx, sessionId, false)
 		if terr != nil {
 			return terr
 		}
@@ -358,7 +358,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		if terr != nil {
 			return terr
 		}
-		session, terr = models.FindSessionByID(tx, sessionId)
+		session, terr = models.FindSessionByID(tx, sessionId, false)
 		if terr != nil {
 			return terr
 		}

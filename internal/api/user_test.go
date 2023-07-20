@@ -209,7 +209,7 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 	require.NoError(ts.T(), err)
 
 	// create a session and modify it's created_at time to simulate a session that is not recently logged in
-	notRecentlyLoggedIn, err := models.FindSessionByID(ts.API.db, *r2.SessionId)
+	notRecentlyLoggedIn, err := models.FindSessionByID(ts.API.db, *r2.SessionId, true)
 	require.NoError(ts.T(), err)
 
 	// cannot use Update here because Update doesn't removes the created_at field

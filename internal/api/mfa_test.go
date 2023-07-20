@@ -258,7 +258,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 
 			if v.expectedHTTPCode == http.StatusOK {
 				// Ensure alternate session has been deleted
-				_, err = models.FindSessionByID(ts.API.db, secondarySession.ID)
+				_, err = models.FindSessionByID(ts.API.db, secondarySession.ID, false)
 				require.EqualError(ts.T(), err, models.SessionNotFoundError{}.Error())
 			}
 			if !v.validChallenge {
@@ -330,7 +330,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			if v.expectedHTTPCode == http.StatusOK {
 				_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
 				require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
-				session, _ := models.FindSessionByID(ts.API.db, secondarySession.ID)
+				session, _ := models.FindSessionByID(ts.API.db, secondarySession.ID, false)
 				require.Equal(ts.T(), models.AAL1.String(), session.GetAAL())
 				require.Nil(ts.T(), session.FactorID)
 
@@ -373,7 +373,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
 	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
-	session, _ := models.FindSessionByID(ts.API.db, secondarySession.ID)
+	session, _ := models.FindSessionByID(ts.API.db, secondarySession.ID, false)
 	require.Equal(ts.T(), models.AAL1.String(), session.GetAAL())
 	require.Nil(ts.T(), session.FactorID)
 

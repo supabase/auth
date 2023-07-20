@@ -52,7 +52,7 @@ func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwap() {
 	s, err := GrantRefreshTokenSwap(&http.Request{}, ts.db, u, r)
 	require.NoError(ts.T(), err)
 
-	_, nr, _, err := FindUserWithRefreshToken(ts.db, r.Token)
+	_, nr, _, err := FindUserWithRefreshToken(ts.db, r.Token, false)
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), r.ID, nr.ID)
@@ -68,7 +68,7 @@ func (ts *RefreshTokenTestSuite) TestLogout() {
 	require.NoError(ts.T(), err)
 
 	require.NoError(ts.T(), Logout(ts.db, u.ID))
-	u, r, _, err = FindUserWithRefreshToken(ts.db, r.Token)
+	u, r, _, err = FindUserWithRefreshToken(ts.db, r.Token, false)
 	require.Errorf(ts.T(), err, "expected error when there are no refresh tokens to authenticate. user: %v token: %v", u, r)
 
 	require.True(ts.T(), IsNotFoundError(err), "expected NotFoundError")
