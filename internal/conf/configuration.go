@@ -151,6 +151,7 @@ type ProviderConfiguration struct {
 	Google                  OAuthProviderConfiguration `json:"google"`
 	Kakao                   OAuthProviderConfiguration `json:"kakao"`
 	Notion                  OAuthProviderConfiguration `json:"notion"`
+	Yahoo                   OAuthProviderConfiguration `json:"yahoo"`
 	Keycloak                OAuthProviderConfiguration `json:"keycloak"`
 	Linkedin                OAuthProviderConfiguration `json:"linkedin"`
 	Spotify                 OAuthProviderConfiguration `json:"spotify"`

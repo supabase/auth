@@ -555,6 +555,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewWorkOSProvider(config.External.WorkOS)
 	case "zoom":
 		return provider.NewZoomProvider(config.External.Zoom)
+	case "yahoo": 
+		return provider.NewYahooProvider(config.External.Yahoo, scopes)
 	default:
 		return nil, fmt.Errorf("Provider %s could not be found", name)
 	}
