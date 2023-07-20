@@ -234,14 +234,6 @@ func (ts *PhoneTestSuite) TestParseSmsTemplate() {
 			otp:         "123456",
 			expected:    fmt.Sprintf(defaultSmsMessage, "123456"),
 		},
-		// TODO (Joel): Find a workaround
-		// {
-		// 	desc:        "Sms Template with invalid template",
-		// 	smsTemplate: "Your verification code is {{.OTP}}",
-		// 	otp:         "34567",
-		// 	expected:    "Your verification code is {{.OTP}}",
-		// },
-
 		{
 			desc:        "Valid sms template",
 			smsTemplate: "Your verification code is {{.Code}}",

@@ -82,7 +82,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 
 	message, err := parseSmsTemplate(config.Sms.Template, otp)
 	if err != nil {
-		return "", err
+		return "", internalServerError("invalid sms template").WithInternalError(err)
 	}
 	*token = fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
 	messageID, serr := smsProvider.SendMessage(phone, message, channel)
