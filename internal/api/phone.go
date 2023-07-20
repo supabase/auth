@@ -18,6 +18,7 @@ import (
 )
 
 const defaultSmsMessage = "Your code is %v"
+const defaultTemplateName = "default_sms_template"
 
 var e164Format = regexp.MustCompile("^[1-9][0-9]{1,14}$")
 
@@ -78,22 +79,12 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	if err != nil {
 		return "", internalServerError("error generating otp").WithInternalError(err)
 	}
-	*token = fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
 
-	var message string
-	if config.Sms.Template == "" {
-		message = fmt.Sprintf(defaultSmsMessage, otp)
-	} else {
-		var output bytes.Buffer
-		if err := template.Must(template.New("sms_template").Parse(config.Sms.Template)).Execute(&output, struct {
-			Code string
-		}{Code: otp}); err != nil {
-			return "", err
-		}
-
-		message = output.String()
+	message, err := parseSmsTemplate(config.Sms.Template, otp)
+	if err != nil {
+		return "", err
 	}
-
+	*token = fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
 	messageID, serr := smsProvider.SendMessage(phone, message, channel)
 	if serr != nil {
 		*token = oldToken
@@ -112,4 +103,17 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	}
 
 	return messageID, errors.Wrap(tx.UpdateOnly(user, includeFields...), "Database error updating user for confirmation")
+}
+
+func parseSmsTemplate(smsTemplate, otp string) (string, error) {
+	if smsTemplate == "" {
+		return fmt.Sprintf(defaultSmsMessage, otp), nil
+	}
+	var message bytes.Buffer
+	if err := template.Must(template.New(defaultTemplateName).Parse(smsTemplate)).Execute(&message, struct {
+		Code string
+	}{Code: otp}); err != nil {
+		return "", err
+	}
+	return message.String(), nil
 }

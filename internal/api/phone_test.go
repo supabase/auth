@@ -220,3 +220,39 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 		}
 	}
 }
+
+func (ts *PhoneTestSuite) TestParseSmsTemplate() {
+	cases := []struct {
+		desc        string
+		smsTemplate string
+		otp         string
+		expected    string
+	}{
+		{
+			desc:        "Empty Sms Template",
+			smsTemplate: "",
+			otp:         "123456",
+			expected:    fmt.Sprintf(defaultSmsMessage, "123456"),
+		},
+		// TODO (Joel): Find a workaround
+		// {
+		// 	desc:        "Sms Template with invalid template",
+		// 	smsTemplate: "Your verification code is {{.OTP}}",
+		// 	otp:         "34567",
+		// 	expected:    "Your verification code is {{.OTP}}",
+		// },
+
+		{
+			desc:        "Valid sms template",
+			smsTemplate: "Your verification code is {{.Code}}",
+			otp:         "34567",
+			expected:    "Your verification code is 34567",
+		},
+	}
+	for _, c := range cases {
+		message, err := parseSmsTemplate(c.smsTemplate, c.otp)
+		require.NoError(ts.T(), err)
+		require.Equal(ts.T(), c.expected, message)
+	}
+
+}
