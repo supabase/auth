@@ -84,12 +84,14 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	if config.Sms.Template == "" {
 		message = fmt.Sprintf(defaultSmsMessage, otp)
 	} else {
-		var tpl bytes.Buffer
-		t := template.Must(template.New("sms").Parse(config.Sms.Template))
-		t.Execute(&tpl, struct {
+		var output bytes.Buffer
+		if err := template.Must(template.New("sms_template").Parse(config.Sms.Template)).Execute(&output, struct {
 			Code string
-		}{Code: otp})
-		message = tpl.String()
+		}{Code: otp}); err != nil {
+			return "", err
+		}
+
+		message = output.String()
 	}
 
 	messageID, serr := smsProvider.SendMessage(phone, message, channel)
