@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/crypto"
 	"github.com/supabase/gotrue/internal/models"
 )
 
@@ -787,13 +787,13 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      smsVerification,
-				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetPhone()+"123456"))),
+				"tokenHash": crypto.GenerateTokenHash(u.GetPhone(), "123456"),
 				"token":     "123456",
 				"phone":     u.GetPhone(),
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetPhone()+"123456"))),
+				tokenHash: crypto.GenerateTokenHash(u.GetPhone(), "123456"),
 			},
 		},
 		{
@@ -801,13 +801,13 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      signupVerification,
-				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+				"tokenHash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 				"token":     "123456",
 				"email":     u.GetEmail(),
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 			},
 		},
 		{
@@ -815,13 +815,13 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      recoveryVerification,
-				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+				"tokenHash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 				"token":     "123456",
 				"email":     u.GetEmail(),
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 			},
 		},
 		{
@@ -829,13 +829,13 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      emailOTPVerification,
-				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+				"tokenHash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 				"token":     "123456",
 				"email":     u.GetEmail(),
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456"))),
+				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 			},
 		},
 		{
@@ -843,13 +843,13 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      emailChangeVerification,
-				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+"123456"))),
+				"tokenHash": crypto.GenerateTokenHash(u.EmailChange, "123456"),
 				"token":     "123456",
 				"email":     u.EmailChange,
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+"123456"))),
+				tokenHash: crypto.GenerateTokenHash(u.EmailChange, "123456"),
 			},
 		},
 		{
@@ -857,13 +857,13 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":      phoneChangeVerification,
-				"tokenHash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.PhoneChange+"123456"))),
+				"tokenHash": crypto.GenerateTokenHash(u.PhoneChange, "123456"),
 				"token":     "123456",
 				"phone":     u.PhoneChange,
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.PhoneChange+"123456"))),
+				tokenHash: crypto.GenerateTokenHash(u.PhoneChange, "123456"),
 			},
 		},
 		{
@@ -871,11 +871,11 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":       signupVerification,
-				"token_hash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.Email+"123456"))),
+				"token_hash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.Email+"123456"))),
+				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 			},
 		},
 		{
@@ -883,11 +883,11 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":       emailChangeVerification,
-				"token_hash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+"123456"))),
+				"token_hash": crypto.GenerateTokenHash(u.EmailChange, "123456"),
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+"123456"))),
+				tokenHash: crypto.GenerateTokenHash(u.EmailChange, "123456"),
 			},
 		},
 		{
@@ -895,11 +895,11 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":       emailOTPVerification,
-				"token_hash": fmt.Sprintf("%x", sha256.Sum224([]byte(u.Email+"123456"))),
+				"token_hash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 			},
 			expected: expected{
 				code:      http.StatusOK,
-				tokenHash: fmt.Sprintf("%x", sha256.Sum224([]byte(u.Email+"123456"))),
+				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 			},
 		},
 	}
