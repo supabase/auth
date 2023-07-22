@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/crypto"
 	"github.com/supabase/gotrue/internal/models"
 )
 
@@ -152,7 +152,7 @@ func (ts *InviteTestSuite) TestVerifyInvite() {
 			user.InvitedAt = &now
 			user.ConfirmationSentAt = &now
 			user.EncryptedPassword = ""
-			user.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(c.email+c.requestBody["token"].(string))))
+			user.ConfirmationToken = crypto.GenerateTokenHash(c.email, c.requestBody["token"].(string))
 			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Create(user))
 

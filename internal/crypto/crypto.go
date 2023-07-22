@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -36,4 +37,7 @@ func GenerateOtp(digits int) (string, error) {
 	expr := "%0" + strconv.Itoa(digits) + "v"
 	otp := fmt.Sprintf(expr, val.String())
 	return otp, nil
+}
+func GenerateTokenHash(emailOrPhone, otp string) string {
+	return fmt.Sprintf("%x", sha256.Sum224([]byte(emailOrPhone+otp)))
 }
