@@ -67,7 +67,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	var newTokenResponse *AccessTokenResponse
 
 	err = db.Transaction(func(tx *storage.Connection) error {
-		user, token, _, terr := models.FindUserWithRefreshToken(db, params.RefreshToken, true /* forUpdate */)
+		user, token, _, terr := models.FindUserWithRefreshToken(tx, params.RefreshToken, true /* forUpdate */)
 		if terr != nil {
 			if models.IsNotFoundError(terr) {
 				return oauthError("invalid_grant", "Invalid Refresh Token: Refresh Token Not Found")
