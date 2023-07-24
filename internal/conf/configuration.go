@@ -127,6 +127,31 @@ type GlobalConfiguration struct {
 		Duration int    `json:"duration"`
 	} `json:"cookies"`
 	SAML SAMLConfiguration `json:"saml"`
+	CORS CORSConfiguration `json:"cors"`
+}
+
+type CORSConfiguration struct {
+	AllowedHeaders []string `json:"allowed_headers" split_words:"true"`
+}
+
+func (c *CORSConfiguration) AllAllowedHeaders(defaults []string) []string {
+	set := make(map[string]bool)
+	for _, header := range defaults {
+		set[header] = true
+	}
+
+	var result []string
+	result = append(result, defaults...)
+
+	for _, header := range c.AllowedHeaders {
+		if !set[header] {
+			result = append(result, header)
+		}
+
+		set[header] = true
+	}
+
+	return result
 }
 
 // EmailContentConfiguration holds the configuration for emails, both subjects and template URLs.
