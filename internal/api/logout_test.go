@@ -42,7 +42,7 @@ func (ts *LogoutTestSuite) SetupTest() {
 
 	// generate access token to use for logout
 	var t string
-	t, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
+	t, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
 	require.NoError(ts.T(), err)
 	ts.token = t
 }

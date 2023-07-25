@@ -64,6 +64,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	// session in a transaction so that there's no concurrent modification
 
 	var tokenString string
+	var expiresAt int64
 	var newTokenResponse *AccessTokenResponse
 
 	err = db.Transaction(func(tx *storage.Connection) error {
@@ -117,7 +118,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return terr
 		}
 
-		tokenString, terr = generateAccessToken(tx, user, newToken.SessionId, &config.JWT)
+		tokenString, expiresAt, terr = generateAccessToken(tx, user, newToken.SessionId, &config.JWT)
 
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
@@ -127,6 +128,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			Token:        tokenString,
 			TokenType:    "bearer",
 			ExpiresIn:    config.JWT.Exp,
+			ExpiresAt:    expiresAt,
 			RefreshToken: newToken.Token,
 			User:         user,
 		}
