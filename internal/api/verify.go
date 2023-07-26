@@ -2,10 +2,8 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -14,6 +12,7 @@ import (
 
 	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/gotrue/internal/api/sms_provider"
+	"github.com/supabase/gotrue/internal/crypto"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
@@ -77,13 +76,13 @@ func (p *VerifyParams) Validate(r *http.Request) error {
 				if err != nil {
 					return err
 				}
-				p.TokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(p.Phone+p.Token)))
+				p.TokenHash = crypto.GenerateTokenHash(p.Phone, p.Token)
 			} else if isEmailOtpVerification(p) {
 				p.Email, err = validateEmail(p.Email)
 				if err != nil {
 					return unprocessableEntityError("Invalid email format").WithInternalError(err)
 				}
-				p.TokenHash = fmt.Sprintf("%x", sha256.Sum224([]byte(p.Email+p.Token)))
+				p.TokenHash = crypto.GenerateTokenHash(p.Email, p.Token)
 			} else {
 				return badRequestError("Only an email address or phone number should be provided on verify")
 			}

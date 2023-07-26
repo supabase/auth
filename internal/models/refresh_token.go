@@ -89,19 +89,6 @@ func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
 	return nil
 }
 
-// GetValidChildToken returns the child token of the token provided if the child is not revoked.
-func GetValidChildToken(tx *storage.Connection, token *RefreshToken) (*RefreshToken, error) {
-	refreshToken := &RefreshToken{}
-	err := tx.Q().Where("parent = ? and revoked = false", token.Token).First(refreshToken)
-	if err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, RefreshTokenNotFoundError{}
-		}
-		return nil, err
-	}
-	return refreshToken, nil
-}
-
 func FindTokenBySessionID(tx *storage.Connection, sessionId *uuid.UUID) (*RefreshToken, error) {
 	refreshToken := &RefreshToken{}
 	err := tx.Q().Where("session_id = ?", sessionId).Order("created_at asc").First(refreshToken)

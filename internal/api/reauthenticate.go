@@ -1,13 +1,12 @@
 package api
 
 import (
-	"crypto/sha256"
 	"errors"
-	"fmt"
 	"net/http"
 
 	"github.com/supabase/gotrue/internal/api/sms_provider"
 	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/crypto"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
 )
@@ -82,7 +81,7 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 	}
 	var isValid bool
 	if user.GetEmail() != "" {
-		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+nonce)))
+		tokenHash := crypto.GenerateTokenHash(user.GetEmail(), nonce)
 		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
 	} else if user.GetPhone() != "" {
 		if config.Sms.IsTwilioVerifyProvider() {
@@ -92,7 +91,7 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 			}
 			return nil
 		} else {
-			tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetPhone()+nonce)))
+			tokenHash := crypto.GenerateTokenHash(user.GetPhone(), nonce)
 			isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
 		}
 	} else {

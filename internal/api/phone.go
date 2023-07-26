@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"regexp"
 	"strings"
@@ -79,12 +78,12 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	if err != nil {
 		return "", internalServerError("error generating otp").WithInternalError(err)
 	}
+	*token = crypto.GenerateTokenHash(phone, otp)
 
 	message, err := parseSmsTemplate(config.Sms.Template, otp)
 	if err != nil {
 		return "", internalServerError("invalid sms template").WithInternalError(err)
 	}
-	*token = fmt.Sprintf("%x", sha256.Sum224([]byte(phone+otp)))
 	messageID, serr := smsProvider.SendMessage(phone, message, channel)
 	if serr != nil {
 		*token = oldToken

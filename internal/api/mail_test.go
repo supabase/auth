@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/crypto"
 	"github.com/supabase/gotrue/internal/models"
 )
 
@@ -176,7 +176,7 @@ func (ts *MailTestSuite) TestGenerateLink() {
 			require.Equal(ts.T(), c.ExpectedResponse["redirect_to"], data["redirect_to"])
 
 			// check if hashed_token matches hash function of email and the raw otp
-			require.Equal(ts.T(), fmt.Sprintf("%x", sha256.Sum224([]byte(c.Body.Email+data["email_otp"].(string)))), data["hashed_token"])
+			require.Equal(ts.T(), crypto.GenerateTokenHash(c.Body.Email, data["email_otp"].(string)), data["hashed_token"])
 
 			// check if the host used in the email link matches the initial request host
 			u, err := url.ParseRequestURI(data["action_link"].(string))

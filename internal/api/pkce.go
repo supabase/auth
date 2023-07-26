@@ -9,11 +9,9 @@ import (
 )
 
 const (
-	PKCE                          = "pkce"
 	PKCEPrefix                    = "pkce_"
 	MinCodeChallengeLength        = 43
 	MaxCodeChallengeLength        = 128
-	InvalidFlowTypeErrorMessage   = "Invalid flow type. Flow Type must be either implicit or pkce"
 	InvalidPKCEParamsErrorMessage = "PKCE flow requires code_challenge_method and code_challenge"
 )
 

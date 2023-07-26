@@ -30,12 +30,6 @@ type ExternalProviderClaims struct {
 	FlowStateID string `json:"flow_state_id"`
 }
 
-// ExternalSignupParams are the parameters the Signup endpoint accepts
-type ExternalSignupParams struct {
-	Provider string `json:"provider"`
-	Code     string `json:"code"`
-}
-
 // ExternalProviderRedirect redirects the request to the corresponding oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()

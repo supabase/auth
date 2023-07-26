@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/crypto"
 	"github.com/supabase/gotrue/internal/models"
 )
 
@@ -49,7 +49,7 @@ func (ts *UserTestSuite) TestUserGet() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err, "Error finding user")
 	var token string
-	token, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
+	token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
 
 	require.NoError(ts.T(), err, "Error generating access token")
 
@@ -115,7 +115,7 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 			require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user")
 
 			var token string
-			token, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
+			token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
 
 			require.NoError(ts.T(), err, "Error generating access token")
 
@@ -179,7 +179,7 @@ func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			var token string
-			token, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
+			token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
 			require.NoError(ts.T(), err, "Error generating access token")
 
 			var buffer bytes.Buffer
@@ -209,7 +209,7 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 	require.NoError(ts.T(), err)
 
 	// create a session and modify it's created_at time to simulate a session that is not recently logged in
-	notRecentlyLoggedIn, err := models.FindSessionByID(ts.API.db, *r2.SessionId)
+	notRecentlyLoggedIn, err := models.FindSessionByID(ts.API.db, *r2.SessionId, true)
 	require.NoError(ts.T(), err)
 
 	// cannot use Update here because Update doesn't removes the created_at field
@@ -293,7 +293,7 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 
 			var token string
 
-			token, err = generateAccessToken(ts.API.db, u, c.sessionId, &ts.Config.JWT)
+			token, _, err = generateAccessToken(ts.API.db, u, c.sessionId, &ts.Config.JWT)
 			require.NoError(ts.T(), err)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
@@ -323,7 +323,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
 	var token string
-	token, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
+	token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
 	require.NoError(ts.T(), err)
 
 	// request for reauthentication nonce
@@ -340,7 +340,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
 
 	// update reauthentication token to a known token
-	u.ReauthenticationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+"123456")))
+	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), "123456")
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
 	// update password with reauthentication token

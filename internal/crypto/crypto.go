@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -37,22 +38,6 @@ func GenerateOtp(digits int) (string, error) {
 	otp := fmt.Sprintf(expr, val.String())
 	return otp, nil
 }
-
-// generateOtpFromCharset generates a random n-length otp from a charset
-func generateOtpFromCharset(length int, charset string) (string, error) {
-	b := make([]byte, length)
-	for i := range b {
-		val, err := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		if err != nil {
-			return "", errors.WithMessage(err, "Error generating otp from charset")
-		}
-		b[i] = charset[val.Int64()]
-	}
-	return string(b), nil
-}
-
-// GenerateNanoId generates a random n-length alphanumeric otp
-func GenerateNanoId(length int) (string, error) {
-	const charset = "0123456789abcdefghijklmnopqrstuvwxyz"
-	return generateOtpFromCharset(length, charset)
+func GenerateTokenHash(emailOrPhone, otp string) string {
+	return fmt.Sprintf("%x", sha256.Sum224([]byte(emailOrPhone+otp)))
 }

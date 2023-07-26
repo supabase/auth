@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"time"
 
@@ -435,8 +436,24 @@ func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, er
 }
 
 // FindUserWithRefreshToken finds a user from the provided refresh token.
-func FindUserWithRefreshToken(tx *storage.Connection, token string) (*User, *RefreshToken, *Session, error) {
+func FindUserWithRefreshToken(tx *storage.Connection, token string, forUpdate bool) (*User, *RefreshToken, *Session, error) {
 	refreshToken := &RefreshToken{}
+
+	if forUpdate {
+		// pop does not provide us with a way to execute FOR UPDATE
+		// queries which lock the rows affected by the query from
+		// being accessed by any other transaction that also uses FOR
+		// UPDATE
+		if err := tx.RawQuery(fmt.Sprintf("SELECT id FROM %q WHERE token = ? LIMIT 1 FOR UPDATE;", refreshToken.TableName()), token).Exec(); err != nil {
+			if errors.Cause(err) == sql.ErrNoRows {
+				return nil, nil, nil, RefreshTokenNotFoundError{}
+			}
+
+			return nil, nil, nil, errors.Wrap(err, "error finding refresh token for update")
+		}
+	}
+
+	// once the rows are locked (if forUpdate was true), we can query again using pop
 	if err := tx.Where("token = ?", token).First(refreshToken); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, nil, nil, RefreshTokenNotFoundError{}
@@ -455,7 +472,7 @@ func FindUserWithRefreshToken(tx *storage.Connection, token string) (*User, *Ref
 		sessionId := *refreshToken.SessionId
 
 		if sessionId != uuid.Nil {
-			session, err = FindSessionByID(tx, sessionId)
+			session, err = FindSessionByID(tx, sessionId, forUpdate)
 			if err != nil {
 				if !IsNotFoundError(err) {
 					return nil, nil, nil, errors.Wrap(err, "error finding session from refresh token")
