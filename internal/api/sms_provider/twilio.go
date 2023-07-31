@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/supabase/gotrue/internal/conf"
@@ -55,6 +56,14 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 	}, nil
 }
 
+func isTwilioMessageID(input string) bool {
+	// Twilio Message IDs are two characters followed by 34 digits: https://www.twilio.com/blog/programmable-messaging-sids
+	pattern := "^[A-Za-z0-9]{34}$"
+	regex := regexp.MustCompile(pattern)
+
+	return regex.MatchString(input)
+}
+
 func (t *TwilioProvider) SendMessage(phone string, message string, channel string) (string, error) {
 	switch channel {
 	case SMSProvider, WhatsappProvider:
@@ -70,7 +79,9 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) (string, error)
 	receiver := "+" + phone
 	if channel == WhatsappProvider {
 		receiver = channel + ":" + receiver
-		sender = channel + ":" + sender
+		if !isTwilioMessageID(sender) {
+			sender = channel + ":" + sender
+		}
 	}
 	body := url.Values{
 		"To":      {receiver}, // twilio api requires "+" extension to be included
