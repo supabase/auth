@@ -435,7 +435,11 @@ func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, er
 	return findUser(tx, "is_sso_user = false and (email_change_token_current = ? or email_change_token_new = ?)", token, token)
 }
 
-// FindUserWithRefreshToken finds a user from the provided refresh token.
+// FindUserWithRefreshToken finds a user from the provided refresh token. If
+// forUpdate is set to true, then the SELECT statement used by the query has
+// the form SELECT ... FOR UPDATE SKIP LOCKED. This means that a FOR UPDATE
+// lock will only be acquired if there's no other lock. In case there is a
+// lock, a IsNotFound(err) error will be returned.
 func FindUserWithRefreshToken(tx *storage.Connection, token string, forUpdate bool) (*User, *RefreshToken, *Session, error) {
 	refreshToken := &RefreshToken{}
 
@@ -444,7 +448,7 @@ func FindUserWithRefreshToken(tx *storage.Connection, token string, forUpdate bo
 		// queries which lock the rows affected by the query from
 		// being accessed by any other transaction that also uses FOR
 		// UPDATE
-		if err := tx.RawQuery(fmt.Sprintf("SELECT id FROM %q WHERE token = ? LIMIT 1 FOR UPDATE;", refreshToken.TableName()), token).Exec(); err != nil {
+		if err := tx.RawQuery(fmt.Sprintf("SELECT * FROM %q WHERE token = ? LIMIT 1 FOR UPDATE SKIP LOCKED;", refreshToken.TableName()), token).First(refreshToken); err != nil {
 			if errors.Cause(err) == sql.ErrNoRows {
 				return nil, nil, nil, RefreshTokenNotFoundError{}
 			}
@@ -474,6 +478,10 @@ func FindUserWithRefreshToken(tx *storage.Connection, token string, forUpdate bo
 		if sessionId != uuid.Nil {
 			session, err = FindSessionByID(tx, sessionId, forUpdate)
 			if err != nil {
+				if forUpdate {
+					return nil, nil, nil, err
+				}
+
 				if !IsNotFoundError(err) {
 					return nil, nil, nil, errors.Wrap(err, "error finding session from refresh token")
 				}
