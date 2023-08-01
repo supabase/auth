@@ -320,11 +320,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		session, terr := models.FindSessionByID(tx, *refreshToken.SessionId, false)
-		if terr != nil {
-			return terr
-		}
-		terr = models.AddClaimToSession(tx, session, authenticationMethod)
+		terr = models.AddClaimToSession(tx, *refreshToken.SessionId, authenticationMethod)
 		if terr != nil {
 			return terr
 		}
@@ -361,15 +357,10 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		return nil, internalServerError("Cannot read SessionId claim as UUID").WithInternalError(err)
 	}
 	err = tx.Transaction(func(tx *storage.Connection) error {
+		if terr := models.AddClaimToSession(tx, sessionId, authenticationMethod); terr != nil {
+			return terr
+		}
 		session, terr := models.FindSessionByID(tx, sessionId, false)
-		if terr != nil {
-			return terr
-		}
-		terr = models.AddClaimToSession(tx, session, authenticationMethod)
-		if terr != nil {
-			return terr
-		}
-		session, terr = models.FindSessionByID(tx, sessionId, false)
 		if terr != nil {
 			return terr
 		}
