@@ -29,6 +29,6 @@ func TestIsTwilioMessagingServiceID(ts *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		require.Equal(ts, c.isMessageID, isTwilioMessagingServiceID(c.input))
+		require.Equal(ts, c.isMessagingServiceID, isTwilioMessagingServiceID(c.input))
 	}
 }
