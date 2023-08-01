@@ -56,9 +56,9 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 	}, nil
 }
 
-func isTwilioMessageID(input string) bool {
-	// Twilio Message IDs are two characters followed by 34 digits: https://www.twilio.com/blog/programmable-messaging-sids
-	pattern := "^[A-Za-z0-9]{34}$"
+func isTwilioMessageSID(input string) bool {
+	// Twilio Message IDs are SM or MM followed by 32 digits: https://www.twilio.com/blog/programmable-messaging-sids
+	pattern := "^(SM|MM)[a-zA-Z0-9]{32}$"
 	regex := regexp.MustCompile(pattern)
 
 	return regex.MatchString(input)
@@ -79,7 +79,7 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) (string, error)
 	receiver := "+" + phone
 	if channel == WhatsappProvider {
 		receiver = channel + ":" + receiver
-		if !isTwilioMessageID(sender) {
+		if !isTwilioMessageSID(sender) {
 			sender = channel + ":" + sender
 		}
 	}
