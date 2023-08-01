@@ -15,7 +15,12 @@ import (
 const (
 	defaultTwilioApiBase = "https://api.twilio.com"
 	apiVersion           = "2010-04-01"
+	// Twilio Messaging Service IDs take the form of MG followed by 32 digits: https://www.twilio.com/docs/messaging/services#send-a-message-with-a-messaging-service
+	MessagingSIDPattern = "^(MG)[a-zA-Z0-9]{32}$"
 )
+
+// Regexp can't be constant
+var MessagingSIDRegexp = regexp.MustCompile(MessagingSIDPattern)
 
 type TwilioProvider struct {
 	Config  *conf.TwilioProviderConfiguration
@@ -57,11 +62,7 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 }
 
 func isTwilioMessagingServiceID(input string) bool {
-	// Twilio Messaging Service IDs take the form of MG followed by 32 digits: https://www.twilio.com/docs/messaging/services#send-a-message-with-a-messaging-service
-	pattern := "^(MG)[a-zA-Z0-9]{32}$"
-	regex := regexp.MustCompile(pattern)
-
-	return regex.MatchString(input)
+	return MessagingSIDRegexp.MatchString(input)
 }
 
 func (t *TwilioProvider) SendMessage(phone string, message string, channel string) (string, error) {
