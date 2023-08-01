@@ -6,29 +6,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsTwilioMessageSID(ts *testing.T) {
+func TestIsTwilioMessagingServiceID(ts *testing.T) {
 	cases := []struct {
-		desc         string
-		input        string
-		isMessageSID bool
+		desc                 string
+		input                string
+		isMessagingServiceID bool
 	}{
 		{
-			desc:         "Phone number",
-			input:        "+6591234567",
-			isMessageSID: false,
+			desc:                 "Phone number",
+			input:                "+6591234567",
+			isMessagingServiceID: false,
 		},
 		{
-			desc:         "SID",
-			input:        "VAcf79287d476f9dd47f0d6324273cf79d",
-			isMessageSID: false,
+			desc:                 "SID",
+			input:                "VAcf79287d476f9dd47f0d6324273cf79d",
+			isMessagingServiceID: false,
 		},
 		{
-			desc:         "Message Service SID",
-			input:        "MGcf79287d476f9dd47f0d6324273cf79d",
-			isMessageSID: true,
+			desc:                 "Message Service SID",
+			input:                "MGcf79287d476f9dd47f0d6324273cf79d",
+			isMessagingServiceID: true,
 		},
 	}
 	for _, c := range cases {
-		require.Equal(ts, c.isMessageSID, isTwilioMessageSID(c.input))
+		require.Equal(ts, c.isMessageID, isTwilioMessagingServiceID(c.input))
 	}
 }
