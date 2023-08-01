@@ -58,7 +58,7 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 
 func isTwilioMessageSID(input string) bool {
 	// Twilio Message IDs are SM or MM followed by 32 digits: https://www.twilio.com/blog/programmable-messaging-sids
-	pattern := "^(SM|MM)[a-zA-Z0-9]{32}$"
+	pattern := "^(MG)[a-zA-Z0-9]{32}$"
 	regex := regexp.MustCompile(pattern)
 
 	return regex.MatchString(input)

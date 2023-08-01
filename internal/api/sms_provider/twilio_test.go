@@ -24,7 +24,7 @@ func TestIsTwilioMessageSID(ts *testing.T) {
 		},
 		{
 			desc:         "Message Service SID",
-			input:        "SMcf79287d476f9dd47f0d6324273cf79d",
+			input:        "MGcf79287d476f9dd47f0d6324273cf79d",
 			isMessageSID: true,
 		},
 	}
