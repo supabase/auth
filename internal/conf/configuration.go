@@ -372,10 +372,11 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		if SMSTemplate == "" {
 			SMSTemplate = "Your code is {{ .Code }}"
 		}
-		if template, err := template.New("").Parse(SMSTemplate); err != nil {
-			config.Sms.SMSTemplate = template
+		template, err := template.New("").Parse(SMSTemplate)
+		if err != nil {
 			return nil, err
 		}
+		config.Sms.SMSTemplate = template
 	}
 
 	return config, nil
