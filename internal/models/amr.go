@@ -21,14 +21,14 @@ func (AMRClaim) TableName() string {
 	return tableName
 }
 
-func AddClaimToSession(tx *storage.Connection, session *Session, authenticationMethod AuthenticationMethod) error {
+func AddClaimToSession(tx *storage.Connection, sessionId uuid.UUID, authenticationMethod AuthenticationMethod) error {
 	id := uuid.Must(uuid.NewV4())
 
 	currentTime := time.Now()
 	return tx.RawQuery("INSERT INTO "+(&pop.Model{Value: AMRClaim{}}).TableName()+
 		`(id, session_id, created_at, updated_at, authentication_method) values (?, ?, ?, ?, ?)
 			ON CONFLICT ON CONSTRAINT mfa_amr_claims_session_id_authentication_method_pkey
-			DO UPDATE SET updated_at = ?;`, id, session.ID, currentTime, currentTime, authenticationMethod.String(), currentTime).Exec()
+			DO UPDATE SET updated_at = ?;`, id, sessionId, currentTime, currentTime, authenticationMethod.String(), currentTime).Exec()
 }
 
 func (a *AMRClaim) GetAuthenticationMethod() string {

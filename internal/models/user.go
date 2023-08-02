@@ -573,10 +573,9 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *U
 
 	for _, userID := range userIDs {
 		user, err := FindUserByID(tx, userID)
-		if err != nil && !IsNotFoundError(err) {
+		if err != nil {
 			return nil, errors.Wrap(err, "unable to find user from email identity for duplicates")
 		}
-
 		if user.Aud == aud {
 			return user, nil
 		}
@@ -586,7 +585,7 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *U
 	// identities table we also do a final check on the users table
 	user, err := FindUserByEmailAndAudience(tx, email, aud)
 	if err != nil && !IsNotFoundError(err) {
-		return nil, errors.Wrap(err, "unable to find user email addres for duplicates")
+		return nil, errors.Wrap(err, "unable to find user email address for duplicates")
 	}
 
 	return user, nil
