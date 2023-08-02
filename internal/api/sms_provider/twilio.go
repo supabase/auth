@@ -15,17 +15,14 @@ import (
 const (
 	defaultTwilioApiBase = "https://api.twilio.com"
 	apiVersion           = "2010-04-01"
-	// Twilio Messaging Service IDs take the form of MG followed by 32 digits: https://www.twilio.com/docs/messaging/services#send-a-message-with-a-messaging-service
-	MessagingSIDPattern = "^(MG)[a-zA-Z0-9]{32}$"
 )
-
-// Regexp can't be constant
-var MessagingSIDRegexp = regexp.MustCompile(MessagingSIDPattern)
 
 type TwilioProvider struct {
 	Config  *conf.TwilioProviderConfiguration
 	APIPath string
 }
+
+var isPhoneNumber = regexp.MustCompile("^[1-9][0-9]{1,14}$")
 
 type SmsStatus struct {
 	To           string `json:"to"`
@@ -61,10 +58,6 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 	}, nil
 }
 
-func isTwilioMessagingServiceID(input string) bool {
-	return MessagingSIDRegexp.MatchString(input)
-}
-
 func (t *TwilioProvider) SendMessage(phone string, message string, channel string) (string, error) {
 	switch channel {
 	case SMSProvider, WhatsappProvider:
@@ -80,7 +73,7 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) (string, error)
 	receiver := "+" + phone
 	if channel == WhatsappProvider {
 		receiver = channel + ":" + receiver
-		if !isTwilioMessagingServiceID(sender) {
+		if isPhoneNumber.MatchString(sender) {
 			sender = channel + ":" + sender
 		}
 	}
