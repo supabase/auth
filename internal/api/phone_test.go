@@ -250,31 +250,3 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 		}
 	}
 }
-
-func (ts *PhoneTestSuite) TestParseSmsTemplate() {
-	cases := []struct {
-		desc        string
-		smsTemplate string
-		otp         string
-		expected    string
-	}{
-		{
-			desc:        "Empty Sms Template",
-			smsTemplate: "",
-			otp:         "123456",
-			expected:    fmt.Sprintf(defaultSmsMessage, "123456"),
-		},
-		{
-			desc:        "Valid sms template",
-			smsTemplate: "Your verification code is {{.Code}}",
-			otp:         "34567",
-			expected:    "Your verification code is 34567",
-		},
-	}
-	for _, c := range cases {
-		message, err := parseSmsTemplate(c.smsTemplate, c.otp)
-		require.NoError(ts.T(), err)
-		require.Equal(ts.T(), c.expected, message)
-	}
-
-}

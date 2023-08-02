@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"regexp"
 	"strings"
 	"text/template"
@@ -91,11 +90,9 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 			return "", internalServerError("error generating otp").WithInternalError(err)
 		}
 
-		var message string
-		if config.Sms.Template == "" {
-			message = fmt.Sprintf(defaultSmsMessage, otp)
-		} else {
-			message = strings.Replace(config.Sms.Template, "{{ .Code }}", otp, -1)
+		message, err := parseSmsTemplate(config.Sms.SMSTemplate, otp)
+		if err != nil {
+			return "", err
 		}
 
 		messageID, err = smsProvider.SendMessage(phone, message, channel)
@@ -118,12 +115,9 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	return messageID, errors.Wrap(tx.UpdateOnly(user, includeFields...), "Database error updating user for confirmation")
 }
 
-func parseSmsTemplate(smsTemplate, otp string) (string, error) {
-	if smsTemplate == "" {
-		return fmt.Sprintf(defaultSmsMessage, otp), nil
-	}
+func parseSmsTemplate(SMSTemplate *template.Template, otp string) (string, error) {
 	var message bytes.Buffer
-	if err := template.Must(template.New(defaultTemplateName).Parse(smsTemplate)).Execute(&message, struct {
+	if err := SMSTemplate.Execute(&message, struct {
 		Code string
 	}{Code: otp}); err != nil {
 		return "", err
