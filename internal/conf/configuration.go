@@ -368,12 +368,13 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		config.SAML.PrivateKey = ""
 	}
 	if config.Sms.Provider != "" {
-		defaultTemplateName := "default_sms_template_name"
-		if config.Sms.Template == "" {
-			defaultSMSTemplate := "Your code is {{ .Code }}"
-			config.Sms.SMSTemplate = template.Must(template.New(defaultTemplateName).Parse(defaultSMSTemplate))
-		} else {
-			config.Sms.SMSTemplate = template.Must(template.New(defaultTemplateName).Parse(config.Sms.Template))
+		SMSTemplate := config.Sms.Template
+		if SMSTemplate == "" {
+			SMSTemplate = "Your code is {{ .Code }}"
+		}
+		if template, err := template.New("").Parse(SMSTemplate); err != nil {
+			config.Sms.SMSTemplate = template
+			return nil, err
 		}
 	}
 
