@@ -22,7 +22,6 @@ type TwilioProvider struct {
 	APIPath string
 }
 
-// TODO: Figure out how to reuse these from phone.go before merging
 var isPhoneNumber = regexp.MustCompile("^[1-9][0-9]{1,14}$")
 
 // formatPhoneNumber removes "+" and whitespaces in a phone number
