@@ -15,9 +15,6 @@ import (
 	"github.com/supabase/gotrue/internal/storage"
 )
 
-const defaultSmsMessage = "Your code is %v"
-const defaultTemplateName = "default_sms_template"
-
 var e164Format = regexp.MustCompile("^[1-9][0-9]{1,14}$")
 
 const (
