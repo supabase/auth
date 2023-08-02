@@ -22,7 +22,13 @@ type TwilioProvider struct {
 	APIPath string
 }
 
+// TODO: Figure out how to reuse these from phone.go before merging
 var isPhoneNumber = regexp.MustCompile("^[1-9][0-9]{1,14}$")
+
+// formatPhoneNumber removes "+" and whitespaces in a phone number
+func formatPhoneNumber(phone string) string {
+	return strings.ReplaceAll(strings.TrimPrefix(phone, "+"), " ", "")
+}
 
 type SmsStatus struct {
 	To           string `json:"to"`
@@ -73,7 +79,7 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) (string, error)
 	receiver := "+" + phone
 	if channel == WhatsappProvider {
 		receiver = channel + ":" + receiver
-		if isPhoneNumber.MatchString(sender) {
+		if isPhoneNumber.MatchString(formatPhoneNumber(sender)) {
 			sender = channel + ":" + sender
 		}
 	}
