@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/security"
+	metricglobal "go.opentelemetry.io/otel/metric/global"
+	metricinstrument "go.opentelemetry.io/otel/metric/instrument"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
@@ -84,7 +87,17 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 		DefaultExpirationTTL: time.Hour,
 	}).SetBurst(int(a.config.RateLimitSmsSent)).SetMethods([]string{"PUT", "POST"})
 
+	meter := metricglobal.Meter("gotrue")
+	emailRateLimitCount, err := meter.SyncInt64().Counter(
+		"email_rate_limit_count",
+		metricinstrument.WithDescription("Number of Times the email rate limt has been exceeded"),
+	)
+	if err != nil {
+		logrus.WithError(err).Error("unable to get gotrue.email_rate_limit_count counter metric")
+	}
+
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+
 		c := req.Context()
 		config := a.config
 		shouldRateLimitEmail := config.External.Email.Enabled && !config.Mailer.Autoconfirm
@@ -109,6 +122,11 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 				if shouldRateLimitEmail {
 					if requestBody.Email != "" {
 						if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
+							// TODO - check if this needs to be guarded in order to be done safely
+							emailRateLimitCount.Add(
+								req.Context(),
+								1,
+							)
 							return c, httpError(http.StatusTooManyRequests, "Email rate limit exceeded")
 						}
 					}

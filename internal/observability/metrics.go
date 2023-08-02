@@ -215,6 +215,7 @@ func ConfigureMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
 			},
 			func(ctx context.Context) {
 				running.Observe(ctx, 1)
+				emailRateLimit.Observe(ctx, emailRateLimit)
 			},
 		); err != nil {
 			logrus.WithError(err).Error("unable to register gotrue.running gague metric")
