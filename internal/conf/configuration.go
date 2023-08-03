@@ -538,10 +538,11 @@ func (t *SmsProviderConfiguration) IsTwilioVerifyProvider() bool {
 }
 
 func (m *MailerConfiguration) UnescapeMailSubjects() {
-	m.Subjects.Confirmation = strings.ReplaceAll(m.Subjects.Confirmation, "\\'", "'")
-	m.Subjects.EmailChange = strings.ReplaceAll(m.Subjects.EmailChange, "\\'", "'")
-	m.Subjects.Invite = strings.ReplaceAll(m.Subjects.Invite, "\\'", "'")
-	m.Subjects.MagicLink = strings.ReplaceAll(m.Subjects.MagicLink, "\\'", "'")
-	m.Subjects.Reauthentication = strings.ReplaceAll(m.Subjects.Reauthentication, "\\'", "'")
-	m.Subjects.Recovery = strings.ReplaceAll(m.Subjects.Recovery, "\\'", "'")
+	escapeSequence := "\\\\'"
+	m.Subjects.Confirmation = strings.ReplaceAll(m.Subjects.Confirmation, escapeSequence, "'")
+	m.Subjects.EmailChange = strings.ReplaceAll(m.Subjects.EmailChange, escapeSequence, "'")
+	m.Subjects.Invite = strings.ReplaceAll(m.Subjects.Invite, escapeSequence, "'")
+	m.Subjects.MagicLink = strings.ReplaceAll(m.Subjects.MagicLink, escapeSequence, "'")
+	m.Subjects.Reauthentication = strings.ReplaceAll(m.Subjects.Reauthentication, escapeSequence, "'")
+	m.Subjects.Recovery = strings.ReplaceAll(m.Subjects.Recovery, escapeSequence, "'")
 }
