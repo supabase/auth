@@ -1,10 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 	"regexp"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/pkg/errors"
@@ -13,8 +14,6 @@ import (
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
 )
-
-const defaultSmsMessage = "Your code is %v"
 
 var e164Format = regexp.MustCompile("^[1-9][0-9]{1,14}$")
 
@@ -88,11 +87,9 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 			return "", internalServerError("error generating otp").WithInternalError(err)
 		}
 
-		var message string
-		if config.Sms.Template == "" {
-			message = fmt.Sprintf(defaultSmsMessage, otp)
-		} else {
-			message = strings.Replace(config.Sms.Template, "{{ .Code }}", otp, -1)
+		message, err := generateSMSFromTemplate(config.Sms.SMSTemplate, otp)
+		if err != nil {
+			return "", err
 		}
 
 		messageID, err = smsProvider.SendMessage(phone, message, channel)
@@ -113,4 +110,14 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	}
 
 	return messageID, errors.Wrap(tx.UpdateOnly(user, includeFields...), "Database error updating user for confirmation")
+}
+
+func generateSMSFromTemplate(SMSTemplate *template.Template, otp string) (string, error) {
+	var message bytes.Buffer
+	if err := SMSTemplate.Execute(&message, struct {
+		Code string
+	}{Code: otp}); err != nil {
+		return "", err
+	}
+	return message.String(), nil
 }

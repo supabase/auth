@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/gobwas/glob"
@@ -221,14 +222,15 @@ type PhoneProviderConfiguration struct {
 }
 
 type SmsProviderConfiguration struct {
-	Autoconfirm       bool              `json:"autoconfirm"`
-	MaxFrequency      time.Duration     `json:"max_frequency" split_words:"true"`
-	OtpExp            uint              `json:"otp_exp" split_words:"true"`
-	OtpLength         int               `json:"otp_length" split_words:"true"`
-	Provider          string            `json:"provider"`
-	Template          string            `json:"template"`
-	TestOTP           map[string]string `json:"test_otp" split_words:"true"`
-	TestOTPValidUntil time.Time         `json:"test_otp_valid_until" split_words:"true"`
+	Autoconfirm       bool               `json:"autoconfirm"`
+	MaxFrequency      time.Duration      `json:"max_frequency" split_words:"true"`
+	OtpExp            uint               `json:"otp_exp" split_words:"true"`
+	OtpLength         int                `json:"otp_length" split_words:"true"`
+	Provider          string             `json:"provider"`
+	Template          string             `json:"template"`
+	TestOTP           map[string]string  `json:"test_otp" split_words:"true"`
+	TestOTPValidUntil time.Time          `json:"test_otp_valid_until" split_words:"true"`
+	SMSTemplate       *template.Template `json:"-"`
 
 	Twilio       TwilioProviderConfiguration       `json:"twilio"`
 	TwilioVerify TwilioVerifyProviderConfiguration `json:"twilio_verify" split_words:"true"`
@@ -364,6 +366,17 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		}
 	} else {
 		config.SAML.PrivateKey = ""
+	}
+	if config.Sms.Provider != "" {
+		SMSTemplate := config.Sms.Template
+		if SMSTemplate == "" {
+			SMSTemplate = "Your code is {{ .Code }}"
+		}
+		template, err := template.New("").Parse(SMSTemplate)
+		if err != nil {
+			return nil, err
+		}
+		config.Sms.SMSTemplate = template
 	}
 
 	return config, nil
