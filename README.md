@@ -553,19 +553,19 @@ Controls the duration an email link or otp is valid for.
 
 `MAILER_URLPATHS_INVITE` - `string`
 
-URL path to use in the user invite email. Defaults to `/`.
+URL path to use in the user invite email. Defaults to `/verify`.
 
 `MAILER_URLPATHS_CONFIRMATION` - `string`
 
-URL path to use in the signup confirmation email. Defaults to `/`.
+URL path to use in the signup confirmation email. Defaults to `/verify`.
 
 `MAILER_URLPATHS_RECOVERY` - `string`
 
-URL path to use in the password reset email. Defaults to `/`.
+URL path to use in the password reset email. Defaults to `/verify`.
 
 `MAILER_URLPATHS_EMAIL_CHANGE` - `string`
 
-URL path to use in the email change confirmation email. Defaults to `/`.
+URL path to use in the email change confirmation email. Defaults to `/verify`.
 
 `MAILER_SUBJECTS_INVITE` - `string`
 
