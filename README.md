@@ -232,6 +232,7 @@ Only the previous revoked token can be reused. Using an old refresh token way be
 ```properties
 GOTRUE_API_HOST=localhost
 PORT=9999
+API_EXTERNAL_URL=http://localhost:9999
 ```
 
 `API_HOST` - `string`
@@ -245,6 +246,10 @@ Port number to listen on. Defaults to `8081`.
 `API_ENDPOINT` - `string` _Multi-instance mode only_
 
 Controls what endpoint Netlify can access this API on.
+
+`API_EXTERNAL_URL` - `string` **required**
+
+The URL on which Gotrue might be accessed at.
 
 `REQUEST_ID_HEADER` - `string`
 
