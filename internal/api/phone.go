@@ -87,7 +87,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 			return "", internalServerError("error generating otp").WithInternalError(err)
 		}
 
-		message, err := parseSmsTemplate(config.Sms.SMSTemplate, otp)
+		message, err := generateSMSFromTemplate(config.Sms.SMSTemplate, otp)
 		if err != nil {
 			return "", err
 		}
@@ -112,7 +112,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	return messageID, errors.Wrap(tx.UpdateOnly(user, includeFields...), "Database error updating user for confirmation")
 }
 
-func parseSmsTemplate(SMSTemplate *template.Template, otp string) (string, error) {
+func generateSMSFromTemplate(SMSTemplate *template.Template, otp string) (string, error) {
 	var message bytes.Buffer
 	if err := SMSTemplate.Execute(&message, struct {
 		Code string
