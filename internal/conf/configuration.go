@@ -77,17 +77,13 @@ type APIConfiguration struct {
 	Port            string `envconfig:"PORT" default:"8081"`
 	Endpoint        string
 	RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
-	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
+	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL" required:"true"`
 }
 
 func (a *APIConfiguration) Validate() error {
-	if a.ExternalURL != "" {
-		// sometimes, in tests, ExternalURL is empty and we regard that
-		// as a valid value
-		_, err := url.ParseRequestURI(a.ExternalURL)
-		if err != nil {
-			return err
-		}
+	_, err := url.ParseRequestURI(a.ExternalURL)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -397,19 +393,19 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	}
 
 	if config.Mailer.URLPaths.Invite == "" {
-		config.Mailer.URLPaths.Invite = "/"
+		config.Mailer.URLPaths.Invite = "/verify"
 	}
 
 	if config.Mailer.URLPaths.Confirmation == "" {
-		config.Mailer.URLPaths.Confirmation = "/"
+		config.Mailer.URLPaths.Confirmation = "/verify"
 	}
 
 	if config.Mailer.URLPaths.Recovery == "" {
-		config.Mailer.URLPaths.Recovery = "/"
+		config.Mailer.URLPaths.Recovery = "/verify"
 	}
 
 	if config.Mailer.URLPaths.EmailChange == "" {
-		config.Mailer.URLPaths.EmailChange = "/"
+		config.Mailer.URLPaths.EmailChange = "/verify"
 	}
 
 	if config.Mailer.OtpExp == 0 {
