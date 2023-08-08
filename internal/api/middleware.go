@@ -12,6 +12,7 @@ import (
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/security"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
@@ -114,6 +115,7 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 							emailRateLimitCounter.Add(
 								req.Context(),
 								1,
+								attribute.String("path", req.URL.Path),
 							)
 							return c, httpError(http.StatusTooManyRequests, "Email rate limit exceeded")
 						}
