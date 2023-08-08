@@ -6,7 +6,7 @@ import (
 
 	"github.com/supabase/gotrue/internal/observability"
 	"go.opentelemetry.io/otel/attribute"
-	metricinstrument "go.opentelemetry.io/otel/metric/instrument"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -28,27 +28,14 @@ const (
 // GenerateHashFromPassword.
 var PasswordHashCost = DefaultHashCost
 
-type metricCounter interface {
-	Add(ctx context.Context, incr int64, attrs ...attribute.KeyValue)
-}
-
-func obtainMetricCounter(name, desc string) metricCounter {
-	counter, err := observability.Meter("gotrue").SyncInt64().Counter(name, metricinstrument.WithDescription(desc))
-	if err != nil {
-		panic(err)
-	}
-
-	return counter
-}
-
 var (
-	generateFromPasswordSubmittedCounter = obtainMetricCounter("gotrue_generate_from_password_submitted", "Number of submitted GenerateFromPassword hashing attempts")
-	generateFromPasswordCompletedCounter = obtainMetricCounter("gotrue_generate_from_password_completed", "Number of completed GenerateFromPassword hashing attempts")
+	generateFromPasswordSubmittedCounter = observability.ObtainMetricCounter("gotrue_generate_from_password_submitted", "Number of submitted GenerateFromPassword hashing attempts")
+	generateFromPasswordCompletedCounter = observability.ObtainMetricCounter("gotrue_generate_from_password_completed", "Number of completed GenerateFromPassword hashing attempts")
 )
 
 var (
-	compareHashAndPasswordSubmittedCounter = obtainMetricCounter("gotrue_compare_hash_and_password_submitted", "Number of submitted CompareHashAndPassword hashing attempts")
-	compareHashAndPasswordCompletedCounter = obtainMetricCounter("gotrue_compare_hash_and_password_completed", "Number of completed CompareHashAndPassword hashing attempts")
+	compareHashAndPasswordSubmittedCounter = observability.ObtainMetricCounter("gotrue_compare_hash_and_password_submitted", "Number of submitted CompareHashAndPassword hashing attempts")
+	compareHashAndPasswordCompletedCounter = observability.ObtainMetricCounter("gotrue_compare_hash_and_password_completed", "Number of completed CompareHashAndPassword hashing attempts")
 )
 
 // CompareHashAndPassword compares the hash and

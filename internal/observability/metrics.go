@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/gotrue/internal/conf"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
@@ -28,6 +29,19 @@ import (
 
 func Meter(instrumentationName string, opts ...metric.MeterOption) metric.Meter {
 	return metricglobal.Meter(instrumentationName, opts...)
+}
+
+type metricCounter interface {
+	Add(ctx context.Context, incr int64, attrs ...attribute.KeyValue)
+}
+
+func ObtainMetricCounter(name, desc string) metricCounter {
+	counter, err := Meter("gotrue").SyncInt64().Counter(name, metricinstrument.WithDescription(desc))
+	if err != nil {
+		panic(err)
+	}
+
+	return counter
 }
 
 func enablePrometheusMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
