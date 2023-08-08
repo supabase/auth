@@ -199,10 +199,6 @@ func ConfigureMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
 			logrus.WithError(err).Error("unable to get gotrue.gotrue_running gague metric")
 			return
 		}
-		if err != nil {
-			logrus.WithError(err).Error("unable to get gotrue.email_rate_limit gague metric")
-			return
-		}
 
 		if err := meter.RegisterCallback(
 			[]metricinstrument.Asynchronous{
