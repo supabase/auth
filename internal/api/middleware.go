@@ -87,7 +87,6 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 	}).SetBurst(int(a.config.RateLimitSmsSent)).SetMethods([]string{"PUT", "POST"})
 
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
-
 		c := req.Context()
 		config := a.config
 		shouldRateLimitEmail := config.External.Email.Enabled && !config.Mailer.Autoconfirm
@@ -112,7 +111,6 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 				if shouldRateLimitEmail {
 					if requestBody.Email != "" {
 						if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
-							// TODO - check if this needs to be guarded in order to be done safely
 							emailRateLimitCounter.Add(
 								req.Context(),
 								1,
