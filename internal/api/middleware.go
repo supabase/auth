@@ -20,7 +20,7 @@ import (
 
 type FunctionHooks map[string][]string
 
-type NetlifyMicroserviceClaims struct {
+type AuthMicroserviceClaims struct {
 	jwt.StandardClaims
 	SiteURL       string        `json:"site_url"`
 	InstanceID    string        `json:"id"`

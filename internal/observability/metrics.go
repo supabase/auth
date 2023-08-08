@@ -11,7 +11,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/gotrue/internal/conf"
 
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"

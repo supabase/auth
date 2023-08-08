@@ -23,7 +23,7 @@ import (
 
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
 type ExternalProviderClaims struct {
-	NetlifyMicroserviceClaims
+	AuthMicroserviceClaims
 	Provider    string `json:"provider"`
 	InviteToken string `json:"invite_token,omitempty"`
 	Referrer    string `json:"referrer,omitempty"`
@@ -83,7 +83,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
-		NetlifyMicroserviceClaims: NetlifyMicroserviceClaims{
+		AuthMicroserviceClaims: AuthMicroserviceClaims{
 			StandardClaims: jwt.StandardClaims{
 				ExpiresAt: time.Now().Add(5 * time.Minute).Unix(),
 			},
