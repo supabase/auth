@@ -31,10 +31,6 @@ func Meter(instrumentationName string, opts ...metric.MeterOption) metric.Meter 
 	return metricglobal.Meter(instrumentationName, opts...)
 }
 
-type metricCounter interface {
-	Add(ctx context.Context, incr int64, attrs ...attribute.KeyValue)
-}
-
 func ObtainMetricCounter(name, desc string) metricCounter {
 	counter, err := Meter("gotrue").SyncInt64().Counter(name, metricinstrument.WithDescription(desc))
 	if err != nil {
