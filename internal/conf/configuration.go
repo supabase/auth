@@ -232,6 +232,7 @@ type SmsProviderConfiguration struct {
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
+	Africastalking AfricastalkingProviderConfiguration `json:"africastalking"`
 }
 
 type TwilioProviderConfiguration struct {
@@ -260,6 +261,13 @@ type VonageProviderConfiguration struct {
 	ApiKey    string `json:"api_key" split_words:"true"`
 	ApiSecret string `json:"api_secret" split_words:"true"`
 	From      string `json:"from" split_words:"true"`
+}
+
+type AfricastalkingProviderConfiguration struct {
+	Username	string `json:"username"`
+    ApiKey		string `json:"api_key" split_words:"true"`
+	// From is an optional field, if not provided, the default value will be used.
+	From	string `json:"from"`
 }
 
 type CaptchaConfiguration struct {
@@ -552,6 +560,16 @@ func (t *VonageProviderConfiguration) Validate() error {
 	}
 	if t.From == "" {
 		return errors.New("missing Vonage 'from' parameter")
+	}
+	return nil
+}
+
+func (t *AfricastalkingProviderConfiguration) Validate() error {
+	if t.Username == "" {
+		return errors.New("missing Africastalking username")
+	}
+	if t.ApiKey == "" {
+		return errors.New("missing Africastalking API key")
 	}
 	return nil
 }
