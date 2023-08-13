@@ -56,6 +56,10 @@ func TestSmsProvider(t *testing.T) {
 					ApiKey: "test_api_key",
 					Sender: "test_sender",
 				},
+				Africastalking: conf.AfricastalkingProviderConfiguration{
+					ApiKey:	"test_api_key",
+					Username: "test_username",
+				},
 			},
 		},
 	}
@@ -281,4 +285,34 @@ func (ts *SmsProviderTestSuite) TestTwilioVerifySendSms() {
 			require.Equal(ts.T(), c.ExpectedError, err)
 		})
 	}
+}
+
+func (ts *SmsProviderTestSuite) TestAfricastalkingSendSms() {
+	defer gock.Off()
+	provider, err := NewAfricastalkingProvider(ts.Config.Sms.Africastalking)
+	require.NoError(ts.T(), err)
+
+	africastalkingProvider, ok := provider.(*AfricastalkingProvider)
+	require.Equal(ts.T(), true, ok)
+
+	phone := "123456789"
+	message := "This is the sms code: 123456"
+
+	body := url.Values{
+		"username": {africastalkingProvider.Config.Username},
+		"message": {message},
+		"to": {phone},
+	}
+
+	gock.New(africastalkingProvider.APIPath).Post("").MatchHeader("apikey", africastalkingProvider.Config.ApiKey).MatchType("url").BodyString(body.Encode()).Reply(200).JSON(AfricastalkingResponse{
+		SMSMessageData: AfricastalkingSMSMessageData{
+			Message: "Sent to 1/1 Total Cost: KES 0.8000",
+			Recipients: []AfricastalkingRecipient{
+				{Status: "Success"},
+			},
+		},
+	})
+
+	_, err = africastalkingProvider.SendSms(phone, message)
+	require.NoError(ts.T(), err)
 }

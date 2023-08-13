@@ -1,3 +1,4 @@
+ // Africastalking documentation -  https://developers.africastalking.com/docs/sms/sending/bulk
 package sms_provider
 
 import (
@@ -21,22 +22,22 @@ type AfricastalkingProvider struct {
 	APIPath string
 }
 
-type AfricastalkingError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+type AfricastalkingRecipient struct {
+	MessageID string `json:"messageId"`
+	StatusCode string `json:"statusCode"`
+	Status string `json:"status"`
+}
+
+type AfricastalkingSMSMessageData struct {
+	Message   string             `json:"message"`
+	Recipients []AfricastalkingRecipient `json:"Recipients"`
 }
 
 type AfricastalkingResponse struct {
-	Status   string             `json:"status"`
-	Errors   []AfricastalkingError   `json:"errors"`
-	Messages []AfricastalkingMessage `json:"messages"`
+	SMSMessageData AfricastalkingSMSMessageData `json:"SMSMessageData"`
 }
 
-type AfricastalkingMessage struct {
-	MessageID string `json:"id"`
-}
-
-// Creates a SmsProvider with the Africastalking Config
+// Creates a SmsProvider with the Africastalking Config.
 func NewAfricastalkingProvider(config conf.AfricastalkingProviderConfiguration) (SmsProvider, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
@@ -91,19 +92,13 @@ func (t *AfricastalkingProvider) SendSms(phone string, message string) (string, 
 		return "", derr
 	}
 
-	if len(resp.Errors) > 0 {
+	if len(resp.SMSMessageData.Recipients) <= 0 {
 		return "", errors.New("Africastalking error: Internal Error")
 	}
-
-	messageID := ""
-
-	if resp.Status != "success" {
-		if len(resp.Messages) > 0 {
-			messageID = resp.Messages[0].MessageID
-		}
-
-		return messageID, fmt.Errorf("Africastalking error: %v (code: %v) message %s", resp.Errors[0].Message, resp.Errors[0].Code, messageID)
+	
+	if resp.SMSMessageData.Recipients[0].Status != "Success" {
+		return "", errors.New("Africastalking error: Internal Error - " + resp.SMSMessageData.Recipients[0].Status + " - " + resp.SMSMessageData.Recipients[0].StatusCode)
 	}
 
-	return messageID, nil
+	return resp.SMSMessageData.Recipients[0].MessageID, nil
 }
