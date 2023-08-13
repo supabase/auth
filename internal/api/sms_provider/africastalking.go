@@ -29,7 +29,7 @@ type AfricastalkingRecipient struct {
 }
 
 type AfricastalkingSMSMessageData struct {
-	Message   string             `json:"message"`
+	Message   string             `json:"Message"`
 	Recipients []AfricastalkingRecipient `json:"Recipients"`
 }
 
