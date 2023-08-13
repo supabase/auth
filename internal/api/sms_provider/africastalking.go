@@ -66,7 +66,8 @@ func (t *AfricastalkingProvider) SendSms(phone string, message string) (string, 
 		"message": {message},
 		"to": {phone},
 	}
-
+	
+	// From is an optional field, if not provided, the default value will be used.
 	if t.Config.From != "" {
 		body.Add("from", t.Config.From)
 	}

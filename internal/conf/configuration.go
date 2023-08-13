@@ -276,8 +276,7 @@ type VonageProviderConfiguration struct {
 type AfricastalkingProviderConfiguration struct {
 	Username	string `json:"username"`
     ApiKey		string `json:"api_key" split_words:"true"`
-	// From is an optional field, if not provided, the default value will be used.
-	From	string `json:"from"`
+	From		string `json:"from"`
 }
 
 type CaptchaConfiguration struct {
