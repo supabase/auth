@@ -1,10 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 	"regexp"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/pkg/errors"
@@ -13,8 +14,6 @@ import (
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
 )
-
-const defaultSmsMessage = "Your code is %v"
 
 var e164Format = regexp.MustCompile("^[1-9][0-9]{1,14}$")
 
@@ -67,30 +66,39 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		return "", internalServerError("invalid otp type")
 	}
 
+	// intentionally keeping this before the test OTP, so that the behavior
+	// of regular and test OTPs is similar
 	if sentAt != nil && !sentAt.Add(config.Sms.MaxFrequency).Before(time.Now()) {
 		return "", MaxFrequencyLimitError
 	}
-	oldToken := *token
-	otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
-	if err != nil {
-		return "", internalServerError("error generating otp").WithInternalError(err)
-	}
-	*token = crypto.GenerateTokenHash(phone, otp)
-
-	var message string
-	if config.Sms.Template == "" {
-		message = fmt.Sprintf(defaultSmsMessage, otp)
-	} else {
-		message = strings.Replace(config.Sms.Template, "{{ .Code }}", otp, -1)
-	}
-
-	messageID, serr := smsProvider.SendMessage(phone, message, channel)
-	if serr != nil {
-		*token = oldToken
-		return messageID, serr
-	}
 
 	now := time.Now()
+
+	var otp, messageID string
+
+	if testOTP, ok := config.Sms.GetTestOTP(phone, now); ok {
+		otp = testOTP
+		messageID = "test-otp"
+	}
+
+	if otp == "" { // not using test OTPs
+		otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
+		if err != nil {
+			return "", internalServerError("error generating otp").WithInternalError(err)
+		}
+
+		message, err := generateSMSFromTemplate(config.Sms.SMSTemplate, otp)
+		if err != nil {
+			return "", err
+		}
+
+		messageID, err = smsProvider.SendMessage(phone, message, channel)
+		if err != nil {
+			return messageID, err
+		}
+	}
+
+	*token = crypto.GenerateTokenHash(phone, otp)
 
 	switch otpType {
 	case phoneConfirmationOtp:
@@ -102,4 +110,14 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	}
 
 	return messageID, errors.Wrap(tx.UpdateOnly(user, includeFields...), "Database error updating user for confirmation")
+}
+
+func generateSMSFromTemplate(SMSTemplate *template.Template, otp string) (string, error) {
+	var message bytes.Buffer
+	if err := SMSTemplate.Execute(&message, struct {
+		Code string
+	}{Code: otp}); err != nil {
+		return "", err
+	}
+	return message.String(), nil
 }

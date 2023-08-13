@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/gobwas/glob"
@@ -76,17 +77,13 @@ type APIConfiguration struct {
 	Port            string `envconfig:"PORT" default:"8081"`
 	Endpoint        string
 	RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
-	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
+	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL" required:"true"`
 }
 
 func (a *APIConfiguration) Validate() error {
-	if a.ExternalURL != "" {
-		// sometimes, in tests, ExternalURL is empty and we regard that
-		// as a valid value
-		_, err := url.ParseRequestURI(a.ExternalURL)
-		if err != nil {
-			return err
-		}
+	_, err := url.ParseRequestURI(a.ExternalURL)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -221,18 +218,31 @@ type PhoneProviderConfiguration struct {
 }
 
 type SmsProviderConfiguration struct {
-	Autoconfirm  bool                              `json:"autoconfirm"`
-	MaxFrequency time.Duration                     `json:"max_frequency" split_words:"true"`
-	OtpExp       uint                              `json:"otp_exp" split_words:"true"`
-	OtpLength    int                               `json:"otp_length" split_words:"true"`
-	Provider     string                            `json:"provider"`
-	Template     string                            `json:"template"`
+	Autoconfirm       bool               `json:"autoconfirm"`
+	MaxFrequency      time.Duration      `json:"max_frequency" split_words:"true"`
+	OtpExp            uint               `json:"otp_exp" split_words:"true"`
+	OtpLength         int                `json:"otp_length" split_words:"true"`
+	Provider          string             `json:"provider"`
+	Template          string             `json:"template"`
+	TestOTP           map[string]string  `json:"test_otp" split_words:"true"`
+	TestOTPValidUntil time.Time          `json:"test_otp_valid_until" split_words:"true"`
+	SMSTemplate       *template.Template `json:"-"`
+
 	Twilio       TwilioProviderConfiguration       `json:"twilio"`
 	TwilioVerify TwilioVerifyProviderConfiguration `json:"twilio_verify" split_words:"true"`
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
 	Africastalking AfricastalkingProviderConfiguration `json:"africastalking"`
+}
+
+func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {
+	if c.TestOTP != nil && (c.TestOTPValidUntil.IsZero() || now.Before(c.TestOTPValidUntil)) {
+		testOTP, ok := c.TestOTP[phone]
+		return testOTP, ok
+	}
+
+	return "", false
 }
 
 type TwilioProviderConfiguration struct {
@@ -361,6 +371,17 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 	} else {
 		config.SAML.PrivateKey = ""
 	}
+	if config.Sms.Provider != "" {
+		SMSTemplate := config.Sms.Template
+		if SMSTemplate == "" {
+			SMSTemplate = "Your code is {{ .Code }}"
+		}
+		template, err := template.New("").Parse(SMSTemplate)
+		if err != nil {
+			return nil, err
+		}
+		config.Sms.SMSTemplate = template
+	}
 
 	return config, nil
 }
@@ -380,19 +401,19 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	}
 
 	if config.Mailer.URLPaths.Invite == "" {
-		config.Mailer.URLPaths.Invite = "/"
+		config.Mailer.URLPaths.Invite = "/verify"
 	}
 
 	if config.Mailer.URLPaths.Confirmation == "" {
-		config.Mailer.URLPaths.Confirmation = "/"
+		config.Mailer.URLPaths.Confirmation = "/verify"
 	}
 
 	if config.Mailer.URLPaths.Recovery == "" {
-		config.Mailer.URLPaths.Recovery = "/"
+		config.Mailer.URLPaths.Recovery = "/verify"
 	}
 
 	if config.Mailer.URLPaths.EmailChange == "" {
-		config.Mailer.URLPaths.EmailChange = "/"
+		config.Mailer.URLPaths.EmailChange = "/verify"
 	}
 
 	if config.Mailer.OtpExp == 0 {

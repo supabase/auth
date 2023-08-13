@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/supabase/gotrue/internal/conf"
@@ -19,6 +20,13 @@ const (
 type TwilioProvider struct {
 	Config  *conf.TwilioProviderConfiguration
 	APIPath string
+}
+
+var isPhoneNumber = regexp.MustCompile("^[1-9][0-9]{1,14}$")
+
+// formatPhoneNumber removes "+" and whitespaces in a phone number
+func formatPhoneNumber(phone string) string {
+	return strings.ReplaceAll(strings.TrimPrefix(phone, "+"), " ", "")
 }
 
 type SmsStatus struct {
@@ -70,7 +78,9 @@ func (t *TwilioProvider) SendSms(phone, message, channel string) (string, error)
 	receiver := "+" + phone
 	if channel == WhatsappProvider {
 		receiver = channel + ":" + receiver
-		sender = channel + ":" + sender
+		if isPhoneNumber.MatchString(formatPhoneNumber(sender)) {
+			sender = channel + ":" + sender
+		}
 	}
 	body := url.Values{
 		"To":      {receiver}, // twilio api requires "+" extension to be included

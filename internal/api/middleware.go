@@ -12,6 +12,7 @@ import (
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/security"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
@@ -20,7 +21,7 @@ import (
 
 type FunctionHooks map[string][]string
 
-type NetlifyMicroserviceClaims struct {
+type AuthMicroserviceClaims struct {
 	jwt.StandardClaims
 	SiteURL       string        `json:"site_url"`
 	InstanceID    string        `json:"id"`
@@ -48,6 +49,8 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 	}
 	return nil
 }
+
+var emailRateLimitCounter = observability.ObtainMetricCounter("gotrue_email_rate_limit_counter", "Number of times an email rate limit has been triggered")
 
 func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
@@ -109,6 +112,11 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 				if shouldRateLimitEmail {
 					if requestBody.Email != "" {
 						if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
+							emailRateLimitCounter.Add(
+								req.Context(),
+								1,
+								attribute.String("path", req.URL.Path),
+							)
 							return c, httpError(http.StatusTooManyRequests, "Email rate limit exceeded")
 						}
 					}

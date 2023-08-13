@@ -53,7 +53,7 @@ func IsValidMessageChannel(channel string, smsProvider string) bool {
 	case SMSProvider:
 		return true
 	case WhatsappProvider:
-		return smsProvider == "twilio"
+		return smsProvider == "twilio" || smsProvider == "twilio_verify"
 	default:
 		return false
 	}
