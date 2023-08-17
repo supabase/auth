@@ -116,6 +116,8 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	// Avoid max freq limit error
 	now := time.Now().Add(-1 * time.Minute)
 
+	// Enable Phone Logoin for phone related tests
+	ts.Config.External.Phone.Enabled = true
 	// disable secure email change
 	ts.Config.Mailer.SecureEmailChangeEnabled = false
 
