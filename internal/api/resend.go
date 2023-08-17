@@ -19,7 +19,7 @@ type ResendConfirmationParams struct {
 	Phone string `json:"phone"`
 }
 
-func (p *ResendConfirmationParams) Validate() error {
+func (p *ResendConfirmationParams) Validate(emailEnabled bool) error {
 	switch p.Type {
 	case signupVerification, emailChangeVerification, smsVerification, phoneChangeVerification:
 		break
@@ -39,6 +39,9 @@ func (p *ResendConfirmationParams) Validate() error {
 	if p.Email != "" && p.Phone != "" {
 		return badRequestError("Only an email address or phone number should be provided.")
 	} else if p.Email != "" {
+		if !emailEnabled {
+			return badRequestError("Email logins are disabled")
+		}
 		p.Email, err = validateEmail(p.Email)
 		if err != nil {
 			return err
@@ -71,7 +74,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read params: %v", err)
 	}
 
-	if err := params.Validate(); err != nil {
+	if err := params.Validate(config.External.Email.Enabled); err != nil {
 		return err
 	}
 
