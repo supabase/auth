@@ -75,6 +75,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	now := time.Now()
 
 	var otp, messageID string
+	var err error
 
 	if testOTP, ok := config.Sms.GetTestOTP(phone, now); ok {
 		otp = testOTP
@@ -82,7 +83,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	}
 
 	if otp == "" { // not using test OTPs
-		otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
+		otp, err = crypto.GenerateOtp(config.Sms.OtpLength)
 		if err != nil {
 			return "", internalServerError("error generating otp").WithInternalError(err)
 		}
