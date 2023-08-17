@@ -353,7 +353,9 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 		},
 	}
 
-	for _, c := range cases {
+	for _, caseItem := range cases {
+		c := caseItem
+
 		ts.Run(c.desc, func() {
 			// update token sent time
 			sentTime = time.Now()
