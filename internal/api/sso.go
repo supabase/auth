@@ -65,7 +65,8 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	flowType := getFlowFromChallenge(params.CodeChallenge)
-	flowStateID := uuid.Nil
+	var flowStateID *uuid.UUID
+	flowStateID = nil
 	if flowType == models.PKCEFlow {
 		codeChallengeMethodType, err := models.ParseCodeChallengeMethod(codeChallengeMethod)
 		if err != nil {
@@ -78,7 +79,7 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		if err := a.db.Create(flowState); err != nil {
 			return err
 		}
-		flowStateID = flowState.ID
+		flowStateID = &flowState.ID
 	}
 
 	var ssoProvider *models.SSOProvider
@@ -122,7 +123,7 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		RequestID:     authnRequest.ID,
 		FromIPAddress: utilities.GetIPAddress(r),
 		RedirectTo:    params.RedirectTo,
-		FlowStateID:   &flowStateID,
+		FlowStateID:   flowStateID,
 	}
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
