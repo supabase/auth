@@ -132,7 +132,12 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 
 // ExternalProviderCallback handles the callback endpoint in the external oauth provider flow
 func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
-	a.redirectErrors(a.internalExternalProviderCallback, w, r)
+	rurl := a.getExternalRedirectURL(r)
+	u, err := url.Parse(rurl)
+	if err != nil {
+		return err
+	}
+	a.redirectErrors(a.internalExternalProviderCallback, w, r, rurl, u.Query())
 	return nil
 }
 
@@ -554,19 +559,18 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	}
 }
 
-func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request) {
+func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, rurl string, rq url.Values) {
 	ctx := r.Context()
 	log := observability.GetLogEntry(r)
 	errorID := getRequestID(ctx)
 	err := handler(w, r)
 	if err != nil {
-		q := getErrorQueryString(err, errorID, log)
-		http.Redirect(w, r, a.getExternalRedirectURL(r)+"?"+q.Encode(), http.StatusFound)
+		q := getErrorQueryString(err, errorID, log, rq)
+		http.Redirect(w, r, rurl+"?"+q.Encode(), http.StatusFound)
 	}
 }
 
-func getErrorQueryString(err error, errorID string, log logrus.FieldLogger) *url.Values {
-	q := url.Values{}
+func getErrorQueryString(err error, errorID string, log logrus.FieldLogger, q url.Values) *url.Values {
 	switch e := err.(type) {
 	case *HTTPError:
 		if str, ok := oauthErrorMap[e.Code]; ok {
@@ -587,7 +591,7 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger) *url
 		q.Set("error_description", e.Description)
 		log.WithError(e.Cause()).Info(e.Error())
 	case ErrorCause:
-		return getErrorQueryString(e.Cause(), errorID, log)
+		return getErrorQueryString(e.Cause(), errorID, log, q)
 	default:
 		error_type, error_description := "server_error", err.Error()
 
