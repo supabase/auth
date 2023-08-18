@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/supabase/gotrue/internal/api/sms_provider"
+	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
 	"github.com/supabase/gotrue/internal/utilities"
@@ -19,7 +20,7 @@ type ResendConfirmationParams struct {
 	Phone string `json:"phone"`
 }
 
-func (p *ResendConfirmationParams) Validate() error {
+func (p *ResendConfirmationParams) Validate(config *conf.GlobalConfiguration) error {
 	switch p.Type {
 	case signupVerification, emailChangeVerification, smsVerification, phoneChangeVerification:
 		break
@@ -39,11 +40,17 @@ func (p *ResendConfirmationParams) Validate() error {
 	if p.Email != "" && p.Phone != "" {
 		return badRequestError("Only an email address or phone number should be provided.")
 	} else if p.Email != "" {
+		if !config.External.Email.Enabled {
+			return badRequestError("Email logins are disabled")
+		}
 		p.Email, err = validateEmail(p.Email)
 		if err != nil {
 			return err
 		}
 	} else if p.Phone != "" {
+		if !config.External.Phone.Enabled {
+			return badRequestError("Phone logins are disabled")
+		}
 		p.Phone, err = validatePhone(p.Phone)
 		if err != nil {
 			return err
@@ -71,7 +78,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("Could not read params: %v", err)
 	}
 
-	if err := params.Validate(); err != nil {
+	if err := params.Validate(config); err != nil {
 		return err
 	}
 
