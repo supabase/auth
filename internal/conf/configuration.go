@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/gobwas/glob"
@@ -58,6 +59,8 @@ type JWTConfiguration struct {
 	AdminGroupName   string   `json:"admin_group_name" split_words:"true"`
 	AdminRoles       []string `json:"admin_roles" split_words:"true"`
 	DefaultGroupName string   `json:"default_group_name" split_words:"true"`
+	Issuer           string   `json:"issuer"`
+	KeyID            string   `json:"key_id" split_words:"true"`
 }
 
 // MFAConfiguration holds all the MFA related Configuration
@@ -74,17 +77,13 @@ type APIConfiguration struct {
 	Port            string `envconfig:"PORT" default:"8081"`
 	Endpoint        string
 	RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
-	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL"`
+	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL" required:"true"`
 }
 
 func (a *APIConfiguration) Validate() error {
-	if a.ExternalURL != "" {
-		// sometimes, in tests, ExternalURL is empty and we regard that
-		// as a valid value
-		_, err := url.ParseRequestURI(a.ExternalURL)
-		if err != nil {
-			return err
-		}
+	_, err := url.ParseRequestURI(a.ExternalURL)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -95,8 +94,9 @@ type GlobalConfiguration struct {
 	API                   APIConfiguration
 	DB                    DBConfiguration
 	External              ProviderConfiguration
-	Logging               LoggingConfig `envconfig:"LOG"`
-	OperatorToken         string        `split_words:"true" required:"false"`
+	Logging               LoggingConfig  `envconfig:"LOG"`
+	Profiler              ProfilerConfig `envconfig:"PROFILER"`
+	OperatorToken         string         `split_words:"true" required:"false"`
 	Tracing               TracingConfig
 	Metrics               MetricsConfig
 	SMTP                  SMTPConfiguration
@@ -124,6 +124,31 @@ type GlobalConfiguration struct {
 		Duration int    `json:"duration"`
 	} `json:"cookies"`
 	SAML SAMLConfiguration `json:"saml"`
+	CORS CORSConfiguration `json:"cors"`
+}
+
+type CORSConfiguration struct {
+	AllowedHeaders []string `json:"allowed_headers" split_words:"true"`
+}
+
+func (c *CORSConfiguration) AllAllowedHeaders(defaults []string) []string {
+	set := make(map[string]bool)
+	for _, header := range defaults {
+		set[header] = true
+	}
+
+	var result []string
+	result = append(result, defaults...)
+
+	for _, header := range c.AllowedHeaders {
+		if !set[header] {
+			result = append(result, header)
+		}
+
+		set[header] = true
+	}
+
+	return result
 }
 
 // EmailContentConfiguration holds the configuration for emails, both subjects and template URLs.
@@ -142,6 +167,7 @@ type ProviderConfiguration struct {
 	Bitbucket               OAuthProviderConfiguration `json:"bitbucket"`
 	Discord                 OAuthProviderConfiguration `json:"discord"`
 	Facebook                OAuthProviderConfiguration `json:"facebook"`
+	Figma                   OAuthProviderConfiguration `json:"figma"`
 	Github                  OAuthProviderConfiguration `json:"github"`
 	Gitlab                  OAuthProviderConfiguration `json:"gitlab"`
 	Google                  OAuthProviderConfiguration `json:"google"`
@@ -192,19 +218,39 @@ type PhoneProviderConfiguration struct {
 }
 
 type SmsProviderConfiguration struct {
-	Autoconfirm  bool                             `json:"autoconfirm"`
-	MaxFrequency time.Duration                    `json:"max_frequency" split_words:"true"`
-	OtpExp       uint                             `json:"otp_exp" split_words:"true"`
-	OtpLength    int                              `json:"otp_length" split_words:"true"`
-	Provider     string                           `json:"provider"`
-	Template     string                           `json:"template"`
-	Twilio       TwilioProviderConfiguration      `json:"twilio"`
-	Messagebird  MessagebirdProviderConfiguration `json:"messagebird"`
-	Textlocal    TextlocalProviderConfiguration   `json:"textlocal"`
-	Vonage       VonageProviderConfiguration      `json:"vonage"`
+	Autoconfirm       bool               `json:"autoconfirm"`
+	MaxFrequency      time.Duration      `json:"max_frequency" split_words:"true"`
+	OtpExp            uint               `json:"otp_exp" split_words:"true"`
+	OtpLength         int                `json:"otp_length" split_words:"true"`
+	Provider          string             `json:"provider"`
+	Template          string             `json:"template"`
+	TestOTP           map[string]string  `json:"test_otp" split_words:"true"`
+	TestOTPValidUntil time.Time          `json:"test_otp_valid_until" split_words:"true"`
+	SMSTemplate       *template.Template `json:"-"`
+
+	Twilio       TwilioProviderConfiguration       `json:"twilio"`
+	TwilioVerify TwilioVerifyProviderConfiguration `json:"twilio_verify" split_words:"true"`
+	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
+	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
+	Vonage       VonageProviderConfiguration       `json:"vonage"`
+}
+
+func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {
+	if c.TestOTP != nil && (c.TestOTPValidUntil.IsZero() || now.Before(c.TestOTPValidUntil)) {
+		testOTP, ok := c.TestOTP[phone]
+		return testOTP, ok
+	}
+
+	return "", false
 }
 
 type TwilioProviderConfiguration struct {
+	AccountSid        string `json:"account_sid" split_words:"true"`
+	AuthToken         string `json:"auth_token" split_words:"true"`
+	MessageServiceSid string `json:"message_service_sid" split_words:"true"`
+}
+
+type TwilioVerifyProviderConfiguration struct {
 	AccountSid        string `json:"account_sid" split_words:"true"`
 	AuthToken         string `json:"auth_token" split_words:"true"`
 	MessageServiceSid string `json:"message_service_sid" split_words:"true"`
@@ -317,6 +363,17 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 	} else {
 		config.SAML.PrivateKey = ""
 	}
+	if config.Sms.Provider != "" {
+		SMSTemplate := config.Sms.Template
+		if SMSTemplate == "" {
+			SMSTemplate = "Your code is {{ .Code }}"
+		}
+		template, err := template.New("").Parse(SMSTemplate)
+		if err != nil {
+			return nil, err
+		}
+		config.Sms.SMSTemplate = template
+	}
 
 	return config, nil
 }
@@ -336,19 +393,19 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	}
 
 	if config.Mailer.URLPaths.Invite == "" {
-		config.Mailer.URLPaths.Invite = "/"
+		config.Mailer.URLPaths.Invite = "/verify"
 	}
 
 	if config.Mailer.URLPaths.Confirmation == "" {
-		config.Mailer.URLPaths.Confirmation = "/"
+		config.Mailer.URLPaths.Confirmation = "/verify"
 	}
 
 	if config.Mailer.URLPaths.Recovery == "" {
-		config.Mailer.URLPaths.Recovery = "/"
+		config.Mailer.URLPaths.Recovery = "/verify"
 	}
 
 	if config.Mailer.URLPaths.EmailChange == "" {
-		config.Mailer.URLPaths.EmailChange = "/"
+		config.Mailer.URLPaths.EmailChange = "/verify"
 	}
 
 	if config.Mailer.OtpExp == 0 {
@@ -474,6 +531,19 @@ func (t *TwilioProviderConfiguration) Validate() error {
 	return nil
 }
 
+func (t *TwilioVerifyProviderConfiguration) Validate() error {
+	if t.AccountSid == "" {
+		return errors.New("missing Twilio account SID")
+	}
+	if t.AuthToken == "" {
+		return errors.New("missing Twilio auth token")
+	}
+	if t.MessageServiceSid == "" {
+		return errors.New("missing Twilio message service SID or Twilio phone number")
+	}
+	return nil
+}
+
 func (t *MessagebirdProviderConfiguration) Validate() error {
 	if t.AccessKey == "" {
 		return errors.New("missing Messagebird access key")
@@ -505,4 +575,8 @@ func (t *VonageProviderConfiguration) Validate() error {
 		return errors.New("missing Vonage 'from' parameter")
 	}
 	return nil
+}
+
+func (t *SmsProviderConfiguration) IsTwilioVerifyProvider() bool {
+	return t.Provider == "twilio_verify"
 }

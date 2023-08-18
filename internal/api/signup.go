@@ -15,6 +15,7 @@ import (
 	"github.com/supabase/gotrue/internal/metering"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 // SignupParams are the parameters the Signup endpoint accepts
@@ -103,10 +104,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod); err != nil {
 			return err
 		}
-		// PKCE not needed as autoconfirm returns access token in body
-		if config.Mailer.Autoconfirm {
-			return badRequestError("PKCE flow is not supported on signups with autoconfirm enabled")
-		}
 	}
 
 	var user *models.User
@@ -178,7 +175,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}
 			} else {
 				mailer := a.Mailer(ctx)
-				referrer := a.getReferrer(r)
+				referrer := utilities.GetReferrer(r, config)
 				if terr = models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
@@ -223,7 +220,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
-				if terr = a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); terr != nil {
+				if _, terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
 			}
@@ -339,12 +336,10 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, param
 		// handles external provider case
 		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
 	}
-
-	user.IsSSOUser = isSSOUser
-
 	if err != nil {
 		return nil, internalServerError("Database error creating user").WithInternalError(err)
 	}
+	user.IsSSOUser = isSSOUser
 	if user.AppMetaData == nil {
 		user.AppMetaData = make(map[string]interface{})
 	}

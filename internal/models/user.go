@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"time"
 
@@ -222,13 +223,23 @@ func (u *User) SetPhone(tx *storage.Connection, phone string) error {
 }
 
 // UpdatePassword updates the user's password
-func (u *User) UpdatePassword(tx *storage.Connection, password string) error {
+func (u *User) UpdatePassword(tx *storage.Connection, password string, sessionID *uuid.UUID) error {
 	pw, err := crypto.GenerateFromPassword(context.Background(), password)
 	if err != nil {
 		return err
 	}
 	u.EncryptedPassword = pw
-	return tx.UpdateOnly(u, "encrypted_password")
+	if err := tx.UpdateOnly(u, "encrypted_password"); err != nil {
+		return err
+	}
+
+	if sessionID == nil {
+		// log out user from all sessions to ensure reauthentication after password change
+		return Logout(tx, u.ID)
+	} else {
+		// log out user from all other sessions to ensure reauthentication after password change
+		return LogoutAllExceptMe(tx, *sessionID, u.ID)
+	}
 }
 
 // UpdatePhone updates the user's phone
@@ -382,6 +393,15 @@ func findUser(tx *storage.Connection, query string, args ...interface{}) (*User,
 }
 
 // FindUserByConfirmationToken finds users with the matching confirmation token.
+func FindUserByConfirmationOrRecoveryToken(tx *storage.Connection, token string) (*User, error) {
+	user, err := findUser(tx, "(confirmation_token = ? or recovery_token = ?) and is_sso_user = false", token, token)
+	if err != nil {
+		return nil, ConfirmationOrRecoveryTokenNotFoundError{}
+	}
+	return user, nil
+}
+
+// FindUserByConfirmationToken finds users with the matching confirmation token.
 func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, error) {
 	user, err := findUser(tx, "confirmation_token = ? and is_sso_user = false", token)
 	if err != nil {
@@ -415,9 +435,29 @@ func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, er
 	return findUser(tx, "is_sso_user = false and (email_change_token_current = ? or email_change_token_new = ?)", token, token)
 }
 
-// FindUserWithRefreshToken finds a user from the provided refresh token.
-func FindUserWithRefreshToken(tx *storage.Connection, token string) (*User, *RefreshToken, *Session, error) {
+// FindUserWithRefreshToken finds a user from the provided refresh token. If
+// forUpdate is set to true, then the SELECT statement used by the query has
+// the form SELECT ... FOR UPDATE SKIP LOCKED. This means that a FOR UPDATE
+// lock will only be acquired if there's no other lock. In case there is a
+// lock, a IsNotFound(err) error will be returned.
+func FindUserWithRefreshToken(tx *storage.Connection, token string, forUpdate bool) (*User, *RefreshToken, *Session, error) {
 	refreshToken := &RefreshToken{}
+
+	if forUpdate {
+		// pop does not provide us with a way to execute FOR UPDATE
+		// queries which lock the rows affected by the query from
+		// being accessed by any other transaction that also uses FOR
+		// UPDATE
+		if err := tx.RawQuery(fmt.Sprintf("SELECT * FROM %q WHERE token = ? LIMIT 1 FOR UPDATE SKIP LOCKED;", refreshToken.TableName()), token).First(refreshToken); err != nil {
+			if errors.Cause(err) == sql.ErrNoRows {
+				return nil, nil, nil, RefreshTokenNotFoundError{}
+			}
+
+			return nil, nil, nil, errors.Wrap(err, "error finding refresh token for update")
+		}
+	}
+
+	// once the rows are locked (if forUpdate was true), we can query again using pop
 	if err := tx.Where("token = ?", token).First(refreshToken); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, nil, nil, RefreshTokenNotFoundError{}
@@ -436,8 +476,12 @@ func FindUserWithRefreshToken(tx *storage.Connection, token string) (*User, *Ref
 		sessionId := *refreshToken.SessionId
 
 		if sessionId != uuid.Nil {
-			session, err = FindSessionByID(tx, sessionId)
+			session, err = FindSessionByID(tx, sessionId, forUpdate)
 			if err != nil {
+				if forUpdate {
+					return nil, nil, nil, err
+				}
+
 				if !IsNotFoundError(err) {
 					return nil, nil, nil, errors.Wrap(err, "error finding session from refresh token")
 				}
@@ -537,10 +581,9 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *U
 
 	for _, userID := range userIDs {
 		user, err := FindUserByID(tx, userID)
-		if err != nil && !IsNotFoundError(err) {
+		if err != nil {
 			return nil, errors.Wrap(err, "unable to find user from email identity for duplicates")
 		}
-
 		if user.Aud == aud {
 			return user, nil
 		}
@@ -550,7 +593,7 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *U
 	// identities table we also do a final check on the users table
 	user, err := FindUserByEmailAndAudience(tx, email, aud)
 	if err != nil && !IsNotFoundError(err) {
-		return nil, errors.Wrap(err, "unable to find user email addres for duplicates")
+		return nil, errors.Wrap(err, "unable to find user email address for duplicates")
 	}
 
 	return user, nil

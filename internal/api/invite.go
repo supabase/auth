@@ -8,6 +8,7 @@ import (
 	"github.com/supabase/gotrue/internal/api/provider"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 // InviteParams are the parameters the Signup endpoint accepts
@@ -78,7 +79,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		mailer := a.Mailer(ctx)
-		referrer := a.getReferrer(r)
+		referrer := utilities.GetReferrer(r, config)
 		externalURL := getExternalHost(ctx)
 		if err := sendInvite(tx, user, mailer, referrer, externalURL, config.Mailer.OtpLength); err != nil {
 			return internalServerError("Error inviting user").WithInternalError(err)

@@ -158,6 +158,17 @@ paths:
       security:
         - APIKeyAuth: []
           UserAuth: []
+      parameters:
+        - name: scope
+          in: query
+          description: >
+            (Optional.) Determines how the user should be logged out. When `global` is used, the user is logged out from all active sessions. When `local` is used, the user is logged out from the current session. When `others` is used, the user is logged out from all other sessions except the current one. Clients should remove stored access and refresh tokens except when `others` is used.
+          schema:
+            type: string
+            enum:
+              - global
+              - local
+              - others
       responses:
         204:
           description: No content returned on successful logout.
@@ -222,6 +233,10 @@ paths:
                     - phone_change
                 token:
                   type: string
+                token_hash:
+                  type: string
+                  description: >
+                    The hashed value of token. Applicable only if used with `type` and nothing else.
                 email:
                   type: string
                   format: email
@@ -457,6 +472,10 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  message_id:
+                    type: string
+                    description: Unique ID of the message as reported by the SMS sending provider. Useful for tracking deliverability problems.
         400:
           $ref: "#/components/responses/BadRequestResponse"
         422:
@@ -554,6 +573,10 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  message_id:
+                    type: string
+                    description: Unique ID of the message as reported by the SMS sending provider. Useful for tracking deliverability problems.
         400:
           $ref: "#/components/responses/BadRequestResponse"
         422:
@@ -1877,6 +1900,9 @@ components:
         expires_in:
           type: integer
           description: Number of seconds after which the `access_token` should be renewed by using the refresh token with the `refresh_token` grant type.
+        expires_at:
+          type: integer
+          description: UNIX timestamp after which the `access_token` should be renewed by using the refresh token with the `refresh_token` grant type.
         user:
           $ref: "#/components/schemas/UserSchema"
 

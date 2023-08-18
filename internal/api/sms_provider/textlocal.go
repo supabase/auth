@@ -27,8 +27,13 @@ type TextlocalError struct {
 }
 
 type TextlocalResponse struct {
-	Status string           `json:"status"`
-	Errors []TextlocalError `json:"errors"`
+	Status   string             `json:"status"`
+	Errors   []TextlocalError   `json:"errors"`
+	Messages []TextlocalMessage `json:"messages"`
+}
+
+type TextlocalMessage struct {
+	MessageID string `json:"id"`
 }
 
 // Creates a SmsProvider with the Textlocal Config
@@ -44,17 +49,17 @@ func NewTextlocalProvider(config conf.TextlocalProviderConfiguration) (SmsProvid
 	}, nil
 }
 
-func (t *TextlocalProvider) SendMessage(phone string, message string, channel string) error {
+func (t *TextlocalProvider) SendMessage(phone string, message string, channel string) (string, error) {
 	switch channel {
 	case SMSProvider:
 		return t.SendSms(phone, message)
 	default:
-		return fmt.Errorf("channel type %q is not supported for TextLocal", channel)
+		return "", fmt.Errorf("channel type %q is not supported for TextLocal", channel)
 	}
 }
 
 // Send an SMS containing the OTP with Textlocal's API
-func (t *TextlocalProvider) SendSms(phone string, message string) error {
+func (t *TextlocalProvider) SendSms(phone string, message string) (string, error) {
 	body := url.Values{
 		"sender":  {t.Config.Sender},
 		"apikey":  {t.Config.ApiKey},
@@ -65,29 +70,35 @@ func (t *TextlocalProvider) SendSms(phone string, message string) error {
 	client := &http.Client{Timeout: defaultTimeout}
 	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	res, err := client.Do(r)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer utilities.SafeClose(res.Body)
 
 	resp := &TextlocalResponse{}
 	derr := json.NewDecoder(res.Body).Decode(resp)
 	if derr != nil {
-		return derr
+		return "", derr
 	}
 
 	if len(resp.Errors) > 0 {
-		return errors.New("textlocal error: Internal Error")
+		return "", errors.New("textlocal error: Internal Error")
 	}
+
+	messageID := ""
 
 	if resp.Status != "success" {
-		return fmt.Errorf("textlocal error: %v (code: %v)", resp.Errors[0].Message, resp.Errors[0].Code)
+		if len(resp.Messages) > 0 {
+			messageID = resp.Messages[0].MessageID
+		}
+
+		return messageID, fmt.Errorf("textlocal error: %v (code: %v) message %s", resp.Errors[0].Message, resp.Errors[0].Code, messageID)
 	}
 
-	return nil
+	return messageID, nil
 }

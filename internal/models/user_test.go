@@ -151,7 +151,7 @@ func (ts *UserTestSuite) TestFindUserWithRefreshToken() {
 	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
 	require.NoError(ts.T(), err)
 
-	n, nr, s, err := FindUserWithRefreshToken(ts.db, r.Token)
+	n, nr, s, err := FindUserWithRefreshToken(ts.db, r.Token, true /* forUpdate */)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), r.ID, nr.ID)
 	require.Equal(ts.T(), u.ID, n.ID)

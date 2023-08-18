@@ -23,17 +23,11 @@ import (
 
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
 type ExternalProviderClaims struct {
-	NetlifyMicroserviceClaims
+	AuthMicroserviceClaims
 	Provider    string `json:"provider"`
 	InviteToken string `json:"invite_token,omitempty"`
 	Referrer    string `json:"referrer,omitempty"`
 	FlowStateID string `json:"flow_state_id"`
-}
-
-// ExternalSignupParams are the parameters the Signup endpoint accepts
-type ExternalSignupParams struct {
-	Provider string `json:"provider"`
-	Code     string `json:"code"`
 }
 
 // ExternalProviderRedirect redirects the request to the corresponding oauth provider
@@ -64,7 +58,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		}
 	}
 
-	redirectURL := a.getRedirectURLOrReferrer(r, query.Get("redirect_to"))
+	redirectURL := utilities.GetReferrer(r, config)
 	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
@@ -89,7 +83,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
-		NetlifyMicroserviceClaims: NetlifyMicroserviceClaims{
+		AuthMicroserviceClaims: AuthMicroserviceClaims{
 			StandardClaims: jwt.StandardClaims{
 				ExpiresAt: time.Now().Add(5 * time.Minute).Unix(),
 			},
@@ -244,7 +238,11 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
 	} else {
-		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
+		// Left as hash fragment to comply with spec. Additionally, may override existing error query param if set to PKCE.
+		rurl, err = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl, models.ImplicitFlow)
+		if err != nil {
+			return err
+		}
 	}
 
 	http.Redirect(w, r, rurl, http.StatusFound)
@@ -376,7 +374,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	if !user.IsConfirmed() {
 		if !emailData.Verified && !config.Mailer.Autoconfirm {
 			mailer := a.Mailer(ctx)
-			referrer := a.getReferrer(r)
+			referrer := utilities.GetReferrer(r, config)
 			externalURL := getExternalHost(ctx)
 			if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
@@ -521,6 +519,10 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewBitbucketProvider(config.External.Bitbucket)
 	case "discord":
 		return provider.NewDiscordProvider(config.External.Discord, scopes)
+	case "facebook":
+		return provider.NewFacebookProvider(config.External.Facebook, scopes)
+	case "figma":
+		return provider.NewFigmaProvider(config.External.Figma, scopes)
 	case "github":
 		return provider.NewGithubProvider(config.External.Github, scopes)
 	case "gitlab":
@@ -533,8 +535,6 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewKeycloakProvider(config.External.Keycloak, scopes)
 	case "linkedin":
 		return provider.NewLinkedinProvider(config.External.Linkedin, scopes)
-	case "facebook":
-		return provider.NewFacebookProvider(config.External.Facebook, scopes)
 	case "notion":
 		return provider.NewNotionProvider(config.External.Notion)
 	case "spotify":

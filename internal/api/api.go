@@ -59,7 +59,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	api.deprecationNotices(ctx)
 
 	xffmw, _ := xff.Default()
-	logger := observability.NewStructuredLogger(logrus.StandardLogger())
+	logger := observability.NewStructuredLogger(logrus.StandardLogger(), globalConfig)
 
 	r := newRouter()
 	r.Use(addRequestID(globalConfig))
@@ -108,7 +108,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.With(sharedLimiter).With(api.requireAdminCredentials).Post("/invite", api.Invite)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/signup", api.Signup)
 		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
-		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/resend", api.Resend)
+		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/resend", api.Resend)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
 
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
@@ -230,7 +230,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 	corsHandler := cors.New(cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Client-IP", "X-Client-Info", audHeaderName, useCookieHeader},
+		AllowedHeaders:   globalConfig.CORS.AllAllowedHeaders([]string{"Accept", "Authorization", "Content-Type", "X-Client-IP", "X-Client-Info", audHeaderName, useCookieHeader}),
 		ExposedHeaders:   []string{"X-Total-Count", "Link"},
 		AllowCredentials: true,
 	})

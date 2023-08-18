@@ -12,6 +12,7 @@ import (
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/security"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
@@ -20,7 +21,7 @@ import (
 
 type FunctionHooks map[string][]string
 
-type NetlifyMicroserviceClaims struct {
+type AuthMicroserviceClaims struct {
 	jwt.StandardClaims
 	SiteURL       string        `json:"site_url"`
 	InstanceID    string        `json:"id"`
@@ -48,6 +49,8 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 	}
 	return nil
 }
+
+var emailRateLimitCounter = observability.ObtainMetricCounter("gotrue_email_rate_limit_counter", "Number of times an email rate limit has been triggered")
 
 func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
@@ -87,7 +90,10 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		c := req.Context()
 		config := a.config
-		if (config.External.Email.Enabled && !config.Mailer.Autoconfirm) || (config.External.Phone.Enabled) {
+		shouldRateLimitEmail := config.External.Email.Enabled && !config.Mailer.Autoconfirm
+		shouldRateLimitPhone := config.External.Phone.Enabled && !config.Sms.Autoconfirm
+
+		if shouldRateLimitEmail || shouldRateLimitPhone {
 			if req.Method == "PUT" || req.Method == "POST" {
 				bodyBytes, err := getBodyBytes(req)
 				if err != nil {
@@ -103,19 +109,29 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 					return c, badRequestError("Error invalid request body").WithInternalError(err)
 				}
 
-				if requestBody.Email != "" {
-					if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
-						return c, httpError(http.StatusTooManyRequests, "Email rate limit exceeded")
+				if shouldRateLimitEmail {
+					if requestBody.Email != "" {
+						if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
+							emailRateLimitCounter.Add(
+								req.Context(),
+								1,
+								attribute.String("path", req.URL.Path),
+							)
+							return c, httpError(http.StatusTooManyRequests, "Email rate limit exceeded")
+						}
 					}
 				}
 
-				if requestBody.Phone != "" {
-					if err := tollbooth.LimitByKeys(phoneLimiter, []string{"phone_functions"}); err != nil {
-						return c, httpError(http.StatusTooManyRequests, "Sms rate limit exceeded")
+				if shouldRateLimitPhone {
+					if requestBody.Phone != "" {
+						if err := tollbooth.LimitByKeys(phoneLimiter, []string{"phone_functions"}); err != nil {
+							return c, httpError(http.StatusTooManyRequests, "Sms rate limit exceeded")
+						}
 					}
 				}
 			}
 		}
+
 		return c, nil
 	}
 }
@@ -175,8 +191,9 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 }
 
 func isIgnoreCaptchaRoute(req *http.Request) bool {
-	// captcha shouldn't be enabled on requests to refresh the token
-	if req.URL.Path == "/token" && (req.FormValue("grant_type") == "refresh_token" || req.FormValue("grant_type") == "pkce") {
+	// captcha shouldn't be enabled on the following grant_types
+	// id_token, refresh_token, pkce
+	if req.URL.Path == "/token" && req.FormValue("grant_type") != "password" {
 		return true
 	}
 	return false

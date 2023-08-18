@@ -1,13 +1,14 @@
 package models
 
 import (
+	"testing"
+	"time"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/storage"
 	"github.com/supabase/gotrue/internal/storage/test"
-	"testing"
-	"time"
 )
 
 type SessionsTestSuite struct {
@@ -39,6 +40,20 @@ func TestSession(t *testing.T) {
 	suite.Run(t, ts)
 }
 
+func (ts *SessionsTestSuite) TestFindBySessionIDWithForUpdate() {
+	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	session, err := NewSession()
+	require.NoError(ts.T(), err)
+	session.UserID = u.ID
+	require.NoError(ts.T(), ts.db.Create(session))
+
+	found, err := FindSessionByID(ts.db, session.ID, true)
+	require.NoError(ts.T(), err)
+
+	require.Equal(ts.T(), session.ID, found.ID)
+}
+
 func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	totalDistinctClaims := 2
 	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
@@ -48,13 +63,13 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	session.UserID = u.ID
 	require.NoError(ts.T(), ts.db.Create(session))
 
-	err = AddClaimToSession(ts.db, session, PasswordGrant)
+	err = AddClaimToSession(ts.db, session.ID, PasswordGrant)
 	require.NoError(ts.T(), err)
 
 	firstClaimAddedTime := time.Now()
-	err = AddClaimToSession(ts.db, session, TOTPSignIn)
+	err = AddClaimToSession(ts.db, session.ID, TOTPSignIn)
 	require.NoError(ts.T(), err)
-	session, err = FindSessionByID(ts.db, session.ID)
+	session, err = FindSessionByID(ts.db, session.ID, false)
 	require.NoError(ts.T(), err)
 
 	aal, amr, err := session.CalculateAALAndAMR(ts.db)
@@ -62,10 +77,10 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	require.Equal(ts.T(), AAL2.String(), aal)
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
 
-	err = AddClaimToSession(ts.db, session, TOTPSignIn)
+	err = AddClaimToSession(ts.db, session.ID, TOTPSignIn)
 	require.NoError(ts.T(), err)
 
-	session, err = FindSessionByID(ts.db, session.ID)
+	session, err = FindSessionByID(ts.db, session.ID, false)
 	require.NoError(ts.T(), err)
 
 	aal, amr, err = session.CalculateAALAndAMR(ts.db)
@@ -81,5 +96,4 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 		}
 	}
 	require.True(ts.T(), found)
-
 }

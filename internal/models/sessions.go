@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -85,8 +86,29 @@ func NewSession() (*Session, error) {
 	return session, nil
 }
 
-func FindSessionByID(tx *storage.Connection, id uuid.UUID) (*Session, error) {
+// FindSessionByID looks up a Session by the provided id. If forUpdate is set
+// to true, then the SELECT statement used by the query has the form SELECT ...
+// FOR UPDATE SKIP LOCKED. This means that a FOR UPDATE lock will only be
+// acquired if there's no other lock. In case there is a lock, a
+// IsNotFound(err) error will be retured.
+func FindSessionByID(tx *storage.Connection, id uuid.UUID, forUpdate bool) (*Session, error) {
 	session := &Session{}
+
+	if forUpdate {
+		// pop does not provide us with a way to execute FOR UPDATE
+		// queries which lock the rows affected by the query from
+		// being accessed by any other transaction that also uses FOR
+		// UPDATE
+		if err := tx.RawQuery(fmt.Sprintf("SELECT * FROM %q WHERE id = ? LIMIT 1 FOR UPDATE SKIP LOCKED;", session.TableName()), id).First(session); err != nil {
+			if errors.Cause(err) == sql.ErrNoRows {
+				return nil, SessionNotFoundError{}
+			}
+
+			return nil, err
+		}
+	}
+
+	// once the rows are locked (if forUpdate was true), we can query again using pop
 	if err := tx.Eager().Q().Where("id = ?", id).First(session); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, SessionNotFoundError{}

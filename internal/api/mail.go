@@ -1,9 +1,7 @@
 package api
 
 import (
-	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -19,6 +17,7 @@ import (
 	"github.com/supabase/gotrue/internal/mailer"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 var (
@@ -49,7 +48,6 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 	mailer := a.Mailer(ctx)
 	adminUser := getAdminUser(ctx)
-
 	params := &GenerateLinkParams{}
 
 	body, err := getBodyBytes(r)
@@ -64,6 +62,10 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	params.Email, err = validateEmail(params.Email)
 	if err != nil {
 		return err
+	}
+	referrer := utilities.GetReferrer(r, config)
+	if utilities.IsRedirectURLValid(config, params.RedirectTo) {
+		referrer = params.RedirectTo
 	}
 
 	aud := a.requestAud(ctx, r)
@@ -85,13 +87,12 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var url string
-	referrer := a.getRedirectURLOrReferrer(r, params.RedirectTo)
 	now := time.Now()
 	otp, err := crypto.GenerateOtp(config.Mailer.OtpLength)
 	if err != nil {
 		return err
 	}
-	hashedToken := fmt.Sprintf("%x", sha256.Sum224([]byte(params.Email+otp)))
+	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
@@ -195,7 +196,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if params.Type == "email_change_current" {
 				user.EmailChangeTokenCurrent = hashedToken
 			} else if params.Type == "email_change_new" {
-				user.EmailChangeTokenNew = fmt.Sprintf("%x", sha256.Sum224([]byte(params.NewEmail+otp)))
+				user.EmailChangeTokenNew = crypto.GenerateTokenHash(params.NewEmail, otp)
 			}
 			terr = errors.Wrap(tx.UpdateOnly(user, "email_change_token_current", "email_change_token_new", "email_change", "email_change_sent_at", "email_change_confirm_status"), "Database error updating user for email change")
 		default:
@@ -240,7 +241,7 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 	if err != nil {
 		return err
 	}
-	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
 	if err := mailer.ConfirmationMail(u, otp, referrerURL, externalURL); err != nil {
@@ -258,7 +259,7 @@ func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, re
 	if err != nil {
 		return err
 	}
-	u.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	u.ConfirmationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
 	if err := mailer.InviteMail(u, otp, referrerURL, externalURL); err != nil {
 		u.ConfirmationToken = oldToken
@@ -280,7 +281,7 @@ func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, maile
 	if err != nil {
 		return err
 	}
-	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
 	if err := mailer.RecoveryMail(u, otp, referrerURL, externalURL); err != nil {
@@ -302,7 +303,7 @@ func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, ma
 	if err != nil {
 		return err
 	}
-	u.ReauthenticationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	if err != nil {
 		return err
 	}
@@ -327,7 +328,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 	if err != nil {
 		return err
 	}
-	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 
 	now := time.Now()
@@ -350,7 +351,7 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfigu
 		return err
 	}
 	u.EmailChange = email
-	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+otpNew)))
+	token := crypto.GenerateTokenHash(u.EmailChange, otpNew)
 	u.EmailChangeTokenNew = addFlowPrefixToToken(token, flowType)
 
 	otpCurrent := ""
@@ -359,7 +360,7 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfigu
 		if err != nil {
 			return err
 		}
-		currentToken := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otpCurrent)))
+		currentToken := crypto.GenerateTokenHash(u.GetEmail(), otpCurrent)
 		u.EmailChangeTokenCurrent = addFlowPrefixToToken(currentToken, flowType)
 		if err != nil {
 			return err

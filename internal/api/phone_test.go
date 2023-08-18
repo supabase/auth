@@ -28,10 +28,13 @@ type PhoneTestSuite struct {
 
 type TestSmsProvider struct {
 	mock.Mock
+
+	SentMessages int
 }
 
-func (t *TestSmsProvider) SendMessage(phone string, message string, channel string) error {
-	return nil
+func (t *TestSmsProvider) SendMessage(phone string, message string, channel string) (string, error) {
+	t.SentMessages += 1
+	return "", nil
 }
 
 func TestPhone(t *testing.T) {
@@ -66,7 +69,7 @@ func (ts *PhoneTestSuite) TestFormatPhoneNumber() {
 	assert.Equal(ts.T(), "123456789", actual)
 }
 
-func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
+func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	ctx := context.Background()
@@ -97,12 +100,30 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 		},
 	}
 
+	if useTestOTP {
+		ts.API.config.Sms.TestOTP = map[string]string{
+			"123456789": "123456",
+		}
+	} else {
+		ts.API.config.Sms.TestOTP = nil
+	}
+
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			err = ts.API.sendPhoneConfirmation(ctx, ts.API.db, u, "123456789", c.otpType, &TestSmsProvider{}, sms_provider.SMSProvider)
+			provider := &TestSmsProvider{}
+
+			_, err = ts.API.sendPhoneConfirmation(ctx, ts.API.db, u, "123456789", c.otpType, provider, sms_provider.SMSProvider)
 			require.Equal(ts.T(), c.expected, err)
 			u, err = models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
+
+			if c.expected == nil {
+				if useTestOTP {
+					require.Equal(ts.T(), provider.SentMessages, 0)
+				} else {
+					require.Equal(ts.T(), provider.SentMessages, 1)
+				}
+			}
 
 			switch c.otpType {
 			case phoneConfirmationOtp:
@@ -120,6 +141,14 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
 	}
 }
 
+func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
+	doTestSendPhoneConfirmation(ts, false)
+}
+
+func (ts *PhoneTestSuite) TestSendPhoneConfirmationWithTestOTP() {
+	doTestSendPhoneConfirmation(ts, true)
+}
+
 func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
@@ -128,7 +157,7 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
 	var token string
-	token, err = generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
 	require.NoError(ts.T(), err)
 
 	cases := []struct {
@@ -198,6 +227,7 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 	ts.Config.Sms.Messagebird.AccessKey = ""
 	ts.Config.Sms.Textlocal.ApiKey = ""
 	ts.Config.Sms.Vonage.ApiKey = ""
+
 	for _, c := range cases {
 		for _, provider := range smsProviders {
 			ts.Config.Sms.Provider = provider

@@ -16,6 +16,13 @@ It is originally based on the excellent
 Netlify](https://github.com/netlify/gotrue), however both have diverged significantly in
 features and capabilities.
 
+## Table Of Contents
+
+- [Quick Start](#quick-start)
+- [Running in Production](#running-in-production)
+- [Configuration](#configuration)
+- [Endpoints](#endpoints)
+
 ## Quick Start
 
 Create a `.env` file to store your own custom env vars. See [`example.env`](example.env)
@@ -225,6 +232,7 @@ Only the previous revoked token can be reused. Using an old refresh token way be
 ```properties
 GOTRUE_API_HOST=localhost
 PORT=9999
+API_EXTERNAL_URL=http://localhost:9999
 ```
 
 `API_HOST` - `string`
@@ -238,6 +246,10 @@ Port number to listen on. Defaults to `8081`.
 `API_ENDPOINT` - `string` _Multi-instance mode only_
 
 Controls what endpoint Netlify can access this API on.
+
+`API_EXTERNAL_URL` - `string` **required**
+
+The URL on which Gotrue might be accessed at.
 
 `REQUEST_ID_HEADER` - `string`
 
@@ -421,7 +433,7 @@ The default group to assign all new users to.
 
 ### External Authentication Providers
 
-We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin`, `notion`, `spotify`, `slack`, `twitch`, `twitter` and `workos` for external authentication.
+We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `figma`, `github`, `gitlab`, `google`, `keycloak`, `linkedin`, `notion`, `spotify`, `slack`, `twitch`, `twitter` and `workos` for external authentication.
 
 Use the names as the keys underneath `external` to configure each separately.
 
@@ -541,19 +553,19 @@ Controls the duration an email link or otp is valid for.
 
 `MAILER_URLPATHS_INVITE` - `string`
 
-URL path to use in the user invite email. Defaults to `/`.
+URL path to use in the user invite email. Defaults to `/verify`.
 
 `MAILER_URLPATHS_CONFIRMATION` - `string`
 
-URL path to use in the signup confirmation email. Defaults to `/`.
+URL path to use in the signup confirmation email. Defaults to `/verify`.
 
 `MAILER_URLPATHS_RECOVERY` - `string`
 
-URL path to use in the password reset email. Defaults to `/`.
+URL path to use in the password reset email. Defaults to `/verify`.
 
 `MAILER_URLPATHS_EMAIL_CHANGE` - `string`
 
-URL path to use in the email change confirmation email. Defaults to `/`.
+URL path to use in the email change confirmation email. Defaults to `/verify`.
 
 `MAILER_SUBJECTS_INVITE` - `string`
 
@@ -744,6 +756,7 @@ Returns the publicly available settings for this gotrue instance.
     "bitbucket": true,
     "discord": true,
     "facebook": true,
+    "figma": true,
     "github": true,
     "gitlab": true,
     "google": true,
@@ -1189,7 +1202,7 @@ Get access_token from external oauth provider
 query params:
 
 ```
-provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | keycloak | linkedin | notion | slack | spotify | twitch | twitter | workos
+provider=apple | azure | bitbucket | discord | facebook | figma | github | gitlab | google | keycloak | linkedin | notion | slack | spotify | twitch | twitter | workos
 
 scopes=<optional additional scopes depending on the provider (email and name are requested by default)>
 ```

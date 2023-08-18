@@ -9,11 +9,9 @@ import (
 )
 
 const (
-	PKCE                          = "pkce"
 	PKCEPrefix                    = "pkce_"
 	MinCodeChallengeLength        = 43
 	MaxCodeChallengeLength        = 128
-	InvalidFlowTypeErrorMessage   = "Invalid flow type. Flow Type must be either implicit or pkce"
 	InvalidPKCEParamsErrorMessage = "PKCE flow requires code_challenge_method and code_challenge"
 )
 
@@ -42,15 +40,10 @@ func addFlowPrefixToToken(token string, flowType models.FlowType) string {
 
 func issueAuthCode(tx *storage.Connection, user *models.User, expiryDuration time.Duration, authenticationMethod models.AuthenticationMethod) (string, error) {
 	flowState, err := models.FindFlowStateByUserID(tx, user.ID.String(), authenticationMethod)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return "", badRequestError("No valid flow state found for user.")
-		}
+	if err != nil && models.IsNotFoundError(err) {
+		return "", badRequestError("No valid flow state found for user.")
+	} else if err != nil {
 		return "", err
-	}
-
-	if flowState.IsExpired(expiryDuration) {
-		return "", badRequestError("Flow state is expired")
 	}
 	return flowState.AuthCode, nil
 }
@@ -65,21 +58,15 @@ func isImplicitFlow(flowType models.FlowType) bool {
 
 func validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
 	switch true {
-	// Explicitly spell out each case
-	case codeChallenge == "" && codeChallengeMethod != "":
+	case (codeChallenge == "") != (codeChallengeMethod == ""):
 		return badRequestError(InvalidPKCEParamsErrorMessage)
 	case codeChallenge != "":
-		if codeChallengeMethod == "" {
-			return badRequestError(InvalidPKCEParamsErrorMessage)
-		} else {
-			if valid, err := isValidCodeChallenge(codeChallenge); !valid {
-				return err
-			}
+		if valid, err := isValidCodeChallenge(codeChallenge); !valid {
+			return err
 		}
-	case codeChallenge == "" && codeChallengeMethod == "":
-		break
 	default:
-		return badRequestError(InvalidPKCEParamsErrorMessage)
+		// if both params are empty, just return nil
+		return nil
 	}
 	return nil
 }

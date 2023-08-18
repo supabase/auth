@@ -36,6 +36,7 @@ type AccessTokenResponse struct {
 	Token                string       `json:"access_token"`
 	TokenType            string       `json:"token_type"` // Bearer
 	ExpiresIn            int          `json:"expires_in"`
+	ExpiresAt            int64        `json:"expires_at"`
 	RefreshToken         string       `json:"refresh_token"`
 	User                 *models.User `json:"user"`
 	ProviderAccessToken  string       `json:"provider_token,omitempty"`
@@ -48,6 +49,7 @@ func (r *AccessTokenResponse) AsRedirectURL(redirectURL string, extraParams url.
 	extraParams.Set("access_token", r.Token)
 	extraParams.Set("token_type", r.TokenType)
 	extraParams.Set("expires_in", strconv.Itoa(r.ExpiresIn))
+	extraParams.Set("expires_at", strconv.FormatInt(r.ExpiresAt, 10))
 	extraParams.Set("refresh_token", r.RefreshToken)
 
 	return redirectURL + "#" + extraParams.Encode()
@@ -58,11 +60,6 @@ type PasswordGrantParams struct {
 	Email    string `json:"email"`
 	Phone    string `json:"phone"`
 	Password string `json:"password"`
-}
-
-// RefreshTokenGrantParams are the parameters the RefreshTokenGrant method accepts
-type RefreshTokenGrantParams struct {
-	RefreshToken string `json:"refresh_token"`
 }
 
 // PKCEGrantParams are the parameters the PKCEGrant method accepts
@@ -179,121 +176,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	return sendJSON(w, http.StatusOK, token)
 }
 
-// RefreshTokenGrant implements the refresh_token grant type flow
-func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	db := a.db.WithContext(ctx)
-	config := a.config
-
-	params := &RefreshTokenGrantParams{}
-
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read refresh token grant params: %v", err)
-	}
-
-	if params.RefreshToken == "" {
-		return oauthError("invalid_request", "refresh_token required")
-	}
-
-	user, token, session, err := models.FindUserWithRefreshToken(db, params.RefreshToken)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return oauthError("invalid_grant", "Invalid Refresh Token: Refresh Token Not Found")
-		}
-		return internalServerError(err.Error())
-	}
-
-	if user.IsBanned() {
-		return oauthError("invalid_grant", "Invalid Refresh Token: User Banned")
-	}
-
-	if session != nil {
-		var notAfter time.Time
-
-		if session.NotAfter != nil {
-			notAfter = *session.NotAfter
-		}
-
-		if !notAfter.IsZero() && time.Now().UTC().After(notAfter) {
-			return oauthError("invalid_grant", "Invalid Refresh Token: Session Expired")
-		}
-	}
-
-	if token.Revoked {
-		a.clearCookieTokens(config, w)
-		// For a revoked refresh token to be reused, it has to fall within the reuse interval.
-
-		reuseUntil := token.UpdatedAt.Add(
-			time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
-
-		if time.Now().After(reuseUntil) {
-			// not OK to reuse this token
-
-			if config.Security.RefreshTokenRotationEnabled {
-				// Revoke all tokens in token family
-				err = db.Transaction(func(tx *storage.Connection) error {
-					var terr error
-					if terr = models.RevokeTokenFamily(tx, token); terr != nil {
-						return terr
-					}
-					return nil
-				})
-				if err != nil {
-					return internalServerError(err.Error())
-				}
-			}
-
-			return oauthError("invalid_grant", "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID)
-		}
-	}
-
-	var tokenString string
-	var newTokenResponse *AccessTokenResponse
-
-	err = db.Transaction(func(tx *storage.Connection) error {
-		var terr error
-		if terr = models.NewAuditLogEntry(r, tx, user, models.TokenRefreshedAction, "", nil); terr != nil {
-			return terr
-		}
-
-		// a new refresh token is generated and explicitly not reusing
-		// a previous one as it could have already been revoked while
-		// this handler was running
-		newToken, terr := models.GrantRefreshTokenSwap(r, tx, user, token)
-		if terr != nil {
-			return terr
-		}
-
-		tokenString, terr = generateAccessToken(tx, user, newToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
-
-		if terr != nil {
-			return internalServerError("error generating jwt token").WithInternalError(terr)
-		}
-
-		newTokenResponse = &AccessTokenResponse{
-			Token:        tokenString,
-			TokenType:    "bearer",
-			ExpiresIn:    config.JWT.Exp,
-			RefreshToken: newToken.Token,
-			User:         user,
-		}
-		if terr = a.setCookieTokens(config, newTokenResponse, false, w); terr != nil {
-			return internalServerError("Failed to set JWT cookie. %s", terr)
-		}
-
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	metering.RecordLogin("token", user.ID)
-	return sendJSON(w, http.StatusOK, newTokenResponse)
-}
-
 func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	var grantParams models.GrantParams
@@ -366,26 +248,31 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 
 }
 
-func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, expiresIn time.Duration, secret string) (string, error) {
+func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, config *conf.JWTConfiguration) (string, int64, error) {
 	aal, amr := models.AAL1.String(), []models.AMREntry{}
 	sid := ""
 	if sessionId != nil {
 		sid = sessionId.String()
-		session, terr := models.FindSessionByID(tx, *sessionId)
+		session, terr := models.FindSessionByID(tx, *sessionId, false)
 		if terr != nil {
-			return "", terr
+			return "", 0, terr
 		}
 		aal, amr, terr = session.CalculateAALAndAMR(tx)
 		if terr != nil {
-			return "", terr
+			return "", 0, terr
 		}
 	}
+
+	issuedAt := time.Now().UTC()
+	expiresAt := issuedAt.Add(time.Second * time.Duration(config.Exp)).Unix()
 
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
 			Audience:  user.Aud,
-			ExpiresAt: time.Now().Add(expiresIn).Unix(),
+			IssuedAt:  issuedAt.Unix(),
+			ExpiresAt: expiresAt,
+			Issuer:    config.Issuer,
 		},
 		Email:                         user.GetEmail(),
 		Phone:                         user.GetPhone(),
@@ -398,7 +285,21 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(secret))
+
+	if config.KeyID != "" {
+		if token.Header == nil {
+			token.Header = make(map[string]interface{})
+		}
+
+		token.Header["kid"] = config.KeyID
+	}
+
+	signed, err := token.SignedString([]byte(config.Secret))
+	if err != nil {
+		return "", 0, err
+	}
+
+	return signed, expiresAt, nil
 }
 
 func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
@@ -408,6 +309,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 	user.LastSignInAt = &now
 
 	var tokenString string
+	var expiresAt int64
 	var refreshToken *models.RefreshToken
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
@@ -418,16 +320,12 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return internalServerError("Database error granting user").WithInternalError(terr)
 		}
 
-		session, terr := models.FindSessionByID(tx, *refreshToken.SessionId)
-		if terr != nil {
-			return terr
-		}
-		terr = models.AddClaimToSession(tx, session, authenticationMethod)
+		terr = models.AddClaimToSession(tx, *refreshToken.SessionId, authenticationMethod)
 		if terr != nil {
 			return terr
 		}
 
-		tokenString, terr = generateAccessToken(tx, user, refreshToken.SessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, expiresAt, terr = generateAccessToken(tx, user, refreshToken.SessionId, &config.JWT)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -441,6 +339,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 		Token:        tokenString,
 		TokenType:    "bearer",
 		ExpiresIn:    config.JWT.Exp,
+		ExpiresAt:    expiresAt,
 		RefreshToken: refreshToken.Token,
 		User:         user,
 	}, nil
@@ -450,6 +349,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 	ctx := r.Context()
 	config := a.config
 	var tokenString string
+	var expiresAt int64
 	var refreshToken *models.RefreshToken
 	currentClaims := getClaims(ctx)
 	sessionId, err := uuid.FromString(currentClaims.SessionId)
@@ -457,15 +357,10 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		return nil, internalServerError("Cannot read SessionId claim as UUID").WithInternalError(err)
 	}
 	err = tx.Transaction(func(tx *storage.Connection) error {
-		session, terr := models.FindSessionByID(tx, sessionId)
-		if terr != nil {
+		if terr := models.AddClaimToSession(tx, sessionId, authenticationMethod); terr != nil {
 			return terr
 		}
-		terr = models.AddClaimToSession(tx, session, authenticationMethod)
-		if terr != nil {
-			return terr
-		}
-		session, terr = models.FindSessionByID(tx, sessionId)
+		session, terr := models.FindSessionByID(tx, sessionId, false)
 		if terr != nil {
 			return terr
 		}
@@ -490,7 +385,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return err
 		}
 
-		tokenString, terr = generateAccessToken(tx, user, &sessionId, time.Second*time.Duration(config.JWT.Exp), config.JWT.Secret)
+		tokenString, expiresAt, terr = generateAccessToken(tx, user, &sessionId, &config.JWT)
 
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
@@ -504,6 +399,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		Token:        tokenString,
 		TokenType:    "bearer",
 		ExpiresIn:    config.JWT.Exp,
+		ExpiresAt:    expiresAt,
 		RefreshToken: refreshToken.Token,
 		User:         user,
 	}, nil

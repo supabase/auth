@@ -200,7 +200,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 				return invalidPasswordLengthError(config.PasswordMinLength)
 			}
 
-			if terr := user.UpdatePassword(tx, *params.Password); terr != nil {
+			if terr := user.UpdatePassword(tx, *params.Password, nil); terr != nil {
 				return terr
 			}
 		}

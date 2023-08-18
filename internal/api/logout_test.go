@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -42,24 +42,37 @@ func (ts *LogoutTestSuite) SetupTest() {
 
 	// generate access token to use for logout
 	var t string
-	t, err = generateAccessToken(ts.API.db, u, nil, time.Second*time.Duration(ts.Config.JWT.Exp), ts.Config.JWT.Secret)
+	t, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
 	require.NoError(ts.T(), err)
 	ts.token = t
 }
 
 func (ts *LogoutTestSuite) TestLogoutSuccess() {
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/logout", nil)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
-	w := httptest.NewRecorder()
+	for _, scope := range []string{"", "global", "local", "others"} {
+		ts.SetupTest()
 
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+		reqURL, err := url.ParseRequestURI("http://localhost/logout")
+		require.NoError(ts.T(), err)
 
-	accessTokenKey := fmt.Sprintf("%v-access-token", ts.Config.Cookie.Key)
-	refreshTokenKey := fmt.Sprintf("%v-refresh-token", ts.Config.Cookie.Key)
-	for _, c := range w.Result().Cookies() {
-		if c.Name == accessTokenKey || c.Name == refreshTokenKey {
-			require.Equal(ts.T(), "", c.Value)
+		if scope != "" {
+			query := reqURL.Query()
+			query.Set("scope", scope)
+			reqURL.RawQuery = query.Encode()
+		}
+
+		req := httptest.NewRequest(http.MethodPost, reqURL.String(), nil)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		w := httptest.NewRecorder()
+
+		ts.API.handler.ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+		accessTokenKey := fmt.Sprintf("%v-access-token", ts.Config.Cookie.Key)
+		refreshTokenKey := fmt.Sprintf("%v-refresh-token", ts.Config.Cookie.Key)
+		for _, c := range w.Result().Cookies() {
+			if c.Name == accessTokenKey || c.Name == refreshTokenKey {
+				require.Equal(ts.T(), "", c.Value)
+			}
 		}
 	}
 }

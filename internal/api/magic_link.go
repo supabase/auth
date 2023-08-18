@@ -11,6 +11,7 @@ import (
 	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 // MagicLinkParams holds the parameters for a magic link request
@@ -141,7 +142,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		mailer := a.Mailer(ctx)
-		referrer := a.getReferrer(r)
+		referrer := utilities.GetReferrer(r, config)
 		externalURL := getExternalHost(ctx)
 		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, flowType)
 	})
