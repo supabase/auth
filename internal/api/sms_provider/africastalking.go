@@ -1,4 +1,3 @@
- // Africastalking documentation -  https://developers.africastalking.com/docs/sms/sending/bulk
 package sms_provider
 
 import (
@@ -23,13 +22,13 @@ type AfricastalkingProvider struct {
 }
 
 type AfricastalkingRecipient struct {
-	MessageID string `json:"messageId"`
+	MessageID  string `json:"messageId"`
 	StatusCode string `json:"statusCode"`
-	Status string `json:"status"`
+	Status     string `json:"status"`
 }
 
 type AfricastalkingSMSMessageData struct {
-	Message   string             `json:"Message"`
+	Message    string                    `json:"Message"`
 	Recipients []AfricastalkingRecipient `json:"Recipients"`
 }
 
@@ -63,10 +62,10 @@ func (t *AfricastalkingProvider) SendMessage(phone string, message string, chann
 func (t *AfricastalkingProvider) SendSms(phone string, message string) (string, error) {
 	body := url.Values{
 		"username": {t.Config.Username},
-		"message": {message},
-		"to": {phone},
+		"message":  {message},
+		"to":       {phone},
 	}
-	
+
 	// From is an optional field, if not provided, the default value will be used.
 	if t.Config.From != "" {
 		body.Add("from", t.Config.From)
@@ -94,11 +93,11 @@ func (t *AfricastalkingProvider) SendSms(phone string, message string) (string, 
 	}
 
 	if len(resp.SMSMessageData.Recipients) <= 0 {
-		return "", errors.New("Africastalking error: Internal Error")
+		return "", errors.New("africastalking error: internal Error")
 	}
-	
+
 	if resp.SMSMessageData.Recipients[0].Status != "Success" {
-		return "", errors.New("Africastalking error: Internal Error - " + resp.SMSMessageData.Recipients[0].Status + " - " + resp.SMSMessageData.Recipients[0].StatusCode)
+		return "", errors.New("africastalking error: internal error - " + resp.SMSMessageData.Recipients[0].Status + " - " + resp.SMSMessageData.Recipients[0].StatusCode)
 	}
 
 	return resp.SMSMessageData.Recipients[0].MessageID, nil
