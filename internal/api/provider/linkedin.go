@@ -2,9 +2,9 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"strings"
 
+	"log"
 	"github.com/supabase/gotrue/internal/conf"
 	"golang.org/x/oauth2"
 )
@@ -23,25 +23,17 @@ type linkedinProvider struct {
 // See https://docs.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin?context=linkedin/consumer/context
 // for retrieving a member's profile. This requires the r_liteprofile scope.
 type linkedinUser struct {
-	ID        string       `json:"id"`
-	FirstName linkedinName `json:"firstName"`
-	LastName  linkedinName `json:"lastName"`
-	AvatarURL struct {
-		DisplayImage struct {
-			Elements []struct {
-				Identifiers []struct {
-					Identifier string `json:"identifier"`
-				} `json:"identifiers"`
-			} `json:"elements"`
-		} `json:"displayImage~"`
-	} `json:"profilePicture"`
+	Sub        		string       `json:"sub"`
+	Email					string			 `json:"email"`
+	Name					string			 `json:"name"`
+	Picture				string			 `json:"picture"`
+	GivenName			string			 `json:"given_name"`
+	FamilyName		string			 `json:"family_name"`
+	EmailVerified	bool			 	 `json:"email_verified"`
 }
 
 func (u *linkedinUser) getAvatarUrl() string {
-	avatarURL := ""
-	if len(u.AvatarURL.DisplayImage.Elements) > 0 {
-		avatarURL = u.AvatarURL.DisplayImage.Elements[0].Identifiers[0].Identifier
-	}
+	avatarURL := u.Picture
 	return avatarURL
 }
 
@@ -75,8 +67,9 @@ func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 	apiPath := chooseHost(ext.URL, defaultLinkedinAPIBase)
 
 	oauthScopes := []string{
-		"r_emailaddress",
-		"r_liteprofile",
+		"openid",
+		"email",
+		"profile",
 	}
 
 	if scopes != "" {
@@ -110,47 +103,28 @@ func GetName(name linkedinName) string {
 
 func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u linkedinUser
-	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/v2/me?projection=(id,firstName,lastName,profilePicture(displayImage~:playableStreams))", &u); err != nil {
+	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/v2/userinfo", &u); err != nil {
 		return nil, err
 	}
-
-	var e linkedinElements
-	// Note: Use primary contact api for handling phone numbers
-	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/v2/emailAddress?q=members&projection=(elements*(handle~))", &e); err != nil {
-		return nil, err
-	}
-
-	if len(e.Elements) <= 0 {
-		return nil, errors.New("unable to find email with Linkedin provider")
-	}
-
-	emails := []Email{}
-
-	if e.Elements[0].HandleTilde.EmailAddress != "" {
-		// linkedin only returns the primary email which is verified for the r_emailaddress scope.
-		emails = append(emails, Email{
-			Email:    e.Elements[0].HandleTilde.EmailAddress,
-			Primary:  true,
-			Verified: true,
-		})
-	}
-
-	avatarURL := u.getAvatarUrl()
 
 	return &UserProvidedData{
 		Metadata: &Claims{
 			Issuer:        g.APIPath,
-			Subject:       u.ID,
-			Name:          strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
-			Picture:       avatarURL,
-			Email:         e.Elements[0].HandleTilde.EmailAddress,
-			EmailVerified: true,
+			Subject:       u.Sub,
+			Name:          strings.TrimSpace(u.GivenName + " " + u.FamilyName),
+			Picture:       u.Picture,
+			Email:         u.Email,
+			EmailVerified: u.EmailVerified,
 
 			// To be deprecated
-			AvatarURL:  avatarURL,
-			FullName:   strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
-			ProviderId: u.ID,
+			AvatarURL:  u.Picture,
+			FullName:   strings.TrimSpace(u.GivenName + " " + u.FamilyName),
+			ProviderId: u.Sub,
 		},
-		Emails: emails,
+		Emails: []Email{{
+			Email: u.Email,
+			Verified: u.EmailVerified,
+			Primary: true,
+		}},
 	}, nil
 }
