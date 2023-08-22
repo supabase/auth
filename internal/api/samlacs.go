@@ -99,6 +99,9 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		entityId = ssoProvider.SAMLProvider.EntityID
 		redirectTo = relayState.RedirectTo
 		requestIds = append(requestIds, relayState.RequestID)
+		if relayState.FlowState != nil {
+			flowState = relayState.FlowState
+		}
 
 		if err := a.samlDestroyRelayState(ctx, relayState); err != nil {
 			return err
