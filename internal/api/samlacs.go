@@ -61,6 +61,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	var requestIds []string
 
 	var flowState *models.FlowState
+	flowState = nil
 	if relayStateUUID != uuid.Nil {
 		// relay state is a valid UUID, therefore this is likely a SP initiated flow
 
