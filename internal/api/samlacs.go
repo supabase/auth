@@ -60,6 +60,8 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	redirectTo := ""
 	var requestIds []string
 
+	var flowState *models.FlowState
+	flowState = nil
 	if relayStateUUID != uuid.Nil {
 		// relay state is a valid UUID, therefore this is likely a SP initiated flow
 
@@ -98,6 +100,9 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		entityId = ssoProvider.SAMLProvider.EntityID
 		redirectTo = relayState.RedirectTo
 		requestIds = append(requestIds, relayState.RequestID)
+		if relayState.FlowState != nil {
+			flowState = relayState.FlowState
+		}
 
 		if err := a.samlDestroyRelayState(ctx, relayState); err != nil {
 			return err
@@ -276,6 +281,13 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, "sso:"+ssoProvider.ID.String()); terr != nil {
 			return terr
 		}
+		if flowState != nil {
+			// This means that the callback is using PKCE
+			flowState.UserID = &(user.ID)
+			if terr := tx.Update(flowState); terr != nil {
+				return terr
+			}
+		}
 
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.SSOSAML, grantParams)
 
@@ -295,7 +307,17 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	if !utilities.IsRedirectURLValid(config, redirectTo) {
 		redirectTo = config.SiteURL
 	}
+	if flowState != nil {
+		// This means that the callback is using PKCE
+		// Set the flowState.AuthCode to the query param here
+		redirectTo, err = a.prepPKCERedirectURL(redirectTo, flowState.AuthCode)
+		if err != nil {
+			return err
+		}
+		http.Redirect(w, r, redirectTo, http.StatusFound)
+		return nil
 
+	}
 	http.Redirect(w, r, token.AsRedirectURL(redirectTo, url.Values{}), http.StatusFound)
 
 	return nil
