@@ -642,6 +642,17 @@ func (ts *SSOTestSuite) TestSingleSignOn() {
 			URL:  "https://accounts.google.com/o/saml2?idpid=EXAMPLE-A",
 		},
 		{
+			// call /sso with provider_id (EXAMPLE-A) and SSO PKCE
+			// should be successful and redirect to the EXAMPLE-A SSO URL
+			Request: map[string]interface{}{
+				"provider_id":           providers[0].ID,
+				"code_challenge":        "vby3iMQ4XUuycKkEyNsYHXshPql1Dod7Ebey2iXTXm4",
+				"code_challenge_method": "s256",
+			},
+			Code: http.StatusSeeOther,
+			URL:  "https://accounts.google.com/o/saml2?idpid=EXAMPLE-A",
+		},
+		{
 			// call /sso with domain=example.com (provider=EXAMPLE-B)
 			// should be successful and redirect to the EXAMPLE-B SSO URL
 			Request: map[string]interface{}{
