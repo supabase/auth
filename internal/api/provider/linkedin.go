@@ -4,7 +4,6 @@ import (
   "context"
   "strings"
 
-  "log"
   "github.com/supabase/gotrue/internal/conf"
   "golang.org/x/oauth2"
 )
