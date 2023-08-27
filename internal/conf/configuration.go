@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net/url"
@@ -17,6 +18,26 @@ import (
 const defaultMinPasswordLength int = 6
 const defaultChallengeExpiryDuration float64 = 300
 const defaultFlowStateExpiryDuration time.Duration = 300 * time.Second
+
+// Time is used to represent timestamps in the configuration, as envconfig has
+// trouble parsing empty strings, due to time.Time.UnmarshalText().
+type Time struct {
+	time.Time
+}
+
+func (t *Time) UnmarshalText(text []byte) error {
+	trimed := bytes.TrimSpace(text)
+
+	if len(trimed) < 1 {
+		t.Time = time.Time{}
+	} else {
+		if err := t.Time.UnmarshalText(trimed); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 
 // OAuthProviderConfiguration holds all config related to external account providers.
 type OAuthProviderConfiguration struct {
@@ -225,7 +246,7 @@ type SmsProviderConfiguration struct {
 	Provider          string             `json:"provider"`
 	Template          string             `json:"template"`
 	TestOTP           map[string]string  `json:"test_otp" split_words:"true"`
-	TestOTPValidUntil time.Time          `json:"test_otp_valid_until" split_words:"true"`
+	TestOTPValidUntil Time               `json:"test_otp_valid_until" split_words:"true"`
 	SMSTemplate       *template.Template `json:"-"`
 
 	Twilio       TwilioProviderConfiguration       `json:"twilio"`
@@ -236,7 +257,7 @@ type SmsProviderConfiguration struct {
 }
 
 func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {
-	if c.TestOTP != nil && (c.TestOTPValidUntil.IsZero() || now.Before(c.TestOTPValidUntil)) {
+	if c.TestOTP != nil && (c.TestOTPValidUntil.Time.IsZero() || now.Before(c.TestOTPValidUntil.Time)) {
 		testOTP, ok := c.TestOTP[phone]
 		return testOTP, ok
 	}
