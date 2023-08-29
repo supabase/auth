@@ -197,3 +197,22 @@ func (ts *ExternalTestSuite) TestSignupExternalUnsupported() {
 	ts.API.handler.ServeHTTP(w, req)
 	ts.Equal(w.Code, http.StatusBadRequest)
 }
+
+func (ts *ExternalTestSuite) TestRedirectErrors() {
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=external&code=1234", nil)
+	w := httptest.NewRecorder()
+	mockRedirectURL := &url.URL{
+		Scheme:   "http",
+		Host:     "example.com",
+		Path:     "/",
+		RawQuery: "code=1234&param2=value2",
+	}
+	ts.API.redirectErrors(ts.API.internalExternalProviderCallback, w, req, mockRedirectURL)
+	// Check if the response status code is what you expect
+	require.Equal(ts.T(), http.StatusFound, w.Code)
+
+	// Check if the response header contains the correct Location header for the redirection
+	expectedLocation := mockRedirectURL.String() // Modify this according to your expected URL
+	location := w.Header().Get("Location")
+	require.Equal(ts.T(), location, expectedLocation)
+}
