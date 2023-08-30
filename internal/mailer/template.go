@@ -202,6 +202,7 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 				"NewEmail":        user.EmailChange,
 				"Token":           token,
 				"TokenHash":       tokenHash,
+				"SendingTo":       address,
 				"Data":            user.UserMetaData,
 			}
 			errors <- m.Mailer.Mail(
