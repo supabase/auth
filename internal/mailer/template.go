@@ -195,7 +195,6 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 			return err
 		}
 		go func(address, token, tokenHash, template string) {
-			sendingTo := address
 			data := map[string]interface{}{
 				"SiteURL":         m.Config.SiteURL,
 				"ConfirmationURL": externalURL.ResolveReference(path).String(),
@@ -203,7 +202,7 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 				"NewEmail":        user.EmailChange,
 				"Token":           token,
 				"TokenHash":       tokenHash,
-				"SendingTo":       sendingTo,
+				"SendingTo":       address,
 				"Data":            user.UserMetaData,
 			}
 			errors <- m.Mailer.Mail(
