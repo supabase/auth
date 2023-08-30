@@ -198,21 +198,45 @@ func (ts *ExternalTestSuite) TestSignupExternalUnsupported() {
 	ts.Equal(w.Code, http.StatusBadRequest)
 }
 
-func (ts *ExternalTestSuite) TestRedirectErrors() {
-	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=external&code=1234", nil)
+func (ts *ExternalTestSuite) TestRedirectErrorsShouldPreserveParams() {
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=external", nil)
 	w := httptest.NewRecorder()
-	mockRedirectURL := &url.URL{
-		Scheme:   "http",
-		Host:     "example.com",
-		Path:     "/",
-		RawQuery: "code=1234&param2=value2",
+	cases := []struct {
+		Desc        string
+		RedirectURL string
+		QueryParams []string
+		ErrorString string
+	}{
+		{
+			Desc:        "HTTP error with redirect errors",
+			RedirectURL: "http://example.com/path?param2=value2",
+			QueryParams: []string{"param2"},
+			ErrorString: "invalid_request",
+		},
+		{
+			Desc:        "HTTP error with error param gets overwritten",
+			RedirectURL: "http://example.com/path?error=abc",
+			QueryParams: []string{"error"},
+			ErrorString: "invalid_request",
+		},
 	}
-	ts.API.redirectErrors(ts.API.internalExternalProviderCallback, w, req, mockRedirectURL)
-	// Check if the response status code is what you expect
-	require.Equal(ts.T(), http.StatusFound, w.Code)
+	for _, c := range cases {
+		parsedURL, err := url.Parse(c.RedirectURL)
+		require.Equal(ts.T(), err, nil)
 
-	// Check if the response header contains the correct Location header for the redirection
-	expectedLocation := mockRedirectURL.String() // Modify this according to your expected URL
-	location := w.Header().Get("Location")
-	require.Equal(ts.T(), location, expectedLocation)
+		ts.API.redirectErrors(ts.API.internalExternalProviderCallback, w, req, parsedURL)
+
+		parsedParams, err := url.ParseQuery(parsedURL.RawQuery)
+		require.Equal(ts.T(), err, nil)
+
+		expectedQueryParams := append(c.QueryParams, "error", "error_description")
+
+		for _, expectedQueryParam := range expectedQueryParams {
+			val, exists := parsedParams[expectedQueryParam]
+			require.True(ts.T(), exists)
+			if expectedQueryParam == "error" {
+				require.Equal(ts.T(), val[0], c.ErrorString)
+			}
+		}
+	}
 }
