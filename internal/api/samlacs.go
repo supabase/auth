@@ -261,6 +261,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	notAfter := assertion.NotAfter()
 
 	var grantParams models.GrantParams
+	grantParams.ProviderID = "sso:" + ssoProvider.ID.String()
 
 	if !notAfter.IsZero() {
 		grantParams.SessionNotAfter = &notAfter
@@ -278,7 +279,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 		var user *models.User
 
 		// accounts potentially created via SAML can contain non-unique email addresses in the auth.users table
-		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, "sso:"+ssoProvider.ID.String()); terr != nil {
+		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, grantParams.ProviderID); terr != nil {
 			return terr
 		}
 		if flowState != nil {

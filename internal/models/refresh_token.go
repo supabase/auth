@@ -38,7 +38,8 @@ func (RefreshToken) TableName() string {
 // GrantParams is used to pass session-specific parameters when issuing a new
 // refresh token to authenticated users.
 type GrantParams struct {
-	FactorID *uuid.UUID
+	FactorID   *uuid.UUID
+	ProviderID string
 
 	SessionNotAfter *time.Time
 }
@@ -123,6 +124,10 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 
 		if params.FactorID != nil {
 			session.FactorID = params.FactorID
+		}
+
+		if params.ProviderID != "" {
+			session.ProviderID = &params.ProviderID
 		}
 
 		if params.SessionNotAfter != nil {

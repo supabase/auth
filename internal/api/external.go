@@ -151,6 +151,8 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var grantParams models.GrantParams
 	var err error
 
+	grantParams.ProviderID = providerType
+
 	if providerType == "twitter" {
 		// future OAuth1.0 providers will use this method
 		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)

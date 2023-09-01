@@ -190,6 +190,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	var token *AccessTokenResponse
 	var grantParams models.GrantParams
+	grantParams.ProviderID = providerType
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		var user *models.User

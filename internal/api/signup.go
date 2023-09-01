@@ -133,6 +133,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return invalidSignupError(config)
 	}
 
+	grantParams.ProviderID = params.Provider
+
 	if err != nil && !models.IsNotFoundError(err) {
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}
