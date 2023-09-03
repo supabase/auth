@@ -231,6 +231,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 		grantParams models.GrantParams
 		token       *AccessTokenResponse
 	)
+	var isSingleConfirmationResponse = false
 
 	err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -253,10 +254,8 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 		case emailChangeVerification:
 			user, terr = a.emailChangeVerify(r, ctx, tx, params, user)
 			if user == nil && terr == nil {
-				return sendJSON(w, http.StatusOK, map[string]string{
-					"msg":  singleConfirmationAccepted,
-					"code": strconv.Itoa(http.StatusOK),
-				})
+				isSingleConfirmationResponse = true
+				return nil
 			}
 		case smsVerification, phoneChangeVerification:
 			user, terr = a.smsVerify(r, ctx, tx, user, params.Type)
@@ -279,6 +278,12 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 	})
 	if err != nil {
 		return err
+	}
+	if isSingleConfirmationResponse {
+		return sendJSON(w, http.StatusOK, map[string]string{
+			"msg":  singleConfirmationAccepted,
+			"code": strconv.Itoa(http.StatusOK),
+		})
 	}
 	return sendJSON(w, http.StatusOK, token)
 }
