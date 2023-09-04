@@ -622,7 +622,6 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 }
 
 func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
-
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.ConfirmationToken = "pkce_confirmation_token"
@@ -769,8 +768,8 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.EmailChange = "new@example.com"
-	u.Phone = "12345678"
-	u.PhoneChange = "1234567890"
+	u.Phone = "12345677"
+	u.PhoneChange = "1234567888"
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
 	type expected struct {
@@ -933,6 +932,64 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			assert.Equal(ts.T(), c.expected.code, w.Code)
 		})
 	}
+}
+
+func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
+	ts.Config.Mailer.SecureEmailChangeEnabled = true
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	u.EmailChange = "new@example.com"
+	u.Phone = "12345677"
+	u.PhoneChange = "1234567888"
+	require.NoError(ts.T(), ts.API.db.Update(u))
+
+	cases := []struct {
+		desc                    string
+		emailChangeTokenNew     string
+		emailChangeTokenCurrent string
+		shouldBeSuccessful      bool
+	}{
+		{
+			desc:                    "Secure Email Change with Token Hash. Calling Token hash with the two respective token hashes should return token",
+			emailChangeTokenNew:     "TODO: to fill",
+			emailChangeTokenCurrent: "TODO: to fill",
+			shouldBeSuccessful:      true,
+		},
+		{
+			desc:                    "Secure Email Change with Token Hash. Using the same token hash twice should fail.",
+			emailChangeTokenNew:     "TODO: to fill",
+			emailChangeTokenCurrent: "TODO: same as firstTokenHash",
+			shouldBeSuccessful:      false,
+		},
+	}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			// Set the corresponding email change tokens
+			u.EmailChangeSentAt = &c.sentTime
+			u.EmailChangeTokenNew = c.tokenHash
+			require.NoError(ts.T(), ts.API.db.Update(u))
+
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+
+			// Setup request
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			// Setup response recorder
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), c.expected.code, w.Code)
+			// Check that response is adequate
+			//
+
+			// Make another request here
+			// if it shouldBeSuccessful, check that it returns a token.
+			// Else make sure that it properly returns an error.
+		})
+
+	}
+
 }
 
 func (ts *VerifyTestSuite) TestPrepRedirectURL() {
