@@ -939,38 +939,55 @@ func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.EmailChange = "new@example.com"
-	u.Phone = "12345677"
-	u.PhoneChange = "1234567888"
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
+	currentEmailChangeToken := crypto.GenerateTokenHash(string(u.Email), "123456")
+	newEmailChangeToken := crypto.GenerateTokenHash(u.EmailChange, "123456")
+
 	cases := []struct {
-		desc                    string
-		emailChangeTokenNew     string
-		emailChangeTokenCurrent string
-		shouldBeSuccessful      bool
+		desc                   string
+		firstVerificationBody  map[string]interface{}
+		secondVerificationBody map[string]interface{}
+		shouldBeSuccessful     bool
 	}{
 		{
-			desc:                    "Secure Email Change with Token Hash. Calling Token hash with the two respective token hashes should return token",
-			emailChangeTokenNew:     "TODO: to fill",
-			emailChangeTokenCurrent: "TODO: to fill",
-			shouldBeSuccessful:      true,
+			desc: "Secure Email Change with Token Hash. Calling Token hash with the two respective token hashes should return token",
+			firstVerificationBody: map[string]interface{}{
+				"type":       emailChangeVerification,
+				"token_hash": currentEmailChangeToken,
+			},
+			secondVerificationBody: map[string]interface{}{
+				"type":       emailChangeVerification,
+				"token_hash": newEmailChangeToken,
+			},
+			shouldBeSuccessful: true,
 		},
 		{
-			desc:                    "Secure Email Change with Token Hash. Using the same token hash twice should fail.",
-			emailChangeTokenNew:     "TODO: to fill",
-			emailChangeTokenCurrent: "TODO: same as firstTokenHash",
-			shouldBeSuccessful:      false,
+			desc: "Secure Email Change with Token Hash. Using the same token hash twice should fail.",
+			firstVerificationBody: map[string]interface{}{
+				"type":       emailChangeVerification,
+				"token_hash": currentEmailChangeToken,
+			},
+			secondVerificationBody: map[string]interface{}{
+				"type":       emailChangeVerification,
+				"token_hash": currentEmailChangeToken,
+			},
+			shouldBeSuccessful: false,
 		},
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			// Set the corresponding email change tokens
-			u.EmailChangeSentAt = &c.sentTime
-			u.EmailChangeTokenNew = c.tokenHash
+
+			u.EmailChangeTokenCurrent = currentEmailChangeToken
+			u.EmailChangeTokenNew = newEmailChangeToken
+
+			currentTime := time.Now()
+			u.EmailChangeSentAt = &currentTime
 			require.NoError(ts.T(), ts.API.db.Update(u))
 
 			var buffer bytes.Buffer
-			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.firstVerificationBody))
 
 			// Setup request
 			req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
@@ -979,13 +996,24 @@ func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
 			// Setup response recorder
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			assert.Equal(ts.T(), c.expected.code, w.Code)
-			// Check that response is adequate
-			//
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.secondVerificationBody))
 
-			// Make another request here
+			// Setup request
+			req = httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			// Setup response recorder
+			w = httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+
 			// if it shouldBeSuccessful, check that it returns a token.
-			// Else make sure that it properly returns an error.
+			if c.shouldBeSuccessful {
+				assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+			} else {
+				assert.NotEqual(ts.T(), http.StatusOK, w.Code)
+
+			}
 		})
 
 	}

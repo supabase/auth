@@ -453,9 +453,9 @@ func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *stor
 	if config.Mailer.SecureEmailChangeEnabled && user.EmailChangeConfirmStatus == zeroConfirmation && user.GetEmail() != "" {
 		err := conn.Transaction(func(tx *storage.Connection) error {
 			user.EmailChangeConfirmStatus = singleConfirmation
-			if params.Token == user.EmailChangeTokenCurrent {
+			if params.Token == user.EmailChangeTokenCurrent || params.TokenHash == user.EmailChangeTokenCurrent {
 				user.EmailChangeTokenCurrent = ""
-			} else if params.Token == user.EmailChangeTokenNew {
+			} else if params.Token == user.EmailChangeTokenNew || params.TokenHash == user.EmailChangeTokenNew {
 				user.EmailChangeTokenNew = ""
 			}
 			if terr := tx.UpdateOnly(user, "email_change_confirm_status", "email_change_token_current", "email_change_token_new"); terr != nil {
