@@ -768,8 +768,8 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.EmailChange = "new@example.com"
-	u.Phone = "12345677"
-	u.PhoneChange = "1234567888"
+	u.Phone = "12345678"
+	u.PhoneChange = "1234567890"
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
 	type expected struct {
@@ -948,10 +948,10 @@ func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
 		desc                   string
 		firstVerificationBody  map[string]interface{}
 		secondVerificationBody map[string]interface{}
-		shouldBeSuccessful     bool
+		expectedStatus         int
 	}{
 		{
-			desc: "Secure Email Change with Token Hash. Calling Token hash with the two respective token hashes should return token",
+			desc: "Secure Email Change with Token Hash (Success)",
 			firstVerificationBody: map[string]interface{}{
 				"type":       emailChangeVerification,
 				"token_hash": currentEmailChangeToken,
@@ -960,10 +960,10 @@ func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
 				"type":       emailChangeVerification,
 				"token_hash": newEmailChangeToken,
 			},
-			shouldBeSuccessful: true,
+			expectedStatus: http.StatusOK,
 		},
 		{
-			desc: "Secure Email Change with Token Hash. Using the same token hash twice should fail.",
+			desc: "Secure Email Change with Token Hash. Reusing a token hash twice should fail",
 			firstVerificationBody: map[string]interface{}{
 				"type":       emailChangeVerification,
 				"token_hash": currentEmailChangeToken,
@@ -972,13 +972,12 @@ func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
 				"type":       emailChangeVerification,
 				"token_hash": currentEmailChangeToken,
 			},
-			shouldBeSuccessful: false,
+			expectedStatus: http.StatusUnauthorized,
 		},
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			// Set the corresponding email change tokens
-
 			u.EmailChangeTokenCurrent = currentEmailChangeToken
 			u.EmailChangeTokenNew = newEmailChangeToken
 
@@ -998,22 +997,14 @@ func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
 			ts.API.handler.ServeHTTP(w, req)
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.secondVerificationBody))
 
-			// Setup request
+			// Setup second request
 			req = httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
 			req.Header.Set("Content-Type", "application/json")
 
-			// Setup response recorder
+			// Setup second response recorder
 			w = httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-
-			// if it shouldBeSuccessful, check that it returns a token.
-			if c.shouldBeSuccessful {
-				assert.Equal(ts.T(), http.StatusOK, w.Code)
-
-			} else {
-				assert.NotEqual(ts.T(), http.StatusOK, w.Code)
-
-			}
+			assert.Equal(ts.T(), c.expectedStatus, w.Code)
 		})
 
 	}
