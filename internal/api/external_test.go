@@ -199,25 +199,26 @@ func (ts *ExternalTestSuite) TestSignupExternalUnsupported() {
 }
 
 func (ts *ExternalTestSuite) TestRedirectErrorsShouldPreserveParams() {
+	// Request with invalid external provider
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=external", nil)
 	w := httptest.NewRecorder()
 	cases := []struct {
-		Desc        string
-		RedirectURL string
-		QueryParams []string
-		ErrorString string
+		Desc         string
+		RedirectURL  string
+		QueryParams  []string
+		ErrorMessage string
 	}{
 		{
-			Desc:        "HTTP error with redirect errors",
-			RedirectURL: "http://example.com/path?param2=value2",
-			QueryParams: []string{"param2"},
-			ErrorString: "invalid_request",
+			Desc:         "Should preserve redirect query params on error",
+			RedirectURL:  "http://example.com/path?paramforpreservation=value2",
+			QueryParams:  []string{"paramforpreservation"},
+			ErrorMessage: "invalid_request",
 		},
 		{
-			Desc:        "HTTP error with error param gets overwritten",
-			RedirectURL: "http://example.com/path?error=abc",
-			QueryParams: []string{"error"},
-			ErrorString: "invalid_request",
+			Desc:         "Error param should be overwritten",
+			RedirectURL:  "http://example.com/path?error=abc",
+			QueryParams:  []string{"error"},
+			ErrorMessage: "invalid_request",
 		},
 	}
 	for _, c := range cases {
@@ -229,13 +230,14 @@ func (ts *ExternalTestSuite) TestRedirectErrorsShouldPreserveParams() {
 		parsedParams, err := url.ParseQuery(parsedURL.RawQuery)
 		require.Equal(ts.T(), err, nil)
 
+		// An error and description should be returned
 		expectedQueryParams := append(c.QueryParams, "error", "error_description")
 
 		for _, expectedQueryParam := range expectedQueryParams {
 			val, exists := parsedParams[expectedQueryParam]
 			require.True(ts.T(), exists)
 			if expectedQueryParam == "error" {
-				require.Equal(ts.T(), val[0], c.ErrorString)
+				require.Equal(ts.T(), val[0], c.ErrorMessage)
 			}
 		}
 	}
