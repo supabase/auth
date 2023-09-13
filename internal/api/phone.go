@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 	"text/template"
@@ -88,22 +89,27 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		if err != nil {
 			return "", internalServerError("error generating otp").WithInternalError(err)
 		}
+
 		// Extensibility Point - initialize
 		// TODO: I guesss this could be presented as a struct above
 
-		// hookConfiguration = fetchHookConfiguration("custom-sms-provider")
-		// if hookConfiguration != nil{
-		// trigger hooks
-		// } else {
-		message, err := generateSMSFromTemplate(config.Sms.SMSTemplate, otp)
-		if err != nil {
+		hookConfiguration, err := models.FetchHookConfiguration(tx, "extensibility_point = ?", "custom-sms-provider")
+		if (err != nil && err != models.HookConfigNotFoundError{}) {
 			return "", err
 		}
-		// }
+		if (hookConfiguration != nil && err == models.HookConfigNotFoundError{}) {
+			// TODO: Placeholder
+			fmt.Println("execute stuff")
+		} else {
+			message, err := generateSMSFromTemplate(config.Sms.SMSTemplate, otp)
+			if err != nil {
+				return "", err
+			}
 
-		messageID, err = smsProvider.SendMessage(phone, message, channel)
-		if err != nil {
-			return messageID, err
+			messageID, err = smsProvider.SendMessage(phone, message, channel)
+			if err != nil {
+				return messageID, err
+			}
 		}
 	}
 
