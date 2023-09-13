@@ -153,6 +153,12 @@ func closeBody(rsp *http.Response) {
 	}
 }
 
+// func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig HookConfig, user *models.User, config *conf.GlobalConfiguration) error {
+// 	// TODO: fetch extensibility point
+
+// 	return nil
+// }
+
 func triggerEventHooks(ctx context.Context, conn *storage.Connection, event HookEvent, user *models.User, config *conf.GlobalConfiguration) error {
 	if config.Webhook.URL != "" {
 		hookURL, err := url.Parse(config.Webhook.URL)

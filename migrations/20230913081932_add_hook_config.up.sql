@@ -1,6 +1,6 @@
 -- auth.hooks definition
 
-create table if not exists {{ index .Options "Namespace" }}.hooks(
+create table if not exists {{ index .Options "Namespace" }}.hook_config(
     name text null,
     hook_uri text not null,
     secret text not null,
@@ -9,4 +9,4 @@ create table if not exists {{ index .Options "Namespace" }}.hooks(
     constraint extensibility_point_pkey primary key (extensibility_point)
 );
 
-comment on table {{ index .Options "Namespace" }}.hooks is 'Auth: Store of hook configuration - can be used to customize hooks for given extensibility points.';
+comment on table {{ index .Options "Namespace" }}.hook_config is 'Auth: Store of hook configuration - can be used to customize hooks for given extensibility points.';

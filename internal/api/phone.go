@@ -88,10 +88,14 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 			return "", internalServerError("error generating otp").WithInternalError(err)
 		}
 
+		// if hooks.CustomSMSProvider != null {
 		message, err := generateSMSFromTemplate(config.Sms.SMSTemplate, otp)
 		if err != nil {
 			return "", err
 		}
+		// } else {
+		//  triggerHooks
+		// }
 
 		messageID, err = smsProvider.SendMessage(phone, message, channel)
 		if err != nil {
