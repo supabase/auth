@@ -93,7 +93,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		// TODO: I guesss this could be presented as a struct above
 
 		hookConfiguration, err := models.FetchHookConfiguration(tx, "extensibility_point = ?", "custom-sms-provider")
-		if err != nil && models.IsNotFoundError(err) {
+		if err != nil && !models.IsNotFoundError(err) {
 			return "", err
 		}
 		if hookConfiguration != nil && models.IsNotFoundError(err) {

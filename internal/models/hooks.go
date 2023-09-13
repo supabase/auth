@@ -9,7 +9,7 @@ import (
 
 type HookConfig struct {
 	Name               string  `json:"name" db:"name"`
-	URI                string  `json:"hook_uri" db:"hook_uri"`
+	URI                string  `json:"uri" db:"uri"`
 	Secret             string  `json:"secret" db:"secret"`
 	ExtensibilityPoint string  `json:"extensibility_point" db:"extensibility_point"`
 	RequestSchema      JSONMap `json:"request_schema" db:"request_schema"`
