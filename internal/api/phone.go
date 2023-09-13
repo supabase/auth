@@ -42,6 +42,7 @@ func formatPhoneNumber(phone string) string {
 
 // sendPhoneConfirmation sends an otp to the user's phone number
 func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string) (string, error) {
+
 	config := a.config
 
 	var token *string
@@ -87,14 +88,17 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		if err != nil {
 			return "", internalServerError("error generating otp").WithInternalError(err)
 		}
+		// Extensibility Point - initialize
+		// TODO: I guesss this could be presented as a struct above
 
-		// if hooks.CustomSMSProvider != null {
+		// hookConfiguration = fetchHookConfiguration("custom-sms-provider")
+		// if hookConfiguration != nil{
+		// trigger hooks
+		// } else {
 		message, err := generateSMSFromTemplate(config.Sms.SMSTemplate, otp)
 		if err != nil {
 			return "", err
 		}
-		// } else {
-		//  triggerHooks
 		// }
 
 		messageID, err = smsProvider.SendMessage(phone, message, channel)

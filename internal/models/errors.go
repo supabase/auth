@@ -23,6 +23,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case FlowStateNotFoundError, *FlowStateNotFoundError:
 		return true
+	case HookConfigNotFoundError, *HookConfigNotFoundError:
+		return true
 	}
 	return false
 }
@@ -104,4 +106,11 @@ type FlowStateNotFoundError struct{}
 
 func (e FlowStateNotFoundError) Error() string {
 	return "Flow State not found"
+}
+
+// HookConfigNotFoundError represents when a HookConfig is not found.
+type HookConfigNotFoundError struct{}
+
+func (e HookConfigNotFoundError) Error() string {
+	return "Hook Config not Found"
 }

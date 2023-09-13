@@ -1,7 +1,10 @@
 package models
 
 import (
+	"database/sql"
 	"github.com/gobuffalo/pop/v6"
+	"github.com/pkg/errors"
+	"github.com/supabase/gotrue/internal/storage"
 )
 
 type HookConfig struct {
@@ -33,4 +36,16 @@ func NewHookConfig(name, hookURI, secret, extensibilityPoint string, metadata ma
 		Metadata:           metadata,
 	}
 	return hookConfig, nil
+}
+
+func fetchHookConfiguration(tx *storage.Connection, query string, args ...interface{}) (*HookConfig, error) {
+	obj := &HookConfig{}
+	if err := tx.Eager().Q().Where(query, args...).First(obj); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, HookConfigNotFoundError{}
+		}
+		return nil, errors.Wrap(err, "error finding user")
+	}
+
+	return obj, nil
 }
