@@ -154,14 +154,13 @@ func closeBody(rsp *http.Response) {
 }
 
 func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig models.HookConfig, user *models.User, config *conf.GlobalConfiguration) error {
-	// TODO: fetch extensibility point
-	return _triggerAuthHook(ctx, hookConfig.HookURI, hookConfig.Secret, conn, hookConfig.ExtensibilityPoint, user, config)
+	return _triggerAuthHook(ctx, hookConfig.URI, hookConfig.Secret, conn, hookConfig.ExtensibilityPoint, user, config)
 }
 
 // TODO: rename this
 func _triggerAuthHook(ctx context.Context, hookURL string, secret string, conn *storage.Connection, extensibilityPoint string, user *models.User, config *conf.GlobalConfiguration) error {
-
 	// TODO: Change this to take in the various fields that need to be passed
+	// TODO: Need also to filter the relevant user fields
 	payload := struct {
 		User *models.User `json:"user"`
 	}{
@@ -169,21 +168,17 @@ func _triggerAuthHook(ctx context.Context, hookURL string, secret string, conn *
 	}
 	data, err := json.Marshal(&payload)
 	if err != nil {
-		return internalServerError("Failed to serialize the data for signup webhook").WithInternalError(err)
+		// TODO: include name of hook that failed
+		return internalServerError("Failed to serialize the data for hook").WithInternalError(err)
 	}
 
-	sha, err := checksum(data)
-	if err != nil {
-		return internalServerError("Failed to checksum the data for signup webhook").WithInternalError(err)
-	}
-
+	// TODO: Sign the payload here
 	claims := webhookClaims{
 		StandardClaims: jwt.StandardClaims{
 			IssuedAt: time.Now().Unix(),
 			Subject:  uuid.Nil.String(),
 			Issuer:   gotrueIssuer,
 		},
-		SHA256: sha,
 	}
 
 	w := Webhook{
@@ -199,6 +194,7 @@ func _triggerAuthHook(ctx context.Context, hookURL string, secret string, conn *
 	if body != nil {
 		defer utilities.SafeClose(body)
 	}
+	// TODO: this should return webhook response and we should modify the method signature
 	if err == nil && body != nil {
 		// TODO: figure out how we can dictate the response
 		webhookRsp := &WebhookResponse{}
@@ -206,21 +202,6 @@ func _triggerAuthHook(ctx context.Context, hookURL string, secret string, conn *
 		if err = decoder.Decode(webhookRsp); err != nil {
 			return internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
 		}
-		return conn.Transaction(func(tx *storage.Connection) error {
-			if webhookRsp.UserMetaData != nil {
-				user.UserMetaData = nil
-				if terr := user.UpdateUserMetaData(tx, webhookRsp.UserMetaData); terr != nil {
-					return terr
-				}
-			}
-			if webhookRsp.AppMetaData != nil {
-				user.AppMetaData = nil
-				if terr := user.UpdateAppMetaData(tx, webhookRsp.AppMetaData); terr != nil {
-					return terr
-				}
-			}
-			return nil
-		})
 	}
 	return err
 }

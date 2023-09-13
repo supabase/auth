@@ -8,11 +8,12 @@ import (
 )
 
 type HookConfig struct {
-	Name string `json:"name" db:"name"`
-	// TODO: change this t o just URI
-	HookURI            string  `json:"hook_uri" db:"hook_uri"`
+	Name               string  `json:"name" db:"name"`
+	URI                string  `json:"hook_uri" db:"hook_uri"`
 	Secret             string  `json:"secret" db:"secret"`
 	ExtensibilityPoint string  `json:"extensibility_point" db:"extensibility_point"`
+	RequestSchema      JSONMap `json:"request_schema" db:"request_schema"`
+	ResponseSchema     JSONMap `json:"response_schema" db:"response_schema"`
 	Metadata           JSONMap `json:"metadata" db:"metadata"`
 }
 
@@ -27,16 +28,17 @@ func (h *HookConfig) BeforeSave(tx *pop.Connection) error {
 	return nil
 }
 
-func NewHookConfig(name, hookURI, secret, extensibilityPoint string, metadata map[string]interface{}) (*HookConfig, error) {
-	hookConfig := &HookConfig{
-		Name:               name,
-		HookURI:            hookURI,
-		Secret:             secret,
-		ExtensibilityPoint: extensibilityPoint,
-		Metadata:           metadata,
-	}
-	return hookConfig, nil
-}
+// Shouldn't need to create a new hook config unless admin, can be implemented later
+// func NewHookConfig(name, URI, secret, extensibilityPoint string, metadata map[string]interface{}) (*HookConfig, error) {
+// 	hookConfig := &HookConfig{
+// 		Name:               name,
+// 		URI:                URI,
+// 		Secret:             secret,
+// 		ExtensibilityPoint: extensibilityPoint,
+// 		Metadata:           metadata,
+// 	}
+// 	return hookConfig, nil
+// }
 
 // TODO: Make this into smaller function and add wrapper
 func FetchHookConfiguration(tx *storage.Connection, query string, args ...interface{}) (*HookConfig, error) {

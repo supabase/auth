@@ -2,9 +2,11 @@
 
 create table if not exists {{ index .Options "Namespace" }}.hook_config(
     name text null,
-    hook_uri text not null,
+    uri text not null,
     secret text not null,
     extensibility_point text not null,
+    request_schema jsonb not null,
+    response_schema jsonb not null,
     metadata json  null,
     constraint extensibility_point_pkey primary key (extensibility_point)
 );
