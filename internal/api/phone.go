@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"regexp"
 	"strings"
 	"text/template"
@@ -94,13 +93,15 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		// TODO: I guesss this could be presented as a struct above
 
 		hookConfiguration, err := models.FetchHookConfiguration(tx, "extensibility_point = ?", "custom-sms-provider")
-		if (err != nil && err != models.HookConfigNotFoundError{}) {
+		if err != nil && models.IsNotFoundError(err) {
 			return "", err
 		}
-		if (hookConfiguration != nil && err == models.HookConfigNotFoundError{}) {
-			// TODO: Placeholder
-			fmt.Println("execute stuff")
-		} else {
+		if hookConfiguration != nil && models.IsNotFoundError(err) {
+			// TODO: find a way to wrap and properly Fetch the resp
+			if terr := triggerAuthHook(ctx, tx, *hookConfiguration, user, config); terr != nil {
+				return "", terr
+			}
+		} else if models.IsNotFoundError(err) {
 			message, err := generateSMSFromTemplate(config.Sms.SMSTemplate, otp)
 			if err != nil {
 				return "", err
@@ -110,6 +111,8 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 			if err != nil {
 				return messageID, err
 			}
+		} else {
+			return "", err
 		}
 	}
 

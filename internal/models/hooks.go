@@ -38,6 +38,7 @@ func NewHookConfig(name, hookURI, secret, extensibilityPoint string, metadata ma
 	return hookConfig, nil
 }
 
+// TODO: Make this into smaller function and add wrapper
 func FetchHookConfiguration(tx *storage.Connection, query string, args ...interface{}) (*HookConfig, error) {
 	obj := &HookConfig{}
 	if err := tx.Eager().Q().Where(query, args...).First(obj); err != nil {
