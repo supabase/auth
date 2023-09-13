@@ -153,12 +153,79 @@ func closeBody(rsp *http.Response) {
 	}
 }
 
-// func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig HookConfig, user *models.User, config *conf.GlobalConfiguration) error {
-// 	// TODO: fetch extensibility point
+func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig models.HookConfig, user *models.User, config *conf.GlobalConfiguration) error {
+	// TODO: fetch extensibility point
+	return _triggerAuthHook(ctx, hookConfig.HookURI, hookConfig.Secret, conn, hookConfig.ExtensibilityPoint, user, config)
+}
 
-// 	return nil
-// }
+// TODO: rename this
+func _triggerAuthHook(ctx context.Context, hookURL string, secret string, conn *storage.Connection, extensibilityPoint string, user *models.User, config *conf.GlobalConfiguration) error {
 
+	// TODO: Change this to take in the various fields that need to be passed
+	payload := struct {
+		User *models.User `json:"user"`
+	}{
+		User: user,
+	}
+	data, err := json.Marshal(&payload)
+	if err != nil {
+		return internalServerError("Failed to serialize the data for signup webhook").WithInternalError(err)
+	}
+
+	sha, err := checksum(data)
+	if err != nil {
+		return internalServerError("Failed to checksum the data for signup webhook").WithInternalError(err)
+	}
+
+	claims := webhookClaims{
+		StandardClaims: jwt.StandardClaims{
+			IssuedAt: time.Now().Unix(),
+			Subject:  uuid.Nil.String(),
+			Issuer:   gotrueIssuer,
+		},
+		SHA256: sha,
+	}
+
+	w := Webhook{
+		WebhookConfig: &config.Webhook,
+		jwtSecret:     secret,
+		claims:        claims,
+		payload:       data,
+	}
+
+	w.URL = hookURL
+
+	body, err := w.trigger()
+	if body != nil {
+		defer utilities.SafeClose(body)
+	}
+	if err == nil && body != nil {
+		// TODO: figure out how we can dictate the response
+		webhookRsp := &WebhookResponse{}
+		decoder := json.NewDecoder(body)
+		if err = decoder.Decode(webhookRsp); err != nil {
+			return internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
+		}
+		return conn.Transaction(func(tx *storage.Connection) error {
+			if webhookRsp.UserMetaData != nil {
+				user.UserMetaData = nil
+				if terr := user.UpdateUserMetaData(tx, webhookRsp.UserMetaData); terr != nil {
+					return terr
+				}
+			}
+			if webhookRsp.AppMetaData != nil {
+				user.AppMetaData = nil
+				if terr := user.UpdateAppMetaData(tx, webhookRsp.AppMetaData); terr != nil {
+					return terr
+				}
+			}
+			return nil
+		})
+	}
+	return err
+}
+
+// Deprecate this
 func triggerEventHooks(ctx context.Context, conn *storage.Connection, event HookEvent, user *models.User, config *conf.GlobalConfiguration) error {
 	if config.Webhook.URL != "" {
 		hookURL, err := url.Parse(config.Webhook.URL)

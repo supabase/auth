@@ -5,7 +5,8 @@ import (
 )
 
 type HookConfig struct {
-	Name               string  `json:"name" db:"name"`
+	Name string `json:"name" db:"name"`
+	// TODO: change this t o just URI
 	HookURI            string  `json:"hook_uri" db:"hook_uri"`
 	Secret             string  `json:"secret" db:"secret"`
 	ExtensibilityPoint string  `json:"extensibility_point" db:"extensibility_point"`
