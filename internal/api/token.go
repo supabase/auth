@@ -369,7 +369,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return terr
 		}
 		// Swap to ensure current token is the latest one
-		refreshToken, terr = models.GrantRefreshTokenSwap(r, tx, user, currentToken)
+		refreshToken, terr = models.GrantRefreshTokenSwap(r, tx, user, currentToken, true)
 		if terr != nil {
 			return terr
 		}

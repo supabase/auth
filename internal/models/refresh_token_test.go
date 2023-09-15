@@ -49,7 +49,7 @@ func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwap() {
 	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
 	require.NoError(ts.T(), err)
 
-	s, err := GrantRefreshTokenSwap(&http.Request{}, ts.db, u, r)
+	s, err := GrantRefreshTokenSwap(&http.Request{}, ts.db, u, r, true)
 	require.NoError(ts.T(), err)
 
 	_, nr, _, err := FindUserWithRefreshToken(ts.db, r.Token, false)

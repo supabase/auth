@@ -49,7 +49,7 @@ func GrantAuthenticatedUser(tx *storage.Connection, user *User, params GrantPara
 }
 
 // GrantRefreshTokenSwap swaps a refresh token for a new one, revoking the provided token.
-func GrantRefreshTokenSwap(r *http.Request, tx *storage.Connection, user *User, token *RefreshToken) (*RefreshToken, error) {
+func GrantRefreshTokenSwap(r *http.Request, tx *storage.Connection, user *User, token *RefreshToken, markRevoked bool) (*RefreshToken, error) {
 	var newToken *RefreshToken
 	err := tx.Transaction(func(rtx *storage.Connection) error {
 		var terr error
@@ -57,9 +57,11 @@ func GrantRefreshTokenSwap(r *http.Request, tx *storage.Connection, user *User, 
 			return errors.Wrap(terr, "error creating audit log entry")
 		}
 
-		token.Revoked = true
-		if terr = tx.UpdateOnly(token, "revoked"); terr != nil {
-			return terr
+		if markRevoked {
+			token.Revoked = true
+			if terr = tx.UpdateOnly(token, "revoked"); terr != nil {
+				return terr
+			}
 		}
 
 		newToken, terr = createRefreshToken(rtx, user, token, &GrantParams{})

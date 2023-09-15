@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	mathRand "math/rand"
 	"net/http"
 	"time"
@@ -14,9 +15,35 @@ import (
 
 const retryLoopDuration = 5.0
 
+type RefreshTokenPhase = int
+
+const (
+	PhaseImmediatelyCommit RefreshTokenPhase = iota
+	PhasePreCommit         RefreshTokenPhase = iota
+	PhaseCommit            RefreshTokenPhase = iota
+)
+
+func ParseRefreshTokenPhase(phase string) (RefreshTokenPhase, error) {
+	switch phase {
+	case "":
+		return PhaseImmediatelyCommit, nil
+
+	case "pre-commit":
+		return PhasePreCommit, nil
+
+	case "commit":
+		return PhaseCommit, nil
+
+	default:
+		return PhaseImmediatelyCommit, fmt.Errorf("unknown phase value %q", phase)
+	}
+}
+
 // RefreshTokenGrantParams are the parameters the RefreshTokenGrant method accepts
 type RefreshTokenGrantParams struct {
 	RefreshToken string `json:"refresh_token"`
+
+	Phase string `json:"phase"`
 }
 
 // RefreshTokenGrant implements the refresh_token grant type flow
@@ -37,6 +64,11 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 	if params.RefreshToken == "" {
 		return oauthError("invalid_request", "refresh_token required")
+	}
+
+	phase, err := ParseRefreshTokenPhase(params.Phase)
+	if err != nil {
+		return oauthError("invalid_request", err.Error())
 	}
 
 	// A 5 second retry loop is used to make sure that refresh token
@@ -106,7 +138,11 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			// refresh token row and session are locked at this
 			// point, cannot be concurrently refreshed
 
-			if token.Revoked {
+			if phase != PhaseCommit && token.Revoked {
+				// token is revoked and the phase is either
+				// immediately commit, or pre-commit, which
+				// means that the reuse algorithm applies
+
 				a.clearCookieTokens(config, w)
 				// For a revoked refresh token to be reused, it
 				// has to fall within the reuse interval.
@@ -128,15 +164,36 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				}
 			}
 
-			if terr = models.NewAuditLogEntry(r, tx, user, models.TokenRefreshedAction, "", nil); terr != nil {
-				return terr
+			if phase == PhaseCommit {
+				// commit phase, need to mark the token as
+				// revoked as the client is notifying that they
+				// successfully saved the response from the
+				// pre-commit phase
+
+				token.Revoked = true
+				if terr := tx.UpdateOnly(token, "revoked"); terr != nil {
+					return terr
+				}
+
+				return nil
 			}
+
+			// in the pre-commit phase a new refresh token is
+			// generated, but this token is not revoked still as we
+			// are waiting for the commit message from the client
+			// after it has successfully saved the result in
+			// storage
+			markRevoked := phase != PhasePreCommit
 
 			// a new refresh token is generated and explicitly not reusing
 			// a previous one as it could have already been revoked while
 			// this handler was running
-			newToken, terr := models.GrantRefreshTokenSwap(r, tx, user, token)
+			newToken, terr := models.GrantRefreshTokenSwap(r, tx, user, token, markRevoked)
 			if terr != nil {
+				return terr
+			}
+
+			if terr = models.NewAuditLogEntry(r, tx, user, models.TokenRefreshedAction, "", nil); terr != nil {
 				return terr
 			}
 
@@ -162,8 +219,13 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		})
 		if err == nil {
 			// success
-			metering.RecordLogin("token", user.ID)
-			return sendJSON(w, http.StatusOK, newTokenResponse)
+
+			if newTokenResponse != nil {
+				metering.RecordLogin("token", user.ID)
+				return sendJSON(w, http.StatusOK, newTokenResponse)
+			} else {
+				return sendJSON(w, http.StatusOK, map[string]any{})
+			}
 		}
 
 		if err != nil {

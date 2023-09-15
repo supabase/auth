@@ -212,7 +212,7 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
 
 	first, err := models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
 	require.NoError(ts.T(), err)
-	second, err := models.GrantRefreshTokenSwap(&http.Request{}, ts.API.db, u, first)
+	second, err := models.GrantRefreshTokenSwap(&http.Request{}, ts.API.db, u, first, true)
 	require.NoError(ts.T(), err)
 
 	cases := []struct {
