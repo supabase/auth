@@ -35,16 +35,6 @@ func (u *linkedinOIDCUser) getAvatarUrl() string {
 	return u.Picture
 }
 
-type linkedinOIDCName struct {
-	Localized       interface{}        `json:"localized"`
-	PreferredLocale linkedinOIDCLocale `json:"preferredLocale"`
-}
-
-type linkedinOIDCLocale struct {
-	Country  string `json:"country"`
-	Language string `json:"language"`
-}
-
 // NewLinkedinOIDCProvider creates a Linkedin account provider via OIDC.
 func NewLinkedinOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
@@ -82,11 +72,6 @@ func (g linkedinOIDCProvider) GetOAuthToken(code string) (*oauth2.Token, error) 
 	return g.Exchange(context.Background(), code)
 }
 
-func GetOIDCName(name linkedinOIDCName) string {
-	key := name.PreferredLocale.Language + "_" + name.PreferredLocale.Country
-	myMap := name.Localized.(map[string]interface{})
-	return myMap[key].(string)
-}
 func (g linkedinOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u linkedinOIDCUser
 	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/v2/userinfo", &u); err != nil {
