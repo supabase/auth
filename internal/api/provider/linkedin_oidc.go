@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	defaultLinkedinAPIBase = "api.linkedin.com"
+	defaultLinkedinOIDCAPIBase = "api.linkedin.com"
 )
 
-type linkedinProvider struct {
+type linkedinOIDCProvider struct {
 	*oauth2.Config
 	APIPath      string
 	UserInfoURL  string
@@ -22,10 +22,10 @@ type linkedinProvider struct {
 
 // See https://docs.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin?context=linkedin/consumer/context
 // for retrieving a member's profile. This requires the r_liteprofile scope.
-type linkedinUser struct {
-	ID        string       `json:"id"`
-	FirstName linkedinName `json:"firstName"`
-	LastName  linkedinName `json:"lastName"`
+type linkedinOIDCUser struct {
+	ID        string           `json:"id"`
+	FirstName linkedinOIDCName `json:"firstName"`
+	LastName  linkedinOIDCName `json:"lastName"`
 	AvatarURL struct {
 		DisplayImage struct {
 			Elements []struct {
@@ -37,7 +37,7 @@ type linkedinUser struct {
 	} `json:"profilePicture"`
 }
 
-func (u *linkedinUser) getAvatarUrl() string {
+func (u *linkedinOIDCUser) getAvatarUrl() string {
 	avatarURL := ""
 	if len(u.AvatarURL.DisplayImage.Elements) > 0 {
 		avatarURL = u.AvatarURL.DisplayImage.Elements[0].Identifiers[0].Identifier
@@ -45,19 +45,19 @@ func (u *linkedinUser) getAvatarUrl() string {
 	return avatarURL
 }
 
-type linkedinName struct {
-	Localized       interface{}    `json:"localized"`
-	PreferredLocale linkedinLocale `json:"preferredLocale"`
+type linkedinOIDCName struct {
+	Localized       interface{}        `json:"localized"`
+	PreferredLocale linkedinOIDCLocale `json:"preferredLocale"`
 }
 
-type linkedinLocale struct {
+type linkedinOIDCLocale struct {
 	Country  string `json:"country"`
 	Language string `json:"language"`
 }
 
 // See https://docs.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin?context=linkedin/consumer/context#retrieving-member-email-address
 // for retrieving a member email address. This requires the r_email_address scope.
-type linkedinElements struct {
+type linkedinOIDCElements struct {
 	Elements []struct {
 		Handle      string `json:"handle"`
 		HandleTilde struct {
@@ -67,12 +67,12 @@ type linkedinElements struct {
 }
 
 // NewLinkedinProvider creates a Linkedin account provider.
-func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewLinkedinOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
-	apiPath := chooseHost(ext.URL, defaultLinkedinAPIBase)
+	apiPath := chooseHost(ext.URL, defaultLinkedinOIDCAPIBase)
 
 	oauthScopes := []string{
 		"r_emailaddress",
@@ -83,7 +83,7 @@ func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	return &linkedinProvider{
+	return &linkedinOIDCProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
@@ -98,23 +98,22 @@ func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 	}, nil
 }
 
-func (g linkedinProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
+func (g linkedinOIDCProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 
-func GetName(name linkedinName) string {
+func GetOIDCName(name linkedinOIDCName) string {
 	key := name.PreferredLocale.Language + "_" + name.PreferredLocale.Country
 	myMap := name.Localized.(map[string]interface{})
 	return myMap[key].(string)
 }
-
-func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	var u linkedinUser
+func (g linkedinOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
+	var u linkedinOIDCUser
 	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/v2/me?projection=(id,firstName,lastName,profilePicture(displayImage~:playableStreams))", &u); err != nil {
 		return nil, err
 	}
 
-	var e linkedinElements
+	var e linkedinOIDCElements
 	// Note: Use primary contact api for handling phone numbers
 	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/v2/emailAddress?q=members&projection=(elements*(handle~))", &e); err != nil {
 		return nil, err
@@ -141,14 +140,14 @@ func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 		Metadata: &Claims{
 			Issuer:        g.APIPath,
 			Subject:       u.ID,
-			Name:          strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
+			Name:          strings.TrimSpace(GetOIDCName(u.FirstName) + " " + GetOIDCName(u.LastName)),
 			Picture:       avatarURL,
 			Email:         e.Elements[0].HandleTilde.EmailAddress,
 			EmailVerified: true,
 
 			// To be deprecated
 			AvatarURL:  avatarURL,
-			FullName:   strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
+			FullName:   strings.TrimSpace(GetOIDCName(u.FirstName) + " " + GetOIDCName(u.LastName)),
 			ProviderId: u.ID,
 		},
 		Emails: emails,
