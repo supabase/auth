@@ -540,7 +540,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewKeycloakProvider(config.External.Keycloak, scopes)
 	case "linkedin":
 		return provider.NewLinkedinProvider(config.External.Linkedin, scopes)
-	case "linkedinOIDC":
+	case "linkedin-oidc":
 		return provider.NewLinkedinOIDCProvider(config.External.LinkedinOIDC, scopes)
 	case "notion":
 		return provider.NewNotionProvider(config.External.Notion)
