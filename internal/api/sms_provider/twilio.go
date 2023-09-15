@@ -76,18 +76,28 @@ func (t *TwilioProvider) SendMessage(phone string, message string, channel strin
 func (t *TwilioProvider) SendSms(phone, message, channel string) (string, error) {
 	sender := t.Config.MessageServiceSid
 	receiver := "+" + phone
+	var body url.Values
 	if channel == WhatsappProvider {
 		receiver = channel + ":" + receiver
 		if isPhoneNumber.MatchString(formatPhoneNumber(sender)) {
 			sender = channel + ":" + sender
 		}
+		body = url.Values{
+			"To":         {receiver}, // twilio api requires "+" extension to be included
+			"Channel":    {channel},
+			"From":       {sender},
+			"ContentSID": {t.Config.ContentSid},
+			// "ContentVariables": {},
+		}
+	} else {
+		body = url.Values{
+			"To":      {receiver}, // twilio api requires "+" extension to be included
+			"Channel": {channel},
+			"From":    {sender},
+			"Body":    {message},
+		}
 	}
-	body := url.Values{
-		"To":      {receiver}, // twilio api requires "+" extension to be included
-		"Channel": {channel},
-		"From":    {sender},
-		"Body":    {message},
-	}
+
 	client := &http.Client{Timeout: defaultTimeout}
 	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))
 	if err != nil {
