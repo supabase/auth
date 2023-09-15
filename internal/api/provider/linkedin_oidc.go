@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/supabase/gotrue/internal/conf"
@@ -20,29 +19,20 @@ type linkedinOIDCProvider struct {
 	UserEmailUrl string
 }
 
-// See https://docs.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin?context=linkedin/consumer/context
-// for retrieving a member's profile. This requires the r_liteprofile scope.
+// See https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2
+// for retrieving a member's profile. This requires the profile, openid, and email scope.
 type linkedinOIDCUser struct {
-	ID        string           `json:"id"`
-	FirstName linkedinOIDCName `json:"firstName"`
-	LastName  linkedinOIDCName `json:"lastName"`
-	AvatarURL struct {
-		DisplayImage struct {
-			Elements []struct {
-				Identifiers []struct {
-					Identifier string `json:"identifier"`
-				} `json:"identifiers"`
-			} `json:"elements"`
-		} `json:"displayImage~"`
-	} `json:"profilePicture"`
+	Sub           string `json:"sub"`
+	Email         string `json:"email"`
+	Name          string `json:"name"`
+	Picture       string `json:"picture"`
+	GivenName     string `json:"given_name"`
+	FamilyName    string `json:"family_name"`
+	EmailVerified bool   `json:"email_verified"`
 }
 
 func (u *linkedinOIDCUser) getAvatarUrl() string {
-	avatarURL := ""
-	if len(u.AvatarURL.DisplayImage.Elements) > 0 {
-		avatarURL = u.AvatarURL.DisplayImage.Elements[0].Identifiers[0].Identifier
-	}
-	return avatarURL
+	return u.Picture
 }
 
 type linkedinOIDCName struct {
@@ -55,18 +45,7 @@ type linkedinOIDCLocale struct {
 	Language string `json:"language"`
 }
 
-// See https://docs.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin?context=linkedin/consumer/context#retrieving-member-email-address
-// for retrieving a member email address. This requires the r_email_address scope.
-type linkedinOIDCElements struct {
-	Elements []struct {
-		Handle      string `json:"handle"`
-		HandleTilde struct {
-			EmailAddress string `json:"emailAddress"`
-		} `json:"handle~"`
-	} `json:"elements"`
-}
-
-// NewLinkedinProvider creates a Linkedin account provider.
+// NewLinkedinOIDCProvider creates a Linkedin account provider via OIDC.
 func NewLinkedinOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
@@ -75,8 +54,9 @@ func NewLinkedinOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string)
 	apiPath := chooseHost(ext.URL, defaultLinkedinOIDCAPIBase)
 
 	oauthScopes := []string{
-		"r_emailaddress",
-		"r_liteprofile",
+		"openid",
+		"email",
+		"profile",
 	}
 
 	if scopes != "" {
@@ -109,47 +89,28 @@ func GetOIDCName(name linkedinOIDCName) string {
 }
 func (g linkedinOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u linkedinOIDCUser
-	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/v2/me?projection=(id,firstName,lastName,profilePicture(displayImage~:playableStreams))", &u); err != nil {
+	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/v2/userinfo", &u); err != nil {
 		return nil, err
 	}
-
-	var e linkedinOIDCElements
-	// Note: Use primary contact api for handling phone numbers
-	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/v2/emailAddress?q=members&projection=(elements*(handle~))", &e); err != nil {
-		return nil, err
-	}
-
-	if len(e.Elements) <= 0 {
-		return nil, errors.New("unable to find email with Linkedin provider")
-	}
-
-	emails := []Email{}
-
-	if e.Elements[0].HandleTilde.EmailAddress != "" {
-		// linkedin only returns the primary email which is verified for the r_emailaddress scope.
-		emails = append(emails, Email{
-			Email:    e.Elements[0].HandleTilde.EmailAddress,
-			Primary:  true,
-			Verified: true,
-		})
-	}
-
-	avatarURL := u.getAvatarUrl()
 
 	return &UserProvidedData{
 		Metadata: &Claims{
 			Issuer:        g.APIPath,
-			Subject:       u.ID,
-			Name:          strings.TrimSpace(GetOIDCName(u.FirstName) + " " + GetOIDCName(u.LastName)),
-			Picture:       avatarURL,
-			Email:         e.Elements[0].HandleTilde.EmailAddress,
-			EmailVerified: true,
+			Subject:       u.Sub,
+			Name:          strings.TrimSpace(u.GivenName + " " + u.FamilyName),
+			Picture:       u.Picture,
+			Email:         u.Email,
+			EmailVerified: u.EmailVerified,
 
 			// To be deprecated
-			AvatarURL:  avatarURL,
-			FullName:   strings.TrimSpace(GetOIDCName(u.FirstName) + " " + GetOIDCName(u.LastName)),
-			ProviderId: u.ID,
+			AvatarURL:  u.Picture,
+			FullName:   strings.TrimSpace(u.GivenName + " " + u.FamilyName),
+			ProviderId: u.Sub,
 		},
-		Emails: emails,
+		Emails: []Email{{
+			Email:    u.Email,
+			Verified: u.EmailVerified,
+			Primary:  true,
+		}},
 	}, nil
 }
