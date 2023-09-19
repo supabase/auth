@@ -28,20 +28,12 @@ func (h *HookConfig) BeforeSave(tx *pop.Connection) error {
 	return nil
 }
 
-// Shouldn't need to create a new hook config unless admin, can be implemented later
-// func NewHookConfig(name, URI, secret, extensibilityPoint string, metadata map[string]interface{}) (*HookConfig, error) {
-// 	hookConfig := &HookConfig{
-// 		Name:               name,
-// 		URI:                URI,
-// 		Secret:             secret,
-// 		ExtensibilityPoint: extensibilityPoint,
-// 		Metadata:           metadata,
-// 	}
-// 	return hookConfig, nil
-// }
+func FindHookByExtensibilityPoint(tx *storage.Connection, name string) (*HookConfig, error) {
+	return findHookConfiguration(tx, "extensibility_point = ?", name)
 
-// TODO: Make this into smaller function and add wrapper
-func FetchHookConfiguration(tx *storage.Connection, query string, args ...interface{}) (*HookConfig, error) {
+}
+
+func findHookConfiguration(tx *storage.Connection, query string, args ...interface{}) (*HookConfig, error) {
 	obj := &HookConfig{}
 	if err := tx.Eager().Q().Where(query, args...).First(obj); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {

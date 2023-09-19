@@ -26,6 +26,16 @@ import (
 
 type HookEvent string
 
+type ExtensibilityPoint struct {
+	Name string
+}
+
+func NewExtensibilityPoint(name string) *ExtensibilityPoint {
+	return &ExtensibilityPoint{
+		Name: name,
+	}
+}
+
 const (
 	headerHookSignature = "x-webhook-signature"
 	defaultHookRetries  = 3
@@ -34,6 +44,10 @@ const (
 	SignupEvent         = "signup"
 	EmailChangeEvent    = "email_change"
 	LoginEvent          = "login"
+)
+
+const (
+	PhoneProviderExtensibilityPoint = "phone-provider"
 )
 
 var defaultTimeout = time.Second * 5
@@ -154,13 +168,6 @@ func closeBody(rsp *http.Response) {
 }
 
 func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig models.HookConfig, user *models.User, config *conf.GlobalConfiguration) error {
-	return _triggerAuthHook(ctx, hookConfig.URI, hookConfig.Secret, conn, hookConfig.ExtensibilityPoint, user, config)
-}
-
-// TODO: rename this
-func _triggerAuthHook(ctx context.Context, hookURL string, secret string, conn *storage.Connection, extensibilityPoint string, user *models.User, config *conf.GlobalConfiguration) error {
-	// TODO: Change this to take in the various fields that need to be passed
-	// TODO: Need also to filter the relevant user fields
 	payload := struct {
 		User *models.User `json:"user"`
 	}{
@@ -183,12 +190,12 @@ func _triggerAuthHook(ctx context.Context, hookURL string, secret string, conn *
 
 	w := Webhook{
 		WebhookConfig: &config.Webhook,
-		jwtSecret:     secret,
+		jwtSecret:     hookConfig.Secret,
 		claims:        claims,
 		payload:       data,
 	}
 
-	w.URL = hookURL
+	w.URL = hookConfig.URI
 
 	body, err := w.trigger()
 	if body != nil {

@@ -42,7 +42,6 @@ func formatPhoneNumber(phone string) string {
 
 // sendPhoneConfirmation sends an otp to the user's phone number
 func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string) (string, error) {
-
 	config := a.config
 
 	var token *string
@@ -90,9 +89,8 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		}
 
 		// Extensibility Point - initialize
-		// TODO: I guesss this could be presented as a struct above
-
-		hookConfiguration, err := models.FetchHookConfiguration(tx, "extensibility_point = ?", "custom-sms-provider")
+		phoneExtensibilityPoint := NewExtensibilityPoint("custom-sms-provider")
+		hookConfiguration, err := models.FindHookByExtensibilityPoint(tx, phoneExtensibilityPoint.Name)
 		if err != nil && !models.IsNotFoundError(err) {
 			return "", err
 		}
