@@ -40,10 +40,12 @@ const (
 	headerHookSignature = "x-webhook-signature"
 	defaultHookRetries  = 3
 	gotrueIssuer        = "gotrue"
-	ValidateEvent       = "validate"
-	SignupEvent         = "signup"
-	EmailChangeEvent    = "email_change"
-	LoginEvent          = "login"
+	// TODO (Joel): Properly substitute this
+	authHookIssuer   = "auth"
+	ValidateEvent    = "validate"
+	SignupEvent      = "signup"
+	EmailChangeEvent = "email_change"
+	LoginEvent       = "login"
 )
 
 const (
@@ -68,6 +70,100 @@ type Webhook struct {
 type WebhookResponse struct {
 	AppMetaData  map[string]interface{} `json:"app_metadata,omitempty"`
 	UserMetaData map[string]interface{} `json:"user_metadata,omitempty"`
+}
+
+// Duplicate of Webhook, should eventually modify the fields passed
+type AuthHook struct {
+	*conf.WebhookConfig
+	// Decide what should go here
+	jwtSecret string
+	claims    jwt.Claims
+	payload   []byte
+}
+
+func (w *AuthHook) trigger() (io.ReadCloser, error) {
+	timeout := defaultTimeout
+	if w.TimeoutSec > 0 {
+		timeout = time.Duration(w.TimeoutSec) * time.Second
+	}
+
+	if w.Retries == 0 {
+		w.Retries = defaultHookRetries
+	}
+
+	hooklog := logrus.WithFields(logrus.Fields{
+		"component":   "webhook",
+		"url":         w.URL,
+		"signed":      w.jwtSecret != "",
+		"instance_id": uuid.Nil.String(),
+	})
+	client := http.Client{
+		Timeout: timeout,
+	}
+	payload, jwtErr := w.generateSignature()
+	if jwtErr != nil {
+		return nil, jwtErr
+	}
+
+	for i := 0; i < w.Retries; i++ {
+		hooklog = hooklog.WithField("attempt", i+1)
+		hooklog.Info("Starting to perform signup hook request")
+
+		req, err := http.NewRequest(http.MethodPost, w.URL, bytes.NewBuffer(payload))
+		if err != nil {
+			return nil, internalServerError("Failed to make request object").WithInternalError(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		watcher, req := watchForConnection(req)
+
+		start := time.Now()
+		rsp, err := client.Do(req)
+		if err != nil {
+			if terr, ok := err.(net.Error); ok && terr.Timeout() {
+				// timed out - try again?
+				if i == w.Retries-1 {
+					closeBody(rsp)
+					return nil, httpError(http.StatusGatewayTimeout, "Failed to perform webhook in time frame (%v seconds)", timeout.Seconds())
+				}
+				hooklog.Info("Request timed out")
+				continue
+			} else if watcher.gotConn {
+				closeBody(rsp)
+				return nil, internalServerError("Failed to trigger webhook to %s", w.URL).WithInternalError(err)
+			} else {
+				closeBody(rsp)
+				return nil, httpError(http.StatusBadGateway, "Failed to connect to %s", w.URL)
+			}
+		}
+		dur := time.Since(start)
+		rspLog := hooklog.WithFields(logrus.Fields{
+			"status_code": rsp.StatusCode,
+			"dur":         dur.Nanoseconds(),
+		})
+		switch rsp.StatusCode {
+		case http.StatusOK, http.StatusNoContent, http.StatusAccepted:
+			rspLog.Infof("Finished processing webhook in %s", dur)
+			var body io.ReadCloser
+			if rsp.ContentLength > 0 {
+				body = rsp.Body
+			}
+			return body, nil
+		default:
+			rspLog.Infof("Bad response for webhook %d in %s", rsp.StatusCode, dur)
+		}
+	}
+
+	hooklog.Infof("Failed to process webhook for %s after %d attempts", w.URL, w.Retries)
+	return nil, unprocessableEntityError("Failed to handle signup webhook")
+}
+
+func (a *AuthHook) generateSignature() ([]byte, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, a.claims)
+	tokenString, err := token.SignedString([]byte(a.jwtSecret))
+	if err != nil {
+		return []byte(""), internalServerError("Failed build signing string").WithInternalError(err)
+	}
+	return []byte(tokenString), nil
 }
 
 func (w *Webhook) trigger() (io.ReadCloser, error) {
@@ -168,49 +264,55 @@ func closeBody(rsp *http.Response) {
 }
 
 func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig models.HookConfig, user *models.User, config *conf.GlobalConfiguration) error {
+	// TODO: these should be filtered but I'm not sure how
 	payload := struct {
 		User *models.User `json:"user"`
 	}{
 		User: user,
 	}
+
 	data, err := json.Marshal(&payload)
 	if err != nil {
 		// TODO: include name of hook that failed
 		return internalServerError("Failed to serialize the data for hook").WithInternalError(err)
 	}
 
-	// TODO: Sign the payload here
-	claims := webhookClaims{
-		StandardClaims: jwt.StandardClaims{
-			IssuedAt: time.Now().Unix(),
-			Subject:  uuid.Nil.String(),
-			Issuer:   gotrueIssuer,
-		},
+	// TODO: substitute with a custom Claims intrface
+	claims := jwt.MapClaims{
+		"IssuedAt": time.Now().Unix(),
+		"Subject":  uuid.Nil.String(),
+		"Issuer":   authHookIssuer,
+		"Data":     data,
 	}
 
-	w := Webhook{
+	a := AuthHook{
 		WebhookConfig: &config.Webhook,
 		jwtSecret:     hookConfig.Secret,
 		claims:        claims,
-		payload:       data,
 	}
 
-	w.URL = hookConfig.URI
+	// Works out because this is a http hook - eventually needs to change
+	a.URL = hookConfig.URI
 
-	body, err := w.trigger()
+	body, err := a.trigger()
 	if body != nil {
 		defer utilities.SafeClose(body)
 	}
+
 	// TODO: this should return webhook response and we should modify the method signature
-	if err == nil && body != nil {
-		// TODO: figure out how we can dictate the response
-		webhookRsp := &WebhookResponse{}
-		decoder := json.NewDecoder(body)
-		if err = decoder.Decode(webhookRsp); err != nil {
-			return internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
-		}
+	//if err == nil && body != nil {
+	// TODO: figure out how we can dictate the response
+	// Also need to validate. For now this is fine because the expected is to return nothing
+	// webhookRsp := &WebhookResponse{}
+	// decoder := json.NewDecoder(body)
+	// if err = decoder.Decode(webhookRsp); err != nil {
+	// 	return internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
+	// }
+	// }
+	if err != nil {
+		return err
 	}
-	return err
+	return nil
 }
 
 // Deprecate this
@@ -302,6 +404,7 @@ func triggerHook(ctx context.Context, hookURL *url.URL, secret string, conn *sto
 		if err = decoder.Decode(webhookRsp); err != nil {
 			return internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
 		}
+
 		return conn.Transaction(func(tx *storage.Connection) error {
 			if webhookRsp.UserMetaData != nil {
 				user.UserMetaData = nil
