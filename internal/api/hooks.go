@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"net"
+	"fmt"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
@@ -104,12 +105,24 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 	if jwtErr != nil {
 		return nil, jwtErr
 	}
+	fmt.Println(w.URL)
 
+	jsonString := struct {
+        JWT string `json:"jwt"`
+    }{
+        JWT: payload,
+    }
+
+    // Marshal the JSON object to JSON format
+    load, err := json.Marshal(jsonString)
+	if err != nil {
+		return nil, err
+	}
 	for i := 0; i < w.Retries; i++ {
 		hooklog = hooklog.WithField("attempt", i+1)
 		hooklog.Info("Starting to perform signup hook request")
 
-		req, err := http.NewRequest(http.MethodPost, w.URL, bytes.NewBuffer(payload))
+		req, err := http.NewRequest(http.MethodPost, w.URL, bytes.NewBuffer(load))
 		if err != nil {
 			return nil, internalServerError("Failed to make request object").WithInternalError(err)
 		}
@@ -157,13 +170,13 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 	return nil, unprocessableEntityError("Failed to handle signup webhook")
 }
 
-func (a *AuthHook) generateSignature() ([]byte, error) {
+func (a *AuthHook) generateSignature() (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, a.claims)
 	tokenString, err := token.SignedString([]byte(a.jwtSecret))
 	if err != nil {
-		return []byte(""), internalServerError("Failed build signing string").WithInternalError(err)
+		return "", internalServerError("Failed build signing string").WithInternalError(err)
 	}
-	return []byte(tokenString), nil
+	return tokenString, nil
 }
 
 func (w *Webhook) trigger() (io.ReadCloser, error) {
@@ -265,6 +278,7 @@ func closeBody(rsp *http.Response) {
 
 func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig models.HookConfig, user *models.User, config *conf.GlobalConfiguration) error {
 	// TODO: these should be filtered but I'm not sure how
+	fmt.Println("auth hook")
 	payload := struct {
 		User *models.User `json:"user"`
 	}{
@@ -276,6 +290,8 @@ func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig m
 		// TODO: include name of hook that failed
 		return internalServerError("Failed to serialize the data for hook").WithInternalError(err)
 	}
+
+	fmt.Println("more data")
 
 	// TODO: substitute with a custom Claims intrface
 	claims := jwt.MapClaims{
@@ -298,6 +314,7 @@ func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig m
 	if body != nil {
 		defer utilities.SafeClose(body)
 	}
+	fmt.Println("triggered")
 
 	// TODO: this should return webhook response and we should modify the method signature
 	//if err == nil && body != nil {

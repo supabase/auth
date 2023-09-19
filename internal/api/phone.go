@@ -7,6 +7,7 @@ import (
 	"strings"
 	"text/template"
 	"time"
+	"fmt"
 
 	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/api/sms_provider"
@@ -94,7 +95,8 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		if err != nil && !models.IsNotFoundError(err) {
 			return "", err
 		}
-		if hookConfiguration != nil && models.IsNotFoundError(err) {
+		fmt.Println(hookConfiguration)
+		if hookConfiguration != nil {
 			// TODO: find a way to wrap and properly Fetch the resp
 			if terr := triggerAuthHook(ctx, tx, *hookConfiguration, user, config); terr != nil {
 				return "", terr
