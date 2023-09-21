@@ -31,10 +31,6 @@ type linkedinOIDCUser struct {
 	EmailVerified bool   `json:"email_verified"`
 }
 
-func (u *linkedinOIDCUser) getAvatarUrl() string {
-	return u.Picture
-}
-
 // NewLinkedinOIDCProvider creates a Linkedin account provider via OIDC.
 func NewLinkedinOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {

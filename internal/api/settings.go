@@ -15,7 +15,7 @@ type ProviderSettings struct {
 	Keycloak     bool `json:"keycloak"`
 	Kakao        bool `json:"kakao"`
 	Linkedin     bool `json:"linkedin"`
-	LinkedinOIDC bool `json:"linkedinOIDC"`
+	LinkedinOIDC bool `json:"linkedin_oidc"`
 	Notion       bool `json:"notion"`
 	Spotify      bool `json:"spotify"`
 	Slack        bool `json:"slack"`
