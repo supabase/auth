@@ -249,36 +249,28 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 }
 
 func parseJWTTokenWithClaims(bearer string, config *conf.GlobalConfiguration, claims jwt.Claims) (*jwt.Token, error) {
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name, jwt.SigningMethodRS256.Name}}
+	p := jwt.Parser{ValidMethods: []string{config.JWT.SigningMethod}}
 	return p.ParseWithClaims(bearer, claims, func(token *jwt.Token) (interface{}, error) {
-		untypedAlg, found := token.Header["alg"]
-		if found {
-			alg, ok := untypedAlg.(string)
-			if ok && alg == "RS256" {
-				pubKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(config.JWT.Pubkey))
-				if err != nil {
-					return nil, unauthorizedError("An error occurred parsing the public key base64; this is a code bug")
-				}
-				return pubKey, nil
+		if config.JWT.SigningMethod == "RS256" {
+			pubKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(config.JWT.Pubkey))
+			if err != nil {
+				return nil, unauthorizedError("An error occurred parsing the public key base64; this is a code bug")
 			}
+			return pubKey, nil
 		}
 		return []byte(config.JWT.Secret), nil
 	})
 }
 
 func parseJWTToken(bearer string, config *conf.GlobalConfiguration) (*jwt.Token, error) {
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name, jwt.SigningMethodRS256.Name}}
+	p := jwt.Parser{ValidMethods: []string{config.JWT.SigningMethod}}
 	return p.Parse(bearer, func(token *jwt.Token) (interface{}, error) {
-		untypedAlg, found := token.Header["alg"]
-		if found {
-			alg, ok := untypedAlg.(string)
-			if ok && alg == "RS256" {
-				pubKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(config.JWT.Pubkey))
-				if err != nil {
-					return nil, unauthorizedError("An error occurred parsing the public key base64; this is a code bug")
-				}
-				return pubKey, nil
+		if config.JWT.SigningMethod == "RS256" {
+			pubKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(config.JWT.Pubkey))
+			if err != nil {
+				return nil, unauthorizedError("An error occurred parsing the public key base64; this is a code bug")
 			}
+			return pubKey, nil
 		}
 		return []byte(config.JWT.Secret), nil
 	})
