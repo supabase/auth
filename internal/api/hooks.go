@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"io"
 	"net"
-	"fmt"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
@@ -105,16 +104,15 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 	if jwtErr != nil {
 		return nil, jwtErr
 	}
-	fmt.Println(w.URL)
 
 	jsonString := struct {
-        JWT string `json:"jwt"`
-    }{
-        JWT: payload,
-    }
+		JWT string `json:"jwt"`
+	}{
+		JWT: payload,
+	}
 
-    // Marshal the JSON object to JSON format
-    load, err := json.Marshal(jsonString)
+	// Marshal the JSON object to JSON format
+	load, err := json.Marshal(jsonString)
 	if err != nil {
 		return nil, err
 	}
@@ -278,27 +276,24 @@ func closeBody(rsp *http.Response) {
 
 func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig models.HookConfig, user *models.User, config *conf.GlobalConfiguration) error {
 	// TODO: these should be filtered but I'm not sure how
-	fmt.Println("auth hook")
-	payload := struct {
-		User *models.User `json:"user"`
-	}{
-		User: user,
-	}
+	// payload := struct {
+	// 	User *models.User `json:"user"`
+	// }{
+	// 	User: user,
+	// }
 
-	data, err := json.Marshal(&payload)
-	if err != nil {
-		// TODO: include name of hook that failed
-		return internalServerError("Failed to serialize the data for hook").WithInternalError(err)
-	}
-
-	fmt.Println("more data")
+	// data, err := json.Marshal(&payload)
+	// if err != nil {
+	// 	// TODO: include name of hook that failed
+	// 	return internalServerError("Failed to serialize the data for hook").WithInternalError(err)
+	// }
 
 	// TODO: substitute with a custom Claims intrface
 	claims := jwt.MapClaims{
 		"IssuedAt": time.Now().Unix(),
 		"Subject":  uuid.Nil.String(),
 		"Issuer":   authHookIssuer,
-		"Data":     data,
+		"Data":     user,
 	}
 
 	a := AuthHook{
@@ -314,7 +309,6 @@ func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig m
 	if body != nil {
 		defer utilities.SafeClose(body)
 	}
-	fmt.Println("triggered")
 
 	// TODO: this should return webhook response and we should modify the method signature
 	//if err == nil && body != nil {

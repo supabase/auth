@@ -7,7 +7,6 @@ import (
 	"strings"
 	"text/template"
 	"time"
-	"fmt"
 
 	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/api/sms_provider"
