@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/golang-jwt/jwt"
@@ -43,10 +45,10 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 	switch token.Issuer {
 	case IssuerGoogle:
 		token, data, err = parseGoogleIDToken(token)
-
 	case IssuerApple:
 		token, data, err = parseAppleIDToken(token)
-
+	case IssuerLinkedin:
+		token, data, err = parseLinkedinIDToken(token)
 	default:
 		token, data, err = parseGenericIDToken(token)
 	}
@@ -149,6 +151,50 @@ func parseAppleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 
 	if len(data.Metadata.CustomClaims) < 1 {
 		data.Metadata.CustomClaims = nil
+	}
+
+	return token, &data, nil
+}
+
+type LinkedinIDTokenClaims struct {
+	jwt.StandardClaims
+
+	Email         string `json:"email"`
+	EmailVerified string `json:"email_verified"`
+	FamilyName    string `json:"family_name"`
+	GivenName     string `json:"given_name"`
+	Locale        string `json:"locale"`
+	Picture       string `json:"picture"`
+}
+
+func parseLinkedinIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
+	var claims LinkedinIDTokenClaims
+	if err := token.Claims(&claims); err != nil {
+		return nil, nil, err
+	}
+
+	var data UserProvidedData
+	emailVerified, err := strconv.ParseBool(claims.EmailVerified)
+	if err != nil {
+		return nil, nil, err
+	}
+	data.Emails = append(data.Emails, Email{
+		Email:    claims.Email,
+		Verified: emailVerified,
+		Primary:  true,
+	})
+
+	data.Metadata = &Claims{
+		Issuer:        token.Issuer,
+		Subject:       token.Subject,
+		Email:         claims.Email,
+		EmailVerified: emailVerified,
+		Name:          strings.TrimSpace(claims.GivenName + " " + claims.FamilyName),
+		GivenName:     claims.GivenName,
+		FamilyName:    claims.FamilyName,
+		Locale:        claims.Locale,
+		Picture:       claims.Picture,
+		ProviderId:    token.Subject,
 	}
 
 	return token, &data, nil
