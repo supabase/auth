@@ -602,6 +602,10 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
 	case phoneChangeVerification:
 		if config.Sms.IsTwilioVerifyProvider() {
+			if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok {
+				params.Token = testOTP
+				return user, nil
+			}
 			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(user.PhoneChange, params.Token); err != nil {
 				return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
 			}
@@ -610,6 +614,10 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		isValid = isOtpValid(tokenHash, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
 	case smsVerification:
 		if config.Sms.IsTwilioVerifyProvider() {
+			if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok {
+				params.Token = testOTP
+				return user, nil
+			}
 			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(params.Phone, params.Token); err != nil {
 				return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
 			}
