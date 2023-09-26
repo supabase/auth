@@ -16,10 +16,8 @@ const (
 
 type linkedinOIDCProvider struct {
 	*oauth2.Config
-	oidc         *oidc.Provider
-	APIPath      string
-	UserInfoURL  string
-	UserEmailUrl string
+	oidc    *oidc.Provider
+	APIPath string
 }
 
 // NewLinkedinOIDCProvider creates a Linkedin account provider via OIDC.
