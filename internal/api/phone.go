@@ -94,7 +94,6 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		if err != nil && !models.IsNotFoundError(err) {
 			return "", err
 		}
-		fmt.Println(hookConfiguration)
 		if hookConfiguration != nil {
 			// TODO: find a way to wrap and properly Fetch the resp
 			if terr := triggerAuthHook(ctx, tx, *hookConfiguration, user, config); terr != nil {
