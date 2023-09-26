@@ -4,31 +4,22 @@ import (
 	"context"
 	"strings"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/supabase/gotrue/internal/conf"
 	"golang.org/x/oauth2"
 )
 
 const (
 	defaultLinkedinOIDCAPIBase = "api.linkedin.com"
+	IssuerLinkedin             = "https://www.linkedin.com"
 )
 
 type linkedinOIDCProvider struct {
 	*oauth2.Config
+	oidc         *oidc.Provider
 	APIPath      string
 	UserInfoURL  string
 	UserEmailUrl string
-}
-
-// See https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2
-// for retrieving a member's profile. This requires the profile, openid, and email scope.
-type linkedinOIDCUser struct {
-	Sub           string `json:"sub"`
-	Email         string `json:"email"`
-	Name          string `json:"name"`
-	Picture       string `json:"picture"`
-	GivenName     string `json:"given_name"`
-	FamilyName    string `json:"family_name"`
-	EmailVerified bool   `json:"email_verified"`
 }
 
 // NewLinkedinOIDCProvider creates a Linkedin account provider via OIDC.
@@ -49,7 +40,16 @@ func NewLinkedinOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string)
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
+	// Linkedin uses a different issuer from it's oidc discovery url
+	// https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2#validating-id-tokens
+	ctx := oidc.InsecureIssuerURLContext(context.Background(), IssuerLinkedin)
+	oidcProvider, err := oidc.NewProvider(ctx, IssuerLinkedin+"/oauth")
+	if err != nil {
+		return nil, err
+	}
+
 	return &linkedinOIDCProvider{
+		oidc: oidcProvider,
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
@@ -69,29 +69,18 @@ func (g linkedinOIDCProvider) GetOAuthToken(code string) (*oauth2.Token, error) 
 }
 
 func (g linkedinOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	var u linkedinOIDCUser
-	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/v2/userinfo", &u); err != nil {
-		return nil, err
+	idToken := tok.Extra("id_token")
+	if tok.AccessToken == "" || idToken == nil {
+		return &UserProvidedData{}, nil
 	}
 
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        g.APIPath,
-			Subject:       u.Sub,
-			Name:          strings.TrimSpace(u.GivenName + " " + u.FamilyName),
-			Picture:       u.Picture,
-			Email:         u.Email,
-			EmailVerified: u.EmailVerified,
-
-			// To be deprecated
-			AvatarURL:  u.Picture,
-			FullName:   strings.TrimSpace(u.GivenName + " " + u.FamilyName),
-			ProviderId: u.Sub,
-		},
-		Emails: []Email{{
-			Email:    u.Email,
-			Verified: u.EmailVerified,
-			Primary:  true,
-		}},
-	}, nil
+	_, data, err := ParseIDToken(ctx, g.oidc, &oidc.Config{
+		ClientID: g.ClientID,
+	}, idToken.(string), ParseIDTokenOptions{
+		AccessToken: tok.AccessToken,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
 }
