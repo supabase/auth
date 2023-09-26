@@ -76,11 +76,7 @@ func (t *TwilioProvider) SendMessage(phone, message, channel, otp string) (strin
 func (t *TwilioProvider) SendSms(phone, message, channel, otp string) (string, error) {
 	sender := t.Config.MessageServiceSid
 	receiver := "+" + phone
-	body := url.Values{
-		"To":      {receiver}, // twilio api requires "+" extension to be included
-		"Channel": {channel},
-		"From":    {sender},
-	}
+	var body url.Values
 	if channel == WhatsappProvider {
 		receiver = channel + ":" + receiver
 		if isPhoneNumber.MatchString(formatPhoneNumber(sender)) {
@@ -89,10 +85,20 @@ func (t *TwilioProvider) SendSms(phone, message, channel, otp string) (string, e
 		// Used to substitute OTP. See https://www.twilio.com/docs/content/whatsappauthentication for more details
 		contentVariables := fmt.Sprintf(`{"1": "%s"}`, otp)
 
-		body.Set("ContentSid", t.Config.ContentSid)
-		body.Set("ContentVariables", contentVariables)
+		body = url.Values{
+			"To":               {receiver}, // twilio api requires "+" extension to be included
+			"Channel":          {channel},
+			"From":             {sender},
+			"ContentSid":       {t.Config.ContentSid},
+			"ContentVariables": {contentVariables},
+		}
 	} else {
-		body.Set("Body", message)
+		body = url.Values{
+			"To":      {receiver}, // twilio api requires "+" extension to be included
+			"Channel": {channel},
+			"From":    {sender},
+			"Body":    {message},
+		}
 	}
 
 	client := &http.Client{Timeout: defaultTimeout}
