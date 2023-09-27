@@ -74,15 +74,6 @@ type WebhookResponse struct {
 	UserMetaData map[string]interface{} `json:"user_metadata,omitempty"`
 }
 
-// TODO: this should eventually go into one large file or we vendor a librar ywhich can generate the struct that we wish to marshal into. Or we can use CLI and maintain copy somewhere
-type CustomSmsHookResponse struct {
-	Status   int         `json:"status"`
-	Message  string      `json:"message"`
-	Code     string      `json:"code"`
-	MoreInfo string      `json:"more_info"`
-	Data     interface{} `json:"data,omitempty"`
-}
-
 // Duplicate of Webhook, should eventually modify the fields passed
 type AuthHook struct {
 	*conf.WebhookConfig
@@ -529,10 +520,9 @@ func validateSchema(schema map[string]interface{}, jsonDataAsString string) erro
 	if validationResult.Valid() {
 		return nil
 	} else {
-		return errors.New("JSON data is not valid against the schema.")
 		for _, desc := range validationResult.Errors() {
 			fmt.Printf("- %s\n", desc)
 		}
+		return errors.New("JSON data is not valid against the schema.")
 	}
-	return nil
 }
