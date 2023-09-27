@@ -23,6 +23,7 @@ import (
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
 	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/xeipuuv/gojsonschema"
 )
 
 type HookEvent string
@@ -130,8 +131,6 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 
 		start := time.Now()
 		rsp, err := client.Do(req)
-		fmt.Println("check here")
-		fmt.Println(err)
 		if err != nil {
 			if terr, ok := err.(net.Error); ok && terr.Timeout() {
 				// timed out - try again?
@@ -279,11 +278,10 @@ func closeBody(rsp *http.Response) {
 
 // TODO: Add an additional metadata param
 func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig models.HookConfig, user *models.User, config *conf.GlobalConfiguration) error {
-	// TODO: filterJSONPayload(user, metadata)
-	payload := struct {
-		User *models.User `json:"user"`
-	}{
-		User: user,
+	// TODO: Modify this so it takes in metadata and geeneralizes or we pass through hook
+	inp, err := TransformInput(user, hookConfig)
+	if err != nil {
+		return err
 	}
 
 	// TODO: substitute with a custom Claims intrface
@@ -291,7 +289,7 @@ func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig m
 		"IssuedAt": time.Now().Unix(),
 		"Subject":  uuid.Nil.String(),
 		"Issuer":   authHookIssuer,
-		"Events":   payload,
+		"Events":   inp,
 	}
 
 	a := AuthHook{
@@ -458,4 +456,51 @@ type connectionWatcher struct {
 
 func (c *connectionWatcher) GotConn(_ httptrace.GotConnInfo) {
 	c.gotConn = true
+}
+
+// TODO: should take in metadata as well
+func TransformInput(user *models.User, hookConfig models.HookConfig) (map[string]interface{}, error) {
+	// Create an empty map to store the result
+	result := make(map[string]interface{})
+
+	// Check if the user is not nil and has a phone number
+	if user != nil && user.Phone != "" {
+		// Add the phone number to the result map
+		result["phone"] = string(user.Phone)
+	}
+	// No switch statement for now but based on the type we can decide what to check
+	requestSchema := hookConfig.RequestSchema
+	requestJSON, err := json.Marshal(requestSchema)
+	if err != nil {
+		return nil, err
+	}
+
+	finalJSON, err := json.Marshal(requestJSON)
+	if err != nil {
+		return nil, err
+	}
+
+	schemaLoader := gojsonschema.NewStringLoader(string(finalJSON))
+
+	jsonData, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	jsonLoader := gojsonschema.NewStringLoader(string(jsonData))
+
+	validationResult, err := gojsonschema.Validate(schemaLoader, jsonLoader)
+	if err != nil {
+		fmt.Printf("Error loading JSON data: %s\n", err.Error())
+		return nil, err
+	}
+	if validationResult.Valid() {
+		fmt.Println("JSON data is valid against the schema.")
+	} else {
+		fmt.Println("JSON data is not valid against the schema.")
+		for _, desc := range validationResult.Errors() {
+			fmt.Printf("- %s\n", desc)
+		}
+	}
+
+	return result, nil
 }
