@@ -475,12 +475,7 @@ func TransformInput(user *models.User, hookConfig models.HookConfig) (map[string
 		return nil, err
 	}
 
-	finalJSON, err := json.Marshal(requestJSON)
-	if err != nil {
-		return nil, err
-	}
-
-	schemaLoader := gojsonschema.NewStringLoader(string(finalJSON))
+	schemaLoader := gojsonschema.NewStringLoader(string(requestJSON))
 
 	jsonData, err := json.Marshal(result)
 	if err != nil {
