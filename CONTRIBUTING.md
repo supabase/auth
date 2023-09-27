@@ -519,6 +519,8 @@ We actively welcome your pull requests.
 
 ## Guidelines for Implementing Additional OAuth Providers
 
+> ⚠️ We won't be accepting any additional oauth / sms provider contributions for now because we intend to support these through webhooks or a generic provider in the future.
+
 Please ensure that an end-to-end test is done for the OAuth provider implemented.
 
 An end-to-end test includes:
