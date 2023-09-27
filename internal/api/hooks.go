@@ -74,13 +74,21 @@ type WebhookResponse struct {
 	UserMetaData map[string]interface{} `json:"user_metadata,omitempty"`
 }
 
+// TODO: this should eventually go into one large file or we vendor a librar ywhich can generate the struct that we wish to marshal into. Or we can use CLI and maintain copy somewhere
+type CustomSmsHookResponse struct {
+	Status   int         `json:"status"`
+	Message  string      `json:"message"`
+	Code     string      `json:"code"`
+	MoreInfo string      `json:"more_info"`
+	Data     interface{} `json:"data,omitempty"`
+}
+
 // Duplicate of Webhook, should eventually modify the fields passed
 type AuthHook struct {
 	*conf.WebhookConfig
 	// Decide what should go here
 	jwtSecret string
 	claims    jwt.Claims
-	payload   []byte
 }
 
 func (w *AuthHook) trigger() (io.ReadCloser, error) {
@@ -160,6 +168,8 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 			if rsp.ContentLength > 0 {
 				body = rsp.Body
 			}
+			fmt.Printf("%v", rsp)
+			fmt.Println(body)
 			return body, nil
 		default:
 			rspLog.Infof("Bad response for webhook %d in %s", rsp.StatusCode, dur)
@@ -279,6 +289,7 @@ func closeBody(rsp *http.Response) {
 // TODO: Add an additional metadata param
 func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig models.HookConfig, user *models.User, config *conf.GlobalConfiguration) error {
 	// TODO: Modify this so it takes in metadata and geeneralizes or we pass through hook
+
 	inp, err := TransformInput(user, hookConfig)
 	if err != nil {
 		return err
@@ -308,12 +319,13 @@ func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig m
 
 	// TODO: this should return webhook response and we should modify the method signature
 	if err == nil && body != nil {
-		// TODO: Fetch the output from hook config and then validate against it
-		webhookRsp := &WebhookResponse{}
-		decoder := json.NewDecoder(body)
-		if err = decoder.Decode(webhookRsp); err != nil {
-			return internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
+
+		resp, err := DecodeAndValidateResponse(hookConfig.ResponseSchema, body)
+		if err != nil {
+			return err
 		}
+		// TODO: modify function so that it returns the response. In this case it's not needed
+		fmt.Println(resp)
 	}
 	if err != nil {
 		return err
@@ -462,40 +474,65 @@ func (c *connectionWatcher) GotConn(_ httptrace.GotConnInfo) {
 func TransformInput(user *models.User, hookConfig models.HookConfig) (map[string]interface{}, error) {
 	// Create an empty map to store the result
 	result := make(map[string]interface{})
-
 	// Check if the user is not nil and has a phone number
 	if user != nil && user.Phone != "" {
 		// Add the phone number to the result map
 		result["phone"] = string(user.Phone)
 	}
+
 	// No switch statement for now but based on the type we can decide what to check
-	requestSchema := hookConfig.RequestSchema
-	requestJSON, err := json.Marshal(requestSchema)
-	if err != nil {
-		return nil, err
-	}
-
-	schemaLoader := gojsonschema.NewStringLoader(string(requestJSON))
-
 	jsonData, err := json.Marshal(result)
 	if err != nil {
 		return nil, err
 	}
-	jsonLoader := gojsonschema.NewStringLoader(string(jsonData))
 
+	if err := validateSchema(hookConfig.RequestSchema, string(jsonData)); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func DecodeAndValidateResponse(outputSchema map[string]interface{}, resp io.ReadCloser) (output map[string]interface{}, err error) {
+	// TODO: Fetch the output from hook config and then validate against it
+	// Switch based on different response types
+	// TODO: Move this into separate file for validation
+	customSmsResponse := &CustomSmsHookResponse{}
+	decoder := json.NewDecoder(resp)
+	if err = decoder.Decode(customSmsResponse); err != nil {
+		return nil, internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
+	}
+	jsonData, err := json.Marshal(customSmsResponse)
+	if err != nil {
+		return nil, err
+	}
+	if validationErr := validateSchema(outputSchema, string(jsonData)); validationErr != nil {
+		return nil, validationErr
+	}
+	// Validate Response against schema
+	return nil, nil
+}
+
+func validateSchema(schema map[string]interface{}, jsonDataAsString string) error {
+	jsonLoader := gojsonschema.NewStringLoader(jsonDataAsString)
+	requestJSON, err := json.Marshal(schema)
+	if err != nil {
+		return err
+	}
+
+	schemaLoader := gojsonschema.NewStringLoader(string(requestJSON))
 	validationResult, err := gojsonschema.Validate(schemaLoader, jsonLoader)
 	if err != nil {
 		fmt.Printf("Error loading JSON data: %s\n", err.Error())
-		return nil, err
+		return err
 	}
 	if validationResult.Valid() {
-		fmt.Println("JSON data is valid against the schema.")
+		return nil
 	} else {
-		fmt.Println("JSON data is not valid against the schema.")
+		return errors.New("JSON data is not valid against the schema.")
 		for _, desc := range validationResult.Errors() {
 			fmt.Printf("- %s\n", desc)
 		}
 	}
-
-	return result, nil
+	return nil
 }
