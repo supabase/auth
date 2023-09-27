@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -100,7 +101,7 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 	client := http.Client{
 		Timeout: timeout,
 	}
-	payload, jwtErr := w.generateSignature()
+	signedPayload, jwtErr := w.generateSignature()
 	if jwtErr != nil {
 		return nil, jwtErr
 	}
@@ -108,11 +109,11 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 	jsonString := struct {
 		JWT string `json:"jwt"`
 	}{
-		JWT: payload,
+		JWT: signedPayload,
 	}
 
 	// Marshal the JSON object to JSON format
-	load, err := json.Marshal(jsonString)
+	requestLoad, err := json.Marshal(jsonString)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +121,7 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 		hooklog = hooklog.WithField("attempt", i+1)
 		hooklog.Info("Starting to perform signup hook request")
 
-		req, err := http.NewRequest(http.MethodPost, w.URL, bytes.NewBuffer(load))
+		req, err := http.NewRequest(http.MethodPost, w.URL, bytes.NewBuffer(requestLoad))
 		if err != nil {
 			return nil, internalServerError("Failed to make request object").WithInternalError(err)
 		}
@@ -129,6 +130,8 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 
 		start := time.Now()
 		rsp, err := client.Do(req)
+		fmt.Println("check here")
+		fmt.Println(err)
 		if err != nil {
 			if terr, ok := err.(net.Error); ok && terr.Timeout() {
 				// timed out - try again?
@@ -274,26 +277,21 @@ func closeBody(rsp *http.Response) {
 	}
 }
 
+// TODO: Add an additional metadata param
 func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig models.HookConfig, user *models.User, config *conf.GlobalConfiguration) error {
-	// TODO: these should be filtered but I'm not sure how
-	// payload := struct {
-	// 	User *models.User `json:"user"`
-	// }{
-	// 	User: user,
-	// }
-
-	// data, err := json.Marshal(&payload)
-	// if err != nil {
-	// 	// TODO: include name of hook that failed
-	// 	return internalServerError("Failed to serialize the data for hook").WithInternalError(err)
-	// }
+	// TODO: filterJSONPayload(user, metadata)
+	payload := struct {
+		User *models.User `json:"user"`
+	}{
+		User: user,
+	}
 
 	// TODO: substitute with a custom Claims intrface
 	claims := jwt.MapClaims{
 		"IssuedAt": time.Now().Unix(),
 		"Subject":  uuid.Nil.String(),
 		"Issuer":   authHookIssuer,
-		"Data":     user,
+		"Events":   payload,
 	}
 
 	a := AuthHook{
@@ -311,15 +309,14 @@ func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig m
 	}
 
 	// TODO: this should return webhook response and we should modify the method signature
-	//if err == nil && body != nil {
-	// TODO: figure out how we can dictate the response
-	// Also need to validate. For now this is fine because the expected is to return nothing
-	// webhookRsp := &WebhookResponse{}
-	// decoder := json.NewDecoder(body)
-	// if err = decoder.Decode(webhookRsp); err != nil {
-	// 	return internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
-	// }
-	// }
+	if err == nil && body != nil {
+		// TODO: Fetch the output from hook config and then validate against it
+		webhookRsp := &WebhookResponse{}
+		decoder := json.NewDecoder(body)
+		if err = decoder.Decode(webhookRsp); err != nil {
+			return internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
+		}
+	}
 	if err != nil {
 		return err
 	}

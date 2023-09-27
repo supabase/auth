@@ -89,7 +89,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		}
 
 		// Extensibility Point - initialize
-		phoneExtensibilityPoint := NewExtensibilityPoint("custom-sms-provider")
+		phoneExtensibilityPoint := NewExtensibilityPoint("custom-sms-sender")
 		hookConfiguration, err := models.FindHookByExtensibilityPoint(tx, phoneExtensibilityPoint.Name)
 		if err != nil && !models.IsNotFoundError(err) {
 			return "", err
