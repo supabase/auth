@@ -9,6 +9,7 @@ type ProviderSettings struct {
 	Discord      bool `json:"discord"`
 	Facebook     bool `json:"facebook"`
 	Figma        bool `json:"figma"`
+	Fly          bool `json:"fly"`
 	GitHub       bool `json:"github"`
 	GitLab       bool `json:"gitlab"`
 	Google       bool `json:"google"`
@@ -48,6 +49,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Discord:      config.External.Discord.Enabled,
 			Facebook:     config.External.Facebook.Enabled,
 			Figma:        config.External.Figma.Enabled,
+			Fly:          config.External.Fly.Enabled,
 			GitHub:       config.External.Github.Enabled,
 			GitLab:       config.External.Gitlab.Enabled,
 			Google:       config.External.Google.Enabled,
