@@ -87,15 +87,18 @@ func (t *TwilioProvider) SendSms(phone, message, channel, otp string) (string, e
 		if isPhoneNumber.MatchString(formatPhoneNumber(sender)) {
 			sender = channel + ":" + sender
 		}
-		// Used to substitute OTP. See https://www.twilio.com/docs/content/whatsappauthentication for more details
-		contentVariables := fmt.Sprintf(`{"1": "%s"}`, otp)
+
 		// Programmable Messaging (WhatsApp) takes in different set of inputs
 		body = url.Values{
-			"To":               {receiver}, // twilio api requires "+" extension to be included
-			"Channel":          {channel},
-			"From":             {sender},
-			"ContentSid":       {t.Config.ContentSid},
-			"ContentVariables": {contentVariables},
+			"To":      {receiver}, // twilio api requires "+" extension to be included
+			"Channel": {channel},
+			"From":    {sender},
+		}
+		// Used to substitute OTP. See https://www.twilio.com/docs/content/whatsappauthentication for more details
+		if t.Config.ContentSid != "" {
+			contentVariables := fmt.Sprintf(`{"1": "%s"}`, otp)
+			body.Set("ContentSid", t.Config.ContentSid)
+			body.Set("ContentVariables", contentVariables)
 		}
 	}
 	client := &http.Client{Timeout: defaultTimeout}
