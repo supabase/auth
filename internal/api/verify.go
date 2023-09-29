@@ -580,7 +580,15 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	}
 
 	var isValid bool
+
 	smsProvider, _ := sms_provider.GetSmsProvider(*config)
+	if config.Sms.IsTwilioVerifyProvider() && (params.Type == phoneChangeVerification || params.Type == smsVerification) {
+		if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok {
+			params.Token = testOTP
+			return user, nil
+		}
+
+	}
 	switch params.Type {
 	case emailOTPVerification:
 		// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
@@ -602,10 +610,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
 	case phoneChangeVerification:
 		if config.Sms.IsTwilioVerifyProvider() {
-			if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok {
-				params.Token = testOTP
-				return user, nil
-			}
+
 			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(user.PhoneChange, params.Token); err != nil {
 				return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
 			}
@@ -614,10 +619,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		isValid = isOtpValid(tokenHash, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
 	case smsVerification:
 		if config.Sms.IsTwilioVerifyProvider() {
-			if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok {
-				params.Token = testOTP
-				return user, nil
-			}
+
 			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(params.Phone, params.Token); err != nil {
 				return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
 			}
