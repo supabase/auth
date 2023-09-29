@@ -93,7 +93,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 			return "", err
 		}
 
-		messageID, err = smsProvider.SendMessage(phone, message, channel)
+		messageID, err = smsProvider.SendMessage(phone, message, channel, otp)
 		if err != nil {
 			return messageID, err
 		}
