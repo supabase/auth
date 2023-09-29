@@ -580,7 +580,15 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	}
 
 	var isValid bool
+
 	smsProvider, _ := sms_provider.GetSmsProvider(*config)
+	if config.Sms.IsTwilioVerifyProvider() && (params.Type == phoneChangeVerification || params.Type == smsVerification) {
+		if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok {
+			params.Token = testOTP
+			return user, nil
+		}
+
+	}
 	switch params.Type {
 	case emailOTPVerification:
 		// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
