@@ -287,6 +287,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		metering.RecordLogin("password", user.ID)
 		return sendJSON(w, http.StatusOK, token)
 	}
+	if user.HasBeenInvited() {
+		// Remove sensitive fields
+		user.UserMetaData = nil
+		user.Identities = nil
+	}
 	return sendJSON(w, http.StatusOK, user)
 }
 
