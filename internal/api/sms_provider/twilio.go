@@ -94,11 +94,14 @@ func (t *TwilioProvider) SendSms(phone, message, channel, otp string) (string, e
 			"Channel": {channel},
 			"From":    {sender},
 		}
-		// Used to substitute OTP. See https://www.twilio.com/docs/content/whatsappauthentication for more details
+		// For backward compatibility with old API.
 		if t.Config.ContentSid != "" {
+			// Used to substitute OTP. See https://www.twilio.com/docs/content/whatsappauthentication for more details
 			contentVariables := fmt.Sprintf(`{"1": "%s"}`, otp)
 			body.Set("ContentSid", t.Config.ContentSid)
 			body.Set("ContentVariables", contentVariables)
+		} else {
+			body.Set("Body", message)
 		}
 	}
 	client := &http.Client{Timeout: defaultTimeout}
