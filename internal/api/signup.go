@@ -289,8 +289,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 	if user.HasBeenInvited() {
 		// Remove sensitive fields
-		user.UserMetaData = nil
-		user.Identities = nil
+		user.UserMetaData = make(map[string]interface{}, 0)
+		user.Identities = make([]models.Identity, 0)
 	}
 	return sendJSON(w, http.StatusOK, user)
 }
