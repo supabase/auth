@@ -26,7 +26,7 @@ type IdTokenGrantParams struct {
 	Issuer      string `json:"issuer"`
 }
 
-func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, string, []string, error) {
+func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, *conf.OAuthProviderConfiguration, string, []string, error) {
 	log := observability.GetLogEntry(r)
 
 	var cfg *conf.OAuthProviderConfiguration
@@ -84,20 +84,20 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		}
 
 		if !allowed {
-			return nil, "", nil, badRequestError(fmt.Sprintf("Custom OIDC provider %q not allowed", p.Issuer))
+			return nil, nil, "", nil, badRequestError(fmt.Sprintf("Custom OIDC provider %q not allowed", p.Issuer))
 		}
 	}
 
 	if cfg != nil && !cfg.Enabled {
-		return nil, "", nil, badRequestError(fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
+		return nil, nil, "", nil, badRequestError(fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
 	}
 
 	oidcProvider, err := oidc.NewProvider(ctx, issuer)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, "", nil, err
 	}
 
-	return oidcProvider, providerType, acceptableClientIDs, nil
+	return oidcProvider, cfg, providerType, acceptableClientIDs, nil
 }
 
 // IdTokenGrant implements the id_token grant type flow
@@ -126,7 +126,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return oauthError("invalid request", "provider or client_id and issuer required")
 	}
 
-	oidcProvider, providerType, acceptableClientIDs, err := params.getProvider(ctx, config, r)
+	oidcProvider, oauthConfig, providerType, acceptableClientIDs, err := params.getProvider(ctx, config, r)
 	if err != nil {
 		return err
 	}
@@ -165,16 +165,18 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return oauthError("invalid request", "Unacceptable audience in id_token")
 	}
 
-	tokenHasNonce := idToken.Nonce != ""
-	paramsHasNonce := params.Nonce != ""
+	if !oauthConfig.SkipNonceCheck {
+		tokenHasNonce := idToken.Nonce != ""
+		paramsHasNonce := params.Nonce != ""
 
-	if tokenHasNonce != paramsHasNonce {
-		return oauthError("invalid request", "Passed nonce and nonce in id_token should either both exist or not.")
-	} else if tokenHasNonce && paramsHasNonce {
-		// verify nonce to mitigate replay attacks
-		hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
-		if hash != idToken.Nonce {
-			return oauthError("invalid nonce", "Nonces mismatch")
+		if tokenHasNonce != paramsHasNonce {
+			return oauthError("invalid request", "Passed nonce and nonce in id_token should either both exist or not.")
+		} else if tokenHasNonce && paramsHasNonce {
+			// verify nonce to mitigate replay attacks
+			hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
+			if hash != idToken.Nonce {
+				return oauthError("invalid nonce", "Nonces mismatch")
+			}
 		}
 	}
 

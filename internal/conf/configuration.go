@@ -41,12 +41,13 @@ func (t *Time) UnmarshalText(text []byte) error {
 
 // OAuthProviderConfiguration holds all config related to external account providers.
 type OAuthProviderConfiguration struct {
-	ClientID    []string `json:"client_id" split_words:"true"`
-	Secret      string   `json:"secret"`
-	RedirectURI string   `json:"redirect_uri" split_words:"true"`
-	URL         string   `json:"url"`
-	ApiURL      string   `json:"api_url" split_words:"true"`
-	Enabled     bool     `json:"enabled"`
+	ClientID       []string `json:"client_id" split_words:"true"`
+	Secret         string   `json:"secret"`
+	RedirectURI    string   `json:"redirect_uri" split_words:"true"`
+	URL            string   `json:"url"`
+	ApiURL         string   `json:"api_url" split_words:"true"`
+	Enabled        bool     `json:"enabled"`
+	SkipNonceCheck bool     `json:"skip_nonce_check" split_words:"true"`
 }
 
 type EmailProviderConfiguration struct {
