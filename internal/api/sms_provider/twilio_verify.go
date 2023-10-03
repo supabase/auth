@@ -53,7 +53,7 @@ func NewTwilioVerifyProvider(config conf.TwilioVerifyProviderConfiguration) (Sms
 	}, nil
 }
 
-func (t *TwilioVerifyProvider) SendMessage(phone, message, channel, otp string) (string, error) {
+func (t *TwilioVerifyProvider) SendMessage(phone string, message string, channel string) (string, error) {
 	switch channel {
 	case SMSProvider, WhatsappProvider:
 		return t.SendSms(phone, message, channel)
