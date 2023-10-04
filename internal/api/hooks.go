@@ -28,16 +28,6 @@ import (
 
 type HookEvent string
 
-type ExtensibilityPoint struct {
-	Name string
-}
-
-func NewExtensibilityPoint(name string) *ExtensibilityPoint {
-	return &ExtensibilityPoint{
-		Name: name,
-	}
-}
-
 const (
 	headerHookSignature = "x-webhook-signature"
 	defaultHookRetries  = 3
@@ -50,8 +40,9 @@ const (
 	LoginEvent       = "login"
 )
 
+// ExtensibilityPoints
 const (
-	PhoneProviderExtensibilityPoint = "phone-provider"
+	CustomSMSExtensibilityPoint = "custom-sms-sender"
 )
 
 var defaultTimeout = time.Second * 5
@@ -455,7 +446,6 @@ func (c *connectionWatcher) GotConn(_ httptrace.GotConnInfo) {
 	c.gotConn = true
 }
 
-// TODO: should take in metadata as well
 func EncodeAndValidateInput(user *models.User, hookConfig models.HookConfig, metadata map[string]interface{}) (map[string]interface{}, error) {
 	// Create an empty map to store the result
 	result := make(map[string]interface{})
@@ -478,23 +468,33 @@ func EncodeAndValidateInput(user *models.User, hookConfig models.HookConfig, met
 	return result, nil
 }
 
-func DecodeAndValidateResponse(outputSchema map[string]interface{}, resp io.ReadCloser) (output map[string]interface{}, err error) {
-	// Switch based on different response types
-	// TODO: Fetch the output from hook config and then validate against it
-	customSmsResponse := &CustomSmsHookResponse{}
-	decoder := json.NewDecoder(resp)
-	if err = decoder.Decode(customSmsResponse); err != nil {
+func DecodeAndValidateResponse(hookConfig models.HookConfig, resp io.ReadCloser) (output interface{}, err error) {
+	var jsonData []byte
+	var decodedResponse interface{}
+	switch hookConfig.ExtensibilityPoint {
+	// Repeat for all possible Hook types
+	case CustomSMSExtensibilityPoint:
+		var outputs CustomSmsHookResponse
+		decoder := json.NewDecoder(resp)
+		if err = decoder.Decode(outputs); err != nil {
+			// TODO: Refactor this into a single error somewhere
+			return nil, internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
+		}
+		decodedResponse = outputs
+
+	default:
 		return nil, internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
 	}
-	jsonData, err := json.Marshal(customSmsResponse)
-	if err != nil {
-		return nil, err
-	}
-	if validationErr := validateSchema(outputSchema, string(jsonData)); validationErr != nil {
+
+	if validationErr := validateSchema(hookConfig.ResponseSchema, string(jsonData)); validationErr != nil {
 		return nil, validationErr
 	}
-	// Validate Response against schema
-	return nil, nil
+
+	jsonData, err = json.Marshal(decodedResponse)
+	if err != nil {
+		return nil, internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
+	}
+	return decodedResponse, nil
 }
 
 func validateSchema(schema map[string]interface{}, jsonDataAsString string) error {
