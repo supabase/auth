@@ -277,16 +277,13 @@ func closeBody(rsp *http.Response) {
 	}
 }
 
-// TODO: Add an additional metadata param
-func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig models.HookConfig, user *models.User, config *conf.GlobalConfiguration) error {
-	// TODO: Modify this so it takes in metadata and geeneralizes or we pass through hook
-
-	inp, err := TransformInput(user, hookConfig)
+func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig models.HookConfig, user *models.User, config *conf.GlobalConfiguration, metadata map[string]interface{}) (map[string]interface{}, error) {
+	inp, err := EncodeAndValidateInput(user, hookConfig, metadata)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// TODO: substitute with a custom Claims intrface
+	// TODO: substitute with a custom claims interface
 	claims := jwt.MapClaims{
 		"IssuedAt": time.Now().Unix(),
 		"Subject":  uuid.Nil.String(),
@@ -308,20 +305,17 @@ func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig m
 		defer utilities.SafeClose(body)
 	}
 
-	// TODO: this should return webhook response and we should modify the method signature
 	if err == nil && body != nil {
-
 		resp, err := DecodeAndValidateResponse(hookConfig.ResponseSchema, body)
 		if err != nil {
-			return err
+			return resp, err
 		}
-		// TODO: modify function so that it returns the response. In this case it's not needed
-		fmt.Println(resp)
+		return resp, nil
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return nil, err
 }
 
 // Deprecate this
@@ -462,7 +456,7 @@ func (c *connectionWatcher) GotConn(_ httptrace.GotConnInfo) {
 }
 
 // TODO: should take in metadata as well
-func TransformInput(user *models.User, hookConfig models.HookConfig) (map[string]interface{}, error) {
+func EncodeAndValidateInput(user *models.User, hookConfig models.HookConfig, metadata map[string]interface{}) (map[string]interface{}, error) {
 	// Create an empty map to store the result
 	result := make(map[string]interface{})
 	// Check if the user is not nil and has a phone number
@@ -485,9 +479,8 @@ func TransformInput(user *models.User, hookConfig models.HookConfig) (map[string
 }
 
 func DecodeAndValidateResponse(outputSchema map[string]interface{}, resp io.ReadCloser) (output map[string]interface{}, err error) {
-	// TODO: Fetch the output from hook config and then validate against it
 	// Switch based on different response types
-	// TODO: Move this into separate file for validation
+	// TODO: Fetch the output from hook config and then validate against it
 	customSmsResponse := &CustomSmsHookResponse{}
 	decoder := json.NewDecoder(resp)
 	if err = decoder.Decode(customSmsResponse); err != nil {

@@ -96,7 +96,10 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 		}
 		if hookConfiguration != nil {
 			// TODO: find a way to wrap and properly Fetch the resp
-			if terr := triggerAuthHook(ctx, tx, *hookConfiguration, user, config); terr != nil {
+			// TODO: Find a way to properly pass in interface
+			// TODO: Change and make use of the _
+			metadata := make(map[string]interface{})
+			if _, terr := triggerAuthHook(ctx, tx, *hookConfiguration, user, config, metadata); terr != nil {
 				return "", terr
 			}
 		} else if models.IsNotFoundError(err) {
