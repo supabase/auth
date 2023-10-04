@@ -2,19 +2,21 @@ package models
 
 import (
 	"database/sql"
+
 	"github.com/gobuffalo/pop/v6"
+	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/storage"
 )
 
 type HookConfig struct {
-	Name               string  `json:"name" db:"name"`
-	URI                string  `json:"uri" db:"uri"`
-	Secret             string  `json:"secret" db:"secret"`
-	ExtensibilityPoint string  `json:"extensibility_point" db:"extensibility_point"`
-	RequestSchema      JSONMap `json:"request_schema" db:"request_schema"`
-	ResponseSchema     JSONMap `json:"response_schema" db:"response_schema"`
-	Metadata           JSONMap `json:"metadata" db:"metadata"`
+	ID                 uuid.UUID `json:"id" db:"id"`
+	URI                string    `json:"uri" db:"uri"`
+	Secret             string    `json:"secret" db:"secret"`
+	ExtensibilityPoint string    `json:"extensibility_point" db:"extensibility_point"`
+	RequestSchema      JSONMap   `json:"request_schema" db:"request_schema"`
+	ResponseSchema     JSONMap   `json:"response_schema" db:"response_schema"`
+	Metadata           JSONMap   `json:"metadata" db:"metadata"`
 }
 
 // TableName overrides the table name used by pop

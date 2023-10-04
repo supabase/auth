@@ -1,7 +1,7 @@
 -- auth.hooks definition
 
 create table if not exists {{ index .Options "Namespace" }}.hook_config(
-    name text null,
+    id uuid not null,
     uri text not null,
     secret text not null,
     extensibility_point text not null,

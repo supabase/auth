@@ -447,17 +447,22 @@ func (c *connectionWatcher) GotConn(_ httptrace.GotConnInfo) {
 	c.gotConn = true
 }
 
-func EncodeAndValidateInput(user *models.User, hookConfig models.HookConfig, metadata map[string]interface{}) (map[string]interface{}, error) {
+func EncodeAndValidateInput(user *models.User, hookConfig models.HookConfig, metadata map[string]interface{}) (interface{}, error) {
 	// Create an empty map to store the result
-	result := make(map[string]interface{})
-	// Check if the user is not nil and has a phone number
-	if user != nil && user.Phone != "" {
-		// Add the phone number to the result map
-		result["phone"] = string(user.Phone)
+	var request interface{}
+	var err error
+	switch hookConfig.ExtensibilityPoint {
+	case CustomSMSExtensibilityPoint:
+		request, err = TransformCustomSMSExtensibilityPointInputs(user, metadata)
+	default:
+		return nil, internalServerError("failed to encode webhook").WithInternalError(err)
+	}
+	if err != nil {
+		return nil, internalServerError("failed to encode webhook").WithInternalError(err)
 	}
 
 	// No switch statement for now but based on the type we can decide what to check
-	jsonData, err := json.Marshal(result)
+	jsonData, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +471,7 @@ func EncodeAndValidateInput(user *models.User, hookConfig models.HookConfig, met
 		return nil, err
 	}
 
-	return result, nil
+	return jsonData, nil
 }
 
 func DecodeAndValidateResponse(hookConfig models.HookConfig, resp io.ReadCloser) (output interface{}, err error) {
@@ -475,7 +480,7 @@ func DecodeAndValidateResponse(hookConfig models.HookConfig, resp io.ReadCloser)
 	switch hookConfig.ExtensibilityPoint {
 	// Repeat for all possible Hook types
 	case CustomSMSExtensibilityPoint:
-		var outputs CustomSmsHookResponse
+		var outputs *CustomSmsHookResponse
 		decoder := json.NewDecoder(resp)
 		if err = decoder.Decode(outputs); err != nil {
 			// TODO: Refactor this into a single error somewhere
@@ -495,7 +500,7 @@ func DecodeAndValidateResponse(hookConfig models.HookConfig, resp io.ReadCloser)
 	if err != nil {
 		return nil, internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
 	}
-	return decodedResponse, nil
+	return jsonData, nil
 }
 
 func validateSchema(schema map[string]interface{}, jsonDataAsString string) error {
