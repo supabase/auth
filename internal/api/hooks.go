@@ -297,11 +297,12 @@ func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig m
 	}
 
 	if err == nil && body != nil {
-		resp, err := DecodeAndValidateResponse(hookConfig.ResponseSchema, body)
+		resp, err := DecodeAndValidateResponse(hookConfig, body)
 		if err != nil {
-			return resp, err
+			// TODO: Figure out if there's a way to not lose typing here
+			return resp.(map[string]interface{}), err
 		}
-		return resp, nil
+		return resp.(map[string]interface{}), nil
 	}
 	if err != nil {
 		return nil, err
