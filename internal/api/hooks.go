@@ -448,7 +448,6 @@ func (c *connectionWatcher) GotConn(_ httptrace.GotConnInfo) {
 }
 
 func EncodeAndValidateInput(user *models.User, hookConfig models.HookConfig, metadata map[string]interface{}) (interface{}, error) {
-	// Create an empty map to store the result
 	var request interface{}
 	var err error
 	switch hookConfig.ExtensibilityPoint {
@@ -461,7 +460,6 @@ func EncodeAndValidateInput(user *models.User, hookConfig models.HookConfig, met
 		return nil, internalServerError("failed to encode webhook").WithInternalError(err)
 	}
 
-	// No switch statement for now but based on the type we can decide what to check
 	jsonData, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
