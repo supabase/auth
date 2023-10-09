@@ -32,7 +32,7 @@ type TestSmsProvider struct {
 	SentMessages int
 }
 
-func (t *TestSmsProvider) SendMessage(phone string, message string, channel string) (string, error) {
+func (t *TestSmsProvider) SendMessage(phone, message, channel, otp string) (string, error) {
 	t.SentMessages += 1
 	return "", nil
 }
