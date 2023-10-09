@@ -1,5 +1,5 @@
 {
-  "description": "CustomSMSRequest",
+  "title": "CustomSMSRequest",
   "type": "object",
   "properties": {
     "api_version": {
