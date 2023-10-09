@@ -1,6 +1,6 @@
 {
   "type": "object",
-  "title": "CustomSMSProviderResponse",
+  "title": "CustomSMSHookResponse",
   "description": "Custom SMS provider Request",
   "properties": {
     "status": {

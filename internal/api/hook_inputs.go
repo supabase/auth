@@ -84,7 +84,7 @@ func (strct *CustomSMSRequest) UnmarshalJSON(b []byte) error {
              }
             api_versionReceived = true
         case "user":
-            if err := json.Unmarshal([]byte(v), &strct.User); err != nil {
+            if err := json.Unmarshal([]byte(v), &strct.UserData); err != nil {
                 return err
              }
             userReceived = true

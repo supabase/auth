@@ -478,7 +478,7 @@ func DecodeAndValidateResponse(hookConfig models.HookConfig, resp io.ReadCloser)
 	switch hookConfig.ExtensibilityPoint {
 	// Repeat for all possible Hook types
 	case CustomSMSExtensibilityPoint:
-		var outputs *CustomSmsHookResponse
+		var outputs *CustomSMSHookResponse
 		decoder := json.NewDecoder(resp)
 		if err = decoder.Decode(outputs); err != nil {
 			// TODO: Refactor this into a single error somewhere

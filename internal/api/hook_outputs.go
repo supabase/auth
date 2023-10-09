@@ -1,14 +1,14 @@
 package api
 
 import (
-    "errors"
     "encoding/json"
     "fmt"
     "bytes"
+    "errors"
 )
 
-// CustomSMSProviderResponse Custom SMS provider Request
-type CustomSMSProviderResponse struct {
+// CustomSMSHookResponse Custom SMS provider Request
+type CustomSMSHookResponse struct {
 
   // API Version
   ApiVersion string `json:"api_version"`
@@ -36,7 +36,7 @@ type CustomSMSProviderResponse struct {
 type User struct {
 }
 
-func (strct *CustomSMSProviderResponse) MarshalJSON() ([]byte, error) {
+func (strct *CustomSMSHookResponse) MarshalJSON() ([]byte, error) {
 	buf := bytes.NewBuffer(make([]byte, 0))
 	buf.WriteString("{")
     comma := false
@@ -85,7 +85,7 @@ func (strct *CustomSMSProviderResponse) MarshalJSON() ([]byte, error) {
  	} else {
  		buf.Write(tmp)
 	}
-		comma = true
+	comma = true
     // Marshal the "more_info" field
     if comma {
         buf.WriteString(",")
@@ -129,7 +129,7 @@ func (strct *CustomSMSProviderResponse) MarshalJSON() ([]byte, error) {
 	return rv, nil
 }
 
-func (strct *CustomSMSProviderResponse) UnmarshalJSON(b []byte) error {
+func (strct *CustomSMSHookResponse) UnmarshalJSON(b []byte) error {
     api_versionReceived := false
     userReceived := false
     var jsonMap map[string]json.RawMessage
