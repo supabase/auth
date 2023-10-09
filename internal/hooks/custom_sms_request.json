@@ -1,0 +1,30 @@
+{
+  "description": "CustomSMSRequest",
+  "type": "object",
+  "properties": {
+    "api_version": {
+      "description": "version of the api",
+      "type": "string"
+    },
+    "user": {
+      "type": "object",
+      "properties": {
+        "phone": {
+          "type": "string",
+          "description": "Store when a phone has been confirmed. Null if unconfirmed."
+        },
+        "app_metadata": {
+          "type": "object"
+        },
+        "confirmed_at": {
+          "type": "string",
+          "description": "Stores user attributes which do not impact core functionality"
+        }
+      },
+      "required": ["phone", "app_metadata", "confirmed_at"]
+    }
+  },
+  "required": ["api_version", "user"],
+  "additionalProperties": false
+}
+

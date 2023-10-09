@@ -1,0 +1,37 @@
+{
+  "type": "object",
+  "title": "CustomSMSProviderResponse",
+  "description": "Custom SMS provider Request",
+  "properties": {
+    "status": {
+      "description": "HTTP Status code (e.g. 400)",
+      "type": "number"
+    },
+    "message": {
+      "description": "Short Description of the error message",
+      "type": "string"
+    },
+    "code": {
+      "description": "Internal Error code reference",
+      "type": "string"
+    },
+    "more_info": {
+      "description": "Detailed elaboration and possibly link to an error page in the future.",
+      "type": "string"
+    },
+    "data": {
+      "description": "Response data returned by the hook"
+    },
+    "api_version": {
+      "description": "API Version",
+      "type": "string"
+    },
+    "user": {
+      "description": "User information",
+      "type": "object"
+    }
+  },
+  "required": ["api_version", "user"],
+  "additionalProperties": false
+}
+
