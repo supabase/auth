@@ -124,7 +124,7 @@ func conflictError(fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusConflict, fmtString, args...)
 }
 func webhookResponseError(fmtString string, args ...interface{}) *HTTPError {
-	return internalServerError(fmt.Sprintf("Webhook returned malformed JSON: %v"), args)
+	return internalServerError(fmt.Sprintf("Webhook returned malformed JSON: %v", fmtString), args)
 }
 
 // HTTPError is an error with a message and an HTTP status code.
