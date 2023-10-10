@@ -84,6 +84,7 @@ func (ts *SmsProviderTestSuite) TestTwilioSendSms() {
 		Desc           string
 		TwilioResponse *gock.Response
 		ExpectedError  error
+		OTP            string
 	}{
 		{
 			Desc: "Successfully sent sms",
@@ -97,6 +98,7 @@ func (ts *SmsProviderTestSuite) TestTwilioSendSms() {
 				Body:       message,
 				MessageSID: "abcdef",
 			}),
+			OTP:           "123456",
 			ExpectedError: nil,
 		},
 		{
@@ -123,6 +125,7 @@ func (ts *SmsProviderTestSuite) TestTwilioSendSms() {
 				MoreInfo: "error",
 				Status:   500,
 			}),
+			OTP: "123456",
 			ExpectedError: &twilioErrResponse{
 				Code:     500,
 				Message:  "Internal server error",
@@ -134,7 +137,7 @@ func (ts *SmsProviderTestSuite) TestTwilioSendSms() {
 
 	for _, c := range cases {
 		ts.Run(c.Desc, func() {
-			_, err = twilioProvider.SendSms(phone, message, SMSProvider)
+			_, err = twilioProvider.SendSms(phone, message, SMSProvider, c.OTP)
 			require.Equal(ts.T(), c.ExpectedError, err)
 		})
 	}
