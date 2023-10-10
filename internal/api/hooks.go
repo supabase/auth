@@ -42,7 +42,7 @@ const (
 
 // ExtensibilityPoints
 const (
-	CustomSMSExtensibilityPoint = "custom-sms-sender"
+	CustomSMSExtensibilityPoint = "custom-sms-provider"
 )
 
 var defaultTimeout = time.Second * 5

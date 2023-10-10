@@ -6,7 +6,7 @@
       "description": "version of the api",
       "type": "string"
     },
-    "userg": {
+    "user": {
       "type": "object",
       "properties": {
         "phone": {
