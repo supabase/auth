@@ -7,14 +7,13 @@ func TransformCustomSMSExtensibilityPointInputs(user *models.User, metadata map[
 	result := make(map[string]interface{})
 	userMap := make(map[string]interface{})
 
-
 	if user != nil && user.Phone != "" {
 		// Add the phone number to the result map
 		result["user"] = userMap
 		result["api_version"] = "1.0"
 		userMap["app_metadata"] = make(map[string]interface{})
 		userMap["confirmed_at"] = ""
-		userMap["phone"]  = string(user.Phone)
+		userMap["phone"] = string(user.Phone)
 	}
 	return result, nil
 
