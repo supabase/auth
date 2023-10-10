@@ -123,6 +123,9 @@ func tooManyRequestsError(fmtString string, args ...interface{}) *HTTPError {
 func conflictError(fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusConflict, fmtString, args...)
 }
+func webhookResponseError(fmtString string, args ...interface{}) *HTTPError {
+	return internalServerError(fmt.Sprintf("Webhook returned malformed JSON: %v"), args)
+}
 
 // HTTPError is an error with a message and an HTTP status code.
 type HTTPError struct {

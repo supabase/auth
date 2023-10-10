@@ -397,7 +397,7 @@ func triggerHook(ctx context.Context, hookURL *url.URL, secret string, conn *sto
 		webhookRsp := &WebhookResponse{}
 		decoder := json.NewDecoder(body)
 		if err = decoder.Decode(webhookRsp); err != nil {
-			return internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
+			return webhookResponseError(err.Error()).WithInternalError(err)
 		}
 
 		return conn.Transaction(func(tx *storage.Connection) error {
@@ -481,13 +481,12 @@ func DecodeAndValidateResponse(hookConfig models.HookConfig, resp io.ReadCloser)
 		var outputs *CustomSMSHookResponse
 		decoder := json.NewDecoder(resp)
 		if err = decoder.Decode(outputs); err != nil {
-			// TODO: Refactor this into a single error somewhere
-			return nil, internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
+			return nil, webhookResponseError(err.Error()).WithInternalError(err)
 		}
 		decodedResponse = outputs
 
 	default:
-		return nil, internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
+		return nil, webhookResponseError(err.Error()).WithInternalError(err)
 	}
 
 	if validationErr := validateSchema(hookConfig.ResponseSchema, string(jsonData)); validationErr != nil {
@@ -496,7 +495,7 @@ func DecodeAndValidateResponse(hookConfig models.HookConfig, resp io.ReadCloser)
 
 	jsonData, err = json.Marshal(decodedResponse)
 	if err != nil {
-		return nil, internalServerError("Webhook returned malformed JSON: %v", err).WithInternalError(err)
+		return nil, webhookResponseError(err.Error()).WithInternalError(err) 
 	}
 	return jsonData, nil
 }
