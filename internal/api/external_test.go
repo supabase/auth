@@ -44,7 +44,11 @@ func (ts *ExternalTestSuite) createUser(providerId string, email string, name st
 		require.NoError(ts.T(), ts.API.db.Destroy(u), "Error deleting user")
 	}
 
-	u, err := models.NewUser("", email, "test", ts.Config.JWT.Aud, map[string]interface{}{"provider_id": providerId, "full_name": name, "avatar_url": avatar})
+	userData := map[string]interface{}{"provider_id": providerId, "full_name": name}
+	if avatar != "" {
+		userData["avatar_url"] = avatar
+	}
+	u, err := models.NewUser("", email, "test", ts.Config.JWT.Aud, userData)
 
 	if confirmationToken != "" {
 		u.ConfirmationToken = confirmationToken

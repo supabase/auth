@@ -528,6 +528,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewFacebookProvider(config.External.Facebook, scopes)
 	case "figma":
 		return provider.NewFigmaProvider(config.External.Figma, scopes)
+	case "fly":
+		return provider.NewFlyProvider(config.External.Fly, scopes)
 	case "github":
 		return provider.NewGithubProvider(config.External.Github, scopes)
 	case "gitlab":
@@ -540,6 +542,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewKeycloakProvider(config.External.Keycloak, scopes)
 	case "linkedin":
 		return provider.NewLinkedinProvider(config.External.Linkedin, scopes)
+	case "linkedin_oidc":
+		return provider.NewLinkedinOIDCProvider(config.External.LinkedinOIDC, scopes)
 	case "notion":
 		return provider.NewNotionProvider(config.External.Notion)
 	case "spotify":

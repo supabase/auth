@@ -580,6 +580,7 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	}
 
 	var isValid bool
+
 	smsProvider, _ := sms_provider.GetSmsProvider(*config)
 	switch params.Type {
 	case emailOTPVerification:
@@ -600,22 +601,27 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	case emailChangeVerification:
 		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
 			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
-	case phoneChangeVerification:
+	case phoneChangeVerification, smsVerification:
+		phone := params.Phone
+		sentAt := user.ConfirmationSentAt
+		expectedToken := user.ConfirmationToken
+		if params.Type == phoneChangeVerification {
+			phone = user.PhoneChange
+			sentAt = user.PhoneChangeSentAt
+			expectedToken = user.PhoneChangeToken
+		}
 		if config.Sms.IsTwilioVerifyProvider() {
-			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(user.PhoneChange, params.Token); err != nil {
+			if testOTP, ok := config.Sms.GetTestOTP(params.Phone, time.Now()); ok {
+				if params.Token == testOTP {
+					return user, nil
+				}
+			}
+			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(phone, params.Token); err != nil {
 				return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
 			}
 			return user, nil
 		}
-		isValid = isOtpValid(tokenHash, user.PhoneChangeToken, user.PhoneChangeSentAt, config.Sms.OtpExp)
-	case smsVerification:
-		if config.Sms.IsTwilioVerifyProvider() {
-			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(params.Phone, params.Token); err != nil {
-				return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
-			}
-			return user, nil
-		}
-		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Sms.OtpExp)
+		isValid = isOtpValid(tokenHash, expectedToken, sentAt, config.Sms.OtpExp)
 	}
 
 	if !isValid || err != nil {

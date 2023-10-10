@@ -138,6 +138,11 @@ func (u *User) IsConfirmed() bool {
 	return u.EmailConfirmedAt != nil
 }
 
+// HasBeenInvited checks if user has been invited
+func (u *User) HasBeenInvited() bool {
+	return u.InvitedAt != nil
+}
+
 // IsPhoneConfirmed checks if a user's phone has already been
 // registered and confirmed.
 func (u *User) IsPhoneConfirmed() bool {

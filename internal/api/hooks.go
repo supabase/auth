@@ -495,7 +495,7 @@ func DecodeAndValidateResponse(hookConfig models.HookConfig, resp io.ReadCloser)
 
 	jsonData, err = json.Marshal(decodedResponse)
 	if err != nil {
-		return nil, webhookResponseError(err.Error()).WithInternalError(err) 
+		return nil, webhookResponseError(err.Error()).WithInternalError(err)
 	}
 	return jsonData, nil
 }

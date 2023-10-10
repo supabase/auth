@@ -189,6 +189,7 @@ type ProviderConfiguration struct {
 	Discord                 OAuthProviderConfiguration `json:"discord"`
 	Facebook                OAuthProviderConfiguration `json:"facebook"`
 	Figma                   OAuthProviderConfiguration `json:"figma"`
+	Fly                     OAuthProviderConfiguration `json:"fly"`
 	Github                  OAuthProviderConfiguration `json:"github"`
 	Gitlab                  OAuthProviderConfiguration `json:"gitlab"`
 	Google                  OAuthProviderConfiguration `json:"google"`
@@ -196,6 +197,7 @@ type ProviderConfiguration struct {
 	Notion                  OAuthProviderConfiguration `json:"notion"`
 	Keycloak                OAuthProviderConfiguration `json:"keycloak"`
 	Linkedin                OAuthProviderConfiguration `json:"linkedin"`
+	LinkedinOIDC            OAuthProviderConfiguration `json:"linkedin_oidc" envconfig:"LINKEDIN_OIDC"`
 	Spotify                 OAuthProviderConfiguration `json:"spotify"`
 	Slack                   OAuthProviderConfiguration `json:"slack"`
 	Twitter                 OAuthProviderConfiguration `json:"twitter"`
@@ -269,6 +271,7 @@ type TwilioProviderConfiguration struct {
 	AccountSid        string `json:"account_sid" split_words:"true"`
 	AuthToken         string `json:"auth_token" split_words:"true"`
 	MessageServiceSid string `json:"message_service_sid" split_words:"true"`
+	ContentSid        string `json:"content_sid" split_words:"true"`
 }
 
 type TwilioVerifyProviderConfiguration struct {
