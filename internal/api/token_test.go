@@ -60,6 +60,53 @@ func (ts *TokenTestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating refresh token")
 }
 
+func (ts *TokenTestSuite) TestFailedToSaveRefreshTokenResultCase() {
+	var buffer bytes.Buffer
+
+	// first refresh
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"refresh_token": ts.RefreshToken.Token,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var firstResult struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+
+	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
+	assert.NotEmpty(ts.T(), firstResult.RefreshToken)
+
+	// pretend that the browser wasn't able to save the firstResult,
+	// run again with the first refresh token
+	buffer = bytes.Buffer{}
+
+	// second refresh with the reused refresh token
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"refresh_token": ts.RefreshToken.Token,
+	}))
+
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var secondResult struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+
+	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&secondResult))
+	assert.NotEmpty(ts.T(), secondResult.RefreshToken)
+
+	// new refresh token is not being issued but the active one from
+	// the first refresh that failed to save is stored
+	assert.Equal(ts.T(), firstResult.RefreshToken, secondResult.RefreshToken)
+}
+
 func (ts *TokenTestSuite) TestRateLimitTokenRefresh() {
 	var buffer bytes.Buffer
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/token", &buffer)
@@ -248,7 +295,7 @@ func (ts *TokenTestSuite) TestTokenRefreshTokenRotation() {
 			desc:                        "Invalid refresh, revoke third token",
 			refreshTokenRotationEnabled: true,
 			reuseInterval:               0,
-			refreshToken:                second.Token,
+			refreshToken:                first.Token,
 			expectedCode:                http.StatusBadRequest,
 			expectedBody: map[string]interface{}{
 				"error":             "invalid_grant",
