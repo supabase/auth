@@ -40,10 +40,21 @@ const (
 	LoginEvent       = "login"
 )
 
+const (
+	webhookSignatureHeader = "webhook-signature"
+	webhookTimestampHeader = "webhook-timestamp"
+	webhookIDHeader        = "webhook-id"
+)
+
 // ExtensibilityPoints
 const (
 	CustomSMSExtensibilityPoint = "custom-sms-provider"
 )
+
+// Event names
+// const (
+// 	CustomSMSEvent = fmt.Sprintf("auth.%v", CustomSMSExtensibilityPoint)
+// )
 
 var defaultTimeout = time.Second * 5
 
@@ -72,6 +83,12 @@ type AuthHook struct {
 	jwtSecret string
 	claims    jwt.Claims
 }
+
+// func setWebhookHeaders(req *http.Request) {
+// req.Header.Set("webhook-id", "<insert>")
+// req.Header.Set("webhook-timestamp", "<insert-unix-timestamp>")
+// req.Header.Set("webhook-signature", "<get-this-from-hook-config>")
+// }
 
 func (w *AuthHook) trigger() (io.ReadCloser, error) {
 	timeout := defaultTimeout
@@ -116,7 +133,11 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 		if err != nil {
 			return nil, internalServerError("Failed to make request object").WithInternalError(err)
 		}
+
+		// setWebhookHeaders(req)
+
 		req.Header.Set("Content-Type", "application/json")
+
 		watcher, req := watchForConnection(req)
 
 		start := time.Now()
@@ -163,6 +184,7 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 }
 
 func (a *AuthHook) generateSignature() (string, error) {
+	// TODO: change this to {msg_id}.{timestamp}.{payload}.
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, a.claims)
 	tokenString, err := token.SignedString([]byte(a.jwtSecret))
 	if err != nil {
@@ -279,13 +301,16 @@ func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig m
 		"IssuedAt": time.Now().Unix(),
 		"Subject":  uuid.Nil.String(),
 		"Issuer":   authHookIssuer,
-		"Events":   inp,
+		//"Type": "<insert-event-type>",
+		// "Timestamp": "now",
+		"Events": inp,
 	}
 
 	a := AuthHook{
 		WebhookConfig: &config.Webhook,
-		jwtSecret:     hookConfig.Secret,
-		claims:        claims,
+		// TODO: Add logic to support JWT secret selection
+		jwtSecret: hookConfig.Secret[0],
+		claims:    claims,
 	}
 
 	// Works out because this is a http hook - eventually needs to change
