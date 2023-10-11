@@ -3,7 +3,9 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
+
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -73,8 +75,9 @@ type WebhookResponse struct {
 
 // Duplicate of Webhook, should eventually modify the fields passed
 type AuthHook struct {
+	// Deprecate this
 	*conf.WebhookConfig
-	// Decide what should go here
+	// TODO: Decide whether to replace this with hookConfig instead
 	jwtSecret string
 	claims    jwt.Claims
 }
@@ -109,17 +112,16 @@ func (a *AuthHook) trigger() (io.ReadCloser, error) {
 	}
 
 	hooklog := logrus.WithFields(logrus.Fields{
-		"component":   "webhook",
-		"uri":         a.URL,
-		"instance_id": uuid.Nil.String(),
-		"hook_id":     hookID,
-		"timestamp":   timestamp,
-		"signature":   signature,
+		"component": "webhook",
+		"uri":       a.URL,
+		"hook_id":   hookID,
+		"timestamp": timestamp,
+		"signature": signature,
 	})
 	client := http.Client{
 		Timeout: timeout,
 	}
-	signedPayload, jwtErr := a.generateBody()
+	signedPayload, jwtErr := a.generateBody(a.jwtSecret)
 	if jwtErr != nil {
 		return nil, jwtErr
 	}
@@ -192,17 +194,27 @@ func (a *AuthHook) trigger() (io.ReadCloser, error) {
 	hooklog.Infof("Failed to process webhook for %s after %d attempts", a.URL, a.Retries)
 	return nil, unprocessableEntityError("Failed to handle signup webhook")
 }
-func (a *AuthHook) generateBody() (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, a.claims)
-	tokenString, err := token.SignedString([]byte(a.jwtSecret))
-	if err != nil {
-		return "", internalServerError("Failed build signing string").WithInternalError(err)
-	}
-	return tokenString, nil
+func (a *AuthHook) generateBody(secret string) (string, error) {
+	// TODO:  Probably do logging here so we can use the field
+	msgID := uuid.Must(uuid.NewV4())
+	timestamp := time.Now().Unix()
+	// payload
+	msg := []byte(fmt.Sprintf("msg_%v.%v.%v", msgID, timestamp, a.claims))
+	hasher := hmac.New(sha256.New, []byte(secret))
+	// Write the data to the hasher
+	hasher.Write(msg)
+
+	// Get the HMAC-SHA256 signature
+	signature := hasher.Sum(nil)
+
+	// Encode the signature as a hex string
+	signatureHex := hex.EncodeToString(signature)
+
+	return signatureHex, nil
 }
 
 func (a *AuthHook) generateSignature() (string, error) {
-	// TODO: change this to {msg_id}.{timestamp}.{payload}.
+	// TODO: change this to {msg_id}.{timestamp}.{payload} and also to use hmac-sha256
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, a.claims)
 	tokenString, err := token.SignedString([]byte(a.jwtSecret))
 	if err != nil {
