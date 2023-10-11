@@ -84,32 +84,48 @@ type AuthHook struct {
 	claims    jwt.Claims
 }
 
-// func setWebhookHeaders(req *http.Request) {
-// req.Header.Set("webhook-id", "<insert>")
-// req.Header.Set("webhook-timestamp", "<insert-unix-timestamp>")
+// func setWebhookHeaders(req *http.Request, hookID, timestamp string) {
+// req.Header.Set("webhook-id", hookID)
+// req.Header.Set("webhook-timestamp", timeStamp)
 // req.Header.Set("webhook-signature", "<get-this-from-hook-config>")
 // }
 
-func (w *AuthHook) trigger() (io.ReadCloser, error) {
+func generateHookCompliantTimestamp(timestamp time.Time) string {
+
+	// Timeformat taken from Webhooks standard
+	timeFormat := "2022-11-03T20:26:10.344522Z"
+	formattedTime := timestamp.Format(timeFormat)
+	return formattedTime
+}
+
+func (a *AuthHook) trigger() (io.ReadCloser, error) {
 	timeout := defaultTimeout
-	if w.TimeoutSec > 0 {
-		timeout = time.Duration(w.TimeoutSec) * time.Second
+	if a.TimeoutSec > 0 {
+		timeout = time.Duration(a.TimeoutSec) * time.Second
 	}
 
-	if w.Retries == 0 {
-		w.Retries = defaultHookRetries
+	if a.Retries == 0 {
+		a.Retries = defaultHookRetries
+	}
+	hookID := uuid.Must(uuid.NewV4())
+	timestamp := time.Now().Unix()
+	signature, err := a.generateSignature()
+	if err != nil {
+		return nil, err
 	}
 
 	hooklog := logrus.WithFields(logrus.Fields{
 		"component":   "webhook",
-		"url":         w.URL,
-		"signed":      w.jwtSecret != "",
+		"uri":         a.URL,
 		"instance_id": uuid.Nil.String(),
+		"hook_id":     hookID,
+		"timestamp":   timestamp,
+		"signature":   signature,
 	})
 	client := http.Client{
 		Timeout: timeout,
 	}
-	signedPayload, jwtErr := w.generateSignature()
+	signedPayload, jwtErr := a.generateBody()
 	if jwtErr != nil {
 		return nil, jwtErr
 	}
@@ -125,16 +141,16 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	for i := 0; i < w.Retries; i++ {
+	for i := 0; i < a.Retries; i++ {
 		hooklog = hooklog.WithField("attempt", i+1)
 		hooklog.Info("Starting to perform signup hook request")
 
-		req, err := http.NewRequest(http.MethodPost, w.URL, bytes.NewBuffer(requestLoad))
+		req, err := http.NewRequest(http.MethodPost, a.URL, bytes.NewBuffer(requestLoad))
 		if err != nil {
 			return nil, internalServerError("Failed to make request object").WithInternalError(err)
 		}
 
-		// setWebhookHeaders(req)
+		// setWebhookHeaders(req, hookID, timestamp)
 
 		req.Header.Set("Content-Type", "application/json")
 
@@ -145,7 +161,7 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 		if err != nil {
 			if terr, ok := err.(net.Error); ok && terr.Timeout() {
 				// timed out - try again?
-				if i == w.Retries-1 {
+				if i == a.Retries-1 {
 					closeBody(rsp)
 					return nil, httpError(http.StatusGatewayTimeout, "Failed to perform webhook in time frame (%v seconds)", timeout.Seconds())
 				}
@@ -153,10 +169,10 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 				continue
 			} else if watcher.gotConn {
 				closeBody(rsp)
-				return nil, internalServerError("Failed to trigger webhook to %s", w.URL).WithInternalError(err)
+				return nil, internalServerError("Failed to trigger webhook to %s", a.URL).WithInternalError(err)
 			} else {
 				closeBody(rsp)
-				return nil, httpError(http.StatusBadGateway, "Failed to connect to %s", w.URL)
+				return nil, httpError(http.StatusBadGateway, "Failed to connect to %s", a.URL)
 			}
 		}
 		dur := time.Since(start)
@@ -179,8 +195,16 @@ func (w *AuthHook) trigger() (io.ReadCloser, error) {
 		}
 	}
 
-	hooklog.Infof("Failed to process webhook for %s after %d attempts", w.URL, w.Retries)
+	hooklog.Infof("Failed to process webhook for %s after %d attempts", a.URL, a.Retries)
 	return nil, unprocessableEntityError("Failed to handle signup webhook")
+}
+func (a *AuthHook) generateBody() (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, a.claims)
+	tokenString, err := token.SignedString([]byte(a.jwtSecret))
+	if err != nil {
+		return "", internalServerError("Failed build signing string").WithInternalError(err)
+	}
+	return tokenString, nil
 }
 
 func (a *AuthHook) generateSignature() (string, error) {
@@ -301,9 +325,10 @@ func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig m
 		"IssuedAt": time.Now().Unix(),
 		"Subject":  uuid.Nil.String(),
 		"Issuer":   authHookIssuer,
-		//"Type": "<insert-event-type>",
-		// "Timestamp": "now",
-		"Events": inp,
+		"Type":     hookConfig.EventName,
+		// TODO: For readbility, kind of duplicate of issuedAt. Check if we need this
+		"Timestamp": generateHookCompliantTimestamp(time.Now().UTC()),
+		"Data":      inp,
 	}
 
 	a := AuthHook{

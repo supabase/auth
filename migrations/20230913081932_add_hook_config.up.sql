@@ -3,6 +3,7 @@
 create table if not exists {{ index .Options "Namespace" }}.hook_config(
     id uuid not null,
     uri text not null,
+    event_name text not null,
     -- This is an array in order to allow for low downtime JWT secret rotation
     secret text[] not null,
     extensibility_point text not null,
