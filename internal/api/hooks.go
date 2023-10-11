@@ -51,11 +51,6 @@ const (
 	CustomSMSExtensibilityPoint = "custom-sms-provider"
 )
 
-// Event names
-// const (
-// 	CustomSMSEvent = fmt.Sprintf("auth.%v", CustomSMSExtensibilityPoint)
-// )
-
 var defaultTimeout = time.Second * 5
 
 type webhookClaims struct {
@@ -84,14 +79,13 @@ type AuthHook struct {
 	claims    jwt.Claims
 }
 
-// func setWebhookHeaders(req *http.Request, hookID, timestamp string) {
-// req.Header.Set("webhook-id", hookID)
-// req.Header.Set("webhook-timestamp", timeStamp)
-// req.Header.Set("webhook-signature", "<get-this-from-hook-config>")
-// }
+func setWebhookHeaders(req *http.Request, hookID uuid.UUID, timestamp int64) {
+	req.Header.Set("webhook-id", hookID.String())
+	req.Header.Set("webhook-timestamp", fmt.Sprintf("%v", timestamp))
+	// req.Header.Set("webhook-signature", "<generate-and-pass-this-in>")
+}
 
 func generateHookCompliantTimestamp(timestamp time.Time) string {
-
 	// Timeformat taken from Webhooks standard
 	timeFormat := "2022-11-03T20:26:10.344522Z"
 	formattedTime := timestamp.Format(timeFormat)
@@ -150,7 +144,7 @@ func (a *AuthHook) trigger() (io.ReadCloser, error) {
 			return nil, internalServerError("Failed to make request object").WithInternalError(err)
 		}
 
-		// setWebhookHeaders(req, hookID, timestamp)
+		setWebhookHeaders(req, hookID, timestamp)
 
 		req.Header.Set("Content-Type", "application/json")
 
