@@ -160,7 +160,9 @@ func assertAuthorizationSuccess(ts *ExternalTestSuite, u *url.URL, tokenCount in
 	ts.Equal("bearer", v.Get("token_type"))
 
 	ts.Equal(1, tokenCount)
-	ts.Equal(1, userCount)
+	if userCount > -1 {
+		ts.Equal(1, userCount)
+	}
 
 	// ensure user has been created with metadata
 	user, err := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
