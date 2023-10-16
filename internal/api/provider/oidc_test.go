@@ -112,7 +112,7 @@ func TestParseIDToken(t *testing.T) {
 	}
 }
 
-func TestAzureIDTOkenClaimsIsEmailVerified(t *testing.T) {
+func TestAzureIDTokenClaimsIsEmailVerified(t *testing.T) {
 	positiveExamples := []AzureIDTokenClaims{
 		{
 			Email:                              "test@example.com",
