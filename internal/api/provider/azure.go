@@ -13,7 +13,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const IssuerAzure = "https://login.microsoftonline.com/common/v2.0"
+const IssuerAzureCommon = "https://login.microsoftonline.com/common/v2.0"
+const IssuerAzureOrganizations = "https://login.microsoftonline.com/organizations/v2.0"
 
 // IssuerAzureMicrosoft is the OIDC issuer for microsoft.com accounts:
 // https://learn.microsoft.com/en-us/azure/active-directory/develop/id-token-claims-reference#payload-claims
@@ -61,7 +62,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	if ext.URL != "" {
 		expectedIssuer = authHost + "/v2.0"
 
-		if !IsAzureIssuer(expectedIssuer) || expectedIssuer == IssuerAzure {
+		if !IsAzureIssuer(expectedIssuer) || expectedIssuer == IssuerAzureCommon || expectedIssuer == IssuerAzureOrganizations {
 			// in tests, the URL is a local server which should not
 			// be the expected issuer
 			// also, IssuerAzure (common) never actually issues any

@@ -51,10 +51,10 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		issuer = provider.IssuerGoogle
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Google.ClientID...)
 
-	case p.Provider == "azure" || p.Issuer == provider.IssuerAzure:
+	case p.Provider == "azure" || p.Issuer == provider.IssuerAzureCommon || p.Issuer == provider.IssuerAzureOrganizations:
 		cfg = &config.External.Azure
 		providerType = "azure"
-		issuer = provider.IssuerAzure
+		issuer = p.Issuer
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Azure.ClientID...)
 
 	case p.Provider == "facebook" || p.Issuer == provider.IssuerFacebook:
