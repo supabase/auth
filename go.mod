@@ -65,7 +65,7 @@ require (
 )
 
 require (
-	github.com/crewjam/saml v0.4.13
+	github.com/crewjam/saml v0.4.14
 	github.com/deepmap/oapi-codegen v1.12.4
 	github.com/fatih/structs v1.1.0
 	github.com/gobuffalo/pop/v6 v6.1.1
@@ -123,7 +123,7 @@ require (
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
-	github.com/russellhaering/goxmldsig v1.2.0 // indirect
+	github.com/russellhaering/goxmldsig v1.3.0 // indirect
 	github.com/sergi/go-diff v1.2.0 // indirect
 	github.com/sourcegraph/annotate v0.0.0-20160123013949-f4cad6c6324d // indirect
 	github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e // indirect
