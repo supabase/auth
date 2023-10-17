@@ -61,9 +61,11 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	if ext.URL != "" {
 		expectedIssuer = authHost + "/v2.0"
 
-		if !IsAzureIssuer(expectedIssuer) {
+		if !IsAzureIssuer(expectedIssuer) || expectedIssuer == IssuerAzure {
 			// in tests, the URL is a local server which should not
 			// be the expected issuer
+			// also, IssuerAzure (common) never actually issues any
+			// ID tokens so it needs to be ignored
 			expectedIssuer = ""
 		}
 	}
