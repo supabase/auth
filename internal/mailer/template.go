@@ -93,6 +93,7 @@ func (m *TemplateMailer) InviteMail(user *models.User, otp, referrerURL string, 
 		"Token":           otp,
 		"TokenHash":       user.ConfirmationToken,
 		"Data":            user.UserMetaData,
+		"RedirectTo":      referrerURL,
 	}
 
 	return m.Mailer.Mail(
@@ -122,6 +123,7 @@ func (m *TemplateMailer) ConfirmationMail(user *models.User, otp, referrerURL st
 		"Token":           otp,
 		"TokenHash":       user.ConfirmationToken,
 		"Data":            user.UserMetaData,
+		"RedirectTo":      referrerURL,
 	}
 
 	return m.Mailer.Mail(
@@ -204,6 +206,7 @@ func (m *TemplateMailer) EmailChangeMail(user *models.User, otpNew, otpCurrent, 
 				"TokenHash":       tokenHash,
 				"SendingTo":       address,
 				"Data":            user.UserMetaData,
+				"RedirectTo":      referrerURL,
 			}
 			errors <- m.Mailer.Mail(
 				address,
@@ -242,6 +245,7 @@ func (m *TemplateMailer) RecoveryMail(user *models.User, otp, referrerURL string
 		"Token":           otp,
 		"TokenHash":       user.RecoveryToken,
 		"Data":            user.UserMetaData,
+		"RedirectTo":      referrerURL,
 	}
 
 	return m.Mailer.Mail(
@@ -271,6 +275,7 @@ func (m *TemplateMailer) MagicLinkMail(user *models.User, otp, referrerURL strin
 		"Token":           otp,
 		"TokenHash":       user.RecoveryToken,
 		"Data":            user.UserMetaData,
+		"RedirectTo":      referrerURL,
 	}
 
 	return m.Mailer.Mail(
