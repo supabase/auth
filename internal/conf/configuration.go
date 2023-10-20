@@ -256,6 +256,7 @@ type SmsProviderConfiguration struct {
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
+	HuaweiCloud  HuaweiCloudProviderConfiguration  `json:"huawei_cloud" split_words:"true"`
 }
 
 func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {
@@ -294,6 +295,14 @@ type VonageProviderConfiguration struct {
 	ApiKey    string `json:"api_key" split_words:"true"`
 	ApiSecret string `json:"api_secret" split_words:"true"`
 	From      string `json:"from" split_words:"true"`
+}
+
+type HuaweiCloudProviderConfiguration struct {
+	ApiKey        string `json:"api_key" split_words:"true"`
+	ApiSecret     string `json:"secret" split_words:"true"`
+	ApiPath       string `json:"api_path" split_words:"true"`
+	ChannelName   string `json:"channel_name" split_words:"true"`
+	ChannelNumber string `json:"channel_number" split_words:"true"`
 }
 
 type CaptchaConfiguration struct {
