@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS {{ index .Options "Namespace" }}.schema_migrations (
 	"version" varchar(255) NOT NULL,
 	CONSTRAINT schema_migrations_pkey PRIMARY KEY ("version")
 );
-comment on table auth.schema_migrations is 'Auth: Manages updates to the auth system.';
+comment on table {{ index .Options "Namespace" }}.schema_migrations is 'Auth: Manages updates to the auth system.';
 		
 -- Gets the User ID from the request cookie
 create or replace function {{ index .Options "Namespace" }}.uid() returns uuid as $$
