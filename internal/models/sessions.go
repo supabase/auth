@@ -227,3 +227,16 @@ func (s *Session) GetAAL() string {
 func (s *Session) IsAAL2() bool {
 	return s.GetAAL() == AAL2.String()
 }
+
+// FindCurrentlyActiveRefreshToken returns the currently active refresh
+// token in the session. This is the last created (ordered by the serial
+// primary key) non-revoked refresh token for the session.
+func (s *Session) FindCurrentlyActiveRefreshToken(tx *storage.Connection) (*RefreshToken, error) {
+	var activeRefreshToken RefreshToken
+
+	if err := tx.Q().Where("session_id = ? and revoked is false", s.ID).Order("id desc").First(&activeRefreshToken); err != nil {
+		return nil, err
+	}
+
+	return &activeRefreshToken, nil
+}

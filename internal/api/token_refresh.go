@@ -86,7 +86,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		var newTokenResponse *AccessTokenResponse
 
 		err = db.Transaction(func(tx *storage.Connection) error {
-			user, token, _, terr := models.FindUserWithRefreshToken(tx, params.RefreshToken, true /* forUpdate */)
+			user, token, session, terr := models.FindUserWithRefreshToken(tx, params.RefreshToken, true /* forUpdate */)
 			if terr != nil {
 				if models.IsNotFoundError(terr) {
 					// because forUpdate was set, and the
@@ -106,25 +106,43 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			// refresh token row and session are locked at this
 			// point, cannot be concurrently refreshed
 
+			var issuedToken *models.RefreshToken
+
 			if token.Revoked {
-				a.clearCookieTokens(config, w)
-				// For a revoked refresh token to be reused, it
-				// has to fall within the reuse interval.
+				activeRefreshToken, terr := session.FindCurrentlyActiveRefreshToken(tx)
+				if terr != nil {
+					return internalServerError(terr.Error())
+				}
 
-				reuseUntil := token.UpdatedAt.Add(
-					time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
+				if activeRefreshToken != nil && activeRefreshToken.Parent.String() == token.Token {
+					// Token was revoked, but it's the
+					// parent of the currently active one.
+					// This indicates that the client was
+					// not able to store the result when it
+					// refreshed token. This case is
+					// allowed, provided we return back the
+					// active refresh token instead of
+					// creating a new one.
+					issuedToken = activeRefreshToken
+				} else {
+					// For a revoked refresh token to be reused, it
+					// has to fall within the reuse interval.
+					reuseUntil := token.UpdatedAt.Add(
+						time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
 
-				if time.Now().After(reuseUntil) {
-					// not OK to reuse this token
+					if time.Now().After(reuseUntil) {
+						a.clearCookieTokens(config, w)
+						// not OK to reuse this token
 
-					if config.Security.RefreshTokenRotationEnabled {
-						// Revoke all tokens in token family
-						if err := models.RevokeTokenFamily(tx, token); err != nil {
-							return internalServerError(err.Error())
+						if config.Security.RefreshTokenRotationEnabled {
+							// Revoke all tokens in token family
+							if err := models.RevokeTokenFamily(tx, token); err != nil {
+								return internalServerError(err.Error())
+							}
 						}
-					}
 
-					return oauthError("invalid_grant", "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID)
+						return oauthError("invalid_grant", "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID)
+					}
 				}
 			}
 
@@ -132,16 +150,16 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				return terr
 			}
 
-			// a new refresh token is generated and explicitly not reusing
-			// a previous one as it could have already been revoked while
-			// this handler was running
-			newToken, terr := models.GrantRefreshTokenSwap(r, tx, user, token)
-			if terr != nil {
-				return terr
+			if issuedToken == nil {
+				newToken, terr := models.GrantRefreshTokenSwap(r, tx, user, token)
+				if terr != nil {
+					return terr
+				}
+
+				issuedToken = newToken
 			}
 
-			tokenString, expiresAt, terr = generateAccessToken(tx, user, newToken.SessionId, &config.JWT)
-
+			tokenString, expiresAt, terr = generateAccessToken(tx, user, issuedToken.SessionId, &config.JWT)
 			if terr != nil {
 				return internalServerError("error generating jwt token").WithInternalError(terr)
 			}
@@ -151,7 +169,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				TokenType:    "bearer",
 				ExpiresIn:    config.JWT.Exp,
 				ExpiresAt:    expiresAt,
-				RefreshToken: newToken.Token,
+				RefreshToken: issuedToken.Token,
 				User:         user,
 			}
 			if terr = a.setCookieTokens(config, newTokenResponse, false, w); terr != nil {
