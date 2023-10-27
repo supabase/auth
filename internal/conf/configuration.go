@@ -111,6 +111,22 @@ func (a *APIConfiguration) Validate() error {
 	return nil
 }
 
+type SessionsConfiguration struct {
+	Timebox *time.Duration `json:"timebox"`
+}
+
+func (c *SessionsConfiguration) Validate() error {
+	if c.Timebox == nil {
+		return nil
+	}
+
+	if *c.Timebox <= time.Duration(0) {
+		return fmt.Errorf("conf: session timebox duration must be positive when set, was %v", (*c.Timebox).String())
+	}
+
+	return nil
+}
+
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
 	API                   APIConfiguration
@@ -139,6 +155,7 @@ type GlobalConfiguration struct {
 	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
 	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
 	Security          SecurityConfiguration    `json:"security"`
+	Sessions          SessionsConfiguration    `json:"sessions"`
 	MFA               MFAConfiguration         `json:"MFA"`
 	Cookie            struct {
 		Key      string `json:"key"`
@@ -516,6 +533,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.SMTP,
 		&c.SAML,
 		&c.Security,
+		&c.Sessions,
 	}
 
 	for _, validatable := range validatables {
