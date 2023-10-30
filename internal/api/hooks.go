@@ -73,13 +73,20 @@ type WebhookResponse struct {
 	UserMetaData map[string]interface{} `json:"user_metadata,omitempty"`
 }
 
+type AuthHookCustomClaims struct {
+	Data      interface{} `json:"data"`
+	EventType string      `json:"event_type"`
+	Timestamp string      `json:"timestamp"`
+	jwt.StandardClaims
+}
+
 // Duplicate of Webhook, should eventually modify the fields passed
 type AuthHook struct {
 	// Deprecate this
 	*conf.WebhookConfig
 	// TODO: Decide whether to replace this with hookConfig instead
 	jwtSecret string
-	claims    jwt.Claims
+	claims    AuthHookCustomClaims
 }
 
 func setWebhookHeaders(req *http.Request, hookID uuid.UUID, timestamp int64) {
@@ -106,7 +113,8 @@ func (a *AuthHook) trigger() (io.ReadCloser, error) {
 	}
 	hookID := uuid.Must(uuid.NewV4())
 	timestamp := time.Now().Unix()
-	signature, err := a.generateSignature()
+	// TODO: Double check this against the standard
+	signature, err := a.generateSignature(a.jwtSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +162,7 @@ func (a *AuthHook) trigger() (io.ReadCloser, error) {
 
 		start := time.Now()
 		rsp, err := client.Do(req)
+
 		if err != nil {
 			if terr, ok := err.(net.Error); ok && terr.Timeout() {
 				// timed out - try again?
@@ -194,7 +203,7 @@ func (a *AuthHook) trigger() (io.ReadCloser, error) {
 	hooklog.Infof("Failed to process webhook for %s after %d attempts", a.URL, a.Retries)
 	return nil, unprocessableEntityError("Failed to handle signup webhook")
 }
-func (a *AuthHook) generateBody(secret string) (string, error) {
+func (a *AuthHook) generateSignature(secret string) (string, error) {
 	// TODO:  Probably do logging here so we can use the field
 	msgID := uuid.Must(uuid.NewV4())
 	timestamp := time.Now().Unix()
@@ -213,8 +222,7 @@ func (a *AuthHook) generateBody(secret string) (string, error) {
 	return signatureHex, nil
 }
 
-func (a *AuthHook) generateSignature() (string, error) {
-	// TODO: change this to {msg_id}.{timestamp}.{payload} and also to use hmac-sha256
+func (a *AuthHook) generateBody(secret string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, a.claims)
 	tokenString, err := token.SignedString([]byte(a.jwtSecret))
 	if err != nil {
@@ -327,20 +335,21 @@ func triggerAuthHook(ctx context.Context, conn *storage.Connection, hookConfig m
 	}
 
 	// TODO: substitute with a custom claims interface
-	claims := jwt.MapClaims{
-		"IssuedAt": time.Now().Unix(),
-		"Subject":  uuid.Nil.String(),
-		"Issuer":   authHookIssuer,
-		"Type":     hookConfig.EventName,
-		// TODO: For readbility, kind of duplicate of issuedAt. Check if we need this
-		"Timestamp": generateHookCompliantTimestamp(time.Now().UTC()),
-		"Data":      inp,
+	claims := AuthHookCustomClaims{
+		inp,
+		hookConfig.EventName,
+		generateHookCompliantTimestamp(time.Now().UTC()),
+		jwt.StandardClaims{
+			IssuedAt: time.Now().Unix(),
+			Subject:  uuid.Nil.String(),
+			Issuer:   authHookIssuer,
+		},
 	}
 
 	a := AuthHook{
 		WebhookConfig: &config.Webhook,
 		// TODO: Add logic to support JWT secret selection
-		jwtSecret: hookConfig.Secret[0],
+		jwtSecret: hookConfig.Secret,
 		claims:    claims,
 	}
 

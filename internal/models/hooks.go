@@ -12,7 +12,7 @@ import (
 type HookConfig struct {
 	ID                 uuid.UUID `json:"id" db:"id"`
 	URI                string    `json:"uri" db:"uri"`
-	Secret             []string  `json:"secret" db:"secret"`
+	Secret             string    `json:"secret" db:"secret"`
 	ExtensibilityPoint string    `json:"extensibility_point" db:"extensibility_point"`
 	EventName          string    `json:"event_name" db:"event_name"`
 	RequestSchema      JSONMap   `json:"request_schema" db:"request_schema"`
