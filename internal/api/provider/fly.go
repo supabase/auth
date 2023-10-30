@@ -19,14 +19,18 @@ type flyProvider struct {
 }
 
 type flyUser struct {
-	ResourceOwnerID string            `json:"resource_owner_id"`
-	UserID          string            `json:"user_id"`
-	UserName        string            `json:"user_name"`
-	Email           string            `json:"email"`
-	Scope           []string          `json:"scope"`
-	Application     map[string]string `json:"application"`
-	ExpiresIn       int               `json:"expires_in"`
-	CreatedAt       int               `json:"created_at"`
+	ResourceOwnerID string `json:"resource_owner_id"`
+	UserID          string `json:"user_id"`
+	UserName        string `json:"user_name"`
+	Email           string `json:"email"`
+	Organizations   []struct {
+		ID   string `json:"id"`
+		Role string `json:"role"`
+	} `json:"organizations"`
+	Scope       []string          `json:"scope"`
+	Application map[string]string `json:"application"`
+	ExpiresIn   int               `json:"expires_in"`
+	CreatedAt   int               `json:"created_at"`
 }
 
 // NewFlyProvider creates a Fly oauth provider.
@@ -86,6 +90,7 @@ func (p flyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserP
 			ProviderId:    u.UserID,
 			CustomClaims: map[string]interface{}{
 				"resource_owner_id": u.ResourceOwnerID,
+				"organizations":     u.Organizations,
 				"application":       u.Application,
 				"scope":             u.Scope,
 				"created_at":        u.CreatedAt,
