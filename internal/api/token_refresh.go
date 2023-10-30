@@ -10,6 +10,7 @@ import (
 	"github.com/supabase/gotrue/internal/metering"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 const retryLoopDuration = 5.0
@@ -50,7 +51,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	for retry && time.Since(retryStart).Seconds() < retryLoopDuration {
 		retry = false
 
-		user, _, session, err := models.FindUserWithRefreshToken(db, params.RefreshToken, false)
+		user, token, session, err := models.FindUserWithRefreshToken(db, params.RefreshToken, false)
 		if err != nil {
 			if models.IsNotFoundError(err) {
 				return oauthError("invalid_grant", "Invalid Refresh Token: Refresh Token Not Found")
@@ -79,6 +80,14 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 			if !notAfter.IsZero() && a.Now().After(notAfter) {
 				return oauthError("invalid_grant", "Invalid Refresh Token: Session Expired")
+			}
+
+			if config.Sessions.InactivityTimeout != nil {
+				timesOutAt := session.LastRefreshedAt(&token.UpdatedAt).Add(*config.Sessions.InactivityTimeout)
+
+				if timesOutAt.Before(a.Now()) {
+					return oauthError("invalid_grant", "Invalid Refresh Token: Session Expired (Inactivity)")
+				}
 			}
 		}
 
@@ -170,6 +179,27 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			tokenString, expiresAt, terr = generateAccessToken(tx, user, issuedToken.SessionId, &config.JWT)
 			if terr != nil {
 				return internalServerError("error generating jwt token").WithInternalError(terr)
+			}
+
+			refreshedAt := a.Now()
+			session.RefreshedAt = &refreshedAt
+
+			userAgent := r.Header.Get("User-Agent")
+			if userAgent != "" {
+				session.UserAgent = &userAgent
+			} else {
+				session.UserAgent = nil
+			}
+
+			ipAddress := utilities.GetIPAddress(r)
+			if ipAddress != "" {
+				session.IP = &ipAddress
+			} else {
+				session.IP = nil
+			}
+
+			if terr := session.UpdateRefresh(tx); terr != nil {
+				return internalServerError("failed to update session information").WithInternalError(terr)
 			}
 
 			newTokenResponse = &AccessTokenResponse{

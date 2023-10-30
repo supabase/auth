@@ -69,11 +69,39 @@ type Session struct {
 	FactorID  *uuid.UUID `json:"factor_id" db:"factor_id"`
 	AMRClaims []AMRClaim `json:"amr,omitempty" has_many:"amr_claims"`
 	AAL       *string    `json:"aal" db:"aal"`
+
+	RefreshedAt *time.Time `json:"refreshed_at,omitempty" db:"refreshed_at"`
+	UserAgent   *string    `json:"user_agent,omitempty" db:"user_agent"`
+	IP          *string    `json:"ip,omitempty" db:"ip"`
 }
 
 func (Session) TableName() string {
 	tableName := "sessions"
 	return tableName
+}
+
+func (s *Session) LastRefreshedAt(refreshTokenTime *time.Time) time.Time {
+	refreshedAt := s.RefreshedAt
+
+	if refreshedAt == nil || refreshedAt.IsZero() {
+		if refreshTokenTime != nil {
+			rtt := *refreshTokenTime
+
+			if rtt.IsZero() {
+				return s.CreatedAt
+			} else if rtt.After(s.CreatedAt) {
+				return rtt
+			}
+		}
+
+		return s.CreatedAt
+	}
+
+	return *refreshedAt
+}
+
+func (s *Session) UpdateRefresh(tx *storage.Connection) error {
+	return tx.UpdateOnly(s, "refreshed_at", "user_agent", "ip")
 }
 
 func NewSession() (*Session, error) {

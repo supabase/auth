@@ -133,6 +133,9 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 		token       *AccessTokenResponse
 		authCode    string
 	)
+
+	grantParams.FillGrantParams(r)
+
 	flowType := models.ImplicitFlow
 	var authenticationMethod models.AuthenticationMethod
 	if strings.HasPrefix(params.Token, PKCEPrefix) {
@@ -227,6 +230,8 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 		token       *AccessTokenResponse
 	)
 	var isSingleConfirmationResponse = false
+
+	grantParams.FillGrantParams(r)
 
 	err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error

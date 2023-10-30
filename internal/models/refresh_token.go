@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/supabase/gotrue/internal/crypto"
 	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
 )
 
 // RefreshToken is the database model for refresh tokens.
@@ -41,6 +42,14 @@ type GrantParams struct {
 	FactorID *uuid.UUID
 
 	SessionNotAfter *time.Time
+
+	UserAgent string
+	IP        string
+}
+
+func (g *GrantParams) FillGrantParams(r *http.Request) {
+	g.UserAgent = r.Header.Get("User-Agent")
+	g.IP = utilities.GetIPAddress(r)
 }
 
 // GrantAuthenticatedUser creates a refresh token for the provided user.
@@ -110,7 +119,6 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 	if oldToken != nil {
 		token.Parent = storage.NullString(oldToken.Token)
 		token.SessionId = oldToken.SessionId
-
 	}
 
 	if token.SessionId == nil {
@@ -127,6 +135,14 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 
 		if params.SessionNotAfter != nil {
 			session.NotAfter = params.SessionNotAfter
+		}
+
+		if params.UserAgent != "" {
+			session.UserAgent = &params.UserAgent
+		}
+
+		if params.IP != "" {
+			session.IP = &params.IP
 		}
 
 		if err := tx.Create(session); err != nil {
