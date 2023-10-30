@@ -94,6 +94,40 @@ func (ts *TokenTestSuite) TestSessionTimebox() {
 	assert.Equal(ts.T(), "Invalid Refresh Token: Session Expired", firstResult.ErrorDescription)
 }
 
+func (ts *TokenTestSuite) TestSessionInactivityTimeout() {
+	inactivityTimeout := 10 * time.Second
+
+	ts.API.config.Sessions.InactivityTimeout = &inactivityTimeout
+	ts.API.overrideTime = func() time.Time {
+		return time.Now().Add(inactivityTimeout).Add(time.Second)
+	}
+
+	defer func() {
+		ts.API.overrideTime = nil
+	}()
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"refresh_token": ts.RefreshToken.Token,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+
+	var firstResult struct {
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
+	}
+
+	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
+	assert.Equal(ts.T(), "invalid_grant", firstResult.Error)
+	assert.Equal(ts.T(), "Invalid Refresh Token: Session Expired (Inactivity)", firstResult.ErrorDescription)
+}
+
 func (ts *TokenTestSuite) TestFailedToSaveRefreshTokenResultCase() {
 	var buffer bytes.Buffer
 

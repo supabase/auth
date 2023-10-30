@@ -112,7 +112,8 @@ func (a *APIConfiguration) Validate() error {
 }
 
 type SessionsConfiguration struct {
-	Timebox *time.Duration `json:"timebox"`
+	Timebox           *time.Duration `json:"timebox"`
+	InactivityTimeout *time.Duration `json:"inactivity_timeout,omitempty" split_words:"true"`
 }
 
 func (c *SessionsConfiguration) Validate() error {

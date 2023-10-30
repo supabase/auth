@@ -108,6 +108,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 	var user *models.User
 	var grantParams models.GrantParams
+
+	grantParams.FillGrantParams(r)
+
 	params.Aud = a.requestAud(ctx, r)
 
 	switch params.Provider {
