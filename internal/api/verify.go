@@ -19,11 +19,6 @@ import (
 	"github.com/supabase/gotrue/internal/utilities"
 )
 
-var (
-	// indicates that a user should be redirected due to an error
-	errRedirectWithQuery = errors.New("redirect user")
-)
-
 const (
 	signupVerification      = "signup"
 	recoveryVerification    = "recovery"
@@ -515,13 +510,13 @@ func (a *API) verifyTokenHash(ctx context.Context, conn *storage.Connection, par
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(errRedirectWithQuery)
+			return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(err)
 		}
 		return nil, internalServerError("Database error finding user from email link").WithInternalError(err)
 	}
 
 	if user.IsBanned() {
-		return nil, unauthorizedError("Error confirming user").WithInternalError(errRedirectWithQuery)
+		return nil, unauthorizedError("Error confirming user").WithInternalMessage("user is banned")
 	}
 
 	var isExpired bool
@@ -543,7 +538,7 @@ func (a *API) verifyTokenHash(ctx context.Context, conn *storage.Connection, par
 	}
 
 	if isExpired {
-		return nil, expiredTokenError("Email link is invalid or has expired").WithInternalError(errRedirectWithQuery)
+		return nil, expiredTokenError("Email link is invalid or has expired").WithInternalMessage("email link has expired")
 	}
 
 	return user, nil
@@ -570,13 +565,13 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, notFoundError(err.Error()).WithInternalError(errRedirectWithQuery)
+			return nil, notFoundError(err.Error()).WithInternalError(err)
 		}
 		return nil, internalServerError("Database error finding user").WithInternalError(err)
 	}
 
 	if user.IsBanned() {
-		return nil, unauthorizedError("Error confirming user").WithInternalError(errRedirectWithQuery)
+		return nil, unauthorizedError("Error confirming user").WithInternalMessage("user is banned")
 	}
 
 	var isValid bool
@@ -624,8 +619,8 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 		isValid = isOtpValid(tokenHash, expectedToken, sentAt, config.Sms.OtpExp)
 	}
 
-	if !isValid || err != nil {
-		return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(errRedirectWithQuery)
+	if !isValid {
+		return nil, expiredTokenError("Token has expired or is invalid").WithInternalMessage("token has expired or is invalid")
 	}
 	return user, nil
 }
