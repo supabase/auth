@@ -31,6 +31,17 @@ type API struct {
 	db      *storage.Connection
 	config  *conf.GlobalConfiguration
 	version string
+
+	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
+	overrideTime func() time.Time
+}
+
+func (a *API) Now() time.Time {
+	if a.overrideTime != nil {
+		return a.overrideTime()
+	}
+
+	return time.Now()
 }
 
 // NewAPI instantiates a new REST API

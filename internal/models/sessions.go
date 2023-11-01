@@ -58,9 +58,12 @@ func (s sortAMREntries) Swap(i, j int) {
 }
 
 type Session struct {
-	ID        uuid.UUID  `json:"-" db:"id"`
-	UserID    uuid.UUID  `json:"user_id" db:"user_id"`
-	NotAfter  *time.Time `json:"not_after,omitempty" db:"not_after"`
+	ID     uuid.UUID `json:"-" db:"id"`
+	UserID uuid.UUID `json:"user_id" db:"user_id"`
+
+	// NotAfter is overriden by timeboxed sessions.
+	NotAfter *time.Time `json:"not_after,omitempty" db:"not_after"`
+
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
 	FactorID  *uuid.UUID `json:"factor_id" db:"factor_id"`

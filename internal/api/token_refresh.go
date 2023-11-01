@@ -44,7 +44,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	// Instead of waiting at the database level, they're waiting at the API
 	// level instead and retry to refresh the locked row every 10-30
 	// milliseconds.
-	retryStart := time.Now()
+	retryStart := a.Now()
 	retry := true
 
 	for retry && time.Since(retryStart).Seconds() < retryLoopDuration {
@@ -69,7 +69,15 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				notAfter = *session.NotAfter
 			}
 
-			if !notAfter.IsZero() && time.Now().UTC().After(notAfter) {
+			if config.Sessions.Timebox != nil {
+				sessionEndsAt := session.CreatedAt.Add((*config.Sessions.Timebox).Abs())
+
+				if notAfter.IsZero() || notAfter.After(sessionEndsAt) {
+					notAfter = sessionEndsAt
+				}
+			}
+
+			if !notAfter.IsZero() && a.Now().After(notAfter) {
 				return oauthError("invalid_grant", "Invalid Refresh Token: Session Expired")
 			}
 		}
@@ -130,7 +138,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 					reuseUntil := token.UpdatedAt.Add(
 						time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
 
-					if time.Now().After(reuseUntil) {
+					if a.Now().After(reuseUntil) {
 						a.clearCookieTokens(config, w)
 						// not OK to reuse this token
 
