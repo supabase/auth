@@ -51,9 +51,9 @@ type Claims struct {
 	Locale            string `json:"locale,omitempty" structs:"locale,omitempty"`
 	UpdatedAt         string `json:"updated_at,omitempty" structs:"updated_at,omitempty"`
 	Email             string `json:"email,omitempty" structs:"email,omitempty"`
-	EmailVerified     bool   `json:"email_verified,omitempty" structs:"email_verified,omitempty"`
+	EmailVerified     bool   `json:"email_verified,omitempty" structs:"email_verified"`
 	Phone             string `json:"phone,omitempty" structs:"phone,omitempty"`
-	PhoneVerified     bool   `json:"phone_verified,omitempty" structs:"phone_verified,omitempty"`
+	PhoneVerified     bool   `json:"phone_verified,omitempty" structs:"phone_verified"`
 
 	// Custom profile claims that are provider specific
 	CustomClaims map[string]interface{} `json:"custom_claims,omitempty" structs:"custom_claims,omitempty"`
