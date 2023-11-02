@@ -531,8 +531,8 @@ func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Paginat
 func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
 	return findUser(
 		tx,
-		"instance_id = ? and LOWER(email) = ? and email_change_token_current = ? and aud = ? and is_sso_user = false",
-		uuid.Nil, strings.ToLower(email), token, aud,
+		"instance_id = ? and LOWER(email) = ? and aud = ? and is_sso_user = false and (email_change_token_current = 'pkce_' || ? or email_change_token_current = ?)",
+		uuid.Nil, strings.ToLower(email), aud, token, token,
 	)
 }
 
@@ -540,8 +540,8 @@ func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, toke
 func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
 	return findUser(
 		tx,
-		"instance_id = ? and LOWER(email_change) = ? and email_change_token_new = ? and aud = ? and is_sso_user = false",
-		uuid.Nil, strings.ToLower(email), token, aud,
+		"instance_id = ? and LOWER(email_change) = ? and aud = ? and is_sso_user = false and (email_change_token_new = 'pkce_' || ? or email_change_token_new = ?)",
+		uuid.Nil, strings.ToLower(email), aud, token, token,
 	)
 }
 

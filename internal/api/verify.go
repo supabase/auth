@@ -558,6 +558,8 @@ func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, 
 	case smsVerification:
 		user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
 	case emailChangeVerification:
+		// Since the email change could be trigger via the implicit or PKCE flow,
+		// the query used has to also check if the token saved in the db contains the pkce_ prefix
 		user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
 	default:
 		user, err = models.FindUserByEmailAndAudience(conn, params.Email, aud)
