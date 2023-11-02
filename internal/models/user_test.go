@@ -236,6 +236,8 @@ func (ts *UserTestSuite) TestRemoveUnconfirmedIdentities() {
 
 	require.NoError(ts.T(), user.RemoveUnconfirmedIdentities(ts.db, idTwitter))
 
+	// reload the user to check that identities are deleted from the db too
+	require.NoError(ts.T(), ts.db.Load(user))
 	require.Empty(ts.T(), user.EncryptedPassword, "password still remains in user")
 
 	require.Len(ts.T(), user.Identities, 1, "only one identity must be remaining")
