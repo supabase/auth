@@ -450,12 +450,12 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 	if err != nil {
 		return nil, err
 	}
-	if err = user.UpdateAppMetaData(tx, map[string]interface{}{
+	if err := user.UpdateAppMetaData(tx, map[string]interface{}{
 		"provider": providerType,
 	}); err != nil {
 		return nil, err
 	}
-	if err = user.UpdateAppMetaDataProviders(tx); err != nil {
+	if err := user.UpdateAppMetaDataProviders(tx); err != nil {
 		return nil, err
 	}
 	if err := user.UpdateUserMetaData(tx, identityData); err != nil {
