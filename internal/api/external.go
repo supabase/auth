@@ -295,7 +295,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			}
 		}
 
-		if _, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+		if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
 			return nil, terr
 		}
 
@@ -331,7 +331,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			return nil, terr
 		}
 
-		if _, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+		if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
 			return nil, terr
 		}
 
@@ -372,7 +372,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	// confirmed their email or phone, they are unaware that a
 	// potentially malicious door exists into their account; thus
 	// the password and phone needs to be removed.
-	if terr = user.RemoveUnconfirmedIdentities(tx); terr != nil {
+	if terr = user.RemoveUnconfirmedIdentities(tx, identity); terr != nil {
 		return nil, internalServerError("Error updating user").WithInternalError(terr)
 	}
 
@@ -446,7 +446,8 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 	if userData.Metadata != nil {
 		identityData = structs.Map(userData.Metadata)
 	}
-	if _, err := a.createNewIdentity(tx, user, providerType, identityData); err != nil {
+	identity, err := a.createNewIdentity(tx, user, providerType, identityData)
+	if err != nil {
 		return nil, err
 	}
 	if err = user.UpdateAppMetaData(tx, map[string]interface{}{
@@ -476,7 +477,7 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 	// confirmed their email or phone, they are unaware that a
 	// potentially malicious door exists into their account; thus
 	// the password and phone needs to be removed.
-	if err = user.RemoveUnconfirmedIdentities(tx); err != nil {
+	if err := user.RemoveUnconfirmedIdentities(tx, identity); err != nil {
 		return nil, internalServerError("Error updating user").WithInternalError(err)
 	}
 
