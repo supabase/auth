@@ -244,7 +244,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		}
 	} else {
 		// Left as hash fragment to comply with spec. Additionally, may override existing error query param if set to PKCE.
-		rurl, err = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl, models.ImplicitFlow)
+		rurl, err = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v. A confirmation email has been sent to your email.", providerType), w, r, rurl, models.ImplicitFlow)
 		if err != nil {
 			return err
 		}
@@ -366,12 +366,10 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return nil, unauthorizedError("User is unauthorized")
 	}
 
-	// an account with a previously unconfirmed email + password
-	// combination or phone may exist. so now that there is an
-	// OAuth identity bound to this user, and since they have not
-	// confirmed their email or phone, they are unaware that a
-	// potentially malicious door exists into their account; thus
-	// the password and phone needs to be removed.
+	// An account with a previously unconfirmed email + password
+	// combination, phone or oauth identity may exist. These identities
+	// need to be removed when a new oauth identity is being added
+	// to prevent pre-account takeover attacks from happening.
 	if terr = user.RemoveUnconfirmedIdentities(tx, identity); terr != nil {
 		return nil, internalServerError("Error updating user").WithInternalError(terr)
 	}
