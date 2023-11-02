@@ -640,57 +640,29 @@ func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
 }
 
 // RemoveUnconfirmedIdentities removes potentially malicious unconfirmed identities from a user (if any)
-func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection) error {
+func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection, identity *Identity) error {
 	if u.IsConfirmed() {
 		return nil
 	}
 
+	// user is unconfirmed so the password should be reset
 	u.EncryptedPassword = ""
-
 	if terr := tx.UpdateOnly(u, "encrypted_password"); terr != nil {
 		return terr
 	}
 
-	if providersList, ok := u.AppMetaData["providers"].([]string); ok {
-		// user has "providers" metadata, and the "email" provider
-		// should be removed from it
-
-		var confirmedProviders []string
-
-		for _, provider := range providersList {
-			if provider != "email" {
-				confirmedProviders = append(confirmedProviders, provider)
-			}
-		}
-
-		u.AppMetaData["providers"] = confirmedProviders
-
-		if len(confirmedProviders) > 0 {
-			u.AppMetaData["provider"] = confirmedProviders[0]
-		} else {
-			u.AppMetaData["provider"] = nil
-		}
-
+	// user is unconfirmed so none of the providers associated to it are verified yet
+	// only the current provider should be kept
+	if _, ok := u.AppMetaData["providers"].([]string); ok {
+		u.AppMetaData["providers"] = []string{identity.Provider}
+		u.AppMetaData["provider"] = identity.Provider
 		if terr := u.UpdateAppMetaData(tx, u.AppMetaData); terr != nil {
 			return terr
 		}
 	}
 
-	// finally, remove any identity with the "email" provider
-
-	var confirmedProviders []Identity
-
-	for i, identity := range u.Identities {
-		if identity.Provider == "email" {
-			if terr := tx.Destroy(&u.Identities[i]); terr != nil {
-				return terr
-			}
-		} else {
-			confirmedProviders = append(confirmedProviders, identity)
-		}
-	}
-
-	u.Identities = confirmedProviders
+	// finally, remove all identities except the current identity being authenticated
+	u.Identities = []Identity{*identity}
 
 	return nil
 }
