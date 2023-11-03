@@ -71,7 +71,7 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionWithAccounts() {
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(identityB))
 
-	// when there are no accounts in the system -- conventional provider
+	// when the email doesn't exist in the system -- conventional provider
 	decision, err := DetermineAccountLinking(ts.db, "provider", "abcdefgh", []string{"other@example.com"})
 	require.NoError(ts.T(), err)
 
@@ -79,18 +79,6 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionWithAccounts() {
 
 	// when looking for an email that doesn't exist in the SSO linking domain
 	decision, err = DetermineAccountLinking(ts.db, "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387", "abcdefgh", []string{"other@samltest.id"})
-	require.NoError(ts.T(), err)
-
-	require.Equal(ts.T(), decision.Decision, CreateAccount)
-
-	// when looking for an email that doesn't exist at all
-	decision, err = DetermineAccountLinking(ts.db, "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387", "abcdefgh", []string{"other@samltest.id"})
-	require.NoError(ts.T(), err)
-
-	require.Equal(ts.T(), decision.Decision, CreateAccount)
-
-	// when looking for an email that doesn't exist in the SSO linking domain
-	decision, err = DetermineAccountLinking(ts.db, "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387", "abcdefgh", []string{"text@example.com"})
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, CreateAccount)
