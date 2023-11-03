@@ -244,7 +244,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		}
 	} else {
 		// Left as hash fragment to comply with spec. Additionally, may override existing error query param if set to PKCE.
-		rurl, err = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v. A confirmation email has been sent to your email.", providerType), w, r, rurl, models.ImplicitFlow)
+		rurl, err = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v. A confirmation email has been sent to your %v email.", providerType, providerType), w, r, rurl, models.ImplicitFlow)
 		if err != nil {
 			return err
 		}
