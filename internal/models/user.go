@@ -666,9 +666,11 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection, identity *Ide
 	}
 
 	// finally, remove all identities except the current identity being authenticated
-	for _, i := range u.Identities {
-		if i.Provider+i.ID != identity.Provider+identity.ID {
-			if terr := tx.Destroy(&i); terr != nil {
+	for i := range u.Identities {
+		identityId := u.Identities[i].Provider + u.Identities[i].ID
+		identityIdToKeep := identity.Provider + identity.ID
+		if identityId != identityIdToKeep {
+			if terr := tx.Destroy(&u.Identities[i]); terr != nil {
 				return terr
 			}
 		}
