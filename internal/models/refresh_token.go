@@ -42,6 +42,7 @@ type GrantParams struct {
 	FactorID *uuid.UUID
 
 	SessionNotAfter *time.Time
+	SessionTag      *string
 
 	UserAgent string
 	IP        string
@@ -143,6 +144,10 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 
 		if params.IP != "" {
 			session.IP = &params.IP
+		}
+
+		if params.SessionTag != nil && *params.SessionTag != "" {
+			session.Tag = params.SessionTag
 		}
 
 		if err := tx.Create(session); err != nil {
