@@ -262,6 +262,8 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 
 	var grantParams models.GrantParams
 
+	grantParams.FillGrantParams(r)
+
 	if !notAfter.IsZero() {
 		grantParams.SessionNotAfter = &notAfter
 	}

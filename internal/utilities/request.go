@@ -24,7 +24,12 @@ func GetIPAddress(r *http.Request) string {
 
 			for _, ip := range ips {
 				if ip != "" {
-					return ip
+					parsed := net.ParseIP(ip)
+					if parsed == nil {
+						continue
+					}
+
+					return parsed.String()
 				}
 			}
 		}

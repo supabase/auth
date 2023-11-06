@@ -113,6 +113,9 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	var user *models.User
 	var grantParams models.GrantParams
 	var provider string
+
+	grantParams.FillGrantParams(r)
+
 	if params.Email != "" {
 		provider = "email"
 		if !config.External.Email.Enabled {
@@ -180,6 +183,12 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	db := a.db.WithContext(ctx)
 	var grantParams models.GrantParams
 
+	// There is a slight problem with this as it will pick-up the
+	// User-Agent and IP addresses from the server if used on the server
+	// side. Currently there's no mechanism to distinguish, but the server
+	// can be told to at least propagate the User-Agent header.
+	grantParams.FillGrantParams(r)
+
 	params := &PKCEGrantParams{}
 	body, err := getBodyBytes(r)
 	if err != nil {
@@ -245,7 +254,6 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	}
 
 	return sendJSON(w, http.StatusOK, token)
-
 }
 
 func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, config *conf.JWTConfiguration) (string, int64, error) {
