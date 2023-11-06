@@ -198,7 +198,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				session.IP = nil
 			}
 
-			if terr := session.UpdateRefresh(tx); terr != nil {
+			if terr := session.UpdateOnlyRefreshInfo(tx); terr != nil {
 				return internalServerError("failed to update session information").WithInternalError(terr)
 			}
 

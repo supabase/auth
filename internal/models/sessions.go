@@ -100,7 +100,7 @@ func (s *Session) LastRefreshedAt(refreshTokenTime *time.Time) time.Time {
 	return *refreshedAt
 }
 
-func (s *Session) UpdateRefresh(tx *storage.Connection) error {
+func (s *Session) UpdateOnlyRefreshInfo(tx *storage.Connection) error {
 	return tx.UpdateOnly(s, "refreshed_at", "user_agent", "ip")
 }
 
