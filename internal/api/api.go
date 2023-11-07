@@ -14,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/mailer"
+	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
 )
@@ -93,7 +94,14 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	r.Use(recoverer)
 
 	if globalConfig.DB.CleanupEnabled {
-		r.UseBypass(api.databaseCleanup)
+		cleanup := &models.Cleanup{
+			SessionTimebox:           globalConfig.Sessions.Timebox,
+			SessionInactivityTimeout: globalConfig.Sessions.InactivityTimeout,
+		}
+
+		cleanup.Setup()
+
+		r.UseBypass(api.databaseCleanup(cleanup))
 	}
 
 	r.Get("/health", api.HealthCheck)
