@@ -267,6 +267,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalGitHubErrorWhenEmailDoesntMa
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenVerifiedFalse() {
+	ts.Config.Mailer.AllowUnverifiedEmailSignIns = false
 	tokenCount, userCount := 0, 0
 	code := "authcode"
 	emails := `[{"email":"github@example.com", "primary": true, "verified": false}]`

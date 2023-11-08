@@ -197,6 +197,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalKakaoErrorWhenEmailDoesntMat
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalKakaoErrorWhenVerifiedFalse() {
+	ts.Config.Mailer.AllowUnverifiedEmailSignIns = false
 	tokenCount, userCount := 0, 0
 	code := "authcode"
 	emails := `[{"email":"kakao@example.com", "primary": true, "verified": false}]`
