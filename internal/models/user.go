@@ -654,6 +654,9 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection, identity *Ide
 	// user is unconfirmed so existing user_metadata should be overwritten
 	// to use the current identity metadata
 	u.UserMetaData = identity.IdentityData
+	if terr := u.UpdateUserMetaData(tx, u.UserMetaData); terr != nil {
+		return terr
+	}
 
 	// user is unconfirmed so none of the providers associated to it are verified yet
 	// only the current provider should be kept
