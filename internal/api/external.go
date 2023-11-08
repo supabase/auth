@@ -265,17 +265,19 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 
 	var user *models.User
 	var identity *models.Identity
-
-	var emailData provider.Email
 	var identityData map[string]interface{}
 	if userData.Metadata != nil {
 		identityData = structs.Map(userData.Metadata)
 	}
 
+	var emailData provider.Email
 	var emails []string
-
+	// an oauth identity with an unverified email will not have an email present
 	for _, email := range userData.Emails {
 		if email.Verified || config.Mailer.Autoconfirm {
+			if email.Primary {
+				emailData = email
+			}
 			emails = append(emails, strings.ToLower(email.Email))
 		}
 	}
@@ -289,14 +291,6 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	case models.LinkAccount:
 		user = decision.User
 
-		emailData = userData.Emails[0]
-		for _, e := range userData.Emails {
-			if e.Primary || e.Verified {
-				emailData = e
-				break
-			}
-		}
-
 		if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
 			return nil, terr
 		}
@@ -308,15 +302,6 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	case models.CreateAccount:
 		if config.DisableSignup {
 			return nil, forbiddenError("Signups not allowed for this instance")
-		}
-
-		// prefer primary email for new signups
-		emailData = userData.Emails[0]
-		for _, e := range userData.Emails {
-			if e.Primary {
-				emailData = e
-				break
-			}
 		}
 
 		params := &SignupParams{
@@ -345,11 +330,6 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
 			return nil, terr
 		}
-		// email & verified status might have changed if identity's email changed
-		emailData = provider.Email{
-			Email:    userData.Metadata.Email,
-			Verified: userData.Metadata.EmailVerified,
-		}
 		if terr = user.UpdateUserMetaData(tx, identityData); terr != nil {
 			return nil, terr
 		}
@@ -368,41 +348,45 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return nil, unauthorizedError("User is unauthorized")
 	}
 
-	// An account with a previously unconfirmed email + password
-	// combination, phone or oauth identity may exist. These identities
-	// need to be removed when a new oauth identity is being added
-	// to prevent pre-account takeover attacks from happening.
-	if terr = user.RemoveUnconfirmedIdentities(tx, identity); terr != nil {
-		return nil, internalServerError("Error updating user").WithInternalError(terr)
-	}
-
 	if !user.IsConfirmed() {
-		if !emailData.Verified && !config.Mailer.Autoconfirm {
-			mailer := a.Mailer(ctx)
-			referrer := utilities.GetReferrer(r, config)
-			externalURL := getExternalHost(ctx)
-			if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
-				if errors.Is(terr, MaxFrequencyLimitError) {
-					return nil, tooManyRequestsError("For security purposes, you can only request this once every minute")
-				}
-				return nil, internalServerError("Error sending confirmation mail").WithInternalError(terr)
-			}
-			// email must be verified to issue a token
-			return nil, errReturnNil
-		}
-
-		if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
-			"provider": providerType,
-		}); terr != nil {
-			return nil, terr
-		}
-		if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
-			return nil, terr
-		}
-
-		// fall through to auto-confirm and issue token
-		if terr = user.Confirm(tx); terr != nil {
+		// The user may have other unconfirmed email + password
+		// combination, phone or oauth identities. These identities
+		// need to be removed when a new oauth identity is being added
+		// to prevent pre-account takeover attacks from happening.
+		if terr = user.RemoveUnconfirmedIdentities(tx, identity); terr != nil {
 			return nil, internalServerError("Error updating user").WithInternalError(terr)
+		}
+		if emailData.Verified || config.Mailer.Autoconfirm {
+			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+				"provider": providerType,
+			}); terr != nil {
+				return nil, terr
+			}
+			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
+				return nil, terr
+			}
+
+			// fall through to auto-confirm and issue token
+			if terr = user.Confirm(tx); terr != nil {
+				return nil, internalServerError("Error updating user").WithInternalError(terr)
+			}
+		} else {
+			if user.Email != "" {
+				// an oauth identity with an unverified email will not have an email present
+				mailer := a.Mailer(ctx)
+				referrer := utilities.GetReferrer(r, config)
+				externalURL := getExternalHost(ctx)
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
+					if errors.Is(terr, MaxFrequencyLimitError) {
+						return nil, tooManyRequestsError("For security purposes, you can only request this once every minute")
+					}
+					return nil, internalServerError("Error sending confirmation mail").WithInternalError(terr)
+				}
+			}
+			if !config.Mailer.AllowUnverifiedEmailSignIns {
+				// email must be verified to issue a token
+				return nil, errReturnNil
+			}
 		}
 	} else {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
