@@ -7,9 +7,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
-	metricglobal "go.opentelemetry.io/otel/metric/global"
-	metricinstrument "go.opentelemetry.io/otel/metric/instrument"
-	otelasyncint64instrument "go.opentelemetry.io/otel/metric/instrument/asyncint64"
+	"go.opentelemetry.io/otel/metric"
+
 
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
@@ -27,7 +26,7 @@ type Cleanup struct {
 
 	// cleanupAffectedRows tracks an OpenTelemetry metric on the total number of
 	// cleaned up rows.
-	cleanupAffectedRows otelasyncint64instrument.Counter
+	cleanupAffectedRows metric.Int64ObservableCounter
 }
 
 func (c *Cleanup) Setup() {
@@ -70,9 +69,9 @@ func (c *Cleanup) Setup() {
 		c.cleanupStatements = append(c.cleanupStatements, fmt.Sprintf("delete from %q where id in (select %q.id as id from %q, %q where %q.session_id = %q.id and %q.refreshed_at is null and %q.revoked is false and %q.updated_at + interval '%d seconds' < now() - interval '24 hours' limit 100 for update skip locked)", tableSessions, tableSessions, tableSessions, tableRefreshTokens, tableRefreshTokens, tableSessions, tableSessions, tableRefreshTokens, tableRefreshTokens, inactivitySeconds))
 	}
 
-	cleanupAffectedRows, err := metricglobal.Meter("gotrue").AsyncInt64().Counter(
+	cleanupAffectedRows, err := meter.Meter("gotrue").NewInt64ObservableCounter(
 		"gotrue_cleanup_affected_rows",
-		metricinstrument.WithDescription("Number of affected rows from cleaning up stale entities"),
+		metric.WithDescription("Number of affected rows from cleaning up stale entities"),
 	)
 	if err != nil {
 		logrus.WithError(err).Error("unable to get gotrue.gotrue_cleanup_rows counter metric")

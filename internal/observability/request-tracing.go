@@ -6,12 +6,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/sirupsen/logrus"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
-	metricglobal "go.opentelemetry.io/otel/metric/global"
-	metricinstrument "go.opentelemetry.io/otel/metric/instrument"
-	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // traceChiRoutesSafely attempts to extract the Chi RouteContext. If the

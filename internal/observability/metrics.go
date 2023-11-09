@@ -11,27 +11,18 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/gotrue/internal/conf"
 
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
-	metricglobal "go.opentelemetry.io/otel/metric/global"
-	metricinstrument "go.opentelemetry.io/otel/metric/instrument"
-	basicmetriccontroller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-	exportmetricaggregation "go.opentelemetry.io/otel/sdk/metric/export/aggregation"
-	basicmetricprocessor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
-	simplemetricselector "go.opentelemetry.io/otel/sdk/metric/selector/simple"
 
 	otelruntimemetrics "go.opentelemetry.io/contrib/instrumentation/runtime"
 )
 
 func Meter(instrumentationName string, opts ...metric.MeterOption) metric.Meter {
-	return metricglobal.Meter(instrumentationName, opts...)
+	return metric.Meter(instrumentationName, opts...)
 }
 
-func ObtainMetricCounter(name, desc string) metricCounter {
-	counter, err := Meter("gotrue").SyncInt64().Counter(name, metricinstrument.WithDescription(desc))
+func ObtainMetricCounter(name, desc string) metric.metricCounter {
+	counter, err := Meter("gotrue").SyncInt64().Counter(name, metric.WithDescription(desc))
 	if err != nil {
 		panic(err)
 	}
