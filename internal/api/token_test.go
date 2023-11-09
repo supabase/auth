@@ -103,6 +103,7 @@ func (ts *TokenTestSuite) TestSessionInactivityTimeout() {
 	}
 
 	defer func() {
+		ts.API.config.Sessions.InactivityTimeout = nil
 		ts.API.overrideTime = nil
 	}()
 
