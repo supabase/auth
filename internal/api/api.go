@@ -79,13 +79,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	// request tracing should be added only when tracing or metrics is
 	// enabled
 	if globalConfig.Tracing.Enabled {
-		switch globalConfig.Tracing.Exporter {
-		case conf.OpenTracing:
-			r.UseBypass(opentracer)
-
-		default:
-			r.UseBypass(observability.RequestTracing())
-		}
+		r.UseBypass(observability.RequestTracing())
 	} else if globalConfig.Metrics.Enabled {
 		r.UseBypass(observability.RequestTracing())
 	}
