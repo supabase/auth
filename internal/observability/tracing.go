@@ -10,7 +10,6 @@ import (
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/utilities"
 
-
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
@@ -102,7 +101,6 @@ func enableOpenTelemetryTracing(ctx context.Context, tc *conf.TracingConfig) err
 	return nil
 }
 
-
 var (
 	tracingOnce sync.Once
 )
@@ -119,7 +117,7 @@ func ConfigureTracing(ctx context.Context, tc *conf.TracingConfig) error {
 
 	tracingOnce.Do(func() {
 		if tc.Enabled {
-			if tc.Exporter ==  conf.OpenTelemetryTracing {
+			if tc.Exporter == conf.OpenTelemetryTracing {
 				if err = enableOpenTelemetryTracing(ctx, tc); err != nil {
 					logrus.WithError(err).Error("unable to start OTLP trace exporter")
 				}
