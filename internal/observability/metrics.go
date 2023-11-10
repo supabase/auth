@@ -2,7 +2,7 @@ package observability
 
 import (
 	"context"
-	"fmt"
+	// "fmt"
 	"net"
 	"net/http"
 	"sync"
@@ -11,18 +11,25 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/gotrue/internal/conf"
 
-	"go.opentelemetry.io/otel/exporters/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
+
+	// otlpmetric "go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
+	// "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	// "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+
 	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 
 	otelruntimemetrics "go.opentelemetry.io/contrib/instrumentation/runtime"
 )
 
 func Meter(instrumentationName string, opts ...metric.MeterOption) metric.Meter {
-	return metric.Meter(instrumentationName, opts...)
+	return otel.Meter(instrumentationName, opts...)
 }
 
-func ObtainMetricCounter(name, desc string) metric.metricCounter {
-	counter, err := Meter("gotrue").SyncInt64().Counter(name, metric.WithDescription(desc))
+func ObtainMetricCounter(name, desc string) metric.Int64Counter {
+	counter, err := Meter("gotrue").Int64Counter(name, metric.WithDescription(desc))
 	if err != nil {
 		panic(err)
 	}
@@ -31,21 +38,21 @@ func ObtainMetricCounter(name, desc string) metric.metricCounter {
 }
 
 func enablePrometheusMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
-	controller := basicmetriccontroller.New(
-		basicmetricprocessor.NewFactory(
-			simplemetricselector.NewWithHistogramDistribution(),
-			exportmetricaggregation.CumulativeTemporalitySelector(),
-			basicmetricprocessor.WithMemory(true), // pushes all metrics, not only the collected ones
-		),
-		basicmetriccontroller.WithResource(openTelemetryResource()),
+
+	// TODO: Figure out how to adjsut for histogram settings and similar
+	controller := sdkmetric.NewMeterProvider(
+		sdkmetric.WithResource(openTelemetryResource()),
 	)
 
-	exporter, err := prometheus.New(prometheus.Config{}, controller)
-	if err != nil {
-		return err
-	}
+	// TODO: Figure out if this is accurate
+	// exporter, err := prometheus.New()
 
-	metricglobal.SetMeterProvider(exporter.MeterProvider())
+	// TODO: figure out how to reinstate settings	prometheus.Config{}, controller
+	// if err != nil {
+	// 	return err
+	// }
+
+	otel.SetMeterProvider(controller)
 
 	cleanupWaitGroup.Add(1)
 	go func() {
@@ -54,7 +61,7 @@ func enablePrometheusMetrics(ctx context.Context, mc *conf.MetricsConfig) error 
 
 		server := &http.Server{
 			Addr:    addr,
-			Handler: exporter,
+			Handler: promhttp.Handler(),
 			BaseContext: func(net.Listener) context.Context {
 				return baseContext
 			},
@@ -87,64 +94,56 @@ func enablePrometheusMetrics(ctx context.Context, mc *conf.MetricsConfig) error 
 	return nil
 }
 
-func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
-	var (
-		err            error
-		metricExporter *otlpmetric.Exporter
-	)
+// func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
+// 	var (
+// 		err            error
+// 		metricExporter *otlpmetric.Exporter
+// 	)
 
-	switch mc.ExporterProtocol {
-	case "grpc":
-		metricExporter, err = otlpmetricgrpc.New(ctx)
-		if err != nil {
-			return err
-		}
+// 	switch mc.ExporterProtocol {
+// 	case "grpc":
+// 		metricExporter, err = otlpmetricgrpc.New(ctx)
+// 		if err != nil {
+// 			return err
+// 		}
 
-	case "http/protobuf":
-		metricExporter, err = otlpmetrichttp.New(ctx)
-		if err != nil {
-			return err
-		}
+// 	case "http/protobuf":
+// 		metricExporter, err = otlpmetrichttp.New(ctx)
+// 		if err != nil {
+// 			return err
+// 		}
 
-	default: // http/json for example
-		return fmt.Errorf("unsupported OpenTelemetry exporter protocol %q", mc.ExporterProtocol)
-	}
+// 	default: // http/json for example
+// 		return fmt.Errorf("unsupported OpenTelemetry exporter protocol %q", mc.ExporterProtocol)
+// 	}
 
-	controller := basicmetriccontroller.New(
-		basicmetricprocessor.NewFactory(
-			simplemetricselector.NewWithHistogramDistribution(),
-			metricExporter,
-		),
-		basicmetriccontroller.WithExporter(metricExporter),
-		basicmetriccontroller.WithResource(openTelemetryResource()),
-	)
+// 	controller := sdkmetric.NewMeterProvider(
+// 		sdkmetric.WithReader(metricExporter),
+// 		sdkmetric.WithResource(openTelemetryResource()),
+// 	)
 
-	metricglobal.SetMeterProvider(controller)
+// 	otel.SetMeterProvider(controller)
 
-	cleanupWaitGroup.Add(1)
-	go func() {
-		defer cleanupWaitGroup.Done()
+// 	cleanupWaitGroup.Add(1)
+// 	go func() {
+// 		defer cleanupWaitGroup.Done()
 
-		<-ctx.Done()
+// 		<-ctx.Done()
 
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer shutdownCancel()
+// 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+// 		defer shutdownCancel()
 
-		if err := metricExporter.Shutdown(shutdownCtx); err != nil {
-			logrus.WithError(err).Error("unable to gracefully shut down OpenTelemetry metric exporter")
-		} else {
-			logrus.Info("OpenTelemetry metric exporter shut down")
-		}
-	}()
+// 		if err := metricExporter.Shutdown(shutdownCtx); err != nil {
+// 			logrus.WithError(err).Error("unable to gracefully shut down OpenTelemetry metric exporter")
+// 		} else {
+// 			logrus.Info("OpenTelemetry metric exporter shut down")
+// 		}
+// 	}()
 
-	if err := controller.Start(ctx); err != nil {
-		logrus.WithError(err).Error("unable to start pushing OpenTelemetry metrics")
-	} else {
-		logrus.Info("OpenTelemetry metrics exporter started")
-	}
+// 	logrus.Info("OpenTelemetry metrics exporter started")
 
-	return nil
-}
+// 	return nil
+// }
 
 var (
 	metricsOnce *sync.Once = &sync.Once{}
@@ -167,11 +166,11 @@ func ConfigureMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
 				}
 
 			case conf.OpenTelemetryMetrics:
-				if err = enableOpenTelemetryMetrics(ctx, mc); err != nil {
-					logrus.WithError(err).Error("unable to start OTLP metrics exporter")
+				//if err = enableOpenTelemetryMetrics(ctx, mc); err != nil {
+				logrus.WithError(err).Error("unable to start OTLP metrics exporter")
 
-					return
-				}
+				//	return
+				//}
 			}
 		}
 
@@ -181,26 +180,20 @@ func ConfigureMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
 			logrus.Info("Go runtime metrics collection started")
 		}
 
-		meter := metricglobal.Meter("gotrue")
-		running, err := meter.AsyncInt64().Gauge(
+		meter := Meter("gotrue")
+		_, err := meter.Int64ObservableGauge(
 			"gotrue_running",
-			metricinstrument.WithDescription("Whether GoTrue is running (always 1)"),
+			metric.WithDescription("Whether GoTrue is running (always 1)"),
+			metric.WithInt64Callback(func(_ context.Context, obsrv metric.Int64Observer) error {
+				obsrv.Observe(int64(1))
+				return nil
+			}),
 		)
 		if err != nil {
 			logrus.WithError(err).Error("unable to get gotrue.gotrue_running gague metric")
 			return
 		}
 
-		if err := meter.RegisterCallback(
-			[]metricinstrument.Asynchronous{
-				running,
-			},
-			func(ctx context.Context) {
-				running.Observe(ctx, 1)
-			},
-		); err != nil {
-			logrus.WithError(err).Error("unable to register gotrue.running gague metric")
-		}
 	})
 
 	return err

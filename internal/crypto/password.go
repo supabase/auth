@@ -6,6 +6,7 @@ import (
 
 	"github.com/supabase/gotrue/internal/observability"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -52,14 +53,14 @@ func CompareHashAndPassword(ctx context.Context, hash, password string) error {
 		attribute.Int("bcrypt_cost", hashCost),
 	}
 
-	compareHashAndPasswordSubmittedCounter.Add(ctx, 1, attributes...)
+	compareHashAndPasswordSubmittedCounter.Add(ctx, 1, metric.WithAttributes(attributes...))
 	defer func() {
 		attributes = append(attributes, attribute.Bool(
 			"match",
 			!errors.Is(err, bcrypt.ErrMismatchedHashAndPassword),
 		))
 
-		compareHashAndPasswordCompletedCounter.Add(ctx, 1, attributes...)
+		compareHashAndPasswordCompletedCounter.Add(ctx, 1, metric.WithAttributes(attributes...))
 	}()
 
 	err = bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
@@ -86,8 +87,8 @@ func GenerateFromPassword(ctx context.Context, password string) (string, error) 
 		attribute.Int("bcrypt_cost", hashCost),
 	}
 
-	generateFromPasswordSubmittedCounter.Add(ctx, 1, attributes...)
-	defer generateFromPasswordCompletedCounter.Add(ctx, 1, attributes...)
+	generateFromPasswordSubmittedCounter.Add(ctx, 1, metric.WithAttributes(attributes...))
+	defer generateFromPasswordCompletedCounter.Add(ctx, 1, metric.WithAttributes(attributes...))
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), hashCost)
 	if err != nil {

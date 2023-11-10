@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-
 
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
@@ -69,7 +69,7 @@ func (c *Cleanup) Setup() {
 		c.cleanupStatements = append(c.cleanupStatements, fmt.Sprintf("delete from %q where id in (select %q.id as id from %q, %q where %q.session_id = %q.id and %q.refreshed_at is null and %q.revoked is false and %q.updated_at + interval '%d seconds' < now() - interval '24 hours' limit 100 for update skip locked)", tableSessions, tableSessions, tableSessions, tableRefreshTokens, tableRefreshTokens, tableSessions, tableSessions, tableRefreshTokens, tableRefreshTokens, inactivitySeconds))
 	}
 
-	cleanupAffectedRows, err := meter.Meter("gotrue").NewInt64ObservableCounter(
+	cleanupAffectedRows, err := otel.Meter("gotrue").Int64ObservableCounter(
 		"gotrue_cleanup_affected_rows",
 		metric.WithDescription("Number of affected rows from cleaning up stale entities"),
 	)
@@ -109,9 +109,10 @@ func (c *Cleanup) Clean(db *storage.Connection) (int, error) {
 		return affectedRows, err
 	}
 
-	if c.cleanupAffectedRows != nil {
-		c.cleanupAffectedRows.Observe(ctx, int64(affectedRows))
-	}
+	// TODO: Do something about this
+	// if c.cleanupAffectedRows != nil {
+	// 	c.cleanupAffectedRows.Observe(ctx, int64(affectedRows))
+	// }
 
 	return affectedRows, nil
 }
