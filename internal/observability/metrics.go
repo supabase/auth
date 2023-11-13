@@ -2,7 +2,7 @@ package observability
 
 import (
 	"context"
-	// "fmt"
+	"fmt"
 	"net"
 	"net/http"
 	"sync"
@@ -15,9 +15,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 
-	// otlpmetric "go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
-	// "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	// "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -92,56 +91,58 @@ func enablePrometheusMetrics(ctx context.Context, mc *conf.MetricsConfig) error 
 	return nil
 }
 
-// func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
-// 	var (
-// 		err            error
-// 		metricExporter *otlpmetric.Exporter
-// 	)
+func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
+	var (
+		controller metric.MeterProvider
+	)
 
-// 	switch mc.ExporterProtocol {
-// 	case "grpc":
-// 		metricExporter, err = otlpmetricgrpc.New(ctx)
-// 		if err != nil {
-// 			return err
-// 		}
+	switch mc.ExporterProtocol {
+	case "grpc":
+		metricExporter, err := otlpmetricgrpc.New(ctx)
+		if err != nil {
+			return err
+		}
+		controller = sdkmetric.NewMeterProvider(
+			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
+			sdkmetric.WithResource(openTelemetryResource()),
+		)
 
-// 	case "http/protobuf":
-// 		metricExporter, err = otlpmetrichttp.New(ctx)
-// 		if err != nil {
-// 			return err
-// 		}
+	case "http/protobuf":
+		metricExporter, err := otlpmetrichttp.New(ctx)
+		if err != nil {
+			return err
+		}
+		controller = sdkmetric.NewMeterProvider(
+			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
+			sdkmetric.WithResource(openTelemetryResource()),
+		)
+	default: // http/json for example
+		return fmt.Errorf("unsupported OpenTelemetry exporter protocol %q", mc.ExporterProtocol)
+	}
 
-// 	default: // http/json for example
-// 		return fmt.Errorf("unsupported OpenTelemetry exporter protocol %q", mc.ExporterProtocol)
-// 	}
+	otel.SetMeterProvider(controller)
 
-// 	controller := sdkmetric.NewMeterProvider(
-// 		sdkmetric.WithReader(metricExporter),
-// 		sdkmetric.WithResource(openTelemetryResource()),
-// 	)
+	cleanupWaitGroup.Add(1)
+	go func() {
+		defer cleanupWaitGroup.Done()
 
-// 	otel.SetMeterProvider(controller)
+		<-ctx.Done()
 
-// 	cleanupWaitGroup.Add(1)
-// 	go func() {
-// 		defer cleanupWaitGroup.Done()
+		// TODO: Figure out how to properly shutdown
+		//shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		// defer shutdownCancel()
 
-// 		<-ctx.Done()
+		// if err := controller.Shutdown(shutdownCtx); err != nil {
+		// 	logrus.WithError(err).Error("unable to gracefully shut down OpenTelemetry metric exporter")
+		// } else {
+		// 	logrus.Info("OpenTelemetry metric exporter shut down")
+		// }
+	}()
 
-// 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-// 		defer shutdownCancel()
+	logrus.Info("OpenTelemetry metrics exporter started")
 
-// 		if err := metricExporter.Shutdown(shutdownCtx); err != nil {
-// 			logrus.WithError(err).Error("unable to gracefully shut down OpenTelemetry metric exporter")
-// 		} else {
-// 			logrus.Info("OpenTelemetry metric exporter shut down")
-// 		}
-// 	}()
-
-// 	logrus.Info("OpenTelemetry metrics exporter started")
-
-// 	return nil
-// }
+	return nil
+}
 
 var (
 	metricsOnce *sync.Once = &sync.Once{}
@@ -164,11 +165,10 @@ func ConfigureMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
 				}
 
 			case conf.OpenTelemetryMetrics:
-				//if err = enableOpenTelemetryMetrics(ctx, mc); err != nil {
-				logrus.WithError(err).Error("unable to start OTLP metrics exporter")
-
-				//	return
-				//}
+				if err = enableOpenTelemetryMetrics(ctx, mc); err != nil {
+					logrus.WithError(err).Error("unable to start OTLP metrics exporter")
+					return
+				}
 			}
 		}
 
