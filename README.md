@@ -311,8 +311,7 @@ To enable tracing configure these variables:
 
 `GOTRUE_TRACING_ENABLED` - `boolean`
 
-`GOTRUE_TRACING_EXPORTER` - `string` only `opentracing` (deprecated) and
-`opentelemetry` supported
+`GOTRUE_TRACING_EXPORTER` - `string` only `opentelemetry` supported
 
 Make sure you also configure the [OpenTelemetry
 Exporter](https://opentelemetry.io/docs/reference/specification/protocol/exporter/)

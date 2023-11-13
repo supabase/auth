@@ -54,7 +54,6 @@ require (
 require (
 	github.com/XSAM/otelsql v0.26.0
 	github.com/bombsimon/logrusr/v3 v3.0.0
-	github.com/opentracing/opentracing-go v1.1.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.45.0
 	go.opentelemetry.io/otel v1.19.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.19.0
@@ -64,7 +63,6 @@ require (
 	go.opentelemetry.io/otel/sdk v1.19.0
 	go.opentelemetry.io/otel/sdk/metric v1.19.0
 	go.opentelemetry.io/otel/trace v1.19.0
-	gopkg.in/DataDog/dd-trace-go.v1 v1.12.1
 	gopkg.in/h2non/gock.v1 v1.1.2
 )
 
@@ -77,10 +75,6 @@ require (
 	github.com/prometheus/client_golang v1.16.0
 	github.com/supabase/mailme v0.0.0-20230628061017-01f68480c747
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.45.0
-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric v0.42.0
-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v0.42.0
-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v0.42.0
-	go.opentelemetry.io/otel/exporters/prometheus v0.42.0
 )
 
 require (
@@ -122,7 +116,6 @@ require (
 	github.com/mattn/go-isatty v0.0.16 // indirect
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible // indirect
 	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
-	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/russellhaering/goxmldsig v1.3.0 // indirect
@@ -131,7 +124,6 @@ require (
 	github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
-	github.com/tinylib/msgp v1.1.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.0.0 // indirect
 	golang.org/x/exp v0.0.0-20230213192124-5e25df0256eb
 	golang.org/x/net v0.17.0 // indirect
