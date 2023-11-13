@@ -262,8 +262,6 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	aud := a.requestAud(ctx, r)
 	config := a.config
 
-	var terr error
-
 	var user *models.User
 	var identity *models.Identity
 	var identityData map[string]interface{}
@@ -271,19 +269,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		identityData = structs.Map(userData.Metadata)
 	}
 
-	var emailData provider.Email
-	var emails []string
-	// an oauth identity with an unverified email will not have an email present
-	for _, email := range userData.Emails {
-		if email.Verified || config.Mailer.Autoconfirm {
-			if email.Primary {
-				emailData = email
-			}
-			emails = append(emails, strings.ToLower(email.Email))
-		}
-	}
-
-	decision, terr := models.DetermineAccountLinking(tx, providerType, userData.Metadata.Subject, emails)
+	decision, terr := models.DetermineAccountLinking(tx, userData.Emails, aud, providerType, userData.Metadata.Subject)
 	if terr != nil {
 		return nil, terr
 	}
@@ -307,15 +293,17 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 
 		params := &SignupParams{
 			Provider: providerType,
-			Email:    emailData.Email,
+			Email:    decision.CandidateEmail.Email,
 			Aud:      aud,
 			Data:     identityData,
 		}
 
-		isSSOUser := strings.HasPrefix(providerType, "sso:")
+		isSSOUser := false
+		if decision.LinkingDomain == "sso" {
+			isSSOUser = true
+		}
 
-		user, terr = a.signupNewUser(ctx, tx, params, isSSOUser)
-		if terr != nil {
+		if user, terr = a.signupNewUser(ctx, tx, params, isSSOUser); terr != nil {
 			return nil, terr
 		}
 
@@ -357,7 +345,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		if terr = user.RemoveUnconfirmedIdentities(tx, identity); terr != nil {
 			return nil, internalServerError("Error updating user").WithInternalError(terr)
 		}
-		if emailData.Verified || config.Mailer.Autoconfirm {
+		if decision.CandidateEmail.Verified || config.Mailer.Autoconfirm {
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 				"provider": providerType,
 			}); terr != nil {
@@ -372,8 +360,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 				return nil, internalServerError("Error updating user").WithInternalError(terr)
 			}
 		} else {
-			if user.Email != "" {
-				// an oauth identity with an unverified email will not have an email present
+			if decision.CandidateEmail.Email != "" {
 				mailer := a.Mailer(ctx)
 				referrer := utilities.GetReferrer(r, config)
 				externalURL := getExternalHost(ctx)
