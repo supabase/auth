@@ -141,8 +141,7 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-// errReturnNil is a hack that signals internalExternalProviderCallback to return nil
-var errReturnNil = errors.New("createAccountFromExternalIdentity: return nil in internalExternalProviderCallback")
+var errEmailVerificationRequired = errors.New("email verification required")
 
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -196,10 +195,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			}
 		} else {
 			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
-				if errors.Is(terr, errReturnNil) {
-					return nil
-				}
-
 				return terr
 			}
 		}
@@ -218,11 +213,23 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		}
 		return nil
 	})
+
+	rurl := a.getExternalRedirectURL(r)
 	if err != nil {
+		if errors.Is(err, errEmailVerificationRequired) {
+			flowType := models.ImplicitFlow
+			if flowState != nil {
+				flowType = models.PKCEFlow
+			}
+			rurl, err = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType), w, r, rurl, flowType)
+			if err != nil {
+				return err
+			}
+			http.Redirect(w, r, rurl, http.StatusFound)
+		}
 		return err
 	}
 
-	rurl := a.getExternalRedirectURL(r)
 	if flowState != nil {
 		// This means that the callback is using PKCE
 		// Set the flowState.AuthCode to the query param here
@@ -243,12 +250,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 		if err := a.setCookieTokens(config, token, false, w); err != nil {
 			return internalServerError("Failed to set JWT cookie. %s", err)
-		}
-	} else {
-		// Left as hash fragment to comply with spec. Additionally, may override existing error query param if set to PKCE.
-		rurl, err = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v. A confirmation email has been sent to your %v email.", providerType, providerType), w, r, rurl, models.ImplicitFlow)
-		if err != nil {
-			return err
 		}
 	}
 
@@ -385,7 +386,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			}
 			if !config.Mailer.AllowUnverifiedEmailSignIns {
 				// email must be verified to issue a token
-				return nil, errReturnNil
+				return nil, errEmailVerificationRequired
 			}
 		}
 	} else {
