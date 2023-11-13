@@ -577,20 +577,27 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *U
 
 	userIDs := make(map[string]uuid.UUID)
 	for _, identity := range identities {
-		if !identity.IsForSSOProvider() {
-			if (currentUser != nil && currentUser.ID != identity.UserID) || (currentUser == nil) {
+		if _, ok := userIDs[identity.UserID.String()]; !ok {
+			if !identity.IsForSSOProvider() {
 				userIDs[identity.UserID.String()] = identity.UserID
 			}
 		}
 	}
 
+	var currentUserId uuid.UUID
+	if currentUser != nil {
+		currentUserId = currentUser.ID
+	}
+
 	for _, userID := range userIDs {
-		user, err := FindUserByID(tx, userID)
-		if err != nil {
-			return nil, errors.Wrap(err, "unable to find user from email identity for duplicates")
-		}
-		if user.Aud == aud {
-			return user, nil
+		if userID != currentUserId {
+			user, err := FindUserByID(tx, userID)
+			if err != nil {
+				return nil, errors.Wrap(err, "unable to find user from email identity for duplicates")
+			}
+			if user.Aud == aud {
+				return user, nil
+			}
 		}
 	}
 
