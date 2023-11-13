@@ -109,9 +109,9 @@ func (c *Cleanup) Clean(db *storage.Connection) (int, error) {
 		return affectedRows, err
 	}
 
-	// TODO: Do something about this
+	// TODO: Figure out how to properly observe/increment by number of affected rows
 	// if c.cleanupAffectedRows != nil {
-	// 	c.cleanupAffectedRows.Observe(ctx, int64(affectedRows))
+	// 	c.cleanupAffectedRows.RegisterCallback(ctx, int64(affectedRows))
 	// }
 
 	return affectedRows, nil

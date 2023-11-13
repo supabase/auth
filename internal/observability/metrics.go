@@ -13,6 +13,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/prometheus"
 
 	// otlpmetric "go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
 	// "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -39,18 +40,15 @@ func ObtainMetricCounter(name, desc string) metric.Int64Counter {
 
 func enablePrometheusMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
 
-	// TODO: Figure out how to adjsut for histogram settings and similar
+	// TODO: Reinstate histogram and figure oout what to watch for
+	exporter, err := prometheus.New()
+	if err != nil {
+		return err
+	}
 	controller := sdkmetric.NewMeterProvider(
 		sdkmetric.WithResource(openTelemetryResource()),
+		sdkmetric.WithReader(exporter),
 	)
-
-	// TODO: Figure out if this is accurate
-	// exporter, err := prometheus.New()
-
-	// TODO: figure out how to reinstate settings	prometheus.Config{}, controller
-	// if err != nil {
-	// 	return err
-	// }
 
 	otel.SetMeterProvider(controller)
 
