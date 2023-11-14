@@ -71,6 +71,9 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 			return AccountLinkingResult{}, terr
 		}
 
+		// we overwrite the email with the existing user's email since the user
+		// could have an empty empty
+		candidateEmail.Email = user.GetEmail()
 		return AccountLinkingResult{
 			Decision:       AccountExists,
 			User:           user,
