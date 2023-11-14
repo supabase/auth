@@ -1,7 +1,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -74,20 +73,19 @@ func (ts *OpenTelemetryTracerTestSuite) TestOpenTelemetryTracer_Spans() {
 
 	if assert.Equal(ts.T(), 2, len(spans)) {
 		attributes1 := spans[0].Attributes()
-		fmt.Println(attributes1)
 		method1 := getAttribute(attributes1, semconv.HTTPMethodKey)
 		assert.Equal(ts.T(), "POST", method1.AsString())
 		// url1 := getAttribute(attributes1, semconv.HTTPTargetKey)
 		// assert.Equal(ts.T(), "http://localhost/something1", url1.AsString())
-		// 	statusCode1 := getAttribute(attributes1, semconv.HTTPStatusCodeKey)
-		// 	assert.Equal(ts.T(), int64(404), statusCode1.AsInt64())
+		statusCode1 := getAttribute(attributes1, semconv.HTTPStatusCodeKey)
+		assert.Equal(ts.T(), int64(404), statusCode1.AsInt64())
 
-		// 	// attributes2 := spans[1].Attributes()
-		// 	// method2 := getAttribute(attributes2, semconv.HTTPMethodKey)
-		// 	// assert.Equal(ts.T(), "GET", method2.AsString())
-		// 	// url2 := getAttribute(attributes2, semconv.HTTPTargetKey)
-		// 	// assert.Equal(ts.T(), "http://localhost/something2", url2.AsString())
-		// 	// statusCode2 := getAttribute(attributes2, semconv.HTTPStatusCodeKey)
-		// 	// assert.Equal(ts.T(), int64(404), statusCode2.AsInt64())
+		attributes2 := spans[1].Attributes()
+		method2 := getAttribute(attributes2, semconv.HTTPMethodKey)
+		assert.Equal(ts.T(), "GET", method2.AsString())
+		// url2 := getAttribute(attributes2, semconv.HTTPTargetKey)
+		// assert.Equal(ts.T(), "http://localhost/something2", url2.AsString())
+		statusCode2 := getAttribute(attributes2, semconv.HTTPStatusCodeKey)
+		assert.Equal(ts.T(), int64(404), statusCode2.AsInt64())
 	}
 }
