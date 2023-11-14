@@ -14,7 +14,8 @@ import (
 type AccountLinkingTestSuite struct {
 	suite.Suite
 
-	db *storage.Connection
+	config *conf.GlobalConfiguration
+	db     *storage.Connection
 }
 
 func (ts *AccountLinkingTestSuite) SetupTest() {
@@ -29,7 +30,8 @@ func TestAccountLinking(t *testing.T) {
 	require.NoError(t, err)
 
 	ts := &AccountLinkingTestSuite{
-		db: conn,
+		config: globalConfig,
+		db:     conn,
 	}
 	defer ts.db.Close()
 
@@ -43,13 +45,13 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionNoAccounts() {
 		Verified: true,
 		Primary:  true,
 	}
-	decision, err := DetermineAccountLinking(ts.db, []provider.Email{testEmail}, "", "provider", "abcdefgh")
+	decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{testEmail}, ts.config.JWT.Aud, "provider", "abcdefgh")
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, CreateAccount)
 
 	// when there are no accounts in the system -- SSO provider
-	decision, err = DetermineAccountLinking(ts.db, []provider.Email{testEmail}, "", "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387", "abcdefgh")
+	decision, err = DetermineAccountLinking(ts.db, ts.config, []provider.Email{testEmail}, ts.config.JWT.Aud, "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387", "abcdefgh")
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, CreateAccount)
@@ -78,25 +80,25 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionWithAccounts() {
 	require.NoError(ts.T(), ts.db.Create(identityB))
 
 	// when the email doesn't exist in the system -- conventional provider
-	decision, err := DetermineAccountLinking(ts.db, []provider.Email{
+	decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{
 		provider.Email{
 			Email:    "other@example.com",
 			Verified: true,
 			Primary:  true,
 		},
-	}, "authenticated", "provider", "abcdefgh")
+	}, ts.config.JWT.Aud, "provider", "abcdefgh")
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, CreateAccount)
 
 	// when looking for an email that doesn't exist in the SSO linking domain
-	decision, err = DetermineAccountLinking(ts.db, []provider.Email{
+	decision, err = DetermineAccountLinking(ts.db, ts.config, []provider.Email{
 		provider.Email{
 			Email:    "other@samltest.id",
 			Verified: true,
 			Primary:  true,
 		},
-	}, "authenticated", "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387", "abcdefgh")
+	}, ts.config.JWT.Aud, "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387", "abcdefgh")
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, CreateAccount)
@@ -113,13 +115,13 @@ func (ts *AccountLinkingTestSuite) TestAccountExists() {
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(identityA))
 
-	decision, err := DetermineAccountLinking(ts.db, []provider.Email{
+	decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{
 		provider.Email{
 			Email:    "test@example.com",
 			Verified: true,
 			Primary:  true,
 		},
-	}, "authenticated", "provider", userA.ID.String())
+	}, ts.config.JWT.Aud, "provider", userA.ID.String())
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, AccountExists)
@@ -260,7 +262,7 @@ func (ts *AccountLinkingTestSuite) TestLinkingScenarios() {
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			decision, err := DetermineAccountLinking(ts.db, []provider.Email{c.email}, "authenticated", c.provider, c.sub)
+			decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{c.email}, ts.config.JWT.Aud, c.provider, c.sub)
 			require.NoError(ts.T(), err)
 			require.Equal(ts.T(), c.decision.Decision, decision.Decision)
 			require.Equal(ts.T(), c.decision.LinkingDomain, decision.LinkingDomain)
@@ -296,13 +298,13 @@ func (ts *AccountLinkingTestSuite) TestMultipleAccounts() {
 	// decision is multiple accounts because there are two distinct
 	// identities in the same "default" linking domain with the same email
 	// address pointing to two different user accounts
-	decision, err := DetermineAccountLinking(ts.db, []provider.Email{
+	decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{
 		provider.Email{
 			Email:    "test@example.com",
 			Verified: true,
 			Primary:  true,
 		},
-	}, "authenticated", "provider", "abcdefgh")
+	}, ts.config.JWT.Aud, "provider", "abcdefgh")
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, MultipleAccounts)

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	p "github.com/supabase/gotrue/internal/api/provider"
+	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/storage"
 )
 
@@ -49,11 +50,11 @@ type AccountLinkingResult struct {
 // - It's not possible to decide due to data inconsistency (MultipleAccounts) and the caller should decide
 //
 // Errors signal failure in processing only, like database access errors.
-func DetermineAccountLinking(tx *storage.Connection, emails []p.Email, aud, provider, sub string) (AccountLinkingResult, error) {
+func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfiguration, emails []p.Email, aud, provider, sub string) (AccountLinkingResult, error) {
 	var verifiedEmails []string
 	var candidateEmail p.Email
 	for _, email := range emails {
-		if email.Verified {
+		if email.Verified || config.Mailer.Autoconfirm {
 			verifiedEmails = append(verifiedEmails, strings.ToLower(email.Email))
 		}
 		if email.Primary {

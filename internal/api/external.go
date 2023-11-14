@@ -142,6 +142,7 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 }
 
 var errEmailVerificationRequired = errors.New("email verification required")
+var errEmailConfirmationSent = errors.New("email confirmation sent")
 
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -216,12 +217,19 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	rurl := a.getExternalRedirectURL(r)
 	if err != nil {
+		msg := ""
 		if errors.Is(err, errEmailVerificationRequired) {
+			msg = fmt.Sprintf("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType)
+		} else if errors.Is(err, errEmailConfirmationSent) {
+			msg = fmt.Sprintf("Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType)
+		}
+
+		if errors.Is(err, errEmailVerificationRequired) || errors.Is(err, errEmailConfirmationSent) {
 			flowType := models.ImplicitFlow
 			if flowState != nil {
 				flowType = models.PKCEFlow
 			}
-			rurl, err = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType), w, r, rurl, flowType)
+			rurl, err = a.prepErrorRedirectURL(unauthorizedError(msg), w, r, rurl, flowType)
 			if err != nil {
 				return err
 			}
@@ -269,7 +277,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		identityData = structs.Map(userData.Metadata)
 	}
 
-	decision, terr := models.DetermineAccountLinking(tx, userData.Emails, aud, providerType, userData.Metadata.Subject)
+	decision, terr := models.DetermineAccountLinking(tx, config, userData.Emails, aud, providerType, userData.Metadata.Subject)
 	if terr != nil {
 		return nil, terr
 	}
@@ -360,6 +368,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 				return nil, internalServerError("Error updating user").WithInternalError(terr)
 			}
 		} else {
+			emailConfirmationSent := false
 			if decision.CandidateEmail.Email != "" {
 				mailer := a.Mailer(ctx)
 				referrer := utilities.GetReferrer(r, config)
@@ -370,8 +379,12 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 					}
 					return nil, internalServerError("Error sending confirmation mail").WithInternalError(terr)
 				}
+				emailConfirmationSent = true
 			}
 			if !config.Mailer.AllowUnverifiedEmailSignIns {
+				if emailConfirmationSent {
+					return nil, errEmailConfirmationSent
+				}
 				// email must be verified to issue a token
 				return nil, errEmailVerificationRequired
 			}

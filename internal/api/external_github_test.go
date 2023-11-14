@@ -280,7 +280,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenVerifiedFalse() {
 	ts.Require().NoError(err)
 	ts.Equal("unauthorized_client", v.Get("error"))
 	ts.Equal("401", v.Get("error_code"))
-	ts.Equal("Unverified email with github. A confirmation email has been sent to your github email.", v.Get("error_description"))
+	ts.Equal("Unverified email with github. A confirmation email has been sent to your github email", v.Get("error_description"))
 	assertAuthorizationFailure(ts, u, "", "", "")
 }
 
