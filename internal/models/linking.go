@@ -3,7 +3,7 @@ package models
 import (
 	"strings"
 
-	p "github.com/supabase/gotrue/internal/api/provider"
+	"github.com/supabase/gotrue/internal/api/provider"
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/storage"
 )
@@ -40,7 +40,7 @@ type AccountLinkingResult struct {
 	User           *User
 	Identities     []*Identity
 	LinkingDomain  string
-	CandidateEmail p.Email
+	CandidateEmail provider.Email
 }
 
 // DetermineAccountLinking uses the provided data and database state to compute a decision on whether:
@@ -50,9 +50,9 @@ type AccountLinkingResult struct {
 // - It's not possible to decide due to data inconsistency (MultipleAccounts) and the caller should decide
 //
 // Errors signal failure in processing only, like database access errors.
-func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfiguration, emails []p.Email, aud, provider, sub string) (AccountLinkingResult, error) {
+func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfiguration, emails []provider.Email, aud, providerName, sub string) (AccountLinkingResult, error) {
 	var verifiedEmails []string
-	var candidateEmail p.Email
+	var candidateEmail provider.Email
 	for _, email := range emails {
 		if email.Verified || config.Mailer.Autoconfirm {
 			verifiedEmails = append(verifiedEmails, strings.ToLower(email.Email))
@@ -63,7 +63,7 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 		}
 	}
 
-	if identity, terr := FindIdentityByIdAndProvider(tx, sub, provider); terr == nil {
+	if identity, terr := FindIdentityByIdAndProvider(tx, sub, providerName); terr == nil {
 		// account exists
 
 		var user *User
@@ -78,7 +78,7 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 			Decision:       AccountExists,
 			User:           user,
 			Identities:     []*Identity{identity},
-			LinkingDomain:  GetAccountLinkingDomain(provider),
+			LinkingDomain:  GetAccountLinkingDomain(providerName),
 			CandidateEmail: candidateEmail,
 		}, nil
 	} else if !IsNotFoundError(terr) {
@@ -89,7 +89,7 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 	// or link to an existing one
 
 	// this is the linking domain for the new identity
-	candidateLinkingDomain := GetAccountLinkingDomain(provider)
+	candidateLinkingDomain := GetAccountLinkingDomain(providerName)
 	if len(verifiedEmails) == 0 {
 		// if there are no verified emails, we always decide to create a new account
 		user, terr := IsDuplicatedEmail(tx, candidateEmail.Email, aud, nil)
@@ -113,7 +113,7 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 		return AccountLinkingResult{}, terr
 	}
 
-	if !strings.HasPrefix(provider, "sso:") {
+	if !strings.HasPrefix(providerName, "sso:") {
 		// there can be multiple user accounts with the same email when is_sso_user is true
 		// so we just do not consider those similar user accounts
 		if terr := tx.Q().Eager().Where("email ilike any (?) and is_sso_user is false", verifiedEmails).All(&similarUsers); terr != nil {
