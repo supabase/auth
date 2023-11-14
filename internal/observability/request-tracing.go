@@ -79,10 +79,6 @@ func (w *interceptingResponseWriter) Header() http.Header {
 	return w.writer.Header()
 }
 
-// type metricCounter interface {
-// 	Add(ctx context.Context, incr int64, attrs ...attribute.KeyValue)
-// }
-
 // countStatusCodesSafely counts the number of HTTP status codes per route that
 // occurred while GoTrue was running. If it is not able to identify the route
 // via chi.RouteContext(ctx).RoutePattern() it counts with a noroute attribute.

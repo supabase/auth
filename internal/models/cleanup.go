@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -108,11 +109,15 @@ func (c *Cleanup) Clean(db *storage.Connection) (int, error) {
 	}); err != nil {
 		return affectedRows, err
 	}
-
-	// TODO: Figure out how to properly observe/increment by number of affected rows
-	// if c.cleanupAffectedRows != nil {
-	// 	c.cleanupAffectedRows.RegisterCallback(ctx, int64(affectedRows))
-	// }
+	if c.cleanupAffectedRows != nil {
+		_, err := otel.Meter("gotrue").RegisterCallback(func(ctx context.Context, obsrv metric.Observer) error {
+			obsrv.ObserveInt64(c.cleanupAffectedRows, int64(affectedRows))
+			return nil
+		}, c.cleanupAffectedRows)
+		if err != nil {
+			logrus.Info("error incrementing cleanup rows metric")
+		}
+	}
 
 	return affectedRows, nil
 }

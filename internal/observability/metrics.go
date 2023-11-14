@@ -106,6 +106,24 @@ func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) err
 			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
 			sdkmetric.WithResource(openTelemetryResource()),
 		)
+		otel.SetMeterProvider(controller)
+
+		// Duplication of shutdown as there's no generic exporter type for both HTTP and gRPC
+		cleanupWaitGroup.Add(1)
+		go func() {
+			defer cleanupWaitGroup.Done()
+
+			<-ctx.Done()
+
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+
+			if err := metricExporter.Shutdown(shutdownCtx); err != nil {
+				logrus.WithError(err).Error("unable to gracefully shut down OpenTelemetry metric exporter")
+			} else {
+				logrus.Info("OpenTelemetry metric exporter shut down")
+			}
+		}()
 
 	case "http/protobuf":
 		metricExporter, err := otlpmetrichttp.New(ctx)
@@ -116,28 +134,26 @@ func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) err
 			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
 			sdkmetric.WithResource(openTelemetryResource()),
 		)
+		otel.SetMeterProvider(controller)
+
+		cleanupWaitGroup.Add(1)
+		go func() {
+			defer cleanupWaitGroup.Done()
+
+			<-ctx.Done()
+
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+
+			if err := metricExporter.Shutdown(shutdownCtx); err != nil {
+				logrus.WithError(err).Error("unable to gracefully shut down OpenTelemetry metric exporter")
+			} else {
+				logrus.Info("OpenTelemetry metric exporter shut down")
+			}
+		}()
 	default: // http/json for example
 		return fmt.Errorf("unsupported OpenTelemetry exporter protocol %q", mc.ExporterProtocol)
 	}
-
-	otel.SetMeterProvider(controller)
-
-	cleanupWaitGroup.Add(1)
-	go func() {
-		defer cleanupWaitGroup.Done()
-
-		<-ctx.Done()
-
-		// TODO: Figure out how to properly shutdown
-		//shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		// defer shutdownCancel()
-
-		// if err := controller.Shutdown(shutdownCtx); err != nil {
-		// 	logrus.WithError(err).Error("unable to gracefully shut down OpenTelemetry metric exporter")
-		// } else {
-		// 	logrus.Info("OpenTelemetry metric exporter shut down")
-		// }
-	}()
 
 	logrus.Info("OpenTelemetry metrics exporter started")
 
