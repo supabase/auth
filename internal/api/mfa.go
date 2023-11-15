@@ -33,10 +33,10 @@ type TOTPObject struct {
 }
 
 type EnrollFactorResponse struct {
-	ID   uuid.UUID  `json:"id"`
-	Type string     `json:"type"`
-	FriendlyName string `json:"friendly_name"`
-	TOTP TOTPObject `json:"totp,omitempty"`
+	ID           uuid.UUID  `json:"id"`
+	Type         string     `json:"type"`
+	FriendlyName string     `json:"friendly_name"`
+	TOTP         TOTPObject `json:"totp,omitempty"`
 }
 
 type VerifyFactorParams struct {
@@ -150,8 +150,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
-		ID:   factor.ID,
-		Type: models.TOTP,
+		ID:           factor.ID,
+		Type:         models.TOTP,
 		FriendlyName: factor.FriendlyName,
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/

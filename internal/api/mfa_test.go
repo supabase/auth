@@ -147,7 +147,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 				qrCode := enrollResp.TOTP.QRCode
 				hasSVGStartAndEnd := strings.Contains(qrCode, "<svg") && strings.Contains(qrCode, "</svg>")
 				require.True(ts.T(), hasSVGStartAndEnd)
-				require.Equal(ts.T(),c.friendlyName, enrollResp.FriendlyName)
+				require.Equal(ts.T(), c.friendlyName, enrollResp.FriendlyName)
 			}
 		})
 	}
