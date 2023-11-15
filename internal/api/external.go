@@ -187,6 +187,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	var user *models.User
 	var token *AccessTokenResponse
+	var errEmailVerificationRequiredOrConfirmationSent error
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		inviteToken := getInviteToken(ctx)
@@ -196,6 +197,12 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			}
 		} else {
 			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
+				if errors.Is(terr, errEmailVerificationRequired) || errors.Is(terr, errEmailConfirmationSent) {
+					// we don't want the transaction to be rolled back because the user is created
+					// but not returned as further action is necessary
+					errEmailVerificationRequiredOrConfirmationSent = terr
+					return nil
+				}
 				return terr
 			}
 		}
@@ -217,25 +224,25 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	rurl := a.getExternalRedirectURL(r)
 	if err != nil {
-		msg := ""
-		if errors.Is(err, errEmailVerificationRequired) {
-			msg = fmt.Sprintf("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType)
-		} else if errors.Is(err, errEmailConfirmationSent) {
-			msg = fmt.Sprintf("Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType)
-		}
-
-		if errors.Is(err, errEmailVerificationRequired) || errors.Is(err, errEmailConfirmationSent) {
-			flowType := models.ImplicitFlow
-			if flowState != nil {
-				flowType = models.PKCEFlow
-			}
-			rurl, err = a.prepErrorRedirectURL(unauthorizedError(msg), w, r, rurl, flowType)
-			if err != nil {
-				return err
-			}
-			http.Redirect(w, r, rurl, http.StatusFound)
-		}
 		return err
+	}
+
+	if errEmailVerificationRequiredOrConfirmationSent != nil {
+		flowType := models.ImplicitFlow
+		if flowState != nil {
+			flowType = models.PKCEFlow
+		}
+		msg := fmt.Sprintf("Unverified email with %v.", providerType)
+		if errors.Is(errEmailVerificationRequiredOrConfirmationSent, errEmailVerificationRequired) {
+			msg += fmt.Sprintf("Verify the email with %v in order to sign in", providerType)
+		} else if errors.Is(errEmailVerificationRequiredOrConfirmationSent, errEmailConfirmationSent) {
+			msg += fmt.Sprintf("A confirmation email has been sent to your %v email", providerType)
+		}
+		rurl, err = a.prepErrorRedirectURL(unauthorizedError(msg), w, r, rurl, flowType)
+		if err != nil {
+			return err
+		}
+		http.Redirect(w, r, rurl, http.StatusFound)
 	}
 
 	if flowState != nil {
@@ -385,7 +392,6 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 				if emailConfirmationSent {
 					return nil, errEmailConfirmationSent
 				}
-				// email must be verified to issue a token
 				return nil, errEmailVerificationRequired
 			}
 		}
