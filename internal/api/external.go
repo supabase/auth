@@ -232,7 +232,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if flowState != nil {
 			flowType = models.PKCEFlow
 		}
-		msg := fmt.Sprintf("Unverified email with %v.", providerType)
+		msg := fmt.Sprintf("Unverified email with %v. ", providerType)
 		if errors.Is(errEmailVerificationRequiredOrConfirmationSent, errEmailVerificationRequired) {
 			msg += fmt.Sprintf("Verify the email with %v in order to sign in", providerType)
 		} else if errors.Is(errEmailVerificationRequiredOrConfirmationSent, errEmailConfirmationSent) {
