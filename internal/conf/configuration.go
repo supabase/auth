@@ -114,6 +114,9 @@ func (a *APIConfiguration) Validate() error {
 type SessionsConfiguration struct {
 	Timebox           *time.Duration `json:"timebox"`
 	InactivityTimeout *time.Duration `json:"inactivity_timeout,omitempty" split_words:"true"`
+
+	SinglePerUser bool     `json:"single_per_user" split_words:"true"`
+	Tags          []string `json:"tags,omitempty"`
 }
 
 func (c *SessionsConfiguration) Validate() error {

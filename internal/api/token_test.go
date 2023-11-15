@@ -70,6 +70,7 @@ func (ts *TokenTestSuite) TestSessionTimebox() {
 
 	defer func() {
 		ts.API.overrideTime = nil
+		ts.API.config.Sessions.Timebox = nil
 	}()
 
 	var buffer bytes.Buffer
@@ -174,6 +175,48 @@ func (ts *TokenTestSuite) TestFailedToSaveRefreshTokenResultCase() {
 	// new refresh token is not being issued but the active one from
 	// the first refresh that failed to save is stored
 	assert.Equal(ts.T(), firstResult.RefreshToken, secondResult.RefreshToken)
+}
+
+func (ts *TokenTestSuite) TestSingleSessionPerUserNoTags() {
+	ts.API.config.Sessions.SinglePerUser = true
+	defer func() {
+		ts.API.config.Sessions.SinglePerUser = false
+	}()
+
+	firstRefreshToken := ts.RefreshToken
+
+	// just in case to give some delay between first and second session creation
+	time.Sleep(10 * time.Millisecond)
+
+	secondRefreshToken, err := models.GrantAuthenticatedUser(ts.API.db, ts.User, models.GrantParams{})
+
+	require.NoError(ts.T(), err)
+
+	require.NotEqual(ts.T(), *firstRefreshToken.SessionId, *secondRefreshToken.SessionId)
+	require.Equal(ts.T(), firstRefreshToken.UserID, secondRefreshToken.UserID)
+
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"refresh_token": firstRefreshToken.Token,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+	assert.True(ts.T(), ts.API.config.Sessions.SinglePerUser)
+
+	var firstResult struct {
+		Error            string `json:"error"`
+		ErrorDescription string `json:"error_description"`
+	}
+
+	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
+	assert.Equal(ts.T(), "invalid_grant", firstResult.Error)
+	assert.Equal(ts.T(), "Invalid Refresh Token: Session Expired (Revoked by Newer Login)", firstResult.ErrorDescription)
 }
 
 func (ts *TokenTestSuite) TestRateLimitTokenRefresh() {
