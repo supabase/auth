@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -201,10 +200,6 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 		user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType)
 		if terr != nil {
-			if errors.Is(terr, errEmailVerificationRequired) {
-				return nil
-			}
-
 			return terr
 		}
 
@@ -215,7 +210,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 		return nil
 	}); err != nil {
-		return oauthError("server_error", "Internal Server Error").WithInternalError(err)
+		switch err.(type) {
+		case *storage.CommitWithError:
+			return err
+		default:
+			return oauthError("server_error", "Internal Server Error").WithInternalError(err)
+		}
 	}
 
 	return sendJSON(w, http.StatusOK, token)

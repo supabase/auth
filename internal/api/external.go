@@ -141,9 +141,6 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-var errEmailVerificationRequired = errors.New("email verification required")
-var errEmailConfirmationSent = errors.New("email confirmation sent")
-
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -187,7 +184,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	var user *models.User
 	var token *AccessTokenResponse
-	var errEmailVerificationRequiredOrConfirmationSent error
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		inviteToken := getInviteToken(ctx)
@@ -197,12 +193,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			}
 		} else {
 			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
-				if errors.Is(terr, errEmailVerificationRequired) || errors.Is(terr, errEmailConfirmationSent) {
-					// we don't want the transaction to be rolled back because the user is created
-					// but not returned as further action is necessary
-					errEmailVerificationRequiredOrConfirmationSent = terr
-					return nil
-				}
 				return terr
 			}
 		}
@@ -222,29 +212,11 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		return nil
 	})
 
-	rurl := a.getExternalRedirectURL(r)
 	if err != nil {
 		return err
 	}
 
-	if errEmailVerificationRequiredOrConfirmationSent != nil {
-		flowType := models.ImplicitFlow
-		if flowState != nil {
-			flowType = models.PKCEFlow
-		}
-		msg := fmt.Sprintf("Unverified email with %v. ", providerType)
-		if errors.Is(errEmailVerificationRequiredOrConfirmationSent, errEmailVerificationRequired) {
-			msg += fmt.Sprintf("Verify the email with %v in order to sign in", providerType)
-		} else if errors.Is(errEmailVerificationRequiredOrConfirmationSent, errEmailConfirmationSent) {
-			msg += fmt.Sprintf("A confirmation email has been sent to your %v email", providerType)
-		}
-		rurl, err = a.prepErrorRedirectURL(unauthorizedError(msg), w, r, rurl, flowType)
-		if err != nil {
-			return err
-		}
-		http.Redirect(w, r, rurl, http.StatusFound)
-	}
-
+	rurl := a.getExternalRedirectURL(r)
 	if flowState != nil {
 		// This means that the callback is using PKCE
 		// Set the flowState.AuthCode to the query param here
@@ -390,9 +362,9 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			}
 			if !config.Mailer.AllowUnverifiedEmailSignIns {
 				if emailConfirmationSent {
-					return nil, errEmailConfirmationSent
+					return nil, storage.NewCommitWithError(unauthorizedError(fmt.Sprintf("Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType)))
 				}
-				return nil, errEmailVerificationRequired
+				return nil, storage.NewCommitWithError(unauthorizedError(fmt.Sprintf("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType)))
 			}
 		}
 	} else {
