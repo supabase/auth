@@ -276,12 +276,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenVerifiedFalse() {
 
 	u := performAuthorization(ts, "github", code, "")
 
-	v, err := url.ParseQuery(u.Fragment)
-	ts.Require().NoError(err)
-	ts.Equal("unauthorized_client", v.Get("error"))
-	ts.Equal("401", v.Get("error_code"))
-	ts.Equal("Unverified email with github. A confirmation email has been sent to your github email", v.Get("error_description"))
-	assertAuthorizationFailure(ts, u, "", "", "")
+	assertAuthorizationFailure(ts, u, "Unverified email with github. A confirmation email has been sent to your github email", "unauthorized_client", "")
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenUserBanned() {
