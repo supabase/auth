@@ -134,7 +134,7 @@ func NewCommitWithError(err error) *CommitWithError {
 func (c *Connection) Transaction(fn func(*Connection) error) error {
 	if c.TX == nil {
 		var returnErr error
-		terr := c.Connection.Transaction(func(tx *pop.Connection) error {
+		if terr := c.Connection.Transaction(func(tx *pop.Connection) error {
 			err := fn(&Connection{tx})
 			switch err.(type) {
 			case *CommitWithError:
@@ -143,8 +143,7 @@ func (c *Connection) Transaction(fn func(*Connection) error) error {
 			default:
 				return err
 			}
-		})
-		if terr != nil {
+		}); terr != nil {
 			return terr
 		}
 		return returnErr
