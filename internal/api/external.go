@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -535,6 +536,19 @@ func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.
 	if err != nil {
 		q := getErrorQueryString(err, errorID, log, u.Query())
 		u.RawQuery = q.Encode()
+
+		// TODO: deprecate returning error details in the query fragment
+		hq := url.Values{}
+		if q.Get("error") != "" {
+			hq.Set("error", q.Get("error"))
+		}
+		if q.Get("error_description") != "" {
+			hq.Set("error_description", q.Get("error_description"))
+		}
+		if q.Get("error_code") != "" {
+			hq.Set("error_code", q.Get("error_code"))
+		}
+		u.Fragment = hq.Encode()
 		http.Redirect(w, r, u.String(), http.StatusFound)
 	}
 }
@@ -555,6 +569,7 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger, q ur
 			log.WithError(e.Cause()).Info(e.Error())
 		}
 		q.Set("error_description", e.Message)
+		q.Set("error_code", strconv.Itoa(e.Code))
 	case *OAuthError:
 		q.Set("error", e.Err)
 		q.Set("error_description", e.Description)
