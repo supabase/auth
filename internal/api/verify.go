@@ -415,8 +415,10 @@ func (a *API) prepErrorRedirectURL(err *HTTPError, w http.ResponseWriter, r *htt
 	q.Set("error_code", strconv.Itoa(err.Code))
 	q.Set("error_description", err.Message)
 	if flowType == models.PKCEFlow {
+		// Additionally, may override existing error query param if set to PKCE.
 		u.RawQuery = q.Encode()
 	}
+	// Left as hash fragment to comply with spec.
 	u.Fragment = hq.Encode()
 	return u.String(), nil
 }

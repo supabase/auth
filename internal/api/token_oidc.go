@@ -201,7 +201,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 		user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType)
 		if terr != nil {
-			if errors.Is(terr, errReturnNil) {
+			if errors.Is(terr, errEmailVerificationRequired) {
 				return nil
 			}
 

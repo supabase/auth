@@ -577,20 +577,27 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *U
 
 	userIDs := make(map[string]uuid.UUID)
 	for _, identity := range identities {
-		if !identity.IsForSSOProvider() {
-			if (currentUser != nil && currentUser.ID != identity.UserID) || (currentUser == nil) {
+		if _, ok := userIDs[identity.UserID.String()]; !ok {
+			if !identity.IsForSSOProvider() {
 				userIDs[identity.UserID.String()] = identity.UserID
 			}
 		}
 	}
 
+	var currentUserId uuid.UUID
+	if currentUser != nil {
+		currentUserId = currentUser.ID
+	}
+
 	for _, userID := range userIDs {
-		user, err := FindUserByID(tx, userID)
-		if err != nil {
-			return nil, errors.Wrap(err, "unable to find user from email identity for duplicates")
-		}
-		if user.Aud == aud {
-			return user, nil
+		if userID != currentUserId {
+			user, err := FindUserByID(tx, userID)
+			if err != nil {
+				return nil, errors.Wrap(err, "unable to find user from email identity for duplicates")
+			}
+			if user.Aud == aud {
+				return user, nil
+			}
 		}
 	}
 
@@ -641,10 +648,6 @@ func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
 
 // RemoveUnconfirmedIdentities removes potentially malicious unconfirmed identities from a user (if any)
 func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection, identity *Identity) error {
-	if u.IsConfirmed() {
-		return nil
-	}
-
 	// user is unconfirmed so the password should be reset
 	u.EncryptedPassword = ""
 	if terr := tx.UpdateOnly(u, "encrypted_password"); terr != nil {
@@ -654,6 +657,9 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection, identity *Ide
 	// user is unconfirmed so existing user_metadata should be overwritten
 	// to use the current identity metadata
 	u.UserMetaData = identity.IdentityData
+	if terr := u.UpdateUserMetaData(tx, u.UserMetaData); terr != nil {
+		return terr
+	}
 
 	// user is unconfirmed so none of the providers associated to it are verified yet
 	// only the current provider should be kept

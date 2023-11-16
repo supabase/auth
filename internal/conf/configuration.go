@@ -249,13 +249,17 @@ func (c *SMTPConfiguration) Validate() error {
 }
 
 type MailerConfiguration struct {
-	Autoconfirm              bool                      `json:"autoconfirm"`
-	Subjects                 EmailContentConfiguration `json:"subjects"`
-	Templates                EmailContentConfiguration `json:"templates"`
-	URLPaths                 EmailContentConfiguration `json:"url_paths"`
-	SecureEmailChangeEnabled bool                      `json:"secure_email_change_enabled" split_words:"true" default:"true"`
-	OtpExp                   uint                      `json:"otp_exp" split_words:"true"`
-	OtpLength                int                       `json:"otp_length" split_words:"true"`
+	Autoconfirm                 bool `json:"autoconfirm"`
+	AllowUnverifiedEmailSignIns bool `json:"allow_unverified_email_sign_ins" split_words:"true" default:"true"`
+
+	Subjects  EmailContentConfiguration `json:"subjects"`
+	Templates EmailContentConfiguration `json:"templates"`
+	URLPaths  EmailContentConfiguration `json:"url_paths"`
+
+	SecureEmailChangeEnabled bool `json:"secure_email_change_enabled" split_words:"true" default:"true"`
+
+	OtpExp    uint `json:"otp_exp" split_words:"true"`
+	OtpLength int  `json:"otp_length" split_words:"true"`
 }
 
 type PhoneProviderConfiguration struct {
@@ -436,6 +440,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 
 	if config.JWT.Exp == 0 {
 		config.JWT.Exp = 3600
+	}
+
+	if config.Mailer.Autoconfirm && config.Mailer.AllowUnverifiedEmailSignIns {
+		return errors.New("cannot enable both GOTRUE_MAILER_AUTOCONFIRM and GOTRUE_MAILER_ALLOW_UNVERIFIED_EMAIL_SIGN_INS")
 	}
 
 	if config.Mailer.URLPaths.Invite == "" {

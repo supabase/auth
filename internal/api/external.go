@@ -141,8 +141,8 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-// errReturnNil is a hack that signals internalExternalProviderCallback to return nil
-var errReturnNil = errors.New("createAccountFromExternalIdentity: return nil in internalExternalProviderCallback")
+var errEmailVerificationRequired = errors.New("email verification required")
+var errEmailConfirmationSent = errors.New("email confirmation sent")
 
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -187,6 +187,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	var user *models.User
 	var token *AccessTokenResponse
+	var errEmailVerificationRequiredOrConfirmationSent error
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		inviteToken := getInviteToken(ctx)
@@ -196,10 +197,12 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			}
 		} else {
 			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
-				if errors.Is(terr, errReturnNil) {
+				if errors.Is(terr, errEmailVerificationRequired) || errors.Is(terr, errEmailConfirmationSent) {
+					// we don't want the transaction to be rolled back because the user is created
+					// but not returned as further action is necessary
+					errEmailVerificationRequiredOrConfirmationSent = terr
 					return nil
 				}
-
 				return terr
 			}
 		}
@@ -218,11 +221,30 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		}
 		return nil
 	})
+
+	rurl := a.getExternalRedirectURL(r)
 	if err != nil {
 		return err
 	}
 
-	rurl := a.getExternalRedirectURL(r)
+	if errEmailVerificationRequiredOrConfirmationSent != nil {
+		flowType := models.ImplicitFlow
+		if flowState != nil {
+			flowType = models.PKCEFlow
+		}
+		msg := fmt.Sprintf("Unverified email with %v. ", providerType)
+		if errors.Is(errEmailVerificationRequiredOrConfirmationSent, errEmailVerificationRequired) {
+			msg += fmt.Sprintf("Verify the email with %v in order to sign in", providerType)
+		} else if errors.Is(errEmailVerificationRequiredOrConfirmationSent, errEmailConfirmationSent) {
+			msg += fmt.Sprintf("A confirmation email has been sent to your %v email", providerType)
+		}
+		rurl, err = a.prepErrorRedirectURL(unauthorizedError(msg), w, r, rurl, flowType)
+		if err != nil {
+			return err
+		}
+		http.Redirect(w, r, rurl, http.StatusFound)
+	}
+
 	if flowState != nil {
 		// This means that the callback is using PKCE
 		// Set the flowState.AuthCode to the query param here
@@ -244,12 +266,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if err := a.setCookieTokens(config, token, false, w); err != nil {
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
-	} else {
-		// Left as hash fragment to comply with spec. Additionally, may override existing error query param if set to PKCE.
-		rurl, err = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v. A confirmation email has been sent to your %v email.", providerType, providerType), w, r, rurl, models.ImplicitFlow)
-		if err != nil {
-			return err
-		}
 	}
 
 	http.Redirect(w, r, rurl, http.StatusFound)
@@ -261,26 +277,14 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	aud := a.requestAud(ctx, r)
 	config := a.config
 
-	var terr error
-
 	var user *models.User
 	var identity *models.Identity
-
-	var emailData provider.Email
 	var identityData map[string]interface{}
 	if userData.Metadata != nil {
 		identityData = structs.Map(userData.Metadata)
 	}
 
-	var emails []string
-
-	for _, email := range userData.Emails {
-		if email.Verified || config.Mailer.Autoconfirm {
-			emails = append(emails, strings.ToLower(email.Email))
-		}
-	}
-
-	decision, terr := models.DetermineAccountLinking(tx, providerType, userData.Metadata.Subject, emails)
+	decision, terr := models.DetermineAccountLinking(tx, config, userData.Emails, aud, providerType, userData.Metadata.Subject)
 	if terr != nil {
 		return nil, terr
 	}
@@ -288,14 +292,6 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	switch decision.Decision {
 	case models.LinkAccount:
 		user = decision.User
-
-		emailData = userData.Emails[0]
-		for _, e := range userData.Emails {
-			if e.Primary || e.Verified {
-				emailData = e
-				break
-			}
-		}
 
 		if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
 			return nil, terr
@@ -310,26 +306,19 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			return nil, forbiddenError("Signups not allowed for this instance")
 		}
 
-		// prefer primary email for new signups
-		emailData = userData.Emails[0]
-		for _, e := range userData.Emails {
-			if e.Primary {
-				emailData = e
-				break
-			}
-		}
-
 		params := &SignupParams{
 			Provider: providerType,
-			Email:    emailData.Email,
+			Email:    decision.CandidateEmail.Email,
 			Aud:      aud,
 			Data:     identityData,
 		}
 
-		isSSOUser := strings.HasPrefix(providerType, "sso:")
+		isSSOUser := false
+		if decision.LinkingDomain == "sso" {
+			isSSOUser = true
+		}
 
-		user, terr = a.signupNewUser(ctx, tx, params, isSSOUser)
-		if terr != nil {
+		if user, terr = a.signupNewUser(ctx, tx, params, isSSOUser); terr != nil {
 			return nil, terr
 		}
 
@@ -344,11 +333,6 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		identity.IdentityData = identityData
 		if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
 			return nil, terr
-		}
-		// email & verified status might have changed if identity's email changed
-		emailData = provider.Email{
-			Email:    userData.Metadata.Email,
-			Verified: userData.Metadata.EmailVerified,
 		}
 		if terr = user.UpdateUserMetaData(tx, identityData); terr != nil {
 			return nil, terr
@@ -368,41 +352,48 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return nil, unauthorizedError("User is unauthorized")
 	}
 
-	// An account with a previously unconfirmed email + password
-	// combination, phone or oauth identity may exist. These identities
-	// need to be removed when a new oauth identity is being added
-	// to prevent pre-account takeover attacks from happening.
-	if terr = user.RemoveUnconfirmedIdentities(tx, identity); terr != nil {
-		return nil, internalServerError("Error updating user").WithInternalError(terr)
-	}
-
 	if !user.IsConfirmed() {
-		if !emailData.Verified && !config.Mailer.Autoconfirm {
-			mailer := a.Mailer(ctx)
-			referrer := utilities.GetReferrer(r, config)
-			externalURL := getExternalHost(ctx)
-			if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
-				if errors.Is(terr, MaxFrequencyLimitError) {
-					return nil, tooManyRequestsError("For security purposes, you can only request this once every minute")
-				}
-				return nil, internalServerError("Error sending confirmation mail").WithInternalError(terr)
-			}
-			// email must be verified to issue a token
-			return nil, errReturnNil
-		}
-
-		if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
-			"provider": providerType,
-		}); terr != nil {
-			return nil, terr
-		}
-		if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
-			return nil, terr
-		}
-
-		// fall through to auto-confirm and issue token
-		if terr = user.Confirm(tx); terr != nil {
+		// The user may have other unconfirmed email + password
+		// combination, phone or oauth identities. These identities
+		// need to be removed when a new oauth identity is being added
+		// to prevent pre-account takeover attacks from happening.
+		if terr = user.RemoveUnconfirmedIdentities(tx, identity); terr != nil {
 			return nil, internalServerError("Error updating user").WithInternalError(terr)
+		}
+		if decision.CandidateEmail.Verified || config.Mailer.Autoconfirm {
+			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+				"provider": providerType,
+			}); terr != nil {
+				return nil, terr
+			}
+			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
+				return nil, terr
+			}
+
+			// fall through to auto-confirm and issue token
+			if terr = user.Confirm(tx); terr != nil {
+				return nil, internalServerError("Error updating user").WithInternalError(terr)
+			}
+		} else {
+			emailConfirmationSent := false
+			if decision.CandidateEmail.Email != "" {
+				mailer := a.Mailer(ctx)
+				referrer := utilities.GetReferrer(r, config)
+				externalURL := getExternalHost(ctx)
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
+					if errors.Is(terr, MaxFrequencyLimitError) {
+						return nil, tooManyRequestsError("For security purposes, you can only request this once every minute")
+					}
+					return nil, internalServerError("Error sending confirmation mail").WithInternalError(terr)
+				}
+				emailConfirmationSent = true
+			}
+			if !config.Mailer.AllowUnverifiedEmailSignIns {
+				if emailConfirmationSent {
+					return nil, errEmailConfirmationSent
+				}
+				return nil, errEmailVerificationRequired
+			}
 		}
 	} else {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{

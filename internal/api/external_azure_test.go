@@ -196,7 +196,7 @@ func (ts *ExternalTestSuite) TestSignupExternalAzureDisableSignupSuccessWithPrim
 
 	ts.Config.DisableSignup = true
 
-	ts.createUser("azuretestid", "azure@example.com", "Azure Test", "http://example.com/avatar", "")
+	ts.createUser("azuretestid", "azure@example.com", "Azure Test", "", "")
 
 	tokenCount := 0
 	code := "authcode"
@@ -205,14 +205,14 @@ func (ts *ExternalTestSuite) TestSignupExternalAzureDisableSignupSuccessWithPrim
 
 	u := performAuthorization(ts, "azure", code, "")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, -1, "azure@example.com", "Azure Test", "azuretestid", "http://example.com/avatar")
+	assertAuthorizationSuccess(ts, u, tokenCount, -1, "azure@example.com", "Azure Test", "azuretestid", "")
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalAzureSuccessWhenMatchingToken() {
 	setupAzureOverrideVerifiers()
 
 	// name should be populated from Azure API
-	ts.createUser("azuretestid", "azure@example.com", "", "http://example.com/avatar", "invite_token")
+	ts.createUser("azuretestid", "azure@example.com", "", "", "invite_token")
 
 	tokenCount := 0
 	code := "authcode"
@@ -221,7 +221,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalAzureSuccessWhenMatchingToke
 
 	u := performAuthorization(ts, "azure", code, "invite_token")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, -1, "azure@example.com", "Azure Test", "azuretestid", "http://example.com/avatar")
+	assertAuthorizationSuccess(ts, u, tokenCount, -1, "azure@example.com", "Azure Test", "azuretestid", "")
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalAzureErrorWhenNoMatchingToken() {
