@@ -438,7 +438,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdate() {
 
 	for _, identity := range u.Identities {
 		// for email & phone identities, the providerId is the same as the userId
-		require.Equal(ts.T(), u.ID.String(), identity.ID)
+		require.Equal(ts.T(), u.ID.String(), identity.ProviderID)
 		require.Equal(ts.T(), u.ID, identity.UserID)
 		if identity.Provider == "email" {
 			require.Equal(ts.T(), newEmail, identity.IdentityData["email"])
