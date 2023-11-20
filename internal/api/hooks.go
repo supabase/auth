@@ -33,6 +33,7 @@ const (
 	SignupEvent         = "signup"
 	EmailChangeEvent    = "email_change"
 	LoginEvent          = "login"
+	defaultHookRetries  = 3
 )
 
 type webhookClaims struct {

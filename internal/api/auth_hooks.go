@@ -2,23 +2,30 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"net/url"
 	"time"
 
+	"fmt"
 	"github.com/gofrs/uuid"
 	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/storage"
+	"strings"
 )
 
 type HookType string
 
 const (
 	PostgresHook HookType = "postgres"
+	HTTPHook     HookType = "http"
 )
 
 type AuthHook struct {
-	*conf.HookConfiguration
+	*conf.ExtensibilityPointConfiguration
 	payload  []byte
 	hookType HookType
 	event    string
+	db       *storage.Connection
 }
 
 // Hook Events
@@ -27,13 +34,11 @@ const (
 )
 
 const (
-	defaultTimeout     = time.Second * 2
-	defaultHookRetries = 3
+	defaultTimeout = time.Second * 2
 )
 
 // Functions for encoding and decoding payload
 func CreateMFAVerificationHookInput(user_id uuid.UUID, factor_id uuid.UUID, valid bool) ([]byte, error) {
-	// TODO: find a better way of encdoing so we can support HTTP hooks
 	payload := struct {
 		UserID   uuid.UUID `json:"user_id"`
 		FactorID uuid.UUID `json:"factor_id"`
@@ -50,14 +55,63 @@ func CreateMFAVerificationHookInput(user_id uuid.UUID, factor_id uuid.UUID, vali
 	return data, nil
 }
 
-func (a *AuthHook) Trigger() ([]byte, error) {
+func (ah *AuthHook) Trigger() ([]byte, error) {
 	// Parse URI object
+	url, err := url.Parse(ah.ExtensibilityPointConfiguration.URI)
+	if err != nil {
+		return nil, err
+	}
+	// trigger appropriate type of hook
+	switch url.Scheme {
+	case string(PostgresHook):
+		return ah.triggerPostgresHook()
+	case string(HTTPHook):
+		return ah.triggerHTTPHook()
+	default:
+		return nil, errors.New("unsupported hook type")
+	}
 
-	// switch between Postgres Hook and HTTP Hook, pass in URI
 	return nil, nil
 }
 
-func (a *AuthHook) triggerPostgresHook() error {
+func (ah *AuthHook) fetchHookName() (string, error) {
+	u, err := url.Parse(ah.ExtensibilityPointConfiguration.URI)
+	if err != nil {
+		return "", err
+	}
+	pathParts := strings.Split(u.Path, "/")
+	if len(pathParts) < 3 {
+		return "", fmt.Errorf("URI path does not contain enough parts")
+	}
+	schema := pathParts[1]
+	table := pathParts[2]
+	// TODO: maybe enforce checks on this name?
 
-	return nil
+	return schema + "." + table, nil
+}
+
+func (ah *AuthHook) triggerPostgresHook() ([]byte, error) {
+	// Determine Result payload and request payload
+	var result []byte
+	hookName, err := ah.fetchHookName()
+	if err != nil {
+		return nil, err
+	}
+	if err := ah.db.Transaction(func(tx *storage.Connection) error {
+		resp := tx.RawQuery(fmt.Sprintf("SELECT %s('%s')", hookName, ah.payload))
+		terr := resp.First(result)
+		if terr != nil {
+			return terr
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+
+}
+
+func (a *AuthHook) triggerHTTPHook() ([]byte, error) {
+	return nil, errors.New("not implemented error")
 }

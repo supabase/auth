@@ -258,6 +258,8 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			event:    MFAVerificationEvent,
 			payload:  payload,
 			hookType: PostgresHook,
+			// TODO: find a better way to relay this
+			db: a.db,
 		}
 
 		// TODO: revert to resp and use the resp. In this MFA Verification case the resp is not used
