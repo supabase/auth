@@ -10,9 +10,7 @@ begin
 end$$;
 
 alter table if exists {{ index .Options "Namespace" }}.identities 
-    drop constraint if exists identities_pkey;
-
-alter table if exists {{ index .Options "Namespace" }}.identities 
+    drop constraint if exists identities_pkey,
     add column if not exists id uuid default gen_random_uuid() primary key;
 
 do $$
