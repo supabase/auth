@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"errors"
 	"net/url"
 
 	"github.com/aaronarduino/goqrsvg"
@@ -262,12 +263,26 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			db: a.db,
 		}
 
-		// TODO: revert to resp and use the resp. In this MFA Verification case the resp is not used
-		_, err = h.Trigger()
+		resp, err := h.Trigger()
 		if err != nil {
 			return err
 		}
-		return badRequestError("hook is enabled")
+		parsedErrorResponse, err := parseErrorResponse(resp)
+		if err != nil {
+			return err
+		}
+		if parsedErrorResponse != nil {
+			return errors.New(parsedErrorResponse.ErrorMessage)
+		}
+		// TODO: Decide what to do here
+		response, err := parseMFAVerificationResponse(resp)
+		if err != nil {
+			return err
+		}
+		// TODO: don't hard code this and also change to Enum + handle success case
+		if response.Decision == "reject" {
+			return errors.New("has made 5 unsuccssful verification attempts")
+		}
 	}
 	if !valid {
 		return badRequestError("Invalid TOTP code entered")

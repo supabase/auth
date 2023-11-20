@@ -37,6 +37,38 @@ const (
 	defaultTimeout = time.Second * 2
 )
 
+type HookErrorResponse struct {
+	ErrorMessage string `json:"error_message"`
+	ErrorCode    string `json:"error_code"`
+	RetryAfter   bool   `json:"retry_after"`
+}
+
+type MFAVerificationHookResponse struct {
+	Decision string `json:"decision"`
+}
+
+func parseErrorResponse(response []byte) (*HookErrorResponse, error) {
+	var errResp HookErrorResponse
+	err := json.Unmarshal(response, &errResp)
+	if err != nil {
+		return nil, err
+	}
+	if errResp.ErrorMessage != "" {
+		return &errResp, nil
+	}
+	return nil, err
+}
+
+func parseMFAVerificationResponse(response []byte) (*MFAVerificationHookResponse, error) {
+	var MFAVerificationResponse MFAVerificationHookResponse
+	err := json.Unmarshal(response, &MFAVerificationResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	return &MFAVerificationResponse, err
+}
+
 // Functions for encoding and decoding payload
 func CreateMFAVerificationHookInput(user_id uuid.UUID, factor_id uuid.UUID, valid bool) ([]byte, error) {
 	payload := struct {
