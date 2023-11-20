@@ -399,6 +399,9 @@ func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
 	}
 	return nil
 }
+func (e *ExtensibilityPointConfiguration) IsEnabled() bool {
+	return e.URI != ""
+}
 
 func (w *WebhookConfig) HasEvent(event string) bool {
 	for _, name := range w.Events {

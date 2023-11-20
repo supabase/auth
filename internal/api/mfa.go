@@ -245,7 +245,21 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("%v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
 
-	if valid := totp.Validate(params.Code, factor.Secret); !valid {
+	valid := totp.Validate(params.Code, factor.Secret)
+	if config.Hook.MFA.IsEnabled() {
+		// payload := CreateMFAVerificationHookPayload(user_id, factor_id, valid)
+		//      h := Hook {
+		//         extensibilityPoint: extensibilityPoint
+		//         event: "auth.mfa_verification",
+		//         payload:  payload
+		//      }
+		//
+		//     if resp, err := h.Trigger(); err != nil
+		//     		return errors.New("error executing hook").withError(err)
+		//     }
+		return badRequestError("hook is enabled")
+	}
+	if !valid {
 		return badRequestError("Invalid TOTP code entered")
 	}
 

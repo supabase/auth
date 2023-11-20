@@ -28,15 +28,12 @@ type HookEvent string
 
 const (
 	headerHookSignature = "x-webhook-signature"
-	defaultHookRetries  = 3
 	gotrueIssuer        = "gotrue"
 	ValidateEvent       = "validate"
 	SignupEvent         = "signup"
 	EmailChangeEvent    = "email_change"
 	LoginEvent          = "login"
 )
-
-var defaultTimeout = time.Second * 5
 
 type webhookClaims struct {
 	jwt.StandardClaims
