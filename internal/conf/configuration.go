@@ -250,7 +250,7 @@ func (c *SMTPConfiguration) Validate() error {
 
 type MailerConfiguration struct {
 	Autoconfirm                 bool `json:"autoconfirm"`
-	AllowUnverifiedEmailSignIns bool `json:"allow_unverified_email_sign_ins" split_words:"true" default:"true"`
+	AllowUnverifiedEmailSignIns bool `json:"allow_unverified_email_sign_ins" split_words:"true" default:"false"`
 
 	Subjects  EmailContentConfiguration `json:"subjects"`
 	Templates EmailContentConfiguration `json:"templates"`
