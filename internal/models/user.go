@@ -210,9 +210,13 @@ func (u *User) UpdateAppMetaDataProviders(tx *storage.Connection) error {
 	if terr != nil {
 		return terr
 	}
-	return u.UpdateAppMetaData(tx, map[string]interface{}{
+	payload := map[string]interface{}{
 		"providers": providers,
-	})
+	}
+	if len(providers) > 0 {
+		payload["provider"] = providers[0]
+	}
+	return u.UpdateAppMetaData(tx, payload)
 }
 
 // SetEmail sets the user's email
