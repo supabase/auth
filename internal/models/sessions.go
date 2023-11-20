@@ -345,6 +345,10 @@ func (s *Session) FindCurrentlyActiveRefreshToken(tx *storage.Connection) (*Refr
 	var activeRefreshToken RefreshToken
 
 	if err := tx.Q().Where("session_id = ? and revoked is false", s.ID).Order("id desc").First(&activeRefreshToken); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows || errors.Is(err, sql.ErrNoRows) {
+			return nil, RefreshTokenNotFoundError{}
+		}
+
 		return nil, err
 	}
 

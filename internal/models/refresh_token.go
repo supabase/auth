@@ -94,6 +94,10 @@ func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
 		update `+tablename+` r set revoked = true from token_family where token_family.id = r.id;`, token.Token).Exec()
 	}
 	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows || errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+
 		return err
 	}
 	return nil
