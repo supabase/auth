@@ -247,16 +247,24 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 	valid := totp.Validate(params.Code, factor.Secret)
 	if config.Hook.MFA.IsEnabled() {
-		// payload := CreateMFAVerificationHookPayload(user_id, factor_id, valid)
-		//      h := Hook {
-		//         extensibilityPoint: extensibilityPoint
-		//         event: "auth.mfa_verification",
-		//         payload:  payload
-		//      }
-		//
-		//     if resp, err := h.Trigger(); err != nil
-		//     		return errors.New("error executing hook").withError(err)
-		//     }
+		// To allow for future cases where we don't know that the payload is going to be passed in
+
+		payload, err := CreateMFAVerificationHookInput(user.ID, factor.ID, valid)
+		if err != nil {
+			return err
+		}
+
+		h := AuthHook{
+			event:    MFAVerificationEvent,
+			payload:  payload,
+			hookType: PostgresHook,
+		}
+
+		// TODO: revert to resp and use the resp. In this MFA Verification case the resp is not used
+		_, err = h.Trigger()
+		if err != nil {
+			return err
+		}
 		return badRequestError("hook is enabled")
 	}
 	if !valid {
