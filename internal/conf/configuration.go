@@ -158,6 +158,7 @@ type GlobalConfiguration struct {
 	Sms               SmsProviderConfiguration `json:"sms"`
 	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
 	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
+	Hook              HookConfiguration        `json:"hook" split_words:"true"`
 	Security          SecurityConfiguration    `json:"security"`
 	Sessions          SessionsConfiguration    `json:"sessions"`
 	MFA               MFAConfiguration         `json:"MFA"`
@@ -379,6 +380,26 @@ type WebhookConfig struct {
 	Events     []string `json:"events"`
 }
 
+// Moving away from the existing HookConfig so we can get a fresh start.
+type HookConfiguration struct {
+	// TODO (Joel): Fix the naming later
+	MFA ExtensibilityPointConfiguration `json:"mfa"`
+}
+
+type ExtensibilityPointConfiguration struct {
+	URI string `json:"uri"`
+}
+
+func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
+	if e.URI != "" {
+		_, err := url.Parse(e.URI)
+		if err != nil {
+			return errors.New("hook entry should be a valid URI")
+		}
+	}
+	return nil
+}
+
 func (w *WebhookConfig) HasEvent(event string) bool {
 	for _, name := range w.Events {
 		if event == name {
@@ -424,7 +445,6 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		}
 		config.Sms.SMSTemplate = template
 	}
-
 	return config, nil
 }
 
