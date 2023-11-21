@@ -1,10 +1,13 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
+	"github.com/fatih/structs"
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
+	"github.com/supabase/gotrue/internal/api/provider"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
 )
@@ -64,4 +67,37 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, map[string]interface{}{})
+}
+
+func (a *API) LinkIdentity(w http.ResponseWriter, r *http.Request) error {
+	rurl, err := a.GetExternalProviderRedirectURL(w, r)
+	if err != nil {
+		return err
+	}
+	return sendJSON(w, http.StatusOK, map[string]interface{}{
+		"url": rurl,
+	})
+}
+
+func (a *API) linkIdentityToUser(ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
+	targetUser := getTargetUser(ctx)
+	identity, terr := models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType)
+	if terr != nil {
+		if !models.IsNotFoundError(terr) {
+			return nil, internalServerError("Database error finding identity for linking").WithInternalError(terr)
+		}
+	}
+	if identity != nil {
+		if identity.UserID == uuid.Nil {
+			return nil, badRequestError("Identity is already linked")
+		}
+		return nil, badRequestError("Identity is already linked to another user")
+	}
+	if _, terr := a.createNewIdentity(tx, targetUser, providerType, structs.Map(userData.Metadata)); terr != nil {
+		return nil, terr
+	}
+	if terr := targetUser.UpdateAppMetaDataProviders(tx); terr != nil {
+		return nil, terr
+	}
+	return targetUser, nil
 }
