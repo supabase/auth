@@ -40,6 +40,7 @@ const (
 	DeleteRecoveryCodesAction       AuditAction = "recovery_codes_deleted"
 	UpdateFactorAction              AuditAction = "factor_updated"
 	MFACodeLoginAction              AuditAction = "mfa_code_login"
+	IdentityUnlinkAction            AuditAction = "identity_unlinked"
 
 	account       auditLogType = "account"
 	team          auditLogType = "team"
