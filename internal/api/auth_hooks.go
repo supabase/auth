@@ -101,8 +101,6 @@ func (ah *AuthHook) Trigger() ([]byte, error) {
 	default:
 		return nil, errors.New("unsupported hook type")
 	}
-
-	return nil, nil
 }
 
 func (ah *AuthHook) fetchHookName() (string, error) {
