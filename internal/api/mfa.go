@@ -247,7 +247,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	valid := totp.Validate(params.Code, factor.Secret)
-	if config.Hook.MFA.IsEnabled() {
+	if config.Hook.MFA.Enabled {
 		// To allow for future cases where we don't know that the payload is going to be passed in
 
 		payload, err := CreateMFAVerificationHookInput(user.ID, factor.ID, valid)

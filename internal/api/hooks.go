@@ -41,6 +41,8 @@ type webhookClaims struct {
 	SHA256 string `json:"sha256"`
 }
 
+var defaultTimeout = time.Second * 5
+
 type Webhook struct {
 	*conf.WebhookConfig
 

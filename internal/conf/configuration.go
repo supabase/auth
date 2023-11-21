@@ -387,7 +387,8 @@ type HookConfiguration struct {
 }
 
 type ExtensibilityPointConfiguration struct {
-	URI string `json:"uri"`
+	URI     string `json:"uri"`
+	Enabled bool   `json:"true"`
 }
 
 func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
@@ -398,9 +399,6 @@ func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
 		}
 	}
 	return nil
-}
-func (e *ExtensibilityPointConfiguration) IsEnabled() bool {
-	return e.URI != ""
 }
 
 func (w *WebhookConfig) HasEvent(event string) bool {

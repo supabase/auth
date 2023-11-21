@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
-	"time"
 
 	"fmt"
 	"github.com/gofrs/uuid"
@@ -31,10 +30,6 @@ type AuthHook struct {
 // Hook Events
 const (
 	MFAVerificationEvent = "auth.mfa_verfication"
-)
-
-const (
-	defaultTimeout = time.Second * 2
 )
 
 type HookErrorResponse struct {
