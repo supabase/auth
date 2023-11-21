@@ -9,6 +9,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/storage"
+	"regexp"
 	"strings"
 )
 
@@ -17,6 +18,11 @@ type HookType string
 const (
 	PostgresHook HookType = "postgres"
 	HTTPHook     HookType = "http"
+)
+
+const (
+	MFAHookRejection = "reject"
+	MFAHookContinue  = "continue"
 )
 
 type AuthHook struct {
@@ -77,7 +83,7 @@ func CreateMFAVerificationHookInput(user_id uuid.UUID, factor_id uuid.UUID, vali
 	}
 	data, err := json.Marshal(&payload)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 	return data, nil
 }
@@ -92,8 +98,6 @@ func (ah *AuthHook) Trigger() ([]byte, error) {
 	switch url.Scheme {
 	case string(PostgresHook):
 		return ah.triggerPostgresHook()
-	case string(HTTPHook):
-		return ah.triggerHTTPHook()
 	default:
 		return nil, errors.New("unsupported hook type")
 	}
@@ -102,6 +106,13 @@ func (ah *AuthHook) Trigger() ([]byte, error) {
 }
 
 func (ah *AuthHook) fetchHookName() (string, error) {
+	// specification for Postgres names
+	regExp := `^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`
+	re, err := regexp.Compile(regExp)
+	if err != nil {
+		return "", err
+	}
+
 	u, err := url.Parse(ah.ExtensibilityPointConfiguration.URI)
 	if err != nil {
 		return "", err
@@ -112,7 +123,13 @@ func (ah *AuthHook) fetchHookName() (string, error) {
 	}
 	schema := pathParts[1]
 	table := pathParts[2]
-	// TODO: maybe enforce checks on this name?
+	// Validate schema and table names
+	if !re.MatchString(schema) {
+		return "", fmt.Errorf("invalid schema name: %s", schema)
+	}
+	if !re.MatchString(table) {
+		return "", fmt.Errorf("invalid table name: %s", table)
+	}
 
 	return schema + "." + table, nil
 }
@@ -134,11 +151,13 @@ func (ah *AuthHook) triggerPostgresHook() ([]byte, error) {
 	}); err != nil {
 		return nil, err
 	}
+	if parsedErrorResponse, err := parseErrorResponse(result); err != nil {
+		if parsedErrorResponse != nil {
+			return nil, errors.New(parsedErrorResponse.ErrorMessage)
+		}
+		return nil, err
+	}
 
 	return result, nil
 
-}
-
-func (a *AuthHook) triggerHTTPHook() ([]byte, error) {
-	return nil, errors.New("not implemented error")
 }

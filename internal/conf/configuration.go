@@ -393,9 +393,12 @@ type ExtensibilityPointConfiguration struct {
 
 func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
 	if e.URI != "" {
-		_, err := url.Parse(e.URI)
+		u, err := url.Parse(e.URI)
 		if err != nil {
 			return errors.New("hook entry should be a valid URI")
+		}
+		if pathParts := strings.Split(u.Path, "/"); len(pathParts) < 3 {
+			return fmt.Errorf("URI path does not contain enough parts")
 		}
 	}
 	return nil

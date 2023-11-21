@@ -267,20 +267,17 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		parsedErrorResponse, err := parseErrorResponse(resp)
-		if err != nil {
-			return err
-		}
-		if parsedErrorResponse != nil {
-			return errors.New(parsedErrorResponse.ErrorMessage)
-		}
+
 		// TODO: Decide what to do here
 		response, err := parseMFAVerificationResponse(resp)
 		if err != nil {
 			return err
 		}
-		// TODO: don't hard code this and also change to Enum + handle success case
-		if response.Decision == "reject" {
+
+		if response.Decision == MFAHookRejection {
+			if err := models.Logout(a.db, user.ID); err != nil {
+				return err
+			}
 			return errors.New("has made 5 unsuccssful verification attempts")
 		}
 	}
