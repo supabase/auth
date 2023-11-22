@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strconv"
 
 	"github.com/fatih/structs"
 	"github.com/go-chi/chi"
@@ -74,9 +75,17 @@ func (a *API) LinkIdentity(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	return sendJSON(w, http.StatusOK, map[string]interface{}{
-		"url": rurl,
-	})
+	skipHTTPRedirect, err := strconv.ParseBool(r.URL.Query().Get("skip_http_redirect"))
+	if err != nil {
+		skipHTTPRedirect = false
+	}
+	if skipHTTPRedirect {
+		return sendJSON(w, http.StatusOK, map[string]interface{}{
+			"url": rurl,
+		})
+	}
+	http.Redirect(w, r, rurl, http.StatusFound)
+	return nil
 }
 
 func (a *API) linkIdentityToUser(ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
