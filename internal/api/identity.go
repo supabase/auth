@@ -71,7 +71,9 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) LinkIdentity(w http.ResponseWriter, r *http.Request) error {
-	rurl, err := a.GetExternalProviderRedirectURL(w, r)
+	ctx := r.Context()
+	user := getUser(ctx)
+	rurl, err := a.GetExternalProviderRedirectURL(w, r, user)
 	if err != nil {
 		return err
 	}

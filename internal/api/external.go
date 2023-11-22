@@ -34,7 +34,7 @@ type ExternalProviderClaims struct {
 
 // ExternalProviderRedirect redirects the request to the oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
-	rurl, err := a.GetExternalProviderRedirectURL(w, r)
+	rurl, err := a.GetExternalProviderRedirectURL(w, r, nil)
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 }
 
 // GetExternalProviderRedirectURL returns the URL to start the oauth flow with the corresponding oauth provider
-func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Request) (string, error) {
+func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Request, linkingTargetUser *models.User) (string, error) {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
@@ -108,10 +108,9 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		FlowStateID: flowStateID,
 	}
 
-	if strings.Contains(r.URL.Path, "identities") {
+	if linkingTargetUser != nil {
 		// this means that the user is performing manual linking
-		user := getUser(ctx)
-		claims.LinkingTargetID = user.ID.String()
+		claims.LinkingTargetID = linkingTargetUser.ID.String()
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
