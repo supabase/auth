@@ -16,7 +16,7 @@ import (
 type HookType string
 
 const (
-	PostgresHook HookType = "postgres"
+	PostgresHook HookType = "pg-functions"
 	HTTPHook     HookType = "http"
 )
 
@@ -26,11 +26,11 @@ const (
 )
 
 type AuthHook struct {
-	*conf.ExtensibilityPointConfiguration
-	payload  []byte
-	hookType HookType
-	event    string
-	db       *storage.Connection
+	ExtensibilityPointConfiguration conf.ExtensibilityPointConfiguration
+	payload                         []byte
+	hookType                        HookType
+	event                           string
+	db                              *storage.Connection
 }
 
 // Hook Events
@@ -42,10 +42,6 @@ type HookErrorResponse struct {
 	ErrorMessage string `json:"error_message"`
 	ErrorCode    string `json:"error_code"`
 	RetryAfter   bool   `json:"retry_after"`
-}
-
-type MFAVerificationHookResponse struct {
-	Decision string `json:"decision"`
 }
 
 func parseErrorResponse(response []byte) (*HookErrorResponse, error) {
@@ -60,8 +56,8 @@ func parseErrorResponse(response []byte) (*HookErrorResponse, error) {
 	return nil, err
 }
 
-func parseMFAVerificationResponse(response []byte) (*MFAVerificationHookResponse, error) {
-	var MFAVerificationResponse MFAVerificationHookResponse
+func parseMFAVerificationResponse(response []byte) (*MFAVerificationHookOutput, error) {
+	var MFAVerificationResponse MFAVerificationHookOutput
 	err := json.Unmarshal(response, &MFAVerificationResponse)
 	if err != nil {
 		return nil, err
@@ -70,13 +66,18 @@ func parseMFAVerificationResponse(response []byte) (*MFAVerificationHookResponse
 	return &MFAVerificationResponse, err
 }
 
+type MFAVerificationHookInput struct {
+	UserID   uuid.UUID `json:"user_id"`
+	FactorID uuid.UUID `json:"factor_id"`
+	Valid    bool      `json:"valid"`
+}
+type MFAVerificationHookOutput struct {
+	Decision string `json:"decision"`
+}
+
 // Functions for encoding and decoding payload
 func CreateMFAVerificationHookInput(user_id uuid.UUID, factor_id uuid.UUID, valid bool) ([]byte, error) {
-	payload := struct {
-		UserID   uuid.UUID `json:"user_id"`
-		FactorID uuid.UUID `json:"factor_id"`
-		Valid    bool      `json:"valid"`
-	}{
+	payload := MFAVerificationHookInput{
 		UserID:   user_id,
 		FactorID: factor_id,
 		Valid:    valid,
@@ -134,14 +135,15 @@ func (ah *AuthHook) fetchHookName() (string, error) {
 
 func (ah *AuthHook) triggerPostgresHook() ([]byte, error) {
 	// Determine Result payload and request payload
-	var result []byte
+	var hookResponse []byte
 	hookName, err := ah.fetchHookName()
 	if err != nil {
 		return nil, err
 	}
 	if err := ah.db.Transaction(func(tx *storage.Connection) error {
-		resp := tx.RawQuery(fmt.Sprintf("SELECT %s('%s')", hookName, ah.payload))
-		terr := resp.First(result)
+		// TODO: add some sort of logging here so that we track that the function is called
+		query := tx.RawQuery(fmt.Sprintf("SELECT * from %s(?)", hookName), string(ah.payload))
+		terr := query.First(&hookResponse)
 		if terr != nil {
 			return terr
 		}
@@ -149,13 +151,14 @@ func (ah *AuthHook) triggerPostgresHook() ([]byte, error) {
 	}); err != nil {
 		return nil, err
 	}
-	if parsedErrorResponse, err := parseErrorResponse(result); err != nil {
-		if parsedErrorResponse != nil {
-			return nil, errors.New(parsedErrorResponse.ErrorMessage)
-		}
-		return nil, err
-	}
+	// TODO: Check if it's an error response
+	// if errorResponse, err := parseErrorResponse(hookResponse); err != nil {
+	// 	if errorResponse != nil {
+	// 		return nil, errors.New(errorResponse.ErrorMessage)
+	// 	}
+	// 	return nil, err
+	// }
 
-	return result, nil
+	return hookResponse, nil
 
 }

@@ -245,6 +245,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return badRequestError("%v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
+	type HookResponse struct {
+		Message string
+	}
 
 	valid := totp.Validate(params.Code, factor.Secret)
 	if config.Hook.MFA.Enabled {
@@ -254,12 +257,14 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		h := AuthHook{
-			event:    MFAVerificationEvent,
-			payload:  payload,
-			hookType: PostgresHook,
+			ExtensibilityPointConfiguration: config.Hook.MFA,
+			event:                           MFAVerificationEvent,
+			payload:                         payload,
+			hookType:                        PostgresHook,
 			// TODO: find a better way to relay this
 			db: a.db,
 		}
+		// Log that we're calling the function
 
 		resp, err := h.Trigger()
 		if err != nil {
