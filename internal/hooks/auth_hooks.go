@@ -46,8 +46,13 @@ const (
 	MFAVerificationAttempt = "auth.mfa_verfication"
 )
 
+// TODO: Give this a more proper name
 type HookErrorResponse struct {
 	AuthHookError
+}
+
+func (hookError *HookErrorResponse) IsError() bool {
+	return hookError.Message != ""
 }
 
 func ParseErrorResponse(response []byte) (*HookErrorResponse, error) {

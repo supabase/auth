@@ -203,15 +203,14 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 func (a *API) invokeHook(ctx context.Context, input any, output any) error {
 	switch input.(type) {
 	case hooks.MFAVerificationAttemptInput:
-		var hookResponse []byte
+		var response []byte
 		hookName, err := hooks.FetchHookName(a.config.Hook.MFA)
 		if err != nil {
 			return err
 		}
 		if err := a.db.Transaction(func(tx *storage.Connection) error {
-			// TODO: add some sort of logging here so that we track that the function is called
 			query := tx.RawQuery(fmt.Sprintf("SELECT * from %s(?)", hookName), string(input.([]byte)))
-			terr := query.First(&hookResponse)
+			terr := query.First(&response)
 			if terr != nil {
 				return terr
 			}
@@ -219,13 +218,14 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) error {
 		}); err != nil {
 			return err
 		}
-
-		// Check for hook type (e.g. postgres/http) here
+		hookResponseOrError := hooks.HookErrorResponse{}
+		err = json.Unmarshal(response, &hookResponseOrError)
+		if err == nil && hookResponseOrError.IsError() {
+			return err
+		}
 		return nil
 	default:
 		return errors.New("invalid hook extensibility point")
-		// trigger the MFA verification hook
-
 	}
 }
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
@@ -289,25 +289,22 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			panic(err)
 		}
-		// Log that we're calling the function
 
 		if err := a.invokeHook(ctx, payload, output); err != nil {
 			return err
 		}
-		//
-		// TODO: Move this into invokeHook
-		// response, err := hooks.ParseMFAVerificationResponse(output)
-		// if err != nil {
-		// 	return err
-		// }
-
+		if terr := models.NewAuditLogEntry(r, a.db, user, models.InvokeAuthHookAction, r.RemoteAddr, map[string]interface{}{
+			// TODO: include extensibility point name
+			"factor_id": factor.ID,
+			"URI":       config.Hook.MFA.URI,
+		}); terr != nil {
+			return terr
+		}
 		if output.Decision == hooks.MFAHookRejection {
 			if err := models.Logout(a.db, user.ID); err != nil {
 				return err
 			}
-			// TODO: remove this and reinstate line below
-			return forbiddenError("invalid")
-			// return forbiddenError(response.Message)
+			return forbiddenError(output.Message)
 		}
 	}
 	if !valid {
