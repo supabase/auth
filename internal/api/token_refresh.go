@@ -168,7 +168,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 			if token.Revoked {
 				activeRefreshToken, terr := session.FindCurrentlyActiveRefreshToken(tx)
-				if terr != nil {
+				if terr != nil && !models.IsNotFoundError(terr) {
 					return internalServerError(terr.Error())
 				}
 
@@ -199,7 +199,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 							}
 						}
 
-						return oauthError("invalid_grant", "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID)
+						return storage.NewCommitWithError(oauthError("invalid_grant", "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID))
 					}
 				}
 			}
