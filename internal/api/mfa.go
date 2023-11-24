@@ -2,23 +2,24 @@ package api
 
 import (
 	"bytes"
-	"encoding/json"
-	"net/http"
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
 
 	"net/url"
 
-	"github.com/pkg/errors"
 	"github.com/aaronarduino/goqrsvg"
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
 	"github.com/gofrs/uuid"
+	"github.com/pkg/errors"
 	"github.com/pquerna/otp/totp"
+	"github.com/supabase/gotrue/internal/hooks"
 	"github.com/supabase/gotrue/internal/metering"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
 	"github.com/supabase/gotrue/internal/utilities"
-	"github.com/supabase/gotrue/internal/hooks"
 )
 
 const DefaultQRSize = 3
@@ -199,16 +200,33 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-func (a *API) invokeHook(ctx context.Context, input any, output any) (error) {
-  switch input.(type) {
-     case hooks.MFAVerificationAttemptInput:
-	  // Check for hook type (e.g. postgres/http) here
-	  return nil
-  default:
-	  return errors.New("invalid hook extensibility point")
-       // trigger the MFA verification hook
+func (a *API) invokeHook(ctx context.Context, input any, output any) error {
+	switch input.(type) {
+	case hooks.MFAVerificationAttemptInput:
+		var hookResponse []byte
+		hookName, err := hooks.FetchHookName(a.config.Hook.MFA)
+		if err != nil {
+			return err
+		}
+		if err := a.db.Transaction(func(tx *storage.Connection) error {
+			// TODO: add some sort of logging here so that we track that the function is called
+			query := tx.RawQuery(fmt.Sprintf("SELECT * from %s(?)", hookName), string(input.([]byte)))
+			terr := query.First(&hookResponse)
+			if terr != nil {
+				return terr
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
 
-  }
+		// Check for hook type (e.g. postgres/http) here
+		return nil
+	default:
+		return errors.New("invalid hook extensibility point")
+		// trigger the MFA verification hook
+
+	}
 }
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error

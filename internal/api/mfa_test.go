@@ -522,6 +522,5 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 	return verifyResp
 }
 
-
 func (ts *MFATestSuite) TestHookVerification() {
 }
