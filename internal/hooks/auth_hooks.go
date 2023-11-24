@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"encoding/json"
 	"net/url"
 
 	"fmt"
@@ -53,18 +52,6 @@ type HookErrorResponse struct {
 
 func (hookError *HookErrorResponse) IsError() bool {
 	return hookError.Message != ""
-}
-
-func ParseErrorResponse(response []byte) (*HookErrorResponse, error) {
-	var errResp HookErrorResponse
-	err := json.Unmarshal(response, &errResp)
-	if err != nil {
-		return nil, err
-	}
-	if errResp.Message != "" {
-		return &errResp, nil
-	}
-	return nil, err
 }
 
 func FetchHookName(ep conf.ExtensibilityPointConfiguration) (string, error) {
