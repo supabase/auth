@@ -38,7 +38,7 @@ require (
 )
 
 require (
-	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
+	github.com/go-jose/go-jose/v3 v3.0.1 // indirect
 	github.com/gobuffalo/nulls v0.4.2 // indirect
 )
 

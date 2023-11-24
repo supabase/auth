@@ -152,6 +152,8 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.With(api.requireAuthentication).Route("/user", func(r *router) {
 			r.Get("/", api.UserGet)
 			r.With(sharedLimiter).Put("/", api.UserUpdate)
+
+			r.Delete("/identities/{identity_id}", api.DeleteIdentity)
 		})
 
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {

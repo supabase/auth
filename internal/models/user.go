@@ -210,9 +210,13 @@ func (u *User) UpdateAppMetaDataProviders(tx *storage.Connection) error {
 	if terr != nil {
 		return terr
 	}
-	return u.UpdateAppMetaData(tx, map[string]interface{}{
+	payload := map[string]interface{}{
 		"providers": providers,
-	})
+	}
+	if len(providers) > 0 {
+		payload["provider"] = providers[0]
+	}
+	return u.UpdateAppMetaData(tx, payload)
 }
 
 // SetEmail sets the user's email
@@ -673,9 +677,7 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection, identity *Ide
 
 	// finally, remove all identities except the current identity being authenticated
 	for i := range u.Identities {
-		identityId := u.Identities[i].Provider + u.Identities[i].ID
-		identityIdToKeep := identity.Provider + identity.ID
-		if identityId != identityIdToKeep {
+		if u.Identities[i].ID != identity.ID {
 			if terr := tx.Destroy(&u.Identities[i]); terr != nil {
 				return terr
 			}
@@ -762,10 +764,9 @@ func (u *User) SoftDeleteUserIdentities(tx *storage.Connection) error {
 		if err := tx.RawQuery(
 			"update "+
 				(&pop.Model{Value: Identity{}}).TableName()+
-				" set id = ? where id = ? and provider = ?",
-			obfuscateIdentityId(identity),
+				" set provider_id = ? where id = ?",
+			obfuscateIdentityProviderId(identity),
 			identity.ID,
-			identity.Provider,
 		).Exec(); err != nil {
 			return err
 		}
@@ -787,6 +788,6 @@ func obfuscatePhone(u *User, phone string) string {
 	return obfuscateValue(u.ID, phone)[:15]
 }
 
-func obfuscateIdentityId(identity *Identity) string {
-	return obfuscateValue(identity.UserID, identity.Provider+":"+identity.ID)
+func obfuscateIdentityProviderId(identity *Identity) string {
+	return obfuscateValue(identity.UserID, identity.Provider+":"+identity.ProviderID)
 }

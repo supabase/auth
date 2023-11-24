@@ -41,6 +41,7 @@ const (
 	UpdateFactorAction              AuditAction = "factor_updated"
 	MFACodeLoginAction              AuditAction = "mfa_code_login"
 	InvokeAuthHookAction            AuditAction = "auth_hook_invoked"
+	IdentityUnlinkAction            AuditAction = "identity_unlinked"
 
 	account       auditLogType = "account"
 	team          auditLogType = "team"

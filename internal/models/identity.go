@@ -12,7 +12,12 @@ import (
 )
 
 type Identity struct {
-	ID           string     `json:"id" db:"id"`
+	// returned as identity_id in JSON for backward compatibility with the interface exposed by the client library
+	// see https://github.com/supabase/gotrue-js/blob/c9296bbc27a2f036af55c1f33fca5930704bd021/src/lib/types.ts#L230-L240
+	ID uuid.UUID `json:"identity_id" db:"id"`
+	// returned as id in JSON for backward compatibility with the interface exposed by the client library
+	// see https://github.com/supabase/gotrue-js/blob/c9296bbc27a2f036af55c1f33fca5930704bd021/src/lib/types.ts#L230-L240
+	ProviderID   string     `json:"id" db:"provider_id"`
 	UserID       uuid.UUID  `json:"user_id" db:"user_id"`
 	IdentityData JSONMap    `json:"identity_data,omitempty" db:"identity_data"`
 	Provider     string     `json:"provider" db:"provider"`
@@ -35,7 +40,7 @@ func NewIdentity(user *User, provider string, identityData map[string]interface{
 	now := time.Now()
 
 	identity := &Identity{
-		ID:           providerId.(string),
+		ProviderID:   providerId.(string),
 		UserID:       user.ID,
 		IdentityData: identityData,
 		Provider:     provider,
@@ -63,7 +68,7 @@ func (i *Identity) IsForSSOProvider() bool {
 // FindIdentityById searches for an identity with the matching id and provider given.
 func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider string) (*Identity, error) {
 	identity := &Identity{}
-	if err := tx.Q().Where("id = ? AND provider = ?", providerId, provider).First(identity); err != nil {
+	if err := tx.Q().Where("provider_id = ? AND provider = ?", providerId, provider).First(identity); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, IdentityNotFoundError{}
 		}
@@ -117,9 +122,8 @@ func (i *Identity) UpdateIdentityData(tx *storage.Connection, updates map[string
 	}
 	// pop doesn't support updates on tables with composite primary keys so we use a raw query here.
 	return tx.RawQuery(
-		"update "+(&pop.Model{Value: Identity{}}).TableName()+" set identity_data = ? where provider = ? and id = ?",
+		"update "+(&pop.Model{Value: Identity{}}).TableName()+" set identity_data = ? where id = ?",
 		i.IdentityData,
-		i.Provider,
 		i.ID,
 	).Exec()
 }
