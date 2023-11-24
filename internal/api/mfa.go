@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"context"
 
-	"errors"
 	"net/url"
 
+	"github.com/pkg/errors"
 	"github.com/aaronarduino/goqrsvg"
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
@@ -17,6 +18,7 @@ import (
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
 	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/gotrue/internal/hooks"
 )
 
 const DefaultQRSize = 3
@@ -197,6 +199,17 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
+func (a *API) invokeHook(ctx context.Context, input any, output any) (error) {
+  switch input.(type) {
+     case hooks.MFAVerificationAttemptInput:
+	  // Check for hook type (e.g. postgres/http) here
+	  return nil
+  default:
+	  return errors.New("invalid hook extensibility point")
+       // trigger the MFA verification hook
+
+  }
+}
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
@@ -245,43 +258,38 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return badRequestError("%v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
-	type HookResponse struct {
-		Message string
-	}
 
 	valid := totp.Validate(params.Code, factor.Secret)
 	if config.Hook.MFA.Enabled {
-		payload, err := CreateMFAVerificationHookInput(user.ID, factor.ID, valid)
-		if err != nil {
-			return err
+		input := hooks.MFAVerificationAttemptInput{
+			UserID:   user.ID,
+			FactorID: factor.ID,
+			Valid:    valid,
 		}
-
-		h := AuthHook{
-			ExtensibilityPointConfiguration: config.Hook.MFA,
-			event:                           MFAVerificationEvent,
-			payload:                         payload,
-			hookType:                        PostgresHook,
-			// TODO: find a better way to relay this
-			db: a.db,
+		output := hooks.MFAVerificationAttemptOutput{}
+		payload, err := json.Marshal(&input)
+		if err != nil {
+			panic(err)
 		}
 		// Log that we're calling the function
 
-		resp, err := h.Trigger()
-		if err != nil {
+		if err := a.invokeHook(ctx, payload, output); err != nil {
 			return err
 		}
+		//
+		// TODO: Move this into invokeHook
+		// response, err := hooks.ParseMFAVerificationResponse(output)
+		// if err != nil {
+		// 	return err
+		// }
 
-		// TODO: Decide what to do here
-		response, err := parseMFAVerificationResponse(resp)
-		if err != nil {
-			return err
-		}
-
-		if response.Decision == MFAHookRejection {
+		if output.Decision == hooks.MFAHookRejection {
 			if err := models.Logout(a.db, user.ID); err != nil {
 				return err
 			}
-			return errors.New("has made 5 unsuccssful verification attempts")
+			// TODO: remove this and reinstate line below
+			return forbiddenError("invalid")
+			// return forbiddenError(response.Message)
 		}
 	}
 	if !valid {

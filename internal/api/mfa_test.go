@@ -521,3 +521,7 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 	require.NoError(ts.T(), json.NewDecoder(y.Body).Decode(&verifyResp))
 	return verifyResp
 }
+
+
+func (ts *MFATestSuite) TestHookVerification() {
+}

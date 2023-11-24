@@ -1,8 +1,7 @@
-package api
+package hooks
 
 import (
 	"encoding/json"
-	"errors"
 	"net/url"
 
 	"fmt"
@@ -27,37 +26,53 @@ const (
 
 type AuthHook struct {
 	ExtensibilityPointConfiguration conf.ExtensibilityPointConfiguration
-	payload                         []byte
-	hookType                        HookType
-	event                           string
-	db                              *storage.Connection
+	Payload                         []byte
+	HookType                        HookType
+	Event                           string
+	DB                              *storage.Connection
+}
+
+type MFAVerificationAttemptInput struct {
+	UserID   uuid.UUID `json:"user_id"`
+	FactorID uuid.UUID `json:"factor_id"`
+	Valid    bool      `json:"valid"`
+}
+
+type MFAVerificationAttemptOutput struct {
+	Decision string `json:"decision"`
+	Message  string `json:"message"`
+}
+
+// AuthHookError is an error with a message and an HTTP status code.
+type AuthHookError struct {
+	Code    int    `json:"code"`
+	Message string `json:"msg"`
+	ErrorID string `json:"error_id,omitempty"`
 }
 
 // Hook Events
 const (
-	MFAVerificationEvent = "auth.mfa_verfication"
+	MFAVerificationAttempt = "auth.mfa_verfication"
 )
 
 type HookErrorResponse struct {
-	ErrorMessage string `json:"error_message"`
-	ErrorCode    string `json:"error_code"`
-	RetryAfter   bool   `json:"retry_after"`
+	AuthHookError
 }
 
-func parseErrorResponse(response []byte) (*HookErrorResponse, error) {
+func ParseErrorResponse(response []byte) (*HookErrorResponse, error) {
 	var errResp HookErrorResponse
 	err := json.Unmarshal(response, &errResp)
 	if err != nil {
 		return nil, err
 	}
-	if errResp.ErrorMessage != "" {
+	if errResp.Message != "" {
 		return &errResp, nil
 	}
 	return nil, err
 }
 
-func parseMFAVerificationResponse(response []byte) (*MFAVerificationHookOutput, error) {
-	var MFAVerificationResponse MFAVerificationHookOutput
+func ParseMFAVerificationResponse(response []byte) (*MFAVerificationAttemptOutput, error) {
+	var MFAVerificationResponse MFAVerificationAttemptOutput
 	err := json.Unmarshal(response, &MFAVerificationResponse)
 	if err != nil {
 		return nil, err
@@ -66,45 +81,7 @@ func parseMFAVerificationResponse(response []byte) (*MFAVerificationHookOutput, 
 	return &MFAVerificationResponse, err
 }
 
-type MFAVerificationHookInput struct {
-	UserID   uuid.UUID `json:"user_id"`
-	FactorID uuid.UUID `json:"factor_id"`
-	Valid    bool      `json:"valid"`
-}
-type MFAVerificationHookOutput struct {
-	Decision string `json:"decision"`
-}
-
-// Functions for encoding and decoding payload
-func CreateMFAVerificationHookInput(user_id uuid.UUID, factor_id uuid.UUID, valid bool) ([]byte, error) {
-	payload := MFAVerificationHookInput{
-		UserID:   user_id,
-		FactorID: factor_id,
-		Valid:    valid,
-	}
-	data, err := json.Marshal(&payload)
-	if err != nil {
-		panic(err)
-	}
-	return data, nil
-}
-
-func (ah *AuthHook) Trigger() ([]byte, error) {
-	// Parse URI object
-	url, err := url.Parse(ah.ExtensibilityPointConfiguration.URI)
-	if err != nil {
-		return nil, err
-	}
-	// trigger appropriate type of hook
-	switch url.Scheme {
-	case string(PostgresHook):
-		return ah.triggerPostgresHook()
-	default:
-		return nil, errors.New("unsupported hook type")
-	}
-}
-
-func (ah *AuthHook) fetchHookName() (string, error) {
+func (ah *AuthHook) FetchHookName() (string, error) {
 	// specification for Postgres names
 	regExp := `^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`
 	re, err := regexp.Compile(regExp)
@@ -133,16 +110,16 @@ func (ah *AuthHook) fetchHookName() (string, error) {
 	return schema + "." + table, nil
 }
 
-func (ah *AuthHook) triggerPostgresHook() ([]byte, error) {
+func (ah *AuthHook) TriggerPostgresHook() ([]byte, error) {
 	// Determine Result payload and request payload
 	var hookResponse []byte
-	hookName, err := ah.fetchHookName()
+	hookName, err := ah.FetchHookName()
 	if err != nil {
 		return nil, err
 	}
-	if err := ah.db.Transaction(func(tx *storage.Connection) error {
+	if err := ah.DB.Transaction(func(tx *storage.Connection) error {
 		// TODO: add some sort of logging here so that we track that the function is called
-		query := tx.RawQuery(fmt.Sprintf("SELECT * from %s(?)", hookName), string(ah.payload))
+		query := tx.RawQuery(fmt.Sprintf("SELECT * from %s(?)", hookName), string(ah.Payload))
 		terr := query.First(&hookResponse)
 		if terr != nil {
 			return terr
