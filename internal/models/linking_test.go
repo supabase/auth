@@ -81,7 +81,7 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionWithAccounts() {
 
 	// when the email doesn't exist in the system -- conventional provider
 	decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{
-		{
+		provider.Email{
 			Email:    "other@example.com",
 			Verified: true,
 			Primary:  true,
@@ -93,7 +93,7 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionWithAccounts() {
 
 	// when looking for an email that doesn't exist in the SSO linking domain
 	decision, err = DetermineAccountLinking(ts.db, ts.config, []provider.Email{
-		{
+		provider.Email{
 			Email:    "other@samltest.id",
 			Verified: true,
 			Primary:  true,
@@ -116,7 +116,7 @@ func (ts *AccountLinkingTestSuite) TestAccountExists() {
 	require.NoError(ts.T(), ts.db.Create(identityA))
 
 	decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{
-		{
+		provider.Email{
 			Email:    "test@example.com",
 			Verified: true,
 			Primary:  true,
@@ -299,7 +299,7 @@ func (ts *AccountLinkingTestSuite) TestMultipleAccounts() {
 	// identities in the same "default" linking domain with the same email
 	// address pointing to two different user accounts
 	decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{
-		{
+		provider.Email{
 			Email:    "test@example.com",
 			Verified: true,
 			Primary:  true,
