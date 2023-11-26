@@ -72,21 +72,29 @@ type User struct {
 
 // NewUser initializes a new user from an email, password and user data.
 func NewUser(phone, email, password, aud string, userData map[string]interface{}) (*User, error) {
-	id := uuid.Must(uuid.NewV4())
-	pw, err := crypto.GenerateFromPassword(context.Background(), password)
-	if err != nil {
-		return nil, err
+	passwordHash := ""
+
+	if password != "" {
+		pw, err := crypto.GenerateFromPassword(context.Background(), password)
+		if err != nil {
+			return nil, err
+		}
+
+		passwordHash = pw
 	}
+
 	if userData == nil {
 		userData = make(map[string]interface{})
 	}
+
+	id := uuid.Must(uuid.NewV4())
 	user := &User{
 		ID:                id,
 		Aud:               aud,
 		Email:             storage.NullString(strings.ToLower(email)),
 		Phone:             storage.NullString(phone),
 		UserMetaData:      userData,
-		EncryptedPassword: pw,
+		EncryptedPassword: passwordHash,
 	}
 	return user, nil
 }
