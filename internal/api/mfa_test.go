@@ -522,24 +522,81 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 	return verifyResp
 }
 
+// TODO: refactor 4 cases into one long function
 func (ts *MFATestSuite) TestVerificationHookSuccess() {
-	// TODO
+	ts.Config.Hook.MFAVerificationAttempt.Enabled = true
+	// Pop executes as supabase_auth_admin and only has access to auth
+	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/auth/verification_hook"
+	verificationHookSQL := `
+    create or replace function verification_hook(input jsonb)
+    returns json as $$
+    begin
+        return json_build_object(
+            'decision', 'continue'
+        );
+    end;
+    $$ language plpgsql;
+    `
+	email := "testemail@gmail.com"
+	password := "testpassword"
+	// 3. Execute the SQL to create the function
+	err := ts.API.db.RawQuery(verificationHookSQL).Exec()
+	require.NoError(ts.T(), err)
+	token := signUpAndVerify(ts, email, password)
+	require.NotNil(ts.T(), token)
+	cleanupHookSQL := `
+    drop function verification_hook(input jsonb)
+    `
+	err = ts.API.db.RawQuery(cleanupHookSQL).Exec()
+	require.NoError(ts.T(), err)
 }
 
 func (ts *MFATestSuite) TestVerificationHookReject() {
-	// TODO
+	ts.Config.Hook.MFAVerificationAttempt.Enabled = true
+	// Pop executes as supabase_auth_admin and only has access to auth
+	// ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/auth/verification_hook"
+	// verificationHookSQL := `
+	// create or replace function verification_hook(input jsonb)
+	// returns json as $$
+	// begin
+	//     return json_build_object(
+	//         'decision', 'reject'
+	//     );
+	// end;
+	// $$ language plpgsql;
+	// `
+	// email := "testemail@gmail.com"
+	// password := "testpassword"
+	// // 3. Execute the SQL to create the function
+	// err := ts.API.db.RawQuery(verificationHookSQL).Exec()
+	// require.NoError(ts.T(), err)
+	// token := signUpAndVerify(ts, email, password)
+	// require.Nil(ts.T(), token)
+	// cleanupHookSQL := `
+	// drop function verification_hook(input jsonb)
+	// `
+	// err = ts.API.db.RawQuery(cleanupHookSQL).Exec()
+	// require.NoError(ts.T(), err)
 
 }
 func (ts *MFATestSuite) TestVerificationHookError() {
+	ts.Config.Hook.MFAVerificationAttempt.Enabled = true
+	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/public/test_verification_hook_error"
 	// TODO
 
 }
 
 func (ts *MFATestSuite) TestVerificationHookTimeout() {
-	// TODO
+	ts.Config.Hook.MFAVerificationAttempt.Enabled = true
+	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/public/test_verification_hook_timeout"
+	// Call pg_sleep(10)
+	// TODO: expect an rror
 }
 
 func (ts *MFATestSuite) TestVerificationHookDisabled() {
-	// TODO
+	// The suite should default to false, but for illustration sake
+	ts.Config.Hook.MFAVerificationAttempt.Enabled = false
+	// resp := signUpAndVerify()
+	// Response should indicate failture
 
 }

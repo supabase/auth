@@ -203,14 +203,17 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 func (a *API) invokeHook(ctx context.Context, input any, output any) error {
 	switch input.(type) {
 	case hooks.MFAVerificationAttemptInput:
-		var response []byte
+		payload, err := json.Marshal(&input)
+		if err != nil {
+			panic(err)
+		}
 		hookName, err := hooks.FetchHookName(a.config.Hook.MFAVerificationAttempt)
 		if err != nil {
 			return err
 		}
 		if err := a.db.Transaction(func(tx *storage.Connection) error {
-			query := tx.RawQuery(fmt.Sprintf("SELECT * from %s(?)", hookName), string(input.([]byte)))
-			terr := query.First(&response)
+			query := tx.RawQuery(fmt.Sprintf("SELECT * from %s(?)", hookName), payload)
+			terr := query.First(&output)
 			if terr != nil {
 				return terr
 			}
@@ -219,7 +222,7 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) error {
 			return err
 		}
 		hookResponseOrError := hooks.AuthHookErrorResponse{}
-		err = json.Unmarshal(response, &hookResponseOrError)
+		err = json.Unmarshal(output.([]byte), &hookResponseOrError)
 		if err == nil && hookResponseOrError.IsError() {
 			return err
 		}
@@ -285,18 +288,14 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			Valid:    valid,
 		}
 		output := hooks.MFAVerificationAttemptOutput{}
-		payload, err := json.Marshal(&input)
-		if err != nil {
-			panic(err)
-		}
 
-		if err := a.invokeHook(ctx, payload, output); err != nil {
+		if err := a.invokeHook(ctx, input, &output); err != nil {
 			return err
 		}
 		if terr := models.NewAuditLogEntry(r, a.db, user, models.InvokeAuthHookAction, r.RemoteAddr, map[string]interface{}{
-			// TODO: include extensibility point name
-			"factor_id": factor.ID,
-			"URI":       config.Hook.MFAVerificationAttempt.URI,
+			"extensibility_point_event": hooks.MFAVerificationAttempt,
+			"factor_id":                 factor.ID,
+			"URI":                       config.Hook.MFAVerificationAttempt.URI,
 		}); terr != nil {
 			return terr
 		}

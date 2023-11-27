@@ -17,6 +17,8 @@ const (
 	HTTPHook     HookType = "http"
 )
 
+// Hook Names
+
 const (
 	MFAHookRejection = "reject"
 	MFAHookContinue  = "continue"
