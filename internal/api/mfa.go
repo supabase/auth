@@ -201,6 +201,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) invokeHook(ctx context.Context, input any, output any) error {
+	var response []byte
 	switch input.(type) {
 	case hooks.MFAVerificationAttemptInput:
 		payload, err := json.Marshal(&input)
@@ -213,7 +214,7 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) error {
 		}
 		if err := a.db.Transaction(func(tx *storage.Connection) error {
 			query := tx.RawQuery(fmt.Sprintf("SELECT * from %s(?)", hookName), payload)
-			terr := query.First(&output)
+			terr := query.First(&response)
 			if terr != nil {
 				return terr
 			}
@@ -222,10 +223,14 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) error {
 			return err
 		}
 		hookResponseOrError := hooks.AuthHookErrorResponse{}
-		err = json.Unmarshal(output.([]byte), &hookResponseOrError)
+		err = json.Unmarshal(response, &hookResponseOrError)
 		if err == nil && hookResponseOrError.IsError() {
 			return err
 		}
+		if err = json.Unmarshal(response, output); err != nil {
+			return err
+		}
+
 		return nil
 	default:
 		return errors.New("invalid hook extensibility point")
@@ -287,9 +292,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			FactorID: factor.ID,
 			Valid:    valid,
 		}
-		output := hooks.MFAVerificationAttemptOutput{}
+		output := &hooks.MFAVerificationAttemptOutput{}
 
-		if err := a.invokeHook(ctx, input, &output); err != nil {
+		if err := a.invokeHook(ctx, input, output); err != nil {
 			return err
 		}
 		if terr := models.NewAuditLogEntry(r, a.db, user, models.InvokeAuthHookAction, r.RemoteAddr, map[string]interface{}{
