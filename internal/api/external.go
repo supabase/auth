@@ -291,7 +291,15 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			isSSOUser = true
 		}
 
-		if user, terr = a.signupNewUser(ctx, tx, params, isSSOUser); terr != nil {
+		// because params above sets no password, this method is not
+		// computationally hard so it can be used within a database
+		// transaction
+		user, terr = params.ToUserModel(isSSOUser)
+		if terr != nil {
+			return nil, terr
+		}
+
+		if user, terr = a.signupNewUser(ctx, tx, user); terr != nil {
 			return nil, terr
 		}
 

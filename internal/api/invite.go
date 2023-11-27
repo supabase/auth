@@ -57,7 +57,16 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 				Aud:      aud,
 				Provider: "email",
 			}
-			user, err = a.signupNewUser(ctx, tx, &signupParams, false /* <- isSSOUser */)
+
+			// because params above sets no password, this method
+			// is not computationally hard so it can be used within
+			// a database transaction
+			user, err = signupParams.ToUserModel(false /* <- isSSOUser */)
+			if err != nil {
+				return err
+			}
+
+			user, err = a.signupNewUser(ctx, tx, user)
 			if err != nil {
 				return err
 			}

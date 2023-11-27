@@ -92,7 +92,31 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+
 	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
+
+	var signupUser *models.User
+	if params.Type == signupVerification && user == nil {
+		if params.Password == "" {
+			return unprocessableEntityError("Signup requires a valid password")
+		}
+		if len(params.Password) < config.PasswordMinLength {
+			return invalidPasswordLengthError(config.PasswordMinLength)
+		}
+		signupParams := &SignupParams{
+			Email:    params.Email,
+			Password: params.Password,
+			Data:     params.Data,
+			Provider: "email",
+			Aud:      aud,
+		}
+
+		signupUser, err = signupParams.ToUserModel(false /* <- isSSOUser */)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
@@ -115,7 +139,16 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 					Provider: "email",
 					Aud:      aud,
 				}
-				user, terr = a.signupNewUser(ctx, tx, signupParams, false /* <- isSSOUser */)
+
+				// because params above sets no password, this
+				// method is not computationally hard so it can
+				// be used within a database transaction
+				user, terr = signupParams.ToUserModel(false /* <- isSSOUser */)
+				if terr != nil {
+					return terr
+				}
+
+				user, terr = a.signupNewUser(ctx, tx, user)
 				if terr != nil {
 					return terr
 				}
@@ -147,20 +180,11 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return internalServerError("Database error updating user").WithInternalError(err)
 				}
 			} else {
-				if params.Password == "" {
-					return unprocessableEntityError("Signup requires a valid password")
-				}
-				if len(params.Password) < config.PasswordMinLength {
-					return invalidPasswordLengthError(config.PasswordMinLength)
-				}
-				signupParams := &SignupParams{
-					Email:    params.Email,
-					Password: params.Password,
-					Data:     params.Data,
-					Provider: "email",
-					Aud:      aud,
-				}
-				user, terr = a.signupNewUser(ctx, tx, signupParams, false /* <- isSSOUser */)
+				// you should never use SignupParams with
+				// password here to generate a new user, use
+				// signupUser which is a model generated from
+				// SignupParams above
+				user, terr = a.signupNewUser(ctx, tx, signupUser)
 				if terr != nil {
 					return terr
 				}
