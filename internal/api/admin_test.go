@@ -350,7 +350,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				expectedPassword = fmt.Sprintf("%v", c.params["password"])
 			}
 
-			assert.Equal(ts.T(), c.expected["isAuthenticated"], u.Authenticate(expectedPassword))
+			assert.Equal(ts.T(), c.expected["isAuthenticated"], u.Authenticate(context.Background(), expectedPassword))
 
 			// remove created user after each case
 			require.NoError(ts.T(), ts.API.db.Destroy(u))
