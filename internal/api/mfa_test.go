@@ -553,35 +553,64 @@ func (ts *MFATestSuite) TestVerificationHookSuccess() {
 }
 
 func (ts *MFATestSuite) TestVerificationHookReject() {
+	cases := []struct {
+		desc          string
+		enabled       bool
+		expectedToken bool
+	}{
+		{
+			desc:          "No token returned when Hook is configured to reject",
+			enabled:       true,
+			expectedToken: false,
+		},
+		{
+			desc:          "Token returned when Hook is disabled",
+			enabled:       false,
+			expectedToken: true,
+		},
+	}
+
 	verificationError := "authentication attempt rejected"
-	ts.Config.Hook.MFAVerificationAttempt.Enabled = true
-	// Pop executes as supabase_auth_admin and only has access to auth
-	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/auth/verification_hook_reject"
-	verificationHookSQL := fmt.Sprintf(`
-	create or replace function verification_hook_reject(input jsonb)
-	returns json as $$
-	begin
-	    return json_build_object(
-	        'decision', 'reject',
-             'message', %q
-	    );
-	end;
-	$$ language plpgsql;
-	`, verificationError)
-	email := "testemail@gmail.com"
-	password := "testpassword"
 
-	err := ts.API.db.RawQuery(verificationHookSQL).Exec()
-	require.NoError(ts.T(), err)
-	resp := signUpAndVerify(ts, email, password, false /* Guarantee Success */)
-	// TODO: Figure out how to properly require a 403 and a proper error message here
-	require.Equal(ts.T(), "", resp.Token)
-	cleanupHookSQL := `
-	drop function verification_hook_reject(input jsonb)
-	`
-	err = ts.API.db.RawQuery(cleanupHookSQL).Exec()
-	require.NoError(ts.T(), err)
+	for _, c := range cases {
+		ts.T().Run(c.desc, func(t *testing.T) {
+			ts.Config.Hook.MFAVerificationAttempt.Enabled = c.enabled
+			// To ensure distinct emails
+			email := fmt.Sprintf("testemail%s@gmail.com", strings.ReplaceAll(c.desc, " ", ""))
+			password := "testpassword"
 
+			if c.enabled {
+				ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/auth/verification_hook_reject"
+				verificationHookSQL := fmt.Sprintf(`
+                create or replace function verification_hook_reject(input jsonb)
+                returns json as $$
+                begin
+                    return json_build_object(
+                        'decision', 'reject',
+                        'message', '%s'
+                    );
+                end;
+                $$ language plpgsql;
+                `, verificationError)
+
+				err := ts.API.db.RawQuery(verificationHookSQL).Exec()
+				require.NoError(t, err)
+			}
+
+			resp := signUpAndVerify(ts, email, password, false /* Guarantee Success */)
+			if c.expectedToken {
+				require.NotEqual(t, "", resp.Token)
+			} else {
+				require.Equal(t, "", resp.Token)
+			}
+
+			if c.enabled {
+				cleanupHookSQL := `drop function verification_hook_reject(input jsonb)`
+				err := ts.API.db.RawQuery(cleanupHookSQL).Exec()
+				require.NoError(t, err)
+			}
+		})
+	}
 }
 
 func (ts *MFATestSuite) TestVerificationHookError() {
@@ -596,12 +625,4 @@ func (ts *MFATestSuite) TestVerificationHookTimeout() {
 	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/public/test_verification_hook_timeout"
 	// Call pg_sleep(10)
 	// TODO: expect an rror
-}
-
-func (ts *MFATestSuite) TestVerificationHookDisabled() {
-	// The suite should default to false, but for illustration sake
-	ts.Config.Hook.MFAVerificationAttempt.Enabled = false
-	// resp := signUpAndVerify()
-	// Response should indicate failture
-
 }
