@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -306,7 +307,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		output := &hooks.MFAVerificationAttemptOutput{}
 
 		if err := a.invokeHook(ctx, input, output); err != nil {
-			return err
+			return errors.New(err.Error())
 		}
 		if terr := models.NewAuditLogEntry(r, a.db, user, models.InvokeAuthHookAction, r.RemoteAddr, map[string]interface{}{
 			"extensibility_point_event": hooks.MFAVerificationAttempt,
