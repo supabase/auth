@@ -40,7 +40,6 @@ type MFAVerificationAttemptOutput struct {
 	Message  string `json:"message"`
 }
 
-// AuthHookError is an error with a message and an error code.
 type AuthHookError struct {
 	Code    string `json:"code"`
 	Message string `json:"msg"`

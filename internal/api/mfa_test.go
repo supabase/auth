@@ -384,7 +384,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
 	email := "test1@example.com"
 	password := "test123"
-	token := signUpAndVerify(ts, email, password, true /* <- isSuccessGuaranteed */)
+	token := signUpAndVerify(ts, email, password, true /* <- requireStatusOK */)
 	ts.Config.Security.RefreshTokenRotationEnabled = true
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
@@ -410,7 +410,7 @@ func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
 func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
 	email := "test1@example.com"
 	password := "test123"
-	token := signUpAndVerify(ts, email, password, true /*  <- isSuccessGuaranteed */)
+	token := signUpAndVerify(ts, email, password, true /*  <- requireStatusOK */)
 	ts.Config.Security.RefreshTokenRotationEnabled = true
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
@@ -455,10 +455,10 @@ func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenRes
 	return data
 }
 
-func signUpAndVerify(ts *MFATestSuite, email, password string, isSuccessGuaranteed bool) (verifyResp *AccessTokenResponse) {
+func signUpAndVerify(ts *MFATestSuite, email, password string, requireStatusOK bool) (verifyResp *AccessTokenResponse) {
 
 	signUpResp := signUp(ts, email, password)
-	verifyResp = enrollAndVerify(ts, signUpResp.User, signUpResp.Token, isSuccessGuaranteed)
+	verifyResp = enrollAndVerify(ts, signUpResp.User, signUpResp.Token, requireStatusOK)
 
 	return verifyResp
 
@@ -542,7 +542,7 @@ func (ts *MFATestSuite) TestVerificationHookDefaultSuccess() {
 
 	err := ts.API.db.RawQuery(verificationHookSQL).Exec()
 	require.NoError(ts.T(), err)
-	token := signUpAndVerify(ts, email, password, true /*  <- isSuccessGuaranteed */)
+	token := signUpAndVerify(ts, email, password, true /*  <- requireStatusOK */)
 	require.NotNil(ts.T(), token)
 	cleanupHookSQL := `
     drop function verification_hook(input jsonb)
@@ -596,7 +596,7 @@ func (ts *MFATestSuite) TestVerificationHookDefaultReject() {
 				require.NoError(t, err)
 			}
 
-			resp := signUpAndVerify(ts, email, password, false /*  <- isSuccessGuaranteed */)
+			resp := signUpAndVerify(ts, email, password, false /*  <- requireStatusOK */)
 			if c.expectedToken {
 				require.NotEqual(t, "", resp.Token)
 			} else {
@@ -623,7 +623,7 @@ func (ts *MFATestSuite) TestVerificationHookError() {
 	require.NoError(ts.T(), err)
 	email := "testemail_error@gmail.com"
 	password := "testpassword"
-	resp := signUpAndVerify(ts, email, password, false /* <- isSuccessGuaranteed */)
+	resp := signUpAndVerify(ts, email, password, false /* <- requireStatusOK */)
 	// TODO: Convert into proper assetions here instead of nilcheck
 	require.Equal(ts.T(), "", resp.Token) // Assuming that the token is nil on error
 	cleanupHook(ts, "test_verification_hook_error(input jsonb)")
@@ -648,7 +648,7 @@ func (ts *MFATestSuite) TestVerificationHookTimeout() {
 
 	email := "testemail_error@gmail.com"
 	password := "testpassword"
-	resp := signUpAndVerify(ts, email, password, false /* <- isSuccessGuaranteed */)
+	resp := signUpAndVerify(ts, email, password, false /* <- requireStatusOK */)
 	require.Equal(ts.T(), "", resp.Token) // Assuming that the token is nil on error
 
 	cleanupHook(ts, "test_verification_hook_timeout(input jsonb)")
