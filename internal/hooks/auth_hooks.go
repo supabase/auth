@@ -19,7 +19,8 @@ const (
 )
 
 const (
-	DefaultTimeout = 2 * time.Second
+	// In Miliseconds
+	DefaultTimeout = 2000
 )
 
 // Hook Names

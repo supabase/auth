@@ -637,7 +637,7 @@ func (ts *MFATestSuite) TestVerificationHookTimeout() {
     create or replace function test_verification_hook_timeout(input jsonb)
     returns json as $$
     begin
-        PERFORM pg_sleep(10);
+        PERFORM pg_sleep(3);
         return json_build_object(
             'decision', 'continue'
         );
