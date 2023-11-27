@@ -384,7 +384,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
 	email := "test1@example.com"
 	password := "test123"
-	token := signUpAndVerify(ts, email, password, true /* Guarantee success */)
+	token := signUpAndVerify(ts, email, password, true /* <- isSuccessGuaranteed */)
 	ts.Config.Security.RefreshTokenRotationEnabled = true
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
@@ -410,7 +410,7 @@ func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
 func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
 	email := "test1@example.com"
 	password := "test123"
-	token := signUpAndVerify(ts, email, password, true /* Guarantee Success */)
+	token := signUpAndVerify(ts, email, password, true /*  <- isSuccessGuaranteed */)
 	ts.Config.Security.RefreshTokenRotationEnabled = true
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
@@ -455,10 +455,10 @@ func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenRes
 	return data
 }
 
-func signUpAndVerify(ts *MFATestSuite, email, password string, guaranteeSuccess bool) (verifyResp *AccessTokenResponse) {
+func signUpAndVerify(ts *MFATestSuite, email, password string, isSuccessGuaranteed bool) (verifyResp *AccessTokenResponse) {
 
 	signUpResp := signUp(ts, email, password)
-	verifyResp = enrollAndVerify(ts, signUpResp.User, signUpResp.Token, guaranteeSuccess)
+	verifyResp = enrollAndVerify(ts, signUpResp.User, signUpResp.Token, isSuccessGuaranteed)
 
 	return verifyResp
 
@@ -523,10 +523,9 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string, guarante
 	return verifyResp
 }
 
-// TODO: refactor 4 cases into one long function. Also consider how to cleanup if any fails
-func (ts *MFATestSuite) TestVerificationHookSuccess() {
+func (ts *MFATestSuite) TestVerificationHookDefaultSuccess() {
 	ts.Config.Hook.MFAVerificationAttempt.Enabled = true
-	// Pop executes as supabase_auth_admin and only has access to auth
+	// GoTrue executes as supabase_auth_admin and only has access to the Auth Schema
 	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/auth/verification_hook"
 	verificationHookSQL := `
     create or replace function verification_hook(input jsonb)
@@ -540,10 +539,10 @@ func (ts *MFATestSuite) TestVerificationHookSuccess() {
     `
 	email := "testemail@gmail.com"
 	password := "testpassword"
-	// 3. Execute the SQL to create the function
+
 	err := ts.API.db.RawQuery(verificationHookSQL).Exec()
 	require.NoError(ts.T(), err)
-	token := signUpAndVerify(ts, email, password, true /* Guarantee Success */)
+	token := signUpAndVerify(ts, email, password, true /*  <- isSuccessGuaranteed */)
 	require.NotNil(ts.T(), token)
 	cleanupHookSQL := `
     drop function verification_hook(input jsonb)
@@ -552,25 +551,25 @@ func (ts *MFATestSuite) TestVerificationHookSuccess() {
 	require.NoError(ts.T(), err)
 }
 
-func (ts *MFATestSuite) TestVerificationHookReject() {
+func (ts *MFATestSuite) TestVerificationHookDefaultReject() {
 	cases := []struct {
 		desc          string
 		enabled       bool
 		expectedToken bool
 	}{
 		{
-			desc:          "No token returned when Hook is configured to reject",
+			desc:          "Rejection hook works when enabled",
 			enabled:       true,
 			expectedToken: false,
 		},
 		{
-			desc:          "Token returned when Hook is disabled",
+			desc:          "Rejection hook has no effect when disabled",
 			enabled:       false,
 			expectedToken: true,
 		},
 	}
 
-	verificationError := "authentication attempt rejected"
+	defaultVerificationErrorMessage := "authentication attempt rejected"
 
 	for _, c := range cases {
 		ts.T().Run(c.desc, func(t *testing.T) {
@@ -591,31 +590,27 @@ func (ts *MFATestSuite) TestVerificationHookReject() {
                     );
                 end;
                 $$ language plpgsql;
-                `, verificationError)
+                `, defaultVerificationErrorMessage)
 
 				err := ts.API.db.RawQuery(verificationHookSQL).Exec()
 				require.NoError(t, err)
 			}
 
-			resp := signUpAndVerify(ts, email, password, false /* Guarantee Success */)
+			resp := signUpAndVerify(ts, email, password, false /*  <- isSuccessGuaranteed */)
 			if c.expectedToken {
 				require.NotEqual(t, "", resp.Token)
 			} else {
 				require.Equal(t, "", resp.Token)
 			}
 
-			if c.enabled {
-				cleanupHookSQL := `drop function verification_hook_reject(input jsonb)`
-				err := ts.API.db.RawQuery(cleanupHookSQL).Exec()
-				require.NoError(t, err)
-			}
+			cleanupHook(ts, "verification_hook_reject(input jsonb)")
 		})
 	}
 }
 
 func (ts *MFATestSuite) TestVerificationHookError() {
 	ts.Config.Hook.MFAVerificationAttempt.Enabled = true
-	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/public/test_verification_hook_error"
+	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/auth/test_verification_hook_error"
 
 	errorHookSQL := `
     create or replace function test_verification_hook_error(input jsonb)
@@ -628,19 +623,15 @@ func (ts *MFATestSuite) TestVerificationHookError() {
 	require.NoError(ts.T(), err)
 	email := "testemail_error@gmail.com"
 	password := "testpassword"
-	resp := signUpAndVerify(ts, email, password, false /* No guarantee of success */)
+	resp := signUpAndVerify(ts, email, password, false /* <- isSuccessGuaranteed */)
 	// TODO: Convert into proper assetions here instead of nilcheck
 	require.Equal(ts.T(), "", resp.Token) // Assuming that the token is nil on error
-	// TODO: Convert this into generic function
-	cleanupHookSQL := `drop function test_verification_hook_error(input jsonb)`
-	err = ts.API.db.RawQuery(cleanupHookSQL).Exec()
-	require.NoError(ts.T(), err)
-
+	cleanupHook(ts, "test_verification_hook_error(input jsonb)")
 }
 
 func (ts *MFATestSuite) TestVerificationHookTimeout() {
 	ts.Config.Hook.MFAVerificationAttempt.Enabled = true
-	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/public/test_verification_hook_timeout"
+	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/auth/test_verification_hook_timeout"
 
 	timeoutHookSQL := `
     create or replace function test_verification_hook_timeout(input jsonb)
@@ -657,11 +648,16 @@ func (ts *MFATestSuite) TestVerificationHookTimeout() {
 
 	email := "testemail_error@gmail.com"
 	password := "testpassword"
-	resp := signUpAndVerify(ts, email, password, false /* No guarantee of success */)
+	resp := signUpAndVerify(ts, email, password, false /* <- isSuccessGuaranteed */)
 	require.Equal(ts.T(), "", resp.Token) // Assuming that the token is nil on error
 
-	cleanupHookSQL := `drop function test_verification_hook_timeout(input jsonb)`
-	err = ts.API.db.RawQuery(cleanupHookSQL).Exec()
+	cleanupHook(ts, "test_verification_hook_timeout(input jsonb)")
+
+}
+
+func cleanupHook(ts *MFATestSuite, hookName string) {
+	cleanupHookSQL := fmt.Sprintf("drop function if exists %s", hookName)
+	err := ts.API.db.RawQuery(cleanupHookSQL).Exec()
 	require.NoError(ts.T(), err)
 
 }

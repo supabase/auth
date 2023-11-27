@@ -214,7 +214,7 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) error {
 		}
 		if err := a.db.Transaction(func(tx *storage.Connection) error {
 
-			timeoutQuery := tx.RawQuery(fmt.Sprintf("SET LOCAL statement_timeout TO '%d';", hooks.DefaultTimeout))
+			timeoutQuery := tx.RawQuery(fmt.Sprintf("set local statement_timeout TO '%d';", hooks.DefaultTimeout))
 			if terr := timeoutQuery.Exec(); terr != nil {
 				return terr
 			}
