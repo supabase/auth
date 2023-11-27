@@ -13,7 +13,6 @@ import (
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
 	"github.com/gofrs/uuid"
-	"github.com/pkg/errors"
 	"github.com/pquerna/otp/totp"
 	"github.com/supabase/gotrue/internal/hooks"
 	"github.com/supabase/gotrue/internal/metering"
@@ -200,7 +199,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-func (a *API) invokeHook(ctx context.Context, input any, output any) error {
+func (a *API) invokeHook(ctx context.Context, input any, output any) *hooks.AuthHookError {
 	var response []byte
 	switch input.(type) {
 	case hooks.MFAVerificationAttemptInput:
@@ -210,10 +209,11 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) error {
 		}
 		hookName, err := hooks.FetchHookName(a.config.Hook.MFAVerificationAttempt)
 		if err != nil {
-			return err
+			return &hooks.AuthHookError{
+				Message: "invalid hook name",
+			}
 		}
 		if err := a.db.Transaction(func(tx *storage.Connection) error {
-
 			timeoutQuery := tx.RawQuery(fmt.Sprintf("set local statement_timeout TO '%d';", hooks.DefaultTimeout))
 			if terr := timeoutQuery.Exec(); terr != nil {
 				return terr
@@ -225,20 +225,26 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) error {
 			}
 			return nil
 		}); err != nil {
-			return err
+			return &hooks.AuthHookError{
+				Message: err.Error(),
+			}
 		}
 		hookResponseOrError := hooks.AuthHookErrorResponse{}
 		err = json.Unmarshal(response, &hookResponseOrError)
 		if err == nil && hookResponseOrError.IsError() {
-			return err
+			return &hookResponseOrError.AuthHookError
 		}
 		if err = json.Unmarshal(response, output); err != nil {
-			return err
+			return &hooks.AuthHookError{
+				Message: "error unmarshalling response",
+			}
 		}
 
 		return nil
 	default:
-		return errors.New("invalid hook extensibility point")
+		return &hooks.AuthHookError{
+			Message: "invalid extensibility point",
+		}
 	}
 }
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {

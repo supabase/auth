@@ -8,7 +8,6 @@ import (
 	"github.com/supabase/gotrue/internal/conf"
 	"regexp"
 	"strings"
-	"time"
 )
 
 type HookType string
@@ -41,11 +40,15 @@ type MFAVerificationAttemptOutput struct {
 	Message  string `json:"message"`
 }
 
-// AuthHookError is an error with a message and an HTTP status code.
+// AuthHookError is an error with a message and an error code.
 type AuthHookError struct {
-	Code    int    `json:"code"`
+	Code    string `json:"code"`
 	Message string `json:"msg"`
 	ErrorID string `json:"error_id,omitempty"`
+}
+
+func (a *AuthHookError) Error() string {
+	return fmt.Sprintf("%s: %s", a.Code, a.Message)
 }
 
 // Hook Events
