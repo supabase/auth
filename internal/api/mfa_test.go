@@ -616,13 +616,52 @@ func (ts *MFATestSuite) TestVerificationHookReject() {
 func (ts *MFATestSuite) TestVerificationHookError() {
 	ts.Config.Hook.MFAVerificationAttempt.Enabled = true
 	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/public/test_verification_hook_error"
-	// TODO
+
+	errorHookSQL := `
+    create or replace function test_verification_hook_error(input jsonb)
+    returns json as $$
+    begin
+        RAISE EXCEPTION 'Intentional Error for Testing';
+    end;
+    $$ language plpgsql;`
+	err := ts.API.db.RawQuery(errorHookSQL).Exec()
+	require.NoError(ts.T(), err)
+	email := "testemail_error@gmail.com"
+	password := "testpassword"
+	resp := signUpAndVerify(ts, email, password, false /* No guarantee of success */)
+	// TODO: Convert into proper assetions here instead of nilcheck
+	require.Equal(ts.T(), "", resp.Token) // Assuming that the token is nil on error
+	// TODO: Convert this into generic function
+	cleanupHookSQL := `drop function test_verification_hook_error(input jsonb)`
+	err = ts.API.db.RawQuery(cleanupHookSQL).Exec()
+	require.NoError(ts.T(), err)
 
 }
 
 func (ts *MFATestSuite) TestVerificationHookTimeout() {
 	ts.Config.Hook.MFAVerificationAttempt.Enabled = true
 	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/public/test_verification_hook_timeout"
-	// Call pg_sleep(10)
-	// TODO: expect an rror
+
+	timeoutHookSQL := `
+    create or replace function test_verification_hook_timeout(input jsonb)
+    returns json as $$
+    begin
+        PERFORM pg_sleep(10);
+        return json_build_object(
+            'decision', 'continue'
+        );
+    end;
+    $$ language plpgsql;`
+	err := ts.API.db.RawQuery(timeoutHookSQL).Exec()
+	require.NoError(ts.T(), err)
+
+	email := "testemail_error@gmail.com"
+	password := "testpassword"
+	resp := signUpAndVerify(ts, email, password, false /* No guarantee of success */)
+	require.Equal(ts.T(), "", resp.Token) // Assuming that the token is nil on error
+
+	cleanupHookSQL := `drop function test_verification_hook_timeout(input jsonb)`
+	err = ts.API.db.RawQuery(cleanupHookSQL).Exec()
+	require.NoError(ts.T(), err)
+
 }

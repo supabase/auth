@@ -8,6 +8,7 @@ import (
 	"github.com/supabase/gotrue/internal/conf"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type HookType string
@@ -15,6 +16,10 @@ type HookType string
 const (
 	PostgresHook HookType = "pg-functions"
 	HTTPHook     HookType = "http"
+)
+
+const (
+	DefaultTimeout = 2 * time.Second
 )
 
 // Hook Names

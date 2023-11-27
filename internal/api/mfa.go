@@ -213,6 +213,11 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) error {
 			return err
 		}
 		if err := a.db.Transaction(func(tx *storage.Connection) error {
+
+			timeoutQuery := tx.RawQuery(fmt.Sprintf("SET LOCAL statement_timeout TO '%d';", hooks.DefaultTimeout))
+			if terr := timeoutQuery.Exec(); terr != nil {
+				return terr
+			}
 			query := tx.RawQuery(fmt.Sprintf("SELECT * from %s(?)", hookName), payload)
 			terr := query.First(&response)
 			if terr != nil {
