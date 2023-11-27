@@ -42,7 +42,7 @@ type GenerateLinkResponse struct {
 	RedirectTo       string `json:"redirect_to"`
 }
 
-func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
+func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
