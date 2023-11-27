@@ -382,8 +382,7 @@ type WebhookConfig struct {
 
 // Moving away from the existing HookConfig so we can get a fresh start.
 type HookConfiguration struct {
-	// TODO (Joel): Fix the naming later
-	MFA ExtensibilityPointConfiguration `json:"mfa"`
+	MFAVerificationAttempt ExtensibilityPointConfiguration `json:"mfa_verification_attempt" split_words:"true"`
 }
 
 type ExtensibilityPointConfiguration struct {

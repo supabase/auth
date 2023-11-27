@@ -73,7 +73,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Zoom:         config.External.Zoom.Enabled,
 		},
 		HookConfiguration: HookSettings{
-			MFAVerification: config.Hook.MFA.Enabled,
+			MFAVerification: config.Hook.MFAVerificationAttempt.Enabled,
 		},
 
 		DisableSignup:     config.DisableSignup,

@@ -204,7 +204,7 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) error {
 	switch input.(type) {
 	case hooks.MFAVerificationAttemptInput:
 		var response []byte
-		hookName, err := hooks.FetchHookName(a.config.Hook.MFA)
+		hookName, err := hooks.FetchHookName(a.config.Hook.MFAVerificationAttempt)
 		if err != nil {
 			return err
 		}
@@ -278,7 +278,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	valid := totp.Validate(params.Code, factor.Secret)
-	if config.Hook.MFA.Enabled {
+	if config.Hook.MFAVerificationAttempt.Enabled {
 		input := hooks.MFAVerificationAttemptInput{
 			UserID:   user.ID,
 			FactorID: factor.ID,
@@ -296,7 +296,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(r, a.db, user, models.InvokeAuthHookAction, r.RemoteAddr, map[string]interface{}{
 			// TODO: include extensibility point name
 			"factor_id": factor.ID,
-			"URI":       config.Hook.MFA.URI,
+			"URI":       config.Hook.MFAVerificationAttempt.URI,
 		}); terr != nil {
 			return terr
 		}
