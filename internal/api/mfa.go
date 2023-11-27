@@ -215,6 +215,7 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) *hooks.Auth
 			}
 		}
 		if err := a.db.Transaction(func(tx *storage.Connection) error {
+			// We rely on Postgres timeouts to ensure the function doesn't overrun
 			timeoutQuery := tx.RawQuery(fmt.Sprintf("set local statement_timeout TO '%d';", hooks.DefaultTimeout))
 			if terr := timeoutQuery.Exec(); terr != nil {
 				return terr
@@ -230,6 +231,7 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) *hooks.Auth
 				Message: err.Error(),
 			}
 		}
+		// As we the response fields aren't known to us we try to check if it's an error first.
 		hookResponseOrError := hooks.AuthHookErrorResponse{}
 		err = json.Unmarshal(response, &hookResponseOrError)
 		if err == nil && hookResponseOrError.IsError() {
