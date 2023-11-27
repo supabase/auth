@@ -45,12 +45,11 @@ const (
 	MFAVerificationAttempt = "auth.mfa_verfication"
 )
 
-// TODO: Give this a more proper name
-type HookErrorResponse struct {
+type AuthHookErrorResponse struct {
 	AuthHookError
 }
 
-func (hookError *HookErrorResponse) IsError() bool {
+func (hookError *AuthHookErrorResponse) IsError() bool {
 	return hookError.Message != ""
 }
 

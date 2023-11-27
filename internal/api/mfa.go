@@ -218,7 +218,7 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) error {
 		}); err != nil {
 			return err
 		}
-		hookResponseOrError := hooks.HookErrorResponse{}
+		hookResponseOrError := hooks.AuthHookErrorResponse{}
 		err = json.Unmarshal(response, &hookResponseOrError)
 		if err == nil && hookResponseOrError.IsError() {
 			return err
