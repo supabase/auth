@@ -40,7 +40,6 @@ const (
 	DeleteRecoveryCodesAction       AuditAction = "recovery_codes_deleted"
 	UpdateFactorAction              AuditAction = "factor_updated"
 	MFACodeLoginAction              AuditAction = "mfa_code_login"
-	InvokeAuthHookAction            AuditAction = "auth_hook_invoked"
 	IdentityUnlinkAction            AuditAction = "identity_unlinked"
 
 	account       auditLogType = "account"
@@ -49,7 +48,6 @@ const (
 	user          auditLogType = "user"
 	factor        auditLogType = "factor"
 	recoveryCodes auditLogType = "recovery_codes"
-	authHook      auditLogType = "auth_hook"
 )
 
 var ActionLogTypeMap = map[AuditAction]auditLogType{
@@ -75,7 +73,6 @@ var ActionLogTypeMap = map[AuditAction]auditLogType{
 	UpdateFactorAction:              factor,
 	MFACodeLoginAction:              factor,
 	DeleteRecoveryCodesAction:       recoveryCodes,
-	InvokeAuthHookAction:            authHook,
 }
 
 // AuditLogEntry is the database model for audit log entries.

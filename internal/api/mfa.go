@@ -239,7 +239,7 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) *hooks.Auth
 
 		return nil
 	default:
-		return hooks.HookError("invalid extensibility point")
+		panic("invalid extensibility point")
 	}
 }
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
@@ -292,6 +292,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	valid := totp.Validate(params.Code, factor.Secret)
+
 	if config.Hook.MFAVerificationAttempt.Enabled {
 		input := hooks.MFAVerificationAttemptInput{
 			UserID:   user.ID,
@@ -299,16 +300,8 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			Valid:    valid,
 		}
 		output := &hooks.MFAVerificationAttemptOutput{}
-
 		if err := a.invokeHook(ctx, input, output); err != nil {
 			return errors.New(err.Error())
-		}
-		if terr := models.NewAuditLogEntry(r, a.db, user, models.InvokeAuthHookAction, r.RemoteAddr, map[string]interface{}{
-			"extensibility_point_event": hooks.MFAVerificationAttempt,
-			"factor_id":                 factor.ID,
-			"URI":                       config.Hook.MFAVerificationAttempt.URI,
-		}); terr != nil {
-			return terr
 		}
 		if output.Decision == hooks.MFAHookRejection {
 			if err := models.Logout(a.db, user.ID); err != nil {
