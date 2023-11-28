@@ -523,136 +523,119 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string, guarante
 	return verifyResp
 }
 
-func (ts *MFATestSuite) TestVerificationHookDefaultSuccess() {
-	ts.Config.Hook.MFAVerificationAttempt.Enabled = true
-	// GoTrue executes as supabase_auth_admin and only has access to the Auth Schema
-	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/auth/verification_hook"
-	verificationHookSQL := `
-    create or replace function verification_hook(input jsonb)
-    returns json as $$
-    begin
-        return json_build_object(
-            'decision', 'continue'
-        );
-    end;
-    $$ language plpgsql;
-    `
-	email := "testemail@gmail.com"
-	password := "testpassword"
-
-	err := ts.API.db.RawQuery(verificationHookSQL).Exec()
-	require.NoError(ts.T(), err)
-	token := signUpAndVerify(ts, email, password, true /*  <- requireStatusOK */)
-	require.NotNil(ts.T(), token)
-	cleanupHookSQL := `
-    drop function verification_hook(input jsonb)
-    `
-	err = ts.API.db.RawQuery(cleanupHookSQL).Exec()
-	require.NoError(ts.T(), err)
-}
-
-func (ts *MFATestSuite) TestVerificationHookDefaultReject() {
-	cases := []struct {
-		desc          string
-		enabled       bool
-		expectedToken bool
-	}{
+func (ts *MFATestSuite) TestVerificationHooks() {
+	type verificationHookTestCase struct {
+		desc                string
+		enabled             bool
+		uri                 string
+		hookFunctionSQL     string
+		emailSuffix         string
+		expectToken         bool
+		cleanupHookFunction string
+	}
+	cases := []verificationHookTestCase{
 		{
-			desc:          "Rejection hook works when enabled",
-			enabled:       true,
-			expectedToken: false,
+			desc:    "Default Success",
+			enabled: true,
+			uri:     "pg-functions://postgres/auth/verification_hook",
+			hookFunctionSQL: `
+                create or replace function verification_hook(input jsonb)
+                returns json as $$
+                begin
+                    return json_build_object('decision', 'continue');
+                end; $$ language plpgsql;`,
+			emailSuffix:         "success",
+			expectToken:         true,
+			cleanupHookFunction: "verification_hook(input jsonb)",
 		},
 		{
-			desc:          "Rejection hook has no effect when disabled",
-			enabled:       false,
-			expectedToken: true,
+			desc:    "Error",
+			enabled: true,
+			uri:     "pg-functions://postgres/auth/test_verification_hook_error",
+			hookFunctionSQL: `
+                create or replace function test_verification_hook_error(input jsonb)
+                returns json as $$
+                begin
+                    RAISE EXCEPTION 'Intentional Error for Testing';
+                end; $$ language plpgsql;`,
+			emailSuffix:         "error",
+			expectToken:         false,
+			cleanupHookFunction: "test_verification_hook_error(input jsonb)",
+		},
+		{
+			desc:    "Reject - Enabled",
+			enabled: true,
+			uri:     "pg-functions://postgres/auth/verification_hook_reject",
+			hookFunctionSQL: `
+        create or replace function verification_hook_reject(input jsonb)
+        returns json as $$
+        begin
+            return json_build_object(
+                'decision', 'reject',
+                'message', 'authentication attempt rejected'
+            );
+        end; $$ language plpgsql;`,
+			emailSuffix:         "reject_enabled",
+			expectToken:         false,
+			cleanupHookFunction: "verification_hook_reject(input jsonb)",
+		},
+		{
+			desc:    "Reject - Disabled",
+			enabled: false,
+			uri:     "pg-functions://postgres/auth/verification_hook_reject",
+			hookFunctionSQL: `
+        create or replace function verification_hook_reject(input jsonb)
+        returns json as $$
+        begin
+            return json_build_object(
+                'decision', 'reject',
+                'message', 'authentication attempt rejected'
+            );
+        end; $$ language plpgsql;`,
+			emailSuffix:         "reject_disabled",
+			expectToken:         true,
+			cleanupHookFunction: "verification_hook_reject(input jsonb)",
+		},
+		{
+			desc:    "Timeout",
+			enabled: true,
+			uri:     "pg-functions://postgres/auth/test_verification_hook_timeout",
+			hookFunctionSQL: `
+        create or replace function test_verification_hook_timeout(input jsonb)
+        returns json as $$
+        begin
+            PERFORM pg_sleep(3);
+            return json_build_object(
+                'decision', 'continue'
+            );
+        end; $$ language plpgsql;`,
+			emailSuffix:         "timeout",
+			expectToken:         false, // Assuming the test expects no token due to timeout
+			cleanupHookFunction: "test_verification_hook_timeout(input jsonb)",
 		},
 	}
-
-	defaultVerificationErrorMessage := "authentication attempt rejected"
 
 	for _, c := range cases {
 		ts.T().Run(c.desc, func(t *testing.T) {
 			ts.Config.Hook.MFAVerificationAttempt.Enabled = c.enabled
-			// To ensure distinct emails
-			email := fmt.Sprintf("testemail%s@gmail.com", strings.ReplaceAll(c.desc, " ", ""))
+			ts.Config.Hook.MFAVerificationAttempt.URI = c.uri
+
+			err := ts.API.db.RawQuery(c.hookFunctionSQL).Exec()
+			require.NoError(t, err)
+
+			email := fmt.Sprintf("testemail_%s@gmail.com", c.emailSuffix)
 			password := "testpassword"
+			resp := signUpAndVerify(ts, email, password, c.expectToken)
 
-			if c.enabled {
-				ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/auth/verification_hook_reject"
-				verificationHookSQL := fmt.Sprintf(`
-                create or replace function verification_hook_reject(input jsonb)
-                returns json as $$
-                begin
-                    return json_build_object(
-                        'decision', 'reject',
-                        'message', '%s'
-                    );
-                end;
-                $$ language plpgsql;
-                `, defaultVerificationErrorMessage)
-
-				err := ts.API.db.RawQuery(verificationHookSQL).Exec()
-				require.NoError(t, err)
-			}
-
-			resp := signUpAndVerify(ts, email, password, false /*  <- requireStatusOK */)
-			if c.expectedToken {
+			if c.expectToken {
 				require.NotEqual(t, "", resp.Token)
 			} else {
 				require.Equal(t, "", resp.Token)
 			}
 
-			cleanupHook(ts, "verification_hook_reject(input jsonb)")
+			cleanupHook(ts, c.cleanupHookFunction)
 		})
 	}
-}
-
-func (ts *MFATestSuite) TestVerificationHookError() {
-	ts.Config.Hook.MFAVerificationAttempt.Enabled = true
-	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/auth/test_verification_hook_error"
-
-	errorHookSQL := `
-    create or replace function test_verification_hook_error(input jsonb)
-    returns json as $$
-    begin
-        RAISE EXCEPTION 'Intentional Error for Testing';
-    end;
-    $$ language plpgsql;`
-	err := ts.API.db.RawQuery(errorHookSQL).Exec()
-	require.NoError(ts.T(), err)
-	email := "testemail_error@gmail.com"
-	password := "testpassword"
-	resp := signUpAndVerify(ts, email, password, false /* <- requireStatusOK */)
-	// TODO: Convert into proper assetions here instead of nilcheck
-	require.Equal(ts.T(), "", resp.Token) // Assuming that the token is nil on error
-	cleanupHook(ts, "test_verification_hook_error(input jsonb)")
-}
-
-func (ts *MFATestSuite) TestVerificationHookTimeout() {
-	ts.Config.Hook.MFAVerificationAttempt.Enabled = true
-	ts.Config.Hook.MFAVerificationAttempt.URI = "pg-functions://postgres/auth/test_verification_hook_timeout"
-
-	timeoutHookSQL := `
-    create or replace function test_verification_hook_timeout(input jsonb)
-    returns json as $$
-    begin
-        PERFORM pg_sleep(3);
-        return json_build_object(
-            'decision', 'continue'
-        );
-    end;
-    $$ language plpgsql;`
-	err := ts.API.db.RawQuery(timeoutHookSQL).Exec()
-	require.NoError(ts.T(), err)
-
-	email := "testemail_error@gmail.com"
-	password := "testpassword"
-	resp := signUpAndVerify(ts, email, password, false /* <- requireStatusOK */)
-	require.Equal(ts.T(), "", resp.Token) // Assuming that the token is nil on error
-
-	cleanupHook(ts, "test_verification_hook_timeout(input jsonb)")
-
 }
 
 func cleanupHook(ts *MFATestSuite, hookName string) {
