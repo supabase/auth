@@ -55,8 +55,19 @@ const (
 	MFAVerificationAttempt = "auth.mfa_verfication"
 )
 
+const (
+	DefaultMFAHookRejectionMessage = "mfa attempt rejected"
+)
+
 type AuthHookErrorResponse struct {
 	AuthHookError
+}
+
+func HookError(message string, args ...interface{}) *AuthHookError {
+	return &AuthHookError{
+		Message: fmt.Sprintf(message, args...),
+	}
+
 }
 
 func (hookError *AuthHookErrorResponse) IsError() bool {

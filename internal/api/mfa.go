@@ -210,9 +210,7 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) *hooks.Auth
 		}
 		hookName, err := hooks.FetchHookName(a.config.Hook.MFAVerificationAttempt)
 		if err != nil {
-			return &hooks.AuthHookError{
-				Message: "invalid hook name",
-			}
+			return hooks.HookError("invalid hook name")
 		}
 		if err := a.db.Transaction(func(tx *storage.Connection) error {
 			// We rely on Postgres timeouts to ensure the function doesn't overrun
@@ -227,9 +225,7 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) *hooks.Auth
 			}
 			return nil
 		}); err != nil {
-			return &hooks.AuthHookError{
-				Message: err.Error(),
-			}
+			return hooks.HookError(err.Error())
 		}
 		// As we the response fields aren't known to us we try to check if it's an error first.
 		hookResponseOrError := hooks.AuthHookErrorResponse{}
@@ -238,16 +234,12 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) *hooks.Auth
 			return &hookResponseOrError.AuthHookError
 		}
 		if err = json.Unmarshal(response, output); err != nil {
-			return &hooks.AuthHookError{
-				Message: "error unmarshalling response",
-			}
+			return hooks.HookError("error unmarshalling response")
 		}
 
 		return nil
 	default:
-		return &hooks.AuthHookError{
-			Message: "invalid extensibility point",
-		}
+		return hooks.HookError("invalid extensibility point")
 	}
 }
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
@@ -321,6 +313,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if output.Decision == hooks.MFAHookRejection {
 			if err := models.Logout(a.db, user.ID); err != nil {
 				return err
+			}
+			if output.Message == "" {
+				output.Message = hooks.DefaultMFAHookRejectionMessage
 			}
 			return forbiddenError(output.Message)
 		}
