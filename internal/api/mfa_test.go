@@ -129,7 +129,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 
-			w := enroll(ts, token, c.friendlyName, c.factorType, c.issuer, c.expectedCode)
+			w := performEnrollFlow(ts, token, c.friendlyName, c.factorType, c.issuer, c.expectedCode)
 
 			factors, err := models.FindFactorsByUser(ts.API.db, user)
 			ts.Require().NoError(err)
@@ -278,7 +278,6 @@ func (ts *MFATestSuite) setupUserAndSession() (*models.User, *models.Session) {
 }
 
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
-
 	user, session := ts.setupUserAndSession()
 
 	cases := []struct {
@@ -384,7 +383,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 
 // Integration Tests
 func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
-	resp := signUpAndVerify(ts, ts.TestEmail, ts.TestPassword)
+	resp := performTestSignupAndVerify(ts, ts.TestEmail, ts.TestPassword)
 	accessTokenResp := &AccessTokenResponse{}
 	require.NoError(ts.T(), json.NewDecoder(resp.Body).Decode(&accessTokenResp))
 
@@ -412,7 +411,7 @@ func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
 
 // Performing MFA Verification followed by a sign in should return an AAL1 session and an AAL2 session
 func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
-	resp := signUpAndVerify(ts, ts.TestEmail, ts.TestPassword)
+	resp := performTestSignupAndVerify(ts, ts.TestEmail, ts.TestPassword)
 	accessTokenResp := &AccessTokenResponse{}
 	require.NoError(ts.T(), json.NewDecoder(resp.Body).Decode(&accessTokenResp))
 
@@ -460,16 +459,16 @@ func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenRes
 	return data
 }
 
-func signUpAndVerify(ts *MFATestSuite, email, password string) *httptest.ResponseRecorder {
+func performTestSignupAndVerify(ts *MFATestSuite, email, password string) *httptest.ResponseRecorder {
 
 	signUpResp := signUp(ts, email, password)
-	resp := enrollAndVerify(ts, signUpResp.User, signUpResp.Token)
+	resp := performEnrollAndVerify(ts, signUpResp.User, signUpResp.Token)
 
 	return resp
 
 }
 
-func enroll(ts *MFATestSuite, token, friendlyName, factorType, issuer string, expectedCode int) *httptest.ResponseRecorder {
+func performEnrollFlow(ts *MFATestSuite, token, friendlyName, factorType, issuer string, expectedCode int) *httptest.ResponseRecorder {
 	var buffer bytes.Buffer
 	w := httptest.NewRecorder()
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": friendlyName, "factor_type": factorType, "issuer": issuer}))
@@ -483,7 +482,7 @@ func enroll(ts *MFATestSuite, token, friendlyName, factorType, issuer string, ex
 	return w
 
 }
-func verify(ts *MFATestSuite, challengeID, factorID uuid.UUID, token string, expectedCode int) *httptest.ResponseRecorder {
+func performVerifyFlow(ts *MFATestSuite, challengeID, factorID uuid.UUID, token string, expectedCode int) *httptest.ResponseRecorder {
 	var verifyBuffer bytes.Buffer
 	y := httptest.NewRecorder()
 
@@ -512,26 +511,26 @@ func verify(ts *MFATestSuite, challengeID, factorID uuid.UUID, token string, exp
 	return y
 }
 
-func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) *httptest.ResponseRecorder {
-	w := enroll(ts, token, "", models.TOTP, ts.TestDomain, http.StatusOK)
+func performEnrollAndVerify(ts *MFATestSuite, user *models.User, token string) *httptest.ResponseRecorder {
+	w := performEnrollFlow(ts, token, "", models.TOTP, ts.TestDomain, http.StatusOK)
 	enrollResp := EnrollFactorResponse{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
 	factorID := enrollResp.ID
 
 	// Challenge
 	var challengeBuffer bytes.Buffer
-	x := httptest.NewRecorder()
+	w = httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &challengeBuffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Set("Content-Type", "application/json")
-	ts.API.handler.ServeHTTP(x, req)
-	require.Equal(ts.T(), http.StatusOK, x.Code)
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
 	challengeResp := EnrollFactorResponse{}
-	require.NoError(ts.T(), json.NewDecoder(x.Body).Decode(&challengeResp))
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&challengeResp))
 	challengeID := challengeResp.ID
 
 	// Verify
-	y := verify(ts, challengeID, factorID, token, http.StatusOK)
+	y := performVerifyFlow(ts, challengeID, factorID, token, http.StatusOK)
 
 	return y
 }
