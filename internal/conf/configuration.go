@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -390,14 +391,42 @@ type ExtensibilityPointConfiguration struct {
 	Enabled bool   `json:"true"`
 }
 
+func (h *HookConfiguration) Validate() error {
+	points := []ExtensibilityPointConfiguration{
+		h.MFAVerificationAttempt,
+	}
+	for _, point := range points {
+		if err := point.ValidateExtensibilityPoint(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
 	if e.URI != "" {
+		regExp := `^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`
+		re, err := regexp.Compile(regExp)
+		if err != nil {
+			return err
+		}
+
 		u, err := url.Parse(e.URI)
 		if err != nil {
-			return errors.New("hook entry should be a valid URI")
+			return err
 		}
-		if pathParts := strings.Split(u.Path, "/"); len(pathParts) < 3 {
+		pathParts := strings.Split(u.Path, "/")
+		if len(pathParts) < 3 {
 			return fmt.Errorf("URI path does not contain enough parts")
+		}
+		schema := pathParts[1]
+		table := pathParts[2]
+		// Validate schema and table names
+		if !re.MatchString(schema) {
+			return fmt.Errorf("invalid schema name: %s", schema)
+		}
+		if !re.MatchString(table) {
+			return fmt.Errorf("invalid table name: %s", table)
 		}
 	}
 	return nil
@@ -569,6 +598,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.SAML,
 		&c.Security,
 		&c.Sessions,
+		&c.Hook,
 	}
 
 	for _, validatable := range validatables {
