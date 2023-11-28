@@ -80,6 +80,12 @@ func (ts *MFATestSuite) SetupTest() {
 func (ts *MFATestSuite) TestEnrollFactor() {
 	testFriendlyName := "bob"
 	alternativeFriendlyName := "john"
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	ts.Require().NoError(err)
+
+	token, _, err := generateAccessToken(ts.API.db, user, nil, &ts.Config.JWT)
+
+	require.NoError(ts.T(), err)
 	var cases = []struct {
 		desc         string
 		friendlyName string
@@ -119,20 +125,8 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			var buffer bytes.Buffer
-			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": c.friendlyName, "factor_type": c.factorType, "issuer": c.issuer}))
-			user, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-			ts.Require().NoError(err)
 
-			token, _, err := generateAccessToken(ts.API.db, user, nil, &ts.Config.JWT)
-			require.NoError(ts.T(), err)
-
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodPost, "/factors", &buffer)
-			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-			req.Header.Set("Content-Type", "application/json")
-			ts.API.handler.ServeHTTP(w, req)
-			require.Equal(ts.T(), c.expectedCode, w.Code)
+			w := enroll(ts, token, c.friendlyName, c.factorType, c.issuer, c.expectedCode)
 
 			factors, err := models.FindFactorsByUser(ts.API.db, user)
 			ts.Require().NoError(err)
@@ -176,6 +170,8 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 }
 
 func (ts *MFATestSuite) TestMFAVerifyFactor() {
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
+	ts.Require().NoError(err)
 	cases := []struct {
 		desc             string
 		validChallenge   bool
@@ -204,8 +200,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	for _, v := range cases {
 		ts.Run(v.desc, func() {
 			// Authenticate users and set secret
-			user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
-			ts.Require().NoError(err)
+
 			var buffer bytes.Buffer
 			r, err := models.GrantAuthenticatedUser(ts.API.db, user, models.GrantParams{})
 			require.NoError(ts.T(), err)
@@ -464,17 +459,23 @@ func signUpAndVerify(ts *MFATestSuite, email, password string) (verifyResp *Acce
 
 }
 
-func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyResp *AccessTokenResponse) {
+func enroll(ts *MFATestSuite, token, friendlyName, factorType, issuer string, expectedCode int) *httptest.ResponseRecorder {
 	var buffer bytes.Buffer
 	w := httptest.NewRecorder()
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": "john", "factor_type": models.TOTP, "issuer": ts.TestDomain}))
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": friendlyName, "factor_type": factorType, "issuer": issuer}))
 
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/factors/", &buffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Set("Content-Type", "application/json")
 
 	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.Equal(ts.T(), expectedCode, w.Code)
+	return w
+
+}
+
+func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyResp *AccessTokenResponse) {
+	w := enroll(ts, token, "", models.TOTP, ts.TestDomain, http.StatusOK)
 	enrollResp := EnrollFactorResponse{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
 	factorID := enrollResp.ID
@@ -482,7 +483,7 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 	// Challenge
 	var challengeBuffer bytes.Buffer
 	x := httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &challengeBuffer)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &challengeBuffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Set("Content-Type", "application/json")
 	ts.API.handler.ServeHTTP(x, req)
