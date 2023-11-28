@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/gofrs/uuid"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,11 +26,12 @@ import (
 
 type MFATestSuite struct {
 	suite.Suite
-	API        *API
-	Config     *conf.GlobalConfiguration
-	TestDomain string
-	TestEmail  string
-	TestOTPKey *otp.Key
+	API          *API
+	Config       *conf.GlobalConfiguration
+	TestDomain   string
+	TestEmail    string
+	TestOTPKey   *otp.Key
+	TestPassword string
 }
 
 func TestMFA(t *testing.T) {
@@ -67,6 +69,7 @@ func (ts *MFATestSuite) SetupTest() {
 	testDomain := strings.Split(testEmail, "@")[1]
 	ts.TestDomain = testDomain
 	ts.TestEmail = testEmail
+	ts.TestPassword = "password"
 
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      ts.TestDomain,
@@ -381,14 +384,16 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 
 // Integration Tests
 func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
-	email := "test1@example.com"
-	password := "test123"
-	token := signUpAndVerify(ts, email, password)
+	resp := signUpAndVerify(ts, ts.TestEmail, ts.TestPassword)
+	accessTokenResp := &AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(resp.Body).Decode(&accessTokenResp))
+
 	ts.Config.Security.RefreshTokenRotationEnabled = true
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"refresh_token": token.RefreshToken,
+		"refresh_token": accessTokenResp.RefreshToken,
 	}))
+
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -407,14 +412,15 @@ func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
 
 // Performing MFA Verification followed by a sign in should return an AAL1 session and an AAL2 session
 func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
-	email := "test1@example.com"
-	password := "test123"
-	token := signUpAndVerify(ts, email, password)
+	resp := signUpAndVerify(ts, ts.TestEmail, ts.TestPassword)
+	accessTokenResp := &AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(resp.Body).Decode(&accessTokenResp))
+
 	ts.Config.Security.RefreshTokenRotationEnabled = true
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"email":    email,
-		"password": password,
+		"email":    ts.TestEmail,
+		"password": ts.TestPassword,
 	}))
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &buffer)
 	req.Header.Set("Content-Type", "application/json")
@@ -429,7 +435,7 @@ func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
 	ctx, err = ts.API.maybeLoadUserOrSession(ctx)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), models.AAL1.String(), getSession(ctx).GetAAL())
-	session, err := models.FindSessionByUserID(ts.API.db, token.User.ID)
+	session, err := models.FindSessionByUserID(ts.API.db, accessTokenResp.User.ID)
 	require.NoError(ts.T(), err)
 	require.True(ts.T(), session.IsAAL2())
 }
@@ -454,12 +460,12 @@ func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenRes
 	return data
 }
 
-func signUpAndVerify(ts *MFATestSuite, email, password string) (verifyResp *AccessTokenResponse) {
+func signUpAndVerify(ts *MFATestSuite, email, password string) *httptest.ResponseRecorder {
 
 	signUpResp := signUp(ts, email, password)
-	verifyResp = enrollAndVerify(ts, signUpResp.User, signUpResp.Token)
+	resp := enrollAndVerify(ts, signUpResp.User, signUpResp.Token)
 
-	return verifyResp
+	return resp
 
 }
 
@@ -477,26 +483,7 @@ func enroll(ts *MFATestSuite, token, friendlyName, factorType, issuer string, ex
 	return w
 
 }
-
-func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyResp *AccessTokenResponse) {
-	w := enroll(ts, token, "", models.TOTP, ts.TestDomain, http.StatusOK)
-	enrollResp := EnrollFactorResponse{}
-	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
-	factorID := enrollResp.ID
-
-	// Challenge
-	var challengeBuffer bytes.Buffer
-	x := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &challengeBuffer)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	req.Header.Set("Content-Type", "application/json")
-	ts.API.handler.ServeHTTP(x, req)
-	require.Equal(ts.T(), http.StatusOK, x.Code)
-	challengeResp := EnrollFactorResponse{}
-	require.NoError(ts.T(), json.NewDecoder(x.Body).Decode(&challengeResp))
-	challengeID := challengeResp.ID
-
-	// Verify
+func verify(ts *MFATestSuite, challengeID, factorID uuid.UUID, token string, expectedCode int) *httptest.ResponseRecorder {
 	var verifyBuffer bytes.Buffer
 	y := httptest.NewRecorder()
 
@@ -516,13 +503,35 @@ func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) (verifyR
 		"challenge_id": challengeID,
 		"code":         code,
 	}))
-	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factorID), &verifyBuffer)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factorID), &verifyBuffer)
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	req.Header.Set("Content-Type", "application/json")
 
 	ts.API.handler.ServeHTTP(y, req)
 	require.Equal(ts.T(), http.StatusOK, y.Code)
-	verifyResp = &AccessTokenResponse{}
-	require.NoError(ts.T(), json.NewDecoder(y.Body).Decode(&verifyResp))
-	return verifyResp
+	return y
+}
+
+func enrollAndVerify(ts *MFATestSuite, user *models.User, token string) *httptest.ResponseRecorder {
+	w := enroll(ts, token, "", models.TOTP, ts.TestDomain, http.StatusOK)
+	enrollResp := EnrollFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
+	factorID := enrollResp.ID
+
+	// Challenge
+	var challengeBuffer bytes.Buffer
+	x := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &challengeBuffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+	ts.API.handler.ServeHTTP(x, req)
+	require.Equal(ts.T(), http.StatusOK, x.Code)
+	challengeResp := EnrollFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(x.Body).Decode(&challengeResp))
+	challengeID := challengeResp.ID
+
+	// Verify
+	y := verify(ts, challengeID, factorID, token, http.StatusOK)
+
+	return y
 }
