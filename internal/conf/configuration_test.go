@@ -26,3 +26,72 @@ func TestGlobal(t *testing.T) {
 	require.NotNil(t, gc)
 	assert.Equal(t, "X-Request-ID", gc.API.RequestIDHeader)
 }
+
+func TestPasswordRequiredCharactersDecode(t *testing.T) {
+	examples := []struct {
+		Value  string
+		Result []string
+	}{
+		{
+			Value: "a:b:c",
+			Result: []string{
+				"a",
+				"b",
+				"c",
+			},
+		},
+		{
+			Value: "a\\:b:c",
+			Result: []string{
+				"a:b",
+				"c",
+			},
+		},
+		{
+			Value: "a:b\\:c",
+			Result: []string{
+				"a",
+				"b:c",
+			},
+		},
+		{
+			Value: "\\:a:b:c",
+			Result: []string{
+				":a",
+				"b",
+				"c",
+			},
+		},
+		{
+			Value: "a:b:c\\:",
+			Result: []string{
+				"a",
+				"b",
+				"c:",
+			},
+		},
+		{
+			Value: "::\\::",
+			Result: []string{
+				":",
+			},
+		},
+		{
+			Value:  "",
+			Result: nil,
+		},
+		{
+			Value: " ",
+			Result: []string{
+				" ",
+			},
+		},
+	}
+
+	for i, example := range examples {
+		var into PasswordRequiredCharacters
+		require.NoError(t, into.Decode(example.Value), "Example %d failed with error", i)
+
+		require.Equal(t, []string(into), example.Result, "Example %d got unexpected result", i)
+	}
+}

@@ -131,6 +131,41 @@ func (c *SessionsConfiguration) Validate() error {
 	return nil
 }
 
+type PasswordRequiredCharacters []string
+
+func (v *PasswordRequiredCharacters) Decode(value string) error {
+	parts := strings.Split(value, ":")
+
+	for i := 0; i < len(parts)-1; i += 1 {
+		part := parts[i]
+
+		if part == "" {
+			continue
+		}
+
+		// part ended in escape character, so it should be joined with the next one
+		if part[len(part)-1] == '\\' {
+			parts[i] = part[0:len(part)-1] + ":" + parts[i+1]
+			parts[i+1] = ""
+			continue
+		}
+	}
+
+	for _, part := range parts {
+		if part != "" {
+			*v = append(*v, part)
+		}
+	}
+
+	return nil
+}
+
+type PasswordConfiguration struct {
+	MinLength int `josn:"min_length" split_words:"true"`
+
+	RequiredCharacters PasswordRequiredCharacters `json:"required_characters" split_words:"true"`
+}
+
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
 	API                   APIConfiguration
@@ -149,19 +184,19 @@ type GlobalConfiguration struct {
 	RateLimitTokenRefresh float64 `split_words:"true" default:"150"`
 	RateLimitSso          float64 `split_words:"true" default:"30"`
 
-	SiteURL           string   `json:"site_url" split_words:"true" required:"true"`
-	URIAllowList      []string `json:"uri_allow_list" split_words:"true"`
-	URIAllowListMap   map[string]glob.Glob
-	PasswordMinLength int                      `json:"password_min_length" split_words:"true"`
-	JWT               JWTConfiguration         `json:"jwt"`
-	Mailer            MailerConfiguration      `json:"mailer"`
-	Sms               SmsProviderConfiguration `json:"sms"`
-	DisableSignup     bool                     `json:"disable_signup" split_words:"true"`
-	Webhook           WebhookConfig            `json:"webhook" split_words:"true"`
-	Security          SecurityConfiguration    `json:"security"`
-	Sessions          SessionsConfiguration    `json:"sessions"`
-	MFA               MFAConfiguration         `json:"MFA"`
-	Cookie            struct {
+	SiteURL         string   `json:"site_url" split_words:"true" required:"true"`
+	URIAllowList    []string `json:"uri_allow_list" split_words:"true"`
+	URIAllowListMap map[string]glob.Glob
+	Password        PasswordConfiguration    `json:"password"`
+	JWT             JWTConfiguration         `json:"jwt"`
+	Mailer          MailerConfiguration      `json:"mailer"`
+	Sms             SmsProviderConfiguration `json:"sms"`
+	DisableSignup   bool                     `json:"disable_signup" split_words:"true"`
+	Webhook         WebhookConfig            `json:"webhook" split_words:"true"`
+	Security        SecurityConfiguration    `json:"security"`
+	Sessions        SessionsConfiguration    `json:"sessions"`
+	MFA             MFAConfiguration         `json:"MFA"`
+	Cookie          struct {
 		Key      string `json:"key"`
 		Domain   string `json:"domain"`
 		Duration int    `json:"duration"`
@@ -516,8 +551,8 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		}
 	}
 
-	if config.PasswordMinLength < defaultMinPasswordLength {
-		config.PasswordMinLength = defaultMinPasswordLength
+	if config.Password.MinLength < defaultMinPasswordLength {
+		config.Password.MinLength = defaultMinPasswordLength
 	}
 	if config.MFA.ChallengeExpiryDuration < defaultChallengeExpiryDuration {
 		config.MFA.ChallengeExpiryDuration = defaultChallengeExpiryDuration
