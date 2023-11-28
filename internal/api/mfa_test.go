@@ -53,7 +53,7 @@ func (ts *MFATestSuite) SetupTest() {
 	f, err := models.NewFactor(u, "test_factor", models.TOTP, models.FactorStateUnverified, "secretkey")
 	require.NoError(ts.T(), err, "Error creating test factor model")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
-	// Create corresponding sessoin
+	// Create corresponding session
 	s, err := models.NewSession()
 	require.NoError(ts.T(), err, "Error creating test session")
 	s.UserID = u.ID
@@ -266,7 +266,18 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	}
 }
 
+func (ts *MFATestSuite) setupUserAndSession() (*models.User, *models.Session) {
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	session, err := models.FindSessionByUserID(ts.API.db, user.ID)
+	require.NoError(ts.T(), err)
+	return user, session
+}
+
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
+
+	user, session := ts.setupUserAndSession()
+
 	cases := []struct {
 		desc             string
 		isAAL2           bool
@@ -284,25 +295,20 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 		},
 	}
 	for _, v := range cases {
-
 		ts.Run(v.desc, func() {
 			// Create User
-			u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-			require.NoError(ts.T(), err)
-			s, err := models.FindSessionByUserID(ts.API.db, u.ID)
-			require.NoError(ts.T(), err)
 			if v.isAAL2 {
-				s.UpdateAssociatedAAL(ts.API.db, models.AAL2.String())
+				session.UpdateAssociatedAAL(ts.API.db, models.AAL2.String())
 			}
 			var secondarySession *models.Session
 
 			// Create Session to test behaviour which downgrades other sessions
-			factors, err := models.FindFactorsByUser(ts.API.db, u)
+			factors, err := models.FindFactorsByUser(ts.API.db, user)
 			require.NoError(ts.T(), err, "error finding factors")
 			f := factors[0]
 			secondarySession, err = models.NewSession()
 			require.NoError(ts.T(), err, "Error creating test session")
-			secondarySession.UserID = u.ID
+			secondarySession.UserID = user.ID
 			secondarySession.FactorID = &f.ID
 			require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
@@ -314,7 +320,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 
 			var buffer bytes.Buffer
 
-			token, _, err := generateAccessToken(ts.API.db, u, &s.ID, &ts.Config.JWT)
+			token, _, err := generateAccessToken(ts.API.db, user, &session.ID, &ts.Config.JWT)
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
@@ -337,17 +343,15 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 }
 
 func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	s, err := models.FindSessionByUserID(ts.API.db, u.ID)
-	require.NoError(ts.T(), err)
+	user, session := ts.setupUserAndSession()
+
 	var secondarySession *models.Session
-	factors, err := models.FindFactorsByUser(ts.API.db, u)
+	factors, err := models.FindFactorsByUser(ts.API.db, user)
 	require.NoError(ts.T(), err, "error finding factors")
 	f := factors[0]
 	secondarySession, err = models.NewSession()
 	require.NoError(ts.T(), err, "Error creating test session")
-	secondarySession.UserID = u.ID
+	secondarySession.UserID = user.ID
 	secondarySession.FactorID = &f.ID
 	require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
@@ -356,7 +360,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 
 	var buffer bytes.Buffer
 
-	token, _, err := generateAccessToken(ts.API.db, u, &s.ID, &ts.Config.JWT)
+	token, _, err := generateAccessToken(ts.API.db, user, &session.ID, &ts.Config.JWT)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"factor_id": f.ID,
@@ -369,7 +373,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
 	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
-	session, _ := models.FindSessionByID(ts.API.db, secondarySession.ID, false)
+	session, _ = models.FindSessionByID(ts.API.db, secondarySession.ID, false)
 	require.Equal(ts.T(), models.AAL1.String(), session.GetAAL())
 	require.Nil(ts.T(), session.FactorID)
 
