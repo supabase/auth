@@ -161,7 +161,7 @@ func (v *PasswordRequiredCharacters) Decode(value string) error {
 }
 
 type PasswordConfiguration struct {
-	MinLength int `josn:"min_length" split_words:"true"`
+	MinLength int `json:"min_length" split_words:"true"`
 
 	RequiredCharacters PasswordRequiredCharacters `json:"required_characters" split_words:"true"`
 }
