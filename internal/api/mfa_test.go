@@ -32,6 +32,8 @@ type MFATestSuite struct {
 	TestEmail    string
 	TestOTPKey   *otp.Key
 	TestPassword string
+	TestUser     *models.User
+	TestSession  *models.Session
 }
 
 func TestMFA(t *testing.T) {
@@ -61,6 +63,9 @@ func (ts *MFATestSuite) SetupTest() {
 	s.UserID = u.ID
 	s.FactorID = &f.ID
 	require.NoError(ts.T(), ts.API.db.Create(s), "Error saving test session")
+
+	ts.TestUser = u
+	ts.TestSession = s
 
 	// Generate TOTP related settings
 	emailValue, err := u.Email.Value()
@@ -162,13 +167,7 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 	token, _, err := generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
 	require.NoError(ts.T(), err, "Error generating access token")
 
-	var buffer bytes.Buffer
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", f.ID), &buffer)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
+	w := performChallengeFlow(ts, f.ID, token)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
@@ -269,16 +268,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	}
 }
 
-func (ts *MFATestSuite) setupUserAndSession() (*models.User, *models.Session) {
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-	session, err := models.FindSessionByUserID(ts.API.db, user.ID)
-	require.NoError(ts.T(), err)
-	return user, session
-}
-
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
-	user, session := ts.setupUserAndSession()
 
 	cases := []struct {
 		desc             string
@@ -300,17 +290,17 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 		ts.Run(v.desc, func() {
 			// Create User
 			if v.isAAL2 {
-				session.UpdateAssociatedAAL(ts.API.db, models.AAL2.String())
+				ts.TestSession.UpdateAssociatedAAL(ts.API.db, models.AAL2.String())
 			}
 			var secondarySession *models.Session
 
 			// Create Session to test behaviour which downgrades other sessions
-			factors, err := models.FindFactorsByUser(ts.API.db, user)
+			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
 			require.NoError(ts.T(), err, "error finding factors")
 			f := factors[0]
 			secondarySession, err = models.NewSession()
 			require.NoError(ts.T(), err, "Error creating test session")
-			secondarySession.UserID = user.ID
+			secondarySession.UserID = ts.TestUser.ID
 			secondarySession.FactorID = &f.ID
 			require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
@@ -322,7 +312,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 
 			var buffer bytes.Buffer
 
-			token, _, err := generateAccessToken(ts.API.db, user, &session.ID, &ts.Config.JWT)
+			token, _, err := generateAccessToken(ts.API.db, ts.TestUser, &ts.TestSession.ID, &ts.Config.JWT)
 			require.NoError(ts.T(), err)
 
 			w := httptest.NewRecorder()
@@ -345,15 +335,13 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 }
 
 func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
-	user, session := ts.setupUserAndSession()
-
 	var secondarySession *models.Session
-	factors, err := models.FindFactorsByUser(ts.API.db, user)
+	factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
 	require.NoError(ts.T(), err, "error finding factors")
 	f := factors[0]
 	secondarySession, err = models.NewSession()
 	require.NoError(ts.T(), err, "Error creating test session")
-	secondarySession.UserID = user.ID
+	secondarySession.UserID = ts.TestUser.ID
 	secondarySession.FactorID = &f.ID
 	require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
@@ -362,7 +350,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 
 	var buffer bytes.Buffer
 
-	token, _, err := generateAccessToken(ts.API.db, user, &session.ID, &ts.Config.JWT)
+	token, _, err := generateAccessToken(ts.API.db, ts.TestUser, &ts.TestSession.ID, &ts.Config.JWT)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"factor_id": f.ID,
@@ -375,7 +363,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 	_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
 	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
-	session, _ = models.FindSessionByID(ts.API.db, secondarySession.ID, false)
+	session, _ := models.FindSessionByID(ts.API.db, secondarySession.ID, false)
 	require.Equal(ts.T(), models.AAL1.String(), session.GetAAL())
 	require.Nil(ts.T(), session.FactorID)
 
@@ -511,6 +499,18 @@ func performVerifyFlow(ts *MFATestSuite, challengeID, factorID uuid.UUID, token 
 	return y
 }
 
+func performChallengeFlow(ts *MFATestSuite, factorID uuid.UUID, token string) *httptest.ResponseRecorder {
+	var challengeBuffer bytes.Buffer
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &challengeBuffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	return w
+
+}
+
 func performEnrollAndVerify(ts *MFATestSuite, user *models.User, token string) *httptest.ResponseRecorder {
 	w := performEnrollFlow(ts, token, "", models.TOTP, ts.TestDomain, http.StatusOK)
 	enrollResp := EnrollFactorResponse{}
@@ -518,13 +518,8 @@ func performEnrollAndVerify(ts *MFATestSuite, user *models.User, token string) *
 	factorID := enrollResp.ID
 
 	// Challenge
-	var challengeBuffer bytes.Buffer
-	w = httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &challengeBuffer)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	req.Header.Set("Content-Type", "application/json")
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
+	w = performChallengeFlow(ts, factorID, token)
+
 	challengeResp := EnrollFactorResponse{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&challengeResp))
 	challengeID := challengeResp.ID
