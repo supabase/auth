@@ -99,7 +99,7 @@ func (a *API) linkIdentityToUser(ctx context.Context, tx *storage.Connection, us
 		}
 	}
 	if identity != nil {
-		if identity.UserID == uuid.Nil {
+		if identity.UserID == targetUser.ID {
 			return nil, badRequestError("Identity is already linked")
 		}
 		return nil, badRequestError("Identity is already linked to another user")
