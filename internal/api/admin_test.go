@@ -456,7 +456,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
 	var updateEndpoint = fmt.Sprintf("/admin/users/%s", u.ID)
-	ts.Config.PasswordMinLength = 6
+	ts.Config.Password.MinLength = 6
 	ts.Run("Password doesn't meet minimum length", func() {
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
@@ -479,7 +479,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdateBannedUntilFailed() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
 	var updateEndpoint = fmt.Sprintf("/admin/users/%s", u.ID)
-	ts.Config.PasswordMinLength = 6
+	ts.Config.Password.MinLength = 6
 	ts.Run("Incorrect format for ban_duration", func() {
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
