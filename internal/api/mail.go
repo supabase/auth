@@ -97,18 +97,16 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 
 	var signupUser *models.User
 	if params.Type == signupVerification && user == nil {
-		if params.Password == "" {
-			return unprocessableEntityError("Signup requires a valid password")
-		}
-		if len(params.Password) < config.PasswordMinLength {
-			return invalidPasswordLengthError(config.PasswordMinLength)
-		}
 		signupParams := &SignupParams{
 			Email:    params.Email,
 			Password: params.Password,
 			Data:     params.Data,
 			Provider: "email",
 			Aud:      aud,
+		}
+
+		if err := a.validateSignupParams(ctx, signupParams); err != nil {
+			return err
 		}
 
 		signupUser, err = signupParams.ToUserModel(false /* <- isSSOUser */)

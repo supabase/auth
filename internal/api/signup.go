@@ -31,17 +31,20 @@ type SignupParams struct {
 	CodeChallenge       string                 `json:"code_challenge"`
 }
 
-func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error {
+func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
+	config := a.config
+
 	if p.Password == "" {
 		return unprocessableEntityError("Signup requires a valid password")
 	}
-	if len(p.Password) < passwordMinLength {
-		return invalidPasswordLengthError(passwordMinLength)
+
+	if err := a.checkPasswordStrength(ctx, p.Password); err != nil {
+		return err
 	}
 	if p.Email != "" && p.Phone != "" {
 		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
 	}
-	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
+	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, config.Sms.Provider) {
 		return badRequestError(InvalidChannelError)
 	}
 	// PKCE not needed as phone signups already return access token in body
@@ -123,8 +126,10 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read Signup params: %v", err)
 	}
+
 	params.ConfigureDefaults()
-	if err := params.Validate(config.PasswordMinLength, config.Sms.Provider); err != nil {
+
+	if err := a.validateSignupParams(ctx, params); err != nil {
 		return err
 	}
 

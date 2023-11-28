@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -306,7 +307,7 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
-			require.Equal(ts.T(), c.expected.isAuthenticated, u.Authenticate(c.newPassword))
+			require.Equal(ts.T(), c.expected.isAuthenticated, u.Authenticate(context.Background(), c.newPassword))
 		})
 	}
 }
@@ -363,7 +364,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	require.True(ts.T(), u.Authenticate("newpass"))
+	require.True(ts.T(), u.Authenticate(context.Background(), "newpass"))
 	require.Empty(ts.T(), u.ReauthenticationToken)
 	require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
 }
