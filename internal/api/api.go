@@ -153,8 +153,11 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Get("/", api.UserGet)
 			r.With(sharedLimiter).Put("/", api.UserUpdate)
 
-			r.Get("/identities/authorize", api.LinkIdentity)
-			r.Delete("/identities/{identity_id}", api.DeleteIdentity)
+			r.Route("/identities", func(r *router) {
+				r.Use(api.requireManualLinkingEnabled)
+				r.Get("/authorize", api.LinkIdentity)
+				r.Delete("/{identity_id}", api.DeleteIdentity)
+			})
 		})
 
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
