@@ -422,8 +422,9 @@ type HookConfiguration struct {
 }
 
 type ExtensibilityPointConfiguration struct {
-	URI     string `json:"uri"`
-	Enabled bool   `json:"true"`
+	URI      string `json:"uri"`
+	Enabled  bool   `json:"enabled"`
+	HookName string `json:"hook_name"`
 }
 
 func (h *HookConfiguration) Validate() error {
@@ -431,14 +432,14 @@ func (h *HookConfiguration) Validate() error {
 		h.MFAVerificationAttempt,
 	}
 	for _, point := range points {
-		if err := point.ValidateExtensibilityPoint(); err != nil {
+		if err := point.ValidateAndPopulateExtensibilityPoint(); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
+func (e *ExtensibilityPointConfiguration) ValidateAndPopulateExtensibilityPoint() error {
 	if e.URI != "" {
 		regExp := `^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`
 		re, err := regexp.Compile(regExp)
@@ -463,6 +464,7 @@ func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
 		if !re.MatchString(table) {
 			return fmt.Errorf("invalid table name: %s", table)
 		}
+		e.HookName = fmt.Sprintf("%s.%s", schema, table)
 	}
 	return nil
 }

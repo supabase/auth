@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 
 	"github.com/aaronarduino/goqrsvg"
 	svg "github.com/ajstarks/svgo"
@@ -209,23 +208,13 @@ func (a *API) invokeHook(ctx context.Context, input any, output hooks.HookOutput
 			panic(err)
 		}
 
-		// TODO: maybe populate this on Config load instead
-		u, err := url.Parse(a.config.Hook.MFAVerificationAttempt.URI)
-		if err != nil {
-			return nil, hooks.HookError(err.Error())
-		}
-		pathParts := strings.Split(u.Path, "/")
-		schema := pathParts[1]
-		table := pathParts[2]
-		hookName := fmt.Sprintf("%s.%s", schema, table)
-
 		if err := a.db.Transaction(func(tx *storage.Connection) error {
 			// We rely on Postgres timeouts to ensure the function doesn't overrun
 			timeoutQuery := tx.RawQuery(fmt.Sprintf("set local statement_timeout TO '%d';", hooks.DefaultTimeout))
 			if terr := timeoutQuery.Exec(); terr != nil {
 				return terr
 			}
-			query := tx.RawQuery(fmt.Sprintf("SELECT * from %s(?)", hookName), payload)
+			query := tx.RawQuery(fmt.Sprintf("SELECT * from %s(?)", a.config.Hook.MFAVerificationAttempt.HookName), payload)
 			terr := query.First(&response)
 			if terr != nil {
 				return terr

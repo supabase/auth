@@ -633,6 +633,7 @@ func (ts *MFATestSuite) TestVerificationHooks() {
 		ts.T().Run(c.desc, func(t *testing.T) {
 			ts.Config.Hook.MFAVerificationAttempt.Enabled = c.enabled
 			ts.Config.Hook.MFAVerificationAttempt.URI = c.uri
+			require.NoError(ts.T(), ts.Config.Hook.MFAVerificationAttempt.ValidateAndPopulateExtensibilityPoint())
 
 			err := ts.API.db.RawQuery(c.hookFunctionSQL).Exec()
 			require.NoError(t, err)
