@@ -77,10 +77,7 @@ func (a *API) LinkIdentity(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	skipHTTPRedirect, err := strconv.ParseBool(r.URL.Query().Get("skip_http_redirect"))
-	if err != nil {
-		skipHTTPRedirect = false
-	}
+	skipHTTPRedirect := r.URL.Query().Get("skip_http_redirect") == "true"
 	if skipHTTPRedirect {
 		return sendJSON(w, http.StatusOK, map[string]interface{}{
 			"url": rurl,
