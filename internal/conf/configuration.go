@@ -160,10 +160,30 @@ func (v *PasswordRequiredCharacters) Decode(value string) error {
 	return nil
 }
 
+// HIBPBloomConfiguration configures a bloom cache for pwned passwords. Use
+// this tool to gauge the Items and FalsePositives values:
+// https://hur.st/bloomfilter
+type HIBPBloomConfiguration struct {
+	Enabled        bool    `json:"enabled"`
+	Items          uint    `json:"items" default:"100000"`
+	FalsePositives float64 `json:"false_positives" split_words:"true" default:"0.0000099"`
+}
+
+type HIBPConfiguration struct {
+	Enabled    bool `json:"enabled"`
+	FailClosed bool `json:"fail_closed" split_words:"true"`
+
+	UserAgent string `json:"user_agent" split_words:"true" default:"https://github.com/supabase/gotrue"`
+
+	Bloom HIBPBloomConfiguration `json:"bloom"`
+}
+
 type PasswordConfiguration struct {
 	MinLength int `json:"min_length" split_words:"true"`
 
 	RequiredCharacters PasswordRequiredCharacters `json:"required_characters" split_words:"true"`
+
+	HIBP HIBPConfiguration `json:"hibp"`
 }
 
 // GlobalConfiguration holds all the configuration that applies to all instances.

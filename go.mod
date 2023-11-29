@@ -38,8 +38,11 @@ require (
 )
 
 require (
+	github.com/bits-and-blooms/bitset v1.10.0 // indirect
+	github.com/bits-and-blooms/bloom/v3 v3.6.0 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.1 // indirect
 	github.com/gobuffalo/nulls v0.4.2 // indirect
+	github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869 // indirect
 )
 
 require (
