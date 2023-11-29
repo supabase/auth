@@ -22,6 +22,11 @@ const (
 	MFAHookContinue  = "continue"
 )
 
+type HookOutput interface {
+	IsError() bool
+	Error() string
+}
+
 type MFAVerificationAttemptInput struct {
 	UserID   uuid.UUID `json:"user_id"`
 	FactorID uuid.UUID `json:"factor_id"`
@@ -29,8 +34,9 @@ type MFAVerificationAttemptInput struct {
 }
 
 type MFAVerificationAttemptOutput struct {
-	Decision string `json:"decision"`
-	Message  string `json:"message"`
+	Decision  string        `json:"decision"`
+	Message   string        `json:"message"`
+	HookError AuthHookError `json:"hook_error" split_words:"true"`
 }
 
 type AuthHookError struct {
@@ -63,6 +69,9 @@ func HookError(message string, args ...interface{}) *AuthHookError {
 
 }
 
-func (hookError *AuthHookErrorResponse) IsError() bool {
-	return hookError.Message != ""
+func (mf *MFAVerificationAttemptOutput) IsError() bool {
+	return mf.HookError.Message != ""
+}
+func (mf *MFAVerificationAttemptOutput) Error() string {
+	return mf.HookError.Message
 }

@@ -200,7 +200,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-func (a *API) invokeHook(ctx context.Context, input any, output any) *hooks.AuthHookError {
+func (a *API) invokeHook(ctx context.Context, input any, output hooks.HookOutput) (hooks.HookOutput, *hooks.AuthHookError) {
 	var response []byte
 	switch input.(type) {
 	case hooks.MFAVerificationAttemptInput:
@@ -212,7 +212,7 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) *hooks.Auth
 		// TODO: maybe populate this on Config load instead
 		u, err := url.Parse(a.config.Hook.MFAVerificationAttempt.URI)
 		if err != nil {
-			return hooks.HookError(err.Error())
+			return nil, hooks.HookError(err.Error())
 		}
 		pathParts := strings.Split(u.Path, "/")
 		schema := pathParts[1]
@@ -232,19 +232,16 @@ func (a *API) invokeHook(ctx context.Context, input any, output any) *hooks.Auth
 			}
 			return nil
 		}); err != nil {
-			return hooks.HookError(err.Error())
+			return nil, hooks.HookError(err.Error())
 		}
-		// As we the response fields aren't known to us we try to check if it's an error first.
-		hookResponseOrError := hooks.AuthHookErrorResponse{}
-		err = json.Unmarshal(response, &hookResponseOrError)
-		if err == nil && hookResponseOrError.IsError() {
-			return &hookResponseOrError.AuthHookError
+		if err = json.Unmarshal(response, &output); err != nil {
+			return nil, hooks.HookError(err.Error())
 		}
-		if err = json.Unmarshal(response, output); err != nil {
-			return hooks.HookError("error unmarshalling response")
+		if output.IsError() {
+			return nil, hooks.HookError(output.Error())
 		}
 
-		return nil
+		return output, nil
 	default:
 		panic("invalid extensibility point")
 	}
@@ -307,14 +304,19 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			Valid:    valid,
 		}
 		output := &hooks.MFAVerificationAttemptOutput{}
-		if err := a.invokeHook(ctx, input, output); err != nil {
+		response, err := a.invokeHook(ctx, input, output)
+		if err != nil {
 			return errors.New(err.Error())
 		}
-		if output.Decision == hooks.MFAHookRejection {
+		mfaOutput, ok := response.(*hooks.MFAVerificationAttemptOutput)
+		if !ok {
+			return errors.New("unexpected response type")
+		}
+		if mfaOutput.Decision == hooks.MFAHookRejection {
 			if err := models.Logout(a.db, user.ID); err != nil {
 				return err
 			}
-			if output.Message == "" {
+			if mfaOutput.Message == "" {
 				output.Message = hooks.DefaultMFAHookRejectionMessage
 			}
 			return forbiddenError(output.Message)
