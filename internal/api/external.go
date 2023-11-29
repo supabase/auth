@@ -25,14 +25,25 @@ import (
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
 type ExternalProviderClaims struct {
 	AuthMicroserviceClaims
-	Provider    string `json:"provider"`
-	InviteToken string `json:"invite_token,omitempty"`
-	Referrer    string `json:"referrer,omitempty"`
-	FlowStateID string `json:"flow_state_id"`
+	Provider        string `json:"provider"`
+	InviteToken     string `json:"invite_token,omitempty"`
+	Referrer        string `json:"referrer,omitempty"`
+	FlowStateID     string `json:"flow_state_id"`
+	LinkingTargetID string `json:"linking_target_id,omitempty"`
 }
 
-// ExternalProviderRedirect redirects the request to the corresponding oauth provider
+// ExternalProviderRedirect redirects the request to the oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
+	rurl, err := a.GetExternalProviderRedirectURL(w, r, nil)
+	if err != nil {
+		return err
+	}
+	http.Redirect(w, r, rurl, http.StatusFound)
+	return nil
+}
+
+// GetExternalProviderRedirectURL returns the URL to start the oauth flow with the corresponding oauth provider
+func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Request, linkingTargetUser *models.User) (string, error) {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
@@ -45,7 +56,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 
 	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
-		return badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
+		return "", badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
 	}
 
 	inviteToken := query.Get("invite_token")
@@ -53,9 +64,9 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		_, userErr := models.FindUserByConfirmationToken(db, inviteToken)
 		if userErr != nil {
 			if models.IsNotFoundError(userErr) {
-				return notFoundError(userErr.Error())
+				return "", notFoundError(userErr.Error())
 			}
-			return internalServerError("Database error finding user").WithInternalError(userErr)
+			return "", internalServerError("Database error finding user").WithInternalError(userErr)
 		}
 	}
 
@@ -63,7 +74,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
-		return err
+		return "", err
 	}
 	flowType := getFlowFromChallenge(codeChallenge)
 
@@ -71,19 +82,19 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	if flowType == models.PKCEFlow {
 		codeChallengeMethodType, err := models.ParseCodeChallengeMethod(codeChallengeMethod)
 		if err != nil {
-			return err
+			return "", err
 		}
 		flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethodType, models.OAuth)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if err := a.db.Create(flowState); err != nil {
-			return err
+			return "", err
 		}
 		flowStateID = flowState.ID.String()
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
+	claims := ExternalProviderClaims{
 		AuthMicroserviceClaims: AuthMicroserviceClaims{
 			StandardClaims: jwt.StandardClaims{
 				ExpiresAt: time.Now().Add(5 * time.Minute).Unix(),
@@ -95,10 +106,17 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		InviteToken: inviteToken,
 		Referrer:    redirectURL,
 		FlowStateID: flowStateID,
-	})
+	}
+
+	if linkingTargetUser != nil {
+		// this means that the user is performing manual linking
+		claims.LinkingTargetID = linkingTargetUser.ID.String()
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
-		return internalServerError("Error creating state").WithInternalError(err)
+		return "", internalServerError("Error creating state").WithInternalError(err)
 	}
 
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
@@ -115,20 +133,15 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		}
 	}
 
-	var authURL string
+	authURL := p.AuthCodeURL(tokenString, authUrlParams...)
 	switch externalProvider := p.(type) {
 	case *provider.TwitterProvider:
-		authURL = externalProvider.AuthCodeURL(tokenString, authUrlParams...)
-		err := storage.StoreInSession(providerType, externalProvider.Marshal(), r, w)
-		if err != nil {
-			return internalServerError("Error storing request token in session").WithInternalError(err)
+		if err := storage.StoreInSession(providerType, externalProvider.Marshal(), r, w); err != nil {
+			return "", internalServerError("Error storing request token in session").WithInternalError(err)
 		}
-	default:
-		authURL = p.AuthCodeURL(tokenString, authUrlParams...)
 	}
 
-	http.Redirect(w, r, authURL, http.StatusFound)
-	return nil
+	return authURL, nil
 }
 
 // ExternalProviderCallback handles the callback endpoint in the external oauth provider flow
@@ -142,37 +155,41 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
+func (a *API) handleOAuthCallback(w http.ResponseWriter, r *http.Request) (*OAuthProviderData, error) {
+	ctx := r.Context()
+	providerType := getExternalProviderType(ctx)
+
+	var oAuthResponseData *OAuthProviderData
+	var err error
+	switch providerType {
+	case "twitter":
+		// future OAuth1.0 providers will use this method
+		oAuthResponseData, err = a.oAuth1Callback(ctx, r, providerType)
+	default:
+		oAuthResponseData, err = a.oAuthCallback(ctx, r, providerType)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return oAuthResponseData, nil
+}
+
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
 
-	providerType := getExternalProviderType(ctx)
-	var userData *provider.UserProvidedData
-	var providerAccessToken string
-	var providerRefreshToken string
 	var grantParams models.GrantParams
-	var err error
-
 	grantParams.FillGrantParams(r)
 
-	if providerType == "twitter" {
-		// future OAuth1.0 providers will use this method
-		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)
-		if err != nil {
-			return err
-		}
-		userData = oAuthResponseData.userData
-		providerAccessToken = oAuthResponseData.token
-	} else {
-		oAuthResponseData, err := a.oAuthCallback(ctx, r, providerType)
-		if err != nil {
-			return err
-		}
-		userData = oAuthResponseData.userData
-		providerAccessToken = oAuthResponseData.token
-		providerRefreshToken = oAuthResponseData.refreshToken
+	providerType := getExternalProviderType(ctx)
+	data, err := a.handleOAuthCallback(w, r)
+	if err != nil {
+		return err
 	}
+	userData := data.userData
+	providerAccessToken := data.token
+	providerRefreshToken := data.refreshToken
 
 	var flowState *models.FlowState
 	// if there's a non-empty FlowStateID we perform PKCE Flow
@@ -187,8 +204,11 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		inviteToken := getInviteToken(ctx)
-		if inviteToken != "" {
+		if targetUser := getTargetUser(ctx); targetUser != nil {
+			if user, terr = a.linkIdentityToUser(ctx, tx, userData, providerType); terr != nil {
+				return terr
+			}
+		} else if inviteToken := getInviteToken(ctx); inviteToken != "" {
 			if user, terr = a.processInvite(r, ctx, tx, userData, inviteToken, providerType); terr != nil {
 				return terr
 			}
@@ -478,6 +498,20 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	}
 	if claims.FlowStateID != "" {
 		ctx = withFlowStateID(ctx, claims.FlowStateID)
+	}
+	if claims.LinkingTargetID != "" {
+		linkingTargetUserID, err := uuid.FromString(claims.LinkingTargetID)
+		if err != nil {
+			return nil, badRequestError("invalid target user id")
+		}
+		u, err := models.FindUserByID(a.db, linkingTargetUserID)
+		if err != nil {
+			if models.IsNotFoundError(err) {
+				return nil, notFoundError("Linking target user not found")
+			}
+			return nil, internalServerError("Database error loading user").WithInternalError(err)
+		}
+		ctx = withTargetUser(ctx, u)
 	}
 	ctx = withExternalProviderType(ctx, claims.Provider)
 	return withSignature(ctx, state), nil

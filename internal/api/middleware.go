@@ -233,6 +233,14 @@ func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (cont
 	return ctx, nil
 }
 
+func (a *API) requireManualLinkingEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !a.config.Security.ManualLinkingEnabled {
+		return nil, notFoundError("Manual linking is disabled")
+	}
+	return ctx, nil
+}
+
 func (a *API) databaseCleanup(cleanup *models.Cleanup) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -1,10 +1,13 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
+	"github.com/fatih/structs"
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
+	"github.com/supabase/gotrue/internal/api/provider"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
 )
@@ -29,7 +32,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 
 	user := getUser(ctx)
 	if len(user.Identities) <= 1 {
-		return badRequestError("Cannot unlink identity from user. User must have at least 1 identity after unlinking")
+		return badRequestError("User must have at least 1 identity after unlinking")
 	}
 	var identityToBeDeleted *models.Identity
 	for i := range user.Identities {
@@ -64,4 +67,44 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, map[string]interface{}{})
+}
+
+func (a *API) LinkIdentity(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := getUser(ctx)
+	rurl, err := a.GetExternalProviderRedirectURL(w, r, user)
+	if err != nil {
+		return err
+	}
+	skipHTTPRedirect := r.URL.Query().Get("skip_http_redirect") == "true"
+	if skipHTTPRedirect {
+		return sendJSON(w, http.StatusOK, map[string]interface{}{
+			"url": rurl,
+		})
+	}
+	http.Redirect(w, r, rurl, http.StatusFound)
+	return nil
+}
+
+func (a *API) linkIdentityToUser(ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
+	targetUser := getTargetUser(ctx)
+	identity, terr := models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType)
+	if terr != nil {
+		if !models.IsNotFoundError(terr) {
+			return nil, internalServerError("Database error finding identity for linking").WithInternalError(terr)
+		}
+	}
+	if identity != nil {
+		if identity.UserID == targetUser.ID {
+			return nil, badRequestError("Identity is already linked")
+		}
+		return nil, badRequestError("Identity is already linked to another user")
+	}
+	if _, terr := a.createNewIdentity(tx, targetUser, providerType, structs.Map(userData.Metadata)); terr != nil {
+		return nil, terr
+	}
+	if terr := targetUser.UpdateAppMetaDataProviders(tx); terr != nil {
+		return nil, terr
+	}
+	return targetUser, nil
 }
