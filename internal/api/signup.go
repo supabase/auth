@@ -31,17 +31,20 @@ type SignupParams struct {
 	CodeChallenge       string                 `json:"code_challenge"`
 }
 
-func (p *SignupParams) Validate(passwordMinLength int, smsProvider string) error {
+func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
+	config := a.config
+
 	if p.Password == "" {
 		return unprocessableEntityError("Signup requires a valid password")
 	}
-	if len(p.Password) < passwordMinLength {
-		return invalidPasswordLengthError(passwordMinLength)
+
+	if err := a.checkPasswordStrength(ctx, p.Password); err != nil {
+		return err
 	}
 	if p.Email != "" && p.Phone != "" {
 		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
 	}
-	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
+	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, config.Sms.Provider) {
 		return badRequestError(InvalidChannelError)
 	}
 	// PKCE not needed as phone signups already return access token in body
@@ -69,7 +72,38 @@ func (p *SignupParams) ConfigureDefaults() {
 	if p.Phone != "" && p.Channel == "" {
 		p.Channel = sms_provider.SMSProvider
 	}
+}
 
+func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err error) {
+	switch params.Provider {
+	case "email":
+		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
+	case "phone":
+		user, err = models.NewUser(params.Phone, "", params.Password, params.Aud, params.Data)
+	default:
+		// handles external provider case
+		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
+	}
+	if err != nil {
+		err = internalServerError("Database error creating user").WithInternalError(err)
+		return
+	}
+	user.IsSSOUser = isSSOUser
+	if user.AppMetaData == nil {
+		user.AppMetaData = make(map[string]interface{})
+	}
+
+	user.Identities = make([]models.Identity, 0)
+
+	// TODO: Deprecate "provider" field
+	user.AppMetaData["provider"] = params.Provider
+
+	user.AppMetaData["providers"] = []string{params.Provider}
+	if params.Password == "" {
+		user.EncryptedPassword = ""
+	}
+
+	return
 }
 
 // Signup is the endpoint for registering a new user
@@ -92,8 +126,10 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("Could not read Signup params: %v", err)
 	}
+
 	params.ConfigureDefaults()
-	if err := params.Validate(config.PasswordMinLength, config.Sms.Provider); err != nil {
+
+	if err := a.validateSignupParams(ctx, params); err != nil {
 		return err
 	}
 
@@ -140,6 +176,16 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}
 
+	var signupUser *models.User
+	if user == nil {
+		// always call this outside of a database transaction as this method
+		// can be computationally hard and block due to password hashing
+		signupUser, err = params.ToUserModel(false /* <- isSSOUser */)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if user != nil {
@@ -149,7 +195,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 			// do not update the user because we can't be sure of their claimed identity
 		} else {
-			user, terr = a.signupNewUser(ctx, tx, params, false /* <- isSSOUser */)
+			user, terr = a.signupNewUser(ctx, tx, signupUser)
 			if terr != nil {
 				return terr
 			}
@@ -330,39 +376,10 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 	return u, nil
 }
 
-func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, params *SignupParams, isSSOUser bool) (*models.User, error) {
+func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
 	config := a.config
 
-	var user *models.User
-	var err error
-	switch params.Provider {
-	case "email":
-		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
-	case "phone":
-		user, err = models.NewUser(params.Phone, "", params.Password, params.Aud, params.Data)
-	default:
-		// handles external provider case
-		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
-	}
-	if err != nil {
-		return nil, internalServerError("Database error creating user").WithInternalError(err)
-	}
-	user.IsSSOUser = isSSOUser
-	if user.AppMetaData == nil {
-		user.AppMetaData = make(map[string]interface{})
-	}
-
-	user.Identities = make([]models.Identity, 0)
-
-	// TODO: Deprecate "provider" field
-	user.AppMetaData["provider"] = params.Provider
-
-	user.AppMetaData["providers"] = []string{params.Provider}
-	if params.Password == "" {
-		user.EncryptedPassword = ""
-	}
-
-	err = conn.Transaction(func(tx *storage.Connection) error {
+	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = tx.Create(user); terr != nil {
 			return internalServerError("Database error saving new user").WithInternalError(terr)

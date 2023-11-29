@@ -72,21 +72,29 @@ type User struct {
 
 // NewUser initializes a new user from an email, password and user data.
 func NewUser(phone, email, password, aud string, userData map[string]interface{}) (*User, error) {
-	id := uuid.Must(uuid.NewV4())
-	pw, err := crypto.GenerateFromPassword(context.Background(), password)
-	if err != nil {
-		return nil, err
+	passwordHash := ""
+
+	if password != "" {
+		pw, err := crypto.GenerateFromPassword(context.Background(), password)
+		if err != nil {
+			return nil, err
+		}
+
+		passwordHash = pw
 	}
+
 	if userData == nil {
 		userData = make(map[string]interface{})
 	}
+
+	id := uuid.Must(uuid.NewV4())
 	user := &User{
 		ID:                id,
 		Aud:               aud,
 		Email:             storage.NullString(strings.ToLower(email)),
 		Phone:             storage.NullString(phone),
 		UserMetaData:      userData,
-		EncryptedPassword: pw,
+		EncryptedPassword: passwordHash,
 	}
 	return user, nil
 }
@@ -231,13 +239,24 @@ func (u *User) SetPhone(tx *storage.Connection, phone string) error {
 	return tx.UpdateOnly(u, "phone")
 }
 
-// UpdatePassword updates the user's password
-func (u *User) UpdatePassword(tx *storage.Connection, password string, sessionID *uuid.UUID) error {
-	pw, err := crypto.GenerateFromPassword(context.Background(), password)
+func (u *User) SetPassword(ctx context.Context, password string) error {
+	if password == "" {
+		u.EncryptedPassword = ""
+		return nil
+	}
+
+	pw, err := crypto.GenerateFromPassword(ctx, password)
 	if err != nil {
 		return err
 	}
+
 	u.EncryptedPassword = pw
+
+	return nil
+}
+
+// UpdatePassword updates the user's password. Use SetPassword outside of a transaction first!
+func (u *User) UpdatePassword(tx *storage.Connection, sessionID *uuid.UUID) error {
 	if err := tx.UpdateOnly(u, "encrypted_password"); err != nil {
 		return err
 	}
@@ -258,8 +277,8 @@ func (u *User) UpdatePhone(tx *storage.Connection, phone string) error {
 }
 
 // Authenticate a user from a password
-func (u *User) Authenticate(password string) bool {
-	err := crypto.CompareHashAndPassword(context.Background(), u.EncryptedPassword, password)
+func (u *User) Authenticate(ctx context.Context, password string) bool {
+	err := crypto.CompareHashAndPassword(ctx, u.EncryptedPassword, password)
 	return err == nil
 }
 

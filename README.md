@@ -217,6 +217,8 @@ Rate limit the number of emails sent per hr on the following endpoints: `/signup
 
 Minimum password length, defaults to 6.
 
+`GOTRUE_PASSWORD_REQUIRED_CHARACTERS` - a string of character sets separated by `:`. A password must contain at least one character of each set to be accepted. To use the `:` character escape it with `\`.
+
 `GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` - `bool`
 
 If refresh token rotation is enabled, gotrue will automatically detect malicious attempts to reuse a revoked refresh token. When a malicious attempt is detected, gotrue immediately revokes all tokens that descended from the offending token.

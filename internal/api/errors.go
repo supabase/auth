@@ -65,10 +65,6 @@ func (e *OAuthError) Cause() error {
 	return e
 }
 
-func invalidPasswordLengthError(passwordMinLength int) *HTTPError {
-	return unprocessableEntityError(fmt.Sprintf("Password should be at least %d characters", passwordMinLength))
-}
-
 func invalidSignupError(config *conf.GlobalConfiguration) *HTTPError {
 	var msg string
 	if config.External.Email.Enabled && config.External.Phone.Enabled {
@@ -245,6 +241,22 @@ func handleError(err error, w http.ResponseWriter, r *http.Request) {
 	log := observability.GetLogEntry(r)
 	errorID := getRequestID(r.Context())
 	switch e := err.(type) {
+	case *WeakPasswordError:
+		var output struct {
+			HTTPError
+			Payload struct {
+				Reasons []string `json:"reasons,omitempty"`
+			} `json:"weak_password,omitempty"`
+		}
+
+		output.Code = http.StatusUnprocessableEntity
+		output.Message = e.Message
+		output.Payload.Reasons = e.Reasons
+
+		if jsonErr := sendJSON(w, output.Code, output); jsonErr != nil {
+			handleError(jsonErr, w, r)
+		}
+
 	case *HTTPError:
 		if e.Code >= http.StatusInternalServerError {
 			e.ErrorID = errorID

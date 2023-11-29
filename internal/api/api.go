@@ -223,7 +223,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 				})
 			})
 
-			r.Post("/generate_link", api.GenerateLink)
+			r.Post("/generate_link", api.adminGenerateLink)
 
 			r.Route("/sso", func(r *router) {
 				r.Route("/providers", func(r *router) {
