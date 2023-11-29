@@ -194,7 +194,7 @@ type GlobalConfiguration struct {
 	Sms             SmsProviderConfiguration `json:"sms"`
 	DisableSignup   bool                     `json:"disable_signup" split_words:"true"`
 	Webhook         WebhookConfig            `json:"webhook" split_words:"true"`
-	Hook              HookConfiguration        `json:"hook" split_words:"true"`
+	Hook            HookConfiguration        `json:"hook" split_words:"true"`
 	Security        SecurityConfiguration    `json:"security"`
 	Sessions        SessionsConfiguration    `json:"sessions"`
 	MFA             MFAConfiguration         `json:"MFA"`

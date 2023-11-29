@@ -448,14 +448,12 @@ func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenRes
 }
 
 func performTestSignupAndVerify(ts *MFATestSuite, email, password string, requireStatusOK bool) *httptest.ResponseRecorder {
-
 	signUpResp := signUp(ts, email, password)
 	resp := performEnrollAndVerify(ts, signUpResp.User, signUpResp.Token, requireStatusOK)
 
 	return resp
 
 }
-
 
 func performEnrollFlow(ts *MFATestSuite, token, friendlyName, factorType, issuer string, expectedCode int) *httptest.ResponseRecorder {
 	var buffer bytes.Buffer
@@ -541,6 +539,7 @@ func (ts *MFATestSuite) TestVerificationHooks() {
 		hookFunctionSQL     string
 		emailSuffix         string
 		expectToken         bool
+		expectedCode        int
 		cleanupHookFunction string
 	}
 	cases := []verificationHookTestCase{
@@ -556,6 +555,7 @@ func (ts *MFATestSuite) TestVerificationHooks() {
                 end; $$ language plpgsql;`,
 			emailSuffix:         "success",
 			expectToken:         true,
+			expectedCode:        http.StatusOK,
 			cleanupHookFunction: "verification_hook(input jsonb)",
 		},
 		{
@@ -570,6 +570,7 @@ func (ts *MFATestSuite) TestVerificationHooks() {
                 end; $$ language plpgsql;`,
 			emailSuffix:         "error",
 			expectToken:         false,
+			expectedCode:        http.StatusInternalServerError,
 			cleanupHookFunction: "test_verification_hook_error(input jsonb)",
 		},
 		{
@@ -587,6 +588,7 @@ func (ts *MFATestSuite) TestVerificationHooks() {
         end; $$ language plpgsql;`,
 			emailSuffix:         "reject_enabled",
 			expectToken:         false,
+			expectedCode:        http.StatusForbidden,
 			cleanupHookFunction: "verification_hook_reject(input jsonb)",
 		},
 		{
@@ -604,6 +606,7 @@ func (ts *MFATestSuite) TestVerificationHooks() {
         end; $$ language plpgsql;`,
 			emailSuffix:         "reject_disabled",
 			expectToken:         true,
+			expectedCode:        http.StatusOK,
 			cleanupHookFunction: "verification_hook_reject(input jsonb)",
 		},
 		{
@@ -620,7 +623,8 @@ func (ts *MFATestSuite) TestVerificationHooks() {
             );
         end; $$ language plpgsql;`,
 			emailSuffix:         "timeout",
-			expectToken:         false, // Assuming the test expects no token due to timeout
+			expectToken:         false,
+			expectedCode:        http.StatusInternalServerError,
 			cleanupHookFunction: "test_verification_hook_timeout(input jsonb)",
 		},
 	}
@@ -636,12 +640,11 @@ func (ts *MFATestSuite) TestVerificationHooks() {
 			email := fmt.Sprintf("testemail_%s@gmail.com", c.emailSuffix)
 			password := "testpassword"
 			resp := performTestSignupAndVerify(ts, email, password, c.expectToken)
+			require.Equal(ts.T(), c.expectedCode, resp.Code)
 			accessTokenResp := &AccessTokenResponse{}
 			require.NoError(ts.T(), json.NewDecoder(resp.Body).Decode(&accessTokenResp))
 
-
 			if c.expectToken {
-
 				require.NotEqual(t, "", accessTokenResp.Token)
 			} else {
 				require.Equal(t, "", accessTokenResp.Token)
