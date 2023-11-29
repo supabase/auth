@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"net/http"
-	"strconv"
 
 	"github.com/fatih/structs"
 	"github.com/go-chi/chi"
@@ -33,7 +32,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 
 	user := getUser(ctx)
 	if len(user.Identities) <= 1 {
-		return badRequestError("Cannot unlink identity from user. User must have at least 1 identity after unlinking")
+		return badRequestError("User must have at least 1 identity after unlinking")
 	}
 	var identityToBeDeleted *models.Identity
 	for i := range user.Identities {
