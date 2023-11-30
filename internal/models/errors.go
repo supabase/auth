@@ -105,3 +105,17 @@ type FlowStateNotFoundError struct{}
 func (e FlowStateNotFoundError) Error() string {
 	return "Flow State not found"
 }
+
+func IsUniqueConstraintViolatedError(err error) bool {
+	switch err.(type) {
+	case UserEmailUniqueConflictError, *UserEmailUniqueConflictError:
+		return true
+	}
+	return false
+}
+
+type UserEmailUniqueConflictError struct{}
+
+func (e UserEmailUniqueConflictError) Error() string {
+	return "User email unique constraint violated"
+}
