@@ -55,7 +55,7 @@ const (
 )
 
 const (
-	DefaultMFAHookRejectionMessage = "mfa attempt rejected"
+	DefaultMFAHookRejectionMessage = "Further MFA verification attempts will be rejected."
 )
 
 type AuthHookErrorResponse struct {
