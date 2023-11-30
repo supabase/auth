@@ -49,11 +49,6 @@ func (a *AuthHookError) Error() string {
 	return fmt.Sprintf("%s: %s", a.Code, a.Message)
 }
 
-// Hook Events
-const (
-	MFAVerificationAttempt = "auth.mfa_verfication"
-)
-
 const (
 	DefaultMFAHookRejectionMessage = "Further MFA verification attempts will be rejected."
 )

@@ -97,3 +97,33 @@ func TestPasswordRequiredCharactersDecode(t *testing.T) {
 		require.Equal(t, []string(into), example.Result, "Example %d got unexpected result", i)
 	}
 }
+
+func TestValidateAndPopulateExtensibilityPoint(t *testing.T) {
+	cases := []struct {
+		desc           string
+		uri            string
+		expectedResult string
+	}{
+		// Positive test cases
+		{desc: "Valid URI", uri: "pg-functions://postgres/auth/verification_hook_reject", expectedResult: `"auth"."verification_hook_reject"`},
+		{desc: "Another Valid URI", uri: "pg-functions://postgres/user_management/add_user", expectedResult: `"user_management"."add_user"`},
+		{desc: "Another Valid URI", uri: "pg-functions://postgres/MySpeCial/FUNCTION_THAT_YELLS_AT_YOU", expectedResult: `"MySpeCial"."FUNCTION_THAT_YELLS_AT_YOU"`},
+
+		// Negative test cases
+		{desc: "Invalid Schema Name", uri: "pg-functions://postgres/123auth/verification_hook_reject", expectedResult: ""},
+		{desc: "Invalid Function Name", uri: "pg-functions://postgres/auth/123verification_hook_reject", expectedResult: ""},
+		{desc: "Insufficient Path Parts", uri: "pg-functions://postgres/auth", expectedResult: ""},
+	}
+
+	for _, tc := range cases {
+		ep := ExtensibilityPointConfiguration{URI: tc.uri}
+		err := ep.ValidateAndPopulateExtensibilityPoint()
+		if tc.expectedResult != "" {
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedResult, ep.HookName)
+		} else {
+			require.Error(t, err)
+			require.Empty(t, ep.HookName)
+		}
+	}
+}
