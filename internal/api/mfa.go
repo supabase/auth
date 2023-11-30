@@ -2,9 +2,11 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
-
 	"net/url"
 
 	"github.com/aaronarduino/goqrsvg"
@@ -12,6 +14,7 @@ import (
 	"github.com/boombuler/barcode/qr"
 	"github.com/gofrs/uuid"
 	"github.com/pquerna/otp/totp"
+	"github.com/supabase/gotrue/internal/hooks"
 	"github.com/supabase/gotrue/internal/metering"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
@@ -196,6 +199,42 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
+func (a *API) invokeHook(ctx context.Context, input any, output hooks.HookOutput) error {
+	var response []byte
+	switch input.(type) {
+	case hooks.MFAVerificationAttemptInput:
+		payload, err := json.Marshal(&input)
+		if err != nil {
+			panic(err)
+		}
+
+		if err := a.db.Transaction(func(tx *storage.Connection) error {
+			// We rely on Postgres timeouts to ensure the function doesn't overrun
+			timeoutQuery := tx.RawQuery(fmt.Sprintf("set local statement_timeout TO '%d';", hooks.DefaultTimeout))
+			if terr := timeoutQuery.Exec(); terr != nil {
+				return terr
+			}
+			query := tx.RawQuery(fmt.Sprintf("SELECT %s(?)", a.config.Hook.MFAVerificationAttempt.HookName), payload)
+			terr := query.First(&response)
+			if terr != nil {
+				return terr
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		if err = json.Unmarshal(response, &output); err != nil {
+			return err
+		}
+		if output.IsError() {
+			return &output.(*hooks.MFAVerificationAttemptOutput).HookError
+		}
+
+		return nil
+	default:
+		panic("invalid extensibility point")
+	}
+}
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
@@ -245,7 +284,31 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("%v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
 
-	if valid := totp.Validate(params.Code, factor.Secret); !valid {
+	valid := totp.Validate(params.Code, factor.Secret)
+
+	if config.Hook.MFAVerificationAttempt.Enabled {
+		input := hooks.MFAVerificationAttemptInput{
+			UserID:   user.ID,
+			FactorID: factor.ID,
+			Valid:    valid,
+		}
+		output := &hooks.MFAVerificationAttemptOutput{}
+		err := a.invokeHook(ctx, input, output)
+		if err != nil {
+			return errors.New(err.Error())
+		}
+
+		if output.Decision == hooks.MFAHookRejection {
+			if err := models.Logout(a.db, user.ID); err != nil {
+				return err
+			}
+			if output.Message == "" {
+				output.Message = hooks.DefaultMFAHookRejectionMessage
+			}
+			return forbiddenError(output.Message)
+		}
+	}
+	if !valid {
 		return badRequestError("Invalid TOTP code entered")
 	}
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"text/template"
 	"time"
@@ -18,6 +19,8 @@ import (
 const defaultMinPasswordLength int = 6
 const defaultChallengeExpiryDuration float64 = 300
 const defaultFlowStateExpiryDuration time.Duration = 300 * time.Second
+
+var postgresNamesRegexp = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`)
 
 // Time is used to represent timestamps in the configuration, as envconfig has
 // trouble parsing empty strings, due to time.Time.UnmarshalText().
@@ -213,6 +216,7 @@ type GlobalConfiguration struct {
 	Sms             SmsProviderConfiguration `json:"sms"`
 	DisableSignup   bool                     `json:"disable_signup" split_words:"true"`
 	Webhook         WebhookConfig            `json:"webhook" split_words:"true"`
+	Hook            HookConfiguration        `json:"hook" split_words:"true"`
 	Security        SecurityConfiguration    `json:"security"`
 	Sessions        SessionsConfiguration    `json:"sessions"`
 	MFA             MFAConfiguration         `json:"MFA"`
@@ -435,6 +439,53 @@ type WebhookConfig struct {
 	Events     []string `json:"events"`
 }
 
+// Moving away from the existing HookConfig so we can get a fresh start.
+type HookConfiguration struct {
+	MFAVerificationAttempt ExtensibilityPointConfiguration `json:"mfa_verification_attempt" split_words:"true"`
+}
+
+type ExtensibilityPointConfiguration struct {
+	URI      string `json:"uri"`
+	Enabled  bool   `json:"enabled"`
+	HookName string `json:"hook_name"`
+}
+
+func (h *HookConfiguration) Validate() error {
+	points := []ExtensibilityPointConfiguration{
+		h.MFAVerificationAttempt,
+	}
+	for _, point := range points {
+		if err := point.ValidateAndPopulateExtensibilityPoint(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (e *ExtensibilityPointConfiguration) ValidateAndPopulateExtensibilityPoint() error {
+	if e.URI != "" {
+		u, err := url.Parse(e.URI)
+		if err != nil {
+			return err
+		}
+		pathParts := strings.Split(u.Path, "/")
+		if len(pathParts) < 3 {
+			return fmt.Errorf("URI path does not contain enough parts")
+		}
+		schema := pathParts[1]
+		table := pathParts[2]
+		// Validate schema and table names
+		if !postgresNamesRegexp.MatchString(schema) {
+			return fmt.Errorf("invalid schema name: %s", schema)
+		}
+		if !postgresNamesRegexp.MatchString(table) {
+			return fmt.Errorf("invalid table name: %s", table)
+		}
+		e.HookName = fmt.Sprintf("%q.%q", schema, table)
+	}
+	return nil
+}
+
 func (w *WebhookConfig) HasEvent(event string) bool {
 	for _, name := range w.Events {
 		if event == name {
@@ -480,7 +531,6 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		}
 		config.Sms.SMSTemplate = template
 	}
-
 	return config, nil
 }
 
@@ -602,6 +652,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.SAML,
 		&c.Security,
 		&c.Sessions,
+		&c.Hook,
 	}
 
 	for _, validatable := range validatables {

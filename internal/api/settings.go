@@ -36,6 +36,11 @@ type Settings struct {
 	SmsProvider       string           `json:"sms_provider"`
 	MFAEnabled        bool             `json:"mfa_enabled"`
 	SAMLEnabled       bool             `json:"saml_enabled"`
+	HookConfiguration HookSettings     `json:"hook"`
+}
+
+type HookSettings struct {
+	MFAVerification bool `json:"mfa"`
 }
 
 func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
@@ -66,6 +71,9 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Email:        config.External.Email.Enabled,
 			Phone:        config.External.Phone.Enabled,
 			Zoom:         config.External.Zoom.Enabled,
+		},
+		HookConfiguration: HookSettings{
+			MFAVerification: config.Hook.MFAVerificationAttempt.Enabled,
 		},
 
 		DisableSignup:     config.DisableSignup,
