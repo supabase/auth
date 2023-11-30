@@ -363,6 +363,6 @@ func (ts *UserTestSuite) TestUpdateUserEmailFailure() {
 
 	// UpdateUserEmail should fail with the email unique constraint violation error
 	//  since userB is using the secondary identity's email
-	require.EqualError(ts.T(), userA.UpdateUserEmail(ts.db), "User email unique constraint violated")
+	require.ErrorIs(ts.T(), userA.UpdateUserEmail(ts.db), UserEmailUniqueConflictError{})
 	require.Equal(ts.T(), primaryIdentity.GetEmail(), userA.GetEmail())
 }
