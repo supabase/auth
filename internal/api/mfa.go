@@ -199,7 +199,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-func (a *API) invokeHook(ctx context.Context, input any, output hooks.HookOutput) (hooks.HookOutput, *hooks.AuthHookError) {
+func (a *API) invokeHook(ctx context.Context, input any, output hooks.HookOutput) error {
 	var response []byte
 	switch input.(type) {
 	case hooks.MFAVerificationAttemptInput:
@@ -221,16 +221,16 @@ func (a *API) invokeHook(ctx context.Context, input any, output hooks.HookOutput
 			}
 			return nil
 		}); err != nil {
-			return nil, hooks.HookError(err.Error())
+			return err
 		}
 		if err = json.Unmarshal(response, &output); err != nil {
-			return nil, hooks.HookError(err.Error())
+			return err
 		}
 		if output.IsError() {
-			return nil, hooks.HookError(output.Error())
+			return &output.(*hooks.MFAVerificationAttemptOutput).HookError
 		}
 
-		return output, nil
+		return nil
 	default:
 		panic("invalid extensibility point")
 	}
@@ -293,19 +293,16 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			Valid:    valid,
 		}
 		output := &hooks.MFAVerificationAttemptOutput{}
-		response, err := a.invokeHook(ctx, input, output)
+		err := a.invokeHook(ctx, input, output)
 		if err != nil {
 			return errors.New(err.Error())
 		}
-		mfaOutput, ok := response.(*hooks.MFAVerificationAttemptOutput)
-		if !ok {
-			return errors.New("unexpected response type")
-		}
-		if mfaOutput.Decision == hooks.MFAHookRejection {
+
+		if output.Decision == hooks.MFAHookRejection {
 			if err := models.Logout(a.db, user.ID); err != nil {
 				return err
 			}
-			if mfaOutput.Message == "" {
+			if output.Message == "" {
 				output.Message = hooks.DefaultMFAHookRejectionMessage
 			}
 			return forbiddenError(output.Message)
