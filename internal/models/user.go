@@ -227,6 +227,41 @@ func (u *User) UpdateAppMetaDataProviders(tx *storage.Connection) error {
 	return u.UpdateAppMetaData(tx, payload)
 }
 
+// UpdateUserEmail updates the user's email to one of the identity's email
+// if the current email used doesn't match any of the identities email
+func (u *User) UpdateUserEmail(tx *storage.Connection) error {
+	identities, terr := FindIdentitiesByUserID(tx, u.ID)
+	if terr != nil {
+		return terr
+	}
+	for _, i := range identities {
+		if u.GetEmail() == i.GetEmail() {
+			// there's an existing identity that uses the same email
+			// so the user's email can be kept
+			return nil
+		}
+	}
+
+	var primaryIdentity *Identity
+	for _, i := range identities {
+		if _, terr := FindUserByEmailAndAudience(tx, i.GetEmail(), u.Aud); terr != nil {
+			if IsNotFoundError(terr) {
+				primaryIdentity = i
+				break
+			}
+			return terr
+		}
+	}
+	if primaryIdentity == nil {
+		return UserEmailUniqueConflictError{}
+	}
+	// default to the first identity's email
+	if terr := u.SetEmail(tx, primaryIdentity.GetEmail()); terr != nil {
+		return terr
+	}
+	return nil
+}
+
 // SetEmail sets the user's email
 func (u *User) SetEmail(tx *storage.Connection, email string) error {
 	u.Email = storage.NullString(email)

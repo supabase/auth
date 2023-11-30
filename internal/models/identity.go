@@ -17,18 +17,24 @@ type Identity struct {
 	ID uuid.UUID `json:"identity_id" db:"id"`
 	// returned as id in JSON for backward compatibility with the interface exposed by the client library
 	// see https://github.com/supabase/gotrue-js/blob/c9296bbc27a2f036af55c1f33fca5930704bd021/src/lib/types.ts#L230-L240
-	ProviderID   string     `json:"id" db:"provider_id"`
-	UserID       uuid.UUID  `json:"user_id" db:"user_id"`
-	IdentityData JSONMap    `json:"identity_data,omitempty" db:"identity_data"`
-	Provider     string     `json:"provider" db:"provider"`
-	LastSignInAt *time.Time `json:"last_sign_in_at,omitempty" db:"last_sign_in_at"`
-	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
+	ProviderID   string             `json:"id" db:"provider_id"`
+	UserID       uuid.UUID          `json:"user_id" db:"user_id"`
+	IdentityData JSONMap            `json:"identity_data,omitempty" db:"identity_data"`
+	Provider     string             `json:"provider" db:"provider"`
+	LastSignInAt *time.Time         `json:"last_sign_in_at,omitempty" db:"last_sign_in_at"`
+	CreatedAt    time.Time          `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at" db:"updated_at"`
+	Email        storage.NullString `json:"email,omitempty" db:"email" rw:"r"`
 }
 
 func (Identity) TableName() string {
 	tableName := "identities"
 	return tableName
+}
+
+// GetEmail returns the user's email as a string
+func (i *Identity) GetEmail() string {
+	return string(i.Email)
 }
 
 // NewIdentity returns an identity associated to the user's id.
@@ -45,6 +51,9 @@ func NewIdentity(user *User, provider string, identityData map[string]interface{
 		IdentityData: identityData,
 		Provider:     provider,
 		LastSignInAt: &now,
+	}
+	if email, ok := identityData["email"]; ok {
+		identity.Email = storage.NullString(email.(string))
 	}
 
 	return identity, nil
@@ -92,6 +101,7 @@ func FindIdentitiesByUserID(tx *storage.Connection, userID uuid.UUID) ([]*Identi
 // FindProvidersByUser returns all providers associated to a user
 func FindProvidersByUser(tx *storage.Connection, user *User) ([]string, error) {
 	identities := []Identity{}
+	providerExists := map[string]bool{}
 	providers := make([]string, 0)
 	if err := tx.Q().Select("provider").Where("user_id = ?", user.ID).All(&identities); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
@@ -100,7 +110,10 @@ func FindProvidersByUser(tx *storage.Connection, user *User) ([]string, error) {
 		return nil, errors.Wrap(err, "error finding providers")
 	}
 	for _, identity := range identities {
-		providers = append(providers, identity.Provider)
+		if _, ok := providerExists[identity.Provider]; !ok {
+			providers = append(providers, identity.Provider)
+			providerExists[identity.Provider] = true
+		}
 	}
 	return providers, nil
 }
