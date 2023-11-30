@@ -464,7 +464,7 @@ func (e *ExtensibilityPointConfiguration) ValidateAndPopulateExtensibilityPoint(
 		if !re.MatchString(table) {
 			return fmt.Errorf("invalid table name: %s", table)
 		}
-		e.HookName = fmt.Sprintf("%s.%s", schema, table)
+		e.HookName = fmt.Sprintf("%q.%q", schema, table)
 	}
 	return nil
 }
