@@ -20,6 +20,8 @@ const defaultMinPasswordLength int = 6
 const defaultChallengeExpiryDuration float64 = 300
 const defaultFlowStateExpiryDuration time.Duration = 300 * time.Second
 
+var postgresNamesRegexp = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`)
+
 // Time is used to represent timestamps in the configuration, as envconfig has
 // trouble parsing empty strings, due to time.Time.UnmarshalText().
 type Time struct {
@@ -441,12 +443,6 @@ func (h *HookConfiguration) Validate() error {
 
 func (e *ExtensibilityPointConfiguration) ValidateAndPopulateExtensibilityPoint() error {
 	if e.URI != "" {
-		regExp := `^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`
-		re, err := regexp.Compile(regExp)
-		if err != nil {
-			return err
-		}
-
 		u, err := url.Parse(e.URI)
 		if err != nil {
 			return err
@@ -458,10 +454,10 @@ func (e *ExtensibilityPointConfiguration) ValidateAndPopulateExtensibilityPoint(
 		schema := pathParts[1]
 		table := pathParts[2]
 		// Validate schema and table names
-		if !re.MatchString(schema) {
+		if !postgresNamesRegexp.MatchString(schema) {
 			return fmt.Errorf("invalid schema name: %s", schema)
 		}
-		if !re.MatchString(table) {
+		if !postgresNamesRegexp.MatchString(table) {
 			return fmt.Errorf("invalid table name: %s", table)
 		}
 		e.HookName = fmt.Sprintf("%q.%q", schema, table)
