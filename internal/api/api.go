@@ -17,6 +17,8 @@ import (
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/observability"
 	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/hibp"
 )
 
 const (
@@ -32,6 +34,8 @@ type API struct {
 	db      *storage.Connection
 	config  *conf.GlobalConfiguration
 	version string
+
+	hibpClient *hibp.PwnedClient
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
@@ -67,6 +71,26 @@ func (a *API) deprecationNotices(ctx context.Context) {
 // NewAPIWithVersion creates a new REST API using the specified version
 func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
 	api := &API{config: globalConfig, db: db, version: version}
+
+	if api.config.Password.HIBP.Enabled {
+		httpClient := &http.Client{
+			// all HIBP API requests should finish quickly to avoid
+			// unnecessary slowdowns
+			Timeout: 5 * time.Second,
+		}
+
+		api.hibpClient = &hibp.PwnedClient{
+			UserAgent: api.config.Password.HIBP.UserAgent,
+			HTTP:      httpClient,
+		}
+
+		if api.config.Password.HIBP.Bloom.Enabled {
+			cache := utilities.NewHIBPBloomCache(api.config.Password.HIBP.Bloom.Items, api.config.Password.HIBP.Bloom.FalsePositives)
+			api.hibpClient.Cache = cache
+
+			logrus.Infof("Pwned passwords cache is %.2f KB", float64(cache.Cap())/(8*1024.0))
+		}
+	}
 
 	api.deprecationNotices(ctx)
 

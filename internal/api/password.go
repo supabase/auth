@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 )
 
 // WeakPasswordError encodes an error that a password does not meet strength
@@ -36,6 +38,20 @@ func (a *API) checkPasswordStrength(ctx context.Context, password string) error 
 			messages = append(messages, fmt.Sprintf("Password should contain at least one character of each: %s.", strings.Join(config.Password.RequiredCharacters, ", ")))
 
 			break
+		}
+	}
+
+	if config.Password.HIBP.Enabled {
+		pwned, err := a.hibpClient.Check(ctx, password)
+		if err != nil {
+			if config.Password.HIBP.FailClosed {
+				return internalServerError("Unable to perform password strength check with HaveIBeenPwned.org.").WithInternalError(err)
+			} else {
+				logrus.WithError(err).Warn("Unable to perform password strength check with HaveIBeenPwned.org, pwned passwords are being allowed")
+			}
+		} else if pwned {
+			reasons = append(reasons, "pwned")
+			messages = append(messages, "Password is known to be weak and easy to guess, please choose a different one.")
 		}
 	}
 
