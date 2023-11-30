@@ -53,10 +53,6 @@ const (
 	DefaultMFAHookRejectionMessage = "Further MFA verification attempts will be rejected."
 )
 
-type AuthHookErrorResponse struct {
-	AuthHookError
-}
-
 func HookError(message string, args ...interface{}) *AuthHookError {
 	return &AuthHookError{
 		Message: fmt.Sprintf(message, args...),

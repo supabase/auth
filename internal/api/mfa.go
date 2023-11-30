@@ -214,7 +214,7 @@ func (a *API) invokeHook(ctx context.Context, input any, output hooks.HookOutput
 			if terr := timeoutQuery.Exec(); terr != nil {
 				return terr
 			}
-			query := tx.RawQuery(fmt.Sprintf("SELECT * from %s(?)", a.config.Hook.MFAVerificationAttempt.HookName), payload)
+			query := tx.RawQuery(fmt.Sprintf("SELECT %s(?)", a.config.Hook.MFAVerificationAttempt.HookName), payload)
 			terr := query.First(&response)
 			if terr != nil {
 				return terr
