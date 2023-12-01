@@ -153,7 +153,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			Valid:  isValidPassword,
 		}
 		output := hooks.PasswordVerificationAttemptOutput{}
-		err := a.invokeHook(ctx, input, &output)
+		err := a.invokeHook(ctx, &input, &output)
 		if err != nil {
 			return err
 		}
