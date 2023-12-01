@@ -45,7 +45,7 @@ type PasswordVerificationAttemptInput struct {
 type PasswordVerificationAttemptOutput struct {
 	Decision  string        `json:"decision"`
 	Message   string        `json:"message"`
-	HookError AuthHookError `json:"hook_error" split_words:"true"`
+	HookError AuthHookError `json:"error" split_words:"true"`
 }
 
 func (mf *MFAVerificationAttemptOutput) IsError() bool {
