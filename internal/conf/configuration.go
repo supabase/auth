@@ -447,13 +447,14 @@ type HookConfiguration struct {
 
 type ExtensibilityPointConfiguration struct {
 	URI      string `json:"uri"`
-	Enabled  bool   `json:"enabled"`
+	Enabled  bool   `json:"enabled" default:"false"`
 	HookName string `json:"hook_name"`
 }
 
 func (h *HookConfiguration) Validate() error {
 	points := []ExtensibilityPointConfiguration{
 		h.MFAVerificationAttempt,
+		h.PasswordVerificationAttempt,
 	}
 	for _, point := range points {
 		if err := point.ValidateAndPopulateExtensibilityPoint(); err != nil {

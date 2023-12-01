@@ -591,11 +591,10 @@ func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
 
 func (ts *TokenTestSuite) TestPasswordVerificationHook() {
 	type verificationHookTestcase struct {
-		desc                string
-		uri                 string
-		hookFunctionSQL     string
-		expectedCode        int
-		cleanupHookFunction string
+		desc            string
+		uri             string
+		hookFunctionSQL string
+		expectedCode    int
 	}
 	cases := []verificationHookTestcase{
 		{
@@ -607,8 +606,7 @@ func (ts *TokenTestSuite) TestPasswordVerificationHook() {
                 begin
                     return json_build_object('decision', 'continue');
                 end; $$ language plpgsql;`,
-			expectedCode:        http.StatusOK,
-			cleanupHookFunction: "password_verification_hook(input jsonb)",
+			expectedCode: http.StatusOK,
 		}, {
 			desc: "Reject- Enabled",
 			uri:  "pg-functions://postgres/auth/password_verification_hook_reject",
@@ -616,10 +614,9 @@ func (ts *TokenTestSuite) TestPasswordVerificationHook() {
                 create or replace function password_verification_hook_reject(input jsonb)
                 returns json as $$
                 begin
-                    return json_build_object('decision', 'continue');
+                    return json_build_object('decision', 'reject');
                 end; $$ language plpgsql;`,
-			expectedCode:        http.StatusForbidden,
-			cleanupHookFunction: "password_verification_hook_reject(input jsonb)",
+			expectedCode: http.StatusForbidden,
 		},
 	}
 	for _, c := range cases {
@@ -627,7 +624,6 @@ func (ts *TokenTestSuite) TestPasswordVerificationHook() {
 			ts.Config.Hook.PasswordVerificationAttempt.Enabled = true
 			ts.Config.Hook.PasswordVerificationAttempt.URI = c.uri
 			require.NoError(ts.T(), ts.Config.Hook.PasswordVerificationAttempt.ValidateAndPopulateExtensibilityPoint())
-			require.NoError(ts.T(), ts.Config.Hook.MFAVerificationAttempt.ValidateAndPopulateExtensibilityPoint())
 
 			err := ts.API.db.RawQuery(c.hookFunctionSQL).Exec()
 			require.NoError(t, err)
@@ -642,9 +638,12 @@ func (ts *TokenTestSuite) TestPasswordVerificationHook() {
 
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
+
 			assert.Equal(ts.T(), c.expectedCode, w.Code)
 			cleanupHookSQL := fmt.Sprintf("drop function if exists %s", ts.Config.Hook.PasswordVerificationAttempt.HookName)
 			require.NoError(ts.T(), ts.API.db.RawQuery(cleanupHookSQL).Exec())
+			// Reset so it doesn't affect other tests
+			ts.Config.Hook.PasswordVerificationAttempt.Enabled = false
 
 		})
 	}

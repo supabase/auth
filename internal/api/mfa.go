@@ -270,7 +270,7 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 		}
 
 		if _, err := a.runHook(ctx, config.Hook.PasswordVerificationAttempt.HookName, input, output); err != nil {
-			return internalServerError("Error invoking MFA verification hook.").WithInternalError(err)
+			return internalServerError("Error invoking password verification hook.").WithInternalError(err)
 		}
 
 		if hookOutput.IsError() {
