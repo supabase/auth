@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"fmt"
 	"github.com/gofrs/uuid"
 )
 
@@ -35,7 +34,7 @@ type MFAVerificationAttemptInput struct {
 type MFAVerificationAttemptOutput struct {
 	Decision  string        `json:"decision"`
 	Message   string        `json:"message"`
-	HookError AuthHookError `json:"hook_error" split_words:"true"`
+	HookError AuthHookError `json:"error" split_words:"true"`
 }
 
 type PasswordVerificationAttemptInput struct {
@@ -49,31 +48,10 @@ type PasswordVerificationAttemptOutput struct {
 	HookError AuthHookError `json:"hook_error" split_words:"true"`
 }
 
-type AuthHookError struct {
-	Code    string `json:"code"`
-	Message string `json:"msg"`
-	ErrorID string `json:"error_id,omitempty"`
-}
-
-func (a *AuthHookError) Error() string {
-	return fmt.Sprintf("%s: %s", a.Code, a.Message)
-}
-
-const (
-	DefaultMFAHookRejectionMessage      = "Further MFA verification attempts will be rejected."
-	DefaultPasswordHookRejectionMessage = "Further password verification attempts will be rejected."
-)
-
-func HookError(message string, args ...interface{}) *AuthHookError {
-	return &AuthHookError{
-		Message: fmt.Sprintf(message, args...),
-	}
-
-}
-
 func (mf *MFAVerificationAttemptOutput) IsError() bool {
 	return mf.HookError.Message != ""
 }
+
 func (mf *MFAVerificationAttemptOutput) Error() string {
 	return mf.HookError.Message
 }
@@ -85,3 +63,17 @@ func (p *PasswordVerificationAttemptOutput) IsError() bool {
 func (p *PasswordVerificationAttemptOutput) Error() string {
 	return p.HookError.Message
 }
+
+type AuthHookError struct {
+	HTTPCode int    `json:"http_code,omitempty"`
+	Message  string `json:"message,omitempty"`
+}
+
+func (a *AuthHookError) Error() string {
+	return a.Message
+}
+
+const (
+	DefaultMFAHookRejectionMessage      = "Further MFA verification attempts will be rejected."
+	DefaultPasswordHookRejectionMessage = "Further password verification attempts will be rejected."
+)

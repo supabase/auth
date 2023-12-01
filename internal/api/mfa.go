@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -199,71 +198,77 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-func (a *API) invokeHook(ctx context.Context, input any, output hooks.HookOutput) error {
+func (a *API) runHook(ctx context.Context, name string, input, output any) ([]byte, error) {
+	db := a.db.WithContext(ctx)
+
+	request, err := json.Marshal(input)
+	if err != nil {
+		panic(err)
+	}
+
 	var response []byte
-	switch input.(type) {
-	case hooks.MFAVerificationAttemptInput:
-		payload, err := json.Marshal(&input)
-		if err != nil {
-			panic(err)
+	if err := db.Transaction(func(tx *storage.Connection) error {
+		// We rely on Postgres timeouts to ensure the function doesn't overrun
+		if terr := tx.RawQuery(fmt.Sprintf("set local statement_timeout TO '%d';", hooks.DefaultTimeout)).Exec(); terr != nil {
+			return terr
 		}
 
-		if err := a.db.Transaction(func(tx *storage.Connection) error {
-			// We rely on Postgres timeouts to ensure the function doesn't overrun
-			timeoutQuery := tx.RawQuery(fmt.Sprintf("set local statement_timeout TO '%d';", hooks.DefaultTimeout))
-			if terr := timeoutQuery.Exec(); terr != nil {
-				return terr
-			}
-			query := tx.RawQuery(fmt.Sprintf("SELECT %s(?)", a.config.Hook.MFAVerificationAttempt.HookName), payload)
-			terr := query.First(&response)
-			if terr != nil {
-				return terr
-			}
-			return nil
-		}); err != nil {
-			return err
+		if terr := tx.RawQuery(fmt.Sprintf("select %s(?);", name), request).First(&response); terr != nil {
+			return terr
 		}
-		if err = json.Unmarshal(response, &output); err != nil {
-			return err
-		}
-		if output.IsError() {
-			return &output.(*hooks.MFAVerificationAttemptOutput).HookError
+
+		// reset the timeout
+		if terr := tx.RawQuery("set local statement_timeout TO default;").Exec(); terr != nil {
+			return terr
 		}
 
 		return nil
-	case hooks.PasswordVerificationAttemptInput:
-		// TODO: Refactor overlapping logic
-		payload, err := json.Marshal(&input)
-		if err != nil {
-			panic(err)
+	}); err != nil {
+		return nil, err
+	}
+
+	if err := json.Unmarshal(response, output); err != nil {
+		return response, err
+	}
+
+	return response, nil
+}
+
+func (a *API) invokeHook(ctx context.Context, input, output any) error {
+	config := a.config
+
+	switch input.(type) {
+	case *hooks.MFAVerificationAttemptInput:
+		hookOutput, ok := output.(*hooks.MFAVerificationAttemptOutput)
+		if !ok {
+			panic("output should be *hooks.MFAVerificationAttemptOutput")
 		}
 
-		if err := a.db.Transaction(func(tx *storage.Connection) error {
-			// We rely on Postgres timeouts to ensure the function doesn't overrun
-			timeoutQuery := tx.RawQuery(fmt.Sprintf("set local statement_timeout TO '%d';", hooks.DefaultTimeout))
-			if terr := timeoutQuery.Exec(); terr != nil {
-				return terr
-			}
-			query := tx.RawQuery(fmt.Sprintf("SELECT %s(?)", a.config.Hook.MFAVerificationAttempt.HookName), payload)
-			terr := query.First(&response)
-			if terr != nil {
-				return terr
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-		if err = json.Unmarshal(response, &output); err != nil {
-			return err
-		}
-		if output.IsError() {
-			return &output.(*hooks.PasswordVerificationAttemptOutput).HookError
+		if _, err := a.runHook(ctx, config.Hook.MFAVerificationAttempt.HookName, input, output); err != nil {
+			return internalServerError("Error invoking MFA verification hook.").WithInternalError(err)
 		}
 
+		if hookOutput.IsError() {
+			httpCode := hookOutput.HookError.HTTPCode
+
+			if httpCode == 0 {
+				httpCode = http.StatusInternalServerError
+			}
+
+			httpError := &HTTPError{
+				Code:    httpCode,
+				Message: hookOutput.HookError.Message,
+			}
+
+			return httpError.WithInternalError(&hookOutput.HookError)
+		}
+
+		return nil
 	default:
-		panic("invalid extensibility point")
+		panic("unknown hook input type")
 	}
 }
+
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
@@ -321,19 +326,23 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			FactorID: factor.ID,
 			Valid:    valid,
 		}
-		output := &hooks.MFAVerificationAttemptOutput{}
-		err := a.invokeHook(ctx, input, output)
+
+		output := hooks.MFAVerificationAttemptOutput{}
+
+		err := a.invokeHook(ctx, &input, &output)
 		if err != nil {
-			return errors.New(err.Error())
+			return err
 		}
 
 		if output.Decision == hooks.HookRejection {
 			if err := models.Logout(a.db, user.ID); err != nil {
 				return err
 			}
+
 			if output.Message == "" {
 				output.Message = hooks.DefaultMFAHookRejectionMessage
 			}
+
 			return forbiddenError(output.Message)
 		}
 	}
