@@ -236,7 +236,6 @@ func (a *API) runHook(ctx context.Context, name string, input, output any) ([]by
 
 func (a *API) invokeHook(ctx context.Context, input, output any) error {
 	config := a.config
-
 	switch input.(type) {
 	case *hooks.MFAVerificationAttemptInput:
 		hookOutput, ok := output.(*hooks.MFAVerificationAttemptOutput)

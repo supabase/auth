@@ -588,3 +588,65 @@ func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
 	require.NotEmpty(ts.T(), verifyResp.Token)
 
 }
+
+func (ts *TokenTestSuite) TestPasswordVerificationHook() {
+	type verificationHookTestcase struct {
+		desc                string
+		uri                 string
+		hookFunctionSQL     string
+		expectedCode        int
+		cleanupHookFunction string
+	}
+	cases := []verificationHookTestcase{
+		{
+			desc: "Default success",
+			uri:  "pg-functions://postgres/auth/password_verification_hook",
+			hookFunctionSQL: `
+                create or replace function password_verification_hook(input jsonb)
+                returns json as $$
+                begin
+                    return json_build_object('decision', 'continue');
+                end; $$ language plpgsql;`,
+			expectedCode:        http.StatusOK,
+			cleanupHookFunction: "password_verification_hook(input jsonb)",
+		}, {
+			desc: "Reject- Enabled",
+			uri:  "pg-functions://postgres/auth/password_verification_hook_reject",
+			hookFunctionSQL: `
+                create or replace function password_verification_hook_reject(input jsonb)
+                returns json as $$
+                begin
+                    return json_build_object('decision', 'continue');
+                end; $$ language plpgsql;`,
+			expectedCode:        http.StatusForbidden,
+			cleanupHookFunction: "password_verification_hook_reject(input jsonb)",
+		},
+	}
+	for _, c := range cases {
+		ts.T().Run(c.desc, func(t *testing.T) {
+			ts.Config.Hook.PasswordVerificationAttempt.Enabled = true
+			ts.Config.Hook.PasswordVerificationAttempt.URI = c.uri
+			require.NoError(ts.T(), ts.Config.Hook.PasswordVerificationAttempt.ValidateAndPopulateExtensibilityPoint())
+			require.NoError(ts.T(), ts.Config.Hook.MFAVerificationAttempt.ValidateAndPopulateExtensibilityPoint())
+
+			err := ts.API.db.RawQuery(c.hookFunctionSQL).Exec()
+			require.NoError(t, err)
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"email":    "test@example.com",
+				"password": "password",
+			}))
+
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), c.expectedCode, w.Code)
+			cleanupHookSQL := fmt.Sprintf("drop function if exists %s", ts.Config.Hook.PasswordVerificationAttempt.HookName)
+			require.NoError(ts.T(), ts.API.db.RawQuery(cleanupHookSQL).Exec())
+
+		})
+	}
+
+}
