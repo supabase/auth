@@ -146,9 +146,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 
 	}
 	isValidPassword := user.Authenticate(ctx, params.Password)
-	if !isValidPassword {
-		return oauthError("invalid_grant", InvalidLoginMessage)
-	}
 	if config.Hook.PasswordVerificationAttempt.Enabled {
 
 		input := hooks.PasswordVerificationAttemptInput{
@@ -170,6 +167,9 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			}
 			return forbiddenError(output.Message)
 		}
+	}
+	if !isValidPassword {
+		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
 
 	if params.Email != "" && !user.IsConfirmed() {
