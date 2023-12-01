@@ -231,6 +231,35 @@ func (a *API) invokeHook(ctx context.Context, input any, output hooks.HookOutput
 		}
 
 		return nil
+	case hooks.PasswordVerificationAttemptInput:
+		// TODO: Refactor overlapping logic
+		payload, err := json.Marshal(&input)
+		if err != nil {
+			panic(err)
+		}
+
+		if err := a.db.Transaction(func(tx *storage.Connection) error {
+			// We rely on Postgres timeouts to ensure the function doesn't overrun
+			timeoutQuery := tx.RawQuery(fmt.Sprintf("set local statement_timeout TO '%d';", hooks.DefaultTimeout))
+			if terr := timeoutQuery.Exec(); terr != nil {
+				return terr
+			}
+			query := tx.RawQuery(fmt.Sprintf("SELECT %s(?)", a.config.Hook.MFAVerificationAttempt.HookName), payload)
+			terr := query.First(&response)
+			if terr != nil {
+				return terr
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		if err = json.Unmarshal(response, &output); err != nil {
+			return err
+		}
+		if output.IsError() {
+			return &output.(*hooks.PasswordVerificationAttemptOutput).HookError
+		}
+
 	default:
 		panic("invalid extensibility point")
 	}
@@ -298,7 +327,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			return errors.New(err.Error())
 		}
 
-		if output.Decision == hooks.MFAHookRejection {
+		if output.Decision == hooks.HookRejection {
 			if err := models.Logout(a.db, user.ID); err != nil {
 				return err
 			}

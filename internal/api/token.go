@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt"
 
 	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/gotrue/internal/hooks"
 	"github.com/supabase/gotrue/internal/metering"
 	"github.com/supabase/gotrue/internal/models"
 	"github.com/supabase/gotrue/internal/storage"
@@ -140,8 +141,35 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return internalServerError("Database error querying schema").WithInternalError(err)
 	}
 
-	if user.IsBanned() || !user.Authenticate(ctx, params.Password) {
+	if user.IsBanned() {
 		return oauthError("invalid_grant", InvalidLoginMessage)
+
+	}
+	isValidPassword := user.Authenticate(ctx, params.Password)
+	if !isValidPassword {
+		return oauthError("invalid_grant", InvalidLoginMessage)
+	}
+	if config.Hook.PasswordVerificationAttempt.Enabled {
+
+		input := hooks.PasswordVerificationAttemptInput{
+			UserID: user.ID,
+			Valid:  isValidPassword,
+		}
+		output := &hooks.PasswordVerificationAttemptOutput{}
+		err := a.invokeHook(ctx, input, output)
+		if err != nil {
+			return errors.New(err.Error())
+		}
+
+		if output.Decision == hooks.HookRejection {
+			if err := models.Logout(a.db, user.ID); err != nil {
+				return err
+			}
+			if output.Message == "" {
+				output.Message = hooks.DefaultPasswordHookRejectionMessage
+			}
+			return forbiddenError(output.Message)
+		}
 	}
 
 	if params.Email != "" && !user.IsConfirmed() {

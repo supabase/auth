@@ -441,7 +441,8 @@ type WebhookConfig struct {
 
 // Moving away from the existing HookConfig so we can get a fresh start.
 type HookConfiguration struct {
-	MFAVerificationAttempt ExtensibilityPointConfiguration `json:"mfa_verification_attempt" split_words:"true"`
+	MFAVerificationAttempt      ExtensibilityPointConfiguration `json:"mfa_verification_attempt" split_words:"true"`
+	PasswordVerificationAttempt ExtensibilityPointConfiguration `json:"password_verification_attempt" split_words:"true"`
 }
 
 type ExtensibilityPointConfiguration struct {
