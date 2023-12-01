@@ -266,7 +266,7 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 	case *hooks.PasswordVerificationAttemptInput:
 		hookOutput, ok := output.(*hooks.PasswordVerificationAttemptOutput)
 		if !ok {
-			panic("output should be *hooks.MFAVerificationAttemptOutput")
+			panic("output should be *hooks.PasswordVerificationAttemptOutput")
 		}
 
 		if _, err := a.runHook(ctx, config.Hook.PasswordVerificationAttempt.HookName, input, output); err != nil {
