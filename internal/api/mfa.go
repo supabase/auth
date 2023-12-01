@@ -264,6 +264,33 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 		}
 
 		return nil
+	case *hooks.PasswordVerificationAttemptInput:
+		hookOutput, ok := output.(*hooks.PasswordVerificationAttemptOutput)
+		if !ok {
+			panic("output should be *hooks.MFAVerificationAttemptOutput")
+		}
+
+		if _, err := a.runHook(ctx, config.Hook.PasswordVerificationAttempt.HookName, input, output); err != nil {
+			return internalServerError("Error invoking MFA verification hook.").WithInternalError(err)
+		}
+
+		if hookOutput.IsError() {
+			httpCode := hookOutput.HookError.HTTPCode
+
+			if httpCode == 0 {
+				httpCode = http.StatusInternalServerError
+			}
+
+			httpError := &HTTPError{
+				Code:    httpCode,
+				Message: hookOutput.HookError.Message,
+			}
+
+			return httpError.WithInternalError(&hookOutput.HookError)
+		}
+
+		return nil
+
 	default:
 		panic("unknown hook input type")
 	}
