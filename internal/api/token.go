@@ -159,9 +159,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		}
 
 		if output.Decision == hooks.HookRejection {
-			if err := models.Logout(a.db, user.ID); err != nil {
-				return err
-			}
 			if output.Message == "" {
 				output.Message = hooks.DefaultPasswordHookRejectionMessage
 			}

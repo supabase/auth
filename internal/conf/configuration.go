@@ -447,7 +447,7 @@ type HookConfiguration struct {
 
 type ExtensibilityPointConfiguration struct {
 	URI      string `json:"uri"`
-	Enabled  bool   `json:"enabled" default:"false"`
+	Enabled  bool   `json:"enabled"`
 	HookName string `json:"hook_name"`
 }
 
