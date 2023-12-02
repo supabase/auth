@@ -133,6 +133,15 @@ func (ts *UserTestSuite) TestFindUserByID() {
 	require.Equal(ts.T(), u.ID, n.ID)
 }
 
+func (ts *UserTestSuite) TestFindUserByEmail() {
+	u := ts.createUser()
+
+	n, err := FindUserByEmail(ts.db, u.GetEmail())
+	require.NoError(ts.T(), err)
+
+	require.Equal(ts.T(), u.ID, n.ID)
+}
+
 func (ts *UserTestSuite) TestFindUserByRecoveryToken() {
 	u := ts.createUser()
 	u.RecoveryToken = "asdf"

@@ -453,6 +453,11 @@ func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
 	return findUser(tx, "instance_id = ? and id = ?", uuid.Nil, id)
 }
 
+// FindUserByEmail finds a user with the matching email address.
+func FindUserByEmail(tx *storage.Connection, email string) (*User, error) {
+	return findUser(tx, "instance_id = ? and LOWER(email) = ? and is_sso_user = false", uuid.Nil, strings.ToLower(email))
+}
+
 // FindUserByRecoveryToken finds a user with the matching recovery token.
 func FindUserByRecoveryToken(tx *storage.Connection, token string) (*User, error) {
 	return findUser(tx, "recovery_token = ? and is_sso_user = false", token)
