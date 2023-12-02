@@ -143,7 +143,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 
 	if user.IsBanned() {
 		return oauthError("invalid_grant", InvalidLoginMessage)
-
 	}
 	isValidPassword := user.Authenticate(ctx, params.Password)
 	if config.Hook.PasswordVerificationAttempt.Enabled {
