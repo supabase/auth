@@ -358,6 +358,58 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 	}
 }
 
+// TestAdminUserFind_GetEmail tests API /admin/user/find?email=xyz route (GET)
+func (ts *AdminTestSuite) TestAdminUserFind_GetEmail() {
+	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test Get User by Email"})
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	// Setup request
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/users/find?email=%s", u.Email), nil)
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	data := make(map[string]interface{})
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+	assert.Equal(ts.T(), data["email"], "test1@example.com")
+	assert.NotNil(ts.T(), data["app_metadata"])
+	assert.NotNil(ts.T(), data["user_metadata"])
+	md := data["user_metadata"].(map[string]interface{})
+	assert.Len(ts.T(), md, 1)
+	assert.Equal(ts.T(), "Test Get User by Email", md["full_name"])
+}
+
+// TestAdminUserFind_GetUserID tests API /admin/user/find?email=xyz route (GET)
+func (ts *AdminTestSuite) TestAdminUserFind_GetUserID() {
+	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test Get User by ID"})
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	// Setup request
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/users/find?user_id=%s", u.ID), nil)
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	data := make(map[string]interface{})
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+	assert.Equal(ts.T(), data["email"], "test1@example.com")
+	assert.NotNil(ts.T(), data["app_metadata"])
+	assert.NotNil(ts.T(), data["user_metadata"])
+	md := data["user_metadata"].(map[string]interface{})
+	assert.Len(ts.T(), md, 1)
+	assert.Equal(ts.T(), "Test Get User by ID", md["full_name"])
+}
+
 // TestAdminUserGet tests API /admin/user route (GET)
 func (ts *AdminTestSuite) TestAdminUserGet() {
 	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test Get User"})

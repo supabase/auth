@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -44,6 +45,79 @@ type AdminListUsersResponse struct {
 	Aud   string         `json:"aud"`
 }
 
+const (
+	userIDParam = "user_id"
+	emailParam  = "email"
+)
+
+func (a *API) loadUserById(db *storage.Connection, userID uuid.UUID) (*models.User, error) {
+	u, err := models.FindUserByID(db, userID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return nil, notFoundError("User not found")
+		}
+		return nil, internalServerError("Database error loading user").WithInternalError(err)
+	}
+
+	return u, nil
+}
+
+func (a *API) loadUserByEmail(db *storage.Connection, userEmail string) (*models.User, error) {
+	u, err := models.FindUserByEmail(db, userEmail)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return nil, notFoundError("user not found")
+		}
+		return nil, internalServerError("database error loading user").WithInternalError(err)
+	}
+
+	return u, nil
+}
+
+func (a *API) adminUserFind(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+
+	email := r.URL.Query().Get(emailParam)
+	userID := r.URL.Query().Get(userIDParam)
+
+	var user *models.User
+
+	if email == "" && userID == "" {
+		return badRequestError(fmt.Sprintf("%s or %s must be provided", emailParam, userIDParam))
+	} else if email != "" && userID != "" {
+		return badRequestError(fmt.Sprintf("only one of %s or %s must be provided", emailParam, userIDParam))
+	}
+
+	if email != "" {
+		observability.LogEntrySetField(r, emailParam, email)
+
+		email, err := validateEmail(email)
+		if err != nil {
+			return badRequestError("invalid email address provided")
+		}
+
+		user, err = a.loadUserByEmail(db, email)
+		if err != nil {
+			return err
+		}
+	} else {
+		userID, err := uuid.FromString(userID)
+		if err != nil {
+			return badRequestError("invalid user id provided")
+		}
+
+		observability.LogEntrySetField(r, userIDParam, userID)
+
+		user, err = a.loadUserById(db, userID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return sendJSON(w, http.StatusOK, user)
+}
+
 func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -55,14 +129,10 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 
 	observability.LogEntrySetField(r, "user_id", userID)
 
-	u, err := models.FindUserByID(db, userID)
+	u, err := a.loadUserById(db, userID)
 	if err != nil {
-		if models.IsNotFoundError(err) {
-			return nil, notFoundError("User not found")
-		}
-		return nil, internalServerError("Database error loading user").WithInternalError(err)
+		return nil, err
 	}
-
 	return withUser(ctx, u), nil
 }
 

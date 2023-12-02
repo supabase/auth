@@ -1438,6 +1438,51 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorSchema"
 
+  /admin/users/find:
+    get:
+      summary: Find a user by email or user ID.
+      tags:
+        - admin
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      parameters:
+        - name: email
+          in: query
+          required: false
+          schema:
+            type: string
+            format: email
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        200:
+          description: User details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSchema"
+        400:
+          description: Bad request. Either email or user_id must be provided, but not both.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+        404:
+          description: User not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+
   /admin/sso/providers:
     get:
       summary: Fetch a list of all registered SSO providers.

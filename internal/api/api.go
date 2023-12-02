@@ -249,6 +249,10 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 					r.Put("/", api.adminUserUpdate)
 					r.Delete("/", api.adminUserDelete)
 				})
+
+				r.Route("/find", func(r *router) {
+					r.Get("/", api.adminUserFind)
+				})
 			})
 
 			r.Post("/generate_link", api.adminGenerateLink)
