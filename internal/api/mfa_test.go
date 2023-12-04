@@ -49,8 +49,11 @@ func TestMFA(t *testing.T) {
 
 func (ts *MFATestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
+
+	ts.TestEmail = "test@example.com"
+	ts.TestPassword = "password"
 	// Create user
-	u, err := models.NewUser("123456789", "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("123456789", ts.TestEmail, ts.TestPassword, ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 	// Create Factor
@@ -64,17 +67,15 @@ func (ts *MFATestSuite) SetupTest() {
 	s.FactorID = &f.ID
 	require.NoError(ts.T(), ts.API.db.Create(s), "Error saving test session")
 
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
+	ts.Require().NoError(err)
+
 	ts.TestUser = u
 	ts.TestSession = s
 
 	// Generate TOTP related settings
-	emailValue, err := u.Email.Value()
-	require.NoError(ts.T(), err)
-	testEmail := emailValue.(string)
-	testDomain := strings.Split(testEmail, "@")[1]
+	testDomain := strings.Split(ts.TestEmail, "@")[1]
 	ts.TestDomain = testDomain
-	ts.TestEmail = testEmail
-	ts.TestPassword = "password"
 
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      ts.TestDomain,
@@ -85,15 +86,19 @@ func (ts *MFATestSuite) SetupTest() {
 
 }
 
+func (ts *MFATestSuite) generateToken(user *models.User, sessionId *uuid.UUID) string {
+	token, _, err := generateAccessToken(ts.API.db, user, sessionId, &ts.Config.JWT)
+	require.NoError(ts.T(), err, "Error generating access token")
+	return token
+}
+
 func (ts *MFATestSuite) TestEnrollFactor() {
 	testFriendlyName := "bob"
 	alternativeFriendlyName := "john"
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	ts.Require().NoError(err)
 
-	token, _, err := generateAccessToken(ts.API.db, user, nil, &ts.Config.JWT)
-
+	token, _, err := generateAccessToken(ts.API.db, ts.TestUser, nil, &ts.Config.JWT)
 	require.NoError(ts.T(), err)
+
 	var cases = []struct {
 		desc         string
 		friendlyName string
@@ -136,7 +141,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 
 			w := performEnrollFlow(ts, token, c.friendlyName, c.factorType, c.issuer, c.expectedCode)
 
-			factors, err := models.FindFactorsByUser(ts.API.db, user)
+			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
 			ts.Require().NoError(err)
 			latestFactor := factors[len(factors)-1]
 			require.False(ts.T(), latestFactor.IsVerified())
@@ -157,23 +162,13 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 }
 
 func (ts *MFATestSuite) TestChallengeFactor() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-
-	factors, err := models.FindFactorsByUser(ts.API.db, u)
-	require.NoError(ts.T(), err)
-	f := factors[0]
-
-	token, _, err := generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
-	require.NoError(ts.T(), err, "Error generating access token")
-
+	f := ts.TestUser.Factors[0]
+	token := ts.generateToken(ts.TestUser, nil)
 	w := performChallengeFlow(ts, f.ID, token)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
 func (ts *MFATestSuite) TestMFAVerifyFactor() {
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
-	ts.Require().NoError(err)
 	cases := []struct {
 		desc             string
 		validChallenge   bool
@@ -204,10 +199,10 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			// Authenticate users and set secret
 
 			var buffer bytes.Buffer
-			r, err := models.GrantAuthenticatedUser(ts.API.db, user, models.GrantParams{})
+			r, err := models.GrantAuthenticatedUser(ts.API.db, ts.TestUser, models.GrantParams{})
 			require.NoError(ts.T(), err)
 			sharedSecret := ts.TestOTPKey.Secret()
-			factors, err := models.FindFactorsByUser(ts.API.db, user)
+			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
 			f := factors[0]
 			f.Secret = sharedSecret
 			require.NoError(ts.T(), err)
@@ -216,13 +211,11 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			// Create session to be invalidated
 			secondarySession, err := models.NewSession()
 			require.NoError(ts.T(), err, "Error creating test session")
-			secondarySession.UserID = user.ID
+			secondarySession.UserID = ts.TestUser.ID
 			secondarySession.FactorID = &f.ID
 			require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
-			token, _, err := generateAccessToken(ts.API.db, user, r.SessionId, &ts.Config.JWT)
-
-			require.NoError(ts.T(), err)
+			token := ts.generateToken(ts.TestUser, r.SessionId)
 
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", f.ID), &buffer)
@@ -312,8 +305,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 
 			var buffer bytes.Buffer
 
-			token, _, err := generateAccessToken(ts.API.db, ts.TestUser, &ts.TestSession.ID, &ts.Config.JWT)
-			require.NoError(ts.T(), err)
+			token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/factors/%s/", f.ID), &buffer)
@@ -336,10 +328,8 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 
 func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 	var secondarySession *models.Session
-	factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
-	require.NoError(ts.T(), err, "error finding factors")
-	f := factors[0]
-	secondarySession, err = models.NewSession()
+	f := ts.TestUser.Factors[0]
+	secondarySession, err := models.NewSession()
 	require.NoError(ts.T(), err, "Error creating test session")
 	secondarySession.UserID = ts.TestUser.ID
 	secondarySession.FactorID = &f.ID
@@ -350,7 +340,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 
 	var buffer bytes.Buffer
 
-	token, _, err := generateAccessToken(ts.API.db, ts.TestUser, &ts.TestSession.ID, &ts.Config.JWT)
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"factor_id": f.ID,
