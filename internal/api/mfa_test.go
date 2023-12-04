@@ -87,7 +87,7 @@ func (ts *MFATestSuite) SetupTest() {
 }
 
 func (ts *MFATestSuite) generateToken(user *models.User, sessionId *uuid.UUID) string {
-	token, _, err := generateAccessToken(ts.API.db, ts.TestUser, sessionId, &ts.Config.JWT)
+	token, _, err := generateAccessToken(ts.API.db, user, sessionId, &ts.Config.JWT)
 	require.NoError(ts.T(), err, "Error generating access token")
 	return token
 }
