@@ -59,11 +59,11 @@ Therefore, to contribute to GoTrue you will need to install these tools.
 
 ### Install Tools
 
-- Install [Go](https://go.dev) 1.16
+- Install [Go](https://go.dev) 1.21
 
 ```terminal
 # Via Homebrew on OSX
-brew install go@1.16
+brew install go@1.21
 
 # Set the GOPATH environment variable in the ~/.zshrc file
 export GOPATH="$HOME/go"
