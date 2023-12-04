@@ -88,10 +88,8 @@ func (ts *MFATestSuite) SetupTest() {
 func (ts *MFATestSuite) TestEnrollFactor() {
 	testFriendlyName := "bob"
 	alternativeFriendlyName := "john"
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	ts.Require().NoError(err)
 
-	token, _, err := generateAccessToken(ts.API.db, user, nil, &ts.Config.JWT)
+	token, _, err := generateAccessToken(ts.API.db, ts.TestUser, nil, &ts.Config.JWT)
 
 	require.NoError(ts.T(), err)
 	var cases = []struct {
@@ -136,7 +134,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 
 			w := performEnrollFlow(ts, token, c.friendlyName, c.factorType, c.issuer, c.expectedCode)
 
-			factors, err := models.FindFactorsByUser(ts.API.db, user)
+			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
 			ts.Require().NoError(err)
 			latestFactor := factors[len(factors)-1]
 			require.False(ts.T(), latestFactor.IsVerified())
@@ -157,14 +155,11 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 }
 
 func (ts *MFATestSuite) TestChallengeFactor() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
-	require.NoError(ts.T(), err)
-
-	factors, err := models.FindFactorsByUser(ts.API.db, u)
+	factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
 	require.NoError(ts.T(), err)
 	f := factors[0]
 
-	token, _, err := generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
+	token, _, err := generateAccessToken(ts.API.db, ts.TestUser, nil, &ts.Config.JWT)
 	require.NoError(ts.T(), err, "Error generating access token")
 
 	w := performChallengeFlow(ts, f.ID, token)
@@ -172,8 +167,6 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 }
 
 func (ts *MFATestSuite) TestMFAVerifyFactor() {
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
-	ts.Require().NoError(err)
 	cases := []struct {
 		desc             string
 		validChallenge   bool
@@ -204,10 +197,10 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			// Authenticate users and set secret
 
 			var buffer bytes.Buffer
-			r, err := models.GrantAuthenticatedUser(ts.API.db, user, models.GrantParams{})
+			r, err := models.GrantAuthenticatedUser(ts.API.db, ts.TestUser, models.GrantParams{})
 			require.NoError(ts.T(), err)
 			sharedSecret := ts.TestOTPKey.Secret()
-			factors, err := models.FindFactorsByUser(ts.API.db, user)
+			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
 			f := factors[0]
 			f.Secret = sharedSecret
 			require.NoError(ts.T(), err)
@@ -216,11 +209,11 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			// Create session to be invalidated
 			secondarySession, err := models.NewSession()
 			require.NoError(ts.T(), err, "Error creating test session")
-			secondarySession.UserID = user.ID
+			secondarySession.UserID = ts.TestUser.ID
 			secondarySession.FactorID = &f.ID
 			require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
-			token, _, err := generateAccessToken(ts.API.db, user, r.SessionId, &ts.Config.JWT)
+			token, _, err := generateAccessToken(ts.API.db, ts.TestUser, r.SessionId, &ts.Config.JWT)
 
 			require.NoError(ts.T(), err)
 
