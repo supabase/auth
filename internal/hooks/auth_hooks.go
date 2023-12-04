@@ -17,8 +17,7 @@ const (
 
 // Hook Names
 const (
-	MFAHookRejection = "reject"
-	MFAHookContinue  = "continue"
+	HookRejection = "reject"
 )
 
 type HookOutput interface {
@@ -33,10 +32,21 @@ type MFAVerificationAttemptInput struct {
 }
 
 type MFAVerificationAttemptOutput struct {
-	Decision string `json:"decision,omitempty"`
-	Message  string `json:"message,omitempty"`
+	Decision  string        `json:"decision"`
+	Message   string        `json:"message"`
+	HookError AuthHookError `json:"error"`
+}
 
-	HookError AuthHookError `json:"error,omitempty"`
+type PasswordVerificationAttemptInput struct {
+	UserID uuid.UUID `json:"user_id"`
+	Valid  bool      `json:"valid"`
+}
+
+type PasswordVerificationAttemptOutput struct {
+	Decision         string        `json:"decision"`
+	Message          string        `json:"message"`
+	ShouldLogoutUser bool          `json:"should_logout_user"`
+	HookError        AuthHookError `json:"error"`
 }
 
 func (mf *MFAVerificationAttemptOutput) IsError() bool {
@@ -45,6 +55,14 @@ func (mf *MFAVerificationAttemptOutput) IsError() bool {
 
 func (mf *MFAVerificationAttemptOutput) Error() string {
 	return mf.HookError.Message
+}
+
+func (p *PasswordVerificationAttemptOutput) IsError() bool {
+	return p.HookError.Message != ""
+}
+
+func (p *PasswordVerificationAttemptOutput) Error() string {
+	return p.HookError.Message
 }
 
 type AuthHookError struct {
@@ -57,5 +75,6 @@ func (a *AuthHookError) Error() string {
 }
 
 const (
-	DefaultMFAHookRejectionMessage = "Further MFA verification attempts will be rejected."
+	DefaultMFAHookRejectionMessage      = "Further MFA verification attempts will be rejected."
+	DefaultPasswordHookRejectionMessage = "Further password verification attempts will be rejected."
 )

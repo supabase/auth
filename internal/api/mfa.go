@@ -236,7 +236,6 @@ func (a *API) runHook(ctx context.Context, name string, input, output any) ([]by
 
 func (a *API) invokeHook(ctx context.Context, input, output any) error {
 	config := a.config
-
 	switch input.(type) {
 	case *hooks.MFAVerificationAttemptInput:
 		hookOutput, ok := output.(*hooks.MFAVerificationAttemptOutput)
@@ -246,6 +245,32 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 
 		if _, err := a.runHook(ctx, config.Hook.MFAVerificationAttempt.HookName, input, output); err != nil {
 			return internalServerError("Error invoking MFA verification hook.").WithInternalError(err)
+		}
+
+		if hookOutput.IsError() {
+			httpCode := hookOutput.HookError.HTTPCode
+
+			if httpCode == 0 {
+				httpCode = http.StatusInternalServerError
+			}
+
+			httpError := &HTTPError{
+				Code:    httpCode,
+				Message: hookOutput.HookError.Message,
+			}
+
+			return httpError.WithInternalError(&hookOutput.HookError)
+		}
+
+		return nil
+	case *hooks.PasswordVerificationAttemptInput:
+		hookOutput, ok := output.(*hooks.PasswordVerificationAttemptOutput)
+		if !ok {
+			panic("output should be *hooks.PasswordVerificationAttemptOutput")
+		}
+
+		if _, err := a.runHook(ctx, config.Hook.PasswordVerificationAttempt.HookName, input, output); err != nil {
+			return internalServerError("Error invoking password verification hook.").WithInternalError(err)
 		}
 
 		if hookOutput.IsError() {
@@ -335,7 +360,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		if output.Decision == hooks.MFAHookRejection {
+		if output.Decision == hooks.HookRejection {
 			if err := models.Logout(a.db, user.ID); err != nil {
 				return err
 			}
