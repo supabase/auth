@@ -328,10 +328,8 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 
 func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 	var secondarySession *models.Session
-	factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
-	require.NoError(ts.T(), err, "error finding factors")
-	f := factors[0]
-	secondarySession, err = models.NewSession()
+	f := ts.TestUser.Factors[0]
+	secondarySession, err := models.NewSession()
 	require.NoError(ts.T(), err, "Error creating test session")
 	secondarySession.UserID = ts.TestUser.ID
 	secondarySession.FactorID = &f.ID
