@@ -46,16 +46,11 @@ func (ts *UserTestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 }
 
-func (ts *UserTestSuite) generateToken(user *models.User, sessionId *uuid.UUID) string {
-	token, _, err := generateAccessToken(ts.API.db, user, sessionId, &ts.Config.JWT)
-	require.NoError(ts.T(), err, "Error generating access token")
-	return token
-}
-
 func (ts *UserTestSuite) TestUserGet() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err, "Error finding user")
-	token := ts.generateToken(u, nil)
+	var token string
+	token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
 
 	require.NoError(ts.T(), err, "Error generating access token")
 
@@ -120,7 +115,8 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 			require.NoError(ts.T(), u.SetPhone(ts.API.db, c.userData["phone"]), "Error setting user phone")
 			require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user")
 
-			token := ts.generateToken(u, nil)
+			var token string
+			token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
 
 			require.NoError(ts.T(), err, "Error generating access token")
 
@@ -183,7 +179,8 @@ func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			token := ts.generateToken(u, nil)
+			var token string
+			token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
 			require.NoError(ts.T(), err, "Error generating access token")
 
 			var buffer bytes.Buffer
@@ -294,8 +291,11 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 
 			req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
 			req.Header.Set("Content-Type", "application/json")
-			token := ts.generateToken(u, c.sessionId)
 
+			var token string
+
+			token, _, err = generateAccessToken(ts.API.db, u, c.sessionId, &ts.Config.JWT)
+			require.NoError(ts.T(), err)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
 			// Setup response recorder
@@ -323,7 +323,9 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	u.EmailConfirmedAt = &now
 	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
-	token := ts.generateToken(u, nil)
+	var token string
+	token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
+	require.NoError(ts.T(), err)
 
 	// request for reauthentication nonce
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/reauthenticate", nil)
