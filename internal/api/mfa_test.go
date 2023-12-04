@@ -49,8 +49,11 @@ func TestMFA(t *testing.T) {
 
 func (ts *MFATestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
+
+	ts.TestEmail = "test@example.com"
+	ts.TestPassword = "password"
 	// Create user
-	u, err := models.NewUser("123456789", "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("123456789", ts.TestEmail, ts.TestPassword, ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 	// Create Factor
@@ -64,17 +67,15 @@ func (ts *MFATestSuite) SetupTest() {
 	s.FactorID = &f.ID
 	require.NoError(ts.T(), ts.API.db.Create(s), "Error saving test session")
 
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
+	ts.Require().NoError(err)
+
 	ts.TestUser = u
 	ts.TestSession = s
 
 	// Generate TOTP related settings
-	emailValue, err := u.Email.Value()
-	require.NoError(ts.T(), err)
-	testEmail := emailValue.(string)
-	testDomain := strings.Split(testEmail, "@")[1]
+	testDomain := strings.Split(ts.TestEmail, "@")[1]
 	ts.TestDomain = testDomain
-	ts.TestEmail = testEmail
-	ts.TestPassword = "password"
 
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      ts.TestDomain,
@@ -90,8 +91,8 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 	alternativeFriendlyName := "john"
 
 	token, _, err := generateAccessToken(ts.API.db, ts.TestUser, nil, &ts.Config.JWT)
-
 	require.NoError(ts.T(), err)
+
 	var cases = []struct {
 		desc         string
 		friendlyName string
