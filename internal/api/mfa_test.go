@@ -305,8 +305,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 
 			var buffer bytes.Buffer
 
-			token, _, err := generateAccessToken(ts.API.db, ts.TestUser, &ts.TestSession.ID, &ts.Config.JWT)
-			require.NoError(ts.T(), err)
+			token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/factors/%s/", f.ID), &buffer)
@@ -341,7 +340,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 
 	var buffer bytes.Buffer
 
-	token, _, err := generateAccessToken(ts.API.db, ts.TestUser, &ts.TestSession.ID, &ts.Config.JWT)
+	token := ts.generateToken(ts.TestUser, &ts.TestSession.ID)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"factor_id": f.ID,
