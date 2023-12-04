@@ -320,6 +320,18 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 		AuthenticatorAssuranceLevel:   aal,
 		AuthenticationMethodReference: amr,
 	}
+	if config.Hook.CustomAccessToken.Enabled {
+		input := hooks.CustomAccessTokenInput{
+			UserID: user.ID,
+		}
+
+		output := hooks.CustomAccessTokenOutput{}
+
+		err := a.invokeHook(ctx, &input, &output)
+		if err != nil {
+			return err
+		}
+	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 

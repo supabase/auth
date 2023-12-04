@@ -49,6 +49,15 @@ type PasswordVerificationAttemptOutput struct {
 	HookError        AuthHookError `json:"error"`
 }
 
+type CustomAccessTokenInput struct {
+	UserID      uuid.UUID `json:"user_id"`
+	AccessToken string    `json:"access_token"`
+}
+
+type CustomAccessTokenOutput struct {
+	HookError AuthHookError `json:"error,omitempty"`
+}
+
 func (mf *MFAVerificationAttemptOutput) IsError() bool {
 	return mf.HookError.Message != ""
 }
@@ -63,6 +72,14 @@ func (p *PasswordVerificationAttemptOutput) IsError() bool {
 
 func (p *PasswordVerificationAttemptOutput) Error() string {
 	return p.HookError.Message
+}
+
+func (ca *CustomAccessTokenInput) IsError() bool {
+	return ca.HookError.Message != ""
+}
+
+func (ca *CustomAccessTokenOutput) Error() string {
+	return ca.HookError.Message
 }
 
 type AuthHookError struct {
