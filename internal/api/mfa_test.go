@@ -156,9 +156,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 }
 
 func (ts *MFATestSuite) TestChallengeFactor() {
-	factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
-	require.NoError(ts.T(), err)
-	f := factors[0]
+	f := ts.TestUser.Factors[0]
 
 	token, _, err := generateAccessToken(ts.API.db, ts.TestUser, nil, &ts.Config.JWT)
 	require.NoError(ts.T(), err, "Error generating access token")
