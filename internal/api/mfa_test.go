@@ -86,6 +86,12 @@ func (ts *MFATestSuite) SetupTest() {
 
 }
 
+func (ts *MFATestSuite) generateToken(user *models.User, sessionId *uuid.UUID) string {
+	token, _, err := generateAccessToken(ts.API.db, ts.TestUser, sessionId, &ts.Config.JWT)
+	require.NoError(ts.T(), err, "Error generating access token")
+	return token
+}
+
 func (ts *MFATestSuite) TestEnrollFactor() {
 	testFriendlyName := "bob"
 	alternativeFriendlyName := "john"
@@ -157,10 +163,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 
 func (ts *MFATestSuite) TestChallengeFactor() {
 	f := ts.TestUser.Factors[0]
-
-	token, _, err := generateAccessToken(ts.API.db, ts.TestUser, nil, &ts.Config.JWT)
-	require.NoError(ts.T(), err, "Error generating access token")
-
+	token := ts.generateToken(ts.TestUser, nil)
 	w := performChallengeFlow(ts, f.ID, token)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
@@ -212,9 +215,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			secondarySession.FactorID = &f.ID
 			require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
-			token, _, err := generateAccessToken(ts.API.db, ts.TestUser, r.SessionId, &ts.Config.JWT)
-
-			require.NoError(ts.T(), err)
+			token := ts.generateToken(ts.TestUser, r.SessionId)
 
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", f.ID), &buffer)
