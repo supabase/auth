@@ -10,6 +10,42 @@ const (
 	PostgresHook HookType = "pg-functions"
 )
 
+const AccessTokenSchema = `{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "Subject": {"type": "string"},
+        "Audience": {"type": "array", "items": {"type": "string"}},
+        "IssuedAt": {"type": "integer"},
+        "ExpiresAt": {"type": "integer"},
+        "Issuer": {"type": "string"},
+        "Email": {"type": "string", "format": "email"},
+        "Phone": {"type": "string"}, // Assuming phone is in string format
+        "AppMetaData": {"type": "object"}, // Assuming AppMetaData is a JSON object
+        "UserMetaData": {"type": "object"}, // Assuming UserMetaData is a JSON object
+        "Role": {"type": "string"},
+        "SessionId": {"type": "string"},
+        "AuthenticatorAssuranceLevel": {"type": "integer"},
+        "AuthenticationMethodReference": {"type": "array", "items": {"type": "string"}}
+    },
+    "required": [
+        "Subject",
+        "Audience",
+        "IssuedAt",
+        "ExpiresAt",
+        "Issuer",
+        "Email",
+        "Phone",
+        "AppMetaData",
+        "UserMetaData",
+        "Role",
+        "SessionId",
+        "AuthenticatorAssuranceLevel",
+        "AuthenticationMethodReference"
+    ],
+    "additionalProperties": true
+}`
+
 const (
 	// In Miliseconds
 	DefaultTimeout = 2000
@@ -74,7 +110,7 @@ func (p *PasswordVerificationAttemptOutput) Error() string {
 	return p.HookError.Message
 }
 
-func (ca *CustomAccessTokenInput) IsError() bool {
+func (ca *CustomAccessTokenOutput) IsError() bool {
 	return ca.HookError.Message != ""
 }
 

@@ -289,6 +289,30 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 		}
 
 		return nil
+	case *hooks.CustomAccessTokenInput:
+		hookOutput, ok := output.(*hooks.CustomAccessTokenOutput)
+		if !ok {
+			panic("output should be *hooks.CustomAccessTokenOutput")
+		}
+
+		if _, err := a.runHook(ctx, config.Hook.CustomAccessToken.HookName, input, output); err != nil {
+			return internalServerError("Error invoking access token hook.").WithInternalError(err)
+		}
+
+		if hookOutput.IsError() {
+			httpCode := hookOutput.HookError.HTTPCode
+
+			if httpCode == 0 {
+				httpCode = http.StatusInternalServerError
+			}
+
+			httpError := &HTTPError{
+				Code:    httpCode,
+				Message: hookOutput.HookError.Message,
+			}
+
+			return httpError.WithInternalError(&hookOutput.HookError)
+		}
 
 	default:
 		panic("unknown hook input type")

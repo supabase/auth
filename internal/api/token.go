@@ -331,6 +331,13 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 		if err != nil {
 			return err
 		}
+
+		// Validate the claims on the output
+		// documentLoader := gojsonschema.NewStringLoader(output)
+		// schemaLoader := gojsonschema.NewStringLoader(hooks.AccessTokenSchema)
+		// claims := string(output)
+		// stringLoader := gojsonschema.NewStringLoader(jsonString)
+		// strin
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
