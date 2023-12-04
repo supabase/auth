@@ -313,6 +313,7 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 
 			return httpError.WithInternalError(&hookOutput.HookError)
 		}
+		return nil
 
 	default:
 		panic("unknown hook input type")

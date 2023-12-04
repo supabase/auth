@@ -285,7 +285,8 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, config *conf.JWTConfiguration) (string, int64, error) {
+func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, user *models.User, sessionId *uuid.UUID) (string, int64, error) {
+	config := a.config
 	aal, amr := models.AAL1.String(), []models.AMREntry{}
 	sid := ""
 	if sessionId != nil {
@@ -301,7 +302,7 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 	}
 
 	issuedAt := time.Now().UTC()
-	expiresAt := issuedAt.Add(time.Second * time.Duration(config.Exp)).Unix()
+	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp)).Unix()
 
 	claims := &GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
@@ -309,7 +310,7 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 			Audience:  user.Aud,
 			IssuedAt:  issuedAt.Unix(),
 			ExpiresAt: expiresAt,
-			Issuer:    config.Issuer,
+			Issuer:    config.JWT.Issuer,
 		},
 		Email:                         user.GetEmail(),
 		Phone:                         user.GetPhone(),
@@ -329,7 +330,7 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 
 		err := a.invokeHook(ctx, &input, &output)
 		if err != nil {
-			return err
+			return "", 0, err
 		}
 
 		// Validate the claims on the output
@@ -342,15 +343,15 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 
-	if config.KeyID != "" {
+	if config.JWT.KeyID != "" {
 		if token.Header == nil {
 			token.Header = make(map[string]interface{})
 		}
 
-		token.Header["kid"] = config.KeyID
+		token.Header["kid"] = config.JWT.KeyID
 	}
 
-	signed, err := token.SignedString([]byte(config.Secret))
+	signed, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
 		return "", 0, err
 	}
@@ -381,7 +382,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return terr
 		}
 
-		tokenString, expiresAt, terr = generateAccessToken(tx, user, refreshToken.SessionId, &config.JWT)
+		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, refreshToken.SessionId)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -441,7 +442,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return err
 		}
 
-		tokenString, expiresAt, terr = generateAccessToken(tx, user, &sessionId, &config.JWT)
+		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, &sessionId)
 
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)

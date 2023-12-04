@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -178,7 +179,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 
 		// Generate access token for request
 		var token string
-		token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
+		token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, nil)
 		require.NoError(ts.T(), err)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 

@@ -47,7 +47,7 @@ func (ts *UserTestSuite) SetupTest() {
 }
 
 func (ts *UserTestSuite) generateToken(user *models.User, sessionId *uuid.UUID) string {
-	token, _, err := generateAccessToken(ts.API.db, user, sessionId, &ts.Config.JWT)
+	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, user, sessionId)
 	require.NoError(ts.T(), err, "Error generating access token")
 	return token
 }
