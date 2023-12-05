@@ -9,8 +9,10 @@ import (
 	"strconv"
 	"time"
 
+	"fmt"
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
+	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/hooks"
@@ -335,15 +337,14 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 		if err != nil {
 			return "", 0, err
 		}
+
+		if err := validateClaims(output.Claims); err != nil {
+			return "", 0, err
+		}
 		goTrueClaims := jwt.MapClaims(output.Claims)
 
 		token = jwt.NewWithClaims(jwt.SigningMethodHS256, goTrueClaims)
-		// Validate the claims on the output
-		// documentLoader := gojsonschema.NewStringLoader(output)
-		// schemaLoader := gojsonschema.NewStringLoader(hooks.AccessTokenSchema)
-		// claims := string(output)
-		// stringLoader := gojsonschema.NewStringLoader(jsonString)
-		// strin
+
 	} else {
 
 		token = jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -519,4 +520,25 @@ func (a *API) clearCookieToken(config *conf.GlobalConfiguration, name string, w 
 		Path:     "/",
 		Domain:   config.Cookie.Domain,
 	})
+}
+
+func validateClaims(outputClaims map[string]interface{}) error {
+	schemaString := hooks.MinimumViableTokenSchema
+	schemaLoader := gojsonschema.NewStringLoader(schemaString)
+
+	documentLoader := gojsonschema.NewGoLoader(outputClaims)
+
+	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+	if err != nil {
+		return err
+	}
+
+	if !result.Valid() {
+		for _, desc := range result.Errors() {
+			fmt.Printf("- %s\n", desc)
+		}
+		return fmt.Errorf("output claims do not conform to the expected schema")
+	}
+
+	return nil
 }

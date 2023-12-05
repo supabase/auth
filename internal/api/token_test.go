@@ -59,6 +59,8 @@ func (ts *TokenTestSuite) SetupTest() {
 	ts.User = u
 	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
 	require.NoError(ts.T(), err, "Error creating refresh token")
+	ts.Config.Hook.CustomAccessToken.Enabled = false
+
 }
 
 func (ts *TokenTestSuite) TestSessionTimebox() {
@@ -656,27 +658,19 @@ func (ts *TokenTestSuite) TestCustomAccessToken() {
 		uri             string
 		hookFunctionSQL string
 		expectedClaims  map[string]interface{}
+		shouldError     bool
 	}
 	cases := []customAccessTokenTestcase{
 		{
 			desc: "Add a new claim",
 			uri:  "pg-functions://postgres/auth/custom_access_token_add_claim",
-			hookFunctionSQL: `
-create or replace function custom_access_token_add_claim(input jsonb)
-returns jsonb as $$
-declare
-    result jsonb;
-begin
-    if jsonb_typeof(jsonb_object_field(input, 'claims')) is null then
-        result := jsonb_build_object('error', jsonb_build_object('http_code', 400, 'message', 'Input does not contain claims field'));
-        return result;
-    end if;
+			hookFunctionSQL: ` create or replace function custom_access_token_add_claim(input jsonb) returns jsonb as $$ declare result jsonb; begin if jsonb_typeof(jsonb_object_field(input, 'claims')) is null then result := jsonb_build_object('error', jsonb_build_object('http_code', 400, 'message', 'Input does not contain claims field')); return result; end if;
     input := jsonb_set(input, '{claims,newclaim}', '"newvalue"', true);
     result := jsonb_build_object('claims', input->'claims');
     return result;
 end; $$ language plpgsql;`,
 			expectedClaims: map[string]interface{}{
-				"newClaim": "newValue",
+				"newclaim": "newvalue",
 			},
 		}, {
 			desc: "Delete the Role claim",
@@ -691,9 +685,25 @@ begin
     result := jsonb_build_object('claims', input->'claims');
     return result;
 end; $$ language plpgsql;`,
+			expectedClaims: map[string]interface{}{},
+			shouldError:    true,
+		}, {
+			desc: "Delete a non-required claim (UserMetadata)",
+			uri:  "pg-functions://postgres/auth/custom_access_token_delete_usermetadata",
+			hookFunctionSQL: `
+create or replace function custom_access_token_delete_usermetadata(input jsonb)
+returns jsonb as $$
+declare
+    result jsonb;
+begin
+    input := jsonb_set(input, '{claims}', (input->'claims') - 'user_metadata');
+    result := jsonb_build_object('claims', input->'claims');
+    return result;
+end; $$ language plpgsql;`,
 			expectedClaims: map[string]interface{}{
-				"role": nil,
+				"user_metadata": nil,
 			},
+			shouldError: false,
 		},
 	}
 	for _, c := range cases {
@@ -721,21 +731,31 @@ end; $$ language plpgsql;`,
 			}
 			require.NoError(t, json.NewDecoder(w.Result().Body).Decode(&tokenResponse))
 
-			parts := strings.Split(tokenResponse.AccessToken, ".")
-			require.Equal(t, 3, len(parts), "Token should have 3 parts")
+			if c.shouldError {
+				require.Equal(t, w.Code, http.StatusInternalServerError)
+			} else {
+				require.NoError(t, err)
 
-			payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-			require.NoError(t, err)
+				parts := strings.Split(tokenResponse.AccessToken, ".")
+				require.Equal(t, 3, len(parts), "Token should have 3 parts")
 
-			var responseClaims map[string]interface{}
-			require.NoError(t, json.Unmarshal(payload, &responseClaims))
+				payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+				require.NoError(t, err)
 
-			for key, expectedValue := range c.expectedClaims {
-				if expectedValue == nil {
-					_, exists := responseClaims[key]
-					assert.False(t, exists)
-				} else {
-					assert.Equal(t, expectedValue, responseClaims[key])
+				var responseClaims map[string]interface{}
+				require.NoError(t, json.Unmarshal(payload, &responseClaims))
+
+				for key, expectedValue := range c.expectedClaims {
+					if expectedValue == nil {
+						_, exists := responseClaims[key]
+						if c.shouldError {
+							assert.True(t, exists, "Claim should not be removed")
+						} else {
+							assert.False(t, exists, "Claim should be removed")
+						}
+					} else {
+						assert.Equal(t, expectedValue, responseClaims[key])
+					}
 				}
 			}
 
