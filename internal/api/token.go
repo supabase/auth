@@ -337,10 +337,6 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 		if err != nil {
 			return "", 0, err
 		}
-
-		if err := validateClaims(output.Claims); err != nil {
-			return "", 0, err
-		}
 		goTrueClaims := jwt.MapClaims(output.Claims)
 
 		token = jwt.NewWithClaims(jwt.SigningMethodHS256, goTrueClaims)

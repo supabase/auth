@@ -313,6 +313,20 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 
 			return httpError.WithInternalError(&hookOutput.HookError)
 		}
+		if err := validateClaims(hookOutput.Claims); err != nil {
+			httpCode := hookOutput.HookError.HTTPCode
+
+			if httpCode == 0 {
+				httpCode = http.StatusInternalServerError
+			}
+
+			httpError := &HTTPError{
+				Code:    httpCode,
+				Message: err.Error(),
+			}
+
+			return httpError
+		}
 		return nil
 
 	default:
