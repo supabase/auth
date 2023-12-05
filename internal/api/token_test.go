@@ -650,7 +650,6 @@ func (ts *TokenTestSuite) TestPasswordVerificationHook() {
 	}
 
 }
-
 func (ts *TokenTestSuite) TestCustomAccessToken() {
 	type customAccessTokenTestcase struct {
 		desc            string
@@ -663,27 +662,19 @@ func (ts *TokenTestSuite) TestCustomAccessToken() {
 			desc: "Add a new claim",
 			uri:  "pg-functions://postgres/auth/custom_access_token_add_claim",
 			hookFunctionSQL: `
-CREATE OR REPLACE FUNCTION custom_access_token_add_claim(input jsonb)
-RETURNS json AS $$
-BEGIN
-    -- Log the input received
-    RAISE NOTICE 'Function called with input: %', input;
-
-    -- Check if the 'claims' field exists in the input
-    IF jsonb_typeof(jsonb_object_field(input, 'claims')) IS NULL THEN
-        RAISE NOTICE 'Input does not contain claims field';
-        -- Raise an exception if the 'claims' field is mandatory
-        RAISE EXCEPTION 'Input does not contain claims field';
-    END IF;
-
-    -- Modify the 'claims' field of the input JSON
-    input := jsonb_set(input, '{claims,newClaim}', '"newValue"', true);
-
-    -- Log the modified input
-    RAISE NOTICE 'Modified input: %', input;
-
-    RETURN input;
-END; $$ LANGUAGE plpgsql;`,
+create or replace function custom_access_token_add_claim(input jsonb)
+returns jsonb as $$
+declare
+    result jsonb;
+begin
+    if jsonb_typeof(jsonb_object_field(input, 'claims')) is null then
+        result := jsonb_build_object('error', jsonb_build_object('http_code', 400, 'message', 'Input does not contain claims field'));
+        return result;
+    end if;
+    input := jsonb_set(input, '{claims,newclaim}', '"newvalue"', true);
+    result := jsonb_build_object('claims', input->'claims');
+    return result;
+end; $$ language plpgsql;`,
 			expectedClaims: map[string]interface{}{
 				"newClaim": "newValue",
 			},
@@ -691,13 +682,15 @@ END; $$ LANGUAGE plpgsql;`,
 			desc: "Delete the Role claim",
 			uri:  "pg-functions://postgres/auth/custom_access_token_delete_claim",
 			hookFunctionSQL: `
-                create or replace function custom_access_token_delete_claim(input jsonb)
-                returns json as $$
-                begin
-                    -- Remove the 'role' claim from the 'claims' field of the input JSON
-                    input := jsonb_set(input, '{claims}', (input->'claims') - 'role');
-                    return input;
-                end; $$ language plpgsql;`,
+create or replace function custom_access_token_delete_claim(input jsonb)
+returns jsonb as $$
+declare
+    result jsonb;
+begin
+    input := jsonb_set(input, '{claims}', (input->'claims') - 'role');
+    result := jsonb_build_object('claims', input->'claims');
+    return result;
+end; $$ language plpgsql;`,
 			expectedClaims: map[string]interface{}{
 				"role": nil,
 			},
@@ -723,37 +716,31 @@ END; $$ LANGUAGE plpgsql;`,
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
 
-			// Extract the token from the response
 			var tokenResponse struct {
 				AccessToken string `json:"access_token"`
 			}
 			require.NoError(t, json.NewDecoder(w.Result().Body).Decode(&tokenResponse))
 
-			// Split the token into its parts (Header, Payload, Signature)
 			parts := strings.Split(tokenResponse.AccessToken, ".")
 			require.Equal(t, 3, len(parts), "Token should have 3 parts")
 
-			// Decode the Payload part
 			payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 			require.NoError(t, err)
 
-			// Deserialize the JSON payload into a map
 			var responseClaims map[string]interface{}
 			require.NoError(t, json.Unmarshal(payload, &responseClaims))
+
 			for key, expectedValue := range c.expectedClaims {
 				if expectedValue == nil {
-					// Check that the key does not exist in the response
 					_, exists := responseClaims[key]
 					assert.False(t, exists)
 				} else {
-					// Check that the key exists and has the expected value
 					assert.Equal(t, expectedValue, responseClaims[key])
 				}
 			}
 
 			cleanupHookSQL := fmt.Sprintf("drop function if exists %s", ts.Config.Hook.CustomAccessToken.HookName)
 			require.NoError(t, ts.API.db.RawQuery(cleanupHookSQL).Exec())
-			// Reset so it doesn't affect other tests
 			ts.Config.Hook.CustomAccessToken.Enabled = false
 		})
 	}
