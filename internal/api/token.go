@@ -346,7 +346,6 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 		token = jwt.NewWithClaims(jwt.SigningMethodHS256, goTrueClaims)
 
 	} else {
-
 		token = jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	}
 
@@ -534,10 +533,14 @@ func validateClaims(outputClaims map[string]interface{}) error {
 	}
 
 	if !result.Valid() {
+		var errorMessages string
+
 		for _, desc := range result.Errors() {
+			errorMessages += fmt.Sprintf("- %s\n", desc)
 			fmt.Printf("- %s\n", desc)
 		}
-		return fmt.Errorf("output claims do not conform to the expected schema")
+		return fmt.Errorf("output claims do not conform to the expected schema: \n%s", errorMessages)
+
 	}
 
 	return nil

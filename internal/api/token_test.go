@@ -700,6 +700,7 @@ begin
     result := jsonb_build_object('claims', input->'claims');
     return result;
 end; $$ language plpgsql;`,
+			// Not used
 			expectedClaims: map[string]interface{}{
 				"user_metadata": nil,
 			},
@@ -730,12 +731,9 @@ end; $$ language plpgsql;`,
 				AccessToken string `json:"access_token"`
 			}
 			require.NoError(t, json.NewDecoder(w.Result().Body).Decode(&tokenResponse))
-
 			if c.shouldError {
-				require.Equal(t, w.Code, http.StatusInternalServerError)
+				require.Equal(t, http.StatusInternalServerError, w.Code)
 			} else {
-				require.NoError(t, err)
-
 				parts := strings.Split(tokenResponse.AccessToken, ".")
 				require.Equal(t, 3, len(parts), "Token should have 3 parts")
 
@@ -747,12 +745,9 @@ end; $$ language plpgsql;`,
 
 				for key, expectedValue := range c.expectedClaims {
 					if expectedValue == nil {
+						// Since c.shouldError is false here, we only need to check if the claim should be removed
 						_, exists := responseClaims[key]
-						if c.shouldError {
-							assert.True(t, exists, "Claim should not be removed")
-						} else {
-							assert.False(t, exists, "Claim should be removed")
-						}
+						assert.False(t, exists, "Claim should be removed")
 					} else {
 						assert.Equal(t, expectedValue, responseClaims[key])
 					}
