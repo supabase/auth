@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -648,4 +649,112 @@ func (ts *TokenTestSuite) TestPasswordVerificationHook() {
 		})
 	}
 
+}
+
+func (ts *TokenTestSuite) TestCustomAccessToken() {
+	type customAccessTokenTestcase struct {
+		desc            string
+		uri             string
+		hookFunctionSQL string
+		expectedClaims  map[string]interface{}
+	}
+	cases := []customAccessTokenTestcase{
+		{
+			desc: "Add a new claim",
+			uri:  "pg-functions://postgres/auth/custom_access_token_add_claim",
+			hookFunctionSQL: `
+CREATE OR REPLACE FUNCTION custom_access_token_add_claim(input jsonb)
+RETURNS json AS $$
+BEGIN
+    -- Log the input received
+    RAISE NOTICE 'Function called with input: %', input;
+
+    -- Check if the 'claims' field exists in the input
+    IF jsonb_typeof(jsonb_object_field(input, 'claims')) IS NULL THEN
+        RAISE NOTICE 'Input does not contain claims field';
+        -- Raise an exception if the 'claims' field is mandatory
+        RAISE EXCEPTION 'Input does not contain claims field';
+    END IF;
+
+    -- Modify the 'claims' field of the input JSON
+    input := jsonb_set(input, '{claims,newClaim}', '"newValue"', true);
+
+    -- Log the modified input
+    RAISE NOTICE 'Modified input: %', input;
+
+    RETURN input;
+END; $$ LANGUAGE plpgsql;`,
+			expectedClaims: map[string]interface{}{
+				"newClaim": "newValue",
+			},
+		}, {
+			desc: "Delete the Role claim",
+			uri:  "pg-functions://postgres/auth/custom_access_token_delete_claim",
+			hookFunctionSQL: `
+                create or replace function custom_access_token_delete_claim(input jsonb)
+                returns json as $$
+                begin
+                    -- Remove the 'role' claim from the 'claims' field of the input JSON
+                    input := jsonb_set(input, '{claims}', (input->'claims') - 'role');
+                    return input;
+                end; $$ language plpgsql;`,
+			expectedClaims: map[string]interface{}{
+				"role": nil,
+			},
+		},
+	}
+	for _, c := range cases {
+		ts.T().Run(c.desc, func(t *testing.T) {
+			ts.Config.Hook.CustomAccessToken.Enabled = true
+			ts.Config.Hook.CustomAccessToken.URI = c.uri
+			require.NoError(t, ts.Config.Hook.CustomAccessToken.ValidateAndPopulateExtensibilityPoint())
+
+			err := ts.API.db.RawQuery(c.hookFunctionSQL).Exec()
+			require.NoError(t, err)
+
+			var buffer bytes.Buffer
+			require.NoError(t, json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"refresh_token": ts.RefreshToken.Token,
+			}))
+
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+
+			// Extract the token from the response
+			var tokenResponse struct {
+				AccessToken string `json:"access_token"`
+			}
+			require.NoError(t, json.NewDecoder(w.Result().Body).Decode(&tokenResponse))
+
+			// Split the token into its parts (Header, Payload, Signature)
+			parts := strings.Split(tokenResponse.AccessToken, ".")
+			require.Equal(t, 3, len(parts), "Token should have 3 parts")
+
+			// Decode the Payload part
+			payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+			require.NoError(t, err)
+
+			// Deserialize the JSON payload into a map
+			var responseClaims map[string]interface{}
+			require.NoError(t, json.Unmarshal(payload, &responseClaims))
+			for key, expectedValue := range c.expectedClaims {
+				if expectedValue == nil {
+					// Check that the key does not exist in the response
+					_, exists := responseClaims[key]
+					assert.False(t, exists)
+				} else {
+					// Check that the key exists and has the expected value
+					assert.Equal(t, expectedValue, responseClaims[key])
+				}
+			}
+
+			cleanupHookSQL := fmt.Sprintf("drop function if exists %s", ts.Config.Hook.CustomAccessToken.HookName)
+			require.NoError(t, ts.API.db.RawQuery(cleanupHookSQL).Exec())
+			// Reset so it doesn't affect other tests
+			ts.Config.Hook.CustomAccessToken.Enabled = false
+		})
+	}
 }

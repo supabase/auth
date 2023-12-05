@@ -304,7 +304,7 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 	issuedAt := time.Now().UTC()
 	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp)).Unix()
 
-	claims := &GoTrueClaims{
+	claims := &hooks.GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
 			Audience:  user.Aud,
@@ -321,9 +321,12 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 		AuthenticatorAssuranceLevel:   aal,
 		AuthenticationMethodReference: amr,
 	}
+
+	var token *jwt.Token
 	if config.Hook.CustomAccessToken.Enabled {
 		input := hooks.CustomAccessTokenInput{
 			UserID: user.ID,
+			Claims: claims,
 		}
 
 		output := hooks.CustomAccessTokenOutput{}
@@ -332,16 +335,19 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 		if err != nil {
 			return "", 0, err
 		}
+		goTrueClaims := jwt.MapClaims(output.Claims)
 
+		token = jwt.NewWithClaims(jwt.SigningMethodHS256, goTrueClaims)
 		// Validate the claims on the output
 		// documentLoader := gojsonschema.NewStringLoader(output)
 		// schemaLoader := gojsonschema.NewStringLoader(hooks.AccessTokenSchema)
 		// claims := string(output)
 		// stringLoader := gojsonschema.NewStringLoader(jsonString)
 		// strin
-	}
+	} else {
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		token = jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	}
 
 	if config.JWT.KeyID != "" {
 		if token.Header == nil {

@@ -2,6 +2,8 @@ package hooks
 
 import (
 	"github.com/gofrs/uuid"
+	"github.com/golang-jwt/jwt"
+	"github.com/supabase/gotrue/internal/models"
 )
 
 type HookType string
@@ -23,6 +25,19 @@ const (
 type HookOutput interface {
 	IsError() bool
 	Error() string
+}
+
+// GoTrueClaims is a struct thats used for JWT claims
+type GoTrueClaims struct {
+	jwt.StandardClaims
+	Email                         string                 `json:"email"`
+	Phone                         string                 `json:"phone"`
+	AppMetaData                   map[string]interface{} `json:"app_metadata"`
+	UserMetaData                  map[string]interface{} `json:"user_metadata"`
+	Role                          string                 `json:"role"`
+	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
+	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
+	SessionId                     string                 `json:"session_id,omitempty"`
 }
 
 type MFAVerificationAttemptInput struct {
@@ -50,12 +65,13 @@ type PasswordVerificationAttemptOutput struct {
 }
 
 type CustomAccessTokenInput struct {
-	UserID      uuid.UUID `json:"user_id"`
-	AccessToken string    `json:"access_token"`
+	UserID uuid.UUID     `json:"user_id"`
+	Claims *GoTrueClaims `json:"claims"`
 }
 
 type CustomAccessTokenOutput struct {
-	HookError AuthHookError `json:"error,omitempty"`
+	Claims    map[string]interface{} `json:"claims"`
+	HookError AuthHookError          `json:"error,omitempty"`
 }
 
 func (mf *MFAVerificationAttemptOutput) IsError() bool {
