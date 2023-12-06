@@ -517,7 +517,7 @@ func (a *API) clearCookieToken(config *conf.GlobalConfiguration, name string, w 
 	})
 }
 
-func validateClaims(outputClaims map[string]interface{}) error {
+func validateTokenClaims(outputClaims map[string]interface{}) error {
 	schemaLoader := gojsonschema.NewStringLoader(hooks.MinimumViableTokenSchema)
 
 	documentLoader := gojsonschema.NewGoLoader(outputClaims)

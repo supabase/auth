@@ -313,7 +313,7 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 
 			return httpError.WithInternalError(&hookOutput.HookError)
 		}
-		if err := validateClaims(hookOutput.Claims); err != nil {
+		if err := validateTokenClaims(hookOutput.Claims); err != nil {
 			httpCode := hookOutput.HookError.HTTPCode
 
 			if httpCode == 0 {
