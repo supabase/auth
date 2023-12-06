@@ -287,7 +287,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, user *models.User, sessionId *uuid.UUID) (string, int64, error) {
+func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, int64, error) {
 	config := a.config
 	aal, amr := models.AAL1.String(), []models.AMREntry{}
 	sid := ""
@@ -329,6 +329,7 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 		input := hooks.CustomAccessTokenInput{
 			UserID: user.ID,
 			Claims: claims,
+			AuthenticationMethod: authenticationMethod.String(),
 		}
 
 		output := hooks.CustomAccessTokenOutput{}
@@ -384,7 +385,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return terr
 		}
 
-		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, refreshToken.SessionId)
+		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user,refreshToken.SessionId, authenticationMethod)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -444,7 +445,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return err
 		}
 
-		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, &sessionId)
+		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, &sessionId, models.TOTPSignIn)
 
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)

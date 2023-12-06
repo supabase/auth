@@ -126,6 +126,7 @@ type PasswordVerificationAttemptOutput struct {
 type CustomAccessTokenInput struct {
 	UserID uuid.UUID     `json:"user_id"`
 	Claims *GoTrueClaims `json:"claims"`
+	AuthenticationMethod string `json:"authentication_method"`
 }
 
 type CustomAccessTokenOutput struct {
