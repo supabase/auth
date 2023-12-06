@@ -443,6 +443,7 @@ type WebhookConfig struct {
 type HookConfiguration struct {
 	MFAVerificationAttempt      ExtensibilityPointConfiguration `json:"mfa_verification_attempt" split_words:"true"`
 	PasswordVerificationAttempt ExtensibilityPointConfiguration `json:"password_verification_attempt" split_words:"true"`
+	CustomAccessToken           ExtensibilityPointConfiguration `json:"custom_access_token" split_words:"true"`
 }
 
 type ExtensibilityPointConfiguration struct {
@@ -455,6 +456,7 @@ func (h *HookConfiguration) Validate() error {
 	points := []ExtensibilityPointConfiguration{
 		h.MFAVerificationAttempt,
 		h.PasswordVerificationAttempt,
+		h.CustomAccessToken,
 	}
 	for _, point := range points {
 		if err := point.ValidateAndPopulateExtensibilityPoint(); err != nil {

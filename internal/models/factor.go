@@ -44,6 +44,7 @@ const (
 	MagicLink
 	EmailSignup
 	EmailChange
+	TokenRefresh
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -68,6 +69,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "email/signup"
 	case EmailChange:
 		return "email_change"
+	case TokenRefresh:
+		return "token_refresh"
 	}
 	return ""
 }
@@ -97,6 +100,8 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return EmailSignup, nil
 	case "email_change":
 		return EmailChange, nil
+	case "token_refresh":
+		return TokenRefresh, nil
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }

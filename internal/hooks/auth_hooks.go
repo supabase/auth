@@ -2,6 +2,8 @@ package hooks
 
 import (
 	"github.com/gofrs/uuid"
+	"github.com/golang-jwt/jwt"
+	"github.com/supabase/gotrue/internal/models"
 )
 
 type HookType string
@@ -23,6 +25,78 @@ const (
 type HookOutput interface {
 	IsError() bool
 	Error() string
+}
+
+// #nosec
+const MinimumViableTokenSchema = `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "aud": {
+      "type": "string"
+    },
+    "exp": {
+      "type": "integer"
+    },
+    "jti": {
+      "type": "string"
+    },
+    "iat": {
+      "type": "integer"
+    },
+    "iss": {
+      "type": "string"
+    },
+    "nbf": {
+      "type": "integer"
+    },
+    "sub": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "app_metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "user_metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "role": {
+      "type": "string"
+    },
+    "aal": {
+      "type": "string"
+    },
+    "amr": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "session_id": {
+      "type": "string"
+    }
+  },
+  "required": ["aud", "exp", "iat", "sub", "email", "phone", "role", "aal"]
+}`
+
+// GoTrueClaims is a struct thats used for JWT claims
+type GoTrueClaims struct {
+	jwt.StandardClaims
+	Email                         string                 `json:"email"`
+	Phone                         string                 `json:"phone"`
+	AppMetaData                   map[string]interface{} `json:"app_metadata"`
+	UserMetaData                  map[string]interface{} `json:"user_metadata"`
+	Role                          string                 `json:"role"`
+	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
+	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
+	SessionId                     string                 `json:"session_id,omitempty"`
 }
 
 type MFAVerificationAttemptInput struct {
@@ -49,6 +123,17 @@ type PasswordVerificationAttemptOutput struct {
 	HookError        AuthHookError `json:"error"`
 }
 
+type CustomAccessTokenInput struct {
+	UserID               uuid.UUID     `json:"user_id"`
+	Claims               *GoTrueClaims `json:"claims"`
+	AuthenticationMethod string        `json:"authentication_method"`
+}
+
+type CustomAccessTokenOutput struct {
+	Claims    map[string]interface{} `json:"claims"`
+	HookError AuthHookError          `json:"error,omitempty"`
+}
+
 func (mf *MFAVerificationAttemptOutput) IsError() bool {
 	return mf.HookError.Message != ""
 }
@@ -63,6 +148,14 @@ func (p *PasswordVerificationAttemptOutput) IsError() bool {
 
 func (p *PasswordVerificationAttemptOutput) Error() string {
 	return p.HookError.Message
+}
+
+func (ca *CustomAccessTokenOutput) IsError() bool {
+	return ca.HookError.Message != ""
+}
+
+func (ca *CustomAccessTokenOutput) Error() string {
+	return ca.HookError.Message
 }
 
 type AuthHookError struct {

@@ -9,8 +9,10 @@ import (
 	"strconv"
 	"time"
 
+	"fmt"
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
+	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/supabase/gotrue/internal/conf"
 	"github.com/supabase/gotrue/internal/hooks"
@@ -285,7 +287,8 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, config *conf.JWTConfiguration) (string, int64, error) {
+func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, int64, error) {
+	config := a.config
 	aal, amr := models.AAL1.String(), []models.AMREntry{}
 	sid := ""
 	if sessionId != nil {
@@ -301,15 +304,15 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 	}
 
 	issuedAt := time.Now().UTC()
-	expiresAt := issuedAt.Add(time.Second * time.Duration(config.Exp)).Unix()
+	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp)).Unix()
 
-	claims := &GoTrueClaims{
+	claims := &hooks.GoTrueClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
 			Audience:  user.Aud,
 			IssuedAt:  issuedAt.Unix(),
 			ExpiresAt: expiresAt,
-			Issuer:    config.Issuer,
+			Issuer:    config.JWT.Issuer,
 		},
 		Email:                         user.GetEmail(),
 		Phone:                         user.GetPhone(),
@@ -321,17 +324,37 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 		AuthenticationMethodReference: amr,
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	var token *jwt.Token
+	if config.Hook.CustomAccessToken.Enabled {
+		input := hooks.CustomAccessTokenInput{
+			UserID:               user.ID,
+			Claims:               claims,
+			AuthenticationMethod: authenticationMethod.String(),
+		}
 
-	if config.KeyID != "" {
+		output := hooks.CustomAccessTokenOutput{}
+
+		err := a.invokeHook(ctx, &input, &output)
+		if err != nil {
+			return "", 0, err
+		}
+		goTrueClaims := jwt.MapClaims(output.Claims)
+
+		token = jwt.NewWithClaims(jwt.SigningMethodHS256, goTrueClaims)
+
+	} else {
+		token = jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	}
+
+	if config.JWT.KeyID != "" {
 		if token.Header == nil {
 			token.Header = make(map[string]interface{})
 		}
 
-		token.Header["kid"] = config.KeyID
+		token.Header["kid"] = config.JWT.KeyID
 	}
 
-	signed, err := token.SignedString([]byte(config.Secret))
+	signed, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
 		return "", 0, err
 	}
@@ -362,7 +385,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return terr
 		}
 
-		tokenString, expiresAt, terr = generateAccessToken(tx, user, refreshToken.SessionId, &config.JWT)
+		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, refreshToken.SessionId, authenticationMethod)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
@@ -422,7 +445,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return err
 		}
 
-		tokenString, expiresAt, terr = generateAccessToken(tx, user, &sessionId, &config.JWT)
+		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, &sessionId, models.TOTPSignIn)
 
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
@@ -493,4 +516,28 @@ func (a *API) clearCookieToken(config *conf.GlobalConfiguration, name string, w 
 		Path:     "/",
 		Domain:   config.Cookie.Domain,
 	})
+}
+
+func validateTokenClaims(outputClaims map[string]interface{}) error {
+	schemaLoader := gojsonschema.NewStringLoader(hooks.MinimumViableTokenSchema)
+
+	documentLoader := gojsonschema.NewGoLoader(outputClaims)
+
+	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+	if err != nil {
+		return err
+	}
+
+	if !result.Valid() {
+		var errorMessages string
+
+		for _, desc := range result.Errors() {
+			errorMessages += fmt.Sprintf("- %s\n", desc)
+			fmt.Printf("- %s\n", desc)
+		}
+		return fmt.Errorf("output claims do not conform to the expected schema: \n%s", errorMessages)
+
+	}
+
+	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -58,6 +59,8 @@ func (ts *TokenTestSuite) SetupTest() {
 	ts.User = u
 	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
 	require.NoError(ts.T(), err, "Error creating refresh token")
+	ts.Config.Hook.CustomAccessToken.Enabled = false
+
 }
 
 func (ts *TokenTestSuite) TestSessionTimebox() {
@@ -648,4 +651,112 @@ func (ts *TokenTestSuite) TestPasswordVerificationHook() {
 		})
 	}
 
+}
+func (ts *TokenTestSuite) TestCustomAccessToken() {
+	type customAccessTokenTestcase struct {
+		desc            string
+		uri             string
+		hookFunctionSQL string
+		expectedClaims  map[string]interface{}
+		shouldError     bool
+	}
+	cases := []customAccessTokenTestcase{
+		{
+			desc: "Add a new claim",
+			uri:  "pg-functions://postgres/auth/custom_access_token_add_claim",
+			hookFunctionSQL: ` create or replace function custom_access_token_add_claim(input jsonb) returns jsonb as $$ declare result jsonb; begin if jsonb_typeof(jsonb_object_field(input, 'claims')) is null then result := jsonb_build_object('error', jsonb_build_object('http_code', 400, 'message', 'Input does not contain claims field')); return result; end if;
+    input := jsonb_set(input, '{claims,newclaim}', '"newvalue"', true);
+    result := jsonb_build_object('claims', input->'claims');
+    return result;
+end; $$ language plpgsql;`,
+			expectedClaims: map[string]interface{}{
+				"newclaim": "newvalue",
+			},
+		}, {
+			desc: "Delete the Role claim",
+			uri:  "pg-functions://postgres/auth/custom_access_token_delete_claim",
+			hookFunctionSQL: `
+create or replace function custom_access_token_delete_claim(input jsonb)
+returns jsonb as $$
+declare
+    result jsonb;
+begin
+    input := jsonb_set(input, '{claims}', (input->'claims') - 'role');
+    result := jsonb_build_object('claims', input->'claims');
+    return result;
+end; $$ language plpgsql;`,
+			expectedClaims: map[string]interface{}{},
+			shouldError:    true,
+		}, {
+			desc: "Delete a non-required claim (UserMetadata)",
+			uri:  "pg-functions://postgres/auth/custom_access_token_delete_usermetadata",
+			hookFunctionSQL: `
+create or replace function custom_access_token_delete_usermetadata(input jsonb)
+returns jsonb as $$
+declare
+    result jsonb;
+begin
+    input := jsonb_set(input, '{claims}', (input->'claims') - 'user_metadata');
+    result := jsonb_build_object('claims', input->'claims');
+    return result;
+end; $$ language plpgsql;`,
+			// Not used
+			expectedClaims: map[string]interface{}{
+				"user_metadata": nil,
+			},
+			shouldError: false,
+		},
+	}
+	for _, c := range cases {
+		ts.T().Run(c.desc, func(t *testing.T) {
+			ts.Config.Hook.CustomAccessToken.Enabled = true
+			ts.Config.Hook.CustomAccessToken.URI = c.uri
+			require.NoError(t, ts.Config.Hook.CustomAccessToken.ValidateAndPopulateExtensibilityPoint())
+
+			err := ts.API.db.RawQuery(c.hookFunctionSQL).Exec()
+			require.NoError(t, err)
+
+			var buffer bytes.Buffer
+			require.NoError(t, json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"refresh_token": ts.RefreshToken.Token,
+			}))
+
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+
+			var tokenResponse struct {
+				AccessToken string `json:"access_token"`
+			}
+			require.NoError(t, json.NewDecoder(w.Result().Body).Decode(&tokenResponse))
+			if c.shouldError {
+				require.Equal(t, http.StatusInternalServerError, w.Code)
+			} else {
+				parts := strings.Split(tokenResponse.AccessToken, ".")
+				require.Equal(t, 3, len(parts), "Token should have 3 parts")
+
+				payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+				require.NoError(t, err)
+
+				var responseClaims map[string]interface{}
+				require.NoError(t, json.Unmarshal(payload, &responseClaims))
+
+				for key, expectedValue := range c.expectedClaims {
+					if expectedValue == nil {
+						// Since c.shouldError is false here, we only need to check if the claim should be removed
+						_, exists := responseClaims[key]
+						assert.False(t, exists, "Claim should be removed")
+					} else {
+						assert.Equal(t, expectedValue, responseClaims[key])
+					}
+				}
+			}
+
+			cleanupHookSQL := fmt.Sprintf("drop function if exists %s", ts.Config.Hook.CustomAccessToken.HookName)
+			require.NoError(t, ts.API.db.RawQuery(cleanupHookSQL).Exec())
+			ts.Config.Hook.CustomAccessToken.Enabled = false
+		})
+	}
 }

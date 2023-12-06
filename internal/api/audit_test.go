@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -48,7 +49,7 @@ func (ts *AuditTestSuite) makeSuperAdmin(email string) string {
 	u.Role = "supabase_admin"
 
 	var token string
-	token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
+	token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, nil, models.PasswordGrant)
 	require.NoError(ts.T(), err, "Error generating access token")
 
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
