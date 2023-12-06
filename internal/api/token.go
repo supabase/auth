@@ -327,8 +327,8 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 	var token *jwt.Token
 	if config.Hook.CustomAccessToken.Enabled {
 		input := hooks.CustomAccessTokenInput{
-			UserID: user.ID,
-			Claims: claims,
+			UserID:               user.ID,
+			Claims:               claims,
 			AuthenticationMethod: authenticationMethod.String(),
 		}
 
@@ -385,7 +385,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return terr
 		}
 
-		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user,refreshToken.SessionId, authenticationMethod)
+		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, refreshToken.SessionId, authenticationMethod)
 		if terr != nil {
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}

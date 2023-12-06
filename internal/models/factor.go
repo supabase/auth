@@ -70,7 +70,7 @@ func (authMethod AuthenticationMethod) String() string {
 	case EmailChange:
 		return "email_change"
 	case TokenRefresh:
-		return "refresh_token"
+		return "token_refresh"
 	}
 	return ""
 }
