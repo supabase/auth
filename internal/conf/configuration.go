@@ -459,14 +459,14 @@ func (h *HookConfiguration) Validate() error {
 		h.CustomAccessToken,
 	}
 	for _, point := range points {
-		if err := point.ValidateAndPopulateExtensibilityPoint(); err != nil {
+		if err := point.ValidateExtensibilityPoint(); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (e *ExtensibilityPointConfiguration) ValidateAndPopulateExtensibilityPoint() error {
+func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
 	if e.URI != "" {
 		u, err := url.Parse(e.URI)
 		if err != nil {
@@ -488,8 +488,20 @@ func (e *ExtensibilityPointConfiguration) ValidateAndPopulateExtensibilityPoint(
 		if !postgresNamesRegexp.MatchString(table) {
 			return fmt.Errorf("invalid table name: %s", table)
 		}
-		e.HookName = fmt.Sprintf("%q.%q", schema, table)
 	}
+	return nil
+}
+
+func (e *ExtensibilityPointConfiguration) PopulateExtensibilityPoint() error {
+	if err := e.ValidateExtensibilityPoint(); err != nil {
+		return err
+	}
+	u, err := url.Parse(e.URI)
+	if err != nil {
+		return err
+	}
+	pathParts := strings.Split(u.Path, "/")
+	e.HookName = fmt.Sprintf("%q.%q", pathParts[1], pathParts[2])
 	return nil
 }
 
@@ -520,6 +532,24 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		return nil, err
 	}
 
+	if config.Hook.CustomAccessToken.Enabled {
+		if err := config.Hook.CustomAccessToken.PopulateExtensibilityPoint(); err != nil {
+			return nil, err
+		}
+	}
+
+	if config.Hook.MFAVerificationAttempt.Enabled {
+		if err := config.Hook.MFAVerificationAttempt.PopulateExtensibilityPoint(); err != nil {
+			return nil, err
+		}
+	}
+
+	if config.Hook.CustomAccessToken.Enabled {
+		if err := config.Hook.CustomAccessToken.PopulateExtensibilityPoint(); err != nil {
+			return nil, err
+		}
+	}
+
 	if config.SAML.Enabled {
 		if err := config.SAML.PopulateFields(config.API.ExternalURL); err != nil {
 			return nil, err
@@ -527,6 +557,7 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 	} else {
 		config.SAML.PrivateKey = ""
 	}
+
 	if config.Sms.Provider != "" {
 		SMSTemplate := config.Sms.Template
 		if SMSTemplate == "" {
