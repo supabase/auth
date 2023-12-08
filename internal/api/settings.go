@@ -40,9 +40,9 @@ type Settings struct {
 }
 
 type HookSettings struct {
-	MFAVerificationAttempt      bool `json:"mfa_verification_attempt_enabled"`
-	PasswordVerificationAttempt bool `json:"password_verification_attempt_enabled"`
-	CustomAccessToken           bool `json:"custom_access_token_enabled"`
+	MFAVerificationAttempt      bool `json:"mfa_verification_attempt"`
+	PasswordVerificationAttempt bool `json:"password_verification_attempt"`
+	CustomAccessToken           bool `json:"custom_access_token"`
 }
 
 func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
