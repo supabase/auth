@@ -476,6 +476,9 @@ func (e *ExtensibilityPointConfiguration) ValidateAndPopulateExtensibilityPoint(
 		if len(pathParts) < 3 {
 			return fmt.Errorf("URI path does not contain enough parts")
 		}
+		if u.Scheme != "pg-functions" {
+			return fmt.Errorf("only postgres hooks are supported at the moment")
+		}
 		schema := pathParts[1]
 		table := pathParts[2]
 		// Validate schema and table names
