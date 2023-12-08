@@ -307,7 +307,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		}
 
 		isSSOUser := false
-		if decision.LinkingDomain == "sso" {
+		if strings.HasPrefix(decision.LinkingDomain, "sso:") {
 			isSSOUser = true
 		}
 
