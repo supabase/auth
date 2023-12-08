@@ -72,7 +72,8 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionWithAccounts() {
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(userB))
 
-	identityB, err := NewIdentity(userB, "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387", map[string]interface{}{
+	ssoProvider := "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387"
+	identityB, err := NewIdentity(userB, ssoProvider, map[string]interface{}{
 		"sub":   userB.ID.String(),
 		"email": "test@samltest.id",
 	})
@@ -90,6 +91,7 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionWithAccounts() {
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, CreateAccount)
+	require.Equal(ts.T(), decision.LinkingDomain, "default")
 
 	// when looking for an email that doesn't exist in the SSO linking domain
 	decision, err = DetermineAccountLinking(ts.db, ts.config, []provider.Email{
@@ -98,10 +100,11 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionWithAccounts() {
 			Verified: true,
 			Primary:  true,
 		},
-	}, ts.config.JWT.Aud, "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387", "abcdefgh")
+	}, ts.config.JWT.Aud, ssoProvider, "abcdefgh")
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, CreateAccount)
+	require.Equal(ts.T(), decision.LinkingDomain, ssoProvider)
 }
 
 func (ts *AccountLinkingTestSuite) TestAccountExists() {
