@@ -40,7 +40,9 @@ type Settings struct {
 }
 
 type HookSettings struct {
-	MFAVerification bool `json:"mfa"`
+	MFAVerificationAttempt      bool `json:"mfa_verification_attempt_enabled"`
+	PasswordVerificationAttempt bool `json:"password_verification_attempt_enabled"`
+	CustomAccessToken           bool `json:"custom_access_token_enabled"`
 }
 
 func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
@@ -73,7 +75,9 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Zoom:         config.External.Zoom.Enabled,
 		},
 		HookConfiguration: HookSettings{
-			MFAVerification: config.Hook.MFAVerificationAttempt.Enabled,
+			MFAVerificationAttempt:      config.Hook.MFAVerificationAttempt.Enabled,
+			PasswordVerificationAttempt: config.Hook.PasswordVerificationAttempt.Enabled,
+			CustomAccessToken:           config.Hook.CustomAccessToken.Enabled,
 		},
 
 		DisableSignup:     config.DisableSignup,

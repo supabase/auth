@@ -44,6 +44,7 @@ func TestSettings_DefaultProviders(t *testing.T) {
 	require.True(t, p.Twitch)
 	require.True(t, p.WorkOS)
 	require.True(t, p.Zoom)
+
 }
 
 func TestSettings_EmailDisabled(t *testing.T) {
@@ -67,4 +68,24 @@ func TestSettings_EmailDisabled(t *testing.T) {
 
 	p := resp.ExternalProviders
 	require.False(t, p.Email)
+}
+
+func TestSettings_HooksDisabled(t *testing.T) {
+	api, _, err := setupAPIForTest()
+	require.NoError(t, err)
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/settings", nil)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	api.handler.ServeHTTP(w, req)
+	require.Equal(t, w.Code, http.StatusOK)
+	resp := Settings{}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+
+	p := resp.HookConfiguration
+	require.False(t, p.MFAVerificationAttempt)
+	require.False(t, p.PasswordVerificationAttempt)
+	require.False(t, p.CustomAccessToken)
 }
