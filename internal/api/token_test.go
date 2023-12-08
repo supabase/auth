@@ -626,7 +626,7 @@ func (ts *TokenTestSuite) TestPasswordVerificationHook() {
 		ts.T().Run(c.desc, func(t *testing.T) {
 			ts.Config.Hook.PasswordVerificationAttempt.Enabled = true
 			ts.Config.Hook.PasswordVerificationAttempt.URI = c.uri
-			require.NoError(ts.T(), ts.Config.Hook.PasswordVerificationAttempt.ValidateAndPopulateExtensibilityPoint())
+			require.NoError(ts.T(), ts.Config.Hook.PasswordVerificationAttempt.PopulateExtensibilityPoint())
 
 			err := ts.API.db.RawQuery(c.hookFunctionSQL).Exec()
 			require.NoError(t, err)
@@ -711,7 +711,7 @@ end; $$ language plpgsql;`,
 		ts.T().Run(c.desc, func(t *testing.T) {
 			ts.Config.Hook.CustomAccessToken.Enabled = true
 			ts.Config.Hook.CustomAccessToken.URI = c.uri
-			require.NoError(t, ts.Config.Hook.CustomAccessToken.ValidateAndPopulateExtensibilityPoint())
+			require.NoError(t, ts.Config.Hook.CustomAccessToken.PopulateExtensibilityPoint())
 
 			err := ts.API.db.RawQuery(c.hookFunctionSQL).Exec()
 			require.NoError(t, err)

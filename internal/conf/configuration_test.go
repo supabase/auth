@@ -98,32 +98,30 @@ func TestPasswordRequiredCharactersDecode(t *testing.T) {
 	}
 }
 
-func TestValidateAndPopulateExtensibilityPoint(t *testing.T) {
+func TestValidateExtensibilityPoint(t *testing.T) {
 	cases := []struct {
-		desc           string
-		uri            string
-		expectedResult string
+		desc        string
+		uri         string
+		expectError bool
 	}{
 		// Positive test cases
-		{desc: "Valid URI", uri: "pg-functions://postgres/auth/verification_hook_reject", expectedResult: `"auth"."verification_hook_reject"`},
-		{desc: "Another Valid URI", uri: "pg-functions://postgres/user_management/add_user", expectedResult: `"user_management"."add_user"`},
-		{desc: "Another Valid URI", uri: "pg-functions://postgres/MySpeCial/FUNCTION_THAT_YELLS_AT_YOU", expectedResult: `"MySpeCial"."FUNCTION_THAT_YELLS_AT_YOU"`},
+		{desc: "Valid URI", uri: "pg-functions://postgres/auth/verification_hook_reject", expectError: false},
+		{desc: "Another Valid URI", uri: "pg-functions://postgres/user_management/add_user", expectError: false},
+		{desc: "Another Valid URI", uri: "pg-functions://postgres/MySpeCial/FUNCTION_THAT_YELLS_AT_YOU", expectError: false},
 
 		// Negative test cases
-		{desc: "Invalid Schema Name", uri: "pg-functions://postgres/123auth/verification_hook_reject", expectedResult: ""},
-		{desc: "Invalid Function Name", uri: "pg-functions://postgres/auth/123verification_hook_reject", expectedResult: ""},
-		{desc: "Insufficient Path Parts", uri: "pg-functions://postgres/auth", expectedResult: ""},
+		{desc: "Invalid Schema Name", uri: "pg-functions://postgres/123auth/verification_hook_reject", expectError: true},
+		{desc: "Invalid Function Name", uri: "pg-functions://postgres/auth/123verification_hook_reject", expectError: true},
+		{desc: "Insufficient Path Parts", uri: "pg-functions://postgres/auth", expectError: true},
 	}
 
 	for _, tc := range cases {
 		ep := ExtensibilityPointConfiguration{URI: tc.uri}
-		err := ep.ValidateAndPopulateExtensibilityPoint()
-		if tc.expectedResult != "" {
-			require.NoError(t, err)
-			require.Equal(t, tc.expectedResult, ep.HookName)
-		} else {
+		err := ep.ValidateExtensibilityPoint()
+		if tc.expectError {
 			require.Error(t, err)
-			require.Empty(t, ep.HookName)
+		} else {
+			require.NoError(t, err)
 		}
 	}
 }
