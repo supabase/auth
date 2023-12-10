@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	defaultTextLocalApiBase = "https://api.textlocal.in"
+	defaultTextLocalApiBase    = "https://api.textlocal.in"
+	textLocalTemplateErrorCode = 80
 )
 
 type TextlocalProvider struct {
@@ -90,6 +91,10 @@ func (t *TextlocalProvider) SendSms(phone string, message string) (string, error
 	if resp.Status != "success" {
 		if len(resp.Messages) > 0 {
 			messageID = resp.Messages[0].MessageID
+		}
+
+		if resp.Errors[0].Code == textLocalTemplateErrorCode {
+			return messageID, fmt.Errorf("textlocal error: %v (code: %v) template message: %s", resp.Errors[0].Message, resp.Errors[0].Code, message)
 		}
 
 		return messageID, fmt.Errorf("textlocal error: %v (code: %v) message %s", resp.Errors[0].Message, resp.Errors[0].Code, messageID)
