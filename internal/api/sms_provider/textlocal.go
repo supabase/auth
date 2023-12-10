@@ -2,7 +2,6 @@ package sms_provider
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -84,10 +83,6 @@ func (t *TextlocalProvider) SendSms(phone string, message string) (string, error
 	derr := json.NewDecoder(res.Body).Decode(resp)
 	if derr != nil {
 		return "", derr
-	}
-
-	if len(resp.Errors) > 0 {
-		return "", errors.New("textlocal error: Internal Error")
 	}
 
 	messageID := ""
