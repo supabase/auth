@@ -49,7 +49,7 @@ func (ts *TokenTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
 	// Create user & refresh token
-	u, err := models.NewUser("12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err := models.NewUser("", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	t := time.Now()
 	u.EmailConfirmedAt = &t
@@ -652,6 +652,7 @@ func (ts *TokenTestSuite) TestPasswordVerificationHook() {
 	}
 
 }
+
 func (ts *TokenTestSuite) TestCustomAccessToken() {
 	type customAccessTokenTestcase struct {
 		desc            string
@@ -755,6 +756,101 @@ end; $$ language plpgsql;`,
 			}
 
 			cleanupHookSQL := fmt.Sprintf("drop function if exists %s", ts.Config.Hook.CustomAccessToken.HookName)
+			require.NoError(t, ts.API.db.RawQuery(cleanupHookSQL).Exec())
+			ts.Config.Hook.CustomAccessToken.Enabled = false
+		})
+	}
+}
+
+func (ts *TokenTestSuite) TestAllowSelectAuthenticationMethods() {
+
+	companyUser, err := models.NewUser("12345678", "test@company.com", "password", ts.Config.JWT.Aud, nil)
+	t := time.Now()
+	companyUser.EmailConfirmedAt = &t
+	require.NoError(ts.T(), err, "Error creating test user model")
+	require.NoError(ts.T(), ts.API.db.Create(companyUser), "Error saving new test user")
+
+	type allowSelectAuthMethodsTestcase struct {
+		desc           string
+		uri            string
+		email          string
+		expectedError  string
+		expectedStatus int
+	}
+
+	// Common hook function SQL definition
+	hookFunctionSQL := `
+create or replace function auth.custom_access_token(event jsonb) returns jsonb language plpgsql as $$
+declare
+    email_claim text;
+    authentication_method text;
+begin
+    email_claim := event->'claims'->>'email';
+    authentication_method := event->>'authentication_method';
+
+    if authentication_method = 'password' and email_claim not like '%@company.com' then
+        return jsonb_build_object(
+            'error', jsonb_build_object(
+                'http_code', 403,
+                'message', 'only members on company.com can access with password authentication'
+            )
+        );
+    end if;
+
+    return event;
+end;
+$$;`
+
+	cases := []allowSelectAuthMethodsTestcase{
+		{
+			desc:           "Error for non-protected domain with password authentication",
+			uri:            "pg-functions://postgres/auth/custom_access_token",
+			email:          "test@example.com",
+			expectedError:  "only members on company.com can access with password authentication",
+			expectedStatus: http.StatusForbidden,
+		},
+		{
+			desc:           "Allow access for protected domain with password authentication",
+			uri:            "pg-functions://postgres/auth/custom_access_token",
+			email:          companyUser.Email.String(),
+			expectedError:  "",
+			expectedStatus: http.StatusOK,
+		},
+	}
+
+	for _, c := range cases {
+		ts.T().Run(c.desc, func(t *testing.T) {
+			// Enable and set up the custom access token hook
+			ts.Config.Hook.CustomAccessToken.Enabled = true
+			ts.Config.Hook.CustomAccessToken.URI = c.uri
+			require.NoError(t, ts.Config.Hook.CustomAccessToken.PopulateExtensibilityPoint())
+
+			// Execute the common hook function SQL
+			err := ts.API.db.RawQuery(hookFunctionSQL).Exec()
+			require.NoError(t, err)
+
+			var buffer bytes.Buffer
+
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"email":    c.email,
+				"password": "password",
+			}))
+
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+
+			require.Equal(t, c.expectedStatus, w.Code, "Unexpected HTTP status code")
+			if c.expectedError != "" {
+				require.Contains(t, w.Body.String(), c.expectedError, "Expected error message not found")
+			} else {
+				require.NotContains(t, w.Body.String(), "error", "Unexpected error occurred")
+			}
+
+			// Delete the function and cleanup
+			cleanupHookSQL := fmt.Sprintf("drop function if exists auth.custom_access_token")
 			require.NoError(t, ts.API.db.RawQuery(cleanupHookSQL).Exec())
 			ts.Config.Hook.CustomAccessToken.Enabled = false
 		})
