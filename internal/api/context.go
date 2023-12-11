@@ -5,7 +5,7 @@ import (
 	"net/url"
 
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/models"
 )
 
 type contextKey string
@@ -49,12 +49,12 @@ func getToken(ctx context.Context) *jwt.Token {
 	return obj.(*jwt.Token)
 }
 
-func getClaims(ctx context.Context) *GoTrueClaims {
+func getClaims(ctx context.Context) *AccessTokenClaims {
 	token := getToken(ctx)
 	if token == nil {
 		return nil
 	}
-	return token.Claims.(*GoTrueClaims)
+	return token.Claims.(*AccessTokenClaims)
 }
 
 // withRequestID adds the provided request ID to the context.

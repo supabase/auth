@@ -3,9 +3,9 @@ package models
 import (
 	"strings"
 
-	"github.com/supabase/gotrue/internal/api/provider"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/storage"
 )
 
 // GetAccountLinkingDomain returns a string that describes the account linking

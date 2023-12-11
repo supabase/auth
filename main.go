@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/cmd"
-	"github.com/supabase/gotrue/internal/api"
-	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/auth/cmd"
+	"github.com/supabase/auth/internal/api"
+	"github.com/supabase/auth/internal/observability"
 )
 
 func init() {

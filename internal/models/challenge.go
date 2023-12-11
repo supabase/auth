@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/storage"
 	"time"
 )
 

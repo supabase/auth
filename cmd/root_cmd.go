@@ -5,8 +5,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/observability"
 )
 
 var configFile = ""

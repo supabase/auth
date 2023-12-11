@@ -7,8 +7,8 @@ import (
 
 	chimiddleware "github.com/go-chi/chi/middleware"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 func NewStructuredLogger(logger *logrus.Logger, config *conf.GlobalConfiguration) func(next http.Handler) http.Handler {

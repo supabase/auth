@@ -7,9 +7,9 @@ import (
 
 	"github.com/mrjones/oauth"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/internal/api/provider"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
 )
 
 // OAuthProviderData contains the userData and token returned by the oauth provider

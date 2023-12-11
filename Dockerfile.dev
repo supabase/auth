@@ -5,7 +5,7 @@ ENV GOOS=linux
 
 RUN apk add --no-cache make git bash
 
-WORKDIR /go/src/github.com/supabase/gotrue
+WORKDIR /go/src/github.com/supabase/auth
 
 # Pulling dependencies
 COPY ./Makefile ./go.* ./

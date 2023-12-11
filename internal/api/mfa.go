@@ -13,11 +13,11 @@ import (
 	"github.com/boombuler/barcode/qr"
 	"github.com/gofrs/uuid"
 	"github.com/pquerna/otp/totp"
-	"github.com/supabase/gotrue/internal/hooks"
-	"github.com/supabase/gotrue/internal/metering"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/hooks"
+	"github.com/supabase/auth/internal/metering"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 const DefaultQRSize = 3

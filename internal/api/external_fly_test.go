@@ -13,7 +13,7 @@ import (
 
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/models"
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalFly() {

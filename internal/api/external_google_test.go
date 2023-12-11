@@ -9,7 +9,7 @@ import (
 
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/gotrue/internal/api/provider"
+	"github.com/supabase/auth/internal/api/provider"
 )
 
 const (
