@@ -2,7 +2,6 @@ package sms_provider
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,7 +12,8 @@ import (
 )
 
 const (
-	defaultTextLocalApiBase = "https://api.textlocal.in"
+	defaultTextLocalApiBase    = "https://api.textlocal.in"
+	textLocalTemplateErrorCode = 80
 )
 
 type TextlocalProvider struct {
@@ -86,15 +86,15 @@ func (t *TextlocalProvider) SendSms(phone string, message string) (string, error
 		return "", derr
 	}
 
-	if len(resp.Errors) > 0 {
-		return "", errors.New("textlocal error: Internal Error")
-	}
-
 	messageID := ""
 
 	if resp.Status != "success" {
 		if len(resp.Messages) > 0 {
 			messageID = resp.Messages[0].MessageID
+		}
+
+		if len(resp.Errors) > 0 && resp.Errors[0].Code == textLocalTemplateErrorCode {
+			return messageID, fmt.Errorf("textlocal error: %v (code: %v) template message: %s", resp.Errors[0].Message, resp.Errors[0].Code, message)
 		}
 
 		return messageID, fmt.Errorf("textlocal error: %v (code: %v) message %s", resp.Errors[0].Message, resp.Errors[0].Code, messageID)
