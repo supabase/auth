@@ -93,7 +93,7 @@ func (t *TextlocalProvider) SendSms(phone string, message string) (string, error
 			messageID = resp.Messages[0].MessageID
 		}
 
-		if resp.Errors[0].Code == textLocalTemplateErrorCode {
+		if len(resp.Errors) > 0 && resp.Errors[0].Code == textLocalTemplateErrorCode {
 			return messageID, fmt.Errorf("textlocal error: %v (code: %v) template message: %s", resp.Errors[0].Message, resp.Errors[0].Code, message)
 		}
 
