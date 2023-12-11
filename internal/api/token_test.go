@@ -850,7 +850,7 @@ $$;`
 			}
 
 			// Delete the function and cleanup
-			cleanupHookSQL := fmt.Sprintf("drop function if exists auth.custom_access_token")
+			cleanupHookSQL := fmt.Sprintf("drop function if exists %s", ts.Config.Hook.CustomAccessToken.HookName)
 			require.NoError(t, ts.API.db.RawQuery(cleanupHookSQL).Exec())
 			ts.Config.Hook.CustomAccessToken.Enabled = false
 		})
