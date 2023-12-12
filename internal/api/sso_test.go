@@ -14,8 +14,8 @@ import (
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 )
 
 const dateInPast = "2001-02-03T04:05:06.789"
@@ -47,7 +47,7 @@ func TestSSO(t *testing.T) {
 func (ts *SSOTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
-	claims := &GoTrueClaims{
+	claims := &AccessTokenClaims{
 		Role: "supabase_admin",
 	}
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))

@@ -12,12 +12,12 @@ import (
 	"github.com/rs/cors"
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/mailer"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/storage"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 	"github.com/supabase/hibp"
 )
 

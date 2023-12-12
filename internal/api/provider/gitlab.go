@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/oauth2"
 )
 

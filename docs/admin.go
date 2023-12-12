@@ -2,7 +2,7 @@
 package docs
 
 import (
-	"github.com/supabase/gotrue/internal/api"
+	"github.com/supabase/auth/internal/api"
 )
 
 // swagger:route GET /admin/users admin admin-list-users

@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/auth/internal/conf"
 )
 
 const (
@@ -45,7 +45,7 @@ func TestMiddlewareFunctions(t *testing.T) {
 func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 	ts.Config.Security.Captcha.Enabled = true
 
-	adminClaims := &GoTrueClaims{
+	adminClaims := &AccessTokenClaims{
 		Role: "supabase_admin",
 	}
 	adminJwt, err := jwt.NewWithClaims(jwt.SigningMethodHS256, adminClaims).SignedString([]byte(ts.Config.JWT.Secret))

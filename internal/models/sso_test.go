@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/storage"
-	"github.com/supabase/gotrue/internal/storage/test"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/storage/test"
 )
 
 type SSOTestSuite struct {

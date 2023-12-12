@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 )
 
 type AdminTestSuite struct {
@@ -43,7 +43,7 @@ func TestAdmin(t *testing.T) {
 func (ts *AdminTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 	ts.Config.External.Email.Enabled = true
-	claims := &GoTrueClaims{
+	claims := &AccessTokenClaims{
 		Role: "supabase_admin",
 	}
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))

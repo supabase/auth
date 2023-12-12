@@ -9,8 +9,8 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
 )
 
 type AuditAction string

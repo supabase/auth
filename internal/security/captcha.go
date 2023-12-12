@@ -12,7 +12,7 @@ import (
 
 	"fmt"
 	"github.com/pkg/errors"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 type GotrueRequest struct {

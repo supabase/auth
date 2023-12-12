@@ -8,11 +8,11 @@ import (
 	"net/http"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/supabase/gotrue/internal/api/provider"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
 )
 
 // IdTokenGrantParams are the parameters the IdTokenGrant method accepts

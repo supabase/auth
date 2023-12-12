@@ -520,6 +520,9 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 	}
 
 	config := new(GlobalConfiguration)
+
+	// although the package is called "auth" it used to be called "gotrue"
+	// so environment configs will remain to be called "GOTRUE"
 	if err := envconfig.Process("gotrue", config); err != nil {
 		return nil, err
 	}

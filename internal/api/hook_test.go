@@ -12,9 +12,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage/test"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage/test"
 )
 
 // withFunctionHooks adds the provided function hooks to the context.

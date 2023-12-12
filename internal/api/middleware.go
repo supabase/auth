@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/security"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/security"
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/didip/tollbooth/v5"

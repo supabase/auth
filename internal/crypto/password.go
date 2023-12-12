@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/auth/internal/observability"
 	"go.opentelemetry.io/otel/attribute"
 
 	"golang.org/x/crypto/bcrypt"

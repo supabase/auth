@@ -7,9 +7,9 @@ import (
 	"github.com/fatih/structs"
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/gotrue/internal/api/provider"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {

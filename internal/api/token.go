@@ -14,15 +14,15 @@ import (
 	"github.com/golang-jwt/jwt"
 	"github.com/xeipuuv/gojsonschema"
 
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/hooks"
-	"github.com/supabase/gotrue/internal/metering"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/hooks"
+	"github.com/supabase/auth/internal/metering"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
-// GoTrueClaims is a struct thats used for JWT claims
-type GoTrueClaims struct {
+// AccessTokenClaims is a struct thats used for JWT claims
+type AccessTokenClaims struct {
 	jwt.StandardClaims
 	Email                         string                 `json:"email"`
 	Phone                         string                 `json:"phone"`
@@ -306,7 +306,7 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 	issuedAt := time.Now().UTC()
 	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp)).Unix()
 
-	claims := &hooks.GoTrueClaims{
+	claims := &hooks.AccessTokenClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
 			Audience:  user.Aud,

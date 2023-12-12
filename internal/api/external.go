@@ -14,11 +14,11 @@ import (
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/internal/api/provider"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/storage"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
 

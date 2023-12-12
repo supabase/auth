@@ -3,7 +3,7 @@ package hooks
 import (
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/models"
 )
 
 type HookType string
@@ -86,8 +86,8 @@ const MinimumViableTokenSchema = `{
   "required": ["aud", "exp", "iat", "sub", "email", "phone", "role", "aal"]
 }`
 
-// GoTrueClaims is a struct thats used for JWT claims
-type GoTrueClaims struct {
+// AccessTokenClaims is a struct thats used for JWT claims
+type AccessTokenClaims struct {
 	jwt.StandardClaims
 	Email                         string                 `json:"email"`
 	Phone                         string                 `json:"phone"`
@@ -124,9 +124,9 @@ type PasswordVerificationAttemptOutput struct {
 }
 
 type CustomAccessTokenInput struct {
-	UserID               uuid.UUID     `json:"user_id"`
-	Claims               *GoTrueClaims `json:"claims"`
-	AuthenticationMethod string        `json:"authentication_method"`
+	UserID               uuid.UUID          `json:"user_id"`
+	Claims               *AccessTokenClaims `json:"claims"`
+	AuthenticationMethod string             `json:"authentication_method"`
 }
 
 type CustomAccessTokenOutput struct {
