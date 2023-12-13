@@ -13,8 +13,8 @@ import (
 // a HTTPError with a special weak_password field that encodes the Reasons
 // slice.
 type WeakPasswordError struct {
-	Message string
-	Reasons []string
+	Message string   `json:"message,omitempty"`
+	Reasons []string `json:"reasons,omitempty"`
 }
 
 func (e *WeakPasswordError) Error() string {

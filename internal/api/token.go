@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"fmt"
+
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
 	"github.com/xeipuuv/gojsonschema"
@@ -18,6 +19,7 @@ import (
 	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -36,14 +38,15 @@ type AccessTokenClaims struct {
 
 // AccessTokenResponse represents an OAuth2 success response
 type AccessTokenResponse struct {
-	Token                string       `json:"access_token"`
-	TokenType            string       `json:"token_type"` // Bearer
-	ExpiresIn            int          `json:"expires_in"`
-	ExpiresAt            int64        `json:"expires_at"`
-	RefreshToken         string       `json:"refresh_token"`
-	User                 *models.User `json:"user"`
-	ProviderAccessToken  string       `json:"provider_token,omitempty"`
-	ProviderRefreshToken string       `json:"provider_refresh_token,omitempty"`
+	Token                string             `json:"access_token"`
+	TokenType            string             `json:"token_type"` // Bearer
+	ExpiresIn            int                `json:"expires_in"`
+	ExpiresAt            int64              `json:"expires_at"`
+	RefreshToken         string             `json:"refresh_token"`
+	User                 *models.User       `json:"user"`
+	ProviderAccessToken  string             `json:"provider_token,omitempty"`
+	ProviderRefreshToken string             `json:"provider_refresh_token,omitempty"`
+	WeakPassword         *WeakPasswordError `json:"weak_password,omitempty"`
 }
 
 // AsRedirectURL encodes the AccessTokenResponse as a redirect URL that
@@ -146,9 +149,21 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	if user.IsBanned() {
 		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
-	isValidPassword := user.Authenticate(ctx, params.Password)
-	if config.Hook.PasswordVerificationAttempt.Enabled {
 
+	isValidPassword := user.Authenticate(ctx, params.Password)
+
+	var weakPasswordError *WeakPasswordError
+	if isValidPassword {
+		if err := a.checkPasswordStrength(ctx, params.Password); err != nil {
+			if wpe, ok := err.(*WeakPasswordError); ok {
+				weakPasswordError = wpe
+			} else {
+				observability.GetLogEntry(r).WithError(err).Warn("Password strength check on sign-in failed")
+			}
+		}
+	}
+
+	if config.Hook.PasswordVerificationAttempt.Enabled {
 		input := hooks.PasswordVerificationAttemptInput{
 			UserID: user.ID,
 			Valid:  isValidPassword,
@@ -193,7 +208,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
-
 		if terr != nil {
 			return terr
 		}
@@ -206,6 +220,9 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	if err != nil {
 		return err
 	}
+
+	token.WeakPassword = weakPasswordError
+
 	metering.RecordLogin("password", user.ID)
 	return sendJSON(w, http.StatusOK, token)
 }
