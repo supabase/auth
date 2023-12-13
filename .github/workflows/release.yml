@@ -43,9 +43,10 @@ jobs:
 
       - run: make deps
       - run: make all
-      - run: tar -czvf auth-v${{ needs.release.outputs.version }}-x86.tar.gz auth migrations/
+      - run: ln -s auth gotrue
+      - run: tar -czvf auth-v${{ needs.release.outputs.version }}-x86.tar.gz auth gotrue migrations/
       - run: mv auth-arm64 auth
-      - run: tar -czvf auth-v${{ needs.release.outputs.version }}-arm64.tar.gz auth migrations/
+      - run: tar -czvf auth-v${{ needs.release.outputs.version }}-arm64.tar.gz auth gotrue migrations/
 
       - uses: AButler/upload-release-assets@v2.0
         with:
