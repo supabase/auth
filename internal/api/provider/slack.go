@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -68,31 +67,28 @@ func (g slackProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 		return nil, err
 	}
 
-	if u.Email == "" {
-		return nil, errors.New("unable to find email with Slack provider")
-	}
-
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        g.APIPath,
-			Subject:       u.ID,
-			Name:          u.Name,
-			Picture:       u.AvatarURL,
-			Email:         u.Email,
-			EmailVerified: true, // Slack dosen't provide data on if email is verified.
-			CustomClaims: map[string]interface{}{
-				"https://slack.com/team_id": u.TeamID,
-			},
-
-			// To be deprecated
-			AvatarURL:  u.AvatarURL,
-			FullName:   u.Name,
-			ProviderId: u.ID,
-		},
-		Emails: []Email{{
+	data := &UserProvidedData{}
+	if u.Email != "" {
+		data.Emails = []Email{{
 			Email:    u.Email,
 			Verified: true, // Slack dosen't provide data on if email is verified.
 			Primary:  true,
-		}},
-	}, nil
+		}}
+	}
+
+	data.Metadata = &Claims{
+		Issuer:  g.APIPath,
+		Subject: u.ID,
+		Name:    u.Name,
+		Picture: u.AvatarURL,
+		CustomClaims: map[string]interface{}{
+			"https://slack.com/team_id": u.TeamID,
+		},
+
+		// To be deprecated
+		AvatarURL:  u.AvatarURL,
+		FullName:   u.Name,
+		ProviderId: u.ID,
+	}
+	return data, nil
 }

@@ -187,7 +187,22 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		return err
 	}
+
 	userData := data.userData
+	if len(userData.Emails) <= 0 {
+		return internalServerError("Error getting user email from external provider")
+	}
+	userData.Metadata.EmailVerified = false
+	for _, email := range userData.Emails {
+		if email.Primary {
+			userData.Metadata.Email = email.Email
+			userData.Metadata.EmailVerified = email.Verified
+			break
+		} else {
+			userData.Metadata.Email = email.Email
+			userData.Metadata.EmailVerified = email.Verified
+		}
+	}
 	providerAccessToken := data.token
 	providerRefreshToken := data.refreshToken
 

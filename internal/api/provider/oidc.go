@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -97,17 +96,11 @@ func parseGoogleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, 
 		})
 	}
 
-	if len(data.Emails) <= 0 {
-		return nil, nil, errors.New("provider: Google ID token must contain an email address")
-	}
-
 	data.Metadata = &Claims{
-		Issuer:        claims.Issuer,
-		Subject:       claims.Subject,
-		Name:          claims.Name,
-		Picture:       claims.AvatarURL,
-		Email:         claims.Email,
-		EmailVerified: claims.IsEmailVerified(),
+		Issuer:  claims.Issuer,
+		Subject: claims.Subject,
+		Name:    claims.Name,
+		Picture: claims.AvatarURL,
 
 		// To be deprecated
 		AvatarURL:  claims.AvatarURL,
@@ -148,12 +141,10 @@ func parseAppleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 	})
 
 	data.Metadata = &Claims{
-		Issuer:        token.Issuer,
-		Subject:       token.Subject,
-		Email:         claims.Email,
-		EmailVerified: true,
-		ProviderId:    token.Subject,
-		CustomClaims:  make(map[string]any),
+		Issuer:       token.Issuer,
+		Subject:      token.Subject,
+		ProviderId:   token.Subject,
+		CustomClaims: make(map[string]any),
 	}
 
 	if claims.IsPrivateEmail != nil {
@@ -193,23 +184,24 @@ func parseLinkedinIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData
 	if err != nil {
 		return nil, nil, err
 	}
-	data.Emails = append(data.Emails, Email{
-		Email:    claims.Email,
-		Verified: emailVerified,
-		Primary:  true,
-	})
+
+	if claims.Email != "" {
+		data.Emails = append(data.Emails, Email{
+			Email:    claims.Email,
+			Verified: emailVerified,
+			Primary:  true,
+		})
+	}
 
 	data.Metadata = &Claims{
-		Issuer:        token.Issuer,
-		Subject:       token.Subject,
-		Email:         claims.Email,
-		EmailVerified: emailVerified,
-		Name:          strings.TrimSpace(claims.GivenName + " " + claims.FamilyName),
-		GivenName:     claims.GivenName,
-		FamilyName:    claims.FamilyName,
-		Locale:        claims.Locale,
-		Picture:       claims.Picture,
-		ProviderId:    token.Subject,
+		Issuer:     token.Issuer,
+		Subject:    token.Subject,
+		Name:       strings.TrimSpace(claims.GivenName + " " + claims.FamilyName),
+		GivenName:  claims.GivenName,
+		FamilyName: claims.FamilyName,
+		Locale:     claims.Locale,
+		Picture:    claims.Picture,
+		ProviderId: token.Subject,
 	}
 
 	return token, &data, nil
@@ -293,20 +285,18 @@ func parseAzureIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 	data.Metadata = &Claims{
 		Issuer:            token.Issuer,
 		Subject:           token.Subject,
-		Email:             azureClaims.Email,
-		EmailVerified:     azureClaims.IsEmailVerified(),
 		ProviderId:        token.Subject,
 		PreferredUsername: azureClaims.PreferredUsername,
 		FullName:          azureClaims.Name,
 		CustomClaims:      make(map[string]any),
 	}
 
-	if data.Metadata.Email != "" {
-		data.Emails = append(data.Emails, Email{
-			Email:    data.Metadata.Email,
-			Verified: data.Metadata.EmailVerified,
+	if azureClaims.Email != "" {
+		data.Emails = []Email{{
+			Email:    azureClaims.Email,
+			Verified: azureClaims.IsEmailVerified(),
 			Primary:  true,
-		})
+		}}
 	}
 
 	if err := token.Claims(&data.Metadata.CustomClaims); err != nil {
@@ -317,10 +307,6 @@ func parseAzureIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 		for _, claim := range removeAzureClaimsFromCustomClaims {
 			delete(data.Metadata.CustomClaims, claim)
 		}
-	}
-
-	if len(data.Emails) <= 0 {
-		return nil, nil, fmt.Errorf("provider: Azure OIDC ID token from issuer %q must contain a valid email address", token.Issuer)
 	}
 
 	return token, &data, nil

@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -86,30 +85,28 @@ func (p facebookProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 		return nil, err
 	}
 
-	if u.Email == "" {
-		return nil, errors.New("unable to find email with Facebook provider")
-	}
-
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        p.ProfileURL,
-			Subject:       u.ID,
-			Name:          strings.TrimSpace(u.FirstName + " " + u.LastName),
-			NickName:      u.Alias,
-			Email:         u.Email,
-			EmailVerified: true, // if email is returned, the email is verified by facebook already
-			Picture:       u.Avatar.Data.URL,
-
-			// To be deprecated
-			Slug:       u.Alias,
-			AvatarURL:  u.Avatar.Data.URL,
-			FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
-			ProviderId: u.ID,
-		},
-		Emails: []Email{{
+	data := &UserProvidedData{}
+	if u.Email != "" {
+		data.Emails = []Email{{
 			Email:    u.Email,
 			Verified: true,
 			Primary:  true,
-		}},
-	}, nil
+		}}
+	}
+
+	data.Metadata = &Claims{
+		Issuer:   p.ProfileURL,
+		Subject:  u.ID,
+		Name:     strings.TrimSpace(u.FirstName + " " + u.LastName),
+		NickName: u.Alias,
+		Picture:  u.Avatar.Data.URL,
+
+		// To be deprecated
+		Slug:       u.Alias,
+		AvatarURL:  u.Avatar.Data.URL,
+		FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
+		ProviderId: u.ID,
+	}
+
+	return data, nil
 }

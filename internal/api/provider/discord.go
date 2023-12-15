@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -72,8 +71,13 @@ func (g discordProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 		return nil, err
 	}
 
-	if u.Email == "" {
-		return nil, errors.New("unable to find email with Discord provider")
+	data := &UserProvidedData{}
+	if u.Email != "" {
+		data.Emails = []Email{{
+			Email:    u.Email,
+			Verified: u.Verified,
+			Primary:  true,
+		}}
 	}
 
 	var avatarURL string
@@ -97,27 +101,20 @@ func (g discordProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 		avatarURL = fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.%s", u.ID, u.Avatar, extension)
 	}
 
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        g.APIPath,
-			Subject:       u.ID,
-			Name:          fmt.Sprintf("%v#%v", u.Name, u.Discriminator),
-			Picture:       avatarURL,
-			Email:         u.Email,
-			EmailVerified: u.Verified,
-			CustomClaims: map[string]interface{}{
-				"global_name": u.GlobalName,
-			},
-
-			// To be deprecated
-			AvatarURL:  avatarURL,
-			FullName:   u.Name,
-			ProviderId: u.ID,
+	data.Metadata = &Claims{
+		Issuer:  g.APIPath,
+		Subject: u.ID,
+		Name:    fmt.Sprintf("%v#%v", u.Name, u.Discriminator),
+		Picture: avatarURL,
+		CustomClaims: map[string]interface{}{
+			"global_name": u.GlobalName,
 		},
-		Emails: []Email{{
-			Email:    u.Email,
-			Verified: u.Verified,
-			Primary:  true,
-		}},
-	}, nil
+
+		// To be deprecated
+		AvatarURL:  avatarURL,
+		FullName:   u.Name,
+		ProviderId: u.ID,
+	}
+
+	return data, nil
 }

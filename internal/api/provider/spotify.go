@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -74,8 +73,15 @@ func (g spotifyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 		return nil, err
 	}
 
-	if u.Email == "" {
-		return nil, errors.New("unable to find email with Spotify provider")
+	data := &UserProvidedData{}
+	if u.Email != "" {
+		data.Emails = []Email{{
+			Email: u.Email,
+			// Spotify dosen't provide data on whether the user's email is verified.
+			// https://developer.spotify.com/documentation/web-api/reference/get-current-users-profile
+			Verified: false,
+			Primary:  true,
+		}}
 	}
 
 	var avatarURL string
@@ -84,26 +90,16 @@ func (g spotifyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 		avatarURL = u.Avatars[0].Url
 	}
 
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:  g.APIPath,
-			Subject: u.ID,
-			Name:    u.DisplayName,
-			Picture: avatarURL,
-			Email:   u.Email,
-			// Spotify dosen't provide data on whether the user's email is verified.
-			// https://developer.spotify.com/documentation/web-api/reference/get-current-users-profile
-			EmailVerified: false,
+	data.Metadata = &Claims{
+		Issuer:  g.APIPath,
+		Subject: u.ID,
+		Name:    u.DisplayName,
+		Picture: avatarURL,
 
-			// To be deprecated
-			AvatarURL:  avatarURL,
-			FullName:   u.DisplayName,
-			ProviderId: u.ID,
-		},
-		Emails: []Email{{
-			Email:    u.Email,
-			Verified: false,
-			Primary:  true,
-		}},
-	}, nil
+		// To be deprecated
+		AvatarURL:  avatarURL,
+		FullName:   u.DisplayName,
+		ProviderId: u.ID,
+	}
+	return data, nil
 }

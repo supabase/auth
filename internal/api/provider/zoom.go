@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -62,38 +61,31 @@ func (g zoomProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*User
 		return nil, err
 	}
 
-	if u.Email == "" {
-		return nil, errors.New("unable to find email with Zoom provider")
+	data := &UserProvidedData{}
+	if u.Email != "" {
+		email := Email{}
+		email.Email = u.Email
+		email.Primary = true
+		// A login_type of "100" refers to email-based logins, not oauth.
+		// A user is verified (type 1) only if they received an email when their profile was created and confirmed the link.
+		// A zoom user will only be sent an email confirmation link if they signed up using their zoom work email and not oauth.
+		// See: https://devforum.zoom.us/t/how-to-determine-if-a-zoom-user-actually-owns-their-email-address/44430
+		if u.LoginType != "100" || u.EmailVerified != 0 {
+			email.Verified = true
+		}
+		data.Emails = []Email{email}
 	}
 
-	verified := true
+	data.Metadata = &Claims{
+		Issuer:  g.APIPath,
+		Subject: u.ID,
+		Name:    strings.TrimSpace(u.FirstName + " " + u.LastName),
+		Picture: u.AvatarURL,
 
-	// A login_type of "100" refers to email-based logins, not oauth.
-	// A user is verified (type 1) only if they received an email when their profile was created and confirmed the link.
-	// A zoom user will only be sent an email confirmation link if they signed up using their zoom work email and not oauth.
-	// See: https://devforum.zoom.us/t/how-to-determine-if-a-zoom-user-actually-owns-their-email-address/44430
-	if u.LoginType == "100" && u.EmailVerified == 0 {
-		verified = false
+		// To be deprecated
+		AvatarURL:  u.AvatarURL,
+		FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
+		ProviderId: u.ID,
 	}
-
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        g.APIPath,
-			Subject:       u.ID,
-			Name:          strings.TrimSpace(u.FirstName + " " + u.LastName),
-			Picture:       u.AvatarURL,
-			Email:         u.Email,
-			EmailVerified: verified,
-
-			// To be deprecated
-			AvatarURL:  u.AvatarURL,
-			FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
-			ProviderId: u.ID,
-		},
-		Emails: []Email{{
-			Email:    u.Email,
-			Verified: verified,
-			Primary:  true,
-		}},
-	}, nil
+	return data, nil
 }

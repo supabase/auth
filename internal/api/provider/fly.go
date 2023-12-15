@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -76,30 +75,29 @@ func (p flyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserP
 		return nil, err
 	}
 
-	if u.Email == "" {
-		return nil, errors.New("unable to find email with Fly provider")
-	}
-
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        p.APIPath,
-			Subject:       u.UserID,
-			FullName:      u.UserName,
-			Email:         u.Email,
-			EmailVerified: true,
-			ProviderId:    u.UserID,
-			CustomClaims: map[string]interface{}{
-				"resource_owner_id": u.ResourceOwnerID,
-				"organizations":     u.Organizations,
-				"application":       u.Application,
-				"scope":             u.Scope,
-				"created_at":        u.CreatedAt,
-			},
-		},
-		Emails: []Email{{
+	data := &UserProvidedData{}
+	if u.Email != "" {
+		data.Emails = []Email{{
 			Email:    u.Email,
 			Verified: true,
 			Primary:  true,
-		}},
-	}, nil
+		}}
+	}
+
+	data.Metadata = &Claims{
+		Issuer:        p.APIPath,
+		Subject:       u.UserID,
+		FullName:      u.UserName,
+		Email:         u.Email,
+		EmailVerified: true,
+		ProviderId:    u.UserID,
+		CustomClaims: map[string]interface{}{
+			"resource_owner_id": u.ResourceOwnerID,
+			"organizations":     u.Organizations,
+			"application":       u.Application,
+			"scope":             u.Scope,
+			"created_at":        u.CreatedAt,
+		},
+	}
+	return data, nil
 }

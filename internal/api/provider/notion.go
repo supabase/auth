@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -98,28 +97,25 @@ func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 		return nil, err
 	}
 
-	if u.Bot.Owner.User.Person.Email == "" {
-		return nil, errors.New("unable to find email with notion provider")
-	}
-
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        g.APIPath,
-			Subject:       u.Bot.Owner.User.ID,
-			Name:          u.Bot.Owner.User.Name,
-			Picture:       u.Bot.Owner.User.AvatarURL,
-			Email:         u.Bot.Owner.User.Person.Email,
-			EmailVerified: true, // Notion dosen't provide data on if email is verified.
-
-			// To be deprecated
-			AvatarURL:  u.Bot.Owner.User.AvatarURL,
-			FullName:   u.Bot.Owner.User.Name,
-			ProviderId: u.Bot.Owner.User.ID,
-		},
-		Emails: []Email{{
+	data := &UserProvidedData{}
+	if u.Bot.Owner.User.Person.Email != "" {
+		data.Emails = []Email{{
 			Email:    u.Bot.Owner.User.Person.Email,
 			Verified: true, // Notion dosen't provide data on if email is verified.
 			Primary:  true,
-		}},
-	}, nil
+		}}
+	}
+
+	data.Metadata = &Claims{
+		Issuer:  g.APIPath,
+		Subject: u.Bot.Owner.User.ID,
+		Name:    u.Bot.Owner.User.Name,
+		Picture: u.Bot.Owner.User.AvatarURL,
+
+		// To be deprecated
+		AvatarURL:  u.Bot.Owner.User.AvatarURL,
+		FullName:   u.Bot.Owner.User.Name,
+		ProviderId: u.Bot.Owner.User.ID,
+	}
+	return data, nil
 }
