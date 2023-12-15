@@ -12,7 +12,7 @@ import (
 const (
 	notionUser           string = `{"bot":{"owner":{"user":{"id":"notionTestId","name":"Notion Test","avatar_url":"http://example.com/avatar","person":{"email":"notion@example.com"},"verified_email":true}}}}`
 	notionUserWrongEmail string = `{"bot":{"owner":{"user":{"id":"notionTestId","name":"Notion Test","avatar_url":"http://example.com/avatar","person":{"email":"other@example.com"},"verified_email":true}}}}`
-	notionUserNoEmail    string = `{"bot":{"owner":{"user":{"id":"notionTestId","name":"Notion Test","avatar_url":"http://example.com/avatar","verified_email":true}}}}}`
+	notionUserNoEmail    string = `{"bot":{"owner":{"user":{"id":"notionTestId","name":"Notion Test","avatar_url":"http://example.com/avatar","verified_email":true}}}}`
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalNotion() {
