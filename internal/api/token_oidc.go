@@ -138,6 +138,18 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return oauthError("invalid request", "Bad ID token").WithInternalError(err)
 	}
 
+	userData.Metadata.EmailVerified = false
+	for _, email := range userData.Emails {
+		if email.Primary {
+			userData.Metadata.Email = email.Email
+			userData.Metadata.EmailVerified = email.Verified
+			break
+		} else {
+			userData.Metadata.Email = email.Email
+			userData.Metadata.EmailVerified = email.Verified
+		}
+	}
+
 	if idToken.Subject == "" {
 		return oauthError("invalid request", "Missing sub claim in id_token")
 	}

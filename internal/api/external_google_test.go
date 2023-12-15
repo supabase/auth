@@ -15,7 +15,7 @@ import (
 const (
 	googleUser           string = `{"id":"googleTestId","name":"Google Test","picture":"http://example.com/avatar","email":"google@example.com","verified_email":true}}`
 	googleUserWrongEmail string = `{"id":"googleTestId","name":"Google Test","picture":"http://example.com/avatar","email":"other@example.com","verified_email":true}}`
-	googleUserNoEmail    string = `{"id":"googleTestId","name":"Google Test","picture":"http://example.com/avatar","verified_email":true}}`
+	googleUserNoEmail    string = `{"id":"googleTestId","name":"Google Test","picture":"http://example.com/avatar","verified_email":false}}`
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalGoogle() {

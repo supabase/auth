@@ -63,25 +63,33 @@ func KakaoTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int
 				}
 			}
 
-			if email == nil {
-				w.WriteHeader(400)
-				return
-			}
-
 			w.Header().Add("Content-Type", "application/json")
-			fmt.Fprintf(w, `
-				{
-					"id":123, 
-					"kakao_account": {
-						"profile": {
-							"nickname":"Kakao Test",
-							"profile_image_url":"http://example.com/avatar"
-						},
-						"email": "%v",
-						"is_email_valid": %v,
-						"is_email_verified": %v
-					}
-				}`, email.Email, email.Verified, email.Verified)
+			if email != nil {
+				fmt.Fprintf(w, `
+					{
+						"id":123, 
+						"kakao_account": {
+							"profile": {
+								"nickname":"Kakao Test",
+								"profile_image_url":"http://example.com/avatar"
+							},
+							"email": "%v",
+							"is_email_valid": %v,
+							"is_email_verified": %v
+						}
+					}`, email.Email, email.Verified, email.Verified)
+			} else {
+				fmt.Fprint(w, `
+					{
+						"id":123, 
+						"kakao_account": {
+							"profile": {
+								"nickname":"Kakao Test",
+								"profile_image_url":"http://example.com/avatar"
+							}
+						}
+					}`)
+			}
 		default:
 			w.WriteHeader(500)
 			ts.Fail("unknown kakao oauth call %s", r.URL.Path)

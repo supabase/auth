@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -72,27 +71,26 @@ func (p figmaProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 		return nil, err
 	}
 
-	if u.Email == "" {
-		return nil, errors.New("unable to find email with Figma provider")
-	}
-
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        p.APIHost,
-			Subject:       u.ID,
-			Name:          u.Name,
-			Email:         u.Email,
-			EmailVerified: true,
-
-			// To be deprecated
-			AvatarURL:  u.AvatarURL,
-			FullName:   u.Name,
-			ProviderId: u.ID,
-		},
-		Emails: []Email{{
+	data := &UserProvidedData{}
+	if u.Email != "" {
+		data.Emails = []Email{{
 			Email:    u.Email,
 			Verified: true,
 			Primary:  true,
-		}},
-	}, nil
+		}}
+	}
+
+	data.Metadata = &Claims{
+		Issuer:        p.APIHost,
+		Subject:       u.ID,
+		Name:          u.Name,
+		Email:         u.Email,
+		EmailVerified: true,
+
+		// To be deprecated
+		AvatarURL:  u.AvatarURL,
+		FullName:   u.Name,
+		ProviderId: u.ID,
+	}
+	return data, nil
 }

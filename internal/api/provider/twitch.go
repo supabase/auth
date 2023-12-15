@@ -120,38 +120,34 @@ func (t twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 
 	user := u.Data[0]
 
-	if user.Email == "" {
-		return nil, errors.New("unable to find email with twitch provider")
-	}
-
-	data := &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        t.APIHost,
-			Subject:       user.ID,
-			Picture:       user.ProfileImageURL,
-			Name:          user.Login,
-			NickName:      user.DisplayName,
-			Email:         user.Email,
-			EmailVerified: true,
-			CustomClaims: map[string]interface{}{
-				"broadcaster_type":  user.BroadcasterType,
-				"description":       user.Description,
-				"type":              user.Type,
-				"offline_image_url": user.OfflineImageURL,
-				"view_count":        user.ViewCount,
-			},
-
-			// To be deprecated
-			Slug:       user.DisplayName,
-			AvatarURL:  user.ProfileImageURL,
-			FullName:   user.Login,
-			ProviderId: user.ID,
-		},
-		Emails: []Email{{
+	data := &UserProvidedData{}
+	if user.Email != "" {
+		data.Emails = []Email{{
 			Email:    user.Email,
 			Verified: true,
 			Primary:  true,
-		}},
+		}}
+	}
+
+	data.Metadata = &Claims{
+		Issuer:   t.APIHost,
+		Subject:  user.ID,
+		Picture:  user.ProfileImageURL,
+		Name:     user.Login,
+		NickName: user.DisplayName,
+		CustomClaims: map[string]interface{}{
+			"broadcaster_type":  user.BroadcasterType,
+			"description":       user.Description,
+			"type":              user.Type,
+			"offline_image_url": user.OfflineImageURL,
+			"view_count":        user.ViewCount,
+		},
+
+		// To be deprecated
+		Slug:       user.DisplayName,
+		AvatarURL:  user.ProfileImageURL,
+		FullName:   user.Login,
+		ProviderId: user.ID,
 	}
 
 	return data, nil

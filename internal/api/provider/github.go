@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"strconv"
 	"strings"
 
@@ -105,15 +104,6 @@ func (g githubProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 		if e.Email != "" {
 			data.Emails = append(data.Emails, Email{Email: e.Email, Verified: e.Verified, Primary: e.Primary})
 		}
-
-		if e.Primary {
-			data.Metadata.Email = e.Email
-			data.Metadata.EmailVerified = e.Verified
-		}
-	}
-
-	if len(data.Emails) <= 0 {
-		return nil, errors.New("unable to find email with GitHub provider")
 	}
 
 	return data, nil
