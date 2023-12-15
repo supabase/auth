@@ -50,10 +50,17 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		issuer = provider.IssuerGoogle
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Google.ClientID...)
 
-	case p.Provider == "azure" || p.Issuer == provider.IssuerAzureCommon || p.Issuer == provider.IssuerAzureOrganizations:
+	case p.Provider == "azure" || provider.IsAzureIssuer(p.Issuer):
+		issuer = p.Issuer
+		if issuer == "" || !provider.IsAzureIssuer(issuer) {
+			detectedIssuer, err := provider.DetectAzureIDTokenIssuer(ctx, p.IdToken)
+			if err != nil {
+				return nil, nil, "", nil, badRequestError("Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
+			}
+			issuer = detectedIssuer
+		}
 		cfg = &config.External.Azure
 		providerType = "azure"
-		issuer = p.Issuer
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Azure.ClientID...)
 
 	case p.Provider == "facebook" || p.Issuer == provider.IssuerFacebook:
