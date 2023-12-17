@@ -104,6 +104,7 @@ type AccessTokenClaims struct {
 	AppMetaData                   map[string]interface{} `json:"app_metadata"`
 	UserMetaData                  map[string]interface{} `json:"user_metadata"`
 	Role                          string                 `json:"role"`
+	AtLeastOneVerifiedFactor      bool                   `json:"has_factor,omitempty"`
 	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
 	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
