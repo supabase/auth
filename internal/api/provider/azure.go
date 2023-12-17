@@ -90,7 +90,7 @@ func (g azureProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 
-func (g azureProvider) detectIDTokenIssuer(ctx context.Context, idToken string) (string, error) {
+func DetectAzureIDTokenIssuer(ctx context.Context, idToken string) (string, error) {
 	var payload struct {
 		Issuer string `json:"iss"`
 	}
@@ -116,7 +116,7 @@ func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 	idToken := tok.Extra("id_token")
 
 	if idToken != nil {
-		issuer, err := g.detectIDTokenIssuer(ctx, idToken.(string))
+		issuer, err := DetectAzureIDTokenIssuer(ctx, idToken.(string))
 		if err != nil {
 			return nil, err
 		}

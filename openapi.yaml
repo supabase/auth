@@ -119,10 +119,14 @@ paths:
                   enum:
                     - google
                     - apple
+                    - azure
+                    - facebook
+                    - keycloak
                 client_id:
                   type: string
                 issuer:
                   type: string
+                  description: If `provider` is `azure` then you can specify any Azure OIDC issuer string here, which will be used for verification.
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
                 auth_code:
