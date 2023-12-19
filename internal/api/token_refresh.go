@@ -219,6 +219,10 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 			tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, issuedToken.SessionId, models.TokenRefresh)
 			if terr != nil {
+				httpErr, ok := terr.(*HTTPError)
+				if ok {
+					return httpErr
+				}
 				return internalServerError("error generating jwt token").WithInternalError(terr)
 			}
 
