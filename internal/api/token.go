@@ -468,8 +468,11 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		}
 
 		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, &sessionId, models.TOTPSignIn)
-
 		if terr != nil {
+			httpErr, ok := terr.(*HTTPError)
+			if ok {
+				return httpErr
+			}
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
 		return nil
