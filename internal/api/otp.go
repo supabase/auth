@@ -149,7 +149,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	if isNewUser {
 		// User either doesn't exist or hasn't completed the signup process.
 		// Sign them up with temporary password.
-		password, err := password.Generate(64, 10, 0, false, true)
+		password, err := password.Generate(64, 10, 1, false, true)
 		if err != nil {
 			internalServerError("error creating user").WithInternalError(err)
 		}
