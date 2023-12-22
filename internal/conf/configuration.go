@@ -51,6 +51,9 @@ type OAuthProviderConfiguration struct {
 	ApiURL         string   `json:"api_url" split_words:"true"`
 	Enabled        bool     `json:"enabled"`
 	SkipNonceCheck bool     `json:"skip_nonce_check" split_words:"true"`
+
+	// AssumEmailIsVerified is only used in the Spotify provider for now.
+	AssumeEmailIsVerified *bool `json:"assume_email_is_verified" split_words:"true"`
 }
 
 type EmailProviderConfiguration struct {

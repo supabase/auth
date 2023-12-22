@@ -73,13 +73,18 @@ func (g spotifyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 		return nil, err
 	}
 
+	// Spotify dosen't provide data on whether the user's email is verified.
+	// https://developer.spotify.com/documentation/web-api/reference/get-current-users-profile
+	emailVerified := false
+	if g.Config.AssumeEmailIsVerified != nil {
+		emailVerified = *g.Config.AssumeEmailIsVerified
+	}
+
 	data := &UserProvidedData{}
 	if u.Email != "" {
 		data.Emails = []Email{{
-			Email: u.Email,
-			// Spotify dosen't provide data on whether the user's email is verified.
-			// https://developer.spotify.com/documentation/web-api/reference/get-current-users-profile
-			Verified: false,
+			Email:    u.Email,
+			Verified: emailVerified,
 			Primary:  true,
 		}}
 	}
@@ -91,10 +96,11 @@ func (g spotifyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 	}
 
 	data.Metadata = &Claims{
-		Issuer:  g.APIPath,
-		Subject: u.ID,
-		Name:    u.DisplayName,
-		Picture: avatarURL,
+		Issuer:        g.APIPath,
+		Subject:       u.ID,
+		Name:          u.DisplayName,
+		Picture:       avatarURL,
+		EmailVerified: emailVerified,
 
 		// To be deprecated
 		AvatarURL:  avatarURL,
