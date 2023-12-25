@@ -384,6 +384,40 @@ func (ts *AdminTestSuite) TestAdminUserGet() {
 	assert.Equal(ts.T(), "Test Get User", md["full_name"])
 }
 
+// TestAdminUsersGetByEmailIdentities tests API /admin/users/email/{email} route (GET)
+func (ts *AdminTestSuite) TestAdminUsersGetByEmailIdentities() {
+	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test Get User"})
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	identity, err := models.NewIdentity(u, "email", map[string]interface{}{
+		"sub":   u.ID.String(),
+		"email": u.GetEmail(),
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(identity))
+
+	// Setup request
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/admin/users/email/%s", u.GetEmail()), nil)
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	
+	data :=  []*models.User{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+	require.Len(ts.T(), data, 1)
+	assert.Equal(ts.T(), "test1@example.com", data[0].GetEmail())
+}
+
 // TestAdminUserUpdate tests API /admin/user route (UPDATE)
 func (ts *AdminTestSuite) TestAdminUserUpdate() {
 	u, err := models.NewUser("12345678", "test1@example.com", "test", ts.Config.JWT.Aud, nil)
