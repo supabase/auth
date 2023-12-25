@@ -644,12 +644,15 @@ func FindUsersByEmailIdentities(tx *storage.Connection, email string) ([]*User, 
         return nil, err
     }
 
+	if len(identities) == 0 {
+		return make([]*User, 0), nil
+	}
+
     userIDs := make([]uuid.UUID, len(identities))
     for i, identity := range identities {
         userIDs[i] = identity.UserID
     }
 
-    // Fetch all users with the provided IDs
     users, err := FindUsersByIDs(tx, userIDs)
     if err != nil {
         return nil, err
