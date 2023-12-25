@@ -351,6 +351,7 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 
 	u.ID = uuid.Must(uuid.NewV4())
 
+	u.Role = ""
 	u.CreatedAt, u.UpdatedAt, u.ConfirmationSentAt = now, now, &now
 	u.LastSignInAt, u.ConfirmedAt, u.EmailConfirmedAt, u.PhoneConfirmedAt = nil, nil, nil, nil
 	u.Identities = make([]models.Identity, 0)
