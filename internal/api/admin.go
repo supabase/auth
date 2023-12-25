@@ -136,6 +136,32 @@ func (a *API) adminUserGet(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, user)
 }
 
+// adminUsersGetByEmail returns information about users with identities of a given email
+func (a *API) adminUsersGetByEmailIdentities(w http.ResponseWriter, r *http.Request) error {
+    ctx := r.Context()
+    db := a.db.WithContext(ctx)
+
+    email := chi.URLParam(r, "email")
+
+    // Validate the email
+    email, err := validateEmail(email)
+    if err != nil {
+        return badRequestError("Invalid email: " + err.Error())
+    }
+
+    observability.LogEntrySetField(r, "email", email)
+
+    users, err := models.FindUsersByEmailIdentities(db, email)
+    if err != nil {
+        if models.IsNotFoundError(err) {
+            return notFoundError("User not found")
+        }
+        return internalServerError("Database error loading user").WithInternalError(err)
+    }
+
+    return sendJSON(w, http.StatusOK, users)
+}
+
 // adminUserUpdate updates a single user object
 func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()

@@ -233,6 +233,10 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			r.Route("/users", func(r *router) {
 				r.Get("/", api.adminUsers)
 				r.Post("/", api.adminUserCreate)
+				
+				r.Route("/email", func(r *router) {
+					r.Get("/{email}", api.adminUsersGetByEmailIdentities)
+				})
 
 				r.Route("/{user_id}", func(r *router) {
 					r.Use(api.loadUser)

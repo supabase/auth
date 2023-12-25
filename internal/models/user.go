@@ -488,6 +488,21 @@ func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
 	return findUser(tx, "instance_id = ? and id = ?", uuid.Nil, id)
 }
 
+// FindUsersByIDs finds users matching the provided IDs.
+func FindUsersByIDs(tx *storage.Connection, ids []uuid.UUID) ([]*User, error) {
+    var users []*User
+
+    err := tx.Eager().Q().Where("instance_id = ?", uuid.Nil).Where("id in (?)", ids).All(&users)
+    if err != nil {
+        if errors.Cause(err) == sql.ErrNoRows {
+            return nil, UserNotFoundError{}
+        }
+        return nil, errors.Wrap(err, "error finding users")
+    }
+
+    return users, nil
+}
+
 // FindUserByRecoveryToken finds a user with the matching recovery token.
 func FindUserByRecoveryToken(tx *storage.Connection, token string) (*User, error) {
 	return findUser(tx, "recovery_token = ? and is_sso_user = false", token)
@@ -618,6 +633,29 @@ func FindUserForEmailChange(tx *storage.Connection, email, token, aud string, se
 // FindUserByPhoneChangeAndAudience finds a user with the matching phone change and audience.
 func FindUserByPhoneChangeAndAudience(tx *storage.Connection, phone, aud string) (*User, error) {
 	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ? and is_sso_user = false", uuid.Nil, phone, aud)
+}
+
+// FindUsersByEmailIdentities returns all users associated with an email in the identities table.
+func FindUsersByEmailIdentities(tx *storage.Connection, email string) ([]*User, error) {
+    var identities []*Identity
+
+    err := tx.Eager().Q().Where("email = ?", strings.ToLower(email)).All(&identities)
+    if err != nil {
+        return nil, err
+    }
+
+    userIDs := make([]uuid.UUID, len(identities))
+    for i, identity := range identities {
+        userIDs[i] = identity.UserID
+    }
+
+    // Fetch all users with the provided IDs
+    users, err := FindUsersByIDs(tx, userIDs)
+    if err != nil {
+        return nil, err
+    }
+
+    return users, nil
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and audience.
