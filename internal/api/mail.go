@@ -74,7 +74,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		if models.IsNotFoundError(err) {
 			if params.Type == magicLinkVerification {
 				params.Type = signupVerification
-				params.Password, err = password.Generate(64, 10, 0, false, true)
+				params.Password, err = password.Generate(64, 10, 1, false, true)
 				if err != nil {
 					return internalServerError("error creating user").WithInternalError(err)
 				}
