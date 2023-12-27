@@ -72,6 +72,6 @@ func (a *API) checkPasswordLength(password string) error {
 	if len(password) > MaxPasswordLength {
 		return unprocessableEntityError(fmt.Sprintf("Password cannot be longer than %d characters", MaxPasswordLength))
 	}
-	
+
 	return nil
 }
