@@ -18,9 +18,6 @@ import (
 	"github.com/supabase/auth/internal/utilities"
 )
 
-// BCrypt hashed passwords have a 72 character limit
-const MaxPasswordLength = 72
-
 // SignupParams are the parameters the Signup endpoint accepts
 type SignupParams struct {
 	Email               string                 `json:"email"`
