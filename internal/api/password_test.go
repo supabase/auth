@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -104,4 +106,35 @@ func TestPasswordStrengthChecks(t *testing.T) {
 			require.Equal(t, err.(*WeakPasswordError).Reasons, example.Reasons, "Example %d failed with wrong reasons", i)
 		}
 	}
+}
+
+func TestCheckPasswordLength(t *testing.T) {
+    examples := []struct {
+        Password string
+        Error    error
+    }{
+        {
+            Password: strings.Repeat("a", MaxPasswordLength - 1),
+            Error:    nil,
+        },
+        {
+            Password: strings.Repeat("a", MaxPasswordLength),
+            Error:    nil,
+        },
+        {
+            Password: strings.Repeat("a", MaxPasswordLength + 1),
+            Error:    unprocessableEntityError(fmt.Sprintf("Password cannot be longer than %d characters", MaxPasswordLength)),
+        },
+    }
+
+    for i, example := range examples {
+        api := &API{}
+
+        err := api.checkPasswordLength(example.Password)
+        if example.Error == nil {
+            require.NoError(t, err, "Example %d failed with error", i)
+        } else {
+            require.Equal(t, example.Error, err, "Example %d failed with wrong error", i)
+        }
+    }
 }
