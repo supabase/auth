@@ -244,6 +244,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 							r.Put("/", api.adminUserUpdateFactor)
 						})
 					})
+					r.Get("/token", api.AdminUserCreateCustomSignInToken)
 
 					r.Get("/", api.adminUserGet)
 					r.Put("/", api.adminUserUpdate)
