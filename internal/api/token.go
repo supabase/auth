@@ -11,6 +11,7 @@ import (
 
 	"fmt"
 
+	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
 	"github.com/xeipuuv/gojsonschema"
@@ -74,6 +75,11 @@ type PKCEGrantParams struct {
 	CodeVerifier string `json:"code_verifier"`
 }
 
+// IdGrantParams are the parameters the adminUserCreateCustomSignInToken method accepts
+type IdGrantParams struct {
+	UserID uuid.UUID `json:"user_id"`
+}
+
 const useCookieHeader = "x-use-cookie"
 const InvalidLoginMessage = "Invalid login credentials"
 
@@ -93,6 +99,70 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	default:
 		return oauthError("unsupported_grant_type", "")
 	}
+}
+
+func (a *API) AdminUserCreateCustomSignInToken(w http.ResponseWriter, r *http.Request) error {
+
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+	fmt.Println("HELLOOOO")
+
+	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+	config := a.config
+
+	if userID.IsNil() {
+		return unprocessableEntityError("ID should be provided on login.")
+	}
+	var user *models.User
+	var grantParams models.GrantParams
+	var provider string
+
+	grantParams.FillGrantParams(r)
+
+	user, err = models.FindUserByID(db, userID)
+
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return oauthError("invalid_grant", InvalidLoginMessage)
+		}
+		return internalServerError("Database error querying schema").WithInternalError(err)
+	}
+
+	if user.IsBanned() {
+		return oauthError("invalid_grant", InvalidLoginMessage)
+	}
+
+	var token *AccessTokenResponse
+	err = db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		if terr = models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+			"provider": provider,
+		}); terr != nil {
+			return terr
+		}
+		// if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
+		// 	return terr
+		// }
+		fmt.Println("issueRefreshToken**********************************")
+		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
+		if terr != nil {
+			return terr
+		}
+
+		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+			return internalServerError("Failed to set JWT cookie. %s", terr)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	metering.RecordLogin("admin_create_login", user.ID)
+	return sendJSON(w, http.StatusOK, token)
 }
 
 // ResourceOwnerPasswordGrant implements the password grant type flow
