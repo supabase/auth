@@ -38,8 +38,8 @@ func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
 		return unprocessableEntityError("Signup requires a valid password")
 	}
 
-	if len(p.Password) > MaxPasswordLength {
-		return unprocessableEntityError(fmt.Sprintf("Password cannot be longer than %d characters", MaxPasswordLength))
+	if err:= a.checkPasswordLength(p.Password); err != nil {
+		return err
 	}
 
 	if err := a.checkPasswordStrength(ctx, p.Password); err != nil {

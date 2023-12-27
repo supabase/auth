@@ -177,6 +177,10 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	if params.Password != nil {
 		password := *params.Password
 
+		if err:= a.checkPasswordLength(password); err != nil {
+			return err
+		}
+
 		if err := a.checkPasswordStrength(ctx, password); err != nil {
 			return err
 		}
@@ -350,6 +354,10 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			return internalServerError("Error generating password").WithInternalError(err)
 		}
 		params.Password = &password
+	}
+
+	if err := a.checkPasswordLength(*params.Password); err != nil {
+		return err
 	}
 
 	user, err := models.NewUser(params.Phone, params.Email, *params.Password, aud, params.UserMetaData)
