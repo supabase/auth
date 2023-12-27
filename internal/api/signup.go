@@ -18,6 +18,9 @@ import (
 	"github.com/supabase/auth/internal/utilities"
 )
 
+// BCrypt hashed passwords have a 72 character limit
+const MaxPasswordLength = 72
+
 // SignupParams are the parameters the Signup endpoint accepts
 type SignupParams struct {
 	Email               string                 `json:"email"`
@@ -36,6 +39,10 @@ func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
 
 	if p.Password == "" {
 		return unprocessableEntityError("Signup requires a valid password")
+	}
+
+	if len(p.Password) > MaxPasswordLength {
+		return unprocessableEntityError(fmt.Sprintf("Password cannot be longer than %d characters", MaxPasswordLength))
 	}
 
 	if err := a.checkPasswordStrength(ctx, p.Password); err != nil {
