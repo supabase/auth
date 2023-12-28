@@ -38,10 +38,6 @@ func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
 		return unprocessableEntityError("Signup requires a valid password")
 	}
 
-	if err:= a.checkPasswordLength(p.Password); err != nil {
-		return err
-	}
-
 	if err := a.checkPasswordStrength(ctx, p.Password); err != nil {
 		return err
 	}

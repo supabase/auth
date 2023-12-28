@@ -34,6 +34,11 @@ func (a *API) checkPasswordStrength(ctx context.Context, password string) error 
 		messages = append(messages, fmt.Sprintf("Password should be at least %d characters.", config.Password.MinLength))
 	}
 
+	if len(password) > MaxPasswordLength {
+		reasons = append(reasons, "length")
+		messages = append(messages, fmt.Sprintf("Password cannot be longer than %d characters", MaxPasswordLength))
+	}
+
 	for _, characterSet := range config.Password.RequiredCharacters {
 		if characterSet != "" && !strings.ContainsAny(password, characterSet) {
 			reasons = append(reasons, "characters")
@@ -63,14 +68,6 @@ func (a *API) checkPasswordStrength(ctx context.Context, password string) error 
 			Message: strings.Join(messages, " "),
 			Reasons: reasons,
 		}
-	}
-
-	return nil
-}
-
-func (a *API) checkPasswordLength(password string) error {
-	if len(password) > MaxPasswordLength {
-		return unprocessableEntityError(fmt.Sprintf("Password cannot be longer than %d characters", MaxPasswordLength))
 	}
 
 	return nil

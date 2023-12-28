@@ -177,10 +177,6 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	if params.Password != nil {
 		password := *params.Password
 
-		if err:= a.checkPasswordLength(password); err != nil {
-			return err
-		}
-
 		if err := a.checkPasswordStrength(ctx, password); err != nil {
 			return err
 		}
@@ -356,7 +352,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		params.Password = &password
 	}
 
-	if err := a.checkPasswordLength(*params.Password); err != nil {
+	if err := a.checkPasswordStrength(ctx, *params.Password); err != nil {
 		return err
 	}
 
