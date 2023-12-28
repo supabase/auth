@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
-
-	"fmt"
 
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
@@ -105,7 +104,6 @@ func (a *API) AdminUserCreateCustomSignInToken(w http.ResponseWriter, r *http.Re
 
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
-	fmt.Println("HELLOOOO")
 
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
@@ -143,10 +141,9 @@ func (a *API) AdminUserCreateCustomSignInToken(w http.ResponseWriter, r *http.Re
 		}); terr != nil {
 			return terr
 		}
-		// if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
-		// 	return terr
-		// }
-		fmt.Println("issueRefreshToken**********************************")
+		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
+			return terr
+		}
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
 		if terr != nil {
 			return terr
