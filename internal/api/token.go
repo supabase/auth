@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
+
+	"fmt"
 
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
@@ -72,11 +73,6 @@ type PasswordGrantParams struct {
 type PKCEGrantParams struct {
 	AuthCode     string `json:"auth_code"`
 	CodeVerifier string `json:"code_verifier"`
-}
-
-// IdGrantParams are the parameters the adminUserCreateCustomSignInToken method accepts
-type IdGrantParams struct {
-	UserID uuid.UUID `json:"user_id"`
 }
 
 const useCookieHeader = "x-use-cookie"
