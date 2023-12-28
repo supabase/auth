@@ -87,7 +87,7 @@ func TestPasswordStrengthChecks(t *testing.T) {
 			Reasons:  nil,
 		},
 		{
-			Password: strings.Repeat("a", MaxPasswordLength + 1),
+			Password: strings.Repeat("a", MaxPasswordLength+1),
 			Reasons: []string{
 				"length",
 			},
