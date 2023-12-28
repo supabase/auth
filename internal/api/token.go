@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"fmt"
-
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
@@ -138,10 +136,9 @@ func (a *API) AdminUserCreateCustomSignInToken(w http.ResponseWriter, r *http.Re
 		}); terr != nil {
 			return terr
 		}
-		// if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
-		// 	return terr
-		// }
-		fmt.Println("issueRefreshToken**********************************")
+		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
+			return terr
+		}
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
 		if terr != nil {
 			return terr
