@@ -3,6 +3,7 @@ package crypto
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/supabase/auth/internal/observability"
 	"go.opentelemetry.io/otel/attribute"
@@ -21,6 +22,9 @@ const (
 	// hashing cost for any hashing algorithm,
 	// useful for tests only.
 	QuickHashCost HashCost = iota
+
+	// BCrypt hashed passwords have a 72 character limit
+	MaxPasswordLength = 72
 )
 
 // PasswordHashCost is the current pasword hashing cost
@@ -72,6 +76,10 @@ func CompareHashAndPassword(ctx context.Context, hash, password string) error {
 // if the algorithm supports it.
 func GenerateFromPassword(ctx context.Context, password string) (string, error) {
 	var hashCost int
+
+	if len(password) > MaxPasswordLength {
+		return "", fmt.Errorf("password cannot be longer than %d characters", MaxPasswordLength)
+	}
 
 	switch PasswordHashCost {
 	case QuickHashCost:
