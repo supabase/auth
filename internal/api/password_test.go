@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -85,12 +84,6 @@ func TestPasswordStrengthChecks(t *testing.T) {
 			},
 			Password: "abc123",
 			Reasons:  nil,
-		},
-		{
-			Password: strings.Repeat("a", MaxPasswordLength+1),
-			Reasons: []string{
-				"length",
-			},
 		},
 	}
 

@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -351,10 +350,6 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			return internalServerError("Error generating password").WithInternalError(err)
 		}
 		params.Password = &password
-	}
-
-	if len(*params.Password) > MaxPasswordLength {
-		return unprocessableEntityError(fmt.Sprintf("Password cannot be longer than %d characters", MaxPasswordLength))
 	}
 
 	user, err := models.NewUser(params.Phone, params.Email, *params.Password, aud, params.UserMetaData)

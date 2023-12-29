@@ -8,9 +8,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// BCrypt hashed passwords have a 72 character limit
-const MaxPasswordLength = 72
-
 // WeakPasswordError encodes an error that a password does not meet strength
 // requirements. It is handled specially in errors.go as it gets transformed to
 // a HTTPError with a special weak_password field that encodes the Reasons
@@ -32,11 +29,6 @@ func (a *API) checkPasswordStrength(ctx context.Context, password string) error 
 	if len(password) < config.Password.MinLength {
 		reasons = append(reasons, "length")
 		messages = append(messages, fmt.Sprintf("Password should be at least %d characters.", config.Password.MinLength))
-	}
-
-	if len(password) > MaxPasswordLength {
-		reasons = append(reasons, "length")
-		messages = append(messages, fmt.Sprintf("Password cannot be longer than %d characters", MaxPasswordLength))
 	}
 
 	for _, characterSet := range config.Password.RequiredCharacters {
