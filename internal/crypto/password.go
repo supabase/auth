@@ -78,7 +78,7 @@ func GenerateFromPassword(ctx context.Context, password string) (string, error) 
 	var hashCost int
 
 	if len(password) > MaxPasswordLength {
-		return "", fmt.Errorf("Password cannot be longer than %d characters", MaxPasswordLength)
+		return "", fmt.Errorf("password cannot be longer than %d characters", MaxPasswordLength)
 	}
 
 	switch PasswordHashCost {
