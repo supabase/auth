@@ -84,25 +84,33 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		issuer = params.Issuer
 	}
 
-	// Read from DB for certainty
 	factors, err := models.FindFactorsByUser(a.db, user)
 	if err != nil {
 		return internalServerError("error validating number of factors in system").WithInternalError(err)
 	}
-
-	if len(factors) >= int(config.MFA.MaxEnrolledFactors) {
-		return forbiddenError("Enrolled factors exceed allowed limit, unenroll to continue")
-	}
-
+	factorCount := len(factors)
 	numVerifiedFactors := 0
+
+	// Cleanup inactive  factors
 	for _, factor := range factors {
+		if factor.IsExpired(config.MFA.FactorExpiryDuration) {
+			if err := a.db.Destroy(factor); err != nil {
+				return internalServerError("error deleting factors").WithInternalError(err)
+			}
+			// We adjust length of factors as destroying it in the DB doesn't remove it from the array
+			factorCount -= 1
+		}
 		if factor.IsVerified() {
 			numVerifiedFactors += 1
 		}
 	}
 
+	if factorCount >= int(config.MFA.MaxEnrolledFactors) {
+		return forbiddenError("Enrolled factors exceed allowed limit, unenroll to continue")
+	}
+
 	if numVerifiedFactors >= config.MFA.MaxVerifiedFactors {
-		return forbiddenError("Maximum number of enrolled factors reached, unenroll to continue")
+		return forbiddenError("Maximum number of verified factors reached, unenroll to continue")
 	}
 
 	if numVerifiedFactors > 0 && !session.IsAAL2() {
@@ -116,6 +124,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return internalServerError(QRCodeGenerationErrorMessage).WithInternalError(err)
 	}
+
 	var buf bytes.Buffer
 	svgData := svg.New(&buf)
 	qrCode, _ := qr.Encode(key.String(), qr.H, qr.Auto)

@@ -144,7 +144,7 @@ func NewFactor(user *User, friendlyName string, factorType string, state FactorS
 // FindFactorsByUser returns all factors belonging to a user ordered by timestamp
 func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	factors := []*Factor{}
-	if err := tx.Q().Where("user_id = ?", user.ID).Order("created_at asc").All(&factors); err != nil {
+	if err := tx.Eager().Q().Where("user_id = ?", user.ID).Order("created_at asc").All(&factors); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return factors, nil
 		}
@@ -216,4 +216,8 @@ func DeleteFactorsByUserId(tx *storage.Connection, userId uuid.UUID) error {
 		return err
 	}
 	return nil
+}
+
+func (f *Factor) IsExpired(validityDuration time.Duration) bool {
+	return !f.IsVerified() && len(f.Challenge) == 0 && f.CreatedAt.Add(validityDuration).Before(time.Now())
 }
