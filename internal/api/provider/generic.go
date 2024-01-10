@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
-	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -16,7 +17,7 @@ import (
 
 type genericProvider struct {
 	*oauth2.Config
-	APIURL          string
+	ApiURL          string
 	UserDataMapping map[string]string
 }
 
@@ -27,10 +28,8 @@ func (p genericProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 func (p genericProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u map[string]interface{}
 
-	// TODO flexible API call based on config
-
 	// Perform http request manually, because we need to vary it based on the provider config
-	req, err := http.NewRequest("GET", p.APIURL, nil)
+	req, err := http.NewRequest("GET", p.ApiURL, nil)
 
 	if err != nil {
 		return nil, err
@@ -63,67 +62,195 @@ func (p genericProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 
 	// Read user data as specified in the JSON mapping
 	mapping := p.UserDataMapping
+
+	email, err := getStringFieldByPath(u, mapping["Email"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	emailVerified, err := getBooleanFieldByPath(u, mapping["EmailVerified"], email != "")
+	if err != nil {
+		return nil, err
+	}
+
+	emailPrimary, err := getBooleanFieldByPath(u, mapping["EmailPrimary"], email != "")
+	if err != nil {
+		return nil, err
+	}
+
+	issuer, err := getStringFieldByPath(u, mapping["Issuer"], p.ApiURL)
+	if err != nil {
+		return nil, err
+	}
+
+	subject, err := getStringFieldByPath(u, mapping["Subject"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	name, err := getStringFieldByPath(u, mapping["Name"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	familyName, err := getStringFieldByPath(u, mapping["FamilyName"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	givenName, err := getStringFieldByPath(u, mapping["GivenName"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	middleName, err := getStringFieldByPath(u, mapping["MiddleName"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	nickName, err := getStringFieldByPath(u, mapping["NickName"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	preferredUsername, err := getStringFieldByPath(u, mapping["PreferredUsername"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	profile, err := getStringFieldByPath(u, mapping["Profile"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	picture, err := getStringFieldByPath(u, mapping["Picture"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	website, err := getStringFieldByPath(u, mapping["Website"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	gender, err := getStringFieldByPath(u, mapping["Gender"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	birthdate, err := getStringFieldByPath(u, mapping["Birthdate"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	zoneInfo, err := getStringFieldByPath(u, mapping["ZoneInfo"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	locale, err := getStringFieldByPath(u, mapping["Locale"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	updatedAt, err := getStringFieldByPath(u, mapping["UpdatedAt"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	phone, err := getStringFieldByPath(u, mapping["Phone"], "")
+	if err != nil {
+		return nil, err
+	}
+
+	phoneVerified, err := getBooleanFieldByPath(u, mapping["PhoneVerified"], phone != "")
+	if err != nil {
+		return nil, err
+	}
+
 	data := &UserProvidedData{
 		Emails: []Email{
 			{
-				Email:    getFieldByPath(u, mapping["Email"], nil).(string),
-				Verified: getFieldByPath(u, mapping["EmailVerified"], true).(bool),
-				Primary:  true,
+				Email:    email,
+				Verified: emailVerified,
+				Primary:  emailPrimary,
 			},
 		},
 		Metadata: &Claims{
-			Issuer:            p.APIURL,
-			Subject:           getFieldByPath(u, mapping["Subject"], nil).(string),
-			Name:              getFieldByPath(u, mapping["Name"], nil).(string),
-			FamilyName:        getFieldByPath(u, mapping["FamilyName"], nil).(string),
-			GivenName:         getFieldByPath(u, mapping["GivenName"], nil).(string),
-			MiddleName:        getFieldByPath(u, mapping["MiddleName"], nil).(string),
-			NickName:          getFieldByPath(u, mapping["NickName"], nil).(string),
-			PreferredUsername: getFieldByPath(u, mapping["PreferredUsername"], nil).(string),
-			Profile:           getFieldByPath(u, mapping["Profile"], nil).(string),
-			Picture:           getFieldByPath(u, mapping["Picture"], nil).(string),
-			Website:           getFieldByPath(u, mapping["Website"], nil).(string),
-			Gender:            getFieldByPath(u, mapping["Gender"], nil).(string),
-			Birthdate:         getFieldByPath(u, mapping["Birthdate"], nil).(string),
-			ZoneInfo:          getFieldByPath(u, mapping["ZoneInfo"], nil).(string),
-			Locale:            getFieldByPath(u, mapping["Locale"], nil).(string),
-			UpdatedAt:         getFieldByPath(u, mapping["UpdatedAt"], nil).(string),
-			Email:             getFieldByPath(u, mapping["Email"], nil).(string),
-			EmailVerified:     getFieldByPath(u, mapping["EmailVerified"], true).(bool),
-			Phone:             getFieldByPath(u, mapping["Email"], nil).(string),
-			PhoneVerified:     getFieldByPath(u, mapping["EmailVerified"], true).(bool),
+			Issuer:            issuer,
+			Subject:           subject,
+			Name:              name,
+			FamilyName:        familyName,
+			GivenName:         givenName,
+			MiddleName:        middleName,
+			NickName:          nickName,
+			PreferredUsername: preferredUsername,
+			Profile:           profile,
+			Picture:           picture,
+			Website:           website,
+			Gender:            gender,
+			Birthdate:         birthdate,
+			ZoneInfo:          zoneInfo,
+			Locale:            locale,
+			UpdatedAt:         updatedAt,
+			Email:             email,
+			EmailVerified:     emailVerified,
+			Phone:             phone,
+			PhoneVerified:     phoneVerified,
 		},
 	}
 
-	// Read all optional claims
-	for key, path := range mapping {
-		value := getFieldByPath(u, path, "")
-		if value == nil {
-			fmt.Printf("Error extracting field %s: %v\n", key, err)
-			continue
-		}
-
-		field := reflect.ValueOf(data.Metadata).Elem().FieldByName(key)
-		if field.IsValid() && field.CanSet() {
-			field.Set(reflect.ValueOf(value))
-		}
-	}
 	return data, nil
 }
 
-func getFieldByPath(obj map[string]interface{}, path string, fallback interface{}) interface{} {
+func getFieldByPath(obj map[string]interface{}, path string, fallback interface{}) (interface{}, error) {
 	value := obj
 
-	for _, field := range strings.Split(path, ".") {
+	pathParts := strings.Split(path, ".")
+	for index, field := range pathParts {
 		fieldValue, ok := value[field]
 		if !ok {
-			return fallback
+			return fallback, nil
 		}
 
-		value, _ = fieldValue.(map[string]interface{})
+		if index == len(pathParts)-1 {
+			return fieldValue, nil
+		}
+
+		value = fieldValue.(map[string]interface{})
 	}
 
-	return value
+	return nil, nil
+}
+
+func getStringFieldByPath(obj map[string]interface{}, path string, fallback string) (string, error) {
+	value, err := getFieldByPath(obj, path, fallback)
+	if err != nil {
+		return "", err
+	}
+	if result, ok := value.(string); ok {
+		return result, nil
+	} else if intValue, ok := value.(int); ok {
+		return strconv.Itoa(intValue), nil
+	} else if floatValue, ok := value.(float64); ok {
+		return strconv.Itoa(int(math.Round(floatValue))), nil
+	} else if value == nil {
+		return "", nil
+	} else {
+		return "", fmt.Errorf("unable to read field as string: %q %q", path, value)
+	}
+}
+
+func getBooleanFieldByPath(obj map[string]interface{}, path string, fallback bool) (bool, error) {
+	value, err := getFieldByPath(obj, path, fallback)
+	if err != nil {
+		return false, err
+	}
+	if result, ok := value.(bool); ok {
+		return result, nil
+	} else {
+		return false, fmt.Errorf("unable to read field as boolean: %q", path)
+	}
 }
 
 // NewGenericProvider creates an OAuth provider according to the config specified by the user
@@ -145,7 +272,7 @@ func NewGenericProvider(ext conf.GenericOAuthProviderConfiguration, scopes strin
 			RedirectURL: ext.RedirectURI,
 			Scopes:      oauthScopes,
 		},
-		APIURL:          ext.URL,
+		ApiURL:          ext.ApiURL,
 		UserDataMapping: ext.UserDataMapping,
 	}, nil
 }
