@@ -134,7 +134,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	factor, err := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, key.Secret())
 	if err != nil {
-		return internalServerError("database error creating factor").WithInternalError(err)
+		return internalServerError("database error creating factor: %s", err).WithInternalError(err)
 	}
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(factor); terr != nil {
