@@ -138,7 +138,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr := tx.Create(factor); terr != nil {
 			pgErr := utilities.NewPostgresError(terr)
 			if pgErr.IsUniqueConstraintViolated("mfa_factors_user_friendly_name_unique") {
-				return internalServerError(fmt.Sprintf("a factor with the friendly name '%s' for this user already exists", factor.FriendlyName))
+				return internalServerError(fmt.Sprintf("a factor with the friendly name %q for this user already exists", factor.FriendlyName))
 			}
 			return terr
 
