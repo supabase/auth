@@ -34,8 +34,8 @@ func NewPostgresError(err error) *PostgresError {
 
 	return nil
 }
-func (pg *PostgresError) IsUniqueConstraintViolation() bool {
-	return pg.Code == "23505"
+func (pg *PostgresError) IsUniqueConstraintViolated(constraintName string) bool {
+	return pg.Code == "23505" && strings.Contains(pg.Message, constraintName)
 }
 
 // isPubliclyAccessiblePostgresError checks if the Postgres error should be
