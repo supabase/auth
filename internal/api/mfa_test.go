@@ -36,6 +36,12 @@ type MFATestSuite struct {
 	TestSession  *models.Session
 }
 
+type ErrorResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"msg"`
+	ErrorID string `json:"error_id"`
+}
+
 func TestMFA(t *testing.T) {
 	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
@@ -119,7 +125,6 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			issuer:       ts.TestDomain,
 			expectedCode: http.StatusBadRequest,
 		},
-
 		{
 			desc:         "TOTP: Factor has friendly name",
 			friendlyName: testFriendlyName,
@@ -157,6 +162,22 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			}
 		})
 	}
+}
+
+func (ts *MFATestSuite) TestDuplicateEnrollsReturnExpectedMessage() {
+	friendlyName := "mary"
+	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, ts.TestUser, nil, models.TOTPSignIn)
+	require.NoError(ts.T(), err)
+	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusOK)
+	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusInternalServerError)
+
+	var errorResponse ErrorResponse
+	err = json.NewDecoder(response.Body).Decode(&errorResponse)
+	require.NoError(ts.T(), err)
+
+	// Convert the response body to a string and check for the expected error message
+	expectedErrorMessage := "a factor with the friendly name 'mary' for this user already exists"
+	require.Contains(ts.T(), errorResponse.Message, expectedErrorMessage)
 
 }
 
