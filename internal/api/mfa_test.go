@@ -648,5 +648,4 @@ func cleanupHook(ts *MFATestSuite, hookName string) {
 	cleanupHookSQL := fmt.Sprintf("drop function if exists %s", hookName)
 	err := ts.API.db.RawQuery(cleanupHookSQL).Exec()
 	require.NoError(ts.T(), err)
-
 }
