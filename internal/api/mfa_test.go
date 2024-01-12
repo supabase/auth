@@ -163,7 +163,7 @@ func (ts *MFATestSuite) TestDuplicateEnrollsReturnExpectedMessage() {
 	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, ts.TestUser, nil, models.TOTPSignIn)
 	require.NoError(ts.T(), err)
 	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusOK)
-	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusInternalServerError)
+	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusBadRequest)
 
 	var errorResponse HTTPError
 	err = json.NewDecoder(response.Body).Decode(&errorResponse)
