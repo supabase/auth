@@ -36,12 +36,6 @@ type MFATestSuite struct {
 	TestSession  *models.Session
 }
 
-type ErrorResponse struct {
-	Code    int    `json:"code"`
-	Message string `json:"msg"`
-	ErrorID string `json:"error_id"`
-}
-
 func TestMFA(t *testing.T) {
 	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
@@ -171,7 +165,7 @@ func (ts *MFATestSuite) TestDuplicateEnrollsReturnExpectedMessage() {
 	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusOK)
 	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusInternalServerError)
 
-	var errorResponse ErrorResponse
+	var errorResponse HTTPError
 	err = json.NewDecoder(response.Body).Decode(&errorResponse)
 	require.NoError(ts.T(), err)
 
