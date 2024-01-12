@@ -124,7 +124,7 @@ func (Factor) TableName() string {
 	return tableName
 }
 
-func NewFactor(user *User, friendlyName string, factorType string, state FactorState, secret string) (*Factor, error) {
+func NewFactor(user *User, friendlyName string, factorType string, state FactorState, secret string) *Factor {
 	id := uuid.Must(uuid.NewV4())
 
 	factor := &Factor{
@@ -135,7 +135,7 @@ func NewFactor(user *User, friendlyName string, factorType string, state FactorS
 		Secret:       secret,
 		FactorType:   factorType,
 	}
-	return factor, nil
+	return factor
 }
 
 // FindFactorsByUser returns all factors belonging to a user ordered by timestamp

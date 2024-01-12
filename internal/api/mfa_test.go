@@ -57,8 +57,7 @@ func (ts *MFATestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 	// Create Factor
-	f, err := models.NewFactor(u, "test_factor", models.TOTP, models.FactorStateUnverified, "secretkey")
-	require.NoError(ts.T(), err, "Error creating test factor model")
+	f := models.NewFactor(u, "test_factor", models.TOTP, models.FactorStateUnverified, "secretkey")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 	// Create corresponding session
 	s, err := models.NewSession()
@@ -120,7 +119,6 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			issuer:       ts.TestDomain,
 			expectedCode: http.StatusBadRequest,
 		},
-
 		{
 			desc:         "TOTP: Factor has friendly name",
 			friendlyName: testFriendlyName,
@@ -158,6 +156,22 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			}
 		})
 	}
+}
+
+func (ts *MFATestSuite) TestDuplicateEnrollsReturnExpectedMessage() {
+	friendlyName := "mary"
+	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, ts.TestUser, nil, models.TOTPSignIn)
+	require.NoError(ts.T(), err)
+	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusOK)
+	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusInternalServerError)
+
+	var errorResponse HTTPError
+	err = json.NewDecoder(response.Body).Decode(&errorResponse)
+	require.NoError(ts.T(), err)
+
+	// Convert the response body to a string and check for the expected error message
+	expectedErrorMessage := fmt.Sprintf("a factor with the friendly name %q for this user likely already exists", friendlyName)
+	require.Contains(ts.T(), errorResponse.Message, expectedErrorMessage)
 
 }
 
@@ -221,8 +235,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", f.ID), &buffer)
 			testIPAddress := utilities.GetIPAddress(req)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-			c, err := models.NewChallenge(f, testIPAddress)
-			require.NoError(ts.T(), err, "Error creating test Challenge model")
+			c := models.NewChallenge(f, testIPAddress)
 			require.NoError(ts.T(), ts.API.db.Create(c), "Error saving new test challenge")
 			if !v.validChallenge {
 				// Set challenge creation so that it has expired in present time.
@@ -650,5 +663,4 @@ func cleanupHook(ts *MFATestSuite, hookName string) {
 	cleanupHookSQL := fmt.Sprintf("drop function if exists %s", hookName)
 	err := ts.API.db.RawQuery(cleanupHookSQL).Exec()
 	require.NoError(ts.T(), err)
-
 }

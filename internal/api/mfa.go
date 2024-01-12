@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -130,13 +131,16 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	svgData.End()
 
-	factor, err := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, key.Secret())
-	if err != nil {
-		return internalServerError("database error creating factor").WithInternalError(err)
-	}
+	factor := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, key.Secret())
+
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(factor); terr != nil {
+			pgErr := utilities.NewPostgresError(terr)
+			if pgErr.IsUniqueConstraintViolated() {
+				return internalServerError(fmt.Sprintf("a factor with the friendly name %q for this user likely already exists", factor.FriendlyName))
+			}
 			return terr
+
 		}
 		if terr := models.NewAuditLogEntry(r, tx, user, models.EnrollFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id": factor.ID,
@@ -169,12 +173,9 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
-	challenge, err := models.NewChallenge(factor, ipAddress)
-	if err != nil {
-		return internalServerError("Database error creating challenge").WithInternalError(err)
-	}
+	challenge := models.NewChallenge(factor, ipAddress)
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(challenge); terr != nil {
 			return terr
 		}
