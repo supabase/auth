@@ -34,6 +34,9 @@ func NewPostgresError(err error) *PostgresError {
 
 	return nil
 }
+func (pg *PostgresError) IsUniqueConstraintViolation() bool {
+	return pg.Code == "23505"
+}
 
 // isPubliclyAccessiblePostgresError checks if the Postgres error should be
 // made accessible.
