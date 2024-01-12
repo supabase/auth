@@ -170,7 +170,7 @@ func (ts *MFATestSuite) TestDuplicateEnrollsReturnExpectedMessage() {
 	require.NoError(ts.T(), err)
 
 	// Convert the response body to a string and check for the expected error message
-	expectedErrorMessage := fmt.Sprintf("a factor with the friendly name %q for this user already exists", friendlyName)
+	expectedErrorMessage := fmt.Sprintf("a factor with the friendly name %q for this user likely already exists", friendlyName)
 	require.Contains(ts.T(), errorResponse.Message, expectedErrorMessage)
 
 }
