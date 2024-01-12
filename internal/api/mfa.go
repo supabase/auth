@@ -169,12 +169,9 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
-	challenge, err := models.NewChallenge(factor, ipAddress)
-	if err != nil {
-		return internalServerError("Database error creating challenge").WithInternalError(err)
-	}
+	challenge := models.NewChallenge(factor, ipAddress)
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(challenge); terr != nil {
 			return terr
 		}

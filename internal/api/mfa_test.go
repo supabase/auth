@@ -57,8 +57,7 @@ func (ts *MFATestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 	// Create Factor
-	f, err := models.NewFactor(u, "test_factor", models.TOTP, models.FactorStateUnverified, "secretkey")
-	require.NoError(ts.T(), err, "Error creating test factor model")
+	f := models.NewFactor(u, "test_factor", models.TOTP, models.FactorStateUnverified, "secretkey")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 	// Create corresponding session
 	s, err := models.NewSession()
@@ -221,8 +220,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", f.ID), &buffer)
 			testIPAddress := utilities.GetIPAddress(req)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-			c, err := models.NewChallenge(f, testIPAddress)
-			require.NoError(ts.T(), err, "Error creating test Challenge model")
+			c := models.NewChallenge(f, testIPAddress)
 			require.NoError(ts.T(), ts.API.db.Create(c), "Error saving new test challenge")
 			if !v.validChallenge {
 				// Set challenge creation so that it has expired in present time.
