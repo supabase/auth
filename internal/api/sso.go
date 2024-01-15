@@ -8,7 +8,6 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 type SingleSignOnParams struct {
