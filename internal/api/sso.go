@@ -121,7 +121,6 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	relayState := models.SAMLRelayState{
 		SSOProviderID: ssoProvider.ID,
 		RequestID:     authnRequest.ID,
-		FromIPAddress: utilities.GetIPAddress(r),
 		RedirectTo:    params.RedirectTo,
 		FlowStateID:   flowStateID,
 	}

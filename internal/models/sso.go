@@ -150,7 +150,6 @@ type SAMLRelayState struct {
 
 	RequestID     string  `db:"request_id"`
 	ForEmail      *string `db:"for_email"`
-	FromIPAddress string  `db:"from_ip_address"`
 
 	RedirectTo string `db:"redirect_to"`
 
