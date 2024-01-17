@@ -80,14 +80,6 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 			return badRequestError("SAML RelayState has expired. Try loggin in again?")
 		}
 
-		if relayState.FromIPAddress != utilities.GetIPAddress(r) {
-			if err := a.samlDestroyRelayState(ctx, relayState); err != nil {
-				return internalServerError("SAML RelayState comes from another IP address and destroying it failed. Try logging in again?").WithInternalError(err)
-			}
-
-			return badRequestError("SAML RelayState comes from another IP address, try logging in again?")
-		}
-
 		// TODO: add abuse detection to bind the RelayState UUID with a
 		// HTTP-Only cookie
 

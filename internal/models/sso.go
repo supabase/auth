@@ -148,9 +148,8 @@ type SAMLRelayState struct {
 
 	SSOProviderID uuid.UUID `db:"sso_provider_id"`
 
-	RequestID     string  `db:"request_id"`
-	ForEmail      *string `db:"for_email"`
-	FromIPAddress string  `db:"from_ip_address"`
+	RequestID string  `db:"request_id"`
+	ForEmail  *string `db:"for_email"`
 
 	RedirectTo string `db:"redirect_to"`
 
