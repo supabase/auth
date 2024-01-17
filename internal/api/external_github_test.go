@@ -276,7 +276,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenVerifiedFalse() {
 
 	u := performAuthorization(ts, "github", code, "")
 
-	assertAuthorizationFailure(ts, u, "Unverified email with github. A confirmation email has been sent to your github email", "unauthorized_client", "")
+	assertAuthorizationFailure(ts, u, "Unverified email with github. A confirmation email has been sent to your github email", "access_denied", "")
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenUserBanned() {
@@ -296,5 +296,5 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenUserBanned() {
 	require.NoError(ts.T(), ts.API.db.UpdateOnly(user, "banned_until"))
 
 	u = performAuthorization(ts, "github", code, "")
-	assertAuthorizationFailure(ts, u, "User is unauthorized", "unauthorized_client", "")
+	assertAuthorizationFailure(ts, u, "User is banned", "access_denied", "")
 }

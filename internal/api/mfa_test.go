@@ -165,17 +165,24 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 
 func (ts *MFATestSuite) TestDuplicateEnrollsReturnExpectedMessage() {
 	friendlyName := "mary"
+<<<<<<< HEAD
 	issuer := "https://issuer.com"
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, http.StatusOK)
 	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, http.StatusBadRequest)
+=======
+	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, ts.TestUser, nil, models.TOTPSignIn)
+	require.NoError(ts.T(), err)
+	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusOK)
+	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusUnprocessableEntity)
+>>>>>>> bafa2e5c (feat: add error codes)
 
 	var errorResponse HTTPError
 	err := json.NewDecoder(response.Body).Decode(&errorResponse)
 	require.NoError(ts.T(), err)
 
 	// Convert the response body to a string and check for the expected error message
-	expectedErrorMessage := fmt.Sprintf("a factor with the friendly name %q for this user likely already exists", friendlyName)
+	expectedErrorMessage := fmt.Sprintf("A factor with the friendly name %q for this user likely already exists", friendlyName)
 	require.Contains(ts.T(), errorResponse.Message, expectedErrorMessage)
 
 }
@@ -198,13 +205,13 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			desc:             "Invalid: Valid code and expired challenge",
 			validChallenge:   false,
 			validCode:        true,
-			expectedHTTPCode: http.StatusBadRequest,
+			expectedHTTPCode: http.StatusUnprocessableEntity,
 		},
 		{
 			desc:             "Invalid: Invalid code and valid challenge ",
 			validChallenge:   true,
 			validCode:        false,
-			expectedHTTPCode: http.StatusBadRequest,
+			expectedHTTPCode: http.StatusUnprocessableEntity,
 		},
 		{
 			desc:             "Valid /verify request",
@@ -281,7 +288,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 		{
 			desc:             "Verified Factor: AAL1",
 			isAAL2:           false,
-			expectedHTTPCode: http.StatusBadRequest,
+			expectedHTTPCode: http.StatusUnprocessableEntity,
 		},
 		{
 			desc:             "Verified Factor: AAL2, Success",

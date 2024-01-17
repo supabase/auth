@@ -260,5 +260,5 @@ func (ts *ExternalTestSuite) TestSignupExternalFigmaErrorWhenUserBanned() {
 	require.NoError(ts.T(), ts.API.db.UpdateOnly(user, "banned_until"))
 
 	u = performAuthorization(ts, "figma", code, "")
-	assertAuthorizationFailure(ts, u, "User is unauthorized", "unauthorized_client", "")
+	assertAuthorizationFailure(ts, u, "User is banned", "access_denied", "")
 }

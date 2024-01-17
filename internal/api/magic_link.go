@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -24,7 +25,7 @@ type MagicLinkParams struct {
 
 func (p *MagicLinkParams) Validate() error {
 	if p.Email == "" {
-		return unprocessableEntityError("Password recovery requires an email")
+		return unprocessableEntityError(ErrorCodeValidationFailed, "Password recovery requires an email")
 	}
 	var err error
 	p.Email, err = validateEmail(p.Email)
@@ -44,14 +45,14 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 
 	if !config.External.Email.Enabled {
-		return badRequestError("Email logins are disabled")
+		return unprocessableEntityError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 	}
 
 	params := &MagicLinkParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
 	if err != nil {
-		return badRequestError("Could not read verification params: %v", err)
+		return badRequestError(ErrorCodeBadJSON, "Could not read verification params: %v", err).WithInternalError(err)
 	}
 
 	if err := params.Validate(); err != nil {
@@ -82,7 +83,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		// Sign them up with temporary password.
 		password, err := password.Generate(64, 10, 1, false, true)
 		if err != nil {
-			internalServerError("error creating user").WithInternalError(err)
+			return internalServerError("error creating user").WithInternalError(err)
 		}
 
 		signUpParams := &SignupParams{
@@ -94,7 +95,8 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		}
 		newBodyContent, err := json.Marshal(signUpParams)
 		if err != nil {
-			return badRequestError("Could not parse metadata: %v", err)
+			// SignupParams must always be marshallable
+			panic(fmt.Errorf("failed to marshal SignupParams: %w", err))
 		}
 		r.Body = io.NopCloser(strings.NewReader(string(newBodyContent)))
 		r.ContentLength = int64(len(string(newBodyContent)))
@@ -113,7 +115,8 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			}
 			metadata, err := json.Marshal(newBodyContent)
 			if err != nil {
-				return badRequestError("Could not parse metadata: %v", err)
+				// SignupParams must always be marshallable
+				panic(fmt.Errorf("failed to marshal SignupParams: %w", err))
 			}
 			r.Body = io.NopCloser(bytes.NewReader(metadata))
 			return a.MagicLink(w, r)
@@ -143,7 +146,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {
-			return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
+			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "For security purposes, you can only request this once every 60 seconds")
 		}
 		return internalServerError("Error sending magic link").WithInternalError(err)
 	}

@@ -66,7 +66,7 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 			} else {
 				err := tollbooth.LimitByKeys(lmt, []string{key})
 				if err != nil {
-					return c, httpError(http.StatusTooManyRequests, "Rate limit exceeded")
+					return c, tooManyRequestsError(ErrorCodeOverRequestRateLimit, "Request rate limit reached")
 				}
 			}
 		}
@@ -101,7 +101,7 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 				}
 
 				if err := retrieveRequestParams(req, &requestBody); err != nil {
-					return c, badRequestError("Error invalid request body").WithInternalError(err)
+					return c, err
 				}
 
 				if shouldRateLimitEmail {
@@ -112,7 +112,7 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 								1,
 								attribute.String("path", req.URL.Path),
 							)
-							return c, httpError(http.StatusTooManyRequests, "Email rate limit exceeded")
+							return c, tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "Email rate limit exceeded")
 						}
 					}
 				}
@@ -120,7 +120,7 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 				if shouldRateLimitPhone {
 					if requestBody.Phone != "" {
 						if err := tollbooth.LimitByKeys(phoneLimiter, []string{"phone_functions"}); err != nil {
-							return c, httpError(http.StatusTooManyRequests, "Sms rate limit exceeded")
+							return c, tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
 						}
 					}
 				}
@@ -151,7 +151,7 @@ func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (co
 	config := a.config
 
 	if !config.External.Email.Enabled {
-		return nil, badRequestError("Email logins are disabled")
+		return nil, badRequestError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 	}
 
 	return ctx, nil
@@ -178,8 +178,7 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 	}
 
 	if !verificationResult.Success {
-		return nil, badRequestError("captcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
-
+		return nil, badRequestError(ErrorCodeCaptchaFailed, "captcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
 	}
 
 	return ctx, nil
@@ -223,7 +222,7 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.SAML.Enabled {
-		return nil, notFoundError("SAML 2.0 is disabled")
+		return nil, notFoundError(ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled")
 	}
 	return ctx, nil
 }
@@ -231,7 +230,7 @@ func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (cont
 func (a *API) requireManualLinkingEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.Security.ManualLinkingEnabled {
-		return nil, notFoundError("Manual linking is disabled")
+		return nil, notFoundError(ErrorCodeManualLinkingDisabled, "Manual linking is disabled")
 	}
 	return ctx, nil
 }

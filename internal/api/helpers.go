@@ -109,7 +109,7 @@ func retrieveRequestParams[A RequestParams](r *http.Request, params *A) error {
 		return internalServerError("Could not read body into byte slice").WithInternalError(err)
 	}
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read request body: %v", err)
+		return badRequestError(ErrorCodeBadJSON, "Could not parse request body as JSON: %v", err)
 	}
 	return nil
 }

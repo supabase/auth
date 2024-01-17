@@ -42,7 +42,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if user != nil {
 			if user.IsConfirmed() {
-				return unprocessableEntityError(DuplicateEmailMsg)
+				return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
 			}
 		} else {
 			signupParams := SignupParams{

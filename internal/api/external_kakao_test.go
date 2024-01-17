@@ -214,7 +214,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKakaoErrorWhenVerifiedFalse() {
 
 	u := performAuthorization(ts, "kakao", code, "")
 
-	assertAuthorizationFailure(ts, u, "Unverified email with kakao. A confirmation email has been sent to your kakao email", "unauthorized_client", "")
+	assertAuthorizationFailure(ts, u, "Unverified email with kakao. A confirmation email has been sent to your kakao email", "access_denied", "")
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalKakaoErrorWhenUserBanned() {
@@ -234,5 +234,5 @@ func (ts *ExternalTestSuite) TestSignupExternalKakaoErrorWhenUserBanned() {
 	require.NoError(ts.T(), ts.API.db.UpdateOnly(user, "banned_until"))
 
 	u = performAuthorization(ts, "kakao", code, "")
-	assertAuthorizationFailure(ts, u, "User is unauthorized", "unauthorized_client", "")
+	assertAuthorizationFailure(ts, u, "User is banned", "access_denied", "")
 }

@@ -68,12 +68,12 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
-	issuer := ""
 
 	if params.FactorType != models.TOTP {
-		return badRequestError("factor_type needs to be totp")
+		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be totp")
 	}
 
+	issuer := ""
 	if params.Issuer == "" {
 		u, err := url.ParseRequestURI(config.SiteURL)
 		if err != nil {
@@ -91,7 +91,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if len(factors) >= int(config.MFA.MaxEnrolledFactors) {
-		return forbiddenError("Enrolled factors exceed allowed limit, unenroll to continue")
+		return unprocessableEntityError(ErrorCodeTooManyEnrolledMFAFactors, "Enrolled factors exceed allowed limit, unenroll to continue")
 	}
 
 	numVerifiedFactors := 0
@@ -102,11 +102,11 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if numVerifiedFactors >= config.MFA.MaxVerifiedFactors {
-		return forbiddenError("Maximum number of enrolled factors reached, unenroll to continue")
+		return forbiddenError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of enrolled factors reached, unenroll to continue")
 	}
 
 	if numVerifiedFactors > 0 && !session.IsAAL2() {
-		return forbiddenError("AAL2 required to enroll a new factor")
+		return forbiddenError(ErrorCodeInsufficientAAL, "AAL2 required to enroll a new factor")
 	}
 
 	key, err := totp.Generate(totp.GenerateOpts{
@@ -132,7 +132,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr := tx.Create(factor); terr != nil {
 			pgErr := utilities.NewPostgresError(terr)
 			if pgErr.IsUniqueConstraintViolated() {
-				return badRequestError(fmt.Sprintf("a factor with the friendly name %q for this user likely already exists", factor.FriendlyName))
+				return unprocessableEntityError(ErrorCodeMFAFactorNameConflict, fmt.Sprintf("A factor with the friendly name %q for this user likely already exists", factor.FriendlyName))
 			}
 			return terr
 
@@ -210,20 +210,20 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 	challenge, err := models.FindChallengeByID(a.db, params.ChallengeID)
 	if err != nil && models.IsNotFoundError(err) {
-		return notFoundError(err.Error())
+		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor with the provided challenge ID not found")
 	} else if err != nil {
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
 
 	if challenge.VerifiedAt != nil || challenge.IPAddress != currentIP {
-		return badRequestError("Challenge and verify IP addresses mismatch")
+		return unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch")
 	}
 
 	if challenge.HasExpired(config.MFA.ChallengeExpiryDuration) {
 		if err := a.db.Destroy(challenge); err != nil {
 			return internalServerError("Database error deleting challenge").WithInternalError(err)
 		}
-		return badRequestError("%v has expired, verify against another challenge or create a new challenge.", challenge.ID)
+		return unprocessableEntityError(ErrorCodeMFAChallengeExpired, "MFA challenge %v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
 
 	valid := totp.Validate(params.Code, factor.Secret)
@@ -251,11 +251,11 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 				output.Message = hooks.DefaultMFAHookRejectionMessage
 			}
 
-			return forbiddenError(output.Message)
+			return forbiddenError(ErrorCodeMFAVerificationRejected, output.Message)
 		}
 	}
 	if !valid {
-		return badRequestError("Invalid TOTP code entered")
+		return unprocessableEntityError(ErrorCodeMFAVerificationFailed, "Invalid TOTP code entered")
 	}
 
 	var token *AccessTokenResponse
@@ -316,7 +316,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if factor.IsVerified() && !session.IsAAL2() {
-		return badRequestError("AAL2 required to unenroll verified factor")
+		return unprocessableEntityError(ErrorCodeInsufficientAAL, "AAL2 required to unenroll verified factor")
 	}
 	if !factor.IsOwnedBy(user) {
 		return internalServerError(InvalidFactorOwnerErrorMessage)

@@ -101,7 +101,7 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 		},
 	}
 	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testExistingUserData, "email")
-	require.ErrorIs(ts.T(), err, badRequestError("Identity is already linked"))
+	require.ErrorIs(ts.T(), err, unprocessableEntityError(ErrorCodeIdentityAlreadyExists, "Identity is already linked"))
 	require.Nil(ts.T(), u)
 }
 

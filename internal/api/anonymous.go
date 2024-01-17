@@ -15,7 +15,7 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 	aud := a.requestAud(ctx, r)
 
 	if config.DisableSignup {
-		return forbiddenError("Signups not allowed for this instance")
+		return unprocessableEntityError(ErrorCodeSignupDisabled, "Signups not allowed for this instance")
 	}
 
 	params := &SignupParams{}
