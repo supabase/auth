@@ -25,7 +25,7 @@ const (
 func validatePhone(phone string) (string, error) {
 	phone = formatPhoneNumber(phone)
 	if isValid := validateE164Format(phone); !isValid {
-		return "", unprocessableEntityError("Invalid phone number format (E.164 required)")
+		return "", badRequestError(ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
 	}
 	return phone, nil
 }

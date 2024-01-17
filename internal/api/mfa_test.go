@@ -5,12 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/gofrs/uuid"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gofrs/uuid"
 
 	"github.com/pquerna/otp"
 	"github.com/supabase/auth/internal/conf"
@@ -163,14 +164,14 @@ func (ts *MFATestSuite) TestDuplicateEnrollsReturnExpectedMessage() {
 	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, ts.TestUser, nil, models.TOTPSignIn)
 	require.NoError(ts.T(), err)
 	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusOK)
-	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusBadRequest)
+	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusUnprocessableEntity)
 
 	var errorResponse HTTPError
 	err = json.NewDecoder(response.Body).Decode(&errorResponse)
 	require.NoError(ts.T(), err)
 
 	// Convert the response body to a string and check for the expected error message
-	expectedErrorMessage := fmt.Sprintf("a factor with the friendly name %q for this user likely already exists", friendlyName)
+	expectedErrorMessage := fmt.Sprintf("A factor with the friendly name %q for this user likely already exists", friendlyName)
 	require.Contains(ts.T(), errorResponse.Message, expectedErrorMessage)
 
 }
@@ -193,13 +194,13 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			desc:             "Invalid: Valid code and expired challenge",
 			validChallenge:   false,
 			validCode:        true,
-			expectedHTTPCode: http.StatusBadRequest,
+			expectedHTTPCode: http.StatusUnprocessableEntity,
 		},
 		{
 			desc:             "Invalid: Invalid code and valid challenge ",
 			validChallenge:   true,
 			validCode:        false,
-			expectedHTTPCode: http.StatusBadRequest,
+			expectedHTTPCode: http.StatusUnprocessableEntity,
 		},
 		{
 			desc:             "Valid /verify request",
@@ -284,7 +285,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 		{
 			desc:             "Verified Factor: AAL1",
 			isAAL2:           false,
-			expectedHTTPCode: http.StatusBadRequest,
+			expectedHTTPCode: http.StatusUnprocessableEntity,
 		},
 		{
 			desc:             "Verified Factor: AAL2, Success",

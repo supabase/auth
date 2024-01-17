@@ -27,11 +27,11 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 
 	body, err := getBodyBytes(r)
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
+		return internalServerError("Could not read body").WithInternalError(err)
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read Invite params: %v", err)
+		return badRequestError(ErrorCodeBadJSON, "Could not read Invite params: %v", err).WithInternalError(err)
 	}
 
 	params.Email, err = validateEmail(params.Email)
@@ -48,7 +48,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if user != nil {
 			if user.IsConfirmed() {
-				return unprocessableEntityError(DuplicateEmailMsg)
+				return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
 			}
 		} else {
 			signupParams := SignupParams{

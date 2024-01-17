@@ -19,7 +19,7 @@ type RecoverParams struct {
 
 func (p *RecoverParams) Validate() error {
 	if p.Email == "" {
-		return unprocessableEntityError("Password recovery requires an email")
+		return badRequestError(ErrorCodeValidationFailed, "Password recovery requires an email")
 	}
 	var err error
 	if p.Email, err = validateEmail(p.Email); err != nil {
@@ -40,11 +40,11 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 
 	body, err := getBodyBytes(r)
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
+		return internalServerError("Could not read body").WithInternalError(err)
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read verification params: %v", err)
+		return badRequestError(ErrorCodeBadJSON, "Could not read verification params: %v", err)
 	}
 
 	flowType := getFlowFromChallenge(params.CodeChallenge)
@@ -83,7 +83,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {
-			return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
+			return tooManyRequestsError(ErrorCodeOverEmailSendRate, "For security purposes, you can only request this once every 60 seconds")
 		}
 		return internalServerError("Unable to process request").WithInternalError(err)
 	}

@@ -104,7 +104,7 @@ func (w *Webhook) trigger() (io.ReadCloser, error) {
 				// timed out - try again?
 				if i == w.Retries-1 {
 					closeBody(rsp)
-					return nil, httpError(http.StatusGatewayTimeout, "Failed to perform webhook in time frame (%v seconds)", timeout.Seconds())
+					return nil, httpError(http.StatusGatewayTimeout, ErrorCodeUnexpectedFailure, "Failed to perform webhook in time frame (%v seconds)", timeout.Seconds())
 				}
 				hooklog.Info("Request timed out")
 				continue
@@ -135,7 +135,7 @@ func (w *Webhook) trigger() (io.ReadCloser, error) {
 	}
 
 	hooklog.Infof("Failed to process webhook for %s after %d attempts", w.URL, w.Retries)
-	return nil, unprocessableEntityError("Failed to handle signup webhook")
+	return nil, internalServerError("Failed to handle signup webhook")
 }
 
 func (w *Webhook) generateSignature() (string, error) {
@@ -347,8 +347,8 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 			}
 
 			httpError := &HTTPError{
-				Code:    httpCode,
-				Message: hookOutput.HookError.Message,
+				HTTPStatus: httpCode,
+				Message:    hookOutput.HookError.Message,
 			}
 
 			return httpError.WithInternalError(&hookOutput.HookError)
@@ -373,8 +373,8 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 			}
 
 			httpError := &HTTPError{
-				Code:    httpCode,
-				Message: hookOutput.HookError.Message,
+				HTTPStatus: httpCode,
+				Message:    hookOutput.HookError.Message,
 			}
 
 			return httpError.WithInternalError(&hookOutput.HookError)
@@ -399,8 +399,8 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 			}
 
 			httpError := &HTTPError{
-				Code:    httpCode,
-				Message: hookOutput.HookError.Message,
+				HTTPStatus: httpCode,
+				Message:    hookOutput.HookError.Message,
 			}
 
 			return httpError.WithInternalError(&hookOutput.HookError)
@@ -413,8 +413,8 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 			}
 
 			httpError := &HTTPError{
-				Code:    httpCode,
-				Message: err.Error(),
+				HTTPStatus: httpCode,
+				Message:    err.Error(),
 			}
 
 			return httpError

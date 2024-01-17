@@ -28,9 +28,9 @@ func (p *SingleSignOnParams) validate() (bool, error) {
 	hasDomain := p.Domain != ""
 
 	if hasProviderID && hasDomain {
-		return hasProviderID, badRequestError("Only one of provider_id or domain supported")
+		return hasProviderID, badRequestError(ErrorCodeValidationFailed, "Only one of provider_id or domain supported")
 	} else if !hasProviderID && !hasDomain {
-		return hasProviderID, badRequestError("A provider_id or domain needs to be provided")
+		return hasProviderID, badRequestError(ErrorCodeValidationFailed, "A provider_id or domain needs to be provided")
 	}
 
 	return hasProviderID, nil
@@ -49,7 +49,7 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	var params SingleSignOnParams
 
 	if err := json.Unmarshal(body, &params); err != nil {
-		return badRequestError("Unable to parse request body as JSON").WithInternalError(err)
+		return badRequestError(ErrorCodeBadJSON, "Unable to parse request body as JSON").WithInternalError(err)
 	}
 
 	hasProviderID := false
@@ -71,10 +71,7 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		flowState, err := models.NewFlowState(models.SSOSAML.String(), codeChallenge, codeChallengeMethodType, models.SSOSAML)
-		if err != nil {
-			return err
-		}
+		flowState := models.NewFlowState(models.SSOSAML.String(), codeChallenge, codeChallengeMethodType, models.SSOSAML)
 		if err := a.db.Create(flowState); err != nil {
 			return err
 		}
@@ -86,14 +83,14 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	if hasProviderID {
 		ssoProvider, err = models.FindSSOProviderByID(db, params.ProviderID)
 		if models.IsNotFoundError(err) {
-			return notFoundError("No such SSO provider")
+			return notFoundError(ErrorCodeSSOProviderNotFound, "No such SSO provider")
 		} else if err != nil {
 			return internalServerError("Unable to find SSO provider by ID").WithInternalError(err)
 		}
 	} else {
 		ssoProvider, err = models.FindSSOProviderByDomain(db, params.Domain)
 		if models.IsNotFoundError(err) {
-			return notFoundError("No SSO provider assigned for this domain")
+			return notFoundError(ErrorCodeSSOProviderNotFound, "No SSO provider assigned for this domain")
 		} else if err != nil {
 			return internalServerError("Unable to find SSO provider by domain").WithInternalError(err)
 		}

@@ -274,7 +274,7 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			nonce:                   "123456",
 			requireReauthentication: true,
 			sessionId:               nil,
-			expected:                expected{code: http.StatusBadRequest, isAuthenticated: false},
+			expected:                expected{code: http.StatusUnprocessableEntity, isAuthenticated: false},
 		},
 		{
 			desc:                    "Valid password length",

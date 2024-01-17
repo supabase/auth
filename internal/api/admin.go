@@ -50,7 +50,7 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 
 	userID, err := uuid.FromString(chi.URLParam(r, "user_id"))
 	if err != nil {
-		return nil, badRequestError("user_id must be an UUID")
+		return nil, notFoundError(ErrorCodeValidationFailed, "user_id must be an UUID")
 	}
 
 	observability.LogEntrySetField(r, "user_id", userID)
@@ -58,7 +58,7 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 	u, err := models.FindUserByID(db, userID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, notFoundError("User not found")
+			return nil, notFoundError(ErrorCodeUserNotFound, "User not found")
 		}
 		return nil, internalServerError("Database error loading user").WithInternalError(err)
 	}
@@ -69,7 +69,7 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	factorID, err := uuid.FromString(chi.URLParam(r, "factor_id"))
 	if err != nil {
-		return nil, badRequestError("factor_id must be an UUID")
+		return nil, notFoundError(ErrorCodeValidationFailed, "factor_id must be an UUID")
 	}
 
 	observability.LogEntrySetField(r, "factor_id", factorID)
@@ -77,7 +77,7 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 	f, err := models.FindFactorByFactorID(a.db, factorID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, notFoundError("Factor not found")
+			return nil, notFoundError(ErrorCodeMFAFactorNotFound, "Factor not found")
 		}
 		return nil, internalServerError("Database error loading factor").WithInternalError(err)
 	}
@@ -89,11 +89,11 @@ func (a *API) getAdminParams(r *http.Request) (*AdminUserParams, error) {
 
 	body, err := getBodyBytes(r)
 	if err != nil {
-		return nil, badRequestError("Could not read body").WithInternalError(err)
+		return nil, internalServerError("Could not read body").WithInternalError(err)
 	}
 
 	if err := json.Unmarshal(body, &params); err != nil {
-		return nil, badRequestError("Could not decode admin user params: %v", err)
+		return nil, badRequestError(ErrorCodeBadJSON, "Could not decode admin user params").WithInternalError(err)
 	}
 
 	return &params, nil
@@ -107,12 +107,12 @@ func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 
 	pageParams, err := paginate(r)
 	if err != nil {
-		return badRequestError("Bad Pagination Parameters: %v", err)
+		return badRequestError(ErrorCodeValidationFailed, "Bad Pagination Parameters: %v", err).WithInternalError(err)
 	}
 
 	sortParams, err := sort(r, map[string]bool{models.CreatedAt: true}, []models.SortField{{Name: models.CreatedAt, Dir: models.Descending}})
 	if err != nil {
-		return badRequestError("Bad Sort Parameters: %v", err)
+		return badRequestError(ErrorCodeValidationFailed, "Bad Sort Parameters: %v", err)
 	}
 
 	filter := r.URL.Query().Get("filter")
@@ -166,7 +166,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		if params.BanDuration != "none" {
 			duration, err = time.ParseDuration(params.BanDuration)
 			if err != nil {
-				return badRequestError("invalid format for ban duration: %v", err)
+				return badRequestError(ErrorCodeValidationFailed, "invalid format for ban duration: %v", err)
 			}
 		}
 		if terr := user.Ban(a.db, duration); terr != nil {
@@ -314,7 +314,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Email == "" && params.Phone == "" {
-		return unprocessableEntityError("Cannot create a user without either an email or phone")
+		return badRequestError(ErrorCodeValidationFailed, "Cannot create a user without either an email or phone")
 	}
 
 	var providers []string
@@ -326,7 +326,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if user, err := models.IsDuplicatedEmail(db, params.Email, aud, nil); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
 		} else if user != nil {
-			return unprocessableEntityError(DuplicateEmailMsg)
+			return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
 		}
 		providers = append(providers, "email")
 	}
@@ -339,7 +339,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if exists, err := models.IsDuplicatedPhone(db, params.Phone, aud); err != nil {
 			return internalServerError("Database error checking phone").WithInternalError(err)
 		} else if exists {
-			return unprocessableEntityError("Phone number already registered by another user")
+			return unprocessableEntityError(ErrorCodePhoneExists, "Phone number already registered by another user")
 		}
 		providers = append(providers, "phone")
 	}
@@ -435,7 +435,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			if params.BanDuration != "none" {
 				duration, err = time.ParseDuration(params.BanDuration)
 				if err != nil {
-					return badRequestError("invalid format for ban duration: %v", err)
+					return badRequestError(ErrorCodeValidationFailed, "invalid format for ban duration: %v", err)
 				}
 			}
 			if terr := user.Ban(a.db, duration); terr != nil {
@@ -466,11 +466,11 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	params := &adminUserDeleteParams{}
 	body, err := getBodyBytes(r)
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
+		return internalServerError("Could not read body").WithInternalError(err)
 	}
 	if len(body) > 0 {
 		if err := json.Unmarshal(body, params); err != nil {
-			return badRequestError("Could not read params: %v", err)
+			return badRequestError(ErrorCodeBadJSON, "Could not read params: %v", err)
 		}
 	} else {
 		params.ShouldSoftDelete = false
@@ -567,11 +567,11 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 	params := &adminUserUpdateFactorParams{}
 	body, err := getBodyBytes(r)
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
+		return internalServerError("Could not read body").WithInternalError(err)
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read factor update params: %v", err)
+		return badRequestError(ErrorCodeBadJSON, "Could not read factor update params: %v", err).WithInternalError(err)
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -582,7 +582,7 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 		}
 		if params.FactorType != "" {
 			if params.FactorType != models.TOTP {
-				return badRequestError("Factor Type not valid")
+				return badRequestError(ErrorCodeValidationFailed, "Factor Type not valid")
 			}
 			if terr := factor.UpdateFactorType(tx, params.FactorType); terr != nil {
 				return terr

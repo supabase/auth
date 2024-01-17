@@ -46,7 +46,7 @@ func (a *API) validateUserUpdateParams(ctx context.Context, p *UserUpdateParams)
 			p.Channel = sms_provider.SMSProvider
 		}
 		if !sms_provider.IsValidMessageChannel(p.Channel, config.Sms.Provider) {
-			return badRequestError(InvalidChannelError)
+			return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 		}
 	}
 
@@ -64,12 +64,12 @@ func (a *API) UserGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	claims := getClaims(ctx)
 	if claims == nil {
-		return badRequestError("Could not read claims")
+		return internalServerError("Could not read claims")
 	}
 
 	aud := a.requestAud(ctx, r)
 	if aud != claims.Audience {
-		return badRequestError("Token audience doesn't match request audience")
+		return badRequestError(ErrorCodeValidationFailed, "Token audience doesn't match request audience")
 	}
 
 	user := getUser(ctx)
@@ -87,11 +87,11 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 	body, err := getBodyBytes(r)
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
+		return internalServerError("Could not read body").WithInternalError(err)
 	}
 
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read User Update params: %v", err)
+		return badRequestError(ErrorCodeBadJSON, "Could not read User Update params: %v", err)
 	}
 
 	user := getUser(ctx)
@@ -103,7 +103,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 	if params.AppData != nil && !isAdmin(user, config) {
 		if !isAdmin(user, config) {
-			return unauthorizedError("Updating app_metadata requires admin privileges")
+			return forbiddenError(ErrorCodeNotAdmin, "Updating app_metadata requires admin privileges")
 		}
 	}
 
@@ -116,7 +116,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		updatingForbiddenFields = updatingForbiddenFields || (params.Nonce != "")
 
 		if updatingForbiddenFields {
-			return unprocessableEntityError("Updating email, phone, password of a SSO account only possible via SSO")
+			return unprocessableEntityError(ErrorCodeUserSSOManaged, "Updating email, phone, password of a SSO account only possible via SSO")
 		}
 	}
 
@@ -124,7 +124,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		if duplicateUser, err := models.IsDuplicatedEmail(db, params.Email, aud, user); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
 		} else if duplicateUser != nil {
-			return unprocessableEntityError(DuplicateEmailMsg)
+			return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
 		}
 	}
 
@@ -132,7 +132,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		if exists, err := models.IsDuplicatedPhone(db, params.Phone, aud); err != nil {
 			return internalServerError("Database error checking phone").WithInternalError(err)
 		} else if exists {
-			return unprocessableEntityError(DuplicatePhoneMsg)
+			return unprocessableEntityError(ErrorCodePhoneExists, DuplicatePhoneMsg)
 		}
 	}
 
@@ -142,7 +142,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			// we require reauthentication if the user hasn't signed in recently in the current session
 			if session == nil || now.After(session.CreatedAt.Add(24*time.Hour)) {
 				if len(params.Nonce) == 0 {
-					return badRequestError("Password update requires reauthentication")
+					return badRequestError(ErrorCodeReauthenticationNeeded, "Password update requires reauthentication")
 				}
 				if err := a.verifyReauthentication(params.Nonce, db, config, user); err != nil {
 					return err
@@ -153,7 +153,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		password := *params.Password
 		if password != "" {
 			if user.EncryptedPassword != "" && user.Authenticate(ctx, password) {
-				return unprocessableEntityError("New password should be different from the old password.")
+				return unprocessableEntityError(ErrorCodeSamePassword, "New password should be different from the old password.")
 			}
 		}
 
@@ -207,7 +207,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			externalURL := getExternalHost(ctx)
 			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, externalURL, config.Mailer.OtpLength, flowType); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
-					return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
+					return tooManyRequestsError(ErrorCodeOverEmailSendRate, "For security purposes, you can only request this once every 60 seconds")
 				}
 				return internalServerError("Error sending change email").WithInternalError(terr)
 			}
@@ -224,7 +224,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			} else {
 				smsProvider, terr := sms_provider.GetSmsProvider(*config)
 				if terr != nil {
-					return badRequestError("Error sending sms: %v", terr)
+					return internalServerError("Error finding SMS provider").WithInternalError(terr)
 				}
 				if _, terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeVerification, smsProvider, params.Channel); terr != nil {
 					return internalServerError("Error sending phone change otp").WithInternalError(terr)

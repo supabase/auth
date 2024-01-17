@@ -158,7 +158,7 @@ func TestHookTimeout(t *testing.T) {
 	require.Error(t, err)
 	herr, ok := err.(*HTTPError)
 	require.True(t, ok)
-	assert.Equal(t, http.StatusGatewayTimeout, herr.Code)
+	assert.Equal(t, http.StatusGatewayTimeout, herr.HTTPStatus)
 
 	svr.Close()
 	assert.Equal(t, 3, callCount)
