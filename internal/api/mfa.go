@@ -75,10 +75,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
 	}
 
-	if user.IsSSOUser {
-		return unprocessableEntityError("MFA enrollment only supported for non-SSO users at this time")
-	}
-
 	if params.FactorType != models.TOTP {
 		return badRequestError("factor_type needs to be totp")
 	}
