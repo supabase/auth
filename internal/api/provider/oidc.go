@@ -59,6 +59,8 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 		token, data, err = parseAppleIDToken(token)
 	case IssuerLinkedin:
 		token, data, err = parseLinkedinIDToken(token)
+	case IssuerKakao:
+		token, data, err = parseKakaoIDToken(token)
 	default:
 		if IsAzureIssuer(token.Issuer) {
 			token, data, err = parseAzureIDToken(token)
@@ -307,6 +309,44 @@ func parseAzureIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 		for _, claim := range removeAzureClaimsFromCustomClaims {
 			delete(data.Metadata.CustomClaims, claim)
 		}
+	}
+
+	return token, &data, nil
+}
+
+type KakaoIDTokenClaims struct {
+	jwt.StandardClaims
+
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"email_verified"`
+	Name          string `json:"name"`
+	Picture       string `json:"picture"`
+}
+
+func parseKakaoIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
+	var claims KakaoIDTokenClaims
+
+	if err := token.Claims(&claims); err != nil {
+		return nil, nil, err
+	}
+
+	var data UserProvidedData
+
+	if claims.Email != "" {
+		data.Emails = append(data.Emails, Email{
+			Email:    claims.Email,
+			Verified: claims.EmailVerified,
+			Primary:  true,
+		})
+	}
+
+	data.Metadata = &Claims{
+		Issuer:            token.Issuer,
+		Subject:           token.Subject,
+		Name:              claims.Name,
+		PreferredUsername: claims.Name,
+		ProviderId:        token.Subject,
+		Picture:           claims.Picture,
 	}
 
 	return token, &data, nil

@@ -12,6 +12,7 @@ import (
 const (
 	defaultKakaoAuthBase = "kauth.kakao.com"
 	defaultKakaoAPIBase  = "kapi.kakao.com"
+	IssuerKakao          = "https://kauth.kakao.com"
 )
 
 type kakaoProvider struct {
