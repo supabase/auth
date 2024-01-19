@@ -114,7 +114,6 @@ func (a *API) oAuth1Callback(ctx context.Context, r *http.Request, providerType 
 	var accessToken *oauth.AccessToken
 	var userData *provider.UserProvidedData
 	if twitterProvider, ok := oAuthProvider.(*provider.TwitterProvider); ok {
-		twitterProvider.OauthVerifier = oauthVerifier
 		accessToken, err = twitterProvider.Consumer.AuthorizeToken(&oauth.RequestToken{
 			Token: oauthToken,
 		}, oauthVerifier)
