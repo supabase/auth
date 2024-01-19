@@ -134,13 +134,6 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	}
 
 	authURL := p.AuthCodeURL(tokenString, authUrlParams...)
-	switch externalProvider := p.(type) {
-	case *provider.TwitterProvider:
-		if err := storage.StoreInSession(providerType, externalProvider.Marshal(), r, w); err != nil {
-			return "", internalServerError("Error storing request token in session").WithInternalError(err)
-		}
-	}
-
 	return authURL, nil
 }
 

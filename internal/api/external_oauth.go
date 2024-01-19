@@ -9,7 +9,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/storage"
 )
 
 // OAuthProviderData contains the userData and token returned by the oauth provider
@@ -110,24 +109,14 @@ func (a *API) oAuth1Callback(ctx context.Context, r *http.Request, providerType 
 	if err != nil {
 		return nil, badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
 	}
-	value, err := storage.GetFromSession(providerType, r)
-	if err != nil {
-		return &OAuthProviderData{}, err
-	}
 	oauthToken := getRequestToken(ctx)
 	oauthVerifier := getOAuthVerifier(ctx)
 	var accessToken *oauth.AccessToken
 	var userData *provider.UserProvidedData
 	if twitterProvider, ok := oAuthProvider.(*provider.TwitterProvider); ok {
-		requestToken, err := twitterProvider.Unmarshal(value)
-		if err != nil {
-			return &OAuthProviderData{}, err
-		}
-		if requestToken.Token != oauthToken {
-			return nil, internalServerError("Request token doesn't match token in callback")
-		}
-		twitterProvider.OauthVerifier = oauthVerifier
-		accessToken, err = twitterProvider.Consumer.AuthorizeToken(requestToken, oauthVerifier)
+		accessToken, err = twitterProvider.Consumer.AuthorizeToken(&oauth.RequestToken{
+			Token: oauthToken,
+		}, oauthVerifier)
 		if err != nil {
 			return nil, internalServerError("Unable to retrieve access token").WithInternalError(err)
 		}
