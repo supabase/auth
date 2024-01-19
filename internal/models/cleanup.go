@@ -36,6 +36,7 @@ func (c *Cleanup) Setup() {
 	tableRelayStates := SAMLRelayState{}.TableName()
 	tableFlowStates := FlowState{}.TableName()
 	tableMFAChallenges := Challenge{}.TableName()
+	tableMFAFactors := Factor{}.TableName()
 
 	// These statements intentionally use SELECT ... FOR UPDATE SKIP LOCKED
 	// as this makes sure that only rows that are not being used in another
@@ -51,6 +52,7 @@ func (c *Cleanup) Setup() {
 		fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '24 hours' limit 100 for update skip locked);", tableRelayStates, tableRelayStates),
 		fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '24 hours' limit 100 for update skip locked);", tableFlowStates, tableFlowStates),
 		fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '24 hours' limit 100 for update skip locked);", tableMFAChallenges, tableMFAChallenges),
+		fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '24 hours' and status = 'unverified' limit 100 for update skip locked);", tableMFAFactors, tableMFAFactors),
 	)
 
 	if c.SessionTimebox != nil {
