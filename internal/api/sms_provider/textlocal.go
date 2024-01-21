@@ -2,18 +2,18 @@ package sms_provider
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 const (
-	defaultTextLocalApiBase = "https://api.textlocal.in"
+	defaultTextLocalApiBase    = "https://api.textlocal.in"
+	textLocalTemplateErrorCode = 80
 )
 
 type TextlocalProvider struct {
@@ -49,7 +49,7 @@ func NewTextlocalProvider(config conf.TextlocalProviderConfiguration) (SmsProvid
 	}, nil
 }
 
-func (t *TextlocalProvider) SendMessage(phone string, message string, channel string) (string, error) {
+func (t *TextlocalProvider) SendMessage(phone, message, channel, otp string) (string, error) {
 	switch channel {
 	case SMSProvider:
 		return t.SendSms(phone, message)
@@ -86,15 +86,15 @@ func (t *TextlocalProvider) SendSms(phone string, message string) (string, error
 		return "", derr
 	}
 
-	if len(resp.Errors) > 0 {
-		return "", errors.New("textlocal error: Internal Error")
-	}
-
 	messageID := ""
 
 	if resp.Status != "success" {
 		if len(resp.Messages) > 0 {
 			messageID = resp.Messages[0].MessageID
+		}
+
+		if len(resp.Errors) > 0 && resp.Errors[0].Code == textLocalTemplateErrorCode {
+			return messageID, fmt.Errorf("textlocal error: %v (code: %v) template message: %s", resp.Errors[0].Message, resp.Errors[0].Code, message)
 		}
 
 		return messageID, fmt.Errorf("textlocal error: %v (code: %v) message %s", resp.Errors[0].Message, resp.Errors[0].Code, messageID)

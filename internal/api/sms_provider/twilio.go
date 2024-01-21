@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 const (
@@ -63,30 +63,46 @@ func NewTwilioProvider(config conf.TwilioProviderConfiguration) (SmsProvider, er
 	}, nil
 }
 
-func (t *TwilioProvider) SendMessage(phone string, message string, channel string) (string, error) {
+func (t *TwilioProvider) SendMessage(phone, message, channel, otp string) (string, error) {
 	switch channel {
 	case SMSProvider, WhatsappProvider:
-		return t.SendSms(phone, message, channel)
+		return t.SendSms(phone, message, channel, otp)
 	default:
 		return "", fmt.Errorf("channel type %q is not supported for Twilio", channel)
 	}
 }
 
 // Send an SMS containing the OTP with Twilio's API
-func (t *TwilioProvider) SendSms(phone, message, channel string) (string, error) {
+func (t *TwilioProvider) SendSms(phone, message, channel, otp string) (string, error) {
 	sender := t.Config.MessageServiceSid
 	receiver := "+" + phone
-	if channel == WhatsappProvider {
-		receiver = channel + ":" + receiver
-		if isPhoneNumber.MatchString(formatPhoneNumber(sender)) {
-			sender = channel + ":" + sender
-		}
-	}
 	body := url.Values{
 		"To":      {receiver}, // twilio api requires "+" extension to be included
 		"Channel": {channel},
 		"From":    {sender},
 		"Body":    {message},
+	}
+	if channel == WhatsappProvider {
+		receiver = channel + ":" + receiver
+		if isPhoneNumber.MatchString(formatPhoneNumber(sender)) {
+			sender = channel + ":" + sender
+		}
+
+		// Programmable Messaging (WhatsApp) takes in different set of inputs
+		body = url.Values{
+			"To":      {receiver}, // twilio api requires "+" extension to be included
+			"Channel": {channel},
+			"From":    {sender},
+		}
+		// For backward compatibility with old API.
+		if t.Config.ContentSid != "" {
+			// Used to substitute OTP. See https://www.twilio.com/docs/content/whatsappauthentication for more details
+			contentVariables := fmt.Sprintf(`{"1": "%s"}`, otp)
+			body.Set("ContentSid", t.Config.ContentSid)
+			body.Set("ContentVariables", contentVariables)
+		} else {
+			body.Set("Body", message)
+		}
 	}
 	client := &http.Client{Timeout: defaultTimeout}
 	r, err := http.NewRequest("POST", t.APIPath, strings.NewReader(body.Encode()))

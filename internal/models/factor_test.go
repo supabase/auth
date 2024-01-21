@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/storage"
-	"github.com/supabase/gotrue/internal/storage/test"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/storage/test"
 )
 
 type FactorTestSuite struct {
@@ -50,8 +50,7 @@ func (ts *FactorTestSuite) createFactor() *Factor {
 	err = ts.db.Create(user)
 	require.NoError(ts.T(), err)
 
-	factor, err := NewFactor(user, "asimplename", TOTP, FactorStateUnverified, "topsecret")
-	require.NoError(ts.T(), err)
+	factor := NewFactor(user, "asimplename", TOTP, FactorStateUnverified, "topsecret")
 
 	err = ts.db.Create(factor)
 	require.NoError(ts.T(), err)
@@ -63,8 +62,7 @@ func (ts *FactorTestSuite) TestUpdateStatus() {
 	u, err := NewUser("", "", "", "", nil)
 	require.NoError(ts.T(), err)
 
-	f, err := NewFactor(u, "", TOTP, FactorStateUnverified, "some-secret")
-	require.NoError(ts.T(), err)
+	f := NewFactor(u, "", TOTP, FactorStateUnverified, "some-secret")
 	require.NoError(ts.T(), f.UpdateStatus(ts.db, newFactorStatus))
 	require.Equal(ts.T(), newFactorStatus.String(), f.Status)
 }
@@ -74,8 +72,7 @@ func (ts *FactorTestSuite) TestUpdateFriendlyName() {
 	u, err := NewUser("", "", "", "", nil)
 	require.NoError(ts.T(), err)
 
-	f, err := NewFactor(u, "A1B2C3", TOTP, FactorStateUnverified, "some-secret")
-	require.NoError(ts.T(), err)
+	f := NewFactor(u, "A1B2C3", TOTP, FactorStateUnverified, "some-secret")
 	require.NoError(ts.T(), f.UpdateFriendlyName(ts.db, newSimpleName))
 	require.Equal(ts.T(), newSimpleName, f.FriendlyName)
 }
@@ -84,8 +81,7 @@ func (ts *FactorTestSuite) TestEncodedFactorDoesNotLeakSecret() {
 	u, err := NewUser("", "", "", "", nil)
 	require.NoError(ts.T(), err)
 
-	f, err := NewFactor(u, "A1B2C3", TOTP, FactorStateUnverified, "some-secret")
-	require.NoError(ts.T(), err)
+	f := NewFactor(u, "A1B2C3", TOTP, FactorStateUnverified, "some-secret")
 	encodedFactor, err := json.Marshal(f)
 	require.NoError(ts.T(), err)
 	decodedFactor := Factor{}

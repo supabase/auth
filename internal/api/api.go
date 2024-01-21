@@ -12,10 +12,13 @@ import (
 	"github.com/rs/cors"
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/mailer"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
+	"github.com/supabase/hibp"
 )
 
 const (
@@ -31,6 +34,19 @@ type API struct {
 	db      *storage.Connection
 	config  *conf.GlobalConfiguration
 	version string
+
+	hibpClient *hibp.PwnedClient
+
+	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
+	overrideTime func() time.Time
+}
+
+func (a *API) Now() time.Time {
+	if a.overrideTime != nil {
+		return a.overrideTime()
+	}
+
+	return time.Now()
 }
 
 // NewAPI instantiates a new REST API
@@ -56,6 +72,26 @@ func (a *API) deprecationNotices(ctx context.Context) {
 func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
 	api := &API{config: globalConfig, db: db, version: version}
 
+	if api.config.Password.HIBP.Enabled {
+		httpClient := &http.Client{
+			// all HIBP API requests should finish quickly to avoid
+			// unnecessary slowdowns
+			Timeout: 5 * time.Second,
+		}
+
+		api.hibpClient = &hibp.PwnedClient{
+			UserAgent: api.config.Password.HIBP.UserAgent,
+			HTTP:      httpClient,
+		}
+
+		if api.config.Password.HIBP.Bloom.Enabled {
+			cache := utilities.NewHIBPBloomCache(api.config.Password.HIBP.Bloom.Items, api.config.Password.HIBP.Bloom.FalsePositives)
+			api.hibpClient.Cache = cache
+
+			logrus.Infof("Pwned passwords cache is %.2f KB", float64(cache.Cap())/(8*1024.0))
+		}
+	}
+
 	api.deprecationNotices(ctx)
 
 	xffmw, _ := xff.Default()
@@ -67,13 +103,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	// request tracing should be added only when tracing or metrics is
 	// enabled
 	if globalConfig.Tracing.Enabled {
-		switch globalConfig.Tracing.Exporter {
-		case conf.OpenTracing:
-			r.UseBypass(opentracer)
-
-		default:
-			r.UseBypass(observability.RequestTracing())
-		}
+		r.UseBypass(observability.RequestTracing())
 	} else if globalConfig.Metrics.Enabled {
 		r.UseBypass(observability.RequestTracing())
 	}
@@ -82,7 +112,14 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	r.Use(recoverer)
 
 	if globalConfig.DB.CleanupEnabled {
-		r.UseBypass(api.databaseCleanup)
+		cleanup := &models.Cleanup{
+			SessionTimebox:           globalConfig.Sessions.Timebox,
+			SessionInactivityTimeout: globalConfig.Sessions.InactivityTimeout,
+		}
+
+		cleanup.Setup()
+
+		r.UseBypass(api.databaseCleanup(cleanup))
 	}
 
 	r.Get("/health", api.HealthCheck)
@@ -108,7 +145,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.With(sharedLimiter).With(api.requireAdminCredentials).Post("/invite", api.Invite)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/signup", api.Signup)
 		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
-		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/resend", api.Resend)
+		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/resend", api.Resend)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
 
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
@@ -139,6 +176,12 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.With(api.requireAuthentication).Route("/user", func(r *router) {
 			r.Get("/", api.UserGet)
 			r.With(sharedLimiter).Put("/", api.UserUpdate)
+
+			r.Route("/identities", func(r *router) {
+				r.Use(api.requireManualLinkingEnabled)
+				r.Get("/authorize", api.LinkIdentity)
+				r.Delete("/{identity_id}", api.DeleteIdentity)
+			})
 		})
 
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
@@ -208,7 +251,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 				})
 			})
 
-			r.Post("/generate_link", api.GenerateLink)
+			r.Post("/generate_link", api.adminGenerateLink)
 
 			r.Route("/sso", func(r *router) {
 				r.Route("/providers", func(r *router) {

@@ -4,16 +4,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/supabase/gotrue/internal/api/provider"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
 )
 
 // IdTokenGrantParams are the parameters the IdTokenGrant method accepts
@@ -26,7 +25,7 @@ type IdTokenGrantParams struct {
 	Issuer      string `json:"issuer"`
 }
 
-func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, string, []string, error) {
+func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, *conf.OAuthProviderConfiguration, string, []string, error) {
 	log := observability.GetLogEntry(r)
 
 	var cfg *conf.OAuthProviderConfiguration
@@ -51,10 +50,17 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		issuer = provider.IssuerGoogle
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Google.ClientID...)
 
-	case p.Provider == "azure" || p.Issuer == provider.IssuerAzure:
+	case p.Provider == "azure" || provider.IsAzureIssuer(p.Issuer):
+		issuer = p.Issuer
+		if issuer == "" || !provider.IsAzureIssuer(issuer) {
+			detectedIssuer, err := provider.DetectAzureIDTokenIssuer(ctx, p.IdToken)
+			if err != nil {
+				return nil, nil, "", nil, badRequestError("Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
+			}
+			issuer = detectedIssuer
+		}
 		cfg = &config.External.Azure
 		providerType = "azure"
-		issuer = provider.IssuerAzure
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Azure.ClientID...)
 
 	case p.Provider == "facebook" || p.Issuer == provider.IssuerFacebook:
@@ -84,20 +90,20 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		}
 
 		if !allowed {
-			return nil, "", nil, badRequestError(fmt.Sprintf("Custom OIDC provider %q not allowed", p.Issuer))
+			return nil, nil, "", nil, badRequestError(fmt.Sprintf("Custom OIDC provider %q not allowed", p.Issuer))
 		}
 	}
 
 	if cfg != nil && !cfg.Enabled {
-		return nil, "", nil, badRequestError(fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
+		return nil, nil, "", nil, badRequestError(fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
 	}
 
 	oidcProvider, err := oidc.NewProvider(ctx, issuer)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, "", nil, err
 	}
 
-	return oidcProvider, providerType, acceptableClientIDs, nil
+	return oidcProvider, cfg, providerType, acceptableClientIDs, nil
 }
 
 // IdTokenGrant implements the id_token grant type flow
@@ -126,7 +132,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return oauthError("invalid request", "provider or client_id and issuer required")
 	}
 
-	oidcProvider, providerType, acceptableClientIDs, err := params.getProvider(ctx, config, r)
+	oidcProvider, oauthConfig, providerType, acceptableClientIDs, err := params.getProvider(ctx, config, r)
 	if err != nil {
 		return err
 	}
@@ -137,6 +143,18 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	})
 	if err != nil {
 		return oauthError("invalid request", "Bad ID token").WithInternalError(err)
+	}
+
+	userData.Metadata.EmailVerified = false
+	for _, email := range userData.Emails {
+		if email.Primary {
+			userData.Metadata.Email = email.Email
+			userData.Metadata.EmailVerified = email.Verified
+			break
+		} else {
+			userData.Metadata.Email = email.Email
+			userData.Metadata.EmailVerified = email.Verified
+		}
 	}
 
 	if idToken.Subject == "" {
@@ -165,16 +183,18 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return oauthError("invalid request", "Unacceptable audience in id_token")
 	}
 
-	tokenHasNonce := idToken.Nonce != ""
-	paramsHasNonce := params.Nonce != ""
+	if !oauthConfig.SkipNonceCheck {
+		tokenHasNonce := idToken.Nonce != ""
+		paramsHasNonce := params.Nonce != ""
 
-	if tokenHasNonce != paramsHasNonce {
-		return oauthError("invalid request", "Passed nonce and nonce in id_token should either both exist or not.")
-	} else if tokenHasNonce && paramsHasNonce {
-		// verify nonce to mitigate replay attacks
-		hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
-		if hash != idToken.Nonce {
-			return oauthError("invalid nonce", "Nonces mismatch")
+		if tokenHasNonce != paramsHasNonce {
+			return oauthError("invalid request", "Passed nonce and nonce in id_token should either both exist or not.")
+		} else if tokenHasNonce && paramsHasNonce {
+			// verify nonce to mitigate replay attacks
+			hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
+			if hash != idToken.Nonce {
+				return oauthError("invalid nonce", "Nonces mismatch")
+			}
 		}
 	}
 
@@ -191,16 +211,14 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	var token *AccessTokenResponse
 	var grantParams models.GrantParams
 
+	grantParams.FillGrantParams(r)
+
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		var user *models.User
 		var terr error
 
 		user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType)
 		if terr != nil {
-			if errors.Is(terr, errReturnNil) {
-				return nil
-			}
-
 			return terr
 		}
 
@@ -211,7 +229,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 		return nil
 	}); err != nil {
-		return oauthError("server_error", "Internal Server Error").WithInternalError(err)
+		switch err.(type) {
+		case *storage.CommitWithError:
+			return err
+		default:
+			return oauthError("server_error", "Internal Server Error").WithInternalError(err)
+		}
 	}
 
 	return sendJSON(w, http.StatusOK, token)

@@ -3,6 +3,9 @@ vendor/
 gotrue
 gotrue-arm64
 gotrue.exe
+auth
+auth-arm64
+auth.exe
 
 coverage.out
 

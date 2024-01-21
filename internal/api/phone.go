@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/supabase/gotrue/internal/api/sms_provider"
-	"github.com/supabase/gotrue/internal/crypto"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 var e164Format = regexp.MustCompile("^[1-9][0-9]{1,14}$")
@@ -75,6 +75,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	now := time.Now()
 
 	var otp, messageID string
+	var err error
 
 	if testOTP, ok := config.Sms.GetTestOTP(phone, now); ok {
 		otp = testOTP
@@ -82,7 +83,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 	}
 
 	if otp == "" { // not using test OTPs
-		otp, err := crypto.GenerateOtp(config.Sms.OtpLength)
+		otp, err = crypto.GenerateOtp(config.Sms.OtpLength)
 		if err != nil {
 			return "", internalServerError("error generating otp").WithInternalError(err)
 		}
@@ -92,7 +93,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection,
 			return "", err
 		}
 
-		messageID, err = smsProvider.SendMessage(phone, message, channel)
+		messageID, err = smsProvider.SendMessage(phone, message, channel, otp)
 		if err != nil {
 			return messageID, err
 		}

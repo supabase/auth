@@ -11,13 +11,13 @@ import (
 	"github.com/fatih/structs"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
-	"github.com/supabase/gotrue/internal/api/provider"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/crypto"
-	"github.com/supabase/gotrue/internal/mailer"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 var (
@@ -42,7 +42,7 @@ type GenerateLinkResponse struct {
 	RedirectTo       string `json:"redirect_to"`
 }
 
-func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
+func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
@@ -74,7 +74,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 		if models.IsNotFoundError(err) {
 			if params.Type == magicLinkVerification {
 				params.Type = signupVerification
-				params.Password, err = password.Generate(64, 10, 0, false, true)
+				params.Password, err = password.Generate(64, 10, 1, false, true)
 				if err != nil {
 					return internalServerError("error creating user").WithInternalError(err)
 				}
@@ -92,7 +92,29 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+
 	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
+
+	var signupUser *models.User
+	if params.Type == signupVerification && user == nil {
+		signupParams := &SignupParams{
+			Email:    params.Email,
+			Password: params.Password,
+			Data:     params.Data,
+			Provider: "email",
+			Aud:      aud,
+		}
+
+		if err := a.validateSignupParams(ctx, signupParams); err != nil {
+			return err
+		}
+
+		signupUser, err = signupParams.ToUserModel(false /* <- isSSOUser */)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
@@ -115,7 +137,16 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					Provider: "email",
 					Aud:      aud,
 				}
-				user, terr = a.signupNewUser(ctx, tx, signupParams, false /* <- isSSOUser */)
+
+				// because params above sets no password, this
+				// method is not computationally hard so it can
+				// be used within a database transaction
+				user, terr = signupParams.ToUserModel(false /* <- isSSOUser */)
+				if terr != nil {
+					return terr
+				}
+
+				user, terr = a.signupNewUser(ctx, tx, user)
 				if terr != nil {
 					return terr
 				}
@@ -147,20 +178,11 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return internalServerError("Database error updating user").WithInternalError(err)
 				}
 			} else {
-				if params.Password == "" {
-					return unprocessableEntityError("Signup requires a valid password")
-				}
-				if len(params.Password) < config.PasswordMinLength {
-					return invalidPasswordLengthError(config.PasswordMinLength)
-				}
-				signupParams := &SignupParams{
-					Email:    params.Email,
-					Password: params.Password,
-					Data:     params.Data,
-					Provider: "email",
-					Aud:      aud,
-				}
-				user, terr = a.signupNewUser(ctx, tx, signupParams, false /* <- isSSOUser */)
+				// you should never use SignupParams with
+				// password here to generate a new user, use
+				// signupUser which is a model generated from
+				// SignupParams above
+				user, terr = a.signupNewUser(ctx, tx, signupUser)
 				if terr != nil {
 					return terr
 				}

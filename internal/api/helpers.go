@@ -8,9 +8,9 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 func addRequestID(globalConfig *conf.GlobalConfiguration) middlewareHandler {

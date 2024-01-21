@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/security"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/security"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
@@ -20,7 +21,7 @@ import (
 
 type FunctionHooks map[string][]string
 
-type NetlifyMicroserviceClaims struct {
+type AuthMicroserviceClaims struct {
 	jwt.StandardClaims
 	SiteURL       string        `json:"site_url"`
 	InstanceID    string        `json:"id"`
@@ -48,6 +49,8 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 	}
 	return nil
 }
+
+var emailRateLimitCounter = observability.ObtainMetricCounter("gotrue_email_rate_limit_counter", "Number of times an email rate limit has been triggered")
 
 func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
@@ -109,6 +112,11 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 				if shouldRateLimitEmail {
 					if requestBody.Email != "" {
 						if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
+							emailRateLimitCounter.Add(
+								req.Context(),
+								1,
+								attribute.String("path", req.URL.Path),
+							)
 							return c, httpError(http.StatusTooManyRequests, "Email rate limit exceeded")
 						}
 					}
@@ -225,26 +233,36 @@ func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (cont
 	return ctx, nil
 }
 
-func (a *API) databaseCleanup(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
+func (a *API) requireManualLinkingEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !a.config.Security.ManualLinkingEnabled {
+		return nil, notFoundError("Manual linking is disabled")
+	}
+	return ctx, nil
+}
 
-		switch r.Method {
-		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-			// continue
+func (a *API) databaseCleanup(cleanup *models.Cleanup) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
 
-		default:
-			return
-		}
+			switch r.Method {
+			case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+				// continue
 
-		db := a.db.WithContext(r.Context())
-		log := observability.GetLogEntry(r)
+			default:
+				return
+			}
 
-		affectedRows, err := models.Cleanup(db)
-		if err != nil {
-			log.WithError(err).WithField("affected_rows", affectedRows).Warn("database cleanup failed")
-		} else if affectedRows > 0 {
-			log.WithField("affected_rows", affectedRows).Debug("cleaned up expired or stale rows")
-		}
-	})
+			db := a.db.WithContext(r.Context())
+			log := observability.GetLogEntry(r)
+
+			affectedRows, err := cleanup.Clean(db)
+			if err != nil {
+				log.WithError(err).WithField("affected_rows", affectedRows).Warn("database cleanup failed")
+			} else if affectedRows > 0 {
+				log.WithField("affected_rows", affectedRows).Debug("cleaned up expired or stale rows")
+			}
+		})
+	}
 }

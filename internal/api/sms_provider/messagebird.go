@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 const (
@@ -56,7 +56,7 @@ func NewMessagebirdProvider(config conf.MessagebirdProviderConfiguration) (SmsPr
 	}, nil
 }
 
-func (t *MessagebirdProvider) SendMessage(phone string, message string, channel string) (string, error) {
+func (t *MessagebirdProvider) SendMessage(phone, message, channel, otp string) (string, error) {
 	switch channel {
 	case SMSProvider:
 		return t.SendSms(phone, message)

@@ -8,8 +8,9 @@ import (
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/gotrue/internal/crypto"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // RefreshToken is the database model for refresh tokens.
@@ -41,6 +42,15 @@ type GrantParams struct {
 	FactorID *uuid.UUID
 
 	SessionNotAfter *time.Time
+	SessionTag      *string
+
+	UserAgent string
+	IP        string
+}
+
+func (g *GrantParams) FillGrantParams(r *http.Request) {
+	g.UserAgent = r.Header.Get("User-Agent")
+	g.IP = utilities.GetIPAddress(r)
 }
 
 // GrantAuthenticatedUser creates a refresh token for the provided user.
@@ -84,6 +94,10 @@ func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
 		update `+tablename+` r set revoked = true from token_family where token_family.id = r.id;`, token.Token).Exec()
 	}
 	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows || errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+
 		return err
 	}
 	return nil
@@ -110,7 +124,6 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 	if oldToken != nil {
 		token.Parent = storage.NullString(oldToken.Token)
 		token.SessionId = oldToken.SessionId
-
 	}
 
 	if token.SessionId == nil {
@@ -127,6 +140,18 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 
 		if params.SessionNotAfter != nil {
 			session.NotAfter = params.SessionNotAfter
+		}
+
+		if params.UserAgent != "" {
+			session.UserAgent = &params.UserAgent
+		}
+
+		if params.IP != "" {
+			session.IP = &params.IP
+		}
+
+		if params.SessionTag != nil && *params.SessionTag != "" {
+			session.Tag = params.SessionTag
 		}
 
 		if err := tx.Create(session); err != nil {

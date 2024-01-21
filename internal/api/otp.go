@@ -7,9 +7,9 @@ import (
 	"net/http"
 
 	"github.com/sethvargo/go-password/password"
-	"github.com/supabase/gotrue/internal/api/sms_provider"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 // OtpParams contains the request body params for the otp endpoint
@@ -149,7 +149,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	if isNewUser {
 		// User either doesn't exist or hasn't completed the signup process.
 		// Sign them up with temporary password.
-		password, err := password.Generate(64, 10, 0, false, true)
+		password, err := password.Generate(64, 10, 1, false, true)
 		if err != nil {
 			internalServerError("error creating user").WithInternalError(err)
 		}
@@ -205,7 +205,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		}
 		mID, serr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel)
 		if serr != nil {
-			return badRequestError("Error sending sms OTP: %v", err)
+			return badRequestError("Error sending sms OTP: %v", serr)
 		}
 		messageID = mID
 		return nil

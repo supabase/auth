@@ -9,13 +9,13 @@ import (
 
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/gotrue/internal/api/provider"
+	"github.com/supabase/auth/internal/api/provider"
 )
 
 const (
 	googleUser           string = `{"id":"googleTestId","name":"Google Test","picture":"http://example.com/avatar","email":"google@example.com","verified_email":true}}`
 	googleUserWrongEmail string = `{"id":"googleTestId","name":"Google Test","picture":"http://example.com/avatar","email":"other@example.com","verified_email":true}}`
-	googleUserNoEmail    string = `{"id":"googleTestId","name":"Google Test","picture":"http://example.com/avatar","verified_email":true}}`
+	googleUserNoEmail    string = `{"id":"googleTestId","name":"Google Test","picture":"http://example.com/avatar","verified_email":false}}`
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalGoogle() {

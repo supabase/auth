@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 const (
@@ -53,7 +53,7 @@ func NewTwilioVerifyProvider(config conf.TwilioVerifyProviderConfiguration) (Sms
 	}, nil
 }
 
-func (t *TwilioVerifyProvider) SendMessage(phone string, message string, channel string) (string, error) {
+func (t *TwilioVerifyProvider) SendMessage(phone, message, channel, otp string) (string, error) {
 	switch channel {
 	case SMSProvider, WhatsappProvider:
 		return t.SendSms(phone, message, channel)

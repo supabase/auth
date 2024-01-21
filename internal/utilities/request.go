@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/auth/internal/conf"
 )
 
 // GetIPAddress returns the real IP address of the HTTP request. It parses the
@@ -24,7 +24,12 @@ func GetIPAddress(r *http.Request) string {
 
 			for _, ip := range ips {
 				if ip != "" {
-					return ip
+					parsed := net.ParseIP(ip)
+					if parsed == nil {
+						continue
+					}
+
+					return parsed.String()
 				}
 			}
 		}

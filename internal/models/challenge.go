@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/storage"
 	"time"
 )
 
@@ -22,7 +22,7 @@ func (Challenge) TableName() string {
 	return tableName
 }
 
-func NewChallenge(factor *Factor, ipAddress string) (*Challenge, error) {
+func NewChallenge(factor *Factor, ipAddress string) *Challenge {
 	id := uuid.Must(uuid.NewV4())
 
 	challenge := &Challenge{
@@ -30,7 +30,7 @@ func NewChallenge(factor *Factor, ipAddress string) (*Challenge, error) {
 		FactorID:  factor.ID,
 		IPAddress: ipAddress,
 	}
-	return challenge, nil
+	return challenge
 }
 
 func FindChallengeByChallengeID(tx *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {

@@ -9,17 +9,22 @@ import (
 	"strconv"
 	"time"
 
+	"fmt"
+
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
+	"github.com/xeipuuv/gojsonschema"
 
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/metering"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/hooks"
+	"github.com/supabase/auth/internal/metering"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
 )
 
-// GoTrueClaims is a struct thats used for JWT claims
-type GoTrueClaims struct {
+// AccessTokenClaims is a struct thats used for JWT claims
+type AccessTokenClaims struct {
 	jwt.StandardClaims
 	Email                         string                 `json:"email"`
 	Phone                         string                 `json:"phone"`
@@ -33,14 +38,15 @@ type GoTrueClaims struct {
 
 // AccessTokenResponse represents an OAuth2 success response
 type AccessTokenResponse struct {
-	Token                string       `json:"access_token"`
-	TokenType            string       `json:"token_type"` // Bearer
-	ExpiresIn            int          `json:"expires_in"`
-	ExpiresAt            int64        `json:"expires_at"`
-	RefreshToken         string       `json:"refresh_token"`
-	User                 *models.User `json:"user"`
-	ProviderAccessToken  string       `json:"provider_token,omitempty"`
-	ProviderRefreshToken string       `json:"provider_refresh_token,omitempty"`
+	Token                string             `json:"access_token"`
+	TokenType            string             `json:"token_type"` // Bearer
+	ExpiresIn            int                `json:"expires_in"`
+	ExpiresAt            int64              `json:"expires_at"`
+	RefreshToken         string             `json:"refresh_token"`
+	User                 *models.User       `json:"user"`
+	ProviderAccessToken  string             `json:"provider_token,omitempty"`
+	ProviderRefreshToken string             `json:"provider_refresh_token,omitempty"`
+	WeakPassword         *WeakPasswordError `json:"weak_password,omitempty"`
 }
 
 // AsRedirectURL encodes the AccessTokenResponse as a redirect URL that
@@ -113,6 +119,9 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	var user *models.User
 	var grantParams models.GrantParams
 	var provider string
+
+	grantParams.FillGrantParams(r)
+
 	if params.Email != "" {
 		provider = "email"
 		if !config.External.Email.Enabled {
@@ -137,7 +146,47 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return internalServerError("Database error querying schema").WithInternalError(err)
 	}
 
-	if user.IsBanned() || !user.Authenticate(params.Password) {
+	if user.IsBanned() {
+		return oauthError("invalid_grant", InvalidLoginMessage)
+	}
+
+	isValidPassword := user.Authenticate(ctx, params.Password)
+
+	var weakPasswordError *WeakPasswordError
+	if isValidPassword {
+		if err := a.checkPasswordStrength(ctx, params.Password); err != nil {
+			if wpe, ok := err.(*WeakPasswordError); ok {
+				weakPasswordError = wpe
+			} else {
+				observability.GetLogEntry(r).WithError(err).Warn("Password strength check on sign-in failed")
+			}
+		}
+	}
+
+	if config.Hook.PasswordVerificationAttempt.Enabled {
+		input := hooks.PasswordVerificationAttemptInput{
+			UserID: user.ID,
+			Valid:  isValidPassword,
+		}
+		output := hooks.PasswordVerificationAttemptOutput{}
+		err := a.invokeHook(ctx, &input, &output)
+		if err != nil {
+			return err
+		}
+
+		if output.Decision == hooks.HookRejection {
+			if output.Message == "" {
+				output.Message = hooks.DefaultPasswordHookRejectionMessage
+			}
+			if output.ShouldLogoutUser {
+				if err := models.Logout(a.db, user.ID); err != nil {
+					return err
+				}
+			}
+			return forbiddenError(output.Message)
+		}
+	}
+	if !isValidPassword {
 		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
 
@@ -159,7 +208,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
-
 		if terr != nil {
 			return terr
 		}
@@ -172,6 +220,9 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	if err != nil {
 		return err
 	}
+
+	token.WeakPassword = weakPasswordError
+
 	metering.RecordLogin("password", user.ID)
 	return sendJSON(w, http.StatusOK, token)
 }
@@ -179,6 +230,12 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	var grantParams models.GrantParams
+
+	// There is a slight problem with this as it will pick-up the
+	// User-Agent and IP addresses from the server if used on the server
+	// side. Currently there's no mechanism to distinguish, but the server
+	// can be told to at least propagate the User-Agent header.
+	grantParams.FillGrantParams(r)
 
 	params := &PKCEGrantParams{}
 	body, err := getBodyBytes(r)
@@ -245,10 +302,10 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	}
 
 	return sendJSON(w, http.StatusOK, token)
-
 }
 
-func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *uuid.UUID, config *conf.JWTConfiguration) (string, int64, error) {
+func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, int64, error) {
+	config := a.config
 	aal, amr := models.AAL1.String(), []models.AMREntry{}
 	sid := ""
 	if sessionId != nil {
@@ -264,15 +321,15 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 	}
 
 	issuedAt := time.Now().UTC()
-	expiresAt := issuedAt.Add(time.Second * time.Duration(config.Exp)).Unix()
+	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp)).Unix()
 
-	claims := &GoTrueClaims{
+	claims := &hooks.AccessTokenClaims{
 		StandardClaims: jwt.StandardClaims{
 			Subject:   user.ID.String(),
 			Audience:  user.Aud,
 			IssuedAt:  issuedAt.Unix(),
 			ExpiresAt: expiresAt,
-			Issuer:    config.Issuer,
+			Issuer:    config.JWT.Issuer,
 		},
 		Email:                         user.GetEmail(),
 		Phone:                         user.GetPhone(),
@@ -284,17 +341,37 @@ func generateAccessToken(tx *storage.Connection, user *models.User, sessionId *u
 		AuthenticationMethodReference: amr,
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	var token *jwt.Token
+	if config.Hook.CustomAccessToken.Enabled {
+		input := hooks.CustomAccessTokenInput{
+			UserID:               user.ID,
+			Claims:               claims,
+			AuthenticationMethod: authenticationMethod.String(),
+		}
 
-	if config.KeyID != "" {
+		output := hooks.CustomAccessTokenOutput{}
+
+		err := a.invokeHook(ctx, &input, &output)
+		if err != nil {
+			return "", 0, err
+		}
+		goTrueClaims := jwt.MapClaims(output.Claims)
+
+		token = jwt.NewWithClaims(jwt.SigningMethodHS256, goTrueClaims)
+
+	} else {
+		token = jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	}
+
+	if config.JWT.KeyID != "" {
 		if token.Header == nil {
 			token.Header = make(map[string]interface{})
 		}
 
-		token.Header["kid"] = config.KeyID
+		token.Header["kid"] = config.JWT.KeyID
 	}
 
-	signed, err := token.SignedString([]byte(config.Secret))
+	signed, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
 		return "", 0, err
 	}
@@ -325,8 +402,13 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return terr
 		}
 
-		tokenString, expiresAt, terr = generateAccessToken(tx, user, refreshToken.SessionId, &config.JWT)
+		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, refreshToken.SessionId, authenticationMethod)
 		if terr != nil {
+			// Account for Hook Error
+			httpErr, ok := terr.(*HTTPError)
+			if ok {
+				return httpErr
+			}
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
 		return nil
@@ -385,9 +467,12 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return err
 		}
 
-		tokenString, expiresAt, terr = generateAccessToken(tx, user, &sessionId, &config.JWT)
-
+		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, &sessionId, models.TOTPSignIn)
 		if terr != nil {
+			httpErr, ok := terr.(*HTTPError)
+			if ok {
+				return httpErr
+			}
 			return internalServerError("error generating jwt token").WithInternalError(terr)
 		}
 		return nil
@@ -456,4 +541,28 @@ func (a *API) clearCookieToken(config *conf.GlobalConfiguration, name string, w 
 		Path:     "/",
 		Domain:   config.Cookie.Domain,
 	})
+}
+
+func validateTokenClaims(outputClaims map[string]interface{}) error {
+	schemaLoader := gojsonschema.NewStringLoader(hooks.MinimumViableTokenSchema)
+
+	documentLoader := gojsonschema.NewGoLoader(outputClaims)
+
+	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+	if err != nil {
+		return err
+	}
+
+	if !result.Valid() {
+		var errorMessages string
+
+		for _, desc := range result.Errors() {
+			errorMessages += fmt.Sprintf("- %s\n", desc)
+			fmt.Printf("- %s\n", desc)
+		}
+		return fmt.Errorf("output claims do not conform to the expected schema: \n%s", errorMessages)
+
+	}
+
+	return nil
 }

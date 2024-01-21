@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -12,10 +11,10 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
 	"github.com/sethvargo/go-password/password"
-	"github.com/supabase/gotrue/internal/api/provider"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
 )
 
 type AdminUserParams struct {
@@ -144,7 +143,6 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
 	params, err := a.getAdminParams(r)
-	config := a.config
 	if err != nil {
 		return err
 	}
@@ -176,6 +174,18 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	if params.Password != nil {
+		password := *params.Password
+
+		if err := a.checkPasswordStrength(ctx, password); err != nil {
+			return err
+		}
+
+		if err := user.SetPassword(ctx, password); err != nil {
+			return err
+		}
+	}
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if params.Role != "" {
 			if terr := user.SetRole(tx, params.Role); terr != nil {
@@ -196,11 +206,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Password != nil {
-			if len(*params.Password) < config.PasswordMinLength {
-				return invalidPasswordLengthError(config.PasswordMinLength)
-			}
-
-			if terr := user.UpdatePassword(tx, *params.Password, nil); terr != nil {
+			if terr := user.UpdatePassword(tx, nil); terr != nil {
 				return terr
 			}
 		}
@@ -284,9 +290,6 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
-		if errors.Is(err, invalidPasswordLengthError(config.PasswordMinLength)) {
-			return err
-		}
 		return internalServerError("Error updating user").WithInternalError(err)
 	}
 

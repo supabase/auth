@@ -2,11 +2,10 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"strconv"
 	"strings"
 
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/oauth2"
 )
 
@@ -92,17 +91,11 @@ func (g gitlabProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 		data.Emails = append(data.Emails, Email{Email: u.Email, Verified: verified, Primary: true})
 	}
 
-	if len(data.Emails) <= 0 {
-		return nil, errors.New("unable to find email with GitLab provider")
-	}
-
 	data.Metadata = &Claims{
-		Issuer:        g.Host,
-		Subject:       strconv.Itoa(u.ID),
-		Name:          u.Name,
-		Picture:       u.AvatarURL,
-		Email:         u.Email,
-		EmailVerified: true,
+		Issuer:  g.Host,
+		Subject: strconv.Itoa(u.ID),
+		Name:    u.Name,
+		Picture: u.AvatarURL,
 
 		// To be deprecated
 		AvatarURL:  u.AvatarURL,

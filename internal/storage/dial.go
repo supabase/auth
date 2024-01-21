@@ -13,7 +13,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/auth/internal/conf"
 )
 
 // Connection is the interface a storage provider must implement.
@@ -112,11 +112,41 @@ func registerOpenTelemetryDatabaseStats(db *pop.Connection) {
 	}
 }
 
+type CommitWithError struct {
+	Err error
+}
+
+func (e *CommitWithError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *CommitWithError) Cause() error {
+	return e.Err
+}
+
+// NewCommitWithError creates an error that can be returned in a pop transaction
+// without rolling back the transaction. This should only be used in cases where
+// you want the transaction to commit but return an error message to the user.
+func NewCommitWithError(err error) *CommitWithError {
+	return &CommitWithError{Err: err}
+}
+
 func (c *Connection) Transaction(fn func(*Connection) error) error {
 	if c.TX == nil {
-		return c.Connection.Transaction(func(tx *pop.Connection) error {
-			return fn(&Connection{tx})
-		})
+		var returnErr error
+		if terr := c.Connection.Transaction(func(tx *pop.Connection) error {
+			err := fn(&Connection{tx})
+			switch err.(type) {
+			case *CommitWithError:
+				returnErr = err
+				return nil
+			default:
+				return err
+			}
+		}); terr != nil {
+			return terr
+		}
+		return returnErr
 	}
 	return fn(c)
 }

@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 )
 
 type ResendTestSuite struct {
@@ -116,6 +116,8 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	// Avoid max freq limit error
 	now := time.Now().Add(-1 * time.Minute)
 
+	// Enable Phone Logoin for phone related tests
+	ts.Config.External.Phone.Enabled = true
 	// disable secure email change
 	ts.Config.Mailer.SecureEmailChangeEnabled = false
 

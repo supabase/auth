@@ -6,10 +6,10 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/supabase/gotrue/internal/api"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/storage"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/api"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 var serveCmd = cobra.Command{

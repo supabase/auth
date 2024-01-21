@@ -2,12 +2,11 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/oauth2"
 )
 
@@ -113,10 +112,6 @@ func (g googleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 			Verified: u.IsEmailVerified(),
 			Primary:  true,
 		})
-	}
-
-	if len(data.Emails) <= 0 {
-		return nil, errors.New("provider: Google OAuth2 user info endpoint did not return an email address")
 	}
 
 	data.Metadata = &Claims{

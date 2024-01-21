@@ -3,8 +3,8 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
-
 	"net/url"
 
 	"github.com/aaronarduino/goqrsvg"
@@ -12,10 +12,11 @@ import (
 	"github.com/boombuler/barcode/qr"
 	"github.com/gofrs/uuid"
 	"github.com/pquerna/otp/totp"
-	"github.com/supabase/gotrue/internal/metering"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/hooks"
+	"github.com/supabase/auth/internal/metering"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 const DefaultQRSize = 3
@@ -33,9 +34,10 @@ type TOTPObject struct {
 }
 
 type EnrollFactorResponse struct {
-	ID   uuid.UUID  `json:"id"`
-	Type string     `json:"type"`
-	TOTP TOTPObject `json:"totp,omitempty"`
+	ID           uuid.UUID  `json:"id"`
+	Type         string     `json:"type"`
+	FriendlyName string     `json:"friendly_name"`
+	TOTP         TOTPObject `json:"totp,omitempty"`
 }
 
 type VerifyFactorParams struct {
@@ -71,10 +73,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	if err := json.Unmarshal(body, params); err != nil {
 		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
-	}
-
-	if user.IsSSOUser {
-		return unprocessableEntityError("MFA enrollment only supported for non-SSO users at this time")
 	}
 
 	if params.FactorType != models.TOTP {
@@ -129,13 +127,16 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	svgData.End()
 
-	factor, err := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, key.Secret())
-	if err != nil {
-		return internalServerError("database error creating factor").WithInternalError(err)
-	}
+	factor := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, key.Secret())
+
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(factor); terr != nil {
+			pgErr := utilities.NewPostgresError(terr)
+			if pgErr.IsUniqueConstraintViolated() {
+				return badRequestError(fmt.Sprintf("a factor with the friendly name %q for this user likely already exists", factor.FriendlyName))
+			}
 			return terr
+
 		}
 		if terr := models.NewAuditLogEntry(r, tx, user, models.EnrollFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id": factor.ID,
@@ -149,8 +150,9 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
-		ID:   factor.ID,
-		Type: models.TOTP,
+		ID:           factor.ID,
+		Type:         models.TOTP,
+		FriendlyName: factor.FriendlyName,
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
 			QRCode: buf.String(),
@@ -167,12 +169,9 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
-	challenge, err := models.NewChallenge(factor, ipAddress)
-	if err != nil {
-		return internalServerError("Database error creating challenge").WithInternalError(err)
-	}
+	challenge := models.NewChallenge(factor, ipAddress)
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(challenge); terr != nil {
 			return terr
 		}
@@ -243,7 +242,35 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError("%v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
 
-	if valid := totp.Validate(params.Code, factor.Secret); !valid {
+	valid := totp.Validate(params.Code, factor.Secret)
+
+	if config.Hook.MFAVerificationAttempt.Enabled {
+		input := hooks.MFAVerificationAttemptInput{
+			UserID:   user.ID,
+			FactorID: factor.ID,
+			Valid:    valid,
+		}
+
+		output := hooks.MFAVerificationAttemptOutput{}
+
+		err := a.invokeHook(ctx, &input, &output)
+		if err != nil {
+			return err
+		}
+
+		if output.Decision == hooks.HookRejection {
+			if err := models.Logout(a.db, user.ID); err != nil {
+				return err
+			}
+
+			if output.Message == "" {
+				output.Message = hooks.DefaultMFAHookRejectionMessage
+			}
+
+			return forbiddenError(output.Message)
+		}
+	}
+	if !valid {
 		return badRequestError("Invalid TOTP code entered")
 	}
 

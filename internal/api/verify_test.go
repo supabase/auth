@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,9 +15,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/crypto"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/models"
 )
 
 type VerifyTestSuite struct {
@@ -178,7 +179,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 
 		// Generate access token for request
 		var token string
-		token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
+		token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, nil, models.MagicLink)
 		require.NoError(ts.T(), err)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
@@ -353,7 +354,9 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 		},
 	}
 
-	for _, c := range cases {
+	for _, caseItem := range cases {
+		c := caseItem
+
 		ts.Run(c.desc, func() {
 			// update token sent time
 			sentTime = time.Now()
@@ -620,7 +623,6 @@ func (ts *VerifyTestSuite) TestVerifySignupWithredirectURLContainedPath() {
 }
 
 func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
-
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.ConfirmationToken = "pkce_confirmation_token"
@@ -904,7 +906,8 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 		},
 	}
 
-	for _, c := range cases {
+	for _, caseItem := range cases {
+		c := caseItem
 		ts.Run(c.desc, func() {
 			// create user
 			u.ConfirmationSentAt = &c.sentTime
@@ -930,6 +933,83 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			assert.Equal(ts.T(), c.expected.code, w.Code)
 		})
 	}
+}
+
+func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
+	ts.Config.Mailer.SecureEmailChangeEnabled = true
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	u.EmailChange = "new@example.com"
+	require.NoError(ts.T(), ts.API.db.Update(u))
+
+	currentEmailChangeToken := crypto.GenerateTokenHash(string(u.Email), "123456")
+	newEmailChangeToken := crypto.GenerateTokenHash(u.EmailChange, "123456")
+
+	cases := []struct {
+		desc                   string
+		firstVerificationBody  map[string]interface{}
+		secondVerificationBody map[string]interface{}
+		expectedStatus         int
+	}{
+		{
+			desc: "Secure Email Change with Token Hash (Success)",
+			firstVerificationBody: map[string]interface{}{
+				"type":       emailChangeVerification,
+				"token_hash": currentEmailChangeToken,
+			},
+			secondVerificationBody: map[string]interface{}{
+				"type":       emailChangeVerification,
+				"token_hash": newEmailChangeToken,
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			desc: "Secure Email Change with Token Hash. Reusing a token hash twice should fail",
+			firstVerificationBody: map[string]interface{}{
+				"type":       emailChangeVerification,
+				"token_hash": currentEmailChangeToken,
+			},
+			secondVerificationBody: map[string]interface{}{
+				"type":       emailChangeVerification,
+				"token_hash": currentEmailChangeToken,
+			},
+			expectedStatus: http.StatusUnauthorized,
+		},
+	}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			// Set the corresponding email change tokens
+			u.EmailChangeTokenCurrent = currentEmailChangeToken
+			u.EmailChangeTokenNew = newEmailChangeToken
+
+			currentTime := time.Now()
+			u.EmailChangeSentAt = &currentTime
+			require.NoError(ts.T(), ts.API.db.Update(u))
+
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.firstVerificationBody))
+
+			// Setup request
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			// Setup response recorder
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.secondVerificationBody))
+
+			// Setup second request
+			req = httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			// Setup second response recorder
+			w = httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), c.expectedStatus, w.Code)
+		})
+
+	}
+
 }
 
 func (ts *VerifyTestSuite) TestPrepRedirectURL() {

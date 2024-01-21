@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 )
 
 type ExternalTestSuite struct {
@@ -44,7 +44,11 @@ func (ts *ExternalTestSuite) createUser(providerId string, email string, name st
 		require.NoError(ts.T(), ts.API.db.Destroy(u), "Error deleting user")
 	}
 
-	u, err := models.NewUser("", email, "test", ts.Config.JWT.Aud, map[string]interface{}{"provider_id": providerId, "full_name": name, "avatar_url": avatar})
+	userData := map[string]interface{}{"provider_id": providerId, "full_name": name}
+	if avatar != "" {
+		userData["avatar_url"] = avatar
+	}
+	u, err := models.NewUser("", email, "test", ts.Config.JWT.Aud, userData)
 
 	if confirmationToken != "" {
 		u.ConfirmationToken = confirmationToken
@@ -156,7 +160,9 @@ func assertAuthorizationSuccess(ts *ExternalTestSuite, u *url.URL, tokenCount in
 	ts.Equal("bearer", v.Get("token_type"))
 
 	ts.Equal(1, tokenCount)
-	ts.Equal(1, userCount)
+	if userCount > -1 {
+		ts.Equal(1, userCount)
+	}
 
 	// ensure user has been created with metadata
 	user, err := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
@@ -196,4 +202,49 @@ func (ts *ExternalTestSuite) TestSignupExternalUnsupported() {
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	ts.Equal(w.Code, http.StatusBadRequest)
+}
+
+func (ts *ExternalTestSuite) TestRedirectErrorsShouldPreserveParams() {
+	// Request with invalid external provider
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=external", nil)
+	w := httptest.NewRecorder()
+	cases := []struct {
+		Desc         string
+		RedirectURL  string
+		QueryParams  []string
+		ErrorMessage string
+	}{
+		{
+			Desc:         "Should preserve redirect query params on error",
+			RedirectURL:  "http://example.com/path?paramforpreservation=value2",
+			QueryParams:  []string{"paramforpreservation"},
+			ErrorMessage: "invalid_request",
+		},
+		{
+			Desc:         "Error param should be overwritten",
+			RedirectURL:  "http://example.com/path?error=abc",
+			QueryParams:  []string{"error"},
+			ErrorMessage: "invalid_request",
+		},
+	}
+	for _, c := range cases {
+		parsedURL, err := url.Parse(c.RedirectURL)
+		require.Equal(ts.T(), err, nil)
+
+		ts.API.redirectErrors(ts.API.internalExternalProviderCallback, w, req, parsedURL)
+
+		parsedParams, err := url.ParseQuery(parsedURL.RawQuery)
+		require.Equal(ts.T(), err, nil)
+
+		// An error and description should be returned
+		expectedQueryParams := append(c.QueryParams, "error", "error_description")
+
+		for _, expectedQueryParam := range expectedQueryParams {
+			val, exists := parsedParams[expectedQueryParam]
+			require.True(ts.T(), exists)
+			if expectedQueryParam == "error" {
+				require.Equal(ts.T(), val[0], c.ErrorMessage)
+			}
+		}
+	}
 }

@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -14,9 +15,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/crypto"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/models"
 )
 
 type InviteTestSuite struct {
@@ -59,7 +60,7 @@ func (ts *InviteTestSuite) makeSuperAdmin(email string) string {
 	u.Role = "supabase_admin"
 
 	var token string
-	token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
+	token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, nil, models.Invite)
 
 	require.NoError(ts.T(), err, "Error generating access token")
 
@@ -92,6 +93,55 @@ func (ts *InviteTestSuite) TestInvite() {
 
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
+func (ts *InviteTestSuite) TestInviteAfterSignupShouldNotReturnSensitiveFields() {
+	// To allow us to send signup and invite request in succession
+	ts.Config.SMTP.MaxFrequency = 5
+	// Request body
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": "test@example.com",
+		"data": map[string]interface{}{
+			"a": 1,
+		},
+	}))
+
+	// Setup request
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/invite", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+	// Setup response recorder
+	w := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    "test@example.com",
+		"password": "test123",
+		"data": map[string]interface{}{
+			"a": 1,
+		},
+	}))
+
+	// Setup request
+	req = httptest.NewRequest(http.MethodPost, "/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Setup response recorder
+	x := httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(x, req)
+
+	require.Equal(ts.T(), http.StatusOK, x.Code)
+
+	data := models.User{}
+	require.NoError(ts.T(), json.NewDecoder(x.Body).Decode(&data))
+	// Sensitive fields
+	require.Equal(ts.T(), 0, len(data.Identities))
+	require.Equal(ts.T(), 0, len(data.UserMetaData))
 }
 
 func (ts *InviteTestSuite) TestInvite_WithoutAccess() {

@@ -8,11 +8,11 @@ Please help us keep all our projects open and inclusive. Kindly follow our [Code
 
 ## Quick Start
 
-GoTrue has a development container setup that makes it easy to get started contributing. This setup only requires that [Docker](https://www.docker.com/get-started) is setup on your system. The development container setup includes a PostgreSQL container with migrations already applied and a container running GoTrue that will perform a hot reload when changes to the source code are detected.
+Auth has a development container setup that makes it easy to get started contributing. This setup only requires that [Docker](https://www.docker.com/get-started) is setup on your system. The development container setup includes a PostgreSQL container with migrations already applied and a container running GoTrue that will perform a hot reload when changes to the source code are detected.
 
-If you would like to run GoTrue locally or learn more about what these containers are doing for you, continue reading the [Setup and Tooling](#setup-and-tooling) section below. Otherwise, you can skip ahead to the [How To Verify that GoTrue is Available](#how-to-verify-that-gotrue-is-available) section to learn about working with and developing GoTrue.
+If you would like to run Auth locally or learn more about what these containers are doing for you, continue reading the [Setup and Tooling](#setup-and-tooling) section below. Otherwise, you can skip ahead to the [How To Verify that GoTrue is Available](#how-to-verify-that-auth-is-available) section to learn about working with and developing GoTrue.
 
-Before using the containers, you will need to make sure an `.env.docker` file exists by making a copy of `example.docker.env` and configuring it for your needs. The set of env vars in `example.docker.env` only contain the necessary env vars for gotrue to start in a docker environment. For the full list of env vars, please refer to `example.env` and copy over the necessary ones into your `.env.docker` file.
+Before using the containers, you will need to make sure an `.env.docker` file exists by making a copy of `example.docker.env` and configuring it for your needs. The set of env vars in `example.docker.env` only contain the necessary env vars for auth to start in a docker environment. For the full list of env vars, please refer to `example.env` and copy over the necessary ones into your `.env.docker` file.
 
 The following are some basic commands. A full and up to date list of commands can be found in the project's `Makefile` or by running `make help`.
 
@@ -50,20 +50,20 @@ make docker-build
 
 ## Setup and Tooling
 
-GoTrue -- as the name implies -- is a user registration and authentication API developed in [Go](https://go.dev).
+Auth -- as the name implies -- is a user registration and authentication API developed in [Go](https://go.dev).
 
 It connects to a [PostgreSQL](https://www.postgresql.org) database in order to store authentication data, [Soda CLI](https://gobuffalo.io/en/docs/db/toolbox) to manage database schema and migrations,
 and runs inside a [Docker](https://www.docker.com/get-started) container.
 
-Therefore, to contribute to GoTrue you will need to install these tools.
+Therefore, to contribute to Auth you will need to install these tools.
 
 ### Install Tools
 
-- Install [Go](https://go.dev) 1.16
+- Install [Go](https://go.dev) 1.21
 
 ```terminal
 # Via Homebrew on OSX
-brew install go@1.16
+brew install go@1.21
 
 # Set the GOPATH environment variable in the ~/.zshrc file
 export GOPATH="$HOME/go"
@@ -91,25 +91,25 @@ If you are on macOS Catalina you may [run into issues installing Soda with Brew]
 go install github.com/gobuffalo/pop/soda@latest
 ```
 
-- Clone the GoTrue [repository](https://github.com/supabase/gotrue)
+- Clone the Auth [repository](https://github.com/supabase/auth)
 
 ```
-git clone https://github.com/supabase/gotrue
+git clone https://github.com/supabase/auth
 ```
 
-### Install GoTrue
+### Install Auth
 
 To begin installation, be sure to start from the root directory.
 
-- `cd gotrue`
+- `cd auth`
 
 To complete installation, you will:
 
 - Install the PostgreSQL Docker image
 - Create the DB Schema and Migrations
 - Setup a local `.env` for environment variables
-- Compile GoTrue
-- Run the GoTrue binary executable
+- Compile Auth
+- Run the Auth binary executable
 
 #### Installation Steps
 
@@ -159,7 +159,7 @@ Status: Downloaded newer image for postgres:14
 f709b97d83fddc3b099e4f2ddc4cb2fbf68052e7a8093332bec57672f38cfa36
 ```
 
-You should then see in Docker that `gotrue_postgresql` is running on `port: 5432`.
+You should then see in Docker that `auth_postgresql` is running on `port: 5432`.
 
 > **Important** If you happen to already have a local running instance of Postgres running on the port `5432` because you
 > may have installed via [homebrew on OSX](https://formulae.brew.sh/formula/postgresql) then be certain to stop the process using:
@@ -168,7 +168,7 @@ You should then see in Docker that `gotrue_postgresql` is running on `port: 5432
 >
 > If you need to run the test environment on another port, you will need to modify several configuration files to use a different custom port.
 
-3. Next compile the GoTrue binary:
+3. Next compile the Auth binary:
 
 ```
 make build
@@ -180,10 +180,10 @@ make build
 make migrate_test
 ```
 
-You should see log messages that indicate that the GoTrue migrations were applied successfully:
+You should see log messages that indicate that the Auth migrations were applied successfully:
 
 ```terminal
-INFO[0000] GoTrue migrations applied successfully
+INFO[0000] Auth migrations applied successfully
 DEBU[0000] after status
 [POP] 2021/12/15 10:44:36 sql - SELECT EXISTS (SELECT schema_migrations.* FROM schema_migrations AS schema_migrations WHERE version = $1) | ["20210710035447"]
 [POP] 2021/12/15 10:44:36 sql - SELECT EXISTS (SELECT schema_migrations.* FROM schema_migrations AS schema_migrations WHERE version = $1) | ["20210722035447"]
@@ -201,39 +201,39 @@ Version          Name                         Status
 That lists each migration that was applied. Note: there may be more migrations than those listed.
 
 4. Create a `.env` file in the root of the project and copy the following config in [example.env](example.env)
-5. In order to have GoTrue connect to your PostgreSQL database running in Docker, it is important to set a connection string like:
+5. In order to have Auth connect to your PostgreSQL database running in Docker, it is important to set a connection string like:
 
 ```
 DATABASE_URL="postgres://supabase_auth_admin:root@localhost:5432/postgres"
 ```
 
-> Important: GoTrue requires a set of SMTP credentials to run, you can generate your own SMTP credentials via an SMTP provider such as AWS SES, SendGrid, MailChimp, SendInBlue or any other SMTP providers.
+> Important: Auth requires a set of SMTP credentials to run, you can generate your own SMTP credentials via an SMTP provider such as AWS SES, SendGrid, MailChimp, SendInBlue or any other SMTP providers.
 
-6. Then finally Start GoTrue
-7. Verify that GoTrue is Available
+6. Then finally Start Auth
+7. Verify that Auth is Available
 
-### Starting GoTrue
+### Starting Auth
 
-Start GoTrue by running the executable:
-
-```
-./gotrue
-```
-
-This command will re-run migrations and then indicate that GoTrue has started:
+Start Auth by running the executable:
 
 ```
-INFO[0000] GoTrue API started on: localhost:9999
+./auth
 ```
 
-### How To Verify that GoTrue is Available
+This command will re-run migrations and then indicate that Auth has started:
 
-To test that your GoTrue is up and available, you can query the `health` endpoint at `http://localhost:9999/health`. You should see a response similar to:
+```
+INFO[0000] Auth API started on: localhost:9999
+```
+
+### How To Verify that Auth is Available
+
+To test that your Auth is up and available, you can query the `health` endpoint at `http://localhost:9999/health`. You should see a response similar to:
 
 ```json
 {
-  "description": "GoTrue is a user registration and authentication API",
-  "name": "GoTrue",
+  "description": "Auth is a user registration and authentication API",
+  "name": "Auth",
   "version": ""
 }
 ```
@@ -430,7 +430,7 @@ make migrate_test
 
 ## Testing
 
-Currently, we don't use a separate test database, so the same database created when installing GoTrue to run locally is used.
+Currently, we don't use a separate test database, so the same database created when installing Auth to run locally is used.
 
 The following commands should help in setting up a database and running the tests:
 
@@ -485,10 +485,10 @@ export GOTRUE_DB_DATABASE_URL="postgres://supabase_auth_admin:root@localhost:743
 
 ```
 # Command line into bash on the PostgreSQL container
-docker exec -it gotrue_postgresql bash
+docker exec -it auth_postgresql bash
 
 # Removes Container
-docker container rm -f gotrue_postgresql
+docker container rm -f auth_postgresql
 
 # Removes volume
 docker volume rm postgres_data
@@ -519,6 +519,8 @@ We actively welcome your pull requests.
 
 ## Guidelines for Implementing Additional OAuth Providers
 
+> ⚠️ We won't be accepting any additional oauth / sms provider contributions for now because we intend to support these through webhooks or a generic provider in the future.
+
 Please ensure that an end-to-end test is done for the OAuth provider implemented.
 
 An end-to-end test includes:
@@ -535,5 +537,5 @@ Since implementing an additional OAuth provider consists of making api calls to 
 
 ## License
 
-By contributing to GoTrue, you agree that your contributions will be licensed
+By contributing to Auth, you agree that your contributions will be licensed
 under its [MIT license](LICENSE).

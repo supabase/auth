@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/auth/internal/conf"
 )
 
 var defaultTimeout time.Duration = time.Second * 10
@@ -26,7 +26,7 @@ func init() {
 }
 
 type SmsProvider interface {
-	SendMessage(phone, message, channel string) (string, error)
+	SendMessage(phone, message, channel, otp string) (string, error)
 }
 
 func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {

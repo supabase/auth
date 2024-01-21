@@ -1,26 +1,14 @@
 package models
 
 import (
-	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/storage/test"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/storage/test"
 )
-
-func TestCleanupSQL(t *testing.T) {
-	globalConfig, err := conf.LoadGlobal(modelsTestConfig)
-	require.NoError(t, err)
-	conn, err := test.SetupDBConnection(globalConfig)
-	require.NoError(t, err)
-
-	for _, statement := range CleanupStatements {
-		_, err := conn.RawQuery(statement).ExecWithCount()
-		require.NoError(t, err, statement)
-	}
-}
 
 func TestCleanup(t *testing.T) {
 	globalConfig, err := conf.LoadGlobal(modelsTestConfig)
@@ -28,11 +16,18 @@ func TestCleanup(t *testing.T) {
 	conn, err := test.SetupDBConnection(globalConfig)
 	require.NoError(t, err)
 
-	for _, statement := range CleanupStatements {
-		_, err := Cleanup(conn)
-		if err != nil {
-			fmt.Printf("%v %t\n", err, err)
-		}
-		require.NoError(t, err, statement)
+	sessionTimebox := 10 * time.Second
+	sessionInactivityTimeout := 5 * time.Second
+
+	cleanup := &Cleanup{
+		SessionTimebox:           &sessionTimebox,
+		SessionInactivityTimeout: &sessionInactivityTimeout,
+	}
+
+	cleanup.Setup()
+
+	for i := 0; i < 100; i += 1 {
+		_, err := cleanup.Clean(conn)
+		require.NoError(t, err)
 	}
 }

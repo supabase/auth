@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/storage"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -63,9 +63,11 @@ func (ts *OpenTelemetryTracerTestSuite) TestOpenTelemetryTracer_Spans() {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/something1", nil)
+	req.Header.Set("User-Agent", "whatever")
 	ts.API.handler.ServeHTTP(w, req)
 
 	req = httptest.NewRequest(http.MethodGet, "http://localhost/something2", nil)
+	req.Header.Set("User-Agent", "whatever")
 	ts.API.handler.ServeHTTP(w, req)
 
 	spanStubs := exporter.GetSpans()
@@ -80,6 +82,9 @@ func (ts *OpenTelemetryTracerTestSuite) TestOpenTelemetryTracer_Spans() {
 		statusCode1 := getAttribute(attributes1, semconv.HTTPStatusCodeKey)
 		assert.Equal(ts.T(), int64(404), statusCode1.AsInt64())
 
+		userAgent1 := getAttribute(attributes1, semconv.HTTPUserAgentKey)
+		assert.Equal(ts.T(), "stripped", userAgent1.AsString())
+
 		attributes2 := spans[1].Attributes()
 		method2 := getAttribute(attributes2, semconv.HTTPMethodKey)
 		assert.Equal(ts.T(), "GET", method2.AsString())
@@ -87,5 +92,8 @@ func (ts *OpenTelemetryTracerTestSuite) TestOpenTelemetryTracer_Spans() {
 		assert.Equal(ts.T(), "http://localhost/something2", url2.AsString())
 		statusCode2 := getAttribute(attributes2, semconv.HTTPStatusCodeKey)
 		assert.Equal(ts.T(), int64(404), statusCode2.AsInt64())
+
+		userAgent2 := getAttribute(attributes2, semconv.HTTPUserAgentKey)
+		assert.Equal(ts.T(), "stripped", userAgent2.AsString())
 	}
 }

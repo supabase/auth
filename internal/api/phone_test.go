@@ -15,9 +15,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/gotrue/internal/api/sms_provider"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 )
 
 type PhoneTestSuite struct {
@@ -32,7 +32,7 @@ type TestSmsProvider struct {
 	SentMessages int
 }
 
-func (t *TestSmsProvider) SendMessage(phone string, message string, channel string) (string, error) {
+func (t *TestSmsProvider) SendMessage(phone, message, channel, otp string) (string, error) {
 	t.SentMessages += 1
 	return "", nil
 }
@@ -157,7 +157,7 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
 	var token string
-	token, _, err = generateAccessToken(ts.API.db, u, nil, &ts.Config.JWT)
+	token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, nil, models.OTP)
 	require.NoError(ts.T(), err)
 
 	cases := []struct {

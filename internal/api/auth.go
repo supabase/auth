@@ -8,8 +8,8 @@ import (
 
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 // requireAuthentication checks incoming requests for tokens presented using the Authorization header
@@ -69,7 +69,7 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request) (context.Context, e
 	config := a.config
 
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
-	token, err := p.ParseWithClaims(bearer, &GoTrueClaims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := p.ParseWithClaims(bearer, &AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(config.JWT.Secret), nil
 	})
 	if err != nil {
