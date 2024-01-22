@@ -317,10 +317,9 @@ func parseAzureIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 type KakaoIDTokenClaims struct {
 	jwt.StandardClaims
 
-	Email         string `json:"email"`
-	EmailVerified bool   `json:"email_verified"`
-	Name          string `json:"name"`
-	Picture       string `json:"picture"`
+	Email    string `json:"email"`
+	Nickname string `json:"nickname"`
+	Picture  string `json:"picture"`
 }
 
 func parseKakaoIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
@@ -335,7 +334,7 @@ func parseKakaoIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 	if claims.Email != "" {
 		data.Emails = append(data.Emails, Email{
 			Email:    claims.Email,
-			Verified: claims.EmailVerified,
+			Verified: true,
 			Primary:  true,
 		})
 	}
@@ -343,8 +342,8 @@ func parseKakaoIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 	data.Metadata = &Claims{
 		Issuer:            token.Issuer,
 		Subject:           token.Subject,
-		Name:              claims.Name,
-		PreferredUsername: claims.Name,
+		Name:              claims.Nickname,
+		PreferredUsername: claims.Nickname,
 		ProviderId:        token.Subject,
 		Picture:           claims.Picture,
 	}
