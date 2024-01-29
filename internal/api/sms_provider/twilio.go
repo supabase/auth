@@ -112,10 +112,10 @@ func (t *TwilioProvider) SendSms(phone, message, channel, otp string) (string, e
 	r.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	r.SetBasicAuth(t.Config.AccountSid, t.Config.AuthToken)
 	res, err := client.Do(r)
-	defer utilities.SafeClose(res.Body)
 	if err != nil {
 		return "", err
 	}
+	defer utilities.SafeClose(res.Body)
 	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
 		resp := &twilioErrResponse{}
 		if err := json.NewDecoder(res.Body).Decode(resp); err != nil {
