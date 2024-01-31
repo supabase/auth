@@ -16,6 +16,8 @@ jobs:
         with:
           release-type: go
 
+      - run: echo "${{ toJSON(steps.release.outputs) }}"
+
       - uses: actions/checkout@v4
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
@@ -24,8 +26,6 @@ jobs:
       - if: ${{ steps.release.outputs.prs_created == 'true' }}
         run: |
           set -ex
-
-          echo "${{ toJSON(steps.release.outputs) }}"
 
           # Release please doesn't tell you the candidate version when it creates the PR, so we have to take it from the title.
 
