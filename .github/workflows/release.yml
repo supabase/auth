@@ -22,7 +22,7 @@ jobs:
 
       - run: |
           set -ex
-          export RELEASE_VERSION=${{ steps.release.outputs.tag_name }}-rc.$(node -e "console.log('$(git describe --tags)'.split('-')[1])")
+          export RELEASE_VERSION=${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}-rc.$(node -e "console.log('$(git describe --tags)'.split('-')[1])")
           export RELEASE_CANDIDATE=true
 
       - if: ${{ steps.release.outputs.release_created }}
