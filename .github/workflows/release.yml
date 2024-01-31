@@ -16,6 +16,10 @@ jobs:
         with:
           release-type: go
 
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - run: |
           set -ex
           export RELEASE_VERSION=${{ steps.release.outputs.tag_name }}-rc.$(node -e "console.log('$(git describe --tags)'.split('-')[1])")
