@@ -17,7 +17,7 @@ jobs:
           release-type: go
 
       - uses: actions/checkout@v4
-        if: ${{ steps.release.outputs.release_created || steps.release.outputs.prs_created }}
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
           fetch-depth: 0
 
@@ -33,19 +33,19 @@ jobs:
           export RELEASE_VERSION=$RELEASE_VERSION-rc.$(node -e "console.log('$(git describe --tags)'.split('-')[1])")
           export RELEASE_CANDIDATE=true
 
-      - if: ${{ steps.release.outputs.release_created }}
+      - if: ${{ steps.release.outputs.release_created == 'true' }}
         run: |
           set -ex
           export RELEASE_VERISON=${{ steps.release.outputs.tag_name }}
           export RELEASE_CANDIDATE=false
 
       - uses: actions/setup-go@v3
-        if: ${{ steps.release.outputs.release_created || steps.release.outputs.prs_created }}
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
           go-version: "^1.21.0" # The Go version to download (if necessary) and use.
 
       - name: Build release artifacts
-        if: ${{ steps.release.outputs.release_created || steps.release.outputs.prs_created }}
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
