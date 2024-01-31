@@ -17,14 +17,18 @@ jobs:
           release-type: go
 
       - uses: actions/checkout@v4
+        if: ${{ steps.release.outputs.release_created }} || ${{ steps.release.outputs.prs_created }}
         with:
           fetch-depth: 0
 
-      - run: |
+      - if: ${{ steps.release.outputs.prs_created }}
+        run: |
           set -ex
-          echo "${{ toJSON(steps.release.outputs) }}"
 
-          export RELEASE_VERSION=${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}-rc.$(node -e "console.log('$(git describe --tags)'.split('-')[1])")
+          # Release please doesn't tell you the candidate version when it creates the PR, so we have to take it from the title.
+
+          export RELEASE_VERSION=$(node -e "console.log('${{ steps.release.outputs.pr.title }}'.split(' ').find(x => x.match(/[0-9]+[.][0-9]+[.][0-9]+/)))")
+          export RELEASE_VERSION=$RELEASE_VERSION-rc.$(node -e "console.log('$(git describe --tags)'.split('-')[1])")
           export RELEASE_CANDIDATE=true
 
       - if: ${{ steps.release.outputs.release_created }}
@@ -34,12 +38,12 @@ jobs:
           export RELEASE_CANDIDATE=false
 
       - uses: actions/setup-go@v3
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs.release_created }} || ${{ steps.release.outputs.prs_created }}
         with:
           go-version: "^1.21.0" # The Go version to download (if necessary) and use.
 
       - name: Build release artifacts
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs.release_created }} || ${{ steps.release.outputs.prs_created }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
