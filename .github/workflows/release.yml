@@ -16,6 +16,17 @@ jobs:
         with:
           release-type: go
 
+      - run: |
+          set -ex
+          export RELEASE_VERSION=${{ steps.release.outputs.tag_name }}-rc.$(node -e "console.log('$(git describe --tags)'.split('-')[1])")
+          export RELEASE_CANDIDATE=true
+
+      - if: ${{ steps.release.outputs.release_created }}
+        run: |
+          set -ex
+          export RELEASE_VERISON=${{ steps.release.outputs.tag_name }}
+          export RELEASE_CANDIDATE=false
+
       - uses: actions/setup-go@v3
         if: ${{ steps.release.outputs.release_created }}
         with:
@@ -29,16 +40,21 @@ jobs:
           make deps
           make all
           ln -s auth gotrue
-          tar -czvf auth-v${{ steps.release.outputs.tag_name }}-x86.tar.gz auth gotrue migrations/
+          tar -czvf auth-v$RELEASE_VERSION-x86.tar.gz auth gotrue migrations/
           mv auth-arm64 auth
-          tar -czvf auth-v${{ steps.release.outputs.tag_name }}-arm64.tar.gz auth gotrue migrations/
+          tar -czvf auth-v$RELEASE_VERSION-arm64.tar.gz auth gotrue migrations/
 
       - name: Upload release artifacts
         if: ${{ steps.release.outputs.release_created }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ steps.release.outputs.tag_name }} ./auth-v${{ steps.release.outputs.tag_name }}-x86.tar.gz ./auth-v${{ steps.release.outputs.tag_name }}-arm64.tar.gz
+          set -ex
+
+          if [ "$RELEASE_CANDIDATE" != "true" ]
+          then
+            gh release upload $RELEASE_VERSION ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v-arm64.tar.gz
+          fi
 
           #publish:
           #  needs:
