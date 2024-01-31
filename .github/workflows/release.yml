@@ -17,7 +17,7 @@ jobs:
           release-type: go
 
       - uses: actions/checkout@v4
-        if: ${{ steps.release.outputs.release_created }} || ${{ steps.release.outputs.prs_created }}
+        if: ${{ steps.release.outputs.release_created || steps.release.outputs.prs_created }}
         with:
           fetch-depth: 0
 
@@ -40,12 +40,12 @@ jobs:
           export RELEASE_CANDIDATE=false
 
       - uses: actions/setup-go@v3
-        if: ${{ steps.release.outputs.release_created }} || ${{ steps.release.outputs.prs_created }}
+        if: ${{ steps.release.outputs.release_created || steps.release.outputs.prs_created }}
         with:
           go-version: "^1.21.0" # The Go version to download (if necessary) and use.
 
       - name: Build release artifacts
-        if: ${{ steps.release.outputs.release_created }} || ${{ steps.release.outputs.prs_created }}
+        if: ${{ steps.release.outputs.release_created || steps.release.outputs.prs_created }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
