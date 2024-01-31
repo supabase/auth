@@ -21,6 +21,18 @@ jobs:
           ${{ toJSON(steps.release.outputs) }}
           EOF
 
+          cat <<EOF
+          ${{ steps.release.outputs.pr }}
+          EOF
+
+          cat <<EOF
+          ${{ steps.release.outputs.pr.title }}
+          EOF
+
+          cat <<EOF
+          ${{ fromJSON(steps.release.outputs.pr).title }}
+          EOF
+
       - uses: actions/checkout@v4
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
