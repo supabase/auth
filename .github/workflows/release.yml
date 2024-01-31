@@ -16,6 +16,11 @@ jobs:
         with:
           release-type: go
 
+      - run: |
+          cat <<EOF
+          ${{ toJSON(steps.release.outputs) }}
+          EOF
+
       - uses: actions/checkout@v4
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
