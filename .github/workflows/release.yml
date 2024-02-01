@@ -86,7 +86,7 @@ jobs:
             # release-please only ignores releases that have a form like [A-Z0-9]<version>, so prefixing with rc<version>
             RELEASE_NAME=rc$RELEASE_VERSION
 
-            gh release create $RELEASE_NAME --title "v$RELEASE_VERSION" --prerelease -n 'This is a release candidate. See release-please PR #${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }} for context.'
+            GH_TOKEN="$GH_TOKEN" gh release create $RELEASE_NAME --title "v$RELEASE_VERSION" --prerelease -n 'This is a release candidate. See release-please PR #${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }} for context.'
           else
             if [ "$GITHUB_REF" == "refs/heads/main" ] || [ "$GITHUB_REF" == "refs/heads/master" ]
             then
@@ -97,7 +97,7 @@ jobs:
                 # Only create release branch if patch version is 0, as this
                 # means that the release can be patched in the future.
 
-                gh api \
+                GH_TOKEN="$GH_TOKEN" gh api \
                   --method POST \
                   -H "Accept: application/vnd.github+json" \
                   -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -108,7 +108,7 @@ jobs:
               fi
           fi
 
-          gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz
+          GH_TOKEN="$GH_TOKEN" gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz
 
           #publish:
           #  needs:
