@@ -104,6 +104,9 @@ jobs:
 
           if [ "$RELEASE_CANDIDATE" == "true" ]
           then
+            # release-please only ignores releases that have a form like [A-Z0-9]<version>, so prefixing with rc<version>
+            RELEASE_NAME=rc$RELEASE_VERSION
+
             gh release create $RELEASE_NAME --prerelease -n 'This is a release candidate. See release-please PR #${{ fromJSON(steps.release.outputs.pr).number }} for changes.'
           else
             if [ "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/master" ]
