@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.140.1](https://github.com/hf/gotrue-release-please-test/compare/v2.140.0...v2.140.1) (2024-02-01)
+
+
+### Bug Fixes
+
+* incr counter to 16 ([3749ecc](https://github.com/hf/gotrue-release-please-test/commit/3749eccfad27d65ec8aee61aff6a521093364bcc))
+* incr counter to 17 ([944ddfb](https://github.com/hf/gotrue-release-please-test/commit/944ddfbb4e7f652ec6e6d49e6fa838d6ffda9d89))
+* incr counter to 18 ([03b1469](https://github.com/hf/gotrue-release-please-test/commit/03b1469652fe37c98f5d13d8ed129f43140dd88f))
+* upgrade counter to 14 ([ac507e8](https://github.com/hf/gotrue-release-please-test/commit/ac507e8a57728fe7c85c11f39bdc7f976c74904a))
+* upgrade counter to 15 ([19efa89](https://github.com/hf/gotrue-release-please-test/commit/19efa893fb135c8d773f1a287753ce3a40370be6))
+
 ## [2.140.0](https://github.com/hf/gotrue-release-please-test/compare/v2.139.1...v2.140.0) (2024-02-01)
 
 
