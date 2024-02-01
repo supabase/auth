@@ -26,29 +26,29 @@ jobs:
         run: |
           set -ex
 
-          RELEASE_CANDIDATE=true
+          RELEASE_CANDIDATE={{ steps.release.outputs.release_created }}
+          if [ "$RELEASE_CANDIDATE" != "true" ]
+          then
+            RELEASE_CANDIDATE=false
+          fi
 
-          # Release please doesn't tell you the candidate version when it
-          # creates the PR, so we have to take it from the title.
-          MAIN_RELEASE_VERSION=$(node -e "console.log('${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).title }}'.split(' ').find(x => x.match(/[0-9]+[.][0-9]+[.][0-9]+/)))")
+          MAIN_RELEASE_VERSION=x
+          RELEASE_VERSION=y
 
-          # Use git describe tags to identify the number of commits the branch
-          # is ahead of the most recent non-release-candidate tag, which is
-          # part of the rc.<commits> value.
-          RELEASE_VERSION=$MAIN_RELEASE_VERSION-rc.$(node -e "console.log('$(git describe --tags --exclude *rc*)'.split('-')[1])")
+          if [ "$RELEASE_CANDIDATE" == "true" ]
+          then
+            # Release please doesn't tell you the candidate version when it
+            # creates the PR, so we have to take it from the title.
+            MAIN_RELEASE_VERSION=$(node -e "console.log('${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).title }}'.split(' ').find(x => x.match(/[0-9]+[.][0-9]+[.][0-9]+/)))")
 
-          echo "MAIN_RELEASE_VERSION=${MAIN_RELEASE_VERSION}" >> "${GITHUB_ENV}"
-          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
-          echo "RELEASE_CANDIDATE=${RELEASE_CANDIDATE}" >> "${GITHUB_ENV}"
-
-      - if: ${{ steps.release.outputs.release_created == 'true' }}
-        run: |
-          set -ex
-
-          RELEASE_CANDIDATE=false
-
-          MAIN_RELEASE_VERISON=${{ steps.release.outputs.tag_name }}
-          RELEASE_VERISON=${{ steps.release.outputs.tag_name }}
+            # Use git describe tags to identify the number of commits the branch
+            # is ahead of the most recent non-release-candidate tag, which is
+            # part of the rc.<commits> value.
+            RELEASE_VERSION=$MAIN_RELEASE_VERSION-rc.$(node -e "console.log('$(git describe --tags --exclude *rc*)'.split('-')[1])")
+          else
+            MAIN_RELEASE_VERISON=${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}
+            RELEASE_VERISON="$MAIN_RELEASE_VERSION"
+          fi
 
           echo "MAIN_RELEASE_VERSION=${MAIN_RELEASE_VERSION}" >> "${GITHUB_ENV}"
           echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
@@ -76,17 +76,14 @@ jobs:
         run: |
           set -ex
 
-          GH_TOKEN='${{ github.token }}'
-          GITHUB_TOKEN=$GH_TOKEN
-
-          RELEASE_NAME=$RELEASE_VERSION
+          RELEASE_NAME=v$RELEASE_VERSION
 
           if [ "$RELEASE_CANDIDATE" == "true" ]
           then
             # release-please only ignores releases that have a form like [A-Z0-9]<version>, so prefixing with rc<version>
             RELEASE_NAME=rc$RELEASE_VERSION
 
-            GH_TOKEN="$GH_TOKEN" gh release create $RELEASE_NAME --title "v$RELEASE_VERSION" --prerelease -n 'This is a release candidate. See release-please PR #${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }} for context.'
+            GH_TOKEN="${{ github.token }}" gh release create $RELEASE_NAME --title "v$RELEASE_VERSION" --prerelease -n 'This is a release candidate. See release-please PR #${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }} for context.'
           else
             if [ "$GITHUB_REF" == "refs/heads/main" ] || [ "$GITHUB_REF" == "refs/heads/master" ]
             then
@@ -97,7 +94,7 @@ jobs:
                 # Only create release branch if patch version is 0, as this
                 # means that the release can be patched in the future.
 
-                GH_TOKEN="$GH_TOKEN" gh api \
+                GH_TOKEN="$${{ github.token }} gh api \
                   --method POST \
                   -H "Accept: application/vnd.github+json" \
                   -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -108,7 +105,7 @@ jobs:
               fi
           fi
 
-          GH_TOKEN="$GH_TOKEN" gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz
+          GH_TOKEN="${{ github.token }}" gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz
 
           #publish:
           #  needs:
