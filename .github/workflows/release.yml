@@ -61,13 +61,11 @@ jobs:
 
       - name: Build release artifacts
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -ex
 
-          make deps
-          make all
+          RELEASE_VERSION=$RELEASE_VERSION make deps
+          RELEASE_VERSION=$RELEASE_VERSION make all
           ln -s auth gotrue
           tar -czvf auth-v$RELEASE_VERSION-x86.tar.gz auth gotrue migrations/
           mv auth-arm64 auth
@@ -87,7 +85,7 @@ jobs:
             # release-please only ignores releases that have a form like [A-Z0-9]<version>, so prefixing with rc<version>
             RELEASE_NAME=rc$RELEASE_VERSION
 
-            gh release create $RELEASE_NAME --title "v$RELEASE_VERSION" --prerelease -n 'This is a release candidate. See release-please PR #${{ fromJSON(steps.release.outputs.pr).number }} for context.'
+            gh release create $RELEASE_NAME --title "v$RELEASE_VERSION" --prerelease -n 'This is a release candidate. See release-please PR #${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }} for context.'
           else
             if [ "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/master" ]
             then
