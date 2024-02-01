@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.146.0](https://github.com/hf/gotrue-release-please-test/compare/v2.145.0...v2.146.0) (2024-02-01)
+
+
+### Features
+
+* final improvements ([287f45d](https://github.com/hf/gotrue-release-please-test/commit/287f45df10a6759a4c23d50ddca88acdbe593016))
+
+
+### Bug Fixes
+
+* gh pr comment ([ab32311](https://github.com/hf/gotrue-release-please-test/commit/ab32311df43cd7245628f9cc6aef9cb9e375f373))
+* ok no edit last ([065b20a](https://github.com/hf/gotrue-release-please-test/commit/065b20a62d37c0b3eddd3e82dbd4f412ab319b1b))
+
 ## [2.145.0](https://github.com/hf/gotrue-release-please-test/compare/v2.144.0...v2.145.0) (2024-02-01)
 
 
