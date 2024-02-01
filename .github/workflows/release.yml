@@ -16,27 +16,6 @@ jobs:
         with:
           release-type: go
 
-      - run: |
-          set -ex
-
-          echo $GITHUB_REF
-
-          cat <<EOF
-          ${{ toJSON(steps.release.outputs) }}
-          EOF
-
-          cat <<EOF
-          ${{ steps.release.outputs.pr }}
-          EOF
-
-          cat <<EOF
-          ${{ steps.release.outputs.pr.title }}
-          EOF
-
-          cat <<EOF
-          ${{ fromjson(steps.release.outputs.pr).title }}
-          EOF
-
       - uses: actions/checkout@v4
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
