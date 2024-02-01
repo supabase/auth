@@ -22,12 +22,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - if: ${{ steps.release.outputs.prs_created == 'true' && steps.release.outputs.pr }}
+      - if: ${{ steps.release.outputs }}
         run: |
           set -ex
 
-          RELEASE_CANDIDATE='${{ steps.release.outputs.release_created }}'
-          if [ "$RELEASE_CANDIDATE" != "true" ]
+          RELEASE_CANDIDATE=true
+          NOT_RELEASE_CANDIDATE='${{ steps.release.outputs.release_created }}'
+          if [ "$NOT_RELEASE_CANDIDATE" == "true" ]
           then
             RELEASE_CANDIDATE=false
           fi
