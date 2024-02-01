@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.142.0](https://github.com/hf/gotrue-release-please-test/compare/v2.141.0...v2.142.0) (2024-02-01)
+
+
+### Features
+
+* incr counter to 20 ([60c4f1c](https://github.com/hf/gotrue-release-please-test/commit/60c4f1ce790ba27898624a008270f6bc6155ddb4))
+
 ## [2.141.0](https://github.com/hf/gotrue-release-please-test/compare/v2.140.1...v2.141.0) (2024-02-01)
 
 
