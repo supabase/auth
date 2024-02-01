@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.147.0](https://github.com/hf/gotrue-release-please-test/compare/v2.146.0...v2.147.0) (2024-02-01)
+
+
+### Features
+
+* fix refs ([882d244](https://github.com/hf/gotrue-release-please-test/commit/882d2444914dc3af191d926c683e5ab14989f3fd))
+
 ## [2.146.0](https://github.com/hf/gotrue-release-please-test/compare/v2.145.0...v2.146.0) (2024-02-01)
 
 
