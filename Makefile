@@ -1,6 +1,11 @@
 .PHONY: all build deps dev-deps image migrate test vet sec format unused
 CHECK_FILES?=./...
-FLAGS?=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=`git describe --tags`" -buildvcs=false
+
+FLAGS=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=`git describe --tags`" -buildvcs=false
+ifdef RELEASE_VERSION
+	FLAGS=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=$(RELEASE_VERSION)" -buildvcs=false
+endif
+
 DEV_DOCKER_COMPOSE:=docker-compose-dev.yml
 
 help: ## Show this help.
