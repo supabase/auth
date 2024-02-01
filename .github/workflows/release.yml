@@ -47,7 +47,7 @@ jobs:
             # part of the rc.<commits> value.
             RELEASE_VERSION=$MAIN_RELEASE_VERSION-rc.$(node -e "console.log('$(git describe --tags --exclude *rc*)'.split('-')[1])")
           else
-            MAIN_RELEASE_VERISON=${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}
+            MAIN_RELEASE_VERSION=${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}
             RELEASE_VERISON="$MAIN_RELEASE_VERSION"
           fi
 
