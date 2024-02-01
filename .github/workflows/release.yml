@@ -91,7 +91,8 @@ jobs:
               --prerelease \
               -n "This is a release candidate. See release-please PR #$PR_NUMBER for context."
 
-            GH_TOKEN='${{ github.token }}' gh pr "$PR_NUMBER" comment \
+            GH_TOKEN='${{ github.token }}' gh pr comment "$PR_NUMBER" \
+              --edit-last \
               -b "Release candidate [v$RELEASE_VERSION](https://github.com/hf/gotrue-release-please-test/releases/tags/$RELEASE_NAME) published."
           else
             if [ "$GITHUB_REF" == "refs/heads/main" ] || [ "$GITHUB_REF" == "refs/heads/master" ]
