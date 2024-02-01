@@ -76,7 +76,8 @@ jobs:
         run: |
           set -ex
 
-          GITHUB_TOKEN='${{ secrets.GITHUB_TOKEN }}'
+          GH_TOKEN='${{ github.token }}'
+          GITHUB_TOKEN=$GH_TOKEN
 
           RELEASE_NAME=$RELEASE_VERSION
 
