@@ -1,0 +1,45 @@
+name: Check pull requests
+
+on:
+  push:
+    branches: '*'
+    branches-ignore: # Run the checks on all branches but the protected ones
+      - master
+      - release/*
+
+  pull_request_target:
+    branches:
+      - master
+      - release/*
+    types:
+      - opened
+      - edited
+      - reopened
+      - ready_for_review
+
+jobs:
+  check-conventional-commits:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master # Always load the latest workflow, not the branch's
+          sparse-checkout: |
+            .github
+
+      - if: ${{ github.event.pull_request }}
+        run: |
+          set -ex
+
+          node .github/workflows/conventional-commits-lint.js pr <<EOF
+          ${{ github.event.pull_request && toJSON(github.event.pull_request) }}
+          EOF
+
+      - if: ${{ github.event.push }}
+        run: |
+          set -ex
+
+          node .github/workflows/conventional-commits-lint.js push <<EOF
+          ${{ github.event.push && toJSON(github.event.push) }}
+          EOF
