@@ -16,6 +16,7 @@ jobs:
         id: release
         with:
           release-type: go
+          target-branch: ${{ github.ref_name }}
 
       - uses: actions/checkout@v4
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
