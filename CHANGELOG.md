@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.145.0](https://github.com/hf/gotrue-release-please-test/compare/v2.144.0...v2.145.0) (2024-02-01)
+
+
+### Features
+
+* ok maybe this will finally fix it ([3cfdc06](https://github.com/hf/gotrue-release-please-test/commit/3cfdc06383b5267d5a3c8c824f49641aec4ee542))
+
 ## [2.144.0](https://github.com/hf/gotrue-release-please-test/compare/v2.143.0...v2.144.0) (2024-02-01)
 
 
