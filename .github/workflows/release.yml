@@ -22,7 +22,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - if: ${{ steps.release.outputs.prs_created == 'true' }}
+      - if: ${{ steps.release.outputs.prs_created == 'true' && steps.release.outputs.pr }}
         run: |
           set -ex
 
@@ -87,7 +87,7 @@ jobs:
 
             gh release create $RELEASE_NAME --title "v$RELEASE_VERSION" --prerelease -n 'This is a release candidate. See release-please PR #${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }} for context.'
           else
-            if [ "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/master" ]
+            if [ "$GITHUB_REF" == "refs/heads/main" ] || [ "$GITHUB_REF" == "refs/heads/master" ]
             then
               IS_PATCH_ZERO=$(node -e "console.log('$RELEASE_VERSION'.endsWith('.0'))")
 
