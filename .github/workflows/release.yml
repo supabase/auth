@@ -101,7 +101,7 @@ jobs:
               -n "This is a release candidate. See release-please PR #$PR_NUMBER for context."
 
             GH_TOKEN='${{ github.token }}' gh pr comment "$PR_NUMBER" \
-              -b "Release candidate [v$RELEASE_VERSION](https://github.com/hf/gotrue-release-please-test/releases/tag/$RELEASE_NAME) published."
+              -b "Release candidate [v$RELEASE_VERSION](https://github.com/supabase/gotrue/releases/tag/$RELEASE_NAME) published."
           else
             if [ "$GITHUB_REF" == "refs/heads/main" ] || [ "$GITHUB_REF" == "refs/heads/master" ]
             then
@@ -116,7 +116,7 @@ jobs:
                   --method POST \
                   -H "Accept: application/vnd.github+json" \
                   -H "X-GitHub-Api-Version: 2022-11-28" \
-                  /repos/hf/gotrue-release-please-test/git/refs \
+                  /repos/supabase/gotrue/git/refs \
                   -f "ref=refs/heads/release/${RELEASE_VERSION}" \
                   -f "sha=$GITHUB_SHA"
                 fi
