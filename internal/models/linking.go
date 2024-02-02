@@ -72,7 +72,7 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 		}
 
 		// we overwrite the email with the existing user's email since the user
-		// could have an empty empty
+		// could have an empty email
 		candidateEmail.Email = user.GetEmail()
 		return AccountLinkingResult{
 			Decision:       AccountExists,
@@ -109,14 +109,14 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 	var similarIdentities []*Identity
 	var similarUsers []*User
 	// look for similar identities and users based on email
-	if terr := tx.Q().Eager().Where("email ilike any (?)", verifiedEmails).All(&similarIdentities); terr != nil {
+	if terr := tx.Q().Eager().Where("email = any (?)", verifiedEmails).All(&similarIdentities); terr != nil {
 		return AccountLinkingResult{}, terr
 	}
 
 	if !strings.HasPrefix(providerName, "sso:") {
 		// there can be multiple user accounts with the same email when is_sso_user is true
 		// so we just do not consider those similar user accounts
-		if terr := tx.Q().Eager().Where("email ilike any (?) and is_sso_user is false", verifiedEmails).All(&similarUsers); terr != nil {
+		if terr := tx.Q().Eager().Where("lower(email) = any (?) and is_sso_user = false", verifiedEmails).All(&similarUsers); terr != nil {
 			return AccountLinkingResult{}, terr
 		}
 	}
