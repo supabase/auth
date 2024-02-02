@@ -144,7 +144,7 @@ func NewFactor(user *User, friendlyName string, factorType string, state FactorS
 // FindFactorsByUser returns all factors belonging to a user ordered by timestamp
 func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	factors := []*Factor{}
-	if err := tx.Eager().Q().Where("user_id = ?", user.ID).Order("created_at asc").All(&factors); err != nil {
+	if err := tx.Q().Where("user_id = ?", user.ID).Order("created_at asc").All(&factors); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return factors, nil
 		}
@@ -218,6 +218,23 @@ func DeleteFactorsByUserId(tx *storage.Connection, userId uuid.UUID) error {
 	return nil
 }
 
-func (f *Factor) IsExpired(validityDuration time.Duration) bool {
-	return !f.IsVerified() && len(f.Challenge) == 0 && f.CreatedAt.Add(validityDuration).Before(time.Now())
+func DeleteExpiredFactors(tx *storage.Connection, validityDuration time.Duration) error {
+	totalSeconds := int64(validityDuration / time.Second)
+	validityInterval := fmt.Sprintf("interval '%d seconds'", totalSeconds)
+
+	factorTable := (&pop.Model{Value: Factor{}}).TableName()
+	challengeTable := (&pop.Model{Value: Challenge{}}).TableName()
+
+	query := fmt.Sprintf(`delete from %s
+where status != 'verified'
+and not exists (
+    select *
+    from %s
+    where %s.id = %s.factor_id
+)
+and created_at + %s < current_timestamp;`, factorTable, challengeTable, factorTable, challengeTable, validityInterval)
+	if err := tx.RawQuery(query).Exec(); err != nil {
+		return err
+	}
+	return nil
 }

@@ -90,16 +90,11 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	factorCount := len(factors)
 	numVerifiedFactors := 0
+	if err := models.DeleteExpiredFactors(a.db, config.MFA.FactorExpiryDuration); err != nil {
+		return err
+	}
 
-	// Cleanup inactive  factors
 	for _, factor := range factors {
-		if factor.IsExpired(config.MFA.FactorExpiryDuration) {
-			if err := a.db.Destroy(factor); err != nil {
-				return internalServerError("error deleting factors").WithInternalError(err)
-			}
-			// We adjust length of factors as destroying it in the DB doesn't remove it from the array
-			factorCount -= 1
-		}
 		if factor.IsVerified() {
 			numVerifiedFactors += 1
 		}
