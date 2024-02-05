@@ -116,7 +116,7 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 	if !strings.HasPrefix(providerName, "sso:") {
 		// there can be multiple user accounts with the same email when is_sso_user is true
 		// so we just do not consider those similar user accounts
-		if terr := tx.Q().Eager().Where("lower(email) = any (?) and is_sso_user = false", verifiedEmails).All(&similarUsers); terr != nil {
+		if terr := tx.Q().Eager().Where("email = any (?) and is_sso_user = false", verifiedEmails).All(&similarUsers); terr != nil {
 			return AccountLinkingResult{}, terr
 		}
 	}
