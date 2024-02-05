@@ -50,7 +50,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 		return nil, err
 	}
 
-	oauthScopes := []string{"openid"}
+	oauthScopes := []string{"openid", "email"}
 
 	if scopes != "" {
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
