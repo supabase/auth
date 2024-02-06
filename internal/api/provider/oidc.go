@@ -90,9 +90,8 @@ func parseGoogleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, 
 
 	if claims.Email != "" {
 		data.Emails = append(data.Emails, Email{
-			Email: claims.Email,
-			// Verified: claims.IsEmailVerified(),
-			Verified: false,
+			Email:    claims.Email,
+			Verified: claims.IsEmailVerified(),
 			Primary:  true,
 		})
 	}
