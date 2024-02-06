@@ -90,8 +90,9 @@ func parseGoogleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, 
 
 	if claims.Email != "" {
 		data.Emails = append(data.Emails, Email{
-			Email:    claims.Email,
-			Verified: claims.IsEmailVerified(),
+			Email: claims.Email,
+			// Verified: claims.IsEmailVerified(),
+			Verified: false,
 			Primary:  true,
 		})
 	}
@@ -122,8 +123,8 @@ type AppleIDTokenClaims struct {
 
 	Email string `json:"email"`
 
-	AuthTime       *float64 `json:"auth_time"`
-	IsPrivateEmail *bool    `json:"is_private_email,string"`
+	AuthTime       *float64        `json:"auth_time"`
+	IsPrivateEmail *IsPrivateEmail `json:"is_private_email"`
 }
 
 func parseAppleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {

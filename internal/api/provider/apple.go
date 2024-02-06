@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -17,8 +18,34 @@ const IssuerApple = "https://appleid.apple.com"
 // AppleProvider stores the custom config for apple provider
 type AppleProvider struct {
 	*oauth2.Config
-
 	oidc *oidc.Provider
+}
+
+type IsPrivateEmail bool
+
+// Apple returns an is_private_email field that could be a string or boolean value so we need to implement a custom unmarshaler
+// https://developer.apple.com/documentation/sign_in_with_apple/sign_in_with_apple_rest_api/authenticating_users_with_sign_in_with_apple
+func (b *IsPrivateEmail) UnmarshalJSON(data []byte) error {
+	var boolVal bool
+	if err := json.Unmarshal(data, &boolVal); err == nil {
+		*b = IsPrivateEmail(boolVal)
+		return nil
+	}
+
+	// ignore the error and try to unmarshal as a string
+	var strVal string
+	if err := json.Unmarshal(data, &strVal); err != nil {
+		return err
+	}
+
+	var err error
+	boolVal, err = strconv.ParseBool(strVal)
+	if err != nil {
+		return err
+	}
+
+	*b = IsPrivateEmail(boolVal)
+	return nil
 }
 
 type appleName struct {
