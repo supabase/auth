@@ -373,19 +373,21 @@ func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Conn
 	config := a.config
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
-			return terr
-		}
-
 		if terr := triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
 			return terr
 		}
 
 		if params.Type == smsVerification {
+			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
+				return terr
+			}
 			if terr := user.ConfirmPhone(tx); terr != nil {
 				return internalServerError("Error confirming user").WithInternalError(terr)
 			}
 		} else if params.Type == phoneChangeVerification {
+			if terr := models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
+				return terr
+			}
 			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone"); terr != nil {
 				if !models.IsNotFoundError(terr) {
 					return terr
