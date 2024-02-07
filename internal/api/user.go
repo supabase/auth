@@ -7,9 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -193,7 +191,6 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		var identities []models.Identity
 		if params.Email != "" && params.Email != user.GetEmail() {
 			mailer := a.Mailer(ctx)
 			referrer := utilities.GetReferrer(r, config)
@@ -217,29 +214,13 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Phone != "" && params.Phone != user.GetPhone() {
-			identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone")
-			if terr != nil {
-				if !models.IsNotFoundError(terr) {
-					return terr
-				}
-				// updating the user's phone should create a new phone identity since the user doesn't have one
-				identity, terr = a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
-					Subject: user.ID.String(),
-					Phone:   params.Phone,
-				}))
-				if terr != nil {
-					return terr
-				}
-			} else {
-				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
-					"phone": params.Phone,
+			if config.Sms.Autoconfirm {
+				if _, terr := a.smsVerify(r, ctx, tx, user, &VerifyParams{
+					Type:  phoneChangeVerification,
+					Phone: params.Phone,
 				}); terr != nil {
 					return terr
 				}
-			}
-			identities = append(identities, *identity)
-			if config.Sms.Autoconfirm {
-				return user.UpdatePhone(tx, params.Phone)
 			} else {
 				smsProvider, terr := sms_provider.GetSmsProvider(*config)
 				if terr != nil {
@@ -250,7 +231,6 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				}
 			}
 		}
-		user.Identities = append(user.Identities, identities...)
 
 		if terr = models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 			return internalServerError("Error recording audit log entry").WithInternalError(terr)

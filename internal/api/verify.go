@@ -260,7 +260,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 				return nil
 			}
 		case smsVerification, phoneChangeVerification:
-			user, terr = a.smsVerify(r, ctx, tx, user, params.Type)
+			user, terr = a.smsVerify(r, ctx, tx, user, params)
 		default:
 			return unprocessableEntityError("Unsupported verification type")
 		}
@@ -369,27 +369,50 @@ func (a *API) recoverVerify(r *http.Request, ctx context.Context, conn *storage.
 	return user, nil
 }
 
-func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User, otpType string) (*models.User, error) {
+func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User, params *VerifyParams) (*models.User, error) {
 	config := a.config
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
-		var terr error
-		if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
 			return terr
 		}
 
-		if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
+		if terr := triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
 			return terr
 		}
 
-		if otpType == smsVerification {
-			if terr = user.ConfirmPhone(tx); terr != nil {
+		if params.Type == smsVerification {
+			if terr := user.ConfirmPhone(tx); terr != nil {
 				return internalServerError("Error confirming user").WithInternalError(terr)
 			}
-		} else if otpType == phoneChangeVerification {
-			if terr = user.ConfirmPhoneChange(tx); terr != nil {
+		} else if params.Type == phoneChangeVerification {
+			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone"); terr != nil {
+				if !models.IsNotFoundError(terr) {
+					return terr
+				}
+				// confirming the phone change should create a new phone identity if the user doesn't have one
+				if _, terr = a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
+					Subject:       user.ID.String(),
+					Phone:         params.Phone,
+					PhoneVerified: true,
+				})); terr != nil {
+					return terr
+				}
+			} else {
+				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
+					"phone":          params.Phone,
+					"phone_verified": true,
+				}); terr != nil {
+					return terr
+				}
+			}
+			if terr := user.ConfirmPhoneChange(tx); terr != nil {
 				return internalServerError("Error confirming user").WithInternalError(terr)
 			}
+		}
+
+		if terr := tx.Load(user, "Identities"); terr != nil {
+			return internalServerError("Error refetching identities").WithInternalError(terr)
 		}
 		return nil
 	})
