@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/structs"
 	"github.com/sethvargo/go-password/password"
+	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
@@ -478,17 +480,38 @@ func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *stor
 
 	// one email is confirmed at this point if GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED is enabled
 	err := conn.Transaction(func(tx *storage.Connection) error {
-		var terr error
-
-		if terr = models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 			return terr
 		}
 
-		if terr = triggerEventHooks(ctx, tx, EmailChangeEvent, user, config); terr != nil {
+		if terr := triggerEventHooks(ctx, tx, EmailChangeEvent, user, config); terr != nil {
 			return terr
 		}
 
-		if terr = user.ConfirmEmailChange(tx, zeroConfirmation); terr != nil {
+		if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email"); terr != nil {
+			if !models.IsNotFoundError(terr) {
+				return terr
+			}
+			// confirming the email change should create a new email identity if the user doesn't have one
+			if _, terr = a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+				Subject:       user.ID.String(),
+				Email:         params.Email,
+				EmailVerified: true,
+			})); terr != nil {
+				return terr
+			}
+		} else {
+			if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
+				"email":          params.Email,
+				"email_verified": true,
+			}); terr != nil {
+				return terr
+			}
+		}
+		if terr := tx.Load(user, "Identities"); terr != nil {
+			return internalServerError("Error refetching identities").WithInternalError(terr)
+		}
+		if terr := user.ConfirmEmailChange(tx, zeroConfirmation); terr != nil {
 			return internalServerError("Error confirm email").WithInternalError(terr)
 		}
 

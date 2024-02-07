@@ -195,27 +195,6 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		var identities []models.Identity
 		if params.Email != "" && params.Email != user.GetEmail() {
-			identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email")
-			if terr != nil {
-				if !models.IsNotFoundError(terr) {
-					return terr
-				}
-				// updating the user's email should create a new email identity since the user doesn't have one
-				identity, terr = a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
-					Subject: user.ID.String(),
-					Email:   params.Email,
-				}))
-				if terr != nil {
-					return terr
-				}
-			} else {
-				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
-					"email": params.Email,
-				}); terr != nil {
-					return terr
-				}
-			}
-			identities = append(identities, *identity)
 			mailer := a.Mailer(ctx)
 			referrer := utilities.GetReferrer(r, config)
 			flowType := getFlowFromChallenge(params.CodeChallenge)
