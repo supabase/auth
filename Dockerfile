@@ -13,7 +13,9 @@ RUN make deps
 
 # Building stuff
 COPY . /go/src/github.com/supabase/auth
-RUN make build
+
+# Make sure you change the RELEASE_VERSION value before publishing an image.
+RUN RELEASE_VERSION=unspecified make build
 
 FROM alpine:3.17
 RUN adduser -D -u 1000 supabase
