@@ -37,6 +37,14 @@ jobs:
       - uses: docker/setup-qemu-action@v2
         with:
           platforms: amd64,arm64
+
+      - run: |
+          set -ex
+
+          echo "Adding explicit release version to Dockerfile..."
+
+          sed -i 's/RELEASE_VERSION=unspecified/RELEASE_VERSION=${{ inputs.version }}/' Dockerfile
+
       - uses: docker/setup-buildx-action@v2
 
       - name: Login to DockerHub
