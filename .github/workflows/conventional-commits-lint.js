@@ -8,6 +8,7 @@ const RELEASE_AS_DIRECTIVE = /^\s*Release-As:/im;
 const BREAKING_CHANGE_DIRECTIVE = /^\s*BREAKING[ \t]+CHANGE:/im;
 
 const ALLOWED_CONVENTIONAL_COMMIT_PREFIXES = [
+  "revert",
   "feat",
   "fix",
   "ci",
