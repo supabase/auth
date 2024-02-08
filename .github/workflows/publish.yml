@@ -34,8 +34,8 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=ref,event=tag
-            type=raw,value=${{ inputs.version }},enable=${{ github.event_name != 'push' }}
+            type=sha,enable=true
+            type=semver,value=${{ inputs.version }},enable=true
 
       - uses: docker/setup-qemu-action@v2
         with:
