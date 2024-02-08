@@ -1,9 +1,6 @@
 name: Publish to Image Registry
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_call:
     inputs:
       version:
@@ -35,7 +32,7 @@ jobs:
             latest=false
           tags: |
             type=sha,enable=true
-            type=semver,value=${{ inputs.version }},enable=true
+            type=semver,pattern={{version}},value=${{ inputs.version }},enable=true
 
       - uses: docker/setup-qemu-action@v2
         with:
