@@ -28,10 +28,12 @@ if (object === "pr") {
   });
 } else if (object === "push") {
   validate.push(
-    ...payload.commits.map((commit) => ({
-      title: commit.message.split("\n")[0],
-      content: commit.message,
-    })),
+    ...payload.commits
+      .map((commit) => ({
+        title: commit.message.split("\n")[0],
+        content: commit.message,
+      }))
+      .filter(({ title }) => !title.startsWith("Merge branch ") && !title.startsWith("Revert ")),
   );
 } else {
   console.error(
