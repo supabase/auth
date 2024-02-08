@@ -133,8 +133,8 @@ jobs:
   publish:
     needs:
       - release_please
-    if: ${{ success() && needs.release_please.outputs.RELEASE_NAME }}
+    if: ${{ success() && needs.release_please.outputs.RELEASE_VERSION }}
     uses: ./.github/workflows/publish.yml
     secrets: inherit
     with:
-      version: ${{ needs.release_please.outputs.RELEASE_NAME }}
+      version: ${{ needs.release_please.outputs.RELEASE_VERSION }}
