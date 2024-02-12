@@ -216,9 +216,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
-					return terr
-				}
 				if terr = user.Confirm(tx); terr != nil {
 					return internalServerError("Database error updating user").WithInternalError(terr)
 				}
@@ -251,9 +248,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					"provider": params.Provider,
 					"channel":  params.Channel,
 				}); terr != nil {
-					return terr
-				}
-				if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
 					return terr
 				}
 				if terr = user.ConfirmPhone(tx); terr != nil {
@@ -314,9 +308,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if terr = models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 				"provider": params.Provider,
 			}); terr != nil {
-				return terr
-			}
-			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 				return terr
 			}
 			token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
@@ -387,9 +378,6 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, user 
 		}
 		if terr = user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {
 			return internalServerError("Database error updating user").WithInternalError(terr)
-		}
-		if terr = triggerEventHooks(ctx, tx, ValidateEvent, user, config); terr != nil {
-			return terr
 		}
 		return nil
 	})

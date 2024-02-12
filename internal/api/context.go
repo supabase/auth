@@ -195,16 +195,6 @@ func getExternalReferrer(ctx context.Context) string {
 	return obj.(string)
 }
 
-// getFunctionHooks reads the request ID from the context.
-func getFunctionHooks(ctx context.Context) map[string][]string {
-	obj := ctx.Value(functionHooksKey)
-	if obj == nil {
-		return map[string][]string{}
-	}
-
-	return obj.(map[string][]string)
-}
-
 // withAdminUser adds the admin user to the context.
 func withAdminUser(ctx context.Context, u *models.User) context.Context {
 	return context.WithValue(ctx, adminUserKey, u)

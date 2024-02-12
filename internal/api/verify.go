@@ -291,8 +291,6 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 }
 
 func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
-	config := a.config
-
 	if user.EncryptedPassword == "" && user.InvitedAt != nil {
 		// sign them up with temporary password, and require application
 		// to present the user with a password set form
@@ -318,10 +316,6 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 			return terr
 		}
 
-		if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
-			return terr
-		}
-
 		if terr = user.Confirm(tx); terr != nil {
 			return internalServerError("Error confirming user").WithInternalError(terr)
 		}
@@ -334,8 +328,6 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 }
 
 func (a *API) recoverVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
-	config := a.config
-
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = user.Recover(tx); terr != nil {
@@ -346,17 +338,11 @@ func (a *API) recoverVerify(r *http.Request, ctx context.Context, conn *storage.
 				return terr
 			}
 
-			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
-				return terr
-			}
 			if terr = user.Confirm(tx); terr != nil {
 				return terr
 			}
 		} else {
 			if terr = models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", nil); terr != nil {
-				return terr
-			}
-			if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
 				return terr
 			}
 		}
@@ -370,12 +356,8 @@ func (a *API) recoverVerify(r *http.Request, ctx context.Context, conn *storage.
 }
 
 func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User, params *VerifyParams) (*models.User, error) {
-	config := a.config
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
-		if terr := triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
-			return terr
-		}
 
 		if params.Type == smsVerification {
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
@@ -506,10 +488,6 @@ func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *stor
 	// one email is confirmed at this point if GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED is enabled
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
-			return terr
-		}
-
-		if terr := triggerEventHooks(ctx, tx, EmailChangeEvent, user, config); terr != nil {
 			return terr
 		}
 
