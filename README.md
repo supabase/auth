@@ -664,6 +664,8 @@ Default Content (if template is unavailable):
 <p><a href="{{ .ConfirmationURL }}">Change Email</a></p>
 ```
 
+> ⚠️ As of 12th Feb 2024, Webhooks are deprecated and will be removed in the next release. We will be replacing the existing Webhooks implementation with a similar HTTP Hook system in the coming weeks.
+
 `WEBHOOK_URL` - `string`
 
 Url of the webhook receiver endpoint. This will be called when events like `validate`, `signup` or `login` occur.
