@@ -67,7 +67,7 @@ func (a *API) deprecationNotices(ctx context.Context) {
 		log.Warn("DEPRECATION NOTICE: GOTRUE_JWT_DEFAULT_GROUP_NAME not supported by Supabase's GoTrue, will be removed soon")
 	}
 	if config.Webhook.URL != "" {
-		log.Warn("DEPRECATION NOTICE: GOTRUE_WEBHOOK_URL not supported by Supabase's GoTrue, all GOTRUE_WEBHOOK related configuration will be removed soon")
+		log.Warn("DEPRECATION NOTICE: GOTRUE_WEBHOOK_URL not supported by Supabase's GoTrue, all GOTRUE_WEBHOOK related configuration will be removed after v2.139.2")
 	}
 }
 
