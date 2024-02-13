@@ -53,6 +53,10 @@ type OAuthProviderConfiguration struct {
 	SkipNonceCheck bool     `json:"skip_nonce_check" split_words:"true"`
 }
 
+type AnonymousProviderConfiguration struct {
+	Enabled bool `json:"enabled" default:"false"`
+}
+
 type EmailProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"true"`
 }
@@ -264,33 +268,34 @@ type EmailContentConfiguration struct {
 }
 
 type ProviderConfiguration struct {
-	Apple                   OAuthProviderConfiguration `json:"apple"`
-	Azure                   OAuthProviderConfiguration `json:"azure"`
-	Bitbucket               OAuthProviderConfiguration `json:"bitbucket"`
-	Discord                 OAuthProviderConfiguration `json:"discord"`
-	Facebook                OAuthProviderConfiguration `json:"facebook"`
-	Figma                   OAuthProviderConfiguration `json:"figma"`
-	Fly                     OAuthProviderConfiguration `json:"fly"`
-	Github                  OAuthProviderConfiguration `json:"github"`
-	Gitlab                  OAuthProviderConfiguration `json:"gitlab"`
-	Google                  OAuthProviderConfiguration `json:"google"`
-	Kakao                   OAuthProviderConfiguration `json:"kakao"`
-	Notion                  OAuthProviderConfiguration `json:"notion"`
-	Keycloak                OAuthProviderConfiguration `json:"keycloak"`
-	Linkedin                OAuthProviderConfiguration `json:"linkedin"`
-	LinkedinOIDC            OAuthProviderConfiguration `json:"linkedin_oidc" envconfig:"LINKEDIN_OIDC"`
-	Spotify                 OAuthProviderConfiguration `json:"spotify"`
-	Slack                   OAuthProviderConfiguration `json:"slack"`
-	Twitter                 OAuthProviderConfiguration `json:"twitter"`
-	Twitch                  OAuthProviderConfiguration `json:"twitch"`
-	WorkOS                  OAuthProviderConfiguration `json:"workos"`
-	Email                   EmailProviderConfiguration `json:"email"`
-	Phone                   PhoneProviderConfiguration `json:"phone"`
-	Zoom                    OAuthProviderConfiguration `json:"zoom"`
-	IosBundleId             string                     `json:"ios_bundle_id" split_words:"true"`
-	RedirectURL             string                     `json:"redirect_url"`
-	AllowedIdTokenIssuers   []string                   `json:"allowed_id_token_issuers" split_words:"true"`
-	FlowStateExpiryDuration time.Duration              `json:"flow_state_expiry_duration" split_words:"true"`
+	AnonymousUsers          AnonymousProviderConfiguration `json:"anonymous_users" split_words:"true"`
+	Apple                   OAuthProviderConfiguration     `json:"apple"`
+	Azure                   OAuthProviderConfiguration     `json:"azure"`
+	Bitbucket               OAuthProviderConfiguration     `json:"bitbucket"`
+	Discord                 OAuthProviderConfiguration     `json:"discord"`
+	Facebook                OAuthProviderConfiguration     `json:"facebook"`
+	Figma                   OAuthProviderConfiguration     `json:"figma"`
+	Fly                     OAuthProviderConfiguration     `json:"fly"`
+	Github                  OAuthProviderConfiguration     `json:"github"`
+	Gitlab                  OAuthProviderConfiguration     `json:"gitlab"`
+	Google                  OAuthProviderConfiguration     `json:"google"`
+	Kakao                   OAuthProviderConfiguration     `json:"kakao"`
+	Notion                  OAuthProviderConfiguration     `json:"notion"`
+	Keycloak                OAuthProviderConfiguration     `json:"keycloak"`
+	Linkedin                OAuthProviderConfiguration     `json:"linkedin"`
+	LinkedinOIDC            OAuthProviderConfiguration     `json:"linkedin_oidc" envconfig:"LINKEDIN_OIDC"`
+	Spotify                 OAuthProviderConfiguration     `json:"spotify"`
+	Slack                   OAuthProviderConfiguration     `json:"slack"`
+	Twitter                 OAuthProviderConfiguration     `json:"twitter"`
+	Twitch                  OAuthProviderConfiguration     `json:"twitch"`
+	WorkOS                  OAuthProviderConfiguration     `json:"workos"`
+	Email                   EmailProviderConfiguration     `json:"email"`
+	Phone                   PhoneProviderConfiguration     `json:"phone"`
+	Zoom                    OAuthProviderConfiguration     `json:"zoom"`
+	IosBundleId             string                         `json:"ios_bundle_id" split_words:"true"`
+	RedirectURL             string                         `json:"redirect_url"`
+	AllowedIdTokenIssuers   []string                       `json:"allowed_id_token_issuers" split_words:"true"`
+	FlowStateExpiryDuration time.Duration                  `json:"flow_state_expiry_duration" split_words:"true"`
 }
 
 type SMTPConfiguration struct {
