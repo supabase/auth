@@ -143,13 +143,9 @@ comprehensive list of those features:
    configuration parameter.
 2. System user (zero UUID user).
 3. Super admin via the `is_super_admin` column.
-4. SAML sign-in provider via the `GOTRUE_SAML_ENABLED` configuration
-   parameter. (A different implementation for SAML may appear in the future
-   which will be supported.)
-5. Support for MySQL based databases. (Only Postgres is supported.)
-6. Group information in JWTs via `GOTRUE_JWT_ADMIN_GROUP_NAME` and other
+4. Group information in JWTs via `GOTRUE_JWT_ADMIN_GROUP_NAME` and other
    configuration fields.
-7. Symmetrics JWTs. In the future it is very likely that Auth will begin
+5. Symmetrics JWTs. In the future it is very likely that Auth will begin
    issuing asymmetric JWTs (subject to configuration), so do not rely on the
    assumption that only HS256 signed JWTs will be issued long term.
 
@@ -664,28 +660,6 @@ Default Content (if template is unavailable):
 <p><a href="{{ .ConfirmationURL }}">Change Email</a></p>
 ```
 
-> ⚠️ As of 12th Feb 2024, Webhooks are deprecated and will be removed in the next release. We will be replacing the existing Webhooks implementation with a similar HTTP Hook system in the coming weeks.
-
-`WEBHOOK_URL` - `string`
-
-Url of the webhook receiver endpoint. This will be called when events like `validate`, `signup` or `login` occur.
-
-`WEBHOOK_SECRET` - `string`
-
-Shared secret to authorize webhook requests. This secret signs the [JSON Web Signature](https://tools.ietf.org/html/draft-ietf-jose-json-web-signature-41) of the request. You _should_ use this to verify the integrity of the request. Otherwise others can feed your webhook receiver with fake data.
-
-`WEBHOOK_RETRIES` - `number`
-
-How often Auth should try a failed hook.
-
-`WEBHOOK_TIMEOUT_SEC` - `number`
-
-Time between retries (in seconds).
-
-`WEBHOOK_EVENTS` - `list`
-
-Which events should trigger a webhook. You can provide a comma separated list.
-For example to listen to all events, provide the values `validate,signup,login`.
 
 ### Phone Auth
 

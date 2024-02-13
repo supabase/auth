@@ -38,7 +38,6 @@ func TestSignup(t *testing.T) {
 
 func (ts *SignupTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
-	ts.Config.Webhook = conf.WebhookConfig{}
 }
 
 // TestSignup tests API /signup route
