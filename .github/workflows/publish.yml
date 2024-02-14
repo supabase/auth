@@ -34,7 +34,7 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=semver,pattern=v{{version}},value=${{ inputs.version }},enable=true
+            type=raw,value=v${{ inputs.version }},enable=true
 
       - uses: docker/setup-qemu-action@v2
         with:
