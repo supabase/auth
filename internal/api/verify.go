@@ -520,14 +520,14 @@ func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *stor
 			// confirming the email change should create a new email identity if the user doesn't have one
 			if _, terr = a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
 				Subject:       user.ID.String(),
-				Email:         params.Email,
+				Email:         user.EmailChange,
 				EmailVerified: true,
 			})); terr != nil {
 				return terr
 			}
 		} else {
 			if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
-				"email":          params.Email,
+				"email":          user.EmailChange,
 				"email_verified": true,
 			}); terr != nil {
 				return terr
