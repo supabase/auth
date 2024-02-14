@@ -188,6 +188,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		})
 
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
+			r.Use(api.requireNotAnonymous)
 			r.Post("/", api.EnrollFactor)
 			r.Route("/{factor_id}", func(r *router) {
 				r.Use(api.loadFactor)
