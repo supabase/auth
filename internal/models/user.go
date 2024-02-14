@@ -66,6 +66,7 @@ type User struct {
 	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
 	BannedUntil *time.Time `json:"banned_until,omitempty" db:"banned_until"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
+	IsAnonymous bool       `json:"is_anonymous" db:"is_anonymous" rw:"r"`
 
 	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 }

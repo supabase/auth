@@ -97,6 +97,7 @@ type AccessTokenClaims struct {
 	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
 	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
+	IsAnonymous                   bool                   `json:"is_anonymous"`
 }
 
 type MFAVerificationAttemptInput struct {

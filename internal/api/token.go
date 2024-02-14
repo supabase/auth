@@ -34,6 +34,7 @@ type AccessTokenClaims struct {
 	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
 	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
+	IsAnonymous                   bool                   `json:"is_anonymous"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -339,6 +340,7 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 		SessionId:                     sid,
 		AuthenticatorAssuranceLevel:   aal,
 		AuthenticationMethodReference: amr,
+		IsAnonymous:                   user.IsAnonymous,
 	}
 
 	var token *jwt.Token

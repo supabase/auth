@@ -80,6 +80,9 @@ func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err 
 		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
 	case "phone":
 		user, err = models.NewUser(params.Phone, "", params.Password, params.Aud, params.Data)
+	case "anonymous":
+		user, err = models.NewUser("", "", "", params.Aud, params.Data)
+		user.IsAnonymous = true
 	default:
 		// handles external provider case
 		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
@@ -95,15 +98,34 @@ func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err 
 
 	user.Identities = make([]models.Identity, 0)
 
-	// TODO: Deprecate "provider" field
-	user.AppMetaData["provider"] = params.Provider
+	if params.Provider != "anonymous" {
+		// TODO: Deprecate "provider" field
+		user.AppMetaData["provider"] = params.Provider
 
-	user.AppMetaData["providers"] = []string{params.Provider}
-	if params.Password == "" {
-		user.EncryptedPassword = ""
+		user.AppMetaData["providers"] = []string{params.Provider}
 	}
 
-	return
+	return user, nil
+}
+
+func (a *API) HandleSignup(w http.ResponseWriter, r *http.Request) error {
+	config := a.config
+
+	params := &SignupParams{}
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return badRequestError("Could not read body").WithInternalError(err)
+	}
+	if err := json.Unmarshal(body, params); err != nil {
+		return badRequestError("Could not read signup params: %v", err)
+	}
+	if params.Email == "" && params.Phone == "" {
+		if !config.External.AnonymousUsers.Enabled {
+			return badRequestError("Anonymous sign-ins are disabled")
+		}
+		return a.SignupAnonymously(w, r)
+	}
+	return a.Signup(w, r)
 }
 
 // Signup is the endpoint for registering a new user

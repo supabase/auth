@@ -146,7 +146,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		sharedLimiter := api.limitEmailOrPhoneSentHandler()
 		r.With(sharedLimiter).With(api.requireAdminCredentials).Post("/invite", api.Invite)
-		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/signup", api.Signup)
+		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/signup", api.HandleSignup)
 		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/resend", api.Resend)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
