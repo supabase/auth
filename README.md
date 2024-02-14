@@ -143,13 +143,9 @@ comprehensive list of those features:
    configuration parameter.
 2. System user (zero UUID user).
 3. Super admin via the `is_super_admin` column.
-4. SAML sign-in provider via the `GOTRUE_SAML_ENABLED` configuration
-   parameter. (A different implementation for SAML may appear in the future
-   which will be supported.)
-5. Support for MySQL based databases. (Only Postgres is supported.)
-6. Group information in JWTs via `GOTRUE_JWT_ADMIN_GROUP_NAME` and other
+4. Group information in JWTs via `GOTRUE_JWT_ADMIN_GROUP_NAME` and other
    configuration fields.
-7. Symmetrics JWTs. In the future it is very likely that Auth will begin
+5. Symmetrics JWTs. In the future it is very likely that Auth will begin
    issuing asymmetric JWTs (subject to configuration), so do not rely on the
    assumption that only HS256 signed JWTs will be issued long term.
 
