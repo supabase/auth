@@ -215,7 +215,6 @@ type GlobalConfiguration struct {
 	Mailer          MailerConfiguration      `json:"mailer"`
 	Sms             SmsProviderConfiguration `json:"sms"`
 	DisableSignup   bool                     `json:"disable_signup" split_words:"true"`
-	Webhook         WebhookConfig            `json:"webhook" split_words:"true"`
 	Hook            HookConfiguration        `json:"hook" split_words:"true"`
 	Security        SecurityConfiguration    `json:"security"`
 	Sessions        SessionsConfiguration    `json:"sessions"`
@@ -431,14 +430,6 @@ func loadEnvironment(filename string) error {
 	return err
 }
 
-type WebhookConfig struct {
-	URL        string   `json:"url"`
-	Retries    int      `json:"retries"`
-	TimeoutSec int      `json:"timeout_sec"`
-	Secret     string   `json:"secret"`
-	Events     []string `json:"events"`
-}
-
 // Moving away from the existing HookConfig so we can get a fresh start.
 type HookConfiguration struct {
 	MFAVerificationAttempt      ExtensibilityPointConfiguration `json:"mfa_verification_attempt" split_words:"true"`
@@ -503,15 +494,6 @@ func (e *ExtensibilityPointConfiguration) PopulateExtensibilityPoint() error {
 	pathParts := strings.Split(u.Path, "/")
 	e.HookName = fmt.Sprintf("%q.%q", pathParts[1], pathParts[2])
 	return nil
-}
-
-func (w *WebhookConfig) HasEvent(event string) bool {
-	for _, name := range w.Events {
-		if event == name {
-			return true
-		}
-	}
-	return false
 }
 
 func LoadGlobal(filename string) (*GlobalConfiguration, error) {

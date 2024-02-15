@@ -204,9 +204,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		}); terr != nil {
 			return terr
 		}
-		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
-			return terr
-		}
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
 		if terr != nil {
 			return terr
