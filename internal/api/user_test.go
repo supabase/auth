@@ -197,6 +197,13 @@ func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), c.expectedCode, w.Code)
+
+			if c.expectedCode == http.StatusOK {
+				// check that the user response returned contains the updated phone field
+				data := &models.User{}
+				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+				require.Equal(ts.T(), data.GetPhone(), c.userData["phone"])
+			}
 		})
 	}
 
