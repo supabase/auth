@@ -305,12 +305,6 @@ func (u *User) UpdatePassword(tx *storage.Connection, sessionID *uuid.UUID) erro
 	}
 }
 
-// UpdatePhone updates the user's phone
-func (u *User) UpdatePhone(tx *storage.Connection, phone string) error {
-	u.Phone = storage.NullString(phone)
-	return tx.UpdateOnly(u, "phone")
-}
-
 // Authenticate a user from a password
 func (u *User) Authenticate(ctx context.Context, password string) bool {
 	err := crypto.CompareHashAndPassword(ctx, u.EncryptedPassword, password)
