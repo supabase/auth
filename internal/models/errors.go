@@ -9,6 +9,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case ConfirmationTokenNotFoundError, *ConfirmationTokenNotFoundError:
 		return true
+	case ConfirmationOrRecoveryTokenNotFoundError, *ConfirmationOrRecoveryTokenNotFoundError:
+		return true
 	case RefreshTokenNotFoundError, *RefreshTokenNotFoundError:
 		return true
 	case IdentityNotFoundError, *IdentityNotFoundError:
