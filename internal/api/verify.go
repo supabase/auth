@@ -177,6 +177,16 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 		if terr != nil {
 			return terr
 		}
+
+		if terr := user.UpdateAppMetaDataProviders(tx); terr != nil {
+			return terr
+		}
+
+		// Reload user model from db.
+		// This is important for refreshing the data in any generated columns like IsAnonymous.
+		if terr := tx.Reload(user); err != nil {
+			return terr
+		}
 		if isImplicitFlow(flowType) {
 			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
 
@@ -266,6 +276,16 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 		}
 
 		if terr != nil {
+			return terr
+		}
+
+		if terr := user.UpdateAppMetaDataProviders(tx); terr != nil {
+			return terr
+		}
+
+		// Reload user model from db.
+		// This is important for refreshing the data in any generated columns like IsAnonymous.
+		if terr := tx.Reload(user); terr != nil {
 			return terr
 		}
 		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)

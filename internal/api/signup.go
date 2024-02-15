@@ -82,7 +82,6 @@ func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err 
 		user, err = models.NewUser(params.Phone, "", params.Password, params.Aud, params.Data)
 	case "anonymous":
 		user, err = models.NewUser("", "", "", params.Aud, params.Data)
-		user.IsAnonymous = true
 	default:
 		// handles external provider case
 		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
@@ -419,11 +418,10 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, user 
 		return nil, err
 	}
 
-	// sometimes there may be triggers in the database that will modify the
+	// there may be triggers or generated column values in the database that will modify the
 	// user data as it is being inserted. thus we load the user object
 	// again to fetch those changes.
-	err = conn.Eager().Load(user)
-	if err != nil {
+	if err := conn.Reload(user); err != nil {
 		return nil, internalServerError("Database error loading user after sign-up").WithInternalError(err)
 	}
 
