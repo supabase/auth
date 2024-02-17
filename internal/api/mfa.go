@@ -62,6 +62,7 @@ const (
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
+	session := getSession(ctx)
 	config := a.config
 
 	params := &EnrollFactorParams{}
@@ -108,6 +109,10 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	if numVerifiedFactors >= config.MFA.MaxVerifiedFactors {
 		return forbiddenError("Maximum number of enrolled factors reached, unenroll to continue")
+	}
+
+	if numVerifiedFactors > 0 && !session.IsAAL2() {
+		return forbiddenError("AAL2 required to enroll a new factor")
 	}
 
 	key, err := totp.Generate(totp.GenerateOpts{
