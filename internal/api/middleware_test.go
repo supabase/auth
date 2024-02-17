@@ -108,7 +108,7 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 
 		w := httptest.NewRecorder()
 
-		afterCtx, err := ts.API.verifyCaptcha(w, req)
+		_, err := ts.API.verifyCaptcha(w, req)
 		require.NoError(ts.T(), err)
 
 		body, err := io.ReadAll(req.Body)
@@ -125,7 +125,6 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaValid() {
 
 		// check if body is the same
 		require.Equal(ts.T(), body, buffer.Bytes())
-		require.Equal(ts.T(), afterCtx, beforeCtx)
 	}
 }
 

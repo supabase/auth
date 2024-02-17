@@ -2,9 +2,7 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
@@ -39,7 +37,6 @@ func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.R
 	// Find the administrative user
 	claims := getClaims(ctx)
 	if claims == nil {
-		fmt.Printf("[%s] %s %s %d %s\n", time.Now().Format("2006-01-02 15:04:05"), r.Method, r.RequestURI, http.StatusForbidden, "Invalid token")
 		return nil, unauthorizedError("Invalid token")
 	}
 
@@ -50,7 +47,6 @@ func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.R
 		return withAdminUser(ctx, &models.User{Role: claims.Role, Email: storage.NullString(claims.Role)}), nil
 	}
 
-	fmt.Printf("[%s] %s %s %d %s\n", time.Now().Format("2006-01-02 15:04:05"), r.Method, r.RequestURI, http.StatusForbidden, "this token needs role 'supabase_admin' or 'service_role'")
 	return nil, unauthorizedError("User not allowed")
 }
 

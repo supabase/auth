@@ -151,6 +151,32 @@ func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) 
 	return a.requireAdmin(ctx, w, req)
 }
 
+func (a *API) isAdminUser(w http.ResponseWriter, req *http.Request) (context.Context, bool, error) {
+	t, err := a.extractBearerToken(req)
+	if err != nil || t == "" {
+		// TODO: Not all enpdoints with captcha will require a token, properly handle here
+		return req.Context(), false, nil
+	}
+
+	ctx, err := a.parseJWTClaims(t, req)
+	if err != nil {
+		a.clearCookieTokens(a.config, w)
+		return ctx, false, err
+	}
+
+	claims := getClaims(ctx)
+	if claims == nil {
+		return ctx, false, unauthorizedError("Invalid token")
+	}
+
+	if isStringInSlice(claims.Role, a.config.JWT.AdminRoles) {
+		// successful authentication
+		return ctx, true, nil
+	}
+
+	return ctx, false, nil
+}
+
 func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	config := a.config
@@ -166,17 +192,17 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 	ctx := req.Context()
 	config := a.config
 
-	if !config.Security.Captcha.Enabled {
-		return ctx, nil
-	}
-	if _, err := a.requireAdminCredentials(w, req); err == nil {
-		// skip captcha validation if authorization header contains an admin role
-		return ctx, nil
-	}
-	if shouldIgnore := isIgnoreCaptchaRoute(req); shouldIgnore {
+	if !config.Security.Captcha.Enabled || isIgnoreCaptchaRoute(req) {
 		return ctx, nil
 	}
 
+	ctx, isAdmin, err := a.isAdminUser(w, req)
+	if err != nil {
+		return nil, err
+	}
+	if isAdmin {
+		return ctx, nil
+	}
 	verificationResult, err := security.VerifyRequest(req, strings.TrimSpace(config.Security.Captcha.Secret), config.Security.Captcha.Provider)
 	if err != nil {
 		return nil, internalServerError("captcha verification process failed").WithInternalError(err)
