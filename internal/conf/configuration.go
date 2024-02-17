@@ -517,8 +517,8 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		return nil, err
 	}
 
-	if config.Hook.CustomAccessToken.Enabled {
-		if err := config.Hook.CustomAccessToken.PopulateExtensibilityPoint(); err != nil {
+	if config.Hook.PasswordVerificationAttempt.Enabled {
+		if err := config.Hook.PasswordVerificationAttempt.PopulateExtensibilityPoint(); err != nil {
 			return nil, err
 		}
 	}
