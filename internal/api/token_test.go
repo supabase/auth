@@ -605,9 +605,9 @@ func (ts *TokenTestSuite) TestPasswordVerificationHook() {
 			uri:  "pg-functions://postgres/auth/password_verification_hook",
 			hookFunctionSQL: `
                 create or replace function password_verification_hook(input jsonb)
-                returns json as $$
+                returns jsonb as $$
                 begin
-                    return json_build_object('decision', 'continue');
+                    return jsonb_build_object('decision', 'continue');
                 end; $$ language plpgsql;`,
 			expectedCode: http.StatusOK,
 		}, {
@@ -615,9 +615,9 @@ func (ts *TokenTestSuite) TestPasswordVerificationHook() {
 			uri:  "pg-functions://postgres/auth/password_verification_hook_reject",
 			hookFunctionSQL: `
                 create or replace function password_verification_hook_reject(input jsonb)
-                returns json as $$
+                returns jsonb as $$
                 begin
-                    return json_build_object('decision', 'reject');
+                    return jsonb_build_object('decision', 'reject', 'message', 'You shall not pass!');
                 end; $$ language plpgsql;`,
 			expectedCode: http.StatusForbidden,
 		},
