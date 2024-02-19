@@ -353,6 +353,11 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 			return "", 0, err
 		}
 		goTrueClaims := jwt.MapClaims(output.Claims)
+		appMetadata, ok := goTrueClaims["AppMetadata"].(map[string]interface{})
+		if !ok {
+			return "", 0, internalServerError("Error loading AppMetadata")
+		}
+		user.AppMetaData = appMetadata
 
 		token = jwt.NewWithClaims(jwt.SigningMethodHS256, goTrueClaims)
 
