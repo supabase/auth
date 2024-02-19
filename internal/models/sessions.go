@@ -302,7 +302,7 @@ func (s *Session) CalculateAALAndAMR(user *User) (aal string, amr []AMREntry, er
 	// initial AMR claim is from sso/saml, we need to add information
 	// about the provider that was used for the authentication
 	identities := user.Identities
-	if len(identities) > 0 && identities[0].IsForSSOProvider() {
+	if len(identities) == 1 && identities[0].IsForSSOProvider() {
 		amr[len(amr)-1].Provider = strings.TrimPrefix(identities[0].Provider, "sso:")
 	}
 	// otherwise we can't identify that this user account has only
