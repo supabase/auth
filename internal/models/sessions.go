@@ -154,14 +154,16 @@ func (s *Session) DetermineTag(tags []string) string {
 	return tags[0]
 }
 
-func NewSession() (*Session, error) {
+func NewSession(userID uuid.UUID, factorID *uuid.UUID) (*Session, error) {
 	id := uuid.Must(uuid.NewV4())
 
 	defaultAAL := AAL1.String()
 
 	session := &Session{
-		ID:  id,
-		AAL: &defaultAAL,
+		ID:       id,
+		AAL:      &defaultAAL,
+		UserID:   userID,
+		FactorID: factorID,
 	}
 
 	return session, nil
@@ -280,7 +282,7 @@ func (s *Session) UpdateAssociatedAAL(tx *storage.Connection, aal string) error 
 	return tx.Update(s)
 }
 
-func (s *Session) CalculateAALAndAMR(tx *storage.Connection) (aal string, amr []AMREntry, err error) {
+func (s *Session) CalculateAALAndAMR(user *User) (aal string, amr []AMREntry, err error) {
 	amr, aal = []AMREntry{}, AAL1.String()
 	for _, claim := range s.AMRClaims {
 		if *claim.AuthenticationMethod == TOTPSignIn.String() {
@@ -290,40 +292,22 @@ func (s *Session) CalculateAALAndAMR(tx *storage.Connection) (aal string, amr []
 	}
 
 	// makes sure that the AMR claims are always ordered most-recent first
-
-	// sort in ascending order
-	sort.Sort(sortAMREntries{
+	sort.Sort(sort.Reverse(sortAMREntries{
 		Array: amr,
-	})
+	}))
 
-	// now reverse for descending order
-	_ = sort.Reverse(sortAMREntries{
-		Array: amr,
-	})
-
-	lastIndex := len(amr) - 1
-
-	if lastIndex > -1 && amr[lastIndex].Method == SSOSAML.String() {
-		// initial AMR claim is from sso/saml, we need to add information
-		// about the provider that was used for the authentication
-		identities, err := FindIdentitiesByUserID(tx, s.UserID)
-		if err != nil {
-			return aal, amr, err
-		}
-
-		if len(identities) == 1 {
-			identity := identities[0]
-
-			if strings.HasPrefix(identity.Provider, "sso:") {
-				amr[lastIndex].Provider = strings.TrimPrefix(identity.Provider, "sso:")
-			}
-		}
-
-		// otherwise we can't identify that this user account has only
-		// one SSO identity, so we are not encoding the provider at
-		// this time
+	if len(amr) > 0 && amr[len(amr)-1].Method == SSOSAML.String() {
+		return aal, amr, nil
 	}
-
+	// initial AMR claim is from sso/saml, we need to add information
+	// about the provider that was used for the authentication
+	identities := user.Identities
+	if len(identities) == 1 && identities[0].IsForSSOProvider() {
+		amr[len(amr)-1].Provider = strings.TrimPrefix(identities[0].Provider, "sso:")
+	}
+	// otherwise we can't identify that this user account has only
+	// one SSO identity, so we are not encoding the provider at
+	// this time
 	return aal, amr, nil
 }
 
