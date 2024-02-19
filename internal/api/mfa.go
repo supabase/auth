@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/aaronarduino/goqrsvg"
 	svg "github.com/ajstarks/svgo"
+	"github.com/boombuler/barcode"
 	"github.com/boombuler/barcode/qr"
 	"github.com/gofrs/uuid"
 	"github.com/pquerna/otp/totp"
@@ -110,24 +110,11 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return forbiddenError("Maximum number of enrolled factors reached, unenroll to continue")
 	}
 
-	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      issuer,
-		AccountName: user.GetEmail(),
-	})
+	qrCode, url, secret, err := generateQRCode(issuer, user.GetEmail())
 	if err != nil {
-		return internalServerError(QRCodeGenerationErrorMessage).WithInternalError(err)
+		return err
 	}
-	var buf bytes.Buffer
-	svgData := svg.New(&buf)
-	qrCode, _ := qr.Encode(key.String(), qr.M, qr.Auto)
-	qs := goqrsvg.NewQrSVG(qrCode, DefaultQRSize)
-	qs.StartQrSVG(svgData)
-	if err = qs.WriteQrSVG(svgData); err != nil {
-		return internalServerError(QRCodeGenerationErrorMessage).WithInternalError(err)
-	}
-	svgData.End()
-
-	factor := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, key.Secret())
+	factor := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, secret)
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(factor); terr != nil {
@@ -155,9 +142,9 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		FriendlyName: factor.FriendlyName,
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
-			QRCode: buf.String(),
+			QRCode: qrCode,
 			Secret: factor.Secret,
-			URI:    key.URL(),
+			URI:    url,
 		},
 	})
 }
@@ -218,9 +205,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
 	if err != nil {
-		if models.IsNotFoundError(err) {
-			return notFoundError(err.Error())
-		}
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
 
@@ -362,4 +346,43 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, &UnenrollFactorResponse{
 		ID: factor.ID,
 	})
+}
+
+func generateQRCode(issuer string, account string) (string, string, string, error) {
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      issuer,
+		AccountName: account,
+	})
+	if err != nil {
+		return "", "", "", err
+	}
+
+	// Create a QR code instance.
+	qrCode, err := qr.Encode(key.URL(), qr.Q, qr.Auto)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	// Scale the QR code to the desired size.
+	qrCode, err = barcode.Scale(qrCode, 256, 256)
+	if err != nil {
+		return "", "", "", err
+	}
+
+	// Create a buffer to hold SVG data.
+	var b bytes.Buffer
+	canvas := svg.New(&b)
+
+	// Start SVG generation.
+	canvas.Start(qrCode.Bounds().Dx(), qrCode.Bounds().Dy())
+	for x := 0; x < qrCode.Bounds().Dx(); x++ {
+		for y := 0; y < qrCode.Bounds().Dy(); y++ {
+			r, g, b, _ := qrCode.At(x, y).RGBA()
+			color := fmt.Sprintf("rgb(%d,%d,%d)", r>>8, g>>8, b>>8)
+			canvas.Rect(x, y, 1, 1, "fill:"+color)
+		}
+	}
+	canvas.End()
+	// TODO: Encode this in a struct
+	return b.String(), key.URL(), key.Secret(), nil
 }

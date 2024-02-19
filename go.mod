@@ -2,7 +2,6 @@ module github.com/supabase/auth
 
 require (
 	github.com/Masterminds/semver/v3 v3.1.1 // indirect
-	github.com/aaronarduino/goqrsvg v0.0.0-20220419053939-17e843f1dd40
 	github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b
 	github.com/badoux/checkmail v0.0.0-20170203135005-d0a759655d62
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc

@@ -36,8 +36,9 @@ func NewChallenge(factor *Factor, ipAddress string) *Challenge {
 func FindChallengeByChallengeID(tx *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
 	challenge, err := findChallenge(tx, "id = ?", challengeID)
 	if err != nil {
-		return nil, ChallengeNotFoundError{}
+		return nil, err
 	}
+
 	return challenge, nil
 }
 
@@ -62,7 +63,7 @@ func findChallenge(tx *storage.Connection, query string, args ...interface{}) (*
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, ChallengeNotFoundError{}
 		}
-		return nil, errors.Wrap(err, "error finding challenge")
+		return nil, err
 	}
 	return obj, nil
 }
