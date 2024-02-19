@@ -40,7 +40,7 @@ func addFlowPrefixToToken(token string, flowType models.FlowType) string {
 
 func issueAuthCode(tx *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod) (string, error) {
 	flowState, err := models.FindFlowStateByUserID(tx, user.ID.String(), authenticationMethod)
-	if err != nil && models.IsNotFoundError(err) {
+	if models.IsNotFoundError(err) {
 		return "", badRequestError("No valid flow state found for user.")
 	} else if err != nil {
 		return "", err

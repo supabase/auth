@@ -246,7 +246,8 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	} else if err != nil {
 		return err
 	}
-	if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
+	// We exempt Magic Links from the requirement and fallback to
+	if flowState.AuthenticationMethod != models.MagicLink.String() && flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
 		return forbiddenError("invalid flow state, flow state has expired")
 	}
 

@@ -183,11 +183,9 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 		}
 		if isImplicitFlow(flowType) {
 			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
-
 			if terr != nil {
 				return terr
 			}
-
 			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
