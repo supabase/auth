@@ -296,24 +296,18 @@ func (s *Session) CalculateAALAndAMR(user *User) (aal string, amr []AMREntry, er
 		Array: amr,
 	}))
 
-	lastIndex := len(amr) - 1
-
-	if lastIndex > -1 && amr[lastIndex].Method == SSOSAML.String() {
-		// initial AMR claim is from sso/saml, we need to add information
-		// about the provider that was used for the authentication
-		identities := user.Identities
-		if len(identities) == 1 {
-			identity := identities[0]
-
-			if strings.HasPrefix(identity.Provider, "sso:") {
-				amr[lastIndex].Provider = strings.TrimPrefix(identity.Provider, "sso:")
-			}
-		}
-		// otherwise we can't identify that this user account has only
-		// one SSO identity, so we are not encoding the provider at
-		// this time
+	if len(amr) > 0 && amr[len(amr)-1].Method == SSOSAML.String() {
+		return aal, amr, nil
 	}
-
+	// initial AMR claim is from sso/saml, we need to add information
+	// about the provider that was used for the authentication
+	identities := user.Identities
+	if len(identities) > 0 && identities[0].IsForSSOProvider() {
+		amr[len(amr)-1].Provider = strings.TrimPrefix(identities[0].Provider, "sso:")
+	}
+	// otherwise we can't identify that this user account has only
+	// one SSO identity, so we are not encoding the provider at
+	// this time
 	return aal, amr, nil
 }
 
