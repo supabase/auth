@@ -215,9 +215,9 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), err)
 			sharedSecret := ts.TestOTPKey.Secret()
 			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
+			require.NoError(ts.T(), err)
 			f := factors[0]
 			f.Secret = sharedSecret
-			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
 
 			// Create session to be invalidated

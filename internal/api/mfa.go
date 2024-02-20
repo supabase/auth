@@ -222,10 +222,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return notFoundError(err.Error())
-		}
+	if models.IsNotFoundError(err) {
+		return notFoundError(err.Error())
+	} else if err != nil {
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
 
@@ -234,15 +233,8 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if challenge.HasExpired(config.MFA.ChallengeExpiryDuration) {
-		err := a.db.Transaction(func(tx *storage.Connection) error {
-			if terr := tx.Destroy(challenge); terr != nil {
-				return internalServerError("Database error deleting challenge").WithInternalError(terr)
-			}
-
-			return nil
-		})
-		if err != nil {
-			return err
+		if err := a.db.Destroy(challenge); err != nil {
+			return internalServerError("Database error deleting challenge").WithInternalError(err)
 		}
 		return badRequestError("%v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
@@ -295,10 +287,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
 				return terr
 			}
-		}
-		user, terr = models.FindUserByID(tx, user.ID)
-		if terr != nil {
-			return terr
 		}
 		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.TOTPSignIn, models.GrantParams{
 			FactorID: &factor.ID,

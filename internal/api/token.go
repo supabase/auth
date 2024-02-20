@@ -266,14 +266,14 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	if err := flowState.VerifyPKCE(params.CodeVerifier); err != nil {
 		return forbiddenError(err.Error())
 	}
+	authMethod, err := models.ParseAuthenticationMethod(flowState.AuthenticationMethod)
+	if err != nil {
+		return err
+	}
 
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		authMethod, err := models.ParseAuthenticationMethod(flowState.AuthenticationMethod)
-		if err != nil {
-			return err
-		}
 		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider_type": flowState.ProviderType,
 		}); terr != nil {
@@ -353,9 +353,9 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 			return "", 0, err
 		}
 		goTrueClaims := jwt.MapClaims(output.Claims)
-		appMetadata, ok := goTrueClaims["AppMetadata"].(map[string]interface{})
+		appMetadata, ok := goTrueClaims["app_metadata"].(map[string]interface{})
 		if !ok {
-			return "", 0, internalServerError("Error loading AppMetadata")
+			return "", 0, internalServerError("Error loading App Metadata")
 		}
 		user.AppMetaData = appMetadata
 
@@ -393,7 +393,6 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
-
 		refreshToken, terr = models.GrantAuthenticatedUser(tx, user, grantParams)
 		if terr != nil {
 			return internalServerError("Database error granting user").WithInternalError(terr)
