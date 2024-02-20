@@ -355,7 +355,7 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 		goTrueClaims := jwt.MapClaims(output.Claims)
 		appMetadata, ok := goTrueClaims["app_metadata"].(map[string]interface{})
 		if !ok {
-			return "", 0, internalServerError("Error loading App Metadata")
+			return "", 0, internalServerError("error reading app metadata from hook response")
 		}
 		user.AppMetaData = appMetadata
 
