@@ -209,7 +209,6 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	for _, v := range cases {
 		ts.Run(v.desc, func() {
 			// Authenticate users and set secret
-
 			var buffer bytes.Buffer
 			r, err := models.GrantAuthenticatedUser(ts.API.db, ts.TestUser, models.GrantParams{})
 			require.NoError(ts.T(), err)
