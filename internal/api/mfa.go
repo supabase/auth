@@ -62,6 +62,7 @@ const (
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
+	session := getSession(ctx)
 	config := a.config
 
 	params := &EnrollFactorParams{}
@@ -110,7 +111,11 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return forbiddenError("Maximum number of enrolled factors reached, unenroll to continue")
 	}
 
-	qrCode, url, secret, err := generateQRCode(issuer, user.GetEmail())
+
+	if numVerifiedFactors > 0 && !session.IsAAL2() {
+		return forbiddenError("AAL2 required to enroll a new factor")
+	}
+  qrCode, url, secret, err := generateQRCode(issuer, user.GetEmail())
 	if err != nil {
 		return err
 	}

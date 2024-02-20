@@ -43,9 +43,8 @@ func TestSession(t *testing.T) {
 func (ts *SessionsTestSuite) TestFindBySessionIDWithForUpdate() {
 	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	session, err := NewSession()
+	session, err := NewSession(u.ID, nil)
 	require.NoError(ts.T(), err)
-	session.UserID = u.ID
 	require.NoError(ts.T(), ts.db.Create(session))
 
 	found, err := FindSessionByID(ts.db, session.ID, true)
@@ -58,9 +57,8 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	totalDistinctClaims := 2
 	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	session, err := NewSession()
+	session, err := NewSession(u.ID, nil)
 	require.NoError(ts.T(), err)
-	session.UserID = u.ID
 	require.NoError(ts.T(), ts.db.Create(session))
 
 	err = AddClaimToSession(ts.db, session.ID, PasswordGrant)
@@ -72,7 +70,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	session, err = FindSessionByID(ts.db, session.ID, false)
 	require.NoError(ts.T(), err)
 
-	aal, amr, err := session.CalculateAALAndAMR(ts.db)
+	aal, amr, err := session.CalculateAALAndAMR(u)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), AAL2.String(), aal)
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
@@ -83,7 +81,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	session, err = FindSessionByID(ts.db, session.ID, false)
 	require.NoError(ts.T(), err)
 
-	aal, amr, err = session.CalculateAALAndAMR(ts.db)
+	aal, amr, err = session.CalculateAALAndAMR(u)
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), AAL2.String(), aal)

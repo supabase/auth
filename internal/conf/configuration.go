@@ -20,7 +20,15 @@ const defaultMinPasswordLength int = 6
 const defaultChallengeExpiryDuration float64 = 300
 const defaultFlowStateExpiryDuration time.Duration = 300 * time.Second
 
+// See: https://www.postgresql.org/docs/7.0/syntax525.htm
 var postgresNamesRegexp = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`)
+
+// See: https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md
+// We use 4 * Math.ceil(n/3) to obtain unpadded length in base 64
+// So this 4 * Math.ceil(24/3) = 32 and 4 * Math.ceil(64/3) = 88 for symmetric secrets
+// Since Ed25519 key is 32 bytes so we have 4 * Math.ceil(32/3) = 44
+var symmetricSecretFormat = regexp.MustCompile(`^v1,whsec_[A-Za-z0-9+/=]{32,88}`)
+var asymmetricSecretFormat = regexp.MustCompile(`^v1a,whpk_[A-Za-z0-9+/=]{44,};whsk_[A-Za-z0-9+/=]{44,}$`)
 
 // Time is used to represent timestamps in the configuration, as envconfig has
 // trouble parsing empty strings, due to time.Time.UnmarshalText().
@@ -435,12 +443,14 @@ type HookConfiguration struct {
 	MFAVerificationAttempt      ExtensibilityPointConfiguration `json:"mfa_verification_attempt" split_words:"true"`
 	PasswordVerificationAttempt ExtensibilityPointConfiguration `json:"password_verification_attempt" split_words:"true"`
 	CustomAccessToken           ExtensibilityPointConfiguration `json:"custom_access_token" split_words:"true"`
+	CustomSMSProvider           ExtensibilityPointConfiguration `json:"custom_sms_provider" split_words:"true"`
 }
 
 type ExtensibilityPointConfiguration struct {
-	URI      string `json:"uri"`
-	Enabled  bool   `json:"enabled"`
-	HookName string `json:"hook_name"`
+	URI             string   `json:"uri"`
+	Enabled         bool     `json:"enabled"`
+	HookName        string   `json:"hook_name"`
+	HTTPHookSecrets []string `json:"secrets"`
 }
 
 func (h *HookConfiguration) Validate() error {
@@ -448,6 +458,7 @@ func (h *HookConfiguration) Validate() error {
 		h.MFAVerificationAttempt,
 		h.PasswordVerificationAttempt,
 		h.CustomAccessToken,
+		h.CustomSMSProvider,
 	}
 	for _, point := range points {
 		if err := point.ValidateExtensibilityPoint(); err != nil {
@@ -458,26 +469,49 @@ func (h *HookConfiguration) Validate() error {
 }
 
 func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
-	if e.URI != "" {
-		u, err := url.Parse(e.URI)
-		if err != nil {
-			return err
-		}
-		pathParts := strings.Split(u.Path, "/")
-		if len(pathParts) < 3 {
-			return fmt.Errorf("URI path does not contain enough parts")
-		}
-		if u.Scheme != "pg-functions" {
-			return fmt.Errorf("only postgres hooks are supported at the moment")
-		}
-		schema := pathParts[1]
-		table := pathParts[2]
-		// Validate schema and table names
-		if !postgresNamesRegexp.MatchString(schema) {
-			return fmt.Errorf("invalid schema name: %s", schema)
-		}
-		if !postgresNamesRegexp.MatchString(table) {
-			return fmt.Errorf("invalid table name: %s", table)
+	if e.URI == "" {
+		return nil
+	}
+	u, err := url.Parse(e.URI)
+	if err != nil {
+		return err
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "pg-functions":
+		return validatePostgresPath(u)
+	case "https":
+		return validateHTTPSHookSecrets(e.HTTPHookSecrets)
+	default:
+		return fmt.Errorf("only postgres hooks and HTTPS functions are supported at the moment")
+	}
+}
+
+func validatePostgresPath(u *url.URL) error {
+	pathParts := strings.Split(u.Path, "/")
+	if len(pathParts) < 3 {
+		return fmt.Errorf("URI path does not contain enough parts")
+	}
+
+	schema := pathParts[1]
+	table := pathParts[2]
+	// Validate schema and table names
+	if !postgresNamesRegexp.MatchString(schema) {
+		return fmt.Errorf("invalid schema name: %s", schema)
+	}
+	if !postgresNamesRegexp.MatchString(table) {
+		return fmt.Errorf("invalid table name: %s", table)
+	}
+	return nil
+}
+
+func isValidSecretFormat(secret string) bool {
+	return symmetricSecretFormat.MatchString(secret) || asymmetricSecretFormat.MatchString(secret)
+}
+
+func validateHTTPSHookSecrets(secrets []string) error {
+	for _, secret := range secrets {
+		if !isValidSecretFormat(secret) {
+			return fmt.Errorf("invalid secret format")
 		}
 	}
 	return nil
@@ -519,6 +553,12 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 
 	if config.Hook.PasswordVerificationAttempt.Enabled {
 		if err := config.Hook.PasswordVerificationAttempt.PopulateExtensibilityPoint(); err != nil {
+			return nil, err
+		}
+	}
+
+	if config.Hook.CustomSMSProvider.Enabled {
+		if err := config.Hook.CustomSMSProvider.PopulateExtensibilityPoint(); err != nil {
 			return nil, err
 		}
 	}
