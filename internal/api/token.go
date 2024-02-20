@@ -132,10 +132,10 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		params.Phone = formatPhoneNumber(params.Phone)
 		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
 
-	case params.Email != "":
+	case !config.External.Email.Enabled:
 		return badRequestError("Email logins are disabled")
 
-	case params.Phone != "":
+	case !config.External.Phone.Enabled:
 		return badRequestError("Phone logins are disabled")
 
 	default:
