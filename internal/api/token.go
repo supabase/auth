@@ -122,27 +122,29 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 
 	grantParams.FillGrantParams(r)
 
-	if params.Email != "" {
+	switch {
+	case params.Email != "" && !config.External.Email.Enabled:
+		return badRequestError("Email logins are disabled")
+
+	case params.Phone != "" && !config.External.Phone.Enabled:
+		return badRequestError("Phone logins are disabled")
+
+	case params.Email != "":
 		provider = "email"
-		if !config.External.Email.Enabled {
-			return badRequestError("Email logins are disabled")
-		}
 		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
-	} else if params.Phone != "" {
+
+	case params.Phone != "":
 		provider = "phone"
-		if !config.External.Phone.Enabled {
-			return badRequestError("Phone logins are disabled")
-		}
 		params.Phone = formatPhoneNumber(params.Phone)
 		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
-	} else {
+
+	default:
 		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
 
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return oauthError("invalid_grant", InvalidLoginMessage)
-		}
+	if err != nil && models.IsNotFoundError(err) {
+		return oauthError("invalid_grant", InvalidLoginMessage)
+	} else if err != nil {
 		return internalServerError("Database error querying schema").WithInternalError(err)
 	}
 
