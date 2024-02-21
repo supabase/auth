@@ -79,15 +79,13 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	flowType := getFlowFromChallenge(codeChallenge)
 
 	flowStateID := ""
-	if flowType == models.PKCEFlow {
+	if isPKCEFlow(flowType) {
 		codeChallengeMethodType, err := models.ParseCodeChallengeMethod(codeChallengeMethod)
 		if err != nil {
 			return "", err
 		}
-		flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethodType, models.OAuth)
-		if err != nil {
-			return "", err
-		}
+		flowState := models.NewFlowState(providerType, codeChallenge, codeChallengeMethodType, models.OAuth, nil)
+
 		if err := a.db.Create(flowState); err != nil {
 			return "", err
 		}

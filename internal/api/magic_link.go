@@ -125,18 +125,21 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 
 		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
+	var flowState *models.FlowState
+
+	if isPKCEFlow(flowType) {
+		flowState, err = generateFlowState(flowType, models.MagicLink, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
+		if err != nil {
+			return err
+		}
+	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
-
-		if isPKCEFlow(flowType) {
-			codeChallengeMethod, terr := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
-			if terr != nil {
-				return terr
-			}
-			if terr := models.NewFlowStateWithUserID(tx, models.MagicLink.String(), params.CodeChallenge, codeChallengeMethod, models.MagicLink, &user.ID); terr != nil {
+		if flowState != nil {
+			if terr := tx.Create(flowState); terr != nil {
 				return terr
 			}
 		}

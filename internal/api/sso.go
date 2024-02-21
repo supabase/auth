@@ -60,12 +60,8 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	flowType := getFlowFromChallenge(params.CodeChallenge)
 	var flowStateID *uuid.UUID
 	flowStateID = nil
-	if flowType == models.PKCEFlow {
-		codeChallengeMethodType, err := models.ParseCodeChallengeMethod(codeChallengeMethod)
-		if err != nil {
-			return err
-		}
-		flowState, err := models.NewFlowState(models.SSOSAML.String(), codeChallenge, codeChallengeMethodType, models.SSOSAML)
+	if isPKCEFlow(flowType) {
+		flowState, err := generateFlowState(flowType, models.SSOSAML, codeChallengeMethod, codeChallenge, nil)
 		if err != nil {
 			return err
 		}
