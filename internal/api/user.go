@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -117,6 +118,34 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		if updatingForbiddenFields {
 			return unprocessableEntityError("Updating email, phone, password of a SSO account only possible via SSO")
+		}
+
+		// Prevents developers that rely on user_metadata in RLS
+		// policices with SSO/SAML to open up security holes in their
+		// applications where other users can impersonate SSO/SAML
+		// users. Only non-attribute-mapping fields can be updated.
+		if params.Data != nil && !isAdmin(user, config) {
+			for _, identity := range user.Identities {
+				if strings.HasPrefix(identity.Provider, "sso:") {
+					ssoProviderID, err := uuid.FromString(strings.TrimPrefix(identity.Provider, "sso:"))
+					if err != nil {
+						return internalServerError("Failed to find SSO provider for SSO user").WithInternalError(err).WithInternalMessage("User has \"sso:\"-prefixed identity but invalid UUID")
+					}
+
+					ssoProvider, err := models.FindSSOProviderByID(db, ssoProviderID)
+					if models.IsNotFoundError(err) {
+						// OK to update user, as the SSO provider does not exist -- was removed
+					} else if err != nil {
+						return internalServerError("Failed to find SSO provider for user").WithInternalError(err)
+					} else {
+						for key, _ := range ssoProvider.SAMLProvider.AttributeMapping.Keys {
+							if _, ok := params.Data[key]; ok {
+								return badRequestError("Cannot update data key %q, it is managed by SAML Identity Provider and registered in SAML Attribute Mappings", key)
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 
