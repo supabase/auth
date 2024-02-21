@@ -122,13 +122,13 @@ func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
 			desc:          "User must have at least 1 identity after unlinking",
 			user:          userWithOneIdentity,
 			identityId:    userWithOneIdentity.Identities[0].ID,
-			expectedError: badRequestError("User must have at least 1 identity after unlinking"),
+			expectedError: unprocessableEntityError(ErrorCodeSingleIdentityNotDeletable, "User must have at least 1 identity after unlinking"),
 		},
 		{
 			desc:          "Identity doesn't exist",
 			user:          userWithTwoIdentities,
 			identityId:    uuid.Must(uuid.NewV4()),
-			expectedError: badRequestError("Identity doesn't exist"),
+			expectedError: unprocessableEntityError(ErrorCodeIdentityNotFound, "Identity doesn't exist"),
 		},
 	}
 
@@ -141,7 +141,7 @@ func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
 			w := httptest.NewRecorder()
 
 			ts.API.handler.ServeHTTP(w, req)
-			require.Equal(ts.T(), c.expectedError.Code, w.Code)
+			require.Equal(ts.T(), c.expectedError.HTTPStatus, w.Code)
 
 			var data HTTPError
 			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))

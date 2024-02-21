@@ -421,9 +421,18 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 	var tokenString string
 	var expiresAt int64
 	var refreshToken *models.RefreshToken
-	session := getSession(ctx)
-	err := tx.Transaction(func(tx *storage.Connection) error {
-		if terr := models.AddClaimToSession(tx, session.ID, authenticationMethod); terr != nil {
+	currentClaims := getClaims(ctx)
+	sessionId, err := uuid.FromString(currentClaims.SessionId)
+	if err != nil {
+		return nil, internalServerError("Cannot read SessionId claim as UUID").WithInternalError(err)
+	}
+
+	err = tx.Transaction(func(tx *storage.Connection) error {
+		if terr := models.AddClaimToSession(tx, sessionId, authenticationMethod); terr != nil {
+			return terr
+		}
+		session, terr := models.FindSessionByID(tx, sessionId, false)
+		if terr != nil {
 			return terr
 		}
 		currentToken, terr := models.FindTokenBySessionID(tx, &session.ID)

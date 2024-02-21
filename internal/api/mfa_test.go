@@ -165,17 +165,10 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 
 func (ts *MFATestSuite) TestDuplicateEnrollsReturnExpectedMessage() {
 	friendlyName := "mary"
-<<<<<<< HEAD
 	issuer := "https://issuer.com"
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, http.StatusOK)
-	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, http.StatusBadRequest)
-=======
-	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, ts.TestUser, nil, models.TOTPSignIn)
-	require.NoError(ts.T(), err)
-	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusOK)
-	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusUnprocessableEntity)
->>>>>>> bafa2e5c (feat: add error codes)
+	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, http.StatusUnprocessableEntity)
 
 	var errorResponse HTTPError
 	err := json.NewDecoder(response.Body).Decode(&errorResponse)
@@ -184,7 +177,6 @@ func (ts *MFATestSuite) TestDuplicateEnrollsReturnExpectedMessage() {
 	// Convert the response body to a string and check for the expected error message
 	expectedErrorMessage := fmt.Sprintf("A factor with the friendly name %q for this user likely already exists", friendlyName)
 	require.Contains(ts.T(), errorResponse.Message, expectedErrorMessage)
-
 }
 
 func (ts *MFATestSuite) TestChallengeFactor() {

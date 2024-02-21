@@ -45,7 +45,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if identityToBeDeleted == nil {
-		return notFoundError(ErrorCodeIdentityNotFound, "Identity doesn't exist")
+		return unprocessableEntityError(ErrorCodeIdentityNotFound, "Identity doesn't exist")
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
