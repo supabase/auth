@@ -182,6 +182,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	}
 
 	userData := data.userData
+	fmt.Printf("%#v\n", userData)
 	if len(userData.Emails) <= 0 {
 		return internalServerError("Error getting user email from external provider")
 	}
