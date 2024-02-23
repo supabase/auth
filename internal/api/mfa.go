@@ -111,11 +111,10 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return forbiddenError("Maximum number of enrolled factors reached, unenroll to continue")
 	}
 
-
 	if numVerifiedFactors > 0 && !session.IsAAL2() {
 		return forbiddenError("AAL2 required to enroll a new factor")
 	}
-  qrCode, url, secret, err := generateQRCode(issuer, user.GetEmail())
+	qrCode, url, secret, err := generateQRCode(issuer, user.GetEmail())
 	if err != nil {
 		return err
 	}
