@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.143.1](https://github.com/supabase/gotrue/compare/v2.143.0...v2.143.1) (2024-02-26)
+
+
+### Bug Fixes
+
+* expose `provider` under `amr` in access token ([#1457](https://github.com/supabase/gotrue/issues/1457)) ([3ffae78](https://github.com/supabase/gotrue/commit/3ffae785f8e0e2f474943add1830e50dbe851647))
+
 ## [2.143.0](https://github.com/supabase/gotrue/compare/v2.142.0...v2.143.0) (2024-02-19)
 
 
