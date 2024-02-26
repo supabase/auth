@@ -19,25 +19,23 @@ import (
 	"github.com/supabase/auth/internal/utilities"
 )
 
-const DefaultQRSize = 3
-
 type EnrollFactorParams struct {
 	FriendlyName string `json:"friendly_name"`
 	FactorType   string `json:"factor_type"`
 	Issuer       string `json:"issuer"`
 }
 
-type TOTPObject struct {
+type TOTPSetup struct {
 	QRCode string `json:"qr_code"`
 	Secret string `json:"secret"`
 	URI    string `json:"uri"`
 }
 
 type EnrollFactorResponse struct {
-	ID           uuid.UUID  `json:"id"`
-	Type         string     `json:"type"`
-	FriendlyName string     `json:"friendly_name"`
-	TOTP         TOTPObject `json:"totp,omitempty"`
+	ID           uuid.UUID `json:"id"`
+	Type         string    `json:"type"`
+	FriendlyName string    `json:"friendly_name"`
+	TOTP         TOTPSetup `json:"totp,omitempty"`
 }
 
 type VerifyFactorParams struct {
@@ -114,11 +112,12 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if numVerifiedFactors > 0 && !session.IsAAL2() {
 		return forbiddenError("AAL2 required to enroll a new factor")
 	}
-	qrCode, url, secret, err := generateQRCode(issuer, user.GetEmail())
+	sideLength := 256
+	totpSetup, err := generateQRCode(issuer, user.GetEmail(), sideLength)
 	if err != nil {
 		return err
 	}
-	factor := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, secret)
+	factor := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, totpSetup.Secret)
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(factor); terr != nil {
@@ -144,11 +143,10 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		ID:           factor.ID,
 		Type:         models.TOTP,
 		FriendlyName: factor.FriendlyName,
-		TOTP: TOTPObject{
-			// See: https://css-tricks.com/probably-dont-base64-svg/
-			QRCode: qrCode,
-			Secret: factor.Secret,
-			URI:    url,
+		TOTP: TOTPSetup{
+			QRCode: totpSetup.QRCode,
+			Secret: totpSetup.Secret,
+			URI:    totpSetup.URI,
 		},
 	})
 }
@@ -274,13 +272,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr = challenge.Verify(tx); terr != nil {
 			return terr
 		}
-		if !factor.IsVerified() {
-			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
-				return terr
-			}
-		}
-		user, terr = models.FindUserByID(tx, user.ID)
-		if terr != nil {
+		if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
 			return terr
 		}
 		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.TOTPSignIn, models.GrantParams{
@@ -352,25 +344,24 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-func generateQRCode(issuer string, account string) (string, string, string, error) {
+func generateQRCode(issuer string, account string, sideLength int) (*TOTPSetup, error) {
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      issuer,
 		AccountName: account,
 	})
 	if err != nil {
-		return "", "", "", err
+		return nil, err
 	}
 
-	// Create a QR code instance.
+	// See: https://pkg.go.dev/github.com/boombuler/barcode@v1.0.1/qr#ErrorCorrectionLevel
 	qrCode, err := qr.Encode(key.URL(), qr.Q, qr.Auto)
 	if err != nil {
-		return "", "", "", err
+		return nil, err
 	}
 
-	// Scale the QR code to the desired size.
-	qrCode, err = barcode.Scale(qrCode, 256, 256)
+	qrCode, err = barcode.Scale(qrCode, sideLength, sideLength)
 	if err != nil {
-		return "", "", "", err
+		return nil, err
 	}
 
 	// Create a buffer to hold SVG data.
@@ -387,6 +378,10 @@ func generateQRCode(issuer string, account string) (string, string, string, erro
 		}
 	}
 	canvas.End()
-	// TODO: Encode this in a struct
-	return b.String(), key.URL(), key.Secret(), nil
+
+	return &TOTPSetup{
+		QRCode: b.String(),
+		Secret: key.Secret(),
+		URI:    key.URL(),
+	}, nil
 }
