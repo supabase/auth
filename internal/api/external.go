@@ -534,6 +534,12 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewFigmaProvider(config.External.Figma, scopes)
 	case "fly":
 		return provider.NewFlyProvider(config.External.Fly, scopes)
+	case "generic1":
+		return provider.NewGenericProvider(config.External.Generic1, scopes)
+	case "generic2":
+		return provider.NewGenericProvider(config.External.Generic2, scopes)
+	case "generic3":
+		return provider.NewGenericProvider(config.External.Generic3, scopes)
 	case "github":
 		return provider.NewGithubProvider(config.External.Github, scopes)
 	case "gitlab":
