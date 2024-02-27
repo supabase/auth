@@ -74,14 +74,14 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	firstClaimAddedTime := time.Now()
 	session = ts.AddClaimAndReloadSession(session, TOTPSignIn)
 
-	aal, amr, err := session.CalculateAALAndAMR(u)
+	_, _, err = session.CalculateAALAndAMR(u)
 	require.NoError(ts.T(), err)
 
 	session = ts.AddClaimAndReloadSession(session, TOTPSignIn)
 
 	session = ts.AddClaimAndReloadSession(session, SSOSAML)
 
-	aal, amr, err = session.CalculateAALAndAMR(u)
+	aal, amr, err := session.CalculateAALAndAMR(u)
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), AAL2.String(), aal)
