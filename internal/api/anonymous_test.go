@@ -138,3 +138,40 @@ func (ts *AnonymousTestSuite) TestConvertAnonymousUserToPermanent() {
 	// User should have an email identity
 	assert.Len(ts.T(), data.User.Identities, 1)
 }
+
+func (ts *AnonymousTestSuite) TestRateLimitAnonymousSignups() {
+	var buffer bytes.Buffer
+	ts.Config.External.AnonymousUsers.Enabled = true
+
+	// It rate limits after 30 requests
+	for i := 0; i < int(ts.Config.RateLimitAnonymousUsers); i++ {
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{}))
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/signup", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("My-Custom-Header", "1.2.3.4")
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+		assert.Equal(ts.T(), http.StatusOK, w.Code)
+	}
+
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{}))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("My-Custom-Header", "1.2.3.4")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
+
+	// It ignores X-Forwarded-For by default
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{}))
+	req.Header.Set("X-Forwarded-For", "1.1.1.1")
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
+
+	// It doesn't rate limit a new value for the limited header
+	req.Header.Set("My-Custom-Header", "5.6.7.8")
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+}
