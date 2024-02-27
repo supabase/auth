@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/golang-jwt/jwt"
+
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -86,7 +88,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		// the connection pool does not get exhausted.
 
 		var tokenString string
-		var expiresAt int64
+		var tokenClaims jwt.Claims
 		var newTokenResponse *AccessTokenResponse
 
 		err = db.Transaction(func(tx *storage.Connection) error {
@@ -216,8 +218,9 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 				issuedToken = newToken
 			}
+			
 
-			tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, issuedToken.SessionId, models.TokenRefresh)
+			tokenString, tokenClaims, terr = a.generateAccessToken(ctx, tx, user, issuedToken.SessionId, models.TokenRefresh)
 			if terr != nil {
 				httpErr, ok := terr.(*HTTPError)
 				if ok {
@@ -225,7 +228,6 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				}
 				return internalServerError("error generating jwt token").WithInternalError(terr)
 			}
-
 			refreshedAt := a.Now()
 			session.RefreshedAt = &refreshedAt
 
@@ -247,23 +249,18 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				return internalServerError("failed to update session information").WithInternalError(terr)
 			}
 
-			newTokenResponse = &AccessTokenResponse{
-				Token:        tokenString,
-				TokenType:    "bearer",
-				ExpiresIn:    config.JWT.Exp,
-				ExpiresAt:    expiresAt,
-				RefreshToken: issuedToken.Token,
-				User:         user,
-			}
+			newTokenResponse = a.constructAccessTokenResponse(user, tokenClaims, tokenString, issuedToken.Token)
+
 			if terr = a.setCookieTokens(config, newTokenResponse, false, w); terr != nil {
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
-
 			return nil
 		})
 		if err == nil {
 			// success
+
 			metering.RecordLogin("token", user.ID)
+
 			return sendJSON(w, http.StatusOK, newTokenResponse)
 		}
 

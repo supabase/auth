@@ -530,6 +530,7 @@ func (ts *TokenTestSuite) TestTokenRefreshWithUnexpiredSession() {
 
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
+	
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
@@ -754,6 +755,80 @@ end; $$ language plpgsql;`,
 					}
 				}
 			}
+
+			cleanupHookSQL := fmt.Sprintf("drop function if exists %s", ts.Config.Hook.CustomAccessToken.HookName)
+			require.NoError(t, ts.API.db.RawQuery(cleanupHookSQL).Exec())
+			ts.Config.Hook.CustomAccessToken.Enabled = false
+		})
+	}
+}
+
+
+func (ts *TokenTestSuite) TestCustomAccessTokenInResponseUser() {
+	type customAccessTokenTestcase struct {
+		desc            string
+		grantType      string
+		requestBody 	map[string]interface{}
+		expectedUser  map[string]interface{}
+	}
+	var hookFunctionSQL string = ` create or replace function custom_access_token_add_claim(input jsonb) 
+	returns jsonb 
+	language plpgsql
+	as $$ 
+		declare 
+			result jsonb; 
+	begin 
+		input := jsonb_set(input, '{claims,user_metadata,new_metadata}', '"newvalue"', true);
+		result := jsonb_build_object('claims', input->'claims');
+		return result;
+	end; 
+	$$;`
+	cases := []customAccessTokenTestcase{
+		{
+			desc: "check user is updated in refresh token grant type",
+			grantType:  "refresh_token",
+			requestBody: map[string]interface{}{
+				"refresh_token": ts.RefreshToken.Token,
+			},
+
+		}, {
+			desc: "check user is updated in password grant type",
+			grantType:  "password",
+			requestBody: map[string]interface{}{
+				"email":    "test@example.com",
+				"password": "password",
+			},
+
+		}, 
+	}
+	for _, c := range cases {
+		ts.T().Run(c.desc, func(t *testing.T) {
+			ts.Config.Hook.CustomAccessToken.Enabled = true
+			ts.Config.Hook.CustomAccessToken.URI = "pg-functions://postgres/auth/custom_access_token_add_claim"
+			require.NoError(t, ts.Config.Hook.CustomAccessToken.PopulateExtensibilityPoint())
+
+			err := ts.API.db.RawQuery(hookFunctionSQL).Exec()
+			require.NoError(t, err)
+
+			var buffer bytes.Buffer
+			require.NoError(t, json.NewEncoder(&buffer).Encode(c.requestBody))
+
+			url := "http://localhost/token?grant_type=" + c.grantType
+			req := httptest.NewRequest(http.MethodPost, url, &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+
+			var userResponse struct {
+				User *models.User `json:"user"`
+			}
+			
+			require.NoError(t, json.NewDecoder(w.Result().Body).Decode(&userResponse))
+			
+			value, exists := userResponse.User.UserMetaData["new_metadata"]
+			require.True(t, exists, "Key 'new_metadata' does not exist in UserMetadata")
+			require.Equal(t, "newvalue", value, "The value of 'new_metadata' is not 'newvalue'")
 
 			cleanupHookSQL := fmt.Sprintf("drop function if exists %s", ts.Config.Hook.CustomAccessToken.HookName)
 			require.NoError(t, ts.API.db.RawQuery(cleanupHookSQL).Exec())

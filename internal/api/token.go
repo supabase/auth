@@ -301,19 +301,20 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, int64, error) {
+func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, jwt.Claims, error) {
 	config := a.config
 	aal, amr := models.AAL1.String(), []models.AMREntry{}
+	var finalClaims jwt.Claims
 	sid := ""
 	if sessionId != nil {
 		sid = sessionId.String()
 		session, terr := models.FindSessionByID(tx, *sessionId, false)
 		if terr != nil {
-			return "", 0, terr
+			return "", nil, terr
 		}
 		aal, amr, terr = session.CalculateAALAndAMR(tx)
 		if terr != nil {
-			return "", 0, terr
+			return "", nil, terr
 		}
 	}
 
@@ -338,6 +339,7 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 		AuthenticationMethodReference: amr,
 	}
 
+	finalClaims = claims
 	var token *jwt.Token
 	if config.Hook.CustomAccessToken.Enabled {
 		input := hooks.CustomAccessTokenInput{
@@ -350,14 +352,14 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 
 		err := a.invokeHook(ctx, &input, &output)
 		if err != nil {
-			return "", 0, err
+			return "", nil, err
 		}
-		goTrueClaims := jwt.MapClaims(output.Claims)
-
-		token = jwt.NewWithClaims(jwt.SigningMethodHS256, goTrueClaims)
+		
+		finalClaims = jwt.MapClaims(output.Claims)
+		token = jwt.NewWithClaims(jwt.SigningMethodHS256, finalClaims)
 
 	} else {
-		token = jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		token = jwt.NewWithClaims(jwt.SigningMethodHS256, finalClaims)
 	}
 
 	if config.JWT.KeyID != "" {
@@ -370,22 +372,23 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 
 	signed, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
-		return "", 0, err
+		return "", nil, err
 	}
 
-	return signed, expiresAt, nil
+	return signed, finalClaims, nil
 }
 
+
+
 func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
-	config := a.config
+	
 
 	now := time.Now()
 	user.LastSignInAt = &now
 
 	var tokenString string
-	var expiresAt int64
+	var tokenClaims jwt.Claims
 	var refreshToken *models.RefreshToken
-
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 
@@ -399,7 +402,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return terr
 		}
 
-		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, refreshToken.SessionId, authenticationMethod)
+		tokenString, tokenClaims, terr = a.generateAccessToken(ctx, tx, user, refreshToken.SessionId, authenticationMethod)
 		if terr != nil {
 			// Account for Hook Error
 			httpErr, ok := terr.(*HTTPError)
@@ -413,22 +416,14 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 	if err != nil {
 		return nil, err
 	}
-
-	return &AccessTokenResponse{
-		Token:        tokenString,
-		TokenType:    "bearer",
-		ExpiresIn:    config.JWT.Exp,
-		ExpiresAt:    expiresAt,
-		RefreshToken: refreshToken.Token,
-		User:         user,
-	}, nil
+	
+	return a.constructAccessTokenResponse(user, tokenClaims, tokenString, refreshToken.Token), nil
 }
 
 func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 	ctx := r.Context()
-	config := a.config
 	var tokenString string
-	var expiresAt int64
+	var tokenClaims jwt.Claims
 	var refreshToken *models.RefreshToken
 	currentClaims := getClaims(ctx)
 	sessionId, err := uuid.FromString(currentClaims.SessionId)
@@ -464,7 +459,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return err
 		}
 
-		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, &sessionId, models.TOTPSignIn)
+		tokenString, tokenClaims, terr = a.generateAccessToken(ctx, tx, user, &sessionId, models.TOTPSignIn)
 		if terr != nil {
 			httpErr, ok := terr.(*HTTPError)
 			if ok {
@@ -477,14 +472,8 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 	if err != nil {
 		return nil, err
 	}
-	return &AccessTokenResponse{
-		Token:        tokenString,
-		TokenType:    "bearer",
-		ExpiresIn:    config.JWT.Exp,
-		ExpiresAt:    expiresAt,
-		RefreshToken: refreshToken.Token,
-		User:         user,
-	}, nil
+
+	return a.constructAccessTokenResponse(user, tokenClaims, tokenString, refreshToken.Token), nil
 }
 
 // setCookieTokens sets the access_token & refresh_token in the cookies
@@ -562,4 +551,60 @@ func validateTokenClaims(outputClaims map[string]interface{}) error {
 	}
 
 	return nil
+}
+
+func (a *API) constructAccessTokenResponse(user *models.User, claims jwt.Claims, token string, refreshToken string) *AccessTokenResponse {
+    config := a.config
+	var expiresIn int
+    var expiresAt int64
+	switch c := claims.(type) {
+	case *hooks.AccessTokenClaims:
+		return &AccessTokenResponse{
+			Token:        token,
+			TokenType:    "bearer",
+			ExpiresIn:    config.JWT.Exp,
+			ExpiresAt:    c.StandardClaims.ExpiresAt,
+			RefreshToken: refreshToken,
+			User:         user,
+		}
+	case jwt.MapClaims:
+
+		if exp, ok := c["exp"].(float64); ok {
+			// Check for expiresAt within StandardClaims
+			expiresAt = int64(exp)
+			expiresIn = int(expiresAt - time.Now().Unix())
+		}else{
+			expiresIn = config.JWT.Exp
+			expiresAt = time.Now().Unix() + int64(expiresIn)
+		}
+
+		// Assign values if the underlying type is map[string]interface{}
+		if userMetaData, ok := c["user_metadata"].(map[string]interface{}); ok {
+			user.UserMetaData = userMetaData
+		}
+
+		if appMetaData, ok := c["app_metadata"].(map[string]interface{}); ok {
+			user.AppMetaData = appMetaData
+		}
+		if role, ok := c["role"].(string); ok {
+			user.Role = role
+		}
+		if subject, ok := c["sub"].(uuid.UUID); ok { // Assuming "sub" is the key for subject
+			user.ID = subject
+		}
+		if audience, ok := c["aud"].(string); ok { // Assuming "aud" is the key for audience
+			user.Aud = audience
+		}
+		return &AccessTokenResponse{
+			Token:        token,
+			TokenType:    "bearer",
+			ExpiresIn:    expiresIn,
+			ExpiresAt:    expiresAt,
+			RefreshToken: refreshToken,
+			User:         user,
+		}
+	default:
+
+		return nil
+	}
 }
