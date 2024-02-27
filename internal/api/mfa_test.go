@@ -140,15 +140,14 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-
 			w := performEnrollFlow(ts, token, c.friendlyName, c.factorType, c.issuer, c.expectedCode)
 
 			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
 			ts.Require().NoError(err)
-			latestFactor := factors[len(factors)-1]
-			require.False(ts.T(), latestFactor.IsVerified())
+			addedFactor := factors[len(factors)-1]
+			require.False(ts.T(), addedFactor.IsVerified())
 			if c.friendlyName != "" && c.expectedCode == http.StatusOK {
-				require.Equal(ts.T(), c.friendlyName, latestFactor.FriendlyName)
+				require.Equal(ts.T(), c.friendlyName, addedFactor.FriendlyName)
 			}
 			if w.Code == http.StatusOK {
 				enrollResp := EnrollFactorResponse{}
@@ -164,9 +163,10 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 
 func (ts *MFATestSuite) TestDuplicateEnrollsReturnExpectedMessage() {
 	friendlyName := "mary"
+	issuer := "https://issuer.com"
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
-	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusOK)
-	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, "https://issuer.com", http.StatusBadRequest)
+	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, http.StatusOK)
+	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, http.StatusBadRequest)
 
 	var errorResponse HTTPError
 	err := json.NewDecoder(response.Body).Decode(&errorResponse)
@@ -270,7 +270,6 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 }
 
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
-
 	cases := []struct {
 		desc             string
 		isAAL2           bool
@@ -289,7 +288,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 	}
 	for _, v := range cases {
 		ts.Run(v.desc, func() {
-			// Create User
+			var buffer bytes.Buffer
 			if v.isAAL2 {
 				ts.TestSession.UpdateAssociatedAAL(ts.API.db, models.AAL2.String())
 			}
@@ -298,14 +297,9 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
 			require.NoError(ts.T(), err, "error finding factors")
 			f := factors[0]
-
-			sharedSecret := ts.TestOTPKey.Secret()
-			f.Secret = sharedSecret
-			err = f.UpdateStatus(ts.API.db, models.FactorStateVerified)
-			require.NoError(ts.T(), err)
+			f.Secret = ts.TestOTPKey.Secret()
+			require.NoError(ts.T(), f.UpdateStatus(ts.API.db, models.FactorStateVerified))
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
-
-			var buffer bytes.Buffer
 
 			token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 
@@ -329,11 +323,9 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 }
 
 func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
-	f := ts.TestUser.Factors[0]
-	sharedSecret := ts.TestOTPKey.Secret()
-	f.Secret = sharedSecret
-
 	var buffer bytes.Buffer
+	f := ts.TestUser.Factors[0]
+	f.Secret = ts.TestOTPKey.Secret()
 
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
@@ -345,6 +337,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
+
 	_, err := models.FindFactorByFactorID(ts.API.db, f.ID)
 	require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
 	session, _ := models.FindSessionByID(ts.API.db, ts.TestSecondarySession.ID, false)
@@ -355,11 +348,11 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 
 // Integration Tests
 func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
+	ts.Config.Security.RefreshTokenRotationEnabled = true
 	resp := performTestSignupAndVerify(ts, ts.TestEmail, ts.TestPassword, true /* <- requireStatusOK */)
 	accessTokenResp := &AccessTokenResponse{}
 	require.NoError(ts.T(), json.NewDecoder(resp.Body).Decode(&accessTokenResp))
 
-	ts.Config.Security.RefreshTokenRotationEnabled = true
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"refresh_token": accessTokenResp.RefreshToken,
@@ -383,11 +376,11 @@ func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
 
 // Performing MFA Verification followed by a sign in should return an AAL1 session and an AAL2 session
 func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
+	ts.Config.Security.RefreshTokenRotationEnabled = true
 	resp := performTestSignupAndVerify(ts, ts.TestEmail, ts.TestPassword, true /* <- requireStatusOK */)
 	accessTokenResp := &AccessTokenResponse{}
 	require.NoError(ts.T(), json.NewDecoder(resp.Body).Decode(&accessTokenResp))
 
-	ts.Config.Security.RefreshTokenRotationEnabled = true
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"email":    ts.TestEmail,
@@ -403,8 +396,10 @@ func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 	ctx, err := ts.API.parseJWTClaims(data.Token, req)
 	require.NoError(ts.T(), err)
+
 	ctx, err = ts.API.maybeLoadUserOrSession(ctx)
 	require.NoError(ts.T(), err)
+
 	require.Equal(ts.T(), models.AAL1.String(), getSession(ctx).GetAAL())
 	session, err := models.FindSessionByUserID(ts.API.db, accessTokenResp.User.ID)
 	require.NoError(ts.T(), err)
@@ -412,6 +407,7 @@ func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
 }
 
 func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenResponse) {
+	ts.API.config.Mailer.Autoconfirm = true
 	var buffer bytes.Buffer
 
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
@@ -422,7 +418,6 @@ func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenRes
 	// Setup request
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/signup", &buffer)
 	req.Header.Set("Content-Type", "application/json")
-	ts.API.config.Mailer.Autoconfirm = true
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
