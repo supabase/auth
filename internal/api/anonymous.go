@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/supabase/auth/internal/metering"
@@ -19,22 +18,18 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 		return forbiddenError("Signups not allowed for this instance")
 	}
 
-	params := &SignupParams{
-		Aud:      aud,
-		Provider: "anonymous",
-	}
-	body, err := getBodyBytes(r)
+	params, err := retrieveSignupParams(r)
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
+		return err
 	}
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read signup params: %v", err)
-	}
+	params.Aud = aud
+	params.Provider = "anonymous"
+
 	// always call this outside of a database transaction as this method
 	// can be computationally hard and block due to password hashing
 	newUser, err := params.ToUserModel(false /* <- isSSOUser */)
 	if err != nil {
-		return internalServerError("")
+		return err
 	}
 
 	var grantParams models.GrantParams

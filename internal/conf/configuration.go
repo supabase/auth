@@ -195,21 +195,22 @@ type PasswordConfiguration struct {
 
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
-	API                   APIConfiguration
-	DB                    DBConfiguration
-	External              ProviderConfiguration
-	Logging               LoggingConfig  `envconfig:"LOG"`
-	Profiler              ProfilerConfig `envconfig:"PROFILER"`
-	OperatorToken         string         `split_words:"true" required:"false"`
-	Tracing               TracingConfig
-	Metrics               MetricsConfig
-	SMTP                  SMTPConfiguration
-	RateLimitHeader       string  `split_words:"true"`
-	RateLimitEmailSent    float64 `split_words:"true" default:"30"`
-	RateLimitSmsSent      float64 `split_words:"true" default:"30"`
-	RateLimitVerify       float64 `split_words:"true" default:"30"`
-	RateLimitTokenRefresh float64 `split_words:"true" default:"150"`
-	RateLimitSso          float64 `split_words:"true" default:"30"`
+	API                     APIConfiguration
+	DB                      DBConfiguration
+	External                ProviderConfiguration
+	Logging                 LoggingConfig  `envconfig:"LOG"`
+	Profiler                ProfilerConfig `envconfig:"PROFILER"`
+	OperatorToken           string         `split_words:"true" required:"false"`
+	Tracing                 TracingConfig
+	Metrics                 MetricsConfig
+	SMTP                    SMTPConfiguration
+	RateLimitHeader         string  `split_words:"true"`
+	RateLimitEmailSent      float64 `split_words:"true" default:"30"`
+	RateLimitSmsSent        float64 `split_words:"true" default:"30"`
+	RateLimitVerify         float64 `split_words:"true" default:"30"`
+	RateLimitTokenRefresh   float64 `split_words:"true" default:"150"`
+	RateLimitSso            float64 `split_words:"true" default:"30"`
+	RateLimitAnonymousUsers float64 `split_words:"true" default:"30"`
 
 	SiteURL         string   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList    []string `json:"uri_allow_list" split_words:"true"`

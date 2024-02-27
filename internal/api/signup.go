@@ -107,24 +107,16 @@ func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err 
 	return user, nil
 }
 
-func (a *API) HandleSignup(w http.ResponseWriter, r *http.Request) error {
-	config := a.config
-
+func retrieveSignupParams(r *http.Request) (*SignupParams, error) {
 	params := &SignupParams{}
 	body, err := getBodyBytes(r)
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
+		return nil, badRequestError("Could not read body").WithInternalError(err)
 	}
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read signup params: %v", err)
+		return nil, badRequestError("Could not read Signup params: %v", err)
 	}
-	if params.Email == "" && params.Phone == "" {
-		if !config.External.AnonymousUsers.Enabled {
-			return badRequestError("Anonymous sign-ins are disabled")
-		}
-		return a.SignupAnonymously(w, r)
-	}
-	return a.Signup(w, r)
+	return params, nil
 }
 
 // Signup is the endpoint for registering a new user
@@ -137,15 +129,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return forbiddenError("Signups not allowed for this instance")
 	}
 
-	params := &SignupParams{}
-
-	body, err := getBodyBytes(r)
+	params, err := retrieveSignupParams(r)
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read Signup params: %v", err)
+		return err
 	}
 
 	params.ConfigureDefaults()
