@@ -769,7 +769,6 @@ func (ts *TokenTestSuite) TestCustomAccessTokenInResponseUser() {
 		desc            string
 		grantType      string
 		requestBody 	map[string]interface{}
-		expectedUser  map[string]interface{}
 	}
 	var hookFunctionSQL string = ` create or replace function custom_access_token_add_claim(input jsonb) 
 	returns jsonb 
