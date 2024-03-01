@@ -75,3 +75,14 @@ func isStringInSlice(checkValue string, list []string) bool {
 func getBodyBytes(req *http.Request) ([]byte, error) {
 	return utilities.GetBodyBytes(req)
 }
+
+func retrieveRequestParams[A any](r *http.Request, params *A) (*A, error) {
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return nil, badRequestError("Could not read body into byte slice").WithInternalError(err)
+	}
+	if err := json.Unmarshal(body, params); err != nil {
+		return nil, badRequestError("Could not read request body: %v", err)
+	}
+	return params, nil
+}
