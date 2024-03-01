@@ -82,6 +82,7 @@ func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err 
 		user, err = models.NewUser(params.Phone, "", params.Password, params.Aud, params.Data)
 	case "anonymous":
 		user, err = models.NewUser("", "", "", params.Aud, params.Data)
+		user.IsAnonymous = true
 	default:
 		// handles external provider case
 		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
