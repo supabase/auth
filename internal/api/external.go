@@ -213,7 +213,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if targetUser := getTargetUser(ctx); targetUser != nil {
-			if user, terr = a.linkIdentityToUser(ctx, tx, userData, providerType); terr != nil {
+			if user, terr = a.linkIdentityToUser(r, ctx, tx, userData, providerType); terr != nil {
 				return terr
 			}
 		} else if inviteToken := getInviteToken(ctx); inviteToken != "" {
