@@ -199,22 +199,36 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if (params.Provider == "email" && user.IsConfirmed()) || (params.Provider == "phone" && user.IsPhoneConfirmed()) {
 				return UserExistsError
 			}
-
 			// do not update the user because we can't be sure of their claimed identity
 		} else {
 			user, terr = a.signupNewUser(ctx, tx, signupUser)
 			if terr != nil {
 				return terr
 			}
-			identity, terr := a.createNewIdentity(tx, user, params.Provider, structs.Map(provider.Claims{
+		}
+		identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email")
+		if terr != nil {
+			if !models.IsNotFoundError(terr) {
+				return terr
+			}
+			identityData := structs.Map(provider.Claims{
 				Subject: user.ID.String(),
 				Email:   user.GetEmail(),
-			}))
+			})
+			for k, v := range params.Data {
+				if _, ok := identityData[k]; !ok {
+					identityData[k] = v
+				}
+			}
+			identity, terr = a.createNewIdentity(tx, user, params.Provider, identityData)
 			if terr != nil {
 				return terr
 			}
-			user.Identities = []models.Identity{*identity}
+			if terr := user.RemoveUnconfirmedIdentities(tx, identity); terr != nil {
+				return terr
+			}
 		}
+		user.Identities = []models.Identity{*identity}
 
 		if params.Provider == "email" && !user.IsConfirmed() {
 			if config.Mailer.Autoconfirm {

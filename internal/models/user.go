@@ -709,10 +709,12 @@ func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
 
 // RemoveUnconfirmedIdentities removes potentially malicious unconfirmed identities from a user (if any)
 func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection, identity *Identity) error {
-	// user is unconfirmed so the password should be reset
-	u.EncryptedPassword = ""
-	if terr := tx.UpdateOnly(u, "encrypted_password"); terr != nil {
-		return terr
+	if identity.Provider != "email" && identity.Provider != "phone" {
+		// user is unconfirmed so the password should be reset
+		u.EncryptedPassword = ""
+		if terr := tx.UpdateOnly(u, "encrypted_password"); terr != nil {
+			return terr
+		}
 	}
 
 	// user is unconfirmed so existing user_metadata should be overwritten
