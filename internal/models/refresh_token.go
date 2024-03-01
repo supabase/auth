@@ -127,15 +127,9 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 	}
 
 	if token.SessionId == nil {
-		session, err := NewSession()
+		session, err := NewSession(user.ID, params.FactorID)
 		if err != nil {
 			return nil, errors.Wrap(err, "error instantiating new session object")
-		}
-
-		session.UserID = user.ID
-
-		if params.FactorID != nil {
-			session.FactorID = params.FactorID
 		}
 
 		if params.SessionNotAfter != nil {

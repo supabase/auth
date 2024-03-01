@@ -60,10 +60,8 @@ func (ts *MFATestSuite) SetupTest() {
 	f := models.NewFactor(u, "test_factor", models.TOTP, models.FactorStateUnverified, "secretkey")
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 	// Create corresponding session
-	s, err := models.NewSession()
+	s, err := models.NewSession(u.ID, &f.ID)
 	require.NoError(ts.T(), err, "Error creating test session")
-	s.UserID = u.ID
-	s.FactorID = &f.ID
 	require.NoError(ts.T(), ts.API.db.Create(s), "Error saving test session")
 
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, ts.TestEmail, ts.Config.JWT.Aud)
@@ -223,10 +221,8 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
 
 			// Create session to be invalidated
-			secondarySession, err := models.NewSession()
+			secondarySession, err := models.NewSession(ts.TestUser.ID, &f.ID)
 			require.NoError(ts.T(), err, "Error creating test session")
-			secondarySession.UserID = ts.TestUser.ID
-			secondarySession.FactorID = &f.ID
 			require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
 			token := ts.generateToken(ts.TestUser, r.SessionId)
@@ -304,10 +300,8 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
 			require.NoError(ts.T(), err, "error finding factors")
 			f := factors[0]
-			secondarySession, err = models.NewSession()
+			secondarySession, err = models.NewSession(ts.TestUser.ID, &f.ID)
 			require.NoError(ts.T(), err, "Error creating test session")
-			secondarySession.UserID = ts.TestUser.ID
-			secondarySession.FactorID = &f.ID
 			require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
 			sharedSecret := ts.TestOTPKey.Secret()
@@ -342,10 +336,8 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 	var secondarySession *models.Session
 	f := ts.TestUser.Factors[0]
-	secondarySession, err := models.NewSession()
+	secondarySession, err := models.NewSession(ts.TestUser.ID, &f.ID)
 	require.NoError(ts.T(), err, "Error creating test session")
-	secondarySession.UserID = ts.TestUser.ID
-	secondarySession.FactorID = &f.ID
 	require.NoError(ts.T(), ts.API.db.Create(secondarySession), "Error saving test session")
 
 	sharedSecret := ts.TestOTPKey.Secret()

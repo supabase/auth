@@ -375,10 +375,6 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			}); terr != nil {
 				return nil, terr
 			}
-			if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
-				return nil, terr
-			}
-
 			// fall through to auto-confirm and issue token
 			if terr = user.Confirm(tx); terr != nil {
 				return nil, internalServerError("Error updating user").WithInternalError(terr)
@@ -410,16 +406,12 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		}); terr != nil {
 			return nil, terr
 		}
-		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
-			return nil, terr
-		}
 	}
 
 	return user, nil
 }
 
 func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, inviteToken, providerType string) (*models.User, error) {
-	config := a.config
 	user, err := models.FindUserByConfirmationToken(tx, inviteToken)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -465,9 +457,6 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 	if err := models.NewAuditLogEntry(r, tx, user, models.InviteAcceptedAction, "", map[string]interface{}{
 		"provider": providerType,
 	}); err != nil {
-		return nil, err
-	}
-	if err := triggerEventHooks(ctx, tx, SignupEvent, user, config); err != nil {
 		return nil, err
 	}
 

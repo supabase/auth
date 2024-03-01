@@ -154,14 +154,16 @@ func (s *Session) DetermineTag(tags []string) string {
 	return tags[0]
 }
 
-func NewSession() (*Session, error) {
+func NewSession(userID uuid.UUID, factorID *uuid.UUID) (*Session, error) {
 	id := uuid.Must(uuid.NewV4())
 
 	defaultAAL := AAL1.String()
 
 	session := &Session{
-		ID:  id,
-		AAL: &defaultAAL,
+		ID:       id,
+		AAL:      &defaultAAL,
+		UserID:   userID,
+		FactorID: factorID,
 	}
 
 	return session, nil
@@ -280,7 +282,7 @@ func (s *Session) UpdateAssociatedAAL(tx *storage.Connection, aal string) error 
 	return tx.Update(s)
 }
 
-func (s *Session) CalculateAALAndAMR(tx *storage.Connection) (aal string, amr []AMREntry, err error) {
+func (s *Session) CalculateAALAndAMR(user *User) (aal string, amr []AMREntry, err error) {
 	amr, aal = []AMREntry{}, AAL1.String()
 	for _, claim := range s.AMRClaims {
 		if *claim.AuthenticationMethod == TOTPSignIn.String() {
@@ -306,15 +308,12 @@ func (s *Session) CalculateAALAndAMR(tx *storage.Connection) (aal string, amr []
 	if lastIndex > -1 && amr[lastIndex].Method == SSOSAML.String() {
 		// initial AMR claim is from sso/saml, we need to add information
 		// about the provider that was used for the authentication
-		identities, err := FindIdentitiesByUserID(tx, s.UserID)
-		if err != nil {
-			return aal, amr, err
-		}
+		identities := user.Identities
 
 		if len(identities) == 1 {
 			identity := identities[0]
 
-			if strings.HasPrefix(identity.Provider, "sso:") {
+			if identity.IsForSSOProvider() {
 				amr[lastIndex].Provider = strings.TrimPrefix(identity.Provider, "sso:")
 			}
 		}

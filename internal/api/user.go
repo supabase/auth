@@ -223,6 +223,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		if params.Phone != "" && params.Phone != user.GetPhone() {
 			if config.Sms.Autoconfirm {
+				user.PhoneChange = params.Phone
 				if _, terr := a.smsVerify(r, ctx, tx, user, &VerifyParams{
 					Type:  phoneChangeVerification,
 					Phone: params.Phone,

@@ -62,6 +62,7 @@ const (
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
+	session := getSession(ctx)
 	config := a.config
 
 	params := &EnrollFactorParams{}
@@ -110,6 +111,10 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return forbiddenError("Maximum number of enrolled factors reached, unenroll to continue")
 	}
 
+	if numVerifiedFactors > 0 && !session.IsAAL2() {
+		return forbiddenError("AAL2 required to enroll a new factor")
+	}
+
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      issuer,
 		AccountName: user.GetEmail(),
@@ -119,7 +124,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	var buf bytes.Buffer
 	svgData := svg.New(&buf)
-	qrCode, _ := qr.Encode(key.String(), qr.M, qr.Auto)
+	qrCode, _ := qr.Encode(key.String(), qr.H, qr.Auto)
 	qs := goqrsvg.NewQrSVG(qrCode, DefaultQRSize)
 	qs.StartQrSVG(svgData)
 	if err = qs.WriteQrSVG(svgData); err != nil {
