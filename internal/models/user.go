@@ -247,6 +247,8 @@ func (u *User) UpdateUserEmail(tx *storage.Connection) error {
 	for _, i := range identities {
 		if _, terr := FindUserByEmailAndAudience(tx, i.GetEmail(), u.Aud); terr != nil {
 			if IsNotFoundError(terr) {
+				// the identity's email is not used by another user
+				// so we can set it as the primary identity
 				primaryIdentity = i
 				break
 			}
@@ -720,16 +722,6 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection, identity *Ide
 		return terr
 	}
 
-	// user is unconfirmed so none of the providers associated to it are verified yet
-	// only the current provider should be kept
-	if _, ok := u.AppMetaData["providers"].([]string); ok {
-		u.AppMetaData["providers"] = []string{identity.Provider}
-		u.AppMetaData["provider"] = identity.Provider
-		if terr := u.UpdateAppMetaData(tx, u.AppMetaData); terr != nil {
-			return terr
-		}
-	}
-
 	// finally, remove all identities except the current identity being authenticated
 	for i := range u.Identities {
 		if u.Identities[i].ID != identity.ID {
@@ -737,6 +729,12 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection, identity *Ide
 				return terr
 			}
 		}
+	}
+
+	// user is unconfirmed so none of the providers associated to it are verified yet
+	// only the current provider should be kept
+	if terr := u.UpdateAppMetaDataProviders(tx); terr != nil {
+		return terr
 	}
 	return nil
 }
