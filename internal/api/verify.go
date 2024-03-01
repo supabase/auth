@@ -149,8 +149,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 	}
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		aud := a.requestAud(ctx, r)
-		user, terr = a.verifyTokenHash(ctx, tx, params, aud)
+		user, terr = a.verifyTokenHash(tx, params)
 		if terr != nil {
 			return terr
 		}
@@ -158,9 +157,9 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 		case signupVerification, inviteVerification:
 			user, terr = a.signupVerify(r, ctx, tx, user)
 		case recoveryVerification, magicLinkVerification:
-			user, terr = a.recoverVerify(r, ctx, tx, user)
+			user, terr = a.recoverVerify(r, tx, user)
 		case emailChangeVerification:
-			user, terr = a.emailChangeVerify(r, ctx, tx, params, user)
+			user, terr = a.emailChangeVerify(r, tx, params, user)
 			if user == nil && terr == nil {
 				// when double confirmation is required
 				rurl, err := a.prepRedirectURL(singleConfirmationAccepted, params.RedirectTo, flowType)
@@ -198,7 +197,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
 		} else if isPKCEFlow(flowType) {
-			if authCode, terr = issueAuthCode(tx, user, a.config.External.FlowStateExpiryDuration, authenticationMethod); terr != nil {
+			if authCode, terr = issueAuthCode(tx, user, authenticationMethod); terr != nil {
 				return badRequestError("No associated flow state found. %s", terr)
 			}
 		}
@@ -208,7 +207,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 	if err != nil {
 		var herr *HTTPError
 		if errors.As(err, &herr) {
-			rurl, err := a.prepErrorRedirectURL(herr, w, r, params.RedirectTo, flowType)
+			rurl, err := a.prepErrorRedirectURL(herr, r, params.RedirectTo, flowType)
 			if err != nil {
 				return err
 			}
@@ -250,9 +249,9 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 		aud := a.requestAud(ctx, r)
 
 		if isUsingTokenHash(params) {
-			user, terr = a.verifyTokenHash(ctx, tx, params, aud)
+			user, terr = a.verifyTokenHash(tx, params)
 		} else {
-			user, terr = a.verifyUserAndToken(ctx, tx, params, aud)
+			user, terr = a.verifyUserAndToken(tx, params, aud)
 		}
 		if terr != nil {
 			return terr
@@ -262,15 +261,15 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 		case signupVerification, inviteVerification:
 			user, terr = a.signupVerify(r, ctx, tx, user)
 		case recoveryVerification, magicLinkVerification:
-			user, terr = a.recoverVerify(r, ctx, tx, user)
+			user, terr = a.recoverVerify(r, tx, user)
 		case emailChangeVerification:
-			user, terr = a.emailChangeVerify(r, ctx, tx, params, user)
+			user, terr = a.emailChangeVerify(r, tx, params, user)
 			if user == nil && terr == nil {
 				isSingleConfirmationResponse = true
 				return nil
 			}
 		case smsVerification, phoneChangeVerification:
-			user, terr = a.smsVerify(r, ctx, tx, user, params)
+			user, terr = a.smsVerify(r, tx, user, params)
 		default:
 			return unprocessableEntityError("Unsupported verification type")
 		}
@@ -347,7 +346,7 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 	return user, nil
 }
 
-func (a *API) recoverVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
+func (a *API) recoverVerify(r *http.Request, conn *storage.Connection, user *models.User) (*models.User, error) {
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = user.Recover(tx); terr != nil {
@@ -375,7 +374,7 @@ func (a *API) recoverVerify(r *http.Request, ctx context.Context, conn *storage.
 	return user, nil
 }
 
-func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User, params *VerifyParams) (*models.User, error) {
+func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.User, params *VerifyParams) (*models.User, error) {
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 
@@ -426,7 +425,7 @@ func (a *API) smsVerify(r *http.Request, ctx context.Context, conn *storage.Conn
 	return user, nil
 }
 
-func (a *API) prepErrorRedirectURL(err *HTTPError, w http.ResponseWriter, r *http.Request, rurl string, flowType models.FlowType) (string, error) {
+func (a *API) prepErrorRedirectURL(err *HTTPError, r *http.Request, rurl string, flowType models.FlowType) (string, error) {
 	u, perr := url.Parse(rurl)
 	if perr != nil {
 		return "", err
@@ -484,7 +483,7 @@ func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
 	return u.String(), nil
 }
 
-func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
+func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
 	config := a.config
 	if config.Mailer.SecureEmailChangeEnabled && user.EmailChangeConfirmStatus == zeroConfirmation && user.GetEmail() != "" {
 		err := conn.Transaction(func(tx *storage.Connection) error {
@@ -547,7 +546,7 @@ func (a *API) emailChangeVerify(r *http.Request, ctx context.Context, conn *stor
 	return user, nil
 }
 
-func (a *API) verifyTokenHash(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*models.User, error) {
 	config := a.config
 
 	var user *models.User
@@ -603,7 +602,7 @@ func (a *API) verifyTokenHash(ctx context.Context, conn *storage.Connection, par
 }
 
 // verifyUserAndToken verifies the token associated to the user based on the verify type
-func (a *API) verifyUserAndToken(ctx context.Context, conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
+func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams, aud string) (*models.User, error) {
 	config := a.config
 
 	var user *models.User

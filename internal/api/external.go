@@ -148,7 +148,7 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-func (a *API) handleOAuthCallback(w http.ResponseWriter, r *http.Request) (*OAuthProviderData, error) {
+func (a *API) handleOAuthCallback(r *http.Request) (*OAuthProviderData, error) {
 	ctx := r.Context()
 	providerType := getExternalProviderType(ctx)
 
@@ -157,7 +157,7 @@ func (a *API) handleOAuthCallback(w http.ResponseWriter, r *http.Request) (*OAut
 	switch providerType {
 	case "twitter":
 		// future OAuth1.0 providers will use this method
-		oAuthResponseData, err = a.oAuth1Callback(ctx, r, providerType)
+		oAuthResponseData, err = a.oAuth1Callback(ctx, providerType)
 	default:
 		oAuthResponseData, err = a.oAuthCallback(ctx, r, providerType)
 	}
@@ -176,7 +176,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	grantParams.FillGrantParams(r)
 
 	providerType := getExternalProviderType(ctx)
-	data, err := a.handleOAuthCallback(w, r)
+	data, err := a.handleOAuthCallback(r)
 	if err != nil {
 		return err
 	}
@@ -217,7 +217,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				return terr
 			}
 		} else if inviteToken := getInviteToken(ctx); inviteToken != "" {
-			if user, terr = a.processInvite(r, ctx, tx, userData, inviteToken, providerType); terr != nil {
+			if user, terr = a.processInvite(r, tx, userData, inviteToken, providerType); terr != nil {
 				return terr
 			}
 		} else {
@@ -327,7 +327,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			return nil, terr
 		}
 
-		if user, terr = a.signupNewUser(ctx, tx, user); terr != nil {
+		if user, terr = a.signupNewUser(tx, user); terr != nil {
 			return nil, terr
 		}
 
@@ -411,7 +411,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	return user, nil
 }
 
-func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, inviteToken, providerType string) (*models.User, error) {
+func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *provider.UserProvidedData, inviteToken, providerType string) (*models.User, error) {
 	user, err := models.FindUserByConfirmationToken(tx, inviteToken)
 	if err != nil {
 		if models.IsNotFoundError(err) {

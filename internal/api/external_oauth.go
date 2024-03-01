@@ -104,7 +104,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 	}, nil
 }
 
-func (a *API) oAuth1Callback(ctx context.Context, r *http.Request, providerType string) (*OAuthProviderData, error) {
+func (a *API) oAuth1Callback(ctx context.Context, providerType string) (*OAuthProviderData, error) {
 	oAuthProvider, err := a.OAuthProvider(ctx, providerType)
 	if err != nil {
 		return nil, badRequestError("Unsupported provider: %+v", err).WithInternalError(err)

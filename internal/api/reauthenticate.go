@@ -49,7 +49,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return badRequestError("Error sending sms: %v", terr)
 			}
-			mID, err := a.sendPhoneConfirmation(ctx, tx, user, phone, phoneReauthenticationOtp, smsProvider, sms_provider.SMSProvider)
+			mID, err := a.sendPhoneConfirmation(tx, user, phone, phoneReauthenticationOtp, smsProvider, sms_provider.SMSProvider)
 			if err != nil {
 				return err
 			}
