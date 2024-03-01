@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -113,15 +112,9 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	db := a.db.WithContext(ctx)
 	config := a.config
 
-	params := &IdTokenGrantParams{}
-
-	body, err := getBodyBytes(r)
+	params, err := retrieveRequestParams(r, &IdTokenGrantParams{})
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read id token grant params: %v", err)
+		return err
 	}
 
 	if params.IdToken == "" {

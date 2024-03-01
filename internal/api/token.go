@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -100,15 +99,9 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 
-	params := &PasswordGrantParams{}
-
-	body, err := getBodyBytes(r)
+	params, err := retrieveRequestParams(r, &PasswordGrantParams{})
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read password grant params: %v", err)
+		return err
 	}
 
 	aud := a.requestAud(ctx, r)
@@ -235,14 +228,9 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	// can be told to at least propagate the User-Agent header.
 	grantParams.FillGrantParams(r)
 
-	params := &PKCEGrantParams{}
-	body, err := getBodyBytes(r)
+	params, err := retrieveRequestParams(r, &PKCEGrantParams{})
 	if err != nil {
-		return internalServerError("Could not read body").WithInternalError(err)
-	}
-
-	if err = json.Unmarshal(body, params); err != nil {
-		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
+		return err
 	}
 
 	if params.AuthCode == "" || params.CodeVerifier == "" {

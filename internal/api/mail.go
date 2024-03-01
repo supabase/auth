@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -48,15 +47,9 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 	mailer := a.Mailer(ctx)
 	adminUser := getAdminUser(ctx)
-	params := &GenerateLinkParams{}
-
-	body, err := getBodyBytes(r)
+	params, err := retrieveRequestParams(r, &GenerateLinkParams{})
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not parse JSON: %v", err)
+		return err
 	}
 
 	params.Email, err = validateEmail(params.Email)

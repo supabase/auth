@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -83,15 +82,9 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 	aud := a.requestAud(ctx, r)
 
-	params := &UserUpdateParams{}
-
-	body, err := getBodyBytes(r)
+	params, err := retrieveRequestParams(r, &UserUpdateParams{})
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read User Update params: %v", err)
+		return err
 	}
 
 	user := getUser(ctx)

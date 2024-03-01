@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -184,14 +183,9 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	body, err := getBodyBytes(r)
+	params, err := retrieveRequestParams(r, &CreateSSOProviderParams{})
 	if err != nil {
-		return internalServerError("Unable to read request body").WithInternalError(err)
-	}
-
-	var params CreateSSOProviderParams
-	if err := json.Unmarshal(body, &params); err != nil {
-		return badRequestError("Unable to parse JSON").WithInternalError(err)
+		return err
 	}
 
 	if err := params.validate(false /* <- forUpdate */); err != nil {
@@ -264,14 +258,9 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	body, err := getBodyBytes(r)
+	params, err := retrieveRequestParams(r, &CreateSSOProviderParams{})
 	if err != nil {
-		return internalServerError("Unable to read request body").WithInternalError(err)
-	}
-
-	var params CreateSSOProviderParams
-	if err := json.Unmarshal(body, &params); err != nil {
-		return badRequestError("Unable to parse JSON").WithInternalError(err)
+		return err
 	}
 
 	if err := params.validate(true /* <- forUpdate */); err != nil {
