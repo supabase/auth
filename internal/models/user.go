@@ -66,7 +66,7 @@ type User struct {
 	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
 	BannedUntil *time.Time `json:"banned_until,omitempty" db:"banned_until"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
-	IsAnonymous bool       `json:"is_anonymous" db:"is_anonymous" rw:"r"`
+	IsAnonymous bool       `json:"is_anonymous" db:"is_anonymous"`
 
 	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 }
@@ -230,7 +230,7 @@ func (u *User) UpdateAppMetaDataProviders(tx *storage.Connection) error {
 
 // UpdateUserEmail updates the user's email to one of the identity's email
 // if the current email used doesn't match any of the identities email
-func (u *User) UpdateUserEmail(tx *storage.Connection) error {
+func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
 	identities, terr := FindIdentitiesByUserID(tx, u.ID)
 	if terr != nil {
 		return terr
