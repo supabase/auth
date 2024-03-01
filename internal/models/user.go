@@ -230,7 +230,7 @@ func (u *User) UpdateAppMetaDataProviders(tx *storage.Connection) error {
 
 // UpdateUserEmail updates the user's email to one of the identity's email
 // if the current email used doesn't match any of the identities email
-func (u *User) UpdateUserEmail(tx *storage.Connection) error {
+func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
 	identities, terr := FindIdentitiesByUserID(tx, u.ID)
 	if terr != nil {
 		return terr
