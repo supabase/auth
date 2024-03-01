@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -109,13 +108,9 @@ func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err 
 }
 
 func retrieveSignupParams(r *http.Request) (*SignupParams, error) {
-	params := &SignupParams{}
-	body, err := getBodyBytes(r)
+	params, err := retrieveRequestParams(r, &SignupParams{})
 	if err != nil {
-		return nil, internalServerError("Could not read body").WithInternalError(err)
-	}
-	if err := json.Unmarshal(body, params); err != nil {
-		return nil, badRequestError("Could not read Signup params: %v", err)
+		return nil, err
 	}
 	return params, nil
 }

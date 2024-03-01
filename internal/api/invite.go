@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/fatih/structs"
@@ -23,15 +22,9 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	config := a.config
 	adminUser := getAdminUser(ctx)
-	params := &InviteParams{}
-
-	body, err := getBodyBytes(r)
+	params, err := retrieveRequestParams(r, &InviteParams{})
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read Invite params: %v", err)
+		return err
 	}
 
 	params.Email, err = validateEmail(params.Email)

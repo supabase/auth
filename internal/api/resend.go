@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -67,15 +66,9 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
-	params := &ResendConfirmationParams{}
-
-	body, err := getBodyBytes(r)
+	params, err := retrieveRequestParams(r, &ResendConfirmationParams{})
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read params: %v", err)
+		return err
 	}
 
 	if err := params.Validate(config); err != nil {

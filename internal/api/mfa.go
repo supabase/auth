@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -65,16 +64,11 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	session := getSession(ctx)
 	config := a.config
 
-	params := &EnrollFactorParams{}
-	issuer := ""
-	body, err := getBodyBytes(r)
+	params, err := retrieveRequestParams(r, &EnrollFactorParams{})
 	if err != nil {
-		return internalServerError("Could not read body").WithInternalError(err)
+		return err
 	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
-	}
+	issuer := ""
 
 	if params.FactorType != models.TOTP {
 		return badRequestError("factor_type needs to be totp")
@@ -205,17 +199,11 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	factor := getFactor(ctx)
 	config := a.config
 
-	params := &VerifyFactorParams{}
-	currentIP := utilities.GetIPAddress(r)
-
-	body, err := getBodyBytes(r)
+	params, err := retrieveRequestParams(r, &VerifyFactorParams{})
 	if err != nil {
-		return internalServerError("Could not read body").WithInternalError(err)
+		return err
 	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
-	}
+	currentIP := utilities.GetIPAddress(r)
 
 	if !factor.IsOwnedBy(user) {
 		return internalServerError(InvalidFactorOwnerErrorMessage)

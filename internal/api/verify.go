@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -107,12 +106,10 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		}
 		return a.verifyGet(w, r, params)
 	case http.MethodPost:
-		body, err := getBodyBytes(r)
+		var err error
+		params, err = retrieveRequestParams(r, params)
 		if err != nil {
-			return badRequestError("Could not read body").WithInternalError(err)
-		}
-		if err := json.Unmarshal(body, params); err != nil {
-			return badRequestError("Could not parse verification params: %v", err)
+			return err
 		}
 		if err := params.Validate(r); err != nil {
 			return err

@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -36,15 +35,9 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
-	params := &RecoverParams{}
-
-	body, err := getBodyBytes(r)
+	params, err := retrieveRequestParams(r, &RecoverParams{})
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read verification params: %v", err)
+		return err
 	}
 
 	flowType := getFlowFromChallenge(params.CodeChallenge)
