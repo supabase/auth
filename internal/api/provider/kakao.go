@@ -27,6 +27,9 @@ type kakaoUser struct {
 			ProfileImageURL string `json:"profile_image_url"`
 		} `json:"profile"`
 		Email         string `json:"email"`
+		Gender        string `json:"gender"`
+		Phone         string `json:"phone_number"`
+		Birthdate     string `json:"birthday"`
 		EmailValid    bool   `json:"is_email_valid"`
 		EmailVerified bool   `json:"is_email_verified"`
 	} `json:"kakao_account"`
@@ -68,6 +71,20 @@ func (p kakaoProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 		ProviderId:  strconv.Itoa(u.ID),
 		UserNameKey: u.Account.Profile.Name,
 	}
+
+	if u.Account.Gender != "" {
+		data.Metadata.Gender = u.Account.Gender
+	}
+
+	if u.Account.Phone != "" {
+		data.Metadata.Phone = u.Account.Phone
+		data.Metadata.PhoneVerified = true
+	}
+
+	if u.Account.Birthdate != "" {
+		data.Metadata.Birthdate = u.Account.Birthdate
+	}
+
 	return data, nil
 }
 
