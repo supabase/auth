@@ -25,8 +25,6 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 	params.Aud = aud
 	params.Provider = "anonymous"
 
-	// always call this outside of a database transaction as this method
-	// can be computationally hard and block due to password hashing
 	newUser, err := params.ToUserModel(false /* <- isSSOUser */)
 	if err != nil {
 		return err

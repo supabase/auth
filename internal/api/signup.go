@@ -112,7 +112,7 @@ func retrieveSignupParams(r *http.Request) (*SignupParams, error) {
 	params := &SignupParams{}
 	body, err := getBodyBytes(r)
 	if err != nil {
-		return nil, badRequestError("Could not read body").WithInternalError(err)
+		return nil, internalServerError("Could not read body").WithInternalError(err)
 	}
 	if err := json.Unmarshal(body, params); err != nil {
 		return nil, badRequestError("Could not read Signup params: %v", err)

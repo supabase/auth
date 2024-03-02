@@ -155,7 +155,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 				}
 				if params.Email == "" && params.Phone == "" {
 					if !api.config.External.AnonymousUsers.Enabled {
-						return badRequestError("Anonymous sign-ins are disabled")
+						return unprocessableEntityError("Anonymous sign-ins are disabled")
 					}
 					if _, err := api.limitHandler(limiter)(w, r); err != nil {
 						return err
