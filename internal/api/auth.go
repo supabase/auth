@@ -39,7 +39,7 @@ func (a *API) requireNotAnonymous(w http.ResponseWriter, r *http.Request) (conte
 	ctx := r.Context()
 	claims := getClaims(ctx)
 	if claims.IsAnonymous {
-		return nil, unauthorizedError("Anonymous user not allowed")
+		return nil, forbiddenError("Anonymous user not allowed to perform these actions")
 	}
 	return ctx, nil
 }
