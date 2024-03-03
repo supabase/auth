@@ -224,7 +224,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		if params.Phone != "" && params.Phone != user.GetPhone() {
 			if config.Sms.Autoconfirm {
 				user.PhoneChange = params.Phone
-				if _, terr := a.smsVerify(r, ctx, tx, user, &VerifyParams{
+				if _, terr := a.smsVerify(r, tx, user, &VerifyParams{
 					Type:  phoneChangeVerification,
 					Phone: params.Phone,
 				}); terr != nil {
@@ -235,7 +235,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return badRequestError("Error sending sms: %v", terr)
 				}
-				if _, terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneChangeVerification, smsProvider, params.Channel); terr != nil {
+				if _, terr := a.sendPhoneConfirmation(tx, user, params.Phone, phoneChangeVerification, smsProvider, params.Channel); terr != nil {
 					return internalServerError("Error sending phone change otp").WithInternalError(terr)
 				}
 			}

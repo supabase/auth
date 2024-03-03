@@ -54,7 +54,7 @@ func NewAPI(globalConfig *conf.GlobalConfiguration, db *storage.Connection) *API
 	return NewAPIWithVersion(context.Background(), globalConfig, db, defaultVersion)
 }
 
-func (a *API) deprecationNotices(ctx context.Context) {
+func (a *API) deprecationNotices() {
 	config := a.config
 
 	log := logrus.WithField("component", "api")
@@ -92,7 +92,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		}
 	}
 
-	api.deprecationNotices(ctx)
+	api.deprecationNotices()
 
 	xffmw, _ := xff.Default()
 	logger := observability.NewStructuredLogger(logrus.StandardLogger(), globalConfig)

@@ -5,12 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/gofrs/uuid"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gofrs/uuid"
 
 	"github.com/pquerna/otp"
 	"github.com/supabase/auth/internal/conf"
@@ -444,7 +445,7 @@ func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenRes
 
 func performTestSignupAndVerify(ts *MFATestSuite, email, password string, requireStatusOK bool) *httptest.ResponseRecorder {
 	signUpResp := signUp(ts, email, password)
-	resp := performEnrollAndVerify(ts, signUpResp.User, signUpResp.Token, requireStatusOK)
+	resp := performEnrollAndVerify(ts, signUpResp.Token, requireStatusOK)
 
 	return resp
 
@@ -464,7 +465,7 @@ func performEnrollFlow(ts *MFATestSuite, token, friendlyName, factorType, issuer
 	return w
 }
 
-func performVerifyFlow(ts *MFATestSuite, challengeID, factorID uuid.UUID, token string, expectedCode int, requireStatusOK bool) *httptest.ResponseRecorder {
+func performVerifyFlow(ts *MFATestSuite, challengeID, factorID uuid.UUID, token string, requireStatusOK bool) *httptest.ResponseRecorder {
 	var verifyBuffer bytes.Buffer
 	y := httptest.NewRecorder()
 
@@ -507,7 +508,7 @@ func performChallengeFlow(ts *MFATestSuite, factorID uuid.UUID, token string) *h
 
 }
 
-func performEnrollAndVerify(ts *MFATestSuite, user *models.User, token string, requireStatusOK bool) *httptest.ResponseRecorder {
+func performEnrollAndVerify(ts *MFATestSuite, token string, requireStatusOK bool) *httptest.ResponseRecorder {
 	w := performEnrollFlow(ts, token, "", models.TOTP, ts.TestDomain, http.StatusOK)
 	enrollResp := EnrollFactorResponse{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
@@ -521,7 +522,7 @@ func performEnrollAndVerify(ts *MFATestSuite, user *models.User, token string, r
 	challengeID := challengeResp.ID
 
 	// Verify
-	y := performVerifyFlow(ts, challengeID, factorID, token, http.StatusOK, requireStatusOK)
+	y := performVerifyFlow(ts, challengeID, factorID, token, requireStatusOK)
 
 	return y
 }

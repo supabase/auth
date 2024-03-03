@@ -203,7 +203,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return badRequestError("Error sending sms: %v", terr)
 		}
-		mID, serr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel)
+		mID, serr := a.sendPhoneConfirmation(tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel)
 		if serr != nil {
 			return badRequestError("Error sending sms OTP: %v", serr)
 		}

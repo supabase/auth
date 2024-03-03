@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"regexp"
 	"strings"
 	"text/template"
@@ -41,7 +40,7 @@ func formatPhoneNumber(phone string) string {
 }
 
 // sendPhoneConfirmation sends an otp to the user's phone number
-func (a *API) sendPhoneConfirmation(ctx context.Context, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string) (string, error) {
+func (a *API) sendPhoneConfirmation(tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string) (string, error) {
 	config := a.config
 
 	var token *string

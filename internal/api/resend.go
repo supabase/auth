@@ -140,7 +140,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
-			mID, terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, sms_provider.SMSProvider)
+			mID, terr := a.sendPhoneConfirmation(tx, user, params.Phone, phoneConfirmationOtp, smsProvider, sms_provider.SMSProvider)
 			if terr != nil {
 				return terr
 			}
@@ -152,7 +152,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
-			mID, terr := a.sendPhoneConfirmation(ctx, tx, user, user.PhoneChange, phoneChangeVerification, smsProvider, sms_provider.SMSProvider)
+			mID, terr := a.sendPhoneConfirmation(tx, user, user.PhoneChange, phoneChangeVerification, smsProvider, sms_provider.SMSProvider)
 			if terr != nil {
 				return terr
 			}

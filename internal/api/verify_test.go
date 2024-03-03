@@ -1101,9 +1101,8 @@ func (ts *VerifyTestSuite) TestPrepErrorRedirectURL() {
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
-			rurl, err := ts.API.prepErrorRedirectURL(badRequestError(DefaultError), w, req, c.rurl, c.flowType)
+			rurl, err := ts.API.prepErrorRedirectURL(badRequestError(DefaultError), req, c.rurl, c.flowType)
 			require.NoError(ts.T(), err)
 			require.Equal(ts.T(), c.expected, rurl)
 		})

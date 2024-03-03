@@ -202,7 +202,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			}
 			// do not update the user because we can't be sure of their claimed identity
 		} else {
-			user, terr = a.signupNewUser(ctx, tx, signupUser)
+			user, terr = a.signupNewUser(tx, signupUser)
 			if terr != nil {
 				return terr
 			}
@@ -285,7 +285,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
-				if _, terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); terr != nil {
+				if _, terr := a.sendPhoneConfirmation(tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); terr != nil {
 					return badRequestError("Error sending confirmation sms: %v", terr)
 				}
 			}
@@ -390,7 +390,7 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 	return u, nil
 }
 
-func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
+func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*models.User, error) {
 	config := a.config
 
 	err := conn.Transaction(func(tx *storage.Connection) error {

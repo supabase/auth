@@ -261,12 +261,6 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 			return nil
 		})
-		if err == nil {
-			// success
-			metering.RecordLogin("token", user.ID)
-			return sendJSON(w, http.StatusOK, newTokenResponse)
-		}
-
 		if err != nil {
 			if retry && models.IsNotFoundError(err) {
 				// refresh token and session row were likely locked, so
@@ -278,6 +272,8 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				return err
 			}
 		}
+		metering.RecordLogin("token", user.ID)
+		return sendJSON(w, http.StatusOK, newTokenResponse)
 	}
 
 	return conflictError("Too many concurrent token refresh requests on the same session or refresh token")

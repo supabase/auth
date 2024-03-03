@@ -2,7 +2,6 @@ package api
 
 import (
 	"regexp"
-	"time"
 
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -38,7 +37,7 @@ func addFlowPrefixToToken(token string, flowType models.FlowType) string {
 	return token
 }
 
-func issueAuthCode(tx *storage.Connection, user *models.User, expiryDuration time.Duration, authenticationMethod models.AuthenticationMethod) (string, error) {
+func issueAuthCode(tx *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod) (string, error) {
 	flowState, err := models.FindFlowStateByUserID(tx, user.ID.String(), authenticationMethod)
 	if err != nil && models.IsNotFoundError(err) {
 		return "", badRequestError("No valid flow state found for user.")
