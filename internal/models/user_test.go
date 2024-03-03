@@ -325,14 +325,14 @@ func (ts *UserTestSuite) TestUpdateUserEmailSuccess() {
 	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
 
 	// UpdateUserEmail should not do anything and the user's email should still use the primaryIdentity
-	require.NoError(ts.T(), userA.UpdateUserEmail(ts.db))
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
 	require.Equal(ts.T(), primaryIdentity.GetEmail(), userA.GetEmail())
 
 	// remove primary identity
 	require.NoError(ts.T(), ts.db.Destroy(primaryIdentity))
 
 	// UpdateUserEmail should update the user to use the secondary identity's email
-	require.NoError(ts.T(), userA.UpdateUserEmail(ts.db))
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
 	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
 }
 
@@ -364,7 +364,7 @@ func (ts *UserTestSuite) TestUpdateUserEmailFailure() {
 
 	// UpdateUserEmail should fail with the email unique constraint violation error
 	//  since userB is using the secondary identity's email
-	require.ErrorIs(ts.T(), userA.UpdateUserEmail(ts.db), UserEmailUniqueConflictError{})
+	require.ErrorIs(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db), UserEmailUniqueConflictError{})
 	require.Equal(ts.T(), primaryIdentity.GetEmail(), userA.GetEmail())
 }
 

@@ -527,6 +527,12 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 				return terr
 			}
 		}
+		if user.IsAnonymous {
+			user.IsAnonymous = false
+			if terr := tx.UpdateOnly(user, "is_anonymous"); terr != nil {
+				return terr
+			}
+		}
 		if terr := tx.Load(user, "Identities"); terr != nil {
 			return internalServerError("Error refetching identities").WithInternalError(terr)
 		}

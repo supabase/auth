@@ -60,7 +60,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 		if terr := tx.Destroy(identityToBeDeleted); terr != nil {
 			return internalServerError("Database error deleting identity").WithInternalError(terr)
 		}
-		if terr := user.UpdateUserEmail(tx); terr != nil {
+		if terr := user.UpdateUserEmailFromIdentities(tx); terr != nil {
 			if models.IsUniqueConstraintViolatedError(terr) {
 				return forbiddenError("Unable to unlink identity due to email conflict").WithInternalError(terr)
 			}
@@ -114,7 +114,7 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 	}
 
 	if targetUser.GetEmail() == "" {
-		if terr := targetUser.UpdateUserEmail(tx); terr != nil {
+		if terr := targetUser.UpdateUserEmailFromIdentities(tx); terr != nil {
 			if models.IsUniqueConstraintViolatedError(terr) {
 				return nil, badRequestError(DuplicateEmailMsg)
 			}
@@ -134,9 +134,12 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 		if terr := targetUser.Confirm(tx); terr != nil {
 			return nil, terr
 		}
-		// if the user is an anonymous user, we need to reload the user object again to fetch the is_anonymous value
-		if terr := tx.Reload(targetUser); terr != nil {
-			return nil, terr
+
+		if targetUser.IsAnonymous {
+			targetUser.IsAnonymous = false
+			if terr := tx.UpdateOnly(targetUser, "is_anonymous"); terr != nil {
+				return nil, terr
+			}
 		}
 	}
 
