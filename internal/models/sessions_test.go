@@ -53,44 +53,51 @@ func (ts *SessionsTestSuite) TestFindBySessionIDWithForUpdate() {
 	require.Equal(ts.T(), session.ID, found.ID)
 }
 
+func (ts *SessionsTestSuite) AddClaimAndReloadSession(session *Session, claim AuthenticationMethod) *Session {
+	err := AddClaimToSession(ts.db, session.ID, claim)
+	require.NoError(ts.T(), err)
+	session, err = FindSessionByID(ts.db, session.ID, false)
+	require.NoError(ts.T(), err)
+	return session
+}
+
 func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
-	totalDistinctClaims := 2
+	totalDistinctClaims := 3
 	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	session, err := NewSession(u.ID, nil)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(session))
 
-	err = AddClaimToSession(ts.db, session.ID, PasswordGrant)
-	require.NoError(ts.T(), err)
+	session = ts.AddClaimAndReloadSession(session, PasswordGrant)
 
 	firstClaimAddedTime := time.Now()
-	err = AddClaimToSession(ts.db, session.ID, TOTPSignIn)
+	session = ts.AddClaimAndReloadSession(session, TOTPSignIn)
+
+	_, _, err = session.CalculateAALAndAMR(u)
 	require.NoError(ts.T(), err)
-	session, err = FindSessionByID(ts.db, session.ID, false)
-	require.NoError(ts.T(), err)
+
+	session = ts.AddClaimAndReloadSession(session, TOTPSignIn)
+
+	session = ts.AddClaimAndReloadSession(session, SSOSAML)
 
 	aal, amr, err := session.CalculateAALAndAMR(u)
 	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), AAL2.String(), aal)
-	require.Equal(ts.T(), totalDistinctClaims, len(amr))
-
-	err = AddClaimToSession(ts.db, session.ID, TOTPSignIn)
-	require.NoError(ts.T(), err)
-
-	session, err = FindSessionByID(ts.db, session.ID, false)
-	require.NoError(ts.T(), err)
-
-	aal, amr, err = session.CalculateAALAndAMR(u)
-	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), AAL2.String(), aal)
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
+
 	found := false
 	for _, claim := range session.AMRClaims {
 		if claim.GetAuthenticationMethod() == TOTPSignIn.String() {
 			require.True(ts.T(), firstClaimAddedTime.Before(claim.UpdatedAt))
 			found = true
+		}
+	}
+
+	for _, claim := range amr {
+		if claim.Method == SSOSAML.String() {
+			require.NotNil(ts.T(), claim.Provider)
 		}
 	}
 	require.True(ts.T(), found)
