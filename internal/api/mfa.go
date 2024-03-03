@@ -258,7 +258,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 		output := hooks.MFAVerificationAttemptOutput{}
 
-		err := a.invokeHook(ctx, &input, &output)
+		err := a.invokeHook(ctx, nil, &input, &output)
 		if err != nil {
 			return err
 		}

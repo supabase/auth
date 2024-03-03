@@ -11,7 +11,7 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
-func (a *API) runHook(ctx context.Context, name string, input, output any) ([]byte, error) {
+func (a *API) runHook(ctx context.Context, tx *storage.Connection, name string, input, output any) ([]byte, error) {
 	db := a.db.WithContext(ctx)
 
 	request, err := json.Marshal(input)
@@ -20,7 +20,7 @@ func (a *API) runHook(ctx context.Context, name string, input, output any) ([]by
 	}
 
 	var response []byte
-	if err := db.Transaction(func(tx *storage.Connection) error {
+	invokeHookFunc := func(tx *storage.Connection) error {
 		// We rely on Postgres timeouts to ensure the function doesn't overrun
 		if terr := tx.RawQuery(fmt.Sprintf("set local statement_timeout TO '%d';", hooks.DefaultTimeout)).Exec(); terr != nil {
 			return terr
@@ -36,8 +36,16 @@ func (a *API) runHook(ctx context.Context, name string, input, output any) ([]by
 		}
 
 		return nil
-	}); err != nil {
-		return nil, err
+	}
+
+	if tx != nil {
+		if err := invokeHookFunc(tx); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := db.Transaction(invokeHookFunc); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := json.Unmarshal(response, output); err != nil {
@@ -47,7 +55,11 @@ func (a *API) runHook(ctx context.Context, name string, input, output any) ([]by
 	return response, nil
 }
 
-func (a *API) invokeHook(ctx context.Context, input, output any) error {
+// invokeHook invokes the hook code. tx can be nil, in which case a new
+// transaction is opened. If calling invokeHook within a transaction, always
+// pass the current transaciton, as pool-exhaustion deadlocks are very easy to
+// trigger.
+func (a *API) invokeHook(ctx context.Context, tx *storage.Connection, input, output any) error {
 	config := a.config
 	switch input.(type) {
 	case *hooks.MFAVerificationAttemptInput:
@@ -56,7 +68,7 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 			panic("output should be *hooks.MFAVerificationAttemptOutput")
 		}
 
-		if _, err := a.runHook(ctx, config.Hook.MFAVerificationAttempt.HookName, input, output); err != nil {
+		if _, err := a.runHook(ctx, tx, config.Hook.MFAVerificationAttempt.HookName, input, output); err != nil {
 			return internalServerError("Error invoking MFA verification hook.").WithInternalError(err)
 		}
 
@@ -82,7 +94,7 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 			panic("output should be *hooks.PasswordVerificationAttemptOutput")
 		}
 
-		if _, err := a.runHook(ctx, config.Hook.PasswordVerificationAttempt.HookName, input, output); err != nil {
+		if _, err := a.runHook(ctx, tx, config.Hook.PasswordVerificationAttempt.HookName, input, output); err != nil {
 			return internalServerError("Error invoking password verification hook.").WithInternalError(err)
 		}
 
@@ -108,7 +120,7 @@ func (a *API) invokeHook(ctx context.Context, input, output any) error {
 			panic("output should be *hooks.CustomAccessTokenOutput")
 		}
 
-		if _, err := a.runHook(ctx, config.Hook.CustomAccessToken.HookName, input, output); err != nil {
+		if _, err := a.runHook(ctx, tx, config.Hook.CustomAccessToken.HookName, input, output); err != nil {
 			return internalServerError("Error invoking access token hook.").WithInternalError(err)
 		}
 
