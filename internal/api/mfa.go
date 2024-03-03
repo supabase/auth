@@ -64,8 +64,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	session := getSession(ctx)
 	config := a.config
 
-	params, err := retrieveRequestParams(r, &EnrollFactorParams{})
-	if err != nil {
+	params := &EnrollFactorParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 	issuer := ""
@@ -199,8 +199,8 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	factor := getFactor(ctx)
 	config := a.config
 
-	params, err := retrieveRequestParams(r, &VerifyFactorParams{})
-	if err != nil {
+	params := &VerifyFactorParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 	currentIP := utilities.GetIPAddress(r)

@@ -107,14 +107,6 @@ func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err 
 	return user, nil
 }
 
-func retrieveSignupParams(r *http.Request) (*SignupParams, error) {
-	params, err := retrieveRequestParams(r, &SignupParams{})
-	if err != nil {
-		return nil, err
-	}
-	return params, nil
-}
-
 // Signup is the endpoint for registering a new user
 func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -125,8 +117,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return forbiddenError("Signups not allowed for this instance")
 	}
 
-	params, err := retrieveSignupParams(r)
-	if err != nil {
+	params := &SignupParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
@@ -137,6 +129,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var codeChallengeMethod models.CodeChallengeMethod
+	var err error
 	flowType := getFlowFromChallenge(params.CodeChallenge)
 
 	if isPKCEFlow(flowType) {

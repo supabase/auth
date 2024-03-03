@@ -22,11 +22,12 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	config := a.config
 	adminUser := getAdminUser(ctx)
-	params, err := retrieveRequestParams(r, &InviteParams{})
-	if err != nil {
+	params := &InviteParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
+	var err error
 	params.Email, err = validateEmail(params.Email)
 	if err != nil {
 		return err

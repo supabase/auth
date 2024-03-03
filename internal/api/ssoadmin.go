@@ -183,8 +183,8 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	params, err := retrieveRequestParams(r, &CreateSSOProviderParams{})
-	if err != nil {
+	params := &CreateSSOProviderParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
@@ -258,8 +258,8 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	params, err := retrieveRequestParams(r, &CreateSSOProviderParams{})
-	if err != nil {
+	params := &CreateSSOProviderParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 

@@ -112,8 +112,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	db := a.db.WithContext(ctx)
 	config := a.config
 
-	params, err := retrieveRequestParams(r, &IdTokenGrantParams{})
-	if err != nil {
+	params := &IdTokenGrantParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 

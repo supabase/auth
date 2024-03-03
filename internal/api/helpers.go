@@ -103,13 +103,13 @@ type RequestParams interface {
 }
 
 // retrieveRequestParams is a generic method that unmarshals the request body into the params struct provided
-func retrieveRequestParams[A RequestParams](r *http.Request, params *A) (*A, error) {
+func retrieveRequestParams[A RequestParams](r *http.Request, params *A) error {
 	body, err := getBodyBytes(r)
 	if err != nil {
-		return nil, internalServerError("Could not read body into byte slice").WithInternalError(err)
+		return internalServerError("Could not read body into byte slice").WithInternalError(err)
 	}
 	if err := json.Unmarshal(body, params); err != nil {
-		return nil, badRequestError("Could not read request body: %v", err)
+		return badRequestError("Could not read request body: %v", err)
 	}
-	return params, nil
+	return nil
 }

@@ -100,13 +100,12 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 					Phone string `json:"phone"`
 				}
 
-				params, err := retrieveRequestParams(req, &requestBody)
-				if err != nil {
+				if err := retrieveRequestParams(req, &requestBody); err != nil {
 					return c, badRequestError("Error invalid request body").WithInternalError(err)
 				}
 
 				if shouldRateLimitEmail {
-					if params.Email != "" {
+					if requestBody.Email != "" {
 						if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
 							emailRateLimitCounter.Add(
 								req.Context(),
@@ -119,7 +118,7 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 				}
 
 				if shouldRateLimitPhone {
-					if params.Phone != "" {
+					if requestBody.Phone != "" {
 						if err := tollbooth.LimitByKeys(phoneLimiter, []string{"phone_functions"}); err != nil {
 							return c, httpError(http.StatusTooManyRequests, "Sms rate limit exceeded")
 						}

@@ -82,8 +82,8 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 	aud := a.requestAud(ctx, r)
 
-	params, err := retrieveRequestParams(r, &UserUpdateParams{})
-	if err != nil {
+	params := &UserUpdateParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
@@ -163,7 +163,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	err = db.Transaction(func(tx *storage.Connection) error {
+	err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if params.Password != nil {
 			var sessionID *uuid.UUID

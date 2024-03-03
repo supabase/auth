@@ -47,11 +47,12 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 	mailer := a.Mailer(ctx)
 	adminUser := getAdminUser(ctx)
-	params, err := retrieveRequestParams(r, &GenerateLinkParams{})
-	if err != nil {
+	params := &GenerateLinkParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
+	var err error
 	params.Email, err = validateEmail(params.Email)
 	if err != nil {
 		return err

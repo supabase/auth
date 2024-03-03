@@ -35,8 +35,8 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
-	params, err := retrieveRequestParams(r, &RecoverParams{})
-	if err != nil {
+	params := &RecoverParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
@@ -46,6 +46,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var user *models.User
+	var err error
 	aud := a.requestAud(ctx, r)
 
 	user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)

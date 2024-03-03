@@ -24,8 +24,8 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	db := a.db.WithContext(ctx)
 	config := a.config
 
-	params, err := retrieveRequestParams(r, &RefreshTokenGrantParams{})
-	if err != nil {
+	params := &RefreshTokenGrantParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 

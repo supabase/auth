@@ -40,11 +40,12 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	params, err := retrieveRequestParams(r, &SingleSignOnParams{})
-	if err != nil {
+	params := &SingleSignOnParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
+	var err error
 	hasProviderID := false
 
 	if hasProviderID, err = params.validate(); err != nil {

@@ -149,8 +149,8 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 				DefaultExpirationTTL: time.Hour,
 			}).SetBurst(int(api.config.RateLimitAnonymousUsers)).SetMethods([]string{"POST"})
 			r.Post("/", func(w http.ResponseWriter, r *http.Request) error {
-				params, err := retrieveSignupParams(r)
-				if err != nil {
+				params := &SignupParams{}
+				if err := retrieveRequestParams(r, params); err != nil {
 					return err
 				}
 				if params.Email == "" && params.Phone == "" {

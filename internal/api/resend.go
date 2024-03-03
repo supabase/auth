@@ -66,8 +66,8 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
-	params, err := retrieveRequestParams(r, &ResendConfirmationParams{})
-	if err != nil {
+	params := &ResendConfirmationParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
@@ -76,6 +76,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var user *models.User
+	var err error
 	aud := a.requestAud(ctx, r)
 	if params.Email != "" {
 		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)

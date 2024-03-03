@@ -99,8 +99,8 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 
-	params, err := retrieveRequestParams(r, &PasswordGrantParams{})
-	if err != nil {
+	params := &PasswordGrantParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
@@ -113,6 +113,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	var user *models.User
 	var grantParams models.GrantParams
 	var provider string
+	var err error
 
 	grantParams.FillGrantParams(r)
 
@@ -228,8 +229,9 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	// can be told to at least propagate the User-Agent header.
 	grantParams.FillGrantParams(r)
 
-	params, err := retrieveRequestParams(r, &PKCEGrantParams{})
-	if err != nil {
+	params := &PKCEGrantParams{}
+
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 

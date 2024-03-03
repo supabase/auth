@@ -18,8 +18,8 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 		return forbiddenError("Signups not allowed for this instance")
 	}
 
-	params, err := retrieveSignupParams(r)
-	if err != nil {
+	params := &SignupParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 	params.Aud = aud

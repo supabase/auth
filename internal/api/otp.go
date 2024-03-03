@@ -61,7 +61,6 @@ func (p *SmsParams) Validate(smsProvider string) error {
 
 // Otp returns the MagicLink or SmsOtp handler based on the request body params
 func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
-	var err error
 	params := &OtpParams{
 		CreateUser: true,
 	}
@@ -69,8 +68,7 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 		params.Data = make(map[string]interface{})
 	}
 
-	params, err = retrieveRequestParams(r, params)
-	if err != nil {
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
@@ -111,8 +109,8 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	}
 	var err error
 
-	params, err := retrieveRequestParams(r, &SmsParams{})
-	if err != nil {
+	params := &SmsParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 

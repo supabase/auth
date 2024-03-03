@@ -85,8 +85,8 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 }
 
 func (a *API) getAdminParams(r *http.Request) (*AdminUserParams, error) {
-	params, err := retrieveRequestParams(r, &AdminUserParams{})
-	if err != nil {
+	params := &AdminUserParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return nil, err
 	}
 
@@ -558,12 +558,12 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 	factor := getFactor(ctx)
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
-	params, err := retrieveRequestParams(r, &adminUserUpdateFactorParams{})
-	if err != nil {
+	params := &adminUserUpdateFactorParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if params.FriendlyName != "" {
 			if terr := factor.UpdateFriendlyName(tx, params.FriendlyName); terr != nil {
 				return terr
