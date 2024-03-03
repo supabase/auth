@@ -2,14 +2,17 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/fatih/structs"
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
+	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
@@ -57,7 +60,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 		if terr := tx.Destroy(identityToBeDeleted); terr != nil {
 			return internalServerError("Database error deleting identity").WithInternalError(terr)
 		}
-		if terr := user.UpdateUserEmail(tx); terr != nil {
+		if terr := user.UpdateUserEmailFromIdentities(tx); terr != nil {
 			if models.IsUniqueConstraintViolatedError(terr) {
 				return forbiddenError("Unable to unlink identity due to email conflict").WithInternalError(terr)
 			}
@@ -92,7 +95,7 @@ func (a *API) LinkIdentity(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (a *API) linkIdentityToUser(ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
+func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
 	targetUser := getTargetUser(ctx)
 	identity, terr := models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType)
 	if terr != nil {
@@ -109,6 +112,37 @@ func (a *API) linkIdentityToUser(ctx context.Context, tx *storage.Connection, us
 	if _, terr := a.createNewIdentity(tx, targetUser, providerType, structs.Map(userData.Metadata)); terr != nil {
 		return nil, terr
 	}
+
+	if targetUser.GetEmail() == "" {
+		if terr := targetUser.UpdateUserEmailFromIdentities(tx); terr != nil {
+			if models.IsUniqueConstraintViolatedError(terr) {
+				return nil, badRequestError(DuplicateEmailMsg)
+			}
+			return nil, terr
+		}
+		if !userData.Metadata.EmailVerified {
+			mailer := a.Mailer(ctx)
+			referrer := utilities.GetReferrer(r, a.config)
+			externalURL := getExternalHost(ctx)
+			if terr := sendConfirmation(tx, targetUser, mailer, a.config.SMTP.MaxFrequency, referrer, externalURL, a.config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
+				if errors.Is(terr, MaxFrequencyLimitError) {
+					return nil, tooManyRequestsError("For security purposes, you can only request this once every minute")
+				}
+			}
+			return nil, storage.NewCommitWithError(unauthorizedError(fmt.Sprintf("Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType)))
+		}
+		if terr := targetUser.Confirm(tx); terr != nil {
+			return nil, terr
+		}
+
+		if targetUser.IsAnonymous {
+			targetUser.IsAnonymous = false
+			if terr := tx.UpdateOnly(targetUser, "is_anonymous"); terr != nil {
+				return nil, terr
+			}
+		}
+	}
+
 	if terr := targetUser.UpdateAppMetaDataProviders(tx); terr != nil {
 		return nil, terr
 	}

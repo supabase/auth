@@ -80,6 +80,9 @@ func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err 
 		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
 	case "phone":
 		user, err = models.NewUser(params.Phone, "", params.Password, params.Aud, params.Data)
+	case "anonymous":
+		user, err = models.NewUser("", "", "", params.Aud, params.Data)
+		user.IsAnonymous = true
 	default:
 		// handles external provider case
 		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
@@ -95,15 +98,26 @@ func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err 
 
 	user.Identities = make([]models.Identity, 0)
 
-	// TODO: Deprecate "provider" field
-	user.AppMetaData["provider"] = params.Provider
+	if params.Provider != "anonymous" {
+		// TODO: Deprecate "provider" field
+		user.AppMetaData["provider"] = params.Provider
 
-	user.AppMetaData["providers"] = []string{params.Provider}
-	if params.Password == "" {
-		user.EncryptedPassword = ""
+		user.AppMetaData["providers"] = []string{params.Provider}
 	}
 
-	return
+	return user, nil
+}
+
+func retrieveSignupParams(r *http.Request) (*SignupParams, error) {
+	params := &SignupParams{}
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return nil, internalServerError("Could not read body").WithInternalError(err)
+	}
+	if err := json.Unmarshal(body, params); err != nil {
+		return nil, badRequestError("Could not read Signup params: %v", err)
+	}
+	return params, nil
 }
 
 // Signup is the endpoint for registering a new user
@@ -116,15 +130,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return forbiddenError("Signups not allowed for this instance")
 	}
 
-	params := &SignupParams{}
-
-	body, err := getBodyBytes(r)
+	params, err := retrieveSignupParams(r)
 	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read Signup params: %v", err)
+		return err
 	}
 
 	params.ConfigureDefaults()
@@ -192,22 +200,36 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if (params.Provider == "email" && user.IsConfirmed()) || (params.Provider == "phone" && user.IsPhoneConfirmed()) {
 				return UserExistsError
 			}
-
 			// do not update the user because we can't be sure of their claimed identity
 		} else {
 			user, terr = a.signupNewUser(ctx, tx, signupUser)
 			if terr != nil {
 				return terr
 			}
-			identity, terr := a.createNewIdentity(tx, user, params.Provider, structs.Map(provider.Claims{
+		}
+		identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email")
+		if terr != nil {
+			if !models.IsNotFoundError(terr) {
+				return terr
+			}
+			identityData := structs.Map(provider.Claims{
 				Subject: user.ID.String(),
 				Email:   user.GetEmail(),
-			}))
+			})
+			for k, v := range params.Data {
+				if _, ok := identityData[k]; !ok {
+					identityData[k] = v
+				}
+			}
+			identity, terr = a.createNewIdentity(tx, user, params.Provider, identityData)
 			if terr != nil {
 				return terr
 			}
-			user.Identities = []models.Identity{*identity}
+			if terr := user.RemoveUnconfirmedIdentities(tx, identity); terr != nil {
+				return terr
+			}
 		}
+		user.Identities = []models.Identity{*identity}
 
 		if params.Provider == "email" && !user.IsConfirmed() {
 			if config.Mailer.Autoconfirm {
@@ -385,11 +407,10 @@ func (a *API) signupNewUser(ctx context.Context, conn *storage.Connection, user 
 		return nil, err
 	}
 
-	// sometimes there may be triggers in the database that will modify the
+	// there may be triggers or generated column values in the database that will modify the
 	// user data as it is being inserted. thus we load the user object
 	// again to fetch those changes.
-	err = conn.Eager().Load(user)
-	if err != nil {
+	if err := conn.Reload(user); err != nil {
 		return nil, internalServerError("Database error loading user after sign-up").WithInternalError(err)
 	}
 

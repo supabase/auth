@@ -35,6 +35,15 @@ func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (con
 	return ctx, err
 }
 
+func (a *API) requireNotAnonymous(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	ctx := r.Context()
+	claims := getClaims(ctx)
+	if claims.IsAnonymous {
+		return nil, forbiddenError("Anonymous user not allowed to perform these actions")
+	}
+	return ctx, nil
+}
+
 func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	// Find the administrative user
 	claims := getClaims(ctx)

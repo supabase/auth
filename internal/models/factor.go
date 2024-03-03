@@ -45,6 +45,7 @@ const (
 	EmailSignup
 	EmailChange
 	TokenRefresh
+	Anonymous
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -71,6 +72,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "email_change"
 	case TokenRefresh:
 		return "token_refresh"
+	case Anonymous:
+		return "anonymous"
 	}
 	return ""
 }

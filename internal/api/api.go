@@ -143,7 +143,28 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		sharedLimiter := api.limitEmailOrPhoneSentHandler()
 		r.With(sharedLimiter).With(api.requireAdminCredentials).Post("/invite", api.Invite)
-		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/signup", api.Signup)
+		r.With(sharedLimiter).With(api.verifyCaptcha).Route("/signup", func(r *router) {
+			// rate limit per hour
+			limiter := tollbooth.NewLimiter(api.config.RateLimitAnonymousUsers/(60*60), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(int(api.config.RateLimitAnonymousUsers)).SetMethods([]string{"POST"})
+			r.Post("/", func(w http.ResponseWriter, r *http.Request) error {
+				params, err := retrieveSignupParams(r)
+				if err != nil {
+					return err
+				}
+				if params.Email == "" && params.Phone == "" {
+					if !api.config.External.AnonymousUsers.Enabled {
+						return unprocessableEntityError("Anonymous sign-ins are disabled")
+					}
+					if _, err := api.limitHandler(limiter)(w, r); err != nil {
+						return err
+					}
+					return api.SignupAnonymously(w, r)
+				}
+				return api.Signup(w, r)
+			})
+		})
 		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/resend", api.Resend)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
@@ -185,6 +206,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		})
 
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
+			r.Use(api.requireNotAnonymous)
 			r.Post("/", api.EnrollFactor)
 			r.Route("/{factor_id}", func(r *router) {
 				r.Use(api.loadFactor)

@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -56,7 +58,9 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 			Subject: "test_subject",
 		},
 	}
-	u, err = ts.API.linkIdentityToUser(ctx, ts.API.db, testValidUserData, "test")
+	// request is just used as a placeholder in the function
+	r := httptest.NewRequest(http.MethodGet, "/identities", nil)
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testValidUserData, "test")
 	require.NoError(ts.T(), err)
 
 	// load associated identities for the user
@@ -71,7 +75,7 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 			Subject: u.ID.String(),
 		},
 	}
-	u, err = ts.API.linkIdentityToUser(ctx, ts.API.db, testExistingUserData, "email")
+	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testExistingUserData, "email")
 	require.ErrorIs(ts.T(), err, badRequestError("Identity is already linked"))
 	require.Nil(ts.T(), u)
 }
