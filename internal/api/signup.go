@@ -232,7 +232,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}
 				if isPKCEFlow(flowType) {
 					flowState, terr := generateFlowState(params.Provider, models.EmailSignup, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
-					if err != nil {
+					if terr != nil {
 						return terr
 					}
 					if terr := tx.Create(flowState); terr != nil {
