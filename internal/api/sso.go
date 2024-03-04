@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/crewjam/saml"
@@ -41,17 +40,12 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return internalServerError("Unable to read request body").WithInternalError(err)
+	params := &SingleSignOnParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
-	var params SingleSignOnParams
-
-	if err := json.Unmarshal(body, &params); err != nil {
-		return badRequestError("Unable to parse request body as JSON").WithInternalError(err)
-	}
-
+	var err error
 	hasProviderID := false
 
 	if hasProviderID, err = params.validate(); err != nil {

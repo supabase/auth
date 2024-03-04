@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	mathRand "math/rand"
 	"net/http"
 	"time"
@@ -26,14 +25,8 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	config := a.config
 
 	params := &RefreshTokenGrantParams{}
-
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read refresh token grant params: %v", err)
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
 	if params.RefreshToken == "" {

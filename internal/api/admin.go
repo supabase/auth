@@ -85,18 +85,12 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 }
 
 func (a *API) getAdminParams(r *http.Request) (*AdminUserParams, error) {
-	params := AdminUserParams{}
-
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return nil, badRequestError("Could not read body").WithInternalError(err)
+	params := &AdminUserParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return nil, err
 	}
 
-	if err := json.Unmarshal(body, &params); err != nil {
-		return nil, badRequestError("Could not decode admin user params: %v", err)
-	}
-
-	return &params, nil
+	return params, nil
 }
 
 // adminUsers responds with a list of all users in a given audience
@@ -565,16 +559,11 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
 	params := &adminUserUpdateFactorParams{}
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read factor update params: %v", err)
-	}
-
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if params.FriendlyName != "" {
 			if terr := factor.UpdateFriendlyName(tx, params.FriendlyName); terr != nil {
 				return terr

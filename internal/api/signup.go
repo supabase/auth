@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -108,18 +107,6 @@ func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err 
 	return user, nil
 }
 
-func retrieveSignupParams(r *http.Request) (*SignupParams, error) {
-	params := &SignupParams{}
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return nil, internalServerError("Could not read body").WithInternalError(err)
-	}
-	if err := json.Unmarshal(body, params); err != nil {
-		return nil, badRequestError("Could not read Signup params: %v", err)
-	}
-	return params, nil
-}
-
 // Signup is the endpoint for registering a new user
 func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -130,8 +117,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return forbiddenError("Signups not allowed for this instance")
 	}
 
-	params, err := retrieveSignupParams(r)
-	if err != nil {
+	params := &SignupParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
@@ -142,6 +129,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var codeChallengeMethod models.CodeChallengeMethod
+	var err error
 	flowType := getFlowFromChallenge(params.CodeChallenge)
 
 	if isPKCEFlow(flowType) {

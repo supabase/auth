@@ -95,17 +95,12 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 
 		if shouldRateLimitEmail || shouldRateLimitPhone {
 			if req.Method == "PUT" || req.Method == "POST" {
-				bodyBytes, err := getBodyBytes(req)
-				if err != nil {
-					return c, internalServerError("Error invalid request body").WithInternalError(err)
-				}
-
 				var requestBody struct {
 					Email string `json:"email"`
 					Phone string `json:"phone"`
 				}
 
-				if err := json.Unmarshal(bodyBytes, &requestBody); err != nil {
+				if err := retrieveRequestParams(req, &requestBody); err != nil {
 					return c, badRequestError("Error invalid request body").WithInternalError(err)
 				}
 
