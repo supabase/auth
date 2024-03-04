@@ -128,15 +128,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	var codeChallengeMethod models.CodeChallengeMethod
 	var err error
 	flowType := getFlowFromChallenge(params.CodeChallenge)
-
-	if isPKCEFlow(flowType) {
-		if codeChallengeMethod, err = models.ParseCodeChallengeMethod(params.CodeChallengeMethod); err != nil {
-			return err
-		}
-	}
 
 	var user *models.User
 	var grantParams models.GrantParams
@@ -238,7 +231,10 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 				if isPKCEFlow(flowType) {
-					flowState := models.NewFlowState(params.Provider, params.CodeChallenge, codeChallengeMethod, models.EmailSignup, &user.ID)
+					flowState, terr := generateFlowState(params.Provider, models.EmailSignup, params.CodeChallenge, params.CodeChallengeMethod, &user.ID)
+					if err != nil {
+						return terr
+					}
 					if terr := tx.Create(flowState); terr != nil {
 						return terr
 					}

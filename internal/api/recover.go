@@ -58,7 +58,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	}
 	var flowState *models.FlowState
 	if isPKCEFlow(flowType) {
-		flowState, err = generateFlowState(models.Recovery, params.CodeChallengeMethod, params.CodeChallenge, &(user.ID))
+		flowState, err = generateFlowState(models.Recovery.String(), models.Recovery, params.CodeChallengeMethod, params.CodeChallenge, &(user.ID))
 		if err != nil {
 			return err
 		}
