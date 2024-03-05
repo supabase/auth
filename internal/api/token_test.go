@@ -306,8 +306,7 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 	invalidVerifier := codeVerifier + "123"
 	codeChallenge := sha256.Sum256([]byte(codeVerifier))
 	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
-	flowState, err := models.NewFlowState("github", challenge, models.SHA256, models.OAuth)
-	require.NoError(ts.T(), err)
+	flowState := models.NewFlowState("github", challenge, models.SHA256, models.OAuth, nil)
 	flowState.AuthCode = authCode
 	require.NoError(ts.T(), ts.API.db.Create(flowState))
 	cases := []struct {

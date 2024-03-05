@@ -197,11 +197,12 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			referrer := utilities.GetReferrer(r, config)
 			flowType := getFlowFromChallenge(params.CodeChallenge)
 			if isPKCEFlow(flowType) {
-				codeChallengeMethod, terr := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
+				flowState, terr := generateFlowState(models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
 				if terr != nil {
 					return terr
 				}
-				if terr := models.NewFlowStateWithUserID(tx, models.EmailChange.String(), params.CodeChallenge, codeChallengeMethod, models.EmailChange, &user.ID); terr != nil {
+
+				if terr := tx.Create(flowState); terr != nil {
 					return terr
 				}
 			}

@@ -3,6 +3,7 @@ package api
 import (
 	"regexp"
 
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -76,4 +77,15 @@ func getFlowFromChallenge(codeChallenge string) models.FlowType {
 	} else {
 		return models.ImplicitFlow
 	}
+}
+
+// Should only be used with Auth Code of PKCE Flows
+func generateFlowState(providerType string, authenticationMethod models.AuthenticationMethod, codeChallengeMethodParam string, codeChallenge string, userID *uuid.UUID) (*models.FlowState, error) {
+	codeChallengeMethod, err := models.ParseCodeChallengeMethod(codeChallengeMethodParam)
+	if err != nil {
+		return nil, err
+	}
+	flowState := models.NewFlowState(providerType, codeChallenge, codeChallengeMethod, authenticationMethod, userID)
+	return flowState, nil
+
 }
