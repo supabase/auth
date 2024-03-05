@@ -80,11 +80,8 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 
 	flowStateID := ""
 	if isPKCEFlow(flowType) {
-		flowState, err := generateFlowState(providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil)
+		flowState, err := generateFlowState(a.db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil)
 		if err != nil {
-			return "", err
-		}
-		if err := a.db.Create(flowState); err != nil {
 			return "", err
 		}
 		flowStateID = flowState.ID.String()

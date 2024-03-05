@@ -125,11 +125,9 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 
 		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
-	var flowState *models.FlowState
 
 	if isPKCEFlow(flowType) {
-		flowState, err = generateFlowState(models.MagicLink.String(), models.MagicLink, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
-		if err != nil {
+		if _, err = generateFlowState(a.db, models.MagicLink.String(), models.MagicLink, params.CodeChallengeMethod, params.CodeChallenge, &user.ID); err != nil {
 			return err
 		}
 	}
@@ -138,12 +136,6 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
-		if flowState != nil {
-			if terr := tx.Create(flowState); terr != nil {
-				return terr
-			}
-		}
-
 		mailer := a.Mailer(ctx)
 		referrer := utilities.GetReferrer(r, config)
 		externalURL := getExternalHost(ctx)
