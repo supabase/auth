@@ -74,6 +74,12 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		issuer = config.External.Keycloak.URL
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Keycloak.ClientID...)
 
+	case p.Provider == "kakao" || p.Issuer == provider.IssuerKakao:
+		cfg = &config.External.Kakao
+		providerType = "kakao"
+		issuer = provider.IssuerKakao
+		acceptableClientIDs = append(acceptableClientIDs, config.External.Kakao.ClientID...)
+
 	default:
 		log.WithField("issuer", p.Issuer).WithField("client_id", p.ClientID).Warn("Use of POST /token with arbitrary issuer and client_id is deprecated for security reasons. Please switch to using the API with provider only!")
 
