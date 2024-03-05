@@ -57,7 +57,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Unable to process request").WithInternalError(err)
 	}
 	if isPKCEFlow(flowType) {
-		if _, err := generateFlowState(a.db, models.Recovery.String(), models.Recovery, params.CodeChallengeMethod, params.CodeChallenge, &(user.ID)); err != nil {
+		if _, err := generateFlowState(db, models.Recovery.String(), models.Recovery, params.CodeChallengeMethod, params.CodeChallenge, &(user.ID)); err != nil {
 			return err
 		}
 	}
