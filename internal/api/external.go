@@ -84,7 +84,6 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		if err != nil {
 			return "", err
 		}
-
 		if err := a.db.Create(flowState); err != nil {
 			return "", err
 		}
