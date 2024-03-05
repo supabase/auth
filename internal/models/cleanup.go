@@ -62,7 +62,7 @@ func (c *Cleanup) Setup() {
 	}
 
 	if c.SessionInactivityTimeout != nil {
-		inactivitySeconds := int((*c.SessionTimebox).Seconds())
+		inactivitySeconds := int((*c.SessionInactivityTimeout).Seconds())
 
 		// delete sessions with a refreshed_at column
 		c.cleanupStatements = append(c.cleanupStatements, fmt.Sprintf("delete from %q where id in (select id from %q where refreshed_at is not null and refreshed_at + interval '%d seconds' < now() - interval '24 hours' limit 100 for update skip locked);", tableSessions, tableSessions, inactivitySeconds))
