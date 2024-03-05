@@ -8,8 +8,9 @@ import (
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/gotrue/internal/crypto"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // RefreshToken is the database model for refresh tokens.
@@ -41,6 +42,15 @@ type GrantParams struct {
 	FactorID *uuid.UUID
 
 	SessionNotAfter *time.Time
+	SessionTag      *string
+
+	UserAgent string
+	IP        string
+}
+
+func (g *GrantParams) FillGrantParams(r *http.Request) {
+	g.UserAgent = r.Header.Get("User-Agent")
+	g.IP = utilities.GetIPAddress(r)
 }
 
 // GrantAuthenticatedUser creates a refresh token for the provided user.
@@ -73,7 +83,7 @@ func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
 	var err error
 	tablename := (&pop.Model{Value: RefreshToken{}}).TableName()
 	if token.SessionId != nil {
-		err = tx.RawQuery(`update `+tablename+` set revoked = true where session_id = ? and revoked = false;`, token.SessionId).Exec()
+		err = tx.RawQuery(`update `+tablename+` set revoked = true, updated_at = now() where session_id = ? and revoked = false;`, token.SessionId).Exec()
 	} else {
 		err = tx.RawQuery(`
 		with recursive token_family as (
@@ -84,27 +94,18 @@ func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
 		update `+tablename+` r set revoked = true from token_family where token_family.id = r.id;`, token.Token).Exec()
 	}
 	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows || errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+
 		return err
 	}
 	return nil
 }
 
-// GetValidChildToken returns the child token of the token provided if the child is not revoked.
-func GetValidChildToken(tx *storage.Connection, token *RefreshToken) (*RefreshToken, error) {
-	refreshToken := &RefreshToken{}
-	err := tx.Q().Where("parent = ? and revoked = false", token.Token).First(refreshToken)
-	if err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, RefreshTokenNotFoundError{}
-		}
-		return nil, err
-	}
-	return refreshToken, nil
-}
-
 func FindTokenBySessionID(tx *storage.Connection, sessionId *uuid.UUID) (*RefreshToken, error) {
 	refreshToken := &RefreshToken{}
-	err := tx.Q().Where("session_id = ?", sessionId).Order("created_at asc").First(refreshToken)
+	err := tx.Q().Where("instance_id = ? and session_id = ?", uuid.Nil, sessionId).Order("created_at asc").First(refreshToken)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, RefreshTokenNotFoundError{}
@@ -123,23 +124,28 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 	if oldToken != nil {
 		token.Parent = storage.NullString(oldToken.Token)
 		token.SessionId = oldToken.SessionId
-
 	}
 
 	if token.SessionId == nil {
-		session, err := NewSession()
+		session, err := NewSession(user.ID, params.FactorID)
 		if err != nil {
 			return nil, errors.Wrap(err, "error instantiating new session object")
 		}
 
-		session.UserID = user.ID
-
-		if params.FactorID != nil {
-			session.FactorID = params.FactorID
-		}
-
 		if params.SessionNotAfter != nil {
 			session.NotAfter = params.SessionNotAfter
+		}
+
+		if params.UserAgent != "" {
+			session.UserAgent = &params.UserAgent
+		}
+
+		if params.IP != "" {
+			session.IP = &params.IP
+		}
+
+		if params.SessionTag != nil && *params.SessionTag != "" {
+			session.Tag = params.SessionTag
 		}
 
 		if err := tx.Create(session); err != nil {
@@ -162,5 +168,5 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 // Deprecated. For backward compatibility, some access tokens may not have a sessionId. Use models.Logout instead.
 // LogoutAllRefreshTokens deletes all sessions for a user.
 func LogoutAllRefreshTokens(tx *storage.Connection, userId uuid.UUID) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: RefreshToken{}}).TableName()+" WHERE user_id = ?", userId).Exec()
+	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: RefreshToken{}}).TableName()+" WHERE instance_id = ? and user_id = ?", uuid.Nil, userId).Exec()
 }

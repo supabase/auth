@@ -141,9 +141,36 @@ func RequestTracing() func(http.Handler) http.Handler {
 			defer traceChiRouteURLParamsSafely(r)
 			defer countStatusCodesSafely(&writer, r, statusCodes)
 
+			originalUserAgent := r.Header.Get("X-Gotrue-Original-User-Agent")
+			if originalUserAgent != "" {
+				r.Header.Set("User-Agent", originalUserAgent)
+			}
+
 			next.ServeHTTP(&writer, r)
+
+			if originalUserAgent != "" {
+				r.Header.Set("X-Gotrue-Original-User-Agent", originalUserAgent)
+				r.Header.Set("User-Agent", "stripped")
+			}
 		}
 
-		return otelhttp.NewHandler(http.HandlerFunc(fn), "api")
+		otelHandler := otelhttp.NewHandler(http.HandlerFunc(fn), "api")
+
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// there is a vulnerability with otelhttp where
+			// User-Agent strings are kept in RAM indefinitely and
+			// can be used as an easy way to resource exhaustion;
+			// so this code strips the User-Agent header before
+			// it's passed to be traced by otelhttp, and then is
+			// returned back to the middleware
+			// https://github.com/supabase/gotrue/security/dependabot/11
+			userAgent := r.UserAgent()
+			if userAgent != "" {
+				r.Header.Set("X-Gotrue-Original-User-Agent", userAgent)
+				r.Header.Set("User-Agent", "stripped")
+			}
+
+			otelHandler.ServeHTTP(w, r)
+		})
 	}
 }

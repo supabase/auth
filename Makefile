@@ -1,6 +1,11 @@
 .PHONY: all build deps dev-deps image migrate test vet sec format unused
 CHECK_FILES?=./...
-FLAGS?=-ldflags "-X github.com/supabase/gotrue/internal/utilities.Version=`git describe --tags`" -buildvcs=false
+
+FLAGS=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=`git describe --tags`" -buildvcs=false
+ifdef RELEASE_VERSION
+	FLAGS=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=v$(RELEASE_VERSION)" -buildvcs=false
+endif
+
 DEV_DOCKER_COMPOSE:=docker-compose-dev.yml
 
 help: ## Show this help.
@@ -10,7 +15,7 @@ all: vet sec static build ## Run the tests and build the binary.
 
 build: deps ## Build the binary.
 	CGO_ENABLED=0 go build $(FLAGS)
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o gotrue-arm64
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o auth-arm64
 
 dev-deps: ## Install developer dependencies
 	@go install github.com/gobuffalo/pop/soda@latest
@@ -62,14 +67,14 @@ down: ## Shutdown the development containers
 
 docker-test: ## Run the tests using the development containers
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
-	docker-compose -f $(DEV_DOCKER_COMPOSE) run gotrue sh -c "make migrate_test"
-	docker-compose -f $(DEV_DOCKER_COMPOSE) run gotrue sh -c "make test"
+	docker-compose -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make migrate_test"
+	docker-compose -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make test"
 	docker-compose -f $(DEV_DOCKER_COMPOSE) down -v
 
 docker-build: ## Force a full rebuild of the development containers
 	docker-compose -f $(DEV_DOCKER_COMPOSE) build --no-cache
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
-	docker-compose -f $(DEV_DOCKER_COMPOSE) run gotrue sh -c "make migrate_dev"
+	docker-compose -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make migrate_dev"
 	docker-compose -f $(DEV_DOCKER_COMPOSE) down
 
 docker-clean: ## Remove the development containers and volumes

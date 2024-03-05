@@ -12,7 +12,7 @@ import (
 const (
 	notionUser           string = `{"bot":{"owner":{"user":{"id":"notionTestId","name":"Notion Test","avatar_url":"http://example.com/avatar","person":{"email":"notion@example.com"},"verified_email":true}}}}`
 	notionUserWrongEmail string = `{"bot":{"owner":{"user":{"id":"notionTestId","name":"Notion Test","avatar_url":"http://example.com/avatar","person":{"email":"other@example.com"},"verified_email":true}}}}`
-	notionUserNoEmail    string = `{"bot":{"owner":{"user":{"id":"notionTestId","name":"Notion Test","avatar_url":"http://example.com/avatar","verified_email":true}}}}}`
+	notionUserNoEmail    string = `{"bot":{"owner":{"user":{"id":"notionTestId","name":"Notion Test","avatar_url":"http://example.com/avatar","verified_email":true}}}}`
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalNotion() {
@@ -24,7 +24,7 @@ func (ts *ExternalTestSuite) TestSignupExternalNotion() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Notion.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Notion.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Notion.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 
 	claims := ExternalProviderClaims{}

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/oauth2"
 )
 
@@ -24,7 +24,7 @@ type keycloakUser struct {
 
 // NewKeycloakProvider creates a Keycloak account provider.
 func NewKeycloakProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -48,7 +48,7 @@ func NewKeycloakProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 
 	return &keycloakProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  ext.URL + "/protocol/openid-connect/auth",
@@ -72,27 +72,27 @@ func (g keycloakProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 		return nil, err
 	}
 
-	if u.Email == "" {
-		return nil, errors.New("unable to find email with Keycloak provider")
-	}
-
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        g.Host,
-			Subject:       u.Sub,
-			Name:          u.Name,
-			Email:         u.Email,
-			EmailVerified: u.EmailVerified,
-
-			// To be deprecated
-			FullName:   u.Name,
-			ProviderId: u.Sub,
-		},
-		Emails: []Email{{
+	data := &UserProvidedData{}
+	if u.Email != "" {
+		data.Emails = []Email{{
 			Email:    u.Email,
 			Verified: u.EmailVerified,
 			Primary:  true,
-		}},
-	}, nil
+		}}
+	}
+
+	data.Metadata = &Claims{
+		Issuer:        g.Host,
+		Subject:       u.Sub,
+		Name:          u.Name,
+		Email:         u.Email,
+		EmailVerified: u.EmailVerified,
+
+		// To be deprecated
+		FullName:   u.Name,
+		ProviderId: u.Sub,
+	}
+
+	return data, nil
 
 }

@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -12,10 +11,10 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
 	"github.com/sethvargo/go-password/password"
-	"github.com/supabase/gotrue/internal/api/provider"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
 )
 
 type AdminUserParams struct {
@@ -86,18 +85,12 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 }
 
 func (a *API) getAdminParams(r *http.Request) (*AdminUserParams, error) {
-	params := AdminUserParams{}
-
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return nil, badRequestError("Could not read body").WithInternalError(err)
+	params := &AdminUserParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return nil, err
 	}
 
-	if err := json.Unmarshal(body, &params); err != nil {
-		return nil, badRequestError("Could not decode admin user params: %v", err)
-	}
-
-	return &params, nil
+	return params, nil
 }
 
 // adminUsers responds with a list of all users in a given audience
@@ -144,7 +137,6 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
 	params, err := a.getAdminParams(r)
-	config := a.config
 	if err != nil {
 		return err
 	}
@@ -176,6 +168,18 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	if params.Password != nil {
+		password := *params.Password
+
+		if err := a.checkPasswordStrength(ctx, password); err != nil {
+			return err
+		}
+
+		if err := user.SetPassword(ctx, password); err != nil {
+			return err
+		}
+	}
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if params.Role != "" {
 			if terr := user.SetRole(tx, params.Role); terr != nil {
@@ -196,11 +200,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Password != nil {
-			if len(*params.Password) < config.PasswordMinLength {
-				return invalidPasswordLengthError(config.PasswordMinLength)
-			}
-
-			if terr := user.UpdatePassword(tx, *params.Password); terr != nil {
+			if terr := user.UpdatePassword(tx, nil); terr != nil {
 				return terr
 			}
 		}
@@ -284,9 +284,6 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
-		if errors.Is(err, invalidPasswordLengthError(config.PasswordMinLength)) {
-			return err
-		}
 		return internalServerError("Error updating user").WithInternalError(err)
 	}
 
@@ -459,10 +456,6 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
 
-	if user.IsSSOUser {
-		return badRequestError("user should be removed via identity provider instead")
-	}
-
 	var err error
 	params := &adminUserDeleteParams{}
 	body, err := getBodyBytes(r)
@@ -566,16 +559,11 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
 	params := &adminUserUpdateFactorParams{}
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read factor update params: %v", err)
-	}
-
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if params.FriendlyName != "" {
 			if terr := factor.UpdateFriendlyName(tx, params.FriendlyName); terr != nil {
 				return terr

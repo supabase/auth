@@ -7,9 +7,9 @@ import (
 	"net/http"
 
 	"github.com/sethvargo/go-password/password"
-	"github.com/supabase/gotrue/internal/api/sms_provider"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 // OtpParams contains the request body params for the otp endpoint
@@ -68,13 +68,8 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 		params.Data = make(map[string]interface{})
 	}
 
-	body, err := getBodyBytes(r)
-	if err != nil {
+	if err := retrieveRequestParams(r, params); err != nil {
 		return err
-	}
-
-	if err = json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read verification params: %v", err)
 	}
 
 	if err := params.Validate(); err != nil {
@@ -99,6 +94,10 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	return otpError("unsupported_otp_type", "")
 }
 
+type SmsOtpResponse struct {
+	MessageID string `json:"message_id,omitempty"`
+}
+
 // SmsOtp sends the user an otp via sms
 func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -111,15 +110,10 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	var err error
 
 	params := &SmsParams{}
-
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read sms otp params: %v", err)
-	}
 	// For backwards compatibility, we default to SMS if params Channel is not specified
 	if params.Phone != "" && params.Channel == "" {
 		params.Channel = sms_provider.SMSProvider
@@ -145,7 +139,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	if isNewUser {
 		// User either doesn't exist or hasn't completed the signup process.
 		// Sign them up with temporary password.
-		password, err := password.Generate(64, 10, 0, false, true)
+		password, err := password.Generate(64, 10, 1, false, true)
 		if err != nil {
 			internalServerError("error creating user").WithInternalError(err)
 		}
@@ -188,6 +182,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
 
+	messageID := ""
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if err := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", map[string]interface{}{
 			"channel": params.Channel,
@@ -198,9 +193,11 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return badRequestError("Error sending sms: %v", terr)
 		}
-		if err := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); err != nil {
-			return badRequestError("Error sending sms otp: %v", err)
+		mID, serr := a.sendPhoneConfirmation(tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel)
+		if serr != nil {
+			return badRequestError("Error sending sms OTP: %v", serr)
 		}
+		messageID = mID
 		return nil
 	})
 
@@ -208,7 +205,9 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, make(map[string]string))
+	return sendJSON(w, http.StatusOK, SmsOtpResponse{
+		MessageID: messageID,
+	})
 }
 
 func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) (bool, error) {

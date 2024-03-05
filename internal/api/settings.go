@@ -3,26 +3,30 @@ package api
 import "net/http"
 
 type ProviderSettings struct {
-	Apple     bool `json:"apple"`
-	Azure     bool `json:"azure"`
-	Bitbucket bool `json:"bitbucket"`
-	Discord   bool `json:"discord"`
-	GitHub    bool `json:"github"`
-	GitLab    bool `json:"gitlab"`
-	Keycloak  bool `json:"keycloak"`
-	Google    bool `json:"google"`
-	Kakao     bool `json:"kakao"`
-	Linkedin  bool `json:"linkedin"`
-	Facebook  bool `json:"facebook"`
-	Notion    bool `json:"notion"`
-	Spotify   bool `json:"spotify"`
-	Slack     bool `json:"slack"`
-	WorkOS    bool `json:"workos"`
-	Twitch    bool `json:"twitch"`
-	Twitter   bool `json:"twitter"`
-	Email     bool `json:"email"`
-	Phone     bool `json:"phone"`
-	Zoom      bool `json:"zoom"`
+	AnonymousUsers bool `json:"anonymous_users"`
+	Apple          bool `json:"apple"`
+	Azure          bool `json:"azure"`
+	Bitbucket      bool `json:"bitbucket"`
+	Discord        bool `json:"discord"`
+	Facebook       bool `json:"facebook"`
+	Figma          bool `json:"figma"`
+	Fly            bool `json:"fly"`
+	GitHub         bool `json:"github"`
+	GitLab         bool `json:"gitlab"`
+	Google         bool `json:"google"`
+	Keycloak       bool `json:"keycloak"`
+	Kakao          bool `json:"kakao"`
+	Linkedin       bool `json:"linkedin"`
+	LinkedinOIDC   bool `json:"linkedin_oidc"`
+	Notion         bool `json:"notion"`
+	Spotify        bool `json:"spotify"`
+	Slack          bool `json:"slack"`
+	WorkOS         bool `json:"workos"`
+	Twitch         bool `json:"twitch"`
+	Twitter        bool `json:"twitter"`
+	Email          bool `json:"email"`
+	Phone          bool `json:"phone"`
+	Zoom           bool `json:"zoom"`
 }
 
 type Settings struct {
@@ -40,28 +44,31 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 
 	return sendJSON(w, http.StatusOK, &Settings{
 		ExternalProviders: ProviderSettings{
-			Apple:     config.External.Apple.Enabled,
-			Azure:     config.External.Azure.Enabled,
-			Bitbucket: config.External.Bitbucket.Enabled,
-			Discord:   config.External.Discord.Enabled,
-			GitHub:    config.External.Github.Enabled,
-			GitLab:    config.External.Gitlab.Enabled,
-			Google:    config.External.Google.Enabled,
-			Kakao:     config.External.Kakao.Enabled,
-			Keycloak:  config.External.Keycloak.Enabled,
-			Linkedin:  config.External.Linkedin.Enabled,
-			Facebook:  config.External.Facebook.Enabled,
-			Notion:    config.External.Notion.Enabled,
-			Spotify:   config.External.Spotify.Enabled,
-			Slack:     config.External.Slack.Enabled,
-			Twitch:    config.External.Twitch.Enabled,
-			Twitter:   config.External.Twitter.Enabled,
-			WorkOS:    config.External.WorkOS.Enabled,
-			Email:     config.External.Email.Enabled,
-			Phone:     config.External.Phone.Enabled,
-			Zoom:      config.External.Zoom.Enabled,
+			AnonymousUsers: config.External.AnonymousUsers.Enabled,
+			Apple:          config.External.Apple.Enabled,
+			Azure:          config.External.Azure.Enabled,
+			Bitbucket:      config.External.Bitbucket.Enabled,
+			Discord:        config.External.Discord.Enabled,
+			Facebook:       config.External.Facebook.Enabled,
+			Figma:          config.External.Figma.Enabled,
+			Fly:            config.External.Fly.Enabled,
+			GitHub:         config.External.Github.Enabled,
+			GitLab:         config.External.Gitlab.Enabled,
+			Google:         config.External.Google.Enabled,
+			Kakao:          config.External.Kakao.Enabled,
+			Keycloak:       config.External.Keycloak.Enabled,
+			Linkedin:       config.External.Linkedin.Enabled,
+			LinkedinOIDC:   config.External.LinkedinOIDC.Enabled,
+			Notion:         config.External.Notion.Enabled,
+			Spotify:        config.External.Spotify.Enabled,
+			Slack:          config.External.Slack.Enabled,
+			Twitch:         config.External.Twitch.Enabled,
+			Twitter:        config.External.Twitter.Enabled,
+			WorkOS:         config.External.WorkOS.Enabled,
+			Email:          config.External.Email.Enabled,
+			Phone:          config.External.Phone.Enabled,
+			Zoom:           config.External.Zoom.Enabled,
 		},
-
 		DisableSignup:     config.DisableSignup,
 		MailerAutoconfirm: config.Mailer.Autoconfirm,
 		PhoneAutoconfirm:  config.Sms.Autoconfirm,

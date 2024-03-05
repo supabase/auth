@@ -11,7 +11,7 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/storage"
 )
 
 type SSOProvider struct {
@@ -148,14 +148,15 @@ type SAMLRelayState struct {
 
 	SSOProviderID uuid.UUID `db:"sso_provider_id"`
 
-	RequestID     string  `db:"request_id"`
-	ForEmail      *string `db:"for_email"`
-	FromIPAddress string  `db:"from_ip_address"`
+	RequestID string  `db:"request_id"`
+	ForEmail  *string `db:"for_email"`
 
 	RedirectTo string `db:"redirect_to"`
 
-	CreatedAt time.Time `db:"created_at" json:"-"`
-	UpdatedAt time.Time `db:"updated_at" json:"-"`
+	CreatedAt   time.Time  `db:"created_at" json:"-"`
+	UpdatedAt   time.Time  `db:"updated_at" json:"-"`
+	FlowStateID *uuid.UUID `db:"flow_state_id" json:"flow_state_id,omitempty"`
+	FlowState   *FlowState `db:"-" json:"flow_state,omitempty" belongs_to:"flow_state"`
 }
 
 func (s SAMLRelayState) TableName() string {

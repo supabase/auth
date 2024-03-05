@@ -5,8 +5,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/observability"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/observability"
 )
 
 var configFile = ""
@@ -49,6 +49,9 @@ func loadGlobalConfig(ctx context.Context) *conf.GlobalConfiguration {
 		logrus.WithError(err).Error("unable to configure metrics")
 	}
 
+	if err := observability.ConfigureProfiler(ctx, &config.Profiler); err != nil {
+		logrus.WithError(err).Error("unable to configure profiler")
+	}
 	return config
 }
 

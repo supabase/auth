@@ -23,7 +23,7 @@ func (ts *ExternalTestSuite) TestSignupExternalTwitch() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Twitch.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Twitch.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Twitch.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("user:read:email", q.Get("scope"))
 
@@ -107,7 +107,7 @@ func (ts *ExternalTestSuite) TestSignupExternalTwitchDisableSignupErrorWhenEmpty
 func (ts *ExternalTestSuite) TestSignupExternalTwitchDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("twitchTestId", "twitch@example.com", "Twitch Test", "https://s.gravatar.com/avatar/23463b99b62a72f26ed677cc556c44e8", "")
+	ts.createUser("twitchTestId", "twitch@example.com", "Twitch user", "https://s.gravatar.com/avatar/23463b99b62a72f26ed677cc556c44e8", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -116,7 +116,7 @@ func (ts *ExternalTestSuite) TestSignupExternalTwitchDisableSignupSuccessWithPri
 
 	u := performAuthorization(ts, "twitch", code, "")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "twitch@example.com", "Twitch Test", "twitchTestId", "https://s.gravatar.com/avatar/23463b99b62a72f26ed677cc556c44e8")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "twitch@example.com", "Twitch user", "twitchTestId", "https://s.gravatar.com/avatar/23463b99b62a72f26ed677cc556c44e8")
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalTwitchSuccessWhenMatchingToken() {

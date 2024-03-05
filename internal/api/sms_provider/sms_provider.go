@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/auth/internal/conf"
 )
 
 var defaultTimeout time.Duration = time.Second * 10
@@ -26,7 +26,7 @@ func init() {
 }
 
 type SmsProvider interface {
-	SendMessage(phone, message, channel string) error
+	SendMessage(phone, message, channel, otp string) (string, error)
 }
 
 func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
@@ -39,6 +39,8 @@ func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
 		return NewTextlocalProvider(config.Sms.Textlocal)
 	case "vonage":
 		return NewVonageProvider(config.Sms.Vonage)
+	case "twilio_verify":
+		return NewTwilioVerifyProvider(config.Sms.TwilioVerify)
 	default:
 		return nil, fmt.Errorf("sms Provider %s could not be found", name)
 	}
@@ -49,7 +51,7 @@ func IsValidMessageChannel(channel string, smsProvider string) bool {
 	case SMSProvider:
 		return true
 	case WhatsappProvider:
-		return smsProvider == "twilio"
+		return smsProvider == "twilio" || smsProvider == "twilio_verify"
 	default:
 		return false
 	}

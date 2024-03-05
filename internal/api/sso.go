@@ -1,21 +1,21 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/crewjam/saml"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 type SingleSignOnParams struct {
-	ProviderID       uuid.UUID `json:"provider_id"`
-	Domain           string    `json:"domain"`
-	RedirectTo       string    `json:"redirect_to"`
-	SkipHTTPRedirect *bool     `json:"skip_http_redirect"`
+	ProviderID          uuid.UUID `json:"provider_id"`
+	Domain              string    `json:"domain"`
+	RedirectTo          string    `json:"redirect_to"`
+	SkipHTTPRedirect    *bool     `json:"skip_http_redirect"`
+	CodeChallenge       string    `json:"code_challenge"`
+	CodeChallengeMethod string    `json:"code_challenge_method"`
 }
 
 type SingleSignOnResponse struct {
@@ -40,21 +40,39 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return internalServerError("Unable to read request body").WithInternalError(err)
+	params := &SingleSignOnParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
-	var params SingleSignOnParams
-
-	if err := json.Unmarshal(body, &params); err != nil {
-		return badRequestError("Unable to parse request body as JSON").WithInternalError(err)
-	}
-
+	var err error
 	hasProviderID := false
 
 	if hasProviderID, err = params.validate(); err != nil {
 		return err
+	}
+	codeChallengeMethod := params.CodeChallengeMethod
+	codeChallenge := params.CodeChallenge
+
+	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
+		return err
+	}
+	flowType := getFlowFromChallenge(params.CodeChallenge)
+	var flowStateID *uuid.UUID
+	flowStateID = nil
+	if flowType == models.PKCEFlow {
+		codeChallengeMethodType, err := models.ParseCodeChallengeMethod(codeChallengeMethod)
+		if err != nil {
+			return err
+		}
+		flowState, err := models.NewFlowState(models.SSOSAML.String(), codeChallenge, codeChallengeMethodType, models.SSOSAML)
+		if err != nil {
+			return err
+		}
+		if err := a.db.Create(flowState); err != nil {
+			return err
+		}
+		flowStateID = &flowState.ID
 	}
 
 	var ssoProvider *models.SSOProvider
@@ -96,8 +114,8 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	relayState := models.SAMLRelayState{
 		SSOProviderID: ssoProvider.ID,
 		RequestID:     authnRequest.ID,
-		FromIPAddress: utilities.GetIPAddress(r),
 		RedirectTo:    params.RedirectTo,
+		FlowStateID:   flowStateID,
 	}
 
 	if err := db.Transaction(func(tx *storage.Connection) error {

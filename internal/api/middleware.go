@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/security"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/security"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
@@ -20,7 +21,7 @@ import (
 
 type FunctionHooks map[string][]string
 
-type NetlifyMicroserviceClaims struct {
+type AuthMicroserviceClaims struct {
 	jwt.StandardClaims
 	SiteURL       string        `json:"site_url"`
 	InstanceID    string        `json:"id"`
@@ -48,6 +49,8 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 	}
 	return nil
 }
+
+var emailRateLimitCounter = observability.ObtainMetricCounter("gotrue_email_rate_limit_counter", "Number of times an email rate limit has been triggered")
 
 func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
@@ -87,35 +90,43 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		c := req.Context()
 		config := a.config
-		if (config.External.Email.Enabled && !config.Mailer.Autoconfirm) || (config.External.Phone.Enabled) {
-			if req.Method == "PUT" || req.Method == "POST" {
-				bodyBytes, err := getBodyBytes(req)
-				if err != nil {
-					return c, internalServerError("Error invalid request body").WithInternalError(err)
-				}
+		shouldRateLimitEmail := config.External.Email.Enabled && !config.Mailer.Autoconfirm
+		shouldRateLimitPhone := config.External.Phone.Enabled && !config.Sms.Autoconfirm
 
+		if shouldRateLimitEmail || shouldRateLimitPhone {
+			if req.Method == "PUT" || req.Method == "POST" {
 				var requestBody struct {
 					Email string `json:"email"`
 					Phone string `json:"phone"`
 				}
 
-				if err := json.Unmarshal(bodyBytes, &requestBody); err != nil {
+				if err := retrieveRequestParams(req, &requestBody); err != nil {
 					return c, badRequestError("Error invalid request body").WithInternalError(err)
 				}
 
-				if requestBody.Email != "" {
-					if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
-						return c, httpError(http.StatusTooManyRequests, "Email rate limit exceeded")
+				if shouldRateLimitEmail {
+					if requestBody.Email != "" {
+						if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
+							emailRateLimitCounter.Add(
+								req.Context(),
+								1,
+								attribute.String("path", req.URL.Path),
+							)
+							return c, httpError(http.StatusTooManyRequests, "Email rate limit exceeded")
+						}
 					}
 				}
 
-				if requestBody.Phone != "" {
-					if err := tollbooth.LimitByKeys(phoneLimiter, []string{"phone_functions"}); err != nil {
-						return c, httpError(http.StatusTooManyRequests, "Sms rate limit exceeded")
+				if shouldRateLimitPhone {
+					if requestBody.Phone != "" {
+						if err := tollbooth.LimitByKeys(phoneLimiter, []string{"phone_functions"}); err != nil {
+							return c, httpError(http.StatusTooManyRequests, "Sms rate limit exceeded")
+						}
 					}
 				}
 			}
 		}
+
 		return c, nil
 	}
 }
@@ -132,7 +143,7 @@ func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) 
 		return nil, err
 	}
 
-	return a.requireAdmin(ctx, w, req)
+	return a.requireAdmin(ctx, req)
 }
 
 func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (context.Context, error) {
@@ -175,8 +186,9 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 }
 
 func isIgnoreCaptchaRoute(req *http.Request) bool {
-	// captcha shouldn't be enabled on requests to refresh the token
-	if req.URL.Path == "/token" && req.FormValue("grant_type") == "refresh_token" {
+	// captcha shouldn't be enabled on the following grant_types
+	// id_token, refresh_token, pkce
+	if req.URL.Path == "/token" && req.FormValue("grant_type") != "password" {
 		return true
 	}
 	return false
@@ -216,26 +228,36 @@ func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (cont
 	return ctx, nil
 }
 
-func (a *API) databaseCleanup(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
+func (a *API) requireManualLinkingEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !a.config.Security.ManualLinkingEnabled {
+		return nil, notFoundError("Manual linking is disabled")
+	}
+	return ctx, nil
+}
 
-		switch r.Method {
-		case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
-			// continue
+func (a *API) databaseCleanup(cleanup *models.Cleanup) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
 
-		default:
-			return
-		}
+			switch r.Method {
+			case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+				// continue
 
-		db := a.db.WithContext(r.Context())
-		log := observability.GetLogEntry(r)
+			default:
+				return
+			}
 
-		affectedRows, err := models.Cleanup(db)
-		if err != nil {
-			log.WithError(err).WithField("affected_rows", affectedRows).Warn("database cleanup failed")
-		} else if affectedRows > 0 {
-			log.WithField("affected_rows", affectedRows).Debug("cleaned up expired or stale rows")
-		}
-	})
+			db := a.db.WithContext(r.Context())
+			log := observability.GetLogEntry(r)
+
+			affectedRows, err := cleanup.Clean(db)
+			if err != nil {
+				log.WithError(err).WithField("affected_rows", affectedRows).Warn("database cleanup failed")
+			} else if affectedRows > 0 {
+				log.WithField("affected_rows", affectedRows).Debug("cleaned up expired or stale rows")
+			}
+		})
+	}
 }

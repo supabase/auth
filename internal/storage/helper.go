@@ -25,3 +25,7 @@ func (s NullString) Value() (driver.Value, error) {
 	}
 	return string(s), nil
 }
+
+func (s NullString) String() string {
+	return string(s)
+}

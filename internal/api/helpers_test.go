@@ -1,29 +1,11 @@
 package api
 
 import (
-	"net"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
-
-func removeLocalhostFromPrivateIPBlock() *net.IPNet {
-	_, localhost, _ := net.ParseCIDR("127.0.0.0/8")
-
-	var localhostIndex int
-	for i := 0; i < len(privateIPBlocks); i++ {
-		if privateIPBlocks[i] == localhost {
-			localhostIndex = i
-		}
-	}
-	privateIPBlocks = append(privateIPBlocks[:localhostIndex], privateIPBlocks[localhostIndex+1:]...)
-
-	return localhost
-}
-
-func unshiftPrivateIPBlock(address *net.IPNet) {
-	privateIPBlocks = append([]*net.IPNet{address}, privateIPBlocks...)
-}
 
 func TestIsValidCodeChallenge(t *testing.T) {
 	cases := []struct {
@@ -52,5 +34,41 @@ func TestIsValidCodeChallenge(t *testing.T) {
 		valid, err := isValidCodeChallenge(c.challenge)
 		require.Equal(t, c.isValid, valid)
 		require.Equal(t, c.expectedError, err)
+	}
+}
+
+func TestIsValidPKCEParmas(t *testing.T) {
+	cases := []struct {
+		challengeMethod string
+		challenge       string
+		expected        error
+	}{
+		{
+			challengeMethod: "",
+			challenge:       "",
+			expected:        nil,
+		},
+		{
+			challengeMethod: "test",
+			challenge:       "testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttest",
+			expected:        nil,
+		},
+		{
+			challengeMethod: "test",
+			challenge:       "",
+			expected:        badRequestError(InvalidPKCEParamsErrorMessage),
+		},
+		{
+			challengeMethod: "",
+			challenge:       "test",
+			expected:        badRequestError(InvalidPKCEParamsErrorMessage),
+		},
+	}
+
+	for i, c := range cases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			err := validatePKCEParams(c.challengeMethod, c.challenge)
+			require.Equal(t, c.expected, err)
+		})
 	}
 }

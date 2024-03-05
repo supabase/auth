@@ -1,12 +1,12 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // RecoverParams holds the parameters for a password recovery request
@@ -36,14 +36,8 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	config := a.config
 	params := &RecoverParams{}
-
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read verification params: %v", err)
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
 	flowType := getFlowFromChallenge(params.CodeChallenge)
@@ -52,6 +46,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var user *models.User
+	var err error
 	aud := a.requestAud(ctx, r)
 
 	user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
@@ -67,7 +62,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 		mailer := a.Mailer(ctx)
-		referrer := a.getReferrer(r)
+		referrer := utilities.GetReferrer(r, config)
 		if isPKCEFlow(flowType) {
 			codeChallengeMethod, terr := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
 			if terr != nil {

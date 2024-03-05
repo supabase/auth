@@ -5,7 +5,7 @@ import (
 	"net/url"
 
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/models"
 )
 
 type contextKey string
@@ -21,6 +21,7 @@ const (
 	signatureKey            = contextKey("signature")
 	externalProviderTypeKey = contextKey("external_provider_type")
 	userKey                 = contextKey("user")
+	targetUserKey           = contextKey("target_user")
 	factorKey               = contextKey("factor")
 	sessionKey              = contextKey("session")
 	externalReferrerKey     = contextKey("external_referrer")
@@ -48,12 +49,12 @@ func getToken(ctx context.Context) *jwt.Token {
 	return obj.(*jwt.Token)
 }
 
-func getClaims(ctx context.Context) *GoTrueClaims {
+func getClaims(ctx context.Context) *AccessTokenClaims {
 	token := getToken(ctx)
 	if token == nil {
 		return nil
 	}
-	return token.Claims.(*GoTrueClaims)
+	return token.Claims.(*AccessTokenClaims)
 }
 
 // withRequestID adds the provided request ID to the context.
@@ -76,6 +77,11 @@ func withUser(ctx context.Context, u *models.User) context.Context {
 	return context.WithValue(ctx, userKey, u)
 }
 
+// withTargetUser adds the target user for linking to the context.
+func withTargetUser(ctx context.Context, u *models.User) context.Context {
+	return context.WithValue(ctx, targetUserKey, u)
+}
+
 // with Factor adds the factor id to the context.
 func withFactor(ctx context.Context, f *models.Factor) context.Context {
 	return context.WithValue(ctx, factorKey, f)
@@ -87,6 +93,18 @@ func getUser(ctx context.Context) *models.User {
 		return nil
 	}
 	obj := ctx.Value(userKey)
+	if obj == nil {
+		return nil
+	}
+	return obj.(*models.User)
+}
+
+// getTargetUser reads the user from the context.
+func getTargetUser(ctx context.Context) *models.User {
+	if ctx == nil {
+		return nil
+	}
+	obj := ctx.Value(targetUserKey)
 	if obj == nil {
 		return nil
 	}
@@ -175,16 +193,6 @@ func getExternalReferrer(ctx context.Context) string {
 	}
 
 	return obj.(string)
-}
-
-// getFunctionHooks reads the request ID from the context.
-func getFunctionHooks(ctx context.Context) map[string][]string {
-	obj := ctx.Value(functionHooksKey)
-	if obj == nil {
-		return map[string][]string{}
-	}
-
-	return obj.(map[string][]string)
 }
 
 // withAdminUser adds the admin user to the context.

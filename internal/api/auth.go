@@ -8,8 +8,8 @@ import (
 
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 // requireAuthentication checks incoming requests for tokens presented using the Authorization header
@@ -35,7 +35,16 @@ func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (con
 	return ctx, err
 }
 
-func (a *API) requireAdmin(ctx context.Context, w http.ResponseWriter, r *http.Request) (context.Context, error) {
+func (a *API) requireNotAnonymous(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	ctx := r.Context()
+	claims := getClaims(ctx)
+	if claims.IsAnonymous {
+		return nil, forbiddenError("Anonymous user not allowed to perform these actions")
+	}
+	return ctx, nil
+}
+
+func (a *API) requireAdmin(ctx context.Context, r *http.Request) (context.Context, error) {
 	// Find the administrative user
 	claims := getClaims(ctx)
 	if claims == nil {
@@ -69,7 +78,7 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request) (context.Context, e
 	config := a.config
 
 	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
-	token, err := p.ParseWithClaims(bearer, &GoTrueClaims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := p.ParseWithClaims(bearer, &AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(config.JWT.Secret), nil
 	})
 	if err != nil {
@@ -113,7 +122,7 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 		if err != nil {
 			return ctx, err
 		}
-		session, err = models.FindSessionByID(db, sessionId)
+		session, err = models.FindSessionByID(db, sessionId, false)
 		if err != nil && !models.IsNotFoundError(err) {
 			return ctx, err
 		}

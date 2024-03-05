@@ -1,13 +1,14 @@
 package models
 
 import (
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/storage"
-	"github.com/supabase/gotrue/internal/storage/test"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/storage/test"
 )
 
 type SessionsTestSuite struct {
@@ -39,40 +40,53 @@ func TestSession(t *testing.T) {
 	suite.Run(t, ts)
 }
 
-func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
-	totalDistinctClaims := 2
+func (ts *SessionsTestSuite) TestFindBySessionIDWithForUpdate() {
 	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	session, err := NewSession()
+	session, err := NewSession(u.ID, nil)
 	require.NoError(ts.T(), err)
-	session.UserID = u.ID
 	require.NoError(ts.T(), ts.db.Create(session))
 
-	err = AddClaimToSession(ts.db, session, PasswordGrant)
+	found, err := FindSessionByID(ts.db, session.ID, true)
 	require.NoError(ts.T(), err)
+
+	require.Equal(ts.T(), session.ID, found.ID)
+}
+
+func (ts *SessionsTestSuite) AddClaimAndReloadSession(session *Session, claim AuthenticationMethod) *Session {
+	err := AddClaimToSession(ts.db, session.ID, claim)
+	require.NoError(ts.T(), err)
+	session, err = FindSessionByID(ts.db, session.ID, false)
+	require.NoError(ts.T(), err)
+	return session
+}
+
+func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
+	totalDistinctClaims := 3
+	u, err := FindUserByEmailAndAudience(ts.db, "test@example.com", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	session, err := NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(session))
+
+	session = ts.AddClaimAndReloadSession(session, PasswordGrant)
 
 	firstClaimAddedTime := time.Now()
-	err = AddClaimToSession(ts.db, session, TOTPSignIn)
-	require.NoError(ts.T(), err)
-	session, err = FindSessionByID(ts.db, session.ID)
+	session = ts.AddClaimAndReloadSession(session, TOTPSignIn)
+
+	_, _, err = session.CalculateAALAndAMR(u)
 	require.NoError(ts.T(), err)
 
-	aal, amr, err := session.CalculateAALAndAMR(ts.db)
-	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), AAL2.String(), aal)
-	require.Equal(ts.T(), totalDistinctClaims, len(amr))
+	session = ts.AddClaimAndReloadSession(session, TOTPSignIn)
 
-	err = AddClaimToSession(ts.db, session, TOTPSignIn)
-	require.NoError(ts.T(), err)
+	session = ts.AddClaimAndReloadSession(session, SSOSAML)
 
-	session, err = FindSessionByID(ts.db, session.ID)
-	require.NoError(ts.T(), err)
-
-	aal, amr, err = session.CalculateAALAndAMR(ts.db)
+	aal, amr, err := session.CalculateAALAndAMR(u)
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), AAL2.String(), aal)
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
+
 	found := false
 	for _, claim := range session.AMRClaims {
 		if claim.GetAuthenticationMethod() == TOTPSignIn.String() {
@@ -80,6 +94,11 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 			found = true
 		}
 	}
-	require.True(ts.T(), found)
 
+	for _, claim := range amr {
+		if claim.Method == SSOSAML.String() {
+			require.NotNil(ts.T(), claim.Provider)
+		}
+	}
+	require.True(ts.T(), found)
 }

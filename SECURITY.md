@@ -1,6 +1,6 @@
 # Security Policy
 
-GoTrue is a project maintained by [Supabase](https://supabase.com). Below is
+Auth is a project maintained by [Supabase](https://supabase.com). Below is
 our security policy.
 
 Contact: security@supabase.io 

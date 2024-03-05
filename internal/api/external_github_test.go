@@ -13,7 +13,7 @@ import (
 
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/models"
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalGithub() {
@@ -25,7 +25,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGithub() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Github.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Github.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Github.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("user:email", q.Get("scope"))
 
@@ -267,6 +267,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalGitHubErrorWhenEmailDoesntMa
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenVerifiedFalse() {
+	ts.Config.Mailer.AllowUnverifiedEmailSignIns = false
 	tokenCount, userCount := 0, 0
 	code := "authcode"
 	emails := `[{"email":"github@example.com", "primary": true, "verified": false}]`
@@ -275,12 +276,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenVerifiedFalse() {
 
 	u := performAuthorization(ts, "github", code, "")
 
-	v, err := url.ParseQuery(u.Fragment)
-	ts.Require().NoError(err)
-	ts.Equal("unauthorized_client", v.Get("error"))
-	ts.Equal("401", v.Get("error_code"))
-	ts.Equal("Unverified email with github", v.Get("error_description"))
-	assertAuthorizationFailure(ts, u, "", "", "")
+	assertAuthorizationFailure(ts, u, "Unverified email with github. A confirmation email has been sent to your github email", "unauthorized_client", "")
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenUserBanned() {

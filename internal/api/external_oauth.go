@@ -7,9 +7,8 @@ import (
 
 	"github.com/mrjones/oauth"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/internal/api/provider"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/observability"
 )
 
 // OAuthProviderData contains the userData and token returned by the oauth provider
@@ -82,7 +81,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 
 	userData, err := oAuthProvider.GetUserData(ctx, token)
 	if err != nil {
-		return nil, internalServerError("Error getting user email from external provider").WithInternalError(err)
+		return nil, internalServerError("Error getting user profile from external provider").WithInternalError(err)
 	}
 
 	switch externalProvider := oAuthProvider.(type) {
@@ -105,29 +104,19 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 	}, nil
 }
 
-func (a *API) oAuth1Callback(ctx context.Context, r *http.Request, providerType string) (*OAuthProviderData, error) {
+func (a *API) oAuth1Callback(ctx context.Context, providerType string) (*OAuthProviderData, error) {
 	oAuthProvider, err := a.OAuthProvider(ctx, providerType)
 	if err != nil {
 		return nil, badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
-	}
-	value, err := storage.GetFromSession(providerType, r)
-	if err != nil {
-		return &OAuthProviderData{}, err
 	}
 	oauthToken := getRequestToken(ctx)
 	oauthVerifier := getOAuthVerifier(ctx)
 	var accessToken *oauth.AccessToken
 	var userData *provider.UserProvidedData
 	if twitterProvider, ok := oAuthProvider.(*provider.TwitterProvider); ok {
-		requestToken, err := twitterProvider.Unmarshal(value)
-		if err != nil {
-			return &OAuthProviderData{}, err
-		}
-		if requestToken.Token != oauthToken {
-			return nil, internalServerError("Request token doesn't match token in callback")
-		}
-		twitterProvider.OauthVerifier = oauthVerifier
-		accessToken, err = twitterProvider.Consumer.AuthorizeToken(requestToken, oauthVerifier)
+		accessToken, err = twitterProvider.Consumer.AuthorizeToken(&oauth.RequestToken{
+			Token: oauthToken,
+		}, oauthVerifier)
 		if err != nil {
 			return nil, internalServerError("Unable to retrieve access token").WithInternalError(err)
 		}

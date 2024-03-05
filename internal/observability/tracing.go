@@ -3,17 +3,12 @@ package observability
 import (
 	"context"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/utilities"
-
-	"github.com/opentracing/opentracing-go"
-	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/opentracer"
-	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/utilities"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -106,19 +101,6 @@ func enableOpenTelemetryTracing(ctx context.Context, tc *conf.TracingConfig) err
 	return nil
 }
 
-func enableOpenTracing(tc *conf.TracingConfig) {
-	tracerOps := []tracer.StartOption{
-		tracer.WithServiceName(tc.ServiceName),
-		tracer.WithAgentAddr(net.JoinHostPort(tc.Host, tc.Port)),
-	}
-
-	for k, v := range tc.Tags {
-		tracerOps = append(tracerOps, tracer.WithGlobalTag(k, v))
-	}
-
-	opentracing.SetGlobalTracer(opentracer.New(tracerOps...))
-}
-
 var (
 	tracingOnce sync.Once
 )
@@ -134,17 +116,12 @@ func ConfigureTracing(ctx context.Context, tc *conf.TracingConfig) error {
 	var err error
 
 	tracingOnce.Do(func() {
-		opentracing.SetGlobalTracer(opentracing.NoopTracer{})
-
 		if tc.Enabled {
-			switch tc.Exporter {
-			case conf.OpenTelemetryTracing:
+			if tc.Exporter == conf.OpenTelemetryTracing {
 				if err = enableOpenTelemetryTracing(ctx, tc); err != nil {
 					logrus.WithError(err).Error("unable to start OTLP trace exporter")
 				}
 
-			case conf.OpenTracing:
-				enableOpenTracing(tc)
 			}
 		}
 	})

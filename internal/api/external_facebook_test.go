@@ -24,7 +24,7 @@ func (ts *ExternalTestSuite) TestSignupExternalFacebook() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Facebook.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Facebook.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Facebook.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("email", q.Get("scope"))
 

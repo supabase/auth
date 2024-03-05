@@ -2,10 +2,9 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"strings"
 
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/oauth2"
 )
 
@@ -68,7 +67,7 @@ type linkedinElements struct {
 
 // NewLinkedinProvider creates a Linkedin account provider.
 func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -85,7 +84,7 @@ func NewLinkedinProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 
 	return &linkedinProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  apiPath + "/oauth/v2/authorization",
@@ -120,37 +119,31 @@ func (g linkedinProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 		return nil, err
 	}
 
-	if len(e.Elements) <= 0 {
-		return nil, errors.New("unable to find email with Linkedin provider")
-	}
-
-	emails := []Email{}
+	data := &UserProvidedData{}
 
 	if e.Elements[0].HandleTilde.EmailAddress != "" {
 		// linkedin only returns the primary email which is verified for the r_emailaddress scope.
-		emails = append(emails, Email{
+		data.Emails = []Email{{
 			Email:    e.Elements[0].HandleTilde.EmailAddress,
 			Primary:  true,
 			Verified: true,
-		})
+		}}
 	}
 
 	avatarURL := u.getAvatarUrl()
 
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        g.APIPath,
-			Subject:       u.ID,
-			Name:          strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
-			Picture:       avatarURL,
-			Email:         e.Elements[0].HandleTilde.EmailAddress,
-			EmailVerified: true,
+	data.Metadata = &Claims{
+		Issuer:        g.APIPath,
+		Subject:       u.ID,
+		Name:          strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
+		Picture:       avatarURL,
+		Email:         e.Elements[0].HandleTilde.EmailAddress,
+		EmailVerified: true,
 
-			// To be deprecated
-			AvatarURL:  avatarURL,
-			FullName:   strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
-			ProviderId: u.ID,
-		},
-		Emails: emails,
-	}, nil
+		// To be deprecated
+		AvatarURL:  avatarURL,
+		FullName:   strings.TrimSpace(GetName(u.FirstName) + " " + GetName(u.LastName)),
+		ProviderId: u.ID,
+	}
+	return data, nil
 }

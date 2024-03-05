@@ -2,11 +2,10 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"strconv"
 	"strings"
 
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/oauth2"
 )
 
@@ -38,7 +37,7 @@ type githubUserEmail struct {
 
 // NewGithubProvider creates a Github account provider.
 func NewGithubProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -58,7 +57,7 @@ func NewGithubProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 
 	return &githubProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  authHost + "/login/oauth/authorize",
@@ -105,15 +104,6 @@ func (g githubProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 		if e.Email != "" {
 			data.Emails = append(data.Emails, Email{Email: e.Email, Verified: e.Verified, Primary: e.Primary})
 		}
-
-		if e.Primary {
-			data.Metadata.Email = e.Email
-			data.Metadata.EmailVerified = e.Verified
-		}
-	}
-
-	if len(data.Emails) <= 0 {
-		return nil, errors.New("unable to find email with GitHub provider")
 	}
 
 	return data, nil

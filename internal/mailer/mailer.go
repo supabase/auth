@@ -5,10 +5,10 @@ import (
 	"net/url"
 
 	"github.com/gofrs/uuid"
-	"github.com/netlify/mailme"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/mailme"
 	"gopkg.in/gomail.v2"
 )
 
@@ -23,6 +23,12 @@ type Mailer interface {
 	ReauthenticateMail(user *models.User, otp string) error
 	ValidateEmail(email string) error
 	GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error)
+}
+
+type EmailParams struct {
+	Token      string
+	Type       string
+	RedirectTo string
 }
 
 // NewMailer returns a new gotrue mailer
@@ -64,7 +70,7 @@ func withDefault(value, defaultValue string) string {
 	return value
 }
 
-func getPath(filepath string, params map[string]string) (*url.URL, error) {
+func getPath(filepath string, params *EmailParams) (*url.URL, error) {
 	path := &url.URL{}
 	if filepath != "" {
 		if p, err := url.Parse(filepath); err != nil {
@@ -73,10 +79,8 @@ func getPath(filepath string, params map[string]string) (*url.URL, error) {
 			path = p
 		}
 	}
-	v := url.Values{}
-	for key, val := range params {
-		v.Add(key, val)
+	if params != nil {
+		path.RawQuery = fmt.Sprintf("token=%s&type=%s&redirect_to=%s", url.QueryEscape(params.Token), url.QueryEscape(params.Type), encodeRedirectURL(params.RedirectTo))
 	}
-	path.RawQuery = v.Encode()
 	return path, nil
 }

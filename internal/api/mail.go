@@ -1,9 +1,6 @@
 package api
 
 import (
-	"crypto/sha256"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,12 +10,13 @@ import (
 	"github.com/fatih/structs"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
-	"github.com/supabase/gotrue/internal/api/provider"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/crypto"
-	"github.com/supabase/gotrue/internal/mailer"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 var (
@@ -44,57 +42,81 @@ type GenerateLinkResponse struct {
 	RedirectTo       string `json:"redirect_to"`
 }
 
-func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
+func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
 	mailer := a.Mailer(ctx)
 	adminUser := getAdminUser(ctx)
 
-	params := &GenerateLinkParams{
-		CreateUser: true,
+	params := &GenerateLinkParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
+  if params.ShouldCreateUser == nil {
+    params.ShouldCreateUser = true
+  }
 
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not parse JSON: %v", err)
-	}
-
+	var err error
 	params.Email, err = validateEmail(params.Email)
 	if err != nil {
 		return err
+	}
+	referrer := utilities.GetReferrer(r, config)
+	if utilities.IsRedirectURLValid(config, params.RedirectTo) {
+		referrer = params.RedirectTo
 	}
 
 	aud := a.requestAud(ctx, r)
 	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil {
-		if models.IsNotFoundError(err) && params.CreateUser {
-			if params.Type == magicLinkVerification {
+		if models.IsNotFoundError(err) {
+      
+			if params.Type == magicLinkVerification && params.ShouldCreateUser {
 				params.Type = signupVerification
-				params.Password, err = password.Generate(64, 10, 0, false, true)
+				params.Password, err = password.Generate(64, 10, 1, false, true)
 				if err != nil {
 					return internalServerError("error creating user").WithInternalError(err)
 				}
-			} else if params.Type == recoveryVerification || params.Type == "email_change_current" || params.Type == "email_change_new" {
+      } params.Type == magicLinkVerification && !params.ShouldCreateUser {
+        return internalServerError("signups not allowed for otp")
+      } else if params.Type == recoveryVerification || params.Type == "email_change_current" || params.Type == "email_change_new" {
 				return notFoundError(err.Error())
 			}
-		} else {
+    } else {
 			return internalServerError("Database error finding user").WithInternalError(err)
 		}
 	}
 
 	var url string
-	referrer := a.getRedirectURLOrReferrer(r, params.RedirectTo)
 	now := time.Now()
 	otp, err := crypto.GenerateOtp(config.Mailer.OtpLength)
 	if err != nil {
 		return err
 	}
-	hashedToken := fmt.Sprintf("%x", sha256.Sum224([]byte(params.Email+otp)))
+
+	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
+
+	var signupUser *models.User
+	if params.Type == signupVerification && user == nil {
+		signupParams := &SignupParams{
+			Email:    params.Email,
+			Password: params.Password,
+			Data:     params.Data,
+			Provider: "email",
+			Aud:      aud,
+		}
+
+		if err := a.validateSignupParams(ctx, signupParams); err != nil {
+			return err
+		}
+
+		signupUser, err = signupParams.ToUserModel(false /* <- isSSOUser */)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
@@ -117,7 +139,16 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					Provider: "email",
 					Aud:      aud,
 				}
-				user, terr = a.signupNewUser(ctx, tx, signupParams, false /* <- isSSOUser */)
+
+				// because params above sets no password, this
+				// method is not computationally hard so it can
+				// be used within a database transaction
+				user, terr = signupParams.ToUserModel(false /* <- isSSOUser */)
+				if terr != nil {
+					return terr
+				}
+
+				user, terr = a.signupNewUser(tx, user)
 				if terr != nil {
 					return terr
 				}
@@ -149,20 +180,11 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return internalServerError("Database error updating user").WithInternalError(err)
 				}
 			} else {
-				if params.Password == "" {
-					return unprocessableEntityError("Signup requires a valid password")
-				}
-				if len(params.Password) < config.PasswordMinLength {
-					return invalidPasswordLengthError(config.PasswordMinLength)
-				}
-				signupParams := &SignupParams{
-					Email:    params.Email,
-					Password: params.Password,
-					Data:     params.Data,
-					Provider: "email",
-					Aud:      aud,
-				}
-				user, terr = a.signupNewUser(ctx, tx, signupParams, false /* <- isSSOUser */)
+				// you should never use SignupParams with
+				// password here to generate a new user, use
+				// signupUser which is a model generated from
+				// SignupParams above
+				user, terr = a.signupNewUser(tx, signupUser)
 				if terr != nil {
 					return terr
 				}
@@ -198,7 +220,7 @@ func (a *API) GenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if params.Type == "email_change_current" {
 				user.EmailChangeTokenCurrent = hashedToken
 			} else if params.Type == "email_change_new" {
-				user.EmailChangeTokenNew = fmt.Sprintf("%x", sha256.Sum224([]byte(params.NewEmail+otp)))
+				user.EmailChangeTokenNew = crypto.GenerateTokenHash(params.NewEmail, otp)
 			}
 			terr = errors.Wrap(tx.UpdateOnly(user, "email_change_token_current", "email_change_token_new", "email_change", "email_change_sent_at", "email_change_confirm_status"), "Database error updating user for email change")
 		default:
@@ -243,7 +265,7 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 	if err != nil {
 		return err
 	}
-	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
 	if err := mailer.ConfirmationMail(u, otp, referrerURL, externalURL); err != nil {
@@ -261,7 +283,7 @@ func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, re
 	if err != nil {
 		return err
 	}
-	u.ConfirmationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	u.ConfirmationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
 	if err := mailer.InviteMail(u, otp, referrerURL, externalURL); err != nil {
 		u.ConfirmationToken = oldToken
@@ -283,7 +305,7 @@ func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, maile
 	if err != nil {
 		return err
 	}
-	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
 	if err := mailer.RecoveryMail(u, otp, referrerURL, externalURL); err != nil {
@@ -305,10 +327,7 @@ func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, ma
 	if err != nil {
 		return err
 	}
-	u.ReauthenticationToken = fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
-	if err != nil {
-		return err
-	}
+	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
 	if err := mailer.ReauthenticateMail(u, otp); err != nil {
 		u.ReauthenticationToken = oldToken
@@ -330,7 +349,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 	if err != nil {
 		return err
 	}
-	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otp)))
+	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 
 	now := time.Now()
@@ -353,7 +372,7 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfigu
 		return err
 	}
 	u.EmailChange = email
-	token := fmt.Sprintf("%x", sha256.Sum224([]byte(u.EmailChange+otpNew)))
+	token := crypto.GenerateTokenHash(u.EmailChange, otpNew)
 	u.EmailChangeTokenNew = addFlowPrefixToToken(token, flowType)
 
 	otpCurrent := ""
@@ -362,11 +381,8 @@ func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfigu
 		if err != nil {
 			return err
 		}
-		currentToken := fmt.Sprintf("%x", sha256.Sum224([]byte(u.GetEmail()+otpCurrent)))
+		currentToken := crypto.GenerateTokenHash(u.GetEmail(), otpCurrent)
 		u.EmailChangeTokenCurrent = addFlowPrefixToToken(currentToken, flowType)
-		if err != nil {
-			return err
-		}
 	}
 
 	u.EmailChangeConfirmStatus = zeroConfirmation

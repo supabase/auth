@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
 
@@ -51,9 +51,9 @@ type Claims struct {
 	Locale            string `json:"locale,omitempty" structs:"locale,omitempty"`
 	UpdatedAt         string `json:"updated_at,omitempty" structs:"updated_at,omitempty"`
 	Email             string `json:"email,omitempty" structs:"email,omitempty"`
-	EmailVerified     bool   `json:"email_verified,omitempty" structs:"email_verified,omitempty"`
+	EmailVerified     bool   `json:"email_verified,omitempty" structs:"email_verified"`
 	Phone             string `json:"phone,omitempty" structs:"phone,omitempty"`
-	PhoneVerified     bool   `json:"phone_verified,omitempty" structs:"phone_verified,omitempty"`
+	PhoneVerified     bool   `json:"phone_verified,omitempty" structs:"phone_verified"`
 
 	// Custom profile claims that are provider specific
 	CustomClaims map[string]interface{} `json:"custom_claims,omitempty" structs:"custom_claims,omitempty"`
@@ -114,7 +114,6 @@ func makeRequest(ctx context.Context, tok *oauth2.Token, g *oauth2.Config, url s
 	defer utilities.SafeClose(res.Body)
 
 	bodyBytes, _ := io.ReadAll(res.Body)
-	defer utilities.SafeClose(res.Body)
 	res.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {

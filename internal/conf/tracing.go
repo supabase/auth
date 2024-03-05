@@ -4,7 +4,6 @@ type TracingExporter = string
 
 const (
 	OpenTelemetryTracing TracingExporter = "opentelemetry"
-	OpenTracing          TracingExporter = "opentracing"
 )
 
 type TracingConfig struct {

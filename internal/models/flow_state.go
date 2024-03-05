@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/storage"
 
 	"github.com/gofrs/uuid"
 )

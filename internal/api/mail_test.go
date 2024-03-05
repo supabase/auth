@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,11 +9,13 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/gobwas/glob"
 	"github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/models"
 )
 
 type MailTestSuite struct {
@@ -49,17 +50,19 @@ func (ts *MailTestSuite) SetupTest() {
 
 func (ts *MailTestSuite) TestGenerateLink() {
 	// create admin jwt
-	claims := &GoTrueClaims{
+	claims := &AccessTokenClaims{
 		Role: "supabase_admin",
 	}
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))
 	require.NoError(ts.T(), err, "Error generating admin jwt")
 
+	ts.setURIAllowListMap("http://localhost:8000/**")
 	// create test cases
 	cases := []struct {
-		Desc         string
-		Body         GenerateLinkParams
-		ExpectedCode int
+		Desc             string
+		Body             GenerateLinkParams
+		ExpectedCode     int
+		ExpectedResponse map[string]interface{}
 	}{
 		{
 			Desc: "Generate signup link",
@@ -69,6 +72,22 @@ func (ts *MailTestSuite) TestGenerateLink() {
 				Type:     "signup",
 			},
 			ExpectedCode: http.StatusOK,
+			ExpectedResponse: map[string]interface{}{
+				"redirect_to": ts.Config.SiteURL,
+			},
+		},
+		{
+			Desc: "Generate signup link with custom redirect url",
+			Body: GenerateLinkParams{
+				Email:      "test@example.com",
+				Password:   "secret123",
+				Type:       "signup",
+				RedirectTo: "http://localhost:8000/welcome",
+			},
+			ExpectedCode: http.StatusOK,
+			ExpectedResponse: map[string]interface{}{
+				"redirect_to": "http://localhost:8000/welcome",
+			},
 		},
 		{
 			Desc: "Generate magic link",
@@ -77,6 +96,9 @@ func (ts *MailTestSuite) TestGenerateLink() {
 				Type:  "magiclink",
 			},
 			ExpectedCode: http.StatusOK,
+			ExpectedResponse: map[string]interface{}{
+				"redirect_to": ts.Config.SiteURL,
+			},
 		},
 		{
 			Desc: "Generate invite link",
@@ -85,6 +107,9 @@ func (ts *MailTestSuite) TestGenerateLink() {
 				Type:  "invite",
 			},
 			ExpectedCode: http.StatusOK,
+			ExpectedResponse: map[string]interface{}{
+				"redirect_to": ts.Config.SiteURL,
+			},
 		},
 		{
 			Desc: "Generate recovery link",
@@ -93,6 +118,9 @@ func (ts *MailTestSuite) TestGenerateLink() {
 				Type:  "recovery",
 			},
 			ExpectedCode: http.StatusOK,
+			ExpectedResponse: map[string]interface{}{
+				"redirect_to": ts.Config.SiteURL,
+			},
 		},
 		{
 			Desc: "Generate email change link",
@@ -102,6 +130,9 @@ func (ts *MailTestSuite) TestGenerateLink() {
 				Type:     "email_change_current",
 			},
 			ExpectedCode: http.StatusOK,
+			ExpectedResponse: map[string]interface{}{
+				"redirect_to": ts.Config.SiteURL,
+			},
 		},
 		{
 			Desc: "Generate email change link",
@@ -111,6 +142,9 @@ func (ts *MailTestSuite) TestGenerateLink() {
 				Type:     "email_change_new",
 			},
 			ExpectedCode: http.StatusOK,
+			ExpectedResponse: map[string]interface{}{
+				"redirect_to": ts.Config.SiteURL,
+			},
 		},
 	}
 
@@ -138,13 +172,23 @@ func (ts *MailTestSuite) TestGenerateLink() {
 			require.Contains(ts.T(), data, "redirect_to")
 			require.Equal(ts.T(), c.Body.Type, data["verification_type"])
 
+			// check if redirect_to is correct
+			require.Equal(ts.T(), c.ExpectedResponse["redirect_to"], data["redirect_to"])
+
 			// check if hashed_token matches hash function of email and the raw otp
-			require.Equal(ts.T(), data["hashed_token"], fmt.Sprintf("%x", sha256.Sum224([]byte(c.Body.Email+data["email_otp"].(string)))))
+			require.Equal(ts.T(), crypto.GenerateTokenHash(c.Body.Email, data["email_otp"].(string)), data["hashed_token"])
 
 			// check if the host used in the email link matches the initial request host
 			u, err := url.ParseRequestURI(data["action_link"].(string))
 			require.NoError(ts.T(), err)
 			require.Equal(ts.T(), req.Host, u.Host)
 		})
+	}
+}
+
+func (ts *MailTestSuite) setURIAllowListMap(uris ...string) {
+	for _, uri := range uris {
+		g := glob.MustCompile(uri, '.', '/')
+		ts.Config.URIAllowListMap[uri] = g
 	}
 }

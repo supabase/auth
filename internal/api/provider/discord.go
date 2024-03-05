@@ -2,12 +2,11 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/oauth2"
 )
 
@@ -26,12 +25,13 @@ type discordUser struct {
 	Email         string `json:"email"`
 	ID            string `json:"id"`
 	Name          string `json:"username"`
+	GlobalName    string `json:"global_name"`
 	Verified      bool   `json:"verified"`
 }
 
 // NewDiscordProvider creates a Discord account provider.
 func NewDiscordProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -48,7 +48,7 @@ func NewDiscordProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAu
 
 	return &discordProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  apiPath + "/oauth2/authorize",
@@ -71,8 +71,13 @@ func (g discordProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 		return nil, err
 	}
 
-	if u.Email == "" {
-		return nil, errors.New("unable to find email with Discord provider")
+	data := &UserProvidedData{}
+	if u.Email != "" {
+		data.Emails = []Email{{
+			Email:    u.Email,
+			Verified: u.Verified,
+			Primary:  true,
+		}}
 	}
 
 	var avatarURL string
@@ -96,24 +101,20 @@ func (g discordProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 		avatarURL = fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.%s", u.ID, u.Avatar, extension)
 	}
 
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        g.APIPath,
-			Subject:       u.ID,
-			Name:          fmt.Sprintf("%v#%v", u.Name, u.Discriminator),
-			Picture:       avatarURL,
-			Email:         u.Email,
-			EmailVerified: u.Verified,
-
-			// To be deprecated
-			AvatarURL:  avatarURL,
-			FullName:   u.Name,
-			ProviderId: u.ID,
+	data.Metadata = &Claims{
+		Issuer:  g.APIPath,
+		Subject: u.ID,
+		Name:    fmt.Sprintf("%v#%v", u.Name, u.Discriminator),
+		Picture: avatarURL,
+		CustomClaims: map[string]interface{}{
+			"global_name": u.GlobalName,
 		},
-		Emails: []Email{{
-			Email:    u.Email,
-			Verified: u.Verified,
-			Primary:  true,
-		}},
-	}, nil
+
+		// To be deprecated
+		AvatarURL:  avatarURL,
+		FullName:   u.Name,
+		ProviderId: u.ID,
+	}
+
+	return data, nil
 }

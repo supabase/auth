@@ -23,7 +23,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKeycloak() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Keycloak.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Keycloak.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Keycloak.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("profile email", q.Get("scope"))
 
@@ -78,7 +78,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKeycloakWithoutURLSetup() {
 
 func (ts *ExternalTestSuite) TestSignupExternalKeycloak_AuthorizationCode() {
 	ts.Config.DisableSignup = false
-	ts.createUser("keycloaktestid", "keycloak@example.com", "Keycloak Test", "http://example.com/avatar", "")
+	ts.createUser("keycloaktestid", "keycloak@example.com", "Keycloak Test", "", "")
 	tokenCount, userCount := 0, 0
 	code := "authcode"
 	server := KeycloakTestSignupSetup(ts, &tokenCount, &userCount, code, keycloakUser)
@@ -86,7 +86,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKeycloak_AuthorizationCode() {
 
 	u := performAuthorization(ts, "keycloak", code, "")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "keycloak@example.com", "Keycloak Test", "keycloaktestid", "http://example.com/avatar")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "keycloak@example.com", "Keycloak Test", "keycloaktestid", "")
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalKeycloakDisableSignupErrorWhenNoUser() {
@@ -117,7 +117,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKeycloakDisableSignupErrorWhenNoE
 func (ts *ExternalTestSuite) TestSignupExternalKeycloakDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("keycloaktestid", "keycloak@example.com", "Keycloak Test", "http://example.com/avatar", "")
+	ts.createUser("keycloaktestid", "keycloak@example.com", "Keycloak Test", "", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -126,12 +126,12 @@ func (ts *ExternalTestSuite) TestSignupExternalKeycloakDisableSignupSuccessWithP
 
 	u := performAuthorization(ts, "keycloak", code, "")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "keycloak@example.com", "Keycloak Test", "keycloaktestid", "http://example.com/avatar")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "keycloak@example.com", "Keycloak Test", "keycloaktestid", "")
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalKeycloakSuccessWhenMatchingToken() {
 	// name and avatar should be populated from Keycloak API
-	ts.createUser("keycloaktestid", "keycloak@example.com", "", "http://example.com/avatar", "invite_token")
+	ts.createUser("keycloaktestid", "keycloak@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -140,7 +140,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalKeycloakSuccessWhenMatchingT
 
 	u := performAuthorization(ts, "keycloak", code, "invite_token")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "keycloak@example.com", "Keycloak Test", "keycloaktestid", "http://example.com/avatar")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "keycloak@example.com", "Keycloak Test", "keycloaktestid", "")
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalKeycloakErrorWhenNoMatchingToken() {

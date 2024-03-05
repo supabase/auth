@@ -25,7 +25,7 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkOSWithConnection() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.WorkOS.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.WorkOS.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.WorkOS.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("", q.Get("scope"))
 	ts.Equal(connection, q.Get("connection"))
@@ -51,7 +51,7 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkOSWithOrganization() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.WorkOS.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.WorkOS.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.WorkOS.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("", q.Get("scope"))
 	ts.Equal(organization, q.Get("organization"))
@@ -77,7 +77,7 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkOSWithProvider() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.WorkOS.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.WorkOS.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.WorkOS.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("", q.Get("scope"))
 	ts.Equal(provider, q.Get("provider"))
@@ -160,7 +160,7 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkosDisableSignupErrorWhenEmpty
 func (ts *ExternalTestSuite) TestSignupExternalWorkosDisableSignupSuccessWithPrimaryEmail() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("test_prof_workos", "workos@example.com", "John Doe", "http://example.com/avatar", "")
+	ts.createUser("test_prof_workos", "workos@example.com", "John Doe", "", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -169,11 +169,11 @@ func (ts *ExternalTestSuite) TestSignupExternalWorkosDisableSignupSuccessWithPri
 
 	u := performAuthorization(ts, "workos", code, "")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "workos@example.com", "John Doe", "test_prof_workos", "http://example.com/avatar")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "workos@example.com", "John Doe", "test_prof_workos", "")
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalWorkosSuccessWhenMatchingToken() {
-	ts.createUser("test_prof_workos", "workos@example.com", "", "http://example.com/avatar", "invite_token")
+	ts.createUser("test_prof_workos", "workos@example.com", "", "", "invite_token")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -182,7 +182,7 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalWorkosSuccessWhenMatchingTok
 
 	u := performAuthorization(ts, "workos", code, "invite_token")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "workos@example.com", "John Doe", "test_prof_workos", "http://example.com/avatar")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "workos@example.com", "John Doe", "test_prof_workos", "")
 }
 
 func (ts *ExternalTestSuite) TestInviteTokenExternalWorkosErrorWhenNoMatchingToken() {

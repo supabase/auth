@@ -9,6 +9,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case ConfirmationTokenNotFoundError, *ConfirmationTokenNotFoundError:
 		return true
+	case ConfirmationOrRecoveryTokenNotFoundError, *ConfirmationOrRecoveryTokenNotFoundError:
+		return true
 	case RefreshTokenNotFoundError, *RefreshTokenNotFoundError:
 		return true
 	case IdentityNotFoundError, *IdentityNotFoundError:
@@ -45,6 +47,13 @@ type IdentityNotFoundError struct{}
 
 func (e IdentityNotFoundError) Error() string {
 	return "Identity not found"
+}
+
+// ConfirmationOrRecoveryTokenNotFoundError represents when a confirmation or recovery token is not found.
+type ConfirmationOrRecoveryTokenNotFoundError struct{}
+
+func (e ConfirmationOrRecoveryTokenNotFoundError) Error() string {
+	return "Confirmation or Recovery Token not found"
 }
 
 // ConfirmationTokenNotFoundError represents when a confirmation token is not found.
@@ -97,4 +106,18 @@ type FlowStateNotFoundError struct{}
 
 func (e FlowStateNotFoundError) Error() string {
 	return "Flow State not found"
+}
+
+func IsUniqueConstraintViolatedError(err error) bool {
+	switch err.(type) {
+	case UserEmailUniqueConflictError, *UserEmailUniqueConflictError:
+		return true
+	}
+	return false
+}
+
+type UserEmailUniqueConflictError struct{}
+
+func (e UserEmailUniqueConflictError) Error() string {
+	return "User email unique constraint violated"
 }

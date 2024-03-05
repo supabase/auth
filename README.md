@@ -1,8 +1,8 @@
-# GoTrue - Authentication and User Management by Supabase
+# Auth - Authentication and User Management by Supabase
 
-[![Coverage Status](https://coveralls.io/repos/github/supabase/gotrue/badge.svg?branch=master)](https://coveralls.io/github/supabase/gotrue?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/supabase/auth/badge.svg?branch=master)](https://coveralls.io/github/supabase/gotrue?branch=master)
 
-GoTrue is a user management and authentication server written in Go that powers
+Auth is a user management and authentication server written in Go that powers
 [Supabase](https://supabase.com)'s features such as:
 
 - Issuing JWTs
@@ -12,23 +12,30 @@ GoTrue is a user management and authentication server written in Go that powers
 - Sign in with external providers (Google, Apple, Facebook, Discord, ...)
 
 It is originally based on the excellent
-[GoTrue codebase by
-Netlify](https://github.com/netlify/gotrue), however both have diverged significantly in
-features and capabilities.
+[Auth codebase by Netlify](https://github.com/netlify/auth), however both have diverged significantly in features and capabilities.
+
+If you wish to contribute to the project, please refer to the [contributing guide](/CONTRIBUTING.md).
+
+## Table Of Contents
+
+- [Quick Start](#quick-start)
+- [Running in Production](#running-in-production)
+- [Configuration](#configuration)
+- [Endpoints](#endpoints)
 
 ## Quick Start
 
 Create a `.env` file to store your own custom env vars. See [`example.env`](example.env)
 
 1. Start the local postgres database in a postgres container: `docker-compose -f docker-compose-dev.yml up postgres`
-2. Build the gotrue binary: `make build` . You should see an output like this:
+2. Build the auth binary: `make build` . You should see an output like this:
 
 ```
-go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`"
-GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/gotrue/cmd.Version=`git rev-parse HEAD`" -o gotrue-arm64
+go build -ldflags "-X github.com/supabase/auth/cmd.Version=`git rev-parse HEAD`"
+GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/auth/cmd.Version=`git rev-parse HEAD`" -o gotrue-arm64
 ```
 
-3. Execute the gotrue binary: `./gotrue`
+3. Execute the auth binary: `./gotrue`
 
 ### If you have docker installed
 
@@ -36,8 +43,8 @@ Create a `.env.docker` file to store your own custom env vars. See [`example.doc
 
 1. `make build`
 2. `make dev`
-3. `docker ps` should show 2 docker containers (`gotrue_postgresql` and `gotrue_gotrue`)
-4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that gotrue is running.
+3. `docker ps` should show 2 docker containers (`auth_postgresql` and `gotrue_gotrue`)
+4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that auth is running.
 
 ## Running in production
 
@@ -47,17 +54,17 @@ security updates.
 
 Otherwise, please make sure you setup a process to promptly update to the
 latest version. You can do that by following this repository, specifically the
-[Releases](https://github.com/supabase/gotrue/releases) and [Security
-Advisories](https://github.com/supabase/gotrue/security/advisories) sections.
+[Releases](https://github.com/supabase/auth/releases) and [Security
+Advisories](https://github.com/supabase/auth/security/advisories) sections.
 
 ### Backward compatibility
 
-GoTrue uses the [Semantic Versioning](https://semver.org) scheme. Here are some
+Auth uses the [Semantic Versioning](https://semver.org) scheme. Here are some
 further clarifications on backward compatibility guarantees:
 
 **Go API compatibility**
 
-GoTrue is not meant to be used as a Go library. There are no guarantees on
+Auth is not meant to be used as a Go library. There are no guarantees on
 backward API compatibility when used this way regardless which version number
 changes.
 
@@ -136,13 +143,9 @@ comprehensive list of those features:
    configuration parameter.
 2. System user (zero UUID user).
 3. Super admin via the `is_super_admin` column.
-4. SAML sign-in provider via the `GOTRUE_SAML_ENABLED` configuration
-   parameter. (A different implementation for SAML may appear in the future
-   which will be supported.)
-5. Support for MySQL based databases. (Only Postgres is supported.)
-6. Group information in JWTs via `GOTRUE_JWT_ADMIN_GROUP_NAME` and other
+4. Group information in JWTs via `GOTRUE_JWT_ADMIN_GROUP_NAME` and other
    configuration fields.
-7. Symmetrics JWTs. In the future it is very likely that GoTrue will begin
+5. Symmetrics JWTs. In the future it is very likely that Auth will begin
    issuing asymmetric JWTs (subject to configuration), so do not rely on the
    assumption that only HS256 signed JWTs will be issued long term.
 
@@ -151,18 +154,18 @@ Note that this is not an exhaustive list and it may change.
 ### Best practices when self-hosting
 
 These are some best practices to follow when self-hosting to ensure backward
-compatibility with GoTrue:
+compatibility with Auth:
 
-1. Do not modify the schema managed by GoTrue. You can see all of the
+1. Do not modify the schema managed by Auth. You can see all of the
    migrations in the `migrations` directory.
 2. Do not rely on schema and structure of data in the database. Always use
-   GoTrue APIs and JWTs to infer information about users.
-3. Always run GoTrue behind a TLS-capable proxy such as a load balancer, CDN,
+   Auth APIs and JWTs to infer information about users.
+3. Always run Auth behind a TLS-capable proxy such as a load balancer, CDN,
    nginx or other similar software.
 
 ## Configuration
 
-You may configure GoTrue using either a configuration file named `.env`,
+You may configure Auth using either a configuration file named `.env`,
 environment variables, or a combination of both. Environment variables are prefixed with `GOTRUE_`, and will always have precedence over values provided via file.
 
 ### Top-Level
@@ -210,13 +213,15 @@ Rate limit the number of emails sent per hr on the following endpoints: `/signup
 
 Minimum password length, defaults to 6.
 
+`GOTRUE_PASSWORD_REQUIRED_CHARACTERS` - a string of character sets separated by `:`. A password must contain at least one character of each set to be accepted. To use the `:` character escape it with `\`.
+
 `GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` - `bool`
 
-If refresh token rotation is enabled, gotrue will automatically detect malicious attempts to reuse a revoked refresh token. When a malicious attempt is detected, gotrue immediately revokes all tokens that descended from the offending token.
+If refresh token rotation is enabled, auth will automatically detect malicious attempts to reuse a revoked refresh token. When a malicious attempt is detected, gotrue immediately revokes all tokens that descended from the offending token.
 
 `GOTRUE_SECURITY_REFRESH_TOKEN_REUSE_INTERVAL` - `string`
 
-This setting is only applicable if `GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` is enabled. The reuse interval for a refresh token allows for exchanging the refresh token multiple times during the interval to support concurrency or offline issues. During the reuse interval, gotrue will not consider using a revoked token as a malicious attempt and will simply return the child refresh token.
+This setting is only applicable if `GOTRUE_SECURITY_REFRESH_TOKEN_ROTATION_ENABLED` is enabled. The reuse interval for a refresh token allows for exchanging the refresh token multiple times during the interval to support concurrency or offline issues. During the reuse interval, auth will not consider using a revoked token as a malicious attempt and will simply return the child refresh token.
 
 Only the previous revoked token can be reused. Using an old refresh token way before the current valid refresh token will trigger the reuse detection.
 
@@ -225,6 +230,7 @@ Only the previous revoked token can be reused. Using an old refresh token way be
 ```properties
 GOTRUE_API_HOST=localhost
 PORT=9999
+API_EXTERNAL_URL=http://localhost:9999
 ```
 
 `API_HOST` - `string`
@@ -239,6 +245,10 @@ Port number to listen on. Defaults to `8081`.
 
 Controls what endpoint Netlify can access this API on.
 
+`API_EXTERNAL_URL` - `string` **required**
+
+The URL on which Gotrue might be accessed at.
+
 `REQUEST_ID_HEADER` - `string`
 
 If you wish to inherit a request ID from the incoming request, specify the name in this value.
@@ -247,7 +257,7 @@ If you wish to inherit a request ID from the incoming request, specify the name 
 
 ```properties
 GOTRUE_DB_DRIVER=postgres
-DATABASE_URL=root@localhost/gotrue
+DATABASE_URL=root@localhost/auth
 ```
 
 `DB_DRIVER` - `string` **required**
@@ -268,16 +278,16 @@ Adds a prefix to all table names.
 
 **Migrations Note**
 
-Migrations are applied automatically when you run `./gotrue`. However, you also have the option to rerun the migrations via the following methods:
+Migrations are applied automatically when you run `./auth`. However, you also have the option to rerun the migrations via the following methods:
 
-- If built locally: `./gotrue migrate`
-- Using Docker: `docker run --rm gotrue gotrue migrate`
+- If built locally: `./auth migrate`
+- Using Docker: `docker run --rm auth gotrue migrate`
 
 ### Logging
 
 ```properties
 LOG_LEVEL=debug # available without GOTRUE prefix (exception)
-GOTRUE_LOG_FILE=/var/log/go/gotrue.log
+GOTRUE_LOG_FILE=/var/log/go/auth.log
 ```
 
 `LOG_LEVEL` - `string`
@@ -290,7 +300,7 @@ If you wish logs to be written to a file, set `log_file` to a valid file path.
 
 ### Observability
 
-GoTrue has basic observability built in. It is able to export
+Auth has basic observability built in. It is able to export
 [OpenTelemetry](https://opentelemetry.io) metrics and traces to a collector.
 
 #### Tracing
@@ -299,8 +309,7 @@ To enable tracing configure these variables:
 
 `GOTRUE_TRACING_ENABLED` - `boolean`
 
-`GOTRUE_TRACING_EXPORTER` - `string` only `opentracing` (deprecated) and
-`opentelemetry` supported
+`GOTRUE_TRACING_EXPORTER` - `string` only `opentelemetry` supported
 
 Make sure you also configure the [OpenTelemetry
 Exporter](https://opentelemetry.io/docs/reference/specification/protocol/exporter/)
@@ -311,10 +320,10 @@ For example, if you use
 you should set these standard OpenTelemetry OTLP variables:
 
 ```
-OTEL_SERVICE_NAME=gotrue
+OTEL_SERVICE_NAME=auth
 OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io:443
-OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=<API-KEY>,x-honeycomb-dataset=gotrue"
+OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=<API-KEY>,x-honeycomb-dataset=auth"
 ```
 
 #### Metrics
@@ -347,10 +356,10 @@ For example, if you use
 you should set these standard OpenTelemetry OTLP variables:
 
 ```
-OTEL_SERVICE_NAME=gotrue
+OTEL_SERVICE_NAME=auth
 OTEL_EXPORTER_OTLP_PROTOCOL=grpc
 OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io:443
-OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=<API-KEY>,x-honeycomb-dataset=gotrue"
+OTEL_EXPORTER_OTLP_HEADERS="x-honeycomb-team=<API-KEY>,x-honeycomb-dataset=auth"
 ```
 
 Note that Honeycomb.io requires a paid plan to ingest metrics.
@@ -364,11 +373,11 @@ When using the OpenTelemetry tracing or metrics exporter you can define custom
 resource attributes using the [standard `OTEL_RESOURCE_ATTRIBUTES` environment
 variable](https://opentelemetry.io/docs/reference/specification/resource/sdk/#specifying-resource-information-via-an-environment-variable).
 
-A default attribute `gotrue.version` is provided containing the build version.
+A default attribute `auth.version` is provided containing the build version.
 
 #### Tracing HTTP routes
 
-All HTTP calls to the GoTrue API are traced. Routes use the parametrized
+All HTTP calls to the Auth API are traced. Routes use the parametrized
 version of the route, and the values for the route parameters can be found as
 the `http.route.params.<route-key>` span attribute.
 
@@ -421,7 +430,7 @@ The default group to assign all new users to.
 
 ### External Authentication Providers
 
-We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin`, `notion`, `spotify`, `slack`, `twitch`, `twitter` and `workos` for external authentication.
+We support `apple`, `azure`, `bitbucket`, `discord`, `facebook`, `figma`, `github`, `gitlab`, `google`, `keycloak`, `linkedin`, `notion`, `spotify`, `slack`, `twitch`, `twitter` and `workos` for external authentication.
 
 Use the names as the keys underneath `external` to configure each separately.
 
@@ -459,7 +468,7 @@ The base URL used for constructing the URLs to request authorization and access 
 To try out external authentication with Apple locally, you will need to do the following:
 
 1. Remap localhost to \<my_custom_dns \> in your `/etc/hosts` config.
-2. Configure gotrue to serve HTTPS traffic over localhost by replacing `ListenAndServe` in [api.go](api/api.go) with:
+2. Configure auth to serve HTTPS traffic over localhost by replacing `ListenAndServe` in [api.go](api/api.go) with:
 
    ```
       func (a *API) ListenAndServe(hostAndPort string) {
@@ -541,19 +550,19 @@ Controls the duration an email link or otp is valid for.
 
 `MAILER_URLPATHS_INVITE` - `string`
 
-URL path to use in the user invite email. Defaults to `/`.
+URL path to use in the user invite email. Defaults to `/verify`.
 
 `MAILER_URLPATHS_CONFIRMATION` - `string`
 
-URL path to use in the signup confirmation email. Defaults to `/`.
+URL path to use in the signup confirmation email. Defaults to `/verify`.
 
 `MAILER_URLPATHS_RECOVERY` - `string`
 
-URL path to use in the password reset email. Defaults to `/`.
+URL path to use in the password reset email. Defaults to `/verify`.
 
 `MAILER_URLPATHS_EMAIL_CHANGE` - `string`
 
-URL path to use in the email change confirmation email. Defaults to `/`.
+URL path to use in the email change confirmation email. Defaults to `/verify`.
 
 `MAILER_SUBJECTS_INVITE` - `string`
 
@@ -577,7 +586,7 @@ Email subject to use for email change confirmation. Defaults to `Confirm Email C
 
 `MAILER_TEMPLATES_INVITE` - `string`
 
-URL path to an email template to use when inviting a user.
+URL path to an email template to use when inviting a user. (e.g. `https://www.example.com/path-to-email-template.html`)
 `SiteURL`, `Email`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
@@ -594,7 +603,7 @@ Default Content (if template is unavailable):
 
 `MAILER_TEMPLATES_CONFIRMATION` - `string`
 
-URL path to an email template to use when confirming a signup.
+URL path to an email template to use when confirming a signup. (e.g. `https://www.example.com/path-to-email-template.html`)
 `SiteURL`, `Email`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
@@ -608,7 +617,7 @@ Default Content (if template is unavailable):
 
 `MAILER_TEMPLATES_RECOVERY` - `string`
 
-URL path to an email template to use when resetting a password.
+URL path to an email template to use when resetting a password. (e.g. `https://www.example.com/path-to-email-template.html`)
 `SiteURL`, `Email`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
@@ -622,7 +631,7 @@ Default Content (if template is unavailable):
 
 `MAILER_TEMPLATES_MAGIC_LINK` - `string`
 
-URL path to an email template to use when sending magic link.
+URL path to an email template to use when sending magic link. (e.g. `https://www.example.com/path-to-email-template.html`)
 `SiteURL`, `Email`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
@@ -636,7 +645,7 @@ Default Content (if template is unavailable):
 
 `MAILER_TEMPLATES_EMAIL_CHANGE` - `string`
 
-URL path to an email template to use when confirming the change of an email address.
+URL path to an email template to use when confirming the change of an email address. (e.g. `https://www.example.com/path-to-email-template.html`)
 `SiteURL`, `Email`, `NewEmail`, and `ConfirmationURL` variables are available.
 
 Default Content (if template is unavailable):
@@ -651,26 +660,6 @@ Default Content (if template is unavailable):
 <p><a href="{{ .ConfirmationURL }}">Change Email</a></p>
 ```
 
-`WEBHOOK_URL` - `string`
-
-Url of the webhook receiver endpoint. This will be called when events like `validate`, `signup` or `login` occur.
-
-`WEBHOOK_SECRET` - `string`
-
-Shared secret to authorize webhook requests. This secret signs the [JSON Web Signature](https://tools.ietf.org/html/draft-ietf-jose-json-web-signature-41) of the request. You _should_ use this to verify the integrity of the request. Otherwise others can feed your webhook receiver with fake data.
-
-`WEBHOOK_RETRIES` - `number`
-
-How often GoTrue should try a failed hook.
-
-`WEBHOOK_TIMEOUT_SEC` - `number`
-
-Time between retries (in seconds).
-
-`WEBHOOK_EVENTS` - `list`
-
-Which events should trigger a webhook. You can provide a comma separated list.
-For example to listen to all events, provide the values `validate,signup,login`.
 
 ### Phone Auth
 
@@ -730,11 +719,11 @@ Enforce reauthentication on password update.
 
 ## Endpoints
 
-GoTrue exposes the following endpoints:
+Auth exposes the following endpoints:
 
 ### **GET /settings**
 
-Returns the publicly available settings for this gotrue instance.
+Returns the publicly available settings for this auth instance.
 
 ```json
 {
@@ -744,6 +733,7 @@ Returns the publicly available settings for this gotrue instance.
     "bitbucket": true,
     "discord": true,
     "facebook": true,
+    "figma": true,
     "github": true,
     "gitlab": true,
     "google": true,
@@ -1189,14 +1179,14 @@ Get access_token from external oauth provider
 query params:
 
 ```
-provider=apple | azure | bitbucket | discord | facebook | github | gitlab | google | keycloak | linkedin | notion | slack | spotify | twitch | twitter | workos
+provider=apple | azure | bitbucket | discord | facebook | figma | github | gitlab | google | keycloak | linkedin | notion | slack | spotify | twitch | twitter | workos
 
 scopes=<optional additional scopes depending on the provider (email and name are requested by default)>
 ```
 
 Redirects to provider and then to `/callback`
 
-For apple specific setup see: <https://github.com/supabase/gotrue#apple-oauth>
+For apple specific setup see: <https://github.com/supabase/auth#apple-oauth>
 
 ### **GET /callback**
 

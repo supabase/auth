@@ -109,6 +109,9 @@ paths:
                   format: phone
                 id_token:
                   type: string
+                access_token:
+                  type: string
+                  description: Provide only when `grant_type` is `id_token` and the provided ID token requires the presence of an access token to be accepted (usually by having an `at_hash` claim).
                 nonce:
                   type: string
                 provider:
@@ -116,10 +119,14 @@ paths:
                   enum:
                     - google
                     - apple
+                    - azure
+                    - facebook
+                    - keycloak
                 client_id:
                   type: string
                 issuer:
                   type: string
+                  description: If `provider` is `azure` then you can specify any Azure OIDC issuer string here, which will be used for verification.
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
                 auth_code:
@@ -155,6 +162,17 @@ paths:
       security:
         - APIKeyAuth: []
           UserAuth: []
+      parameters:
+        - name: scope
+          in: query
+          description: >
+            (Optional.) Determines how the user should be logged out. When `global` is used, the user is logged out from all active sessions. When `local` is used, the user is logged out from the current session. When `others` is used, the user is logged out from all other sessions except the current one. Clients should remove stored access and refresh tokens except when `others` is used.
+          schema:
+            type: string
+            enum:
+              - global
+              - local
+              - others
       responses:
         204:
           description: No content returned on successful logout.
@@ -219,6 +237,10 @@ paths:
                     - phone_change
                 token:
                   type: string
+                token_hash:
+                  type: string
+                  description: >
+                    The hashed value of token. Applicable only if used with `type` and nothing else.
                 email:
                   type: string
                   format: email
@@ -454,6 +476,10 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  message_id:
+                    type: string
+                    description: Unique ID of the message as reported by the SMS sending provider. Useful for tracking deliverability problems.
         400:
           $ref: "#/components/responses/BadRequestResponse"
         422:
@@ -551,6 +577,10 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  message_id:
+                    type: string
+                    description: Unique ID of the message as reported by the SMS sending provider. Useful for tracking deliverability problems.
         400:
           $ref: "#/components/responses/BadRequestResponse"
         422:
@@ -857,6 +887,13 @@ paths:
                 skip_http_redirect:
                   type: boolean
                   description: Set to `true` if the response to this request should not be a HTTP 303 redirect -- useful for browser-based applications.
+                code_challenge:
+                  type: string
+                code_challenge_method:
+                  type: string
+                  enum:
+                    - plain
+                    - s256
                 gotrue_meta_security:
                   $ref: "#/components/schemas/GoTrueMetaSecurity"
       responses:
@@ -1728,6 +1765,19 @@ components:
           type: string
           description: >
             A basic message describing the problem with the request. Usually missing if `error` is present.
+        weak_password:
+          type: object
+          description: >
+            Only returned on the `/signup` endpoint if the password used is too weak. Inspect the `reasons` and `msg` property to identify the causes.
+          properties:
+            reasons:
+              type: array
+              items:
+                type: string
+                enum:
+                  - length
+                  - characters
+                  - pwned
 
     UserSchema:
       type: object
@@ -1869,6 +1919,23 @@ components:
         expires_in:
           type: integer
           description: Number of seconds after which the `access_token` should be renewed by using the refresh token with the `refresh_token` grant type.
+        expires_at:
+          type: integer
+          description: UNIX timestamp after which the `access_token` should be renewed by using the refresh token with the `refresh_token` grant type.
+        weak_password:
+          type: object
+          description: Only returned on the `/token?grant_type=password` endpoint. When present, it indicates that the password used is weak. Inspect the `reasons` and/or `message` properties to identify why.
+          properties:
+            reasons:
+              type: array
+              items:
+                type: string
+                enum:
+                  - length
+                  - characters
+                  - pwned
+            message:
+              type: string
         user:
           $ref: "#/components/schemas/UserSchema"
 

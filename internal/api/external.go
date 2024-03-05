@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,31 +14,36 @@ import (
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/internal/api/provider"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/storage"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
 
 // ExternalProviderClaims are the JWT claims sent as the state in the external oauth provider signup flow
 type ExternalProviderClaims struct {
-	NetlifyMicroserviceClaims
-	Provider    string `json:"provider"`
-	InviteToken string `json:"invite_token,omitempty"`
-	Referrer    string `json:"referrer,omitempty"`
-	FlowStateID string `json:"flow_state_id"`
+	AuthMicroserviceClaims
+	Provider        string `json:"provider"`
+	InviteToken     string `json:"invite_token,omitempty"`
+	Referrer        string `json:"referrer,omitempty"`
+	FlowStateID     string `json:"flow_state_id"`
+	LinkingTargetID string `json:"linking_target_id,omitempty"`
 }
 
-// ExternalSignupParams are the parameters the Signup endpoint accepts
-type ExternalSignupParams struct {
-	Provider string `json:"provider"`
-	Code     string `json:"code"`
-}
-
-// ExternalProviderRedirect redirects the request to the corresponding oauth provider
+// ExternalProviderRedirect redirects the request to the oauth provider
 func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) error {
+	rurl, err := a.GetExternalProviderRedirectURL(w, r, nil)
+	if err != nil {
+		return err
+	}
+	http.Redirect(w, r, rurl, http.StatusFound)
+	return nil
+}
+
+// GetExternalProviderRedirectURL returns the URL to start the oauth flow with the corresponding oauth provider
+func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Request, linkingTargetUser *models.User) (string, error) {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
@@ -50,7 +56,7 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 
 	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
-		return badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
+		return "", badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
 	}
 
 	inviteToken := query.Get("invite_token")
@@ -58,17 +64,17 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		_, userErr := models.FindUserByConfirmationToken(db, inviteToken)
 		if userErr != nil {
 			if models.IsNotFoundError(userErr) {
-				return notFoundError(userErr.Error())
+				return "", notFoundError(userErr.Error())
 			}
-			return internalServerError("Database error finding user").WithInternalError(userErr)
+			return "", internalServerError("Database error finding user").WithInternalError(userErr)
 		}
 	}
 
-	redirectURL := a.getRedirectURLOrReferrer(r, query.Get("redirect_to"))
+	redirectURL := utilities.GetReferrer(r, config)
 	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
-		return err
+		return "", err
 	}
 	flowType := getFlowFromChallenge(codeChallenge)
 
@@ -76,20 +82,20 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 	if flowType == models.PKCEFlow {
 		codeChallengeMethodType, err := models.ParseCodeChallengeMethod(codeChallengeMethod)
 		if err != nil {
-			return err
+			return "", err
 		}
 		flowState, err := models.NewFlowState(providerType, codeChallenge, codeChallengeMethodType, models.OAuth)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if err := a.db.Create(flowState); err != nil {
-			return err
+			return "", err
 		}
 		flowStateID = flowState.ID.String()
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, ExternalProviderClaims{
-		NetlifyMicroserviceClaims: NetlifyMicroserviceClaims{
+	claims := ExternalProviderClaims{
+		AuthMicroserviceClaims: AuthMicroserviceClaims{
 			StandardClaims: jwt.StandardClaims{
 				ExpiresAt: time.Now().Add(5 * time.Minute).Unix(),
 			},
@@ -100,10 +106,17 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		InviteToken: inviteToken,
 		Referrer:    redirectURL,
 		FlowStateID: flowStateID,
-	})
+	}
+
+	if linkingTargetUser != nil {
+		// this means that the user is performing manual linking
+		claims.LinkingTargetID = linkingTargetUser.ID.String()
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
-		return internalServerError("Error creating state").WithInternalError(err)
+		return "", internalServerError("Error creating state").WithInternalError(err)
 	}
 
 	authUrlParams := make([]oauth2.AuthCodeOption, 0)
@@ -120,60 +133,71 @@ func (a *API) ExternalProviderRedirect(w http.ResponseWriter, r *http.Request) e
 		}
 	}
 
-	var authURL string
-	switch externalProvider := p.(type) {
-	case *provider.TwitterProvider:
-		authURL = externalProvider.AuthCodeURL(tokenString, authUrlParams...)
-		err := storage.StoreInSession(providerType, externalProvider.Marshal(), r, w)
-		if err != nil {
-			return internalServerError("Error storing request token in session").WithInternalError(err)
-		}
-	default:
-		authURL = p.AuthCodeURL(tokenString, authUrlParams...)
-	}
-
-	http.Redirect(w, r, authURL, http.StatusFound)
-	return nil
+	authURL := p.AuthCodeURL(tokenString, authUrlParams...)
+	return authURL, nil
 }
 
 // ExternalProviderCallback handles the callback endpoint in the external oauth provider flow
 func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
-	a.redirectErrors(a.internalExternalProviderCallback, w, r)
+	rurl := a.getExternalRedirectURL(r)
+	u, err := url.Parse(rurl)
+	if err != nil {
+		return err
+	}
+	a.redirectErrors(a.internalExternalProviderCallback, w, r, u)
 	return nil
 }
 
-// errReturnNil is a hack that signals internalExternalProviderCallback to return nil
-var errReturnNil = errors.New("createAccountFromExternalIdentity: return nil in internalExternalProviderCallback")
+func (a *API) handleOAuthCallback(r *http.Request) (*OAuthProviderData, error) {
+	ctx := r.Context()
+	providerType := getExternalProviderType(ctx)
+
+	var oAuthResponseData *OAuthProviderData
+	var err error
+	switch providerType {
+	case "twitter":
+		// future OAuth1.0 providers will use this method
+		oAuthResponseData, err = a.oAuth1Callback(ctx, providerType)
+	default:
+		oAuthResponseData, err = a.oAuthCallback(ctx, r, providerType)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return oAuthResponseData, nil
+}
 
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
 
-	providerType := getExternalProviderType(ctx)
-	var userData *provider.UserProvidedData
-	var providerAccessToken string
-	var providerRefreshToken string
 	var grantParams models.GrantParams
-	var err error
+	grantParams.FillGrantParams(r)
 
-	if providerType == "twitter" {
-		// future OAuth1.0 providers will use this method
-		oAuthResponseData, err := a.oAuth1Callback(ctx, r, providerType)
-		if err != nil {
-			return err
-		}
-		userData = oAuthResponseData.userData
-		providerAccessToken = oAuthResponseData.token
-	} else {
-		oAuthResponseData, err := a.oAuthCallback(ctx, r, providerType)
-		if err != nil {
-			return err
-		}
-		userData = oAuthResponseData.userData
-		providerAccessToken = oAuthResponseData.token
-		providerRefreshToken = oAuthResponseData.refreshToken
+	providerType := getExternalProviderType(ctx)
+	data, err := a.handleOAuthCallback(r)
+	if err != nil {
+		return err
 	}
+
+	userData := data.userData
+	if len(userData.Emails) <= 0 {
+		return internalServerError("Error getting user email from external provider")
+	}
+	userData.Metadata.EmailVerified = false
+	for _, email := range userData.Emails {
+		if email.Primary {
+			userData.Metadata.Email = email.Email
+			userData.Metadata.EmailVerified = email.Verified
+			break
+		} else {
+			userData.Metadata.Email = email.Email
+			userData.Metadata.EmailVerified = email.Verified
+		}
+	}
+	providerAccessToken := data.token
+	providerRefreshToken := data.refreshToken
 
 	var flowState *models.FlowState
 	// if there's a non-empty FlowStateID we perform PKCE Flow
@@ -188,17 +212,16 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		inviteToken := getInviteToken(ctx)
-		if inviteToken != "" {
-			if user, terr = a.processInvite(r, ctx, tx, userData, inviteToken, providerType); terr != nil {
+		if targetUser := getTargetUser(ctx); targetUser != nil {
+			if user, terr = a.linkIdentityToUser(r, ctx, tx, userData, providerType); terr != nil {
+				return terr
+			}
+		} else if inviteToken := getInviteToken(ctx); inviteToken != "" {
+			if user, terr = a.processInvite(r, tx, userData, inviteToken, providerType); terr != nil {
 				return terr
 			}
 		} else {
 			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
-				if errors.Is(terr, errReturnNil) {
-					return nil
-				}
-
 				return terr
 			}
 		}
@@ -217,6 +240,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		}
 		return nil
 	})
+
 	if err != nil {
 		return err
 	}
@@ -243,8 +267,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		if err := a.setCookieTokens(config, token, false, w); err != nil {
 			return internalServerError("Failed to set JWT cookie. %s", err)
 		}
-	} else {
-		rurl = a.prepErrorRedirectURL(unauthorizedError("Unverified email with %v", providerType), w, r, rurl)
 	}
 
 	http.Redirect(w, r, rurl, http.StatusFound)
@@ -256,26 +278,14 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	aud := a.requestAud(ctx, r)
 	config := a.config
 
-	var terr error
-
 	var user *models.User
 	var identity *models.Identity
-
-	var emailData provider.Email
 	var identityData map[string]interface{}
 	if userData.Metadata != nil {
 		identityData = structs.Map(userData.Metadata)
 	}
 
-	var emails []string
-
-	for _, email := range userData.Emails {
-		if email.Verified || config.Mailer.Autoconfirm {
-			emails = append(emails, email.Email)
-		}
-	}
-
-	decision, terr := models.DetermineAccountLinking(tx, providerType, userData.Metadata.Subject, emails)
+	decision, terr := models.DetermineAccountLinking(tx, config, userData.Emails, aud, providerType, userData.Metadata.Subject)
 	if terr != nil {
 		return nil, terr
 	}
@@ -284,15 +294,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 	case models.LinkAccount:
 		user = decision.User
 
-		emailData = userData.Emails[0]
-		for _, e := range userData.Emails {
-			if e.Primary || e.Verified {
-				emailData = e
-				break
-			}
-		}
-
-		if _, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+		if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
 			return nil, terr
 		}
 
@@ -305,30 +307,31 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			return nil, forbiddenError("Signups not allowed for this instance")
 		}
 
-		// prefer primary email for new signups
-		emailData = userData.Emails[0]
-		for _, e := range userData.Emails {
-			if e.Primary {
-				emailData = e
-				break
-			}
-		}
-
 		params := &SignupParams{
 			Provider: providerType,
-			Email:    emailData.Email,
+			Email:    decision.CandidateEmail.Email,
 			Aud:      aud,
 			Data:     identityData,
 		}
 
-		isSSOUser := strings.HasPrefix(providerType, "sso:")
+		isSSOUser := false
+		if strings.HasPrefix(decision.LinkingDomain, "sso:") {
+			isSSOUser = true
+		}
 
-		user, terr = a.signupNewUser(ctx, tx, params, isSSOUser)
+		// because params above sets no password, this method is not
+		// computationally hard so it can be used within a database
+		// transaction
+		user, terr = params.ToUserModel(isSSOUser)
 		if terr != nil {
 			return nil, terr
 		}
 
-		if _, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+		if user, terr = a.signupNewUser(tx, user); terr != nil {
+			return nil, terr
+		}
+
+		if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
 			return nil, terr
 		}
 
@@ -339,11 +342,6 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		identity.IdentityData = identityData
 		if terr = tx.UpdateOnly(identity, "identity_data", "last_sign_in_at"); terr != nil {
 			return nil, terr
-		}
-		// email & verified status might have changed if identity's email changed
-		emailData = provider.Email{
-			Email:    userData.Metadata.Email,
-			Verified: userData.Metadata.EmailVerified,
 		}
 		if terr = user.UpdateUserMetaData(tx, identityData); terr != nil {
 			return nil, terr
@@ -363,43 +361,44 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return nil, unauthorizedError("User is unauthorized")
 	}
 
-	// an account with a previously unconfirmed email + password
-	// combination or phone may exist. so now that there is an
-	// OAuth identity bound to this user, and since they have not
-	// confirmed their email or phone, they are unaware that a
-	// potentially malicious door exists into their account; thus
-	// the password and phone needs to be removed.
-	if terr = user.RemoveUnconfirmedIdentities(tx); terr != nil {
-		return nil, internalServerError("Error updating user").WithInternalError(terr)
-	}
-
 	if !user.IsConfirmed() {
-		if !emailData.Verified && !config.Mailer.Autoconfirm {
-			mailer := a.Mailer(ctx)
-			referrer := a.getReferrer(r)
-			externalURL := getExternalHost(ctx)
-			if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
-				if errors.Is(terr, MaxFrequencyLimitError) {
-					return nil, tooManyRequestsError("For security purposes, you can only request this once every minute")
-				}
-				return nil, internalServerError("Error sending confirmation mail").WithInternalError(terr)
-			}
-			// email must be verified to issue a token
-			return nil, errReturnNil
-		}
-
-		if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
-			"provider": providerType,
-		}); terr != nil {
-			return nil, terr
-		}
-		if terr = triggerEventHooks(ctx, tx, SignupEvent, user, config); terr != nil {
-			return nil, terr
-		}
-
-		// fall through to auto-confirm and issue token
-		if terr = user.Confirm(tx); terr != nil {
+		// The user may have other unconfirmed email + password
+		// combination, phone or oauth identities. These identities
+		// need to be removed when a new oauth identity is being added
+		// to prevent pre-account takeover attacks from happening.
+		if terr = user.RemoveUnconfirmedIdentities(tx, identity); terr != nil {
 			return nil, internalServerError("Error updating user").WithInternalError(terr)
+		}
+		if decision.CandidateEmail.Verified || config.Mailer.Autoconfirm {
+			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+				"provider": providerType,
+			}); terr != nil {
+				return nil, terr
+			}
+			// fall through to auto-confirm and issue token
+			if terr = user.Confirm(tx); terr != nil {
+				return nil, internalServerError("Error updating user").WithInternalError(terr)
+			}
+		} else {
+			emailConfirmationSent := false
+			if decision.CandidateEmail.Email != "" {
+				mailer := a.Mailer(ctx)
+				referrer := utilities.GetReferrer(r, config)
+				externalURL := getExternalHost(ctx)
+				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
+					if errors.Is(terr, MaxFrequencyLimitError) {
+						return nil, tooManyRequestsError("For security purposes, you can only request this once every minute")
+					}
+					return nil, internalServerError("Error sending confirmation mail").WithInternalError(terr)
+				}
+				emailConfirmationSent = true
+			}
+			if !config.Mailer.AllowUnverifiedEmailSignIns {
+				if emailConfirmationSent {
+					return nil, storage.NewCommitWithError(unauthorizedError(fmt.Sprintf("Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType)))
+				}
+				return nil, storage.NewCommitWithError(unauthorizedError(fmt.Sprintf("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType)))
+			}
 		}
 	} else {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
@@ -407,16 +406,12 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		}); terr != nil {
 			return nil, terr
 		}
-		if terr = triggerEventHooks(ctx, tx, LoginEvent, user, config); terr != nil {
-			return nil, terr
-		}
 	}
 
 	return user, nil
 }
 
-func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, inviteToken, providerType string) (*models.User, error) {
-	config := a.config
+func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *provider.UserProvidedData, inviteToken, providerType string) (*models.User, error) {
 	user, err := models.FindUserByConfirmationToken(tx, inviteToken)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -443,15 +438,16 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 	if userData.Metadata != nil {
 		identityData = structs.Map(userData.Metadata)
 	}
-	if _, err := a.createNewIdentity(tx, user, providerType, identityData); err != nil {
+	identity, err := a.createNewIdentity(tx, user, providerType, identityData)
+	if err != nil {
 		return nil, err
 	}
-	if err = user.UpdateAppMetaData(tx, map[string]interface{}{
+	if err := user.UpdateAppMetaData(tx, map[string]interface{}{
 		"provider": providerType,
 	}); err != nil {
 		return nil, err
 	}
-	if err = user.UpdateAppMetaDataProviders(tx); err != nil {
+	if err := user.UpdateAppMetaDataProviders(tx); err != nil {
 		return nil, err
 	}
 	if err := user.UpdateUserMetaData(tx, identityData); err != nil {
@@ -463,9 +459,6 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 	}); err != nil {
 		return nil, err
 	}
-	if err := triggerEventHooks(ctx, tx, SignupEvent, user, config); err != nil {
-		return nil, err
-	}
 
 	// an account with a previously unconfirmed email + password
 	// combination or phone may exist. so now that there is an
@@ -473,7 +466,7 @@ func (a *API) processInvite(r *http.Request, ctx context.Context, tx *storage.Co
 	// confirmed their email or phone, they are unaware that a
 	// potentially malicious door exists into their account; thus
 	// the password and phone needs to be removed.
-	if err = user.RemoveUnconfirmedIdentities(tx); err != nil {
+	if err := user.RemoveUnconfirmedIdentities(tx, identity); err != nil {
 		return nil, internalServerError("Error updating user").WithInternalError(err)
 	}
 
@@ -503,6 +496,20 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	if claims.FlowStateID != "" {
 		ctx = withFlowStateID(ctx, claims.FlowStateID)
 	}
+	if claims.LinkingTargetID != "" {
+		linkingTargetUserID, err := uuid.FromString(claims.LinkingTargetID)
+		if err != nil {
+			return nil, badRequestError("invalid target user id")
+		}
+		u, err := models.FindUserByID(a.db, linkingTargetUserID)
+		if err != nil {
+			if models.IsNotFoundError(err) {
+				return nil, notFoundError("Linking target user not found")
+			}
+			return nil, internalServerError("Database error loading user").WithInternalError(err)
+		}
+		ctx = withTargetUser(ctx, u)
+	}
 	ctx = withExternalProviderType(ctx, claims.Provider)
 	return withSignature(ctx, state), nil
 }
@@ -514,27 +521,33 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 
 	switch name {
 	case "apple":
-		return provider.NewAppleProvider(config.External.Apple)
+		return provider.NewAppleProvider(ctx, config.External.Apple)
 	case "azure":
 		return provider.NewAzureProvider(config.External.Azure, scopes)
 	case "bitbucket":
 		return provider.NewBitbucketProvider(config.External.Bitbucket)
 	case "discord":
 		return provider.NewDiscordProvider(config.External.Discord, scopes)
+	case "facebook":
+		return provider.NewFacebookProvider(config.External.Facebook, scopes)
+	case "figma":
+		return provider.NewFigmaProvider(config.External.Figma, scopes)
+	case "fly":
+		return provider.NewFlyProvider(config.External.Fly, scopes)
 	case "github":
 		return provider.NewGithubProvider(config.External.Github, scopes)
 	case "gitlab":
 		return provider.NewGitlabProvider(config.External.Gitlab, scopes)
 	case "google":
-		return provider.NewGoogleProvider(config.External.Google, scopes)
+		return provider.NewGoogleProvider(ctx, config.External.Google, scopes)
 	case "kakao":
 		return provider.NewKakaoProvider(config.External.Kakao, scopes)
 	case "keycloak":
 		return provider.NewKeycloakProvider(config.External.Keycloak, scopes)
 	case "linkedin":
 		return provider.NewLinkedinProvider(config.External.Linkedin, scopes)
-	case "facebook":
-		return provider.NewFacebookProvider(config.External.Facebook, scopes)
+	case "linkedin_oidc":
+		return provider.NewLinkedinOIDCProvider(config.External.LinkedinOIDC, scopes)
 	case "notion":
 		return provider.NewNotionProvider(config.External.Notion)
 	case "spotify":
@@ -554,19 +567,32 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	}
 }
 
-func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request) {
+func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {
 	ctx := r.Context()
 	log := observability.GetLogEntry(r)
 	errorID := getRequestID(ctx)
 	err := handler(w, r)
 	if err != nil {
-		q := getErrorQueryString(err, errorID, log)
-		http.Redirect(w, r, a.getExternalRedirectURL(r)+"?"+q.Encode(), http.StatusFound)
+		q := getErrorQueryString(err, errorID, log, u.Query())
+		u.RawQuery = q.Encode()
+
+		// TODO: deprecate returning error details in the query fragment
+		hq := url.Values{}
+		if q.Get("error") != "" {
+			hq.Set("error", q.Get("error"))
+		}
+		if q.Get("error_description") != "" {
+			hq.Set("error_description", q.Get("error_description"))
+		}
+		if q.Get("error_code") != "" {
+			hq.Set("error_code", q.Get("error_code"))
+		}
+		u.Fragment = hq.Encode()
+		http.Redirect(w, r, u.String(), http.StatusFound)
 	}
 }
 
-func getErrorQueryString(err error, errorID string, log logrus.FieldLogger) *url.Values {
-	q := url.Values{}
+func getErrorQueryString(err error, errorID string, log logrus.FieldLogger, q url.Values) *url.Values {
 	switch e := err.(type) {
 	case *HTTPError:
 		if str, ok := oauthErrorMap[e.Code]; ok {
@@ -582,12 +608,13 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger) *url
 			log.WithError(e.Cause()).Info(e.Error())
 		}
 		q.Set("error_description", e.Message)
+		q.Set("error_code", strconv.Itoa(e.Code))
 	case *OAuthError:
 		q.Set("error", e.Err)
 		q.Set("error_description", e.Description)
 		log.WithError(e.Cause()).Info(e.Error())
 	case ErrorCause:
-		return getErrorQueryString(e.Cause(), errorID, log)
+		return getErrorQueryString(e.Cause(), errorID, log, q)
 	default:
 		error_type, error_description := "server_error", err.Error()
 

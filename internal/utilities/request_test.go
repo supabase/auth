@@ -2,9 +2,11 @@ package utilities
 
 import (
 	"net/http"
+	"net/http/httptest"
 	tst "testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/supabase/auth/internal/conf"
 )
 
 func TestGetIPAddress(t *tst.T) {
@@ -83,5 +85,47 @@ func TestGetIPAddress(t *tst.T) {
 		expected := example(req)
 
 		require.Equal(t, GetIPAddress(req), expected)
+	}
+}
+
+func TestGetReferrer(t *tst.T) {
+	config := conf.GlobalConfiguration{
+		SiteURL:      "https://example.com",
+		URIAllowList: []string{"http://localhost:8000/*"},
+	}
+	config.ApplyDefaults()
+	cases := []struct {
+		desc        string
+		redirectURL string
+		expected    string
+	}{
+		{
+			desc:        "valid redirect url",
+			redirectURL: "http://localhost:8000/path",
+			expected:    "http://localhost:8000/path",
+		},
+		{
+			desc:        "invalid redirect url",
+			redirectURL: "http://localhost:3000",
+			expected:    config.SiteURL,
+		},
+		{
+			desc:        "no / separator",
+			redirectURL: "http://localhost:8000",
+			expected:    config.SiteURL,
+		},
+		{
+			desc:        "* respects separator",
+			redirectURL: "http://localhost:8000/path/to/page",
+			expected:    config.SiteURL,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.desc, func(t *tst.T) {
+			r := httptest.NewRequest("GET", "http://localhost?redirect_to="+c.redirectURL, nil)
+			referrer := GetReferrer(r, &config)
+			require.Equal(t, c.expected, referrer)
+		})
 	}
 }

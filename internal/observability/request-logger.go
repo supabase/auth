@@ -7,25 +7,28 @@ import (
 
 	chimiddleware "github.com/go-chi/chi/middleware"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/utilities"
 )
 
-func NewStructuredLogger(logger *logrus.Logger) func(next http.Handler) http.Handler {
-	return chimiddleware.RequestLogger(&structuredLogger{logger})
+func NewStructuredLogger(logger *logrus.Logger, config *conf.GlobalConfiguration) func(next http.Handler) http.Handler {
+	return chimiddleware.RequestLogger(&structuredLogger{logger, config})
 }
 
 type structuredLogger struct {
 	Logger *logrus.Logger
+	Config *conf.GlobalConfiguration
 }
 
 func (l *structuredLogger) NewLogEntry(r *http.Request) chimiddleware.LogEntry {
+	referrer := utilities.GetReferrer(r, l.Config)
 	entry := &structuredLoggerEntry{Logger: logrus.NewEntry(l.Logger)}
 	logFields := logrus.Fields{
 		"component":   "api",
 		"method":      r.Method,
 		"path":        r.URL.Path,
 		"remote_addr": utilities.GetIPAddress(r),
-		"referer":     r.Referer(),
+		"referer":     referrer,
 		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 	}
 

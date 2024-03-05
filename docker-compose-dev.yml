@@ -1,7 +1,7 @@
 version: "3.9"
 services:
-  gotrue:
-    container_name: gotrue
+  auth:
+    container_name: auth
     depends_on:
       - postgres
     build:
@@ -11,15 +11,15 @@ services:
       - '9999:9999'
       - '9100:9100'
     environment:
-      - GOTRUE_DB_MIGRATIONS_PATH=/go/src/github.com/supabase/gotrue/migrations
+      - GOTRUE_DB_MIGRATIONS_PATH=/go/src/github.com/supabase/auth/migrations
     volumes:
-      - ./:/go/src/github.com/supabase/gotrue
-    command: CompileDaemon --build="make build" --directory=/go/src/github.com/supabase/gotrue --recursive=true -pattern="(.+\.go|.+\.env)" -exclude=gotrue -exclude=gotrue-arm64 -exclude=.env --command="/go/src/github.com/supabase/gotrue/gotrue -c=.env.docker"
+      - ./:/go/src/github.com/supabase/auth
+    command: CompileDaemon --build="make build" --directory=/go/src/github.com/supabase/auth --recursive=true -pattern="(.+\.go|.+\.env)" -exclude=auth -exclude=auth-arm64 -exclude=.env --command="/go/src/github.com/supabase/auth/auth -c=.env.docker"
   postgres:
     build:
       context: .
       dockerfile: Dockerfile.postgres.dev
-    container_name: gotrue_postgres
+    container_name: auth_postgres
     ports:
       - '5432:5432'
     volumes:
@@ -29,6 +29,6 @@ services:
       - POSTGRES_PASSWORD=root
       - POSTGRES_DB=postgres
       # sets the schema name, this should match the `NAMESPACE` env var set in your .env file
-      - DB_NAMESPACE=auth 
+      - DB_NAMESPACE=auth
 volumes:
   postgres_data:

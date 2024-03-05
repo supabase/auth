@@ -9,7 +9,7 @@ import (
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/storage"
 )
 
 type FactorState int
@@ -44,6 +44,8 @@ const (
 	MagicLink
 	EmailSignup
 	EmailChange
+	TokenRefresh
+	Anonymous
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -68,6 +70,10 @@ func (authMethod AuthenticationMethod) String() string {
 		return "email/signup"
 	case EmailChange:
 		return "email_change"
+	case TokenRefresh:
+		return "token_refresh"
+	case Anonymous:
+		return "anonymous"
 	}
 	return ""
 }
@@ -97,6 +103,8 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return EmailSignup, nil
 	case "email_change":
 		return EmailChange, nil
+	case "token_refresh":
+		return TokenRefresh, nil
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }
@@ -119,7 +127,7 @@ func (Factor) TableName() string {
 	return tableName
 }
 
-func NewFactor(user *User, friendlyName string, factorType string, state FactorState, secret string) (*Factor, error) {
+func NewFactor(user *User, friendlyName string, factorType string, state FactorState, secret string) *Factor {
 	id := uuid.Must(uuid.NewV4())
 
 	factor := &Factor{
@@ -130,7 +138,7 @@ func NewFactor(user *User, friendlyName string, factorType string, state FactorS
 		Secret:       secret,
 		FactorType:   factorType,
 	}
-	return factor, nil
+	return factor
 }
 
 // FindFactorsByUser returns all factors belonging to a user ordered by timestamp

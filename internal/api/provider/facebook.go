@@ -5,12 +5,13 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"strings"
 
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/oauth2"
 )
+
+const IssuerFacebook = "https://www.facebook.com"
 
 const (
 	defaultFacebookAuthBase  = "www.facebook.com"
@@ -38,7 +39,7 @@ type facebookUser struct {
 
 // NewFacebookProvider creates a Facebook account provider.
 func NewFacebookProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -56,7 +57,7 @@ func NewFacebookProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 
 	return &facebookProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			RedirectURL:  ext.RedirectURI,
 			Endpoint: oauth2.Endpoint{
@@ -84,30 +85,28 @@ func (p facebookProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 		return nil, err
 	}
 
-	if u.Email == "" {
-		return nil, errors.New("unable to find email with Facebook provider")
-	}
-
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        p.ProfileURL,
-			Subject:       u.ID,
-			Name:          strings.TrimSpace(u.FirstName + " " + u.LastName),
-			NickName:      u.Alias,
-			Email:         u.Email,
-			EmailVerified: true, // if email is returned, the email is verified by facebook already
-			Picture:       u.Avatar.Data.URL,
-
-			// To be deprecated
-			Slug:       u.Alias,
-			AvatarURL:  u.Avatar.Data.URL,
-			FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
-			ProviderId: u.ID,
-		},
-		Emails: []Email{{
+	data := &UserProvidedData{}
+	if u.Email != "" {
+		data.Emails = []Email{{
 			Email:    u.Email,
 			Verified: true,
 			Primary:  true,
-		}},
-	}, nil
+		}}
+	}
+
+	data.Metadata = &Claims{
+		Issuer:   p.ProfileURL,
+		Subject:  u.ID,
+		Name:     strings.TrimSpace(u.FirstName + " " + u.LastName),
+		NickName: u.Alias,
+		Picture:  u.Avatar.Data.URL,
+
+		// To be deprecated
+		Slug:       u.Alias,
+		AvatarURL:  u.Avatar.Data.URL,
+		FullName:   strings.TrimSpace(u.FirstName + " " + u.LastName),
+		ProviderId: u.ID,
+	}
+
+	return data, nil
 }

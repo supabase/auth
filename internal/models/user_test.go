@@ -1,15 +1,16 @@
 package models
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/crypto"
-	"github.com/supabase/gotrue/internal/storage"
-	"github.com/supabase/gotrue/internal/storage/test"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/storage/test"
 )
 
 const modelsTestConfig = "../../hack/test.env"
@@ -151,7 +152,7 @@ func (ts *UserTestSuite) TestFindUserWithRefreshToken() {
 	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
 	require.NoError(ts.T(), err)
 
-	n, nr, s, err := FindUserWithRefreshToken(ts.db, r.Token)
+	n, nr, s, err := FindUserWithRefreshToken(ts.db, r.Token, true /* forUpdate */)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), r.ID, nr.ID)
 	require.Equal(ts.T(), u.ID, n.ID)
@@ -215,15 +216,11 @@ func (ts *UserTestSuite) TestRemoveUnconfirmedIdentities() {
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(idEmail))
 
-	user.Identities = append(user.Identities, *idEmail)
-
 	idPhone, err := NewIdentity(user, "phone", map[string]interface{}{
 		"sub": "+29382983298",
 	})
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(idPhone))
-
-	user.Identities = append(user.Identities, *idPhone)
 
 	idTwitter, err := NewIdentity(user, "twitter", map[string]interface{}{
 		"sub": "test_twitter_user_id",
@@ -231,24 +228,25 @@ func (ts *UserTestSuite) TestRemoveUnconfirmedIdentities() {
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(idTwitter))
 
-	user.Identities = append(user.Identities, *idTwitter)
+	user.Identities = append(user.Identities, *idEmail, *idPhone, *idTwitter)
 
 	// reload the user
 	require.NoError(ts.T(), ts.db.Load(user))
 
 	require.False(ts.T(), user.IsConfirmed(), "user's email must not be confirmed")
 
-	require.NoError(ts.T(), user.RemoveUnconfirmedIdentities(ts.db))
+	require.NoError(ts.T(), user.RemoveUnconfirmedIdentities(ts.db, idTwitter))
 
+	// reload the user to check that identities are deleted from the db too
+	require.NoError(ts.T(), ts.db.Load(user))
 	require.Empty(ts.T(), user.EncryptedPassword, "password still remains in user")
 
-	require.Len(ts.T(), user.Identities, 2, "only two identity must be remaining")
-	require.Equal(ts.T(), idPhone.ID, user.Identities[0].ID, "remaining identity is not the expected one")
-	require.Equal(ts.T(), idTwitter.ID, user.Identities[1].ID, "remaining identity is not the expected one")
+	require.Len(ts.T(), user.Identities, 1, "only one identity must be remaining")
+	require.Equal(ts.T(), idTwitter.ID, user.Identities[0].ID, "remaining identity is not the expected one")
 
 	require.NotNil(ts.T(), user.AppMetaData)
-	require.Equal(ts.T(), user.AppMetaData["provider"], "phone")
-	require.Equal(ts.T(), user.AppMetaData["providers"], []string{"phone", "twitter"})
+	require.Equal(ts.T(), user.AppMetaData["provider"], "twitter")
+	require.Equal(ts.T(), user.AppMetaData["providers"], []string{"twitter"})
 }
 
 func (ts *UserTestSuite) TestConfirmEmailChange() {
@@ -305,4 +303,79 @@ func (ts *UserTestSuite) TestConfirmPhoneChange() {
 
 	require.NotNil(ts.T(), identity.IdentityData)
 	require.Equal(ts.T(), identity.IdentityData["phone"], "987654321")
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailSuccess() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+
+	primaryIdentity, err := NewIdentity(userA, "email", map[string]interface{}{
+		"sub":   userA.ID.String(),
+		"email": "foo@example.com",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(primaryIdentity))
+
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]interface{}{
+		"sub":   userA.ID.String(),
+		"email": "bar@example.com",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
+
+	// UpdateUserEmail should not do anything and the user's email should still use the primaryIdentity
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), primaryIdentity.GetEmail(), userA.GetEmail())
+
+	// remove primary identity
+	require.NoError(ts.T(), ts.db.Destroy(primaryIdentity))
+
+	// UpdateUserEmail should update the user to use the secondary identity's email
+	require.NoError(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db))
+	require.Equal(ts.T(), secondaryIdentity.GetEmail(), userA.GetEmail())
+}
+
+func (ts *UserTestSuite) TestUpdateUserEmailFailure() {
+	userA, err := NewUser("", "foo@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userA))
+
+	primaryIdentity, err := NewIdentity(userA, "email", map[string]interface{}{
+		"sub":   userA.ID.String(),
+		"email": "foo@example.com",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(primaryIdentity))
+
+	secondaryIdentity, err := NewIdentity(userA, "google", map[string]interface{}{
+		"sub":   userA.ID.String(),
+		"email": "bar@example.com",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(secondaryIdentity))
+
+	userB, err := NewUser("", "bar@example.com", "", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(userB))
+
+	// remove primary identity
+	require.NoError(ts.T(), ts.db.Destroy(primaryIdentity))
+
+	// UpdateUserEmail should fail with the email unique constraint violation error
+	//  since userB is using the secondary identity's email
+	require.ErrorIs(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db), UserEmailUniqueConflictError{})
+	require.Equal(ts.T(), primaryIdentity.GetEmail(), userA.GetEmail())
+}
+
+func (ts *UserTestSuite) TestSetPasswordTooLong() {
+	user, err := NewUser("", "", strings.Repeat("a", crypto.MaxPasswordLength), "", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(user))
+
+	err = user.SetPassword(ts.db.Context(), strings.Repeat("a", crypto.MaxPasswordLength+1))
+	require.Error(ts.T(), err)
+
+	err = user.SetPassword(ts.db.Context(), strings.Repeat("a", crypto.MaxPasswordLength))
+	require.NoError(ts.T(), err)
 }

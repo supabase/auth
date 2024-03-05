@@ -1,14 +1,6 @@
 {
   "branches": [
-    "master",
-    {
-        "name": "lastsigninatfix",
-        "prerelease": true
-    },
-    {
-        "name": "mfa",
-        "prerelease": true
-    }
+    "master"
   ],
   "plugins": [
     "@semantic-release/commit-analyzer",

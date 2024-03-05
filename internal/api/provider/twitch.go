@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
 
@@ -45,7 +45,7 @@ type twitchUsers struct {
 
 // NewTwitchProvider creates a Twitch account provider.
 func NewTwitchProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
@@ -62,7 +62,7 @@ func NewTwitchProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 
 	return &twitchProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  authHost + "/oauth2/authorize",
@@ -120,38 +120,34 @@ func (t twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 
 	user := u.Data[0]
 
-	if user.Email == "" {
-		return nil, errors.New("unable to find email with twitch provider")
-	}
-
-	data := &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        t.APIHost,
-			Subject:       user.ID,
-			Picture:       user.ProfileImageURL,
-			Name:          user.Login,
-			NickName:      user.DisplayName,
-			Email:         user.Email,
-			EmailVerified: true,
-			CustomClaims: map[string]interface{}{
-				"broadcaster_type":  user.BroadcasterType,
-				"description":       user.Description,
-				"type":              user.Type,
-				"offline_image_url": user.OfflineImageURL,
-				"view_count":        user.ViewCount,
-			},
-
-			// To be deprecated
-			Slug:       user.DisplayName,
-			AvatarURL:  user.ProfileImageURL,
-			FullName:   user.Login,
-			ProviderId: user.ID,
-		},
-		Emails: []Email{{
+	data := &UserProvidedData{}
+	if user.Email != "" {
+		data.Emails = []Email{{
 			Email:    user.Email,
 			Verified: true,
 			Primary:  true,
-		}},
+		}}
+	}
+
+	data.Metadata = &Claims{
+		Issuer:   t.APIHost,
+		Subject:  user.ID,
+		Picture:  user.ProfileImageURL,
+		Name:     user.Login,
+		NickName: user.DisplayName,
+		CustomClaims: map[string]interface{}{
+			"broadcaster_type":  user.BroadcasterType,
+			"description":       user.Description,
+			"type":              user.Type,
+			"offline_image_url": user.OfflineImageURL,
+			"view_count":        user.ViewCount,
+		},
+
+		// To be deprecated
+		Slug:       user.DisplayName,
+		AvatarURL:  user.ProfileImageURL,
+		FullName:   user.Login,
+		ProviderId: user.ID,
 	}
 
 	return data, nil

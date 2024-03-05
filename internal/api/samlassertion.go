@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/crewjam/saml"
-	"github.com/supabase/gotrue/internal/models"
+	"github.com/supabase/auth/internal/models"
 )
 
 type SAMLAssertion struct {
@@ -96,6 +96,7 @@ func (a *SAMLAssertion) Email() string {
 		"http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
 		"http://schemas.xmlsoap.org/claims/EmailAddress",
 		"mail",
+		"Mail",
 		"email",
 	}
 

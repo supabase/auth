@@ -1,15 +1,14 @@
 package api
 
 import (
-	"crypto/sha256"
 	"errors"
-	"fmt"
 	"net/http"
 
-	"github.com/supabase/gotrue/internal/api/sms_provider"
-	"github.com/supabase/gotrue/internal/conf"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/storage"
+	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 const InvalidNonceMessage = "Nonce has expired or is invalid"
@@ -37,6 +36,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	messageID := ""
 	err := db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserReauthenticateAction, "", nil); terr != nil {
 			return terr
@@ -49,7 +49,12 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return badRequestError("Error sending sms: %v", terr)
 			}
-			return a.sendPhoneConfirmation(ctx, tx, user, phone, phoneReauthenticationOtp, smsProvider, sms_provider.SMSProvider)
+			mID, err := a.sendPhoneConfirmation(tx, user, phone, phoneReauthenticationOtp, smsProvider, sms_provider.SMSProvider)
+			if err != nil {
+				return err
+			}
+
+			messageID = mID
 		}
 		return nil
 	})
@@ -60,7 +65,13 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, make(map[string]string))
+	ret := map[string]any{}
+	if messageID != "" {
+		ret["message_id"] = messageID
+
+	}
+
+	return sendJSON(w, http.StatusOK, ret)
 }
 
 // verifyReauthentication checks if the nonce provided is valid
@@ -70,11 +81,19 @@ func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, confi
 	}
 	var isValid bool
 	if user.GetEmail() != "" {
-		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetEmail()+nonce)))
+		tokenHash := crypto.GenerateTokenHash(user.GetEmail(), nonce)
 		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Mailer.OtpExp)
 	} else if user.GetPhone() != "" {
-		tokenHash := fmt.Sprintf("%x", sha256.Sum224([]byte(user.GetPhone()+nonce)))
-		isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
+		if config.Sms.IsTwilioVerifyProvider() {
+			smsProvider, _ := sms_provider.GetSmsProvider(*config)
+			if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(string(user.Phone), nonce); err != nil {
+				return expiredTokenError("Token has expired or is invalid").WithInternalError(err)
+			}
+			return nil
+		} else {
+			tokenHash := crypto.GenerateTokenHash(user.GetPhone(), nonce)
+			isValid = isOtpValid(tokenHash, user.ReauthenticationToken, user.ReauthenticationSentAt, config.Sms.OtpExp)
+		}
 	} else {
 		return unprocessableEntityError("Reauthentication requires an email or a phone number")
 	}

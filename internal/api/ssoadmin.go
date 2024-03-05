@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,10 +11,10 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/gotrue/internal/models"
-	"github.com/supabase/gotrue/internal/observability"
-	"github.com/supabase/gotrue/internal/storage"
-	"github.com/supabase/gotrue/internal/utilities"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // loadSSOProvider looks for an idp_id parameter in the URL route and loads the SSO provider
@@ -184,14 +183,9 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return internalServerError("Unable to read request body").WithInternalError(err)
-	}
-
-	var params CreateSSOProviderParams
-	if err := json.Unmarshal(body, &params); err != nil {
-		return badRequestError("Unable to parse JSON").WithInternalError(err)
+	params := &CreateSSOProviderParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
 	if err := params.validate(false /* <- forUpdate */); err != nil {
@@ -264,14 +258,9 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return internalServerError("Unable to read request body").WithInternalError(err)
-	}
-
-	var params CreateSSOProviderParams
-	if err := json.Unmarshal(body, &params); err != nil {
-		return badRequestError("Unable to parse JSON").WithInternalError(err)
+	params := &CreateSSOProviderParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
 	if err := params.validate(true /* <- forUpdate */); err != nil {

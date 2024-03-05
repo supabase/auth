@@ -2,37 +2,53 @@ package provider
 
 import (
 	"context"
-	"errors"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"regexp"
 	"strings"
 
-	"github.com/supabase/gotrue/internal/conf"
+	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/oauth2"
 )
 
+const IssuerAzureCommon = "https://login.microsoftonline.com/common/v2.0"
+const IssuerAzureOrganizations = "https://login.microsoftonline.com/organizations/v2.0"
+
+// IssuerAzureMicrosoft is the OIDC issuer for microsoft.com accounts:
+// https://learn.microsoft.com/en-us/azure/active-directory/develop/id-token-claims-reference#payload-claims
+const IssuerAzureMicrosoft = "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0"
+
 const (
 	defaultAzureAuthBase = "login.microsoftonline.com/common"
-	defaultAzureAPIBase  = "graph.microsoft.com"
 )
 
 type azureProvider struct {
 	*oauth2.Config
-	APIPath string
+
+	// ExpectedIssuer contains the OIDC issuer that should be expected when
+	// the authorize flow completes. For example, when using the "common"
+	// endpoint the authorization flow will end with an ID token that
+	// contains any issuer. In this case, ExpectedIssuer is an empty
+	// string, because any issuer is allowed. But if a developer sets up a
+	// tenant-specific authorization endpoint, then we must ensure that the
+	// ID token received is issued by that specific issuer, and so
+	// ExpectedIssuer contains the issuer URL of that tenant.
+	ExpectedIssuer string
 }
 
-type azureUser struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Sub   string `json:"sub"`
+var azureIssuerRegexp = regexp.MustCompile("^https://login[.]microsoftonline[.]com/([^/]+)/v2[.]0/?$")
+
+func IsAzureIssuer(issuer string) bool {
+	return azureIssuerRegexp.MatchString(issuer)
 }
 
 // NewAzureProvider creates a Azure account provider.
 func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
-	if err := ext.Validate(); err != nil {
+	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
-
-	authHost := chooseHost(ext.URL, defaultAzureAuthBase)
-	apiPath := chooseHost(ext.ApiURL, defaultAzureAPIBase)
 
 	oauthScopes := []string{"openid"}
 
@@ -40,9 +56,24 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
+	authHost := chooseHost(ext.URL, defaultAzureAuthBase)
+	expectedIssuer := ""
+
+	if ext.URL != "" {
+		expectedIssuer = authHost + "/v2.0"
+
+		if !IsAzureIssuer(expectedIssuer) || expectedIssuer == IssuerAzureCommon || expectedIssuer == IssuerAzureOrganizations {
+			// in tests, the URL is a local server which should not
+			// be the expected issuer
+			// also, IssuerAzure (common) never actually issues any
+			// ID tokens so it needs to be ignored
+			expectedIssuer = ""
+		}
+	}
+
 	return &azureProvider{
 		Config: &oauth2.Config{
-			ClientID:     ext.ClientID,
+			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  authHost + "/oauth2/v2.0/authorize",
@@ -51,7 +82,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 			RedirectURL: ext.RedirectURI,
 			Scopes:      oauthScopes,
 		},
-		APIPath: apiPath,
+		ExpectedIssuer: expectedIssuer,
 	}, nil
 }
 
@@ -59,32 +90,67 @@ func (g azureProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 	return g.Exchange(context.Background(), code)
 }
 
+func DetectAzureIDTokenIssuer(ctx context.Context, idToken string) (string, error) {
+	var payload struct {
+		Issuer string `json:"iss"`
+	}
+
+	parts := strings.Split(idToken, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("azure: invalid ID token")
+	}
+
+	payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("azure: invalid ID token %w", err)
+	}
+
+	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
+		return "", fmt.Errorf("azure: invalid ID token %w", err)
+	}
+
+	return payload.Issuer, nil
+}
+
 func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	var u azureUser
-	if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/oidc/userinfo", &u); err != nil {
-		return nil, err
+	idToken := tok.Extra("id_token")
+
+	if idToken != nil {
+		issuer, err := DetectAzureIDTokenIssuer(ctx, idToken.(string))
+		if err != nil {
+			return nil, err
+		}
+
+		if !IsAzureIssuer(issuer) {
+			return nil, fmt.Errorf("azure: ID token issuer not valid %q", issuer)
+		}
+
+		if g.ExpectedIssuer != "" && issuer != g.ExpectedIssuer {
+			// Since ExpectedIssuer was set, then the developer had
+			// setup GoTrue to use the tenant-specific
+			// authorization endpoint, which in-turn means that
+			// only those tenant's ID tokens will be accepted.
+			return nil, fmt.Errorf("azure: ID token issuer %q does not match expected issuer %q", issuer, g.ExpectedIssuer)
+		}
+
+		provider, err := oidc.NewProvider(ctx, issuer)
+		if err != nil {
+			return nil, err
+		}
+
+		_, data, err := ParseIDToken(ctx, provider, &oidc.Config{
+			ClientID: g.ClientID,
+		}, idToken.(string), ParseIDTokenOptions{
+			AccessToken: tok.AccessToken,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		return data, nil
 	}
 
-	if u.Email == "" {
-		return nil, errors.New("unable to find email with Azure provider")
-	}
+	// Only ID tokens supported, UserInfo endpoint has a history of being less secure.
 
-	return &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:        g.APIPath,
-			Subject:       u.Sub,
-			Name:          u.Name,
-			Email:         u.Email,
-			EmailVerified: true,
-
-			// To be deprecated
-			FullName:   u.Name,
-			ProviderId: u.Sub,
-		},
-		Emails: []Email{{
-			Email:    u.Email,
-			Verified: true,
-			Primary:  true,
-		}},
-	}, nil
+	return nil, fmt.Errorf("azure: no OIDC ID token present in response")
 }

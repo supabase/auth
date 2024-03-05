@@ -17,7 +17,7 @@ func (ts *ExternalTestSuite) TestSignupExternalApple() {
 	ts.Require().NoError(err, "redirect url parse failed")
 	q := u.Query()
 	ts.Equal(ts.Config.External.Apple.RedirectURI, q.Get("redirect_uri"))
-	ts.Equal(ts.Config.External.Apple.ClientID, q.Get("client_id"))
+	ts.Equal(ts.Config.External.Apple.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
 	ts.Equal("email name", q.Get("scope"))
 
