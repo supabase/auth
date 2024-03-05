@@ -56,10 +56,8 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		}
 		return internalServerError("Unable to process request").WithInternalError(err)
 	}
-	var flowState *models.FlowState
 	if isPKCEFlow(flowType) {
-		flowState, err = generateFlowState(models.Recovery.String(), models.Recovery, params.CodeChallengeMethod, params.CodeChallenge, &(user.ID))
-		if err != nil {
+		if _, err := generateFlowState(db, models.Recovery.String(), models.Recovery, params.CodeChallengeMethod, params.CodeChallenge, &(user.ID)); err != nil {
 			return err
 		}
 	}
@@ -70,11 +68,6 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		}
 		mailer := a.Mailer(ctx)
 		referrer := utilities.GetReferrer(r, config)
-		if flowState != nil {
-			if terr := tx.Create(flowState); terr != nil {
-				return terr
-			}
-		}
 		externalURL := getExternalHost(ctx)
 		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, flowType)
 	})
