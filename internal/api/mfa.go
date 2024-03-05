@@ -170,7 +170,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ipAddress := utilities.GetIPAddress(r)
 	challenge := models.NewChallenge(factor, ipAddress)
 
-	err := a.db.Transaction(func(tx *storage.Connection) error {
+	if err := a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(challenge); terr != nil {
 			return terr
 		}
@@ -181,8 +181,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 
@@ -209,11 +208,10 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
 
-	challenge, err := models.FindChallengeByChallengeID(a.db, params.ChallengeID)
-	if err != nil {
-		if models.IsNotFoundError(err) {
-			return notFoundError(err.Error())
-		}
+	challenge, err := models.FindChallengeByID(a.db, params.ChallengeID)
+	if err != nil && models.IsNotFoundError(err) {
+		return notFoundError(err.Error())
+	} else if err != nil {
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
 
@@ -222,15 +220,8 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if challenge.HasExpired(config.MFA.ChallengeExpiryDuration) {
-		err := a.db.Transaction(func(tx *storage.Connection) error {
-			if terr := tx.Destroy(challenge); terr != nil {
-				return internalServerError("Database error deleting challenge").WithInternalError(terr)
-			}
-
-			return nil
-		})
-		if err != nil {
-			return err
+		if err := a.db.Destroy(challenge); err != nil {
+			return internalServerError("Database error deleting challenge").WithInternalError(err)
 		}
 		return badRequestError("%v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}

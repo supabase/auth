@@ -33,12 +33,15 @@ func NewChallenge(factor *Factor, ipAddress string) *Challenge {
 	return challenge
 }
 
-func FindChallengeByChallengeID(tx *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
-	challenge, err := findChallenge(tx, "id = ?", challengeID)
-	if err != nil {
+func FindChallengeByID(conn *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
+	var challenge Challenge
+	err := conn.Find(&challenge, challengeID)
+	if err != nil && errors.Cause(err) == sql.ErrNoRows {
 		return nil, ChallengeNotFoundError{}
+	} else if err != nil {
+		return nil, err
 	}
-	return challenge, nil
+	return &challenge, nil
 }
 
 // Update the verification timestamp
@@ -54,15 +57,4 @@ func (c *Challenge) HasExpired(expiryDuration float64) bool {
 
 func (c *Challenge) GetExpiryTime(expiryDuration float64) time.Time {
 	return c.CreatedAt.Add(time.Second * time.Duration(expiryDuration))
-}
-
-func findChallenge(tx *storage.Connection, query string, args ...interface{}) (*Challenge, error) {
-	obj := &Challenge{}
-	if err := tx.Eager().Q().Where(query, args...).First(obj); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, ChallengeNotFoundError{}
-		}
-		return nil, errors.Wrap(err, "error finding challenge")
-	}
-	return obj, nil
 }

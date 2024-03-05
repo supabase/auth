@@ -150,6 +150,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			if c.friendlyName != "" && c.expectedCode == http.StatusOK {
 				require.Equal(ts.T(), c.friendlyName, addedFactor.FriendlyName)
 			}
+
 			if w.Code == http.StatusOK {
 				enrollResp := EnrollFactorResponse{}
 				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
@@ -218,6 +219,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			var buffer bytes.Buffer
 			r, err := models.GrantAuthenticatedUser(ts.API.db, ts.TestUser, models.GrantParams{})
 			require.NoError(ts.T(), err)
+
 			sharedSecret := ts.TestOTPKey.Secret()
 			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
 			f := factors[0]
@@ -226,11 +228,11 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
 
 			token := ts.generateAAL1Token(ts.TestUser, r.SessionId)
-
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", f.ID), &buffer)
-			testIPAddress := utilities.GetIPAddress(req)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+			testIPAddress := utilities.GetIPAddress(req)
 			c := models.NewChallenge(f, testIPAddress)
 			require.NoError(ts.T(), ts.API.db.Create(c), "Error saving new test challenge")
 			if !v.validChallenge {
@@ -263,7 +265,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			}
 			if !v.validChallenge {
 				// Ensure invalid challenges are deleted
-				_, err := models.FindChallengeByChallengeID(ts.API.db, c.ID)
+				_, err := models.FindChallengeByID(ts.API.db, c.ID)
 				require.EqualError(ts.T(), err, models.ChallengeNotFoundError{}.Error())
 			}
 		})
@@ -293,7 +295,6 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			if v.isAAL2 {
 				ts.TestSession.UpdateAssociatedAAL(ts.API.db, models.AAL2.String())
 			}
-
 			// Create Session to test behaviour which downgrades other sessions
 			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
 			require.NoError(ts.T(), err, "error finding factors")
@@ -303,15 +304,11 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
 
 			token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
-
-			w := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/factors/%s/", f.ID), &buffer)
-			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-			ts.API.handler.ServeHTTP(w, req)
+			w := ServeAuthenticatedRequest(ts, http.MethodDelete, fmt.Sprintf("/factors/%s", f.ID), token, buffer)
 			require.Equal(ts.T(), v.expectedHTTPCode, w.Code)
 
 			if v.expectedHTTPCode == http.StatusOK {
-				_, err = models.FindFactorByFactorID(ts.API.db, f.ID)
+				_, err := models.FindFactorByFactorID(ts.API.db, f.ID)
 				require.EqualError(ts.T(), err, models.FactorNotFoundError{}.Error())
 				session, _ := models.FindSessionByID(ts.API.db, ts.TestSecondarySession.ID, false)
 				require.Equal(ts.T(), models.AAL1.String(), session.GetAAL())
@@ -333,10 +330,7 @@ func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 		"factor_id": f.ID,
 	}))
 
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/factors/%s", f.ID), &buffer)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	ts.API.handler.ServeHTTP(w, req)
+	w := ServeAuthenticatedRequest(ts, http.MethodDelete, fmt.Sprintf("/factors/%s", f.ID), token, buffer)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
 	_, err := models.FindFactorByFactorID(ts.API.db, f.ID)
@@ -437,21 +431,24 @@ func performTestSignupAndVerify(ts *MFATestSuite, email, password string, requir
 
 func performEnrollFlow(ts *MFATestSuite, token, friendlyName, factorType, issuer string, expectedCode int) *httptest.ResponseRecorder {
 	var buffer bytes.Buffer
-	w := httptest.NewRecorder()
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": friendlyName, "factor_type": factorType, "issuer": issuer}))
-
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/factors/", &buffer)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	req.Header.Set("Content-Type", "application/json")
-
-	ts.API.handler.ServeHTTP(w, req)
+	w := ServeAuthenticatedRequest(ts, http.MethodPost, "http://localhost/factors/", token, buffer)
 	require.Equal(ts.T(), expectedCode, w.Code)
 	return w
 }
 
+func ServeAuthenticatedRequest(ts *MFATestSuite, method, path, token string, buffer bytes.Buffer) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(method, path, &buffer)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	req.Header.Set("Content-Type", "application/json")
+
+	ts.API.handler.ServeHTTP(w, req)
+	return w
+}
+
 func performVerifyFlow(ts *MFATestSuite, challengeID, factorID uuid.UUID, token string, requireStatusOK bool) *httptest.ResponseRecorder {
-	var verifyBuffer bytes.Buffer
-	y := httptest.NewRecorder()
+	var buffer bytes.Buffer
 
 	conn, err := pgx.Connect(context.Background(), ts.API.db.URL())
 	require.NoError(ts.T(), err)
@@ -465,15 +462,13 @@ func performVerifyFlow(ts *MFATestSuite, challengeID, factorID uuid.UUID, token 
 	code, err := totp.GenerateCode(totpSecret, time.Now().UTC())
 	require.NoError(ts.T(), err)
 
-	require.NoError(ts.T(), json.NewEncoder(&verifyBuffer).Encode(map[string]interface{}{
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"challenge_id": challengeID,
 		"code":         code,
 	}))
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", factorID), &verifyBuffer)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	req.Header.Set("Content-Type", "application/json")
 
-	ts.API.handler.ServeHTTP(y, req)
+	y := ServeAuthenticatedRequest(ts, http.MethodPost, fmt.Sprintf("/factors/%s/verify", factorID), token, buffer)
+
 	if requireStatusOK {
 		require.Equal(ts.T(), http.StatusOK, y.Code)
 	}
@@ -481,12 +476,8 @@ func performVerifyFlow(ts *MFATestSuite, challengeID, factorID uuid.UUID, token 
 }
 
 func performChallengeFlow(ts *MFATestSuite, factorID uuid.UUID, token string) *httptest.ResponseRecorder {
-	var challengeBuffer bytes.Buffer
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), &challengeBuffer)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	req.Header.Set("Content-Type", "application/json")
-	ts.API.handler.ServeHTTP(w, req)
+	var buffer bytes.Buffer
+	w := ServeAuthenticatedRequest(ts, http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), token, buffer)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 	return w
 
