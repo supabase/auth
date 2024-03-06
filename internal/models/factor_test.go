@@ -15,7 +15,8 @@ import (
 
 type FactorTestSuite struct {
 	suite.Suite
-	db *storage.Connection
+	db         *storage.Connection
+	TestFactor *Factor
 }
 
 func TestFactor(t *testing.T) {
@@ -32,58 +33,40 @@ func TestFactor(t *testing.T) {
 
 func (ts *FactorTestSuite) SetupTest() {
 	TruncateAll(ts.db)
+	user, err := NewUser("", "agenericemail@gmail.com", "secret", "test", nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(user))
+
+	factor := NewFactor(user, "asimplename", TOTP, FactorStateUnverified, "topsecret")
+	require.NoError(ts.T(), ts.db.Create(factor))
+	ts.TestFactor = factor
 }
 
 func (ts *FactorTestSuite) TestFindFactorByFactorID() {
-	f := ts.createFactor()
-	n, err := FindFactorByFactorID(ts.db, f.ID)
+	n, err := FindFactorByFactorID(ts.db, ts.TestFactor.ID)
 	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), f.ID, n.ID)
+	require.Equal(ts.T(), ts.TestFactor.ID, n.ID)
+
 	_, err = FindFactorByFactorID(ts.db, uuid.Nil)
 	require.EqualError(ts.T(), err, FactorNotFoundError{}.Error())
 }
 
-func (ts *FactorTestSuite) createFactor() *Factor {
-	user, err := NewUser("", "agenericemail@gmail.com", "secret", "test", nil)
-	require.NoError(ts.T(), err)
-
-	err = ts.db.Create(user)
-	require.NoError(ts.T(), err)
-
-	factor := NewFactor(user, "asimplename", TOTP, FactorStateUnverified, "topsecret")
-
-	err = ts.db.Create(factor)
-	require.NoError(ts.T(), err)
-
-	return factor
-}
 func (ts *FactorTestSuite) TestUpdateStatus() {
 	newFactorStatus := FactorStateVerified
-	u, err := NewUser("", "", "", "", nil)
-	require.NoError(ts.T(), err)
-
-	f := NewFactor(u, "", TOTP, FactorStateUnverified, "some-secret")
-	require.NoError(ts.T(), f.UpdateStatus(ts.db, newFactorStatus))
-	require.Equal(ts.T(), newFactorStatus.String(), f.Status)
+	require.NoError(ts.T(), ts.TestFactor.UpdateStatus(ts.db, newFactorStatus))
+	require.Equal(ts.T(), newFactorStatus.String(), ts.TestFactor.Status)
 }
 
 func (ts *FactorTestSuite) TestUpdateFriendlyName() {
-	newSimpleName := "newFactorName"
-	u, err := NewUser("", "", "", "", nil)
-	require.NoError(ts.T(), err)
-
-	f := NewFactor(u, "A1B2C3", TOTP, FactorStateUnverified, "some-secret")
-	require.NoError(ts.T(), f.UpdateFriendlyName(ts.db, newSimpleName))
-	require.Equal(ts.T(), newSimpleName, f.FriendlyName)
+	newName := "newfactorname"
+	require.NoError(ts.T(), ts.TestFactor.UpdateFriendlyName(ts.db, newName))
+	require.Equal(ts.T(), newName, ts.TestFactor.FriendlyName)
 }
 
 func (ts *FactorTestSuite) TestEncodedFactorDoesNotLeakSecret() {
-	u, err := NewUser("", "", "", "", nil)
+	encodedFactor, err := json.Marshal(ts.TestFactor)
 	require.NoError(ts.T(), err)
 
-	f := NewFactor(u, "A1B2C3", TOTP, FactorStateUnverified, "some-secret")
-	encodedFactor, err := json.Marshal(f)
-	require.NoError(ts.T(), err)
 	decodedFactor := Factor{}
 	json.Unmarshal(encodedFactor, &decodedFactor)
 	require.Equal(ts.T(), decodedFactor.Secret, "")
