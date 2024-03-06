@@ -625,7 +625,7 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, notFoundError(err.Error()).WithInternalError(err)
+			return nil, expiredTokenError("Token has expired or is invalid").WithInternalError(err)
 		}
 		return nil, internalServerError("Database error finding user").WithInternalError(err)
 	}
