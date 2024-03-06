@@ -157,7 +157,7 @@ func FindFactorByFactorID(conn *storage.Connection, factorID uuid.UUID) (*Factor
 	var factor Factor
 	err := conn.Find(&factor, factorID)
 	if err != nil && errors.Cause(err) == sql.ErrNoRows {
-		return nil, ChallengeNotFoundError{}
+		return nil, FactorNotFoundError{}
 	} else if err != nil {
 		return nil, err
 	}
