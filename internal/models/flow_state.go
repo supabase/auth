@@ -159,7 +159,7 @@ func (f *FlowState) IsExpired(expiryDuration time.Duration) bool {
 	return time.Now().After(f.CreatedAt.Add(expiryDuration))
 }
 
-func (f *FlowState) RecordAuthCodeIssuedTime(tx *storage.Connection) error {
+func (f *FlowState) RecordAuthCodeIssuedAtTime(tx *storage.Connection) error {
 	issueTime := time.Now()
 	f.AuthCodeIssuedAt = &issueTime
 	if err := tx.Update(f); err != nil {

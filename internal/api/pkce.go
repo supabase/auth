@@ -45,7 +45,7 @@ func issueAuthCode(tx *storage.Connection, user *models.User, authenticationMeth
 	} else if err != nil {
 		return "", err
 	}
-	if err := flowState.RecordIssuedTime(tx); err != nil {
+	if err := flowState.RecordAuthCodeIssuedAtTime(tx); err != nil {
 		return "", err
 	}
 
