@@ -153,24 +153,15 @@ func FindFactorsByUser(tx *storage.Connection, user *User) ([]*Factor, error) {
 	return factors, nil
 }
 
-func FindFactorByFactorID(tx *storage.Connection, factorID uuid.UUID) (*Factor, error) {
-	factor, err := findFactor(tx, "id = ?", factorID)
-	if err != nil {
+func FindFactorByFactorID(conn *storage.Connection, factorID uuid.UUID) (*Factor, error) {
+	var factor Factor
+	err := conn.Find(&factor, factorID)
+	if err != nil && errors.Cause(err) == sql.ErrNoRows {
 		return nil, FactorNotFoundError{}
+	} else if err != nil {
+		return nil, err
 	}
-	return factor, nil
-}
-
-func findFactor(tx *storage.Connection, query string, args ...interface{}) (*Factor, error) {
-	obj := &Factor{}
-	if err := tx.Eager().Q().Where(query, args...).First(obj); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, FactorNotFoundError{}
-		}
-		return nil, errors.Wrap(err, "Database error finding factor")
-	}
-
-	return obj, nil
+	return &factor, nil
 }
 
 func DeleteUnverifiedFactors(tx *storage.Connection, user *User) error {
