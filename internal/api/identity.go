@@ -60,11 +60,23 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 		if terr := tx.Destroy(identityToBeDeleted); terr != nil {
 			return internalServerError("Database error deleting identity").WithInternalError(terr)
 		}
-		if terr := user.UpdateUserEmailFromIdentities(tx); terr != nil {
-			if models.IsUniqueConstraintViolatedError(terr) {
-				return forbiddenError("Unable to unlink identity due to email conflict").WithInternalError(terr)
+
+		switch identityToBeDeleted.Provider {
+		case "phone":
+			user.PhoneConfirmedAt = nil
+			if terr := user.SetPhone(tx, ""); terr != nil {
+				return internalServerError("Database error updating user phone").WithInternalError(terr)
 			}
-			return internalServerError("Database error updating user email").WithInternalError(terr)
+			if terr := tx.UpdateOnly(user, "phone_confirmed_at"); terr != nil {
+				return internalServerError("Database error updating user phone").WithInternalError(terr)
+			}
+		default:
+			if terr := user.UpdateUserEmailFromIdentities(tx); terr != nil {
+				if models.IsUniqueConstraintViolatedError(terr) {
+					return forbiddenError("Unable to unlink identity due to email conflict").WithInternalError(terr)
+				}
+				return internalServerError("Database error updating user email").WithInternalError(terr)
+			}
 		}
 		if terr := user.UpdateAppMetaDataProviders(tx); terr != nil {
 			return internalServerError("Database error updating user providers").WithInternalError(terr)
