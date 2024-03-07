@@ -262,6 +262,12 @@ func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
 	if terr := u.SetEmail(tx, primaryIdentity.GetEmail()); terr != nil {
 		return terr
 	}
+	if primaryIdentity.GetEmail() == "" {
+		u.EmailConfirmedAt = nil
+		if terr := tx.UpdateOnly(u, "email_confirmed_at"); terr != nil {
+			return terr
+		}
+	}
 	return nil
 }
 
