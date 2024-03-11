@@ -231,7 +231,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				if isPKCEFlow(flowType) {
+				if isCodeFlow(flowType) {
 					_, terr := generateFlowState(tx, params.Provider, models.EmailSignup, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
 					if terr != nil {
 						return terr

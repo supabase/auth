@@ -80,7 +80,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	flowType := getFlow(codeChallenge, "")
 
 	flowStateID := ""
-	if isPKCEFlow(flowType) {
+	if isCodeFlow(flowType) {
 		flowState, err := generateFlowState(a.db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil)
 		if err != nil {
 			return "", err
@@ -243,7 +243,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	if flowState != nil {
 		// This means that the callback is using PKCE
 		// Set the flowState.AuthCode to the query param here
-		rurl, err = a.prepPKCERedirectURL(rurl, flowState.AuthCode)
+		rurl, err = a.prepCodeRedirectURL(rurl, flowState.AuthCode)
 		if err != nil {
 			return err
 		}

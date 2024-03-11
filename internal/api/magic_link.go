@@ -129,7 +129,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return sendJSON(w, http.StatusOK, make(map[string]string))
 	}
 
-	if isPKCEFlow(flowType) {
+	if isCodeFlow(flowType) {
 		if _, err = generateFlowState(a.db, models.MagicLink.String(), models.MagicLink, params.CodeChallengeMethod, params.CodeChallenge, &user.ID); err != nil {
 			return err
 		}

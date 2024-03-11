@@ -30,7 +30,7 @@ func isValidCodeChallenge(codeChallenge string) (bool, error) {
 }
 
 func addFlowPrefixToToken(token string, flowType models.FlowType) string {
-	if isPKCEFlow(flowType) {
+	if isCodeFlow(flowType) {
 		return flowType.String() + "_" + token
 	} else if isImplicitFlow(flowType) {
 		return token
@@ -48,8 +48,8 @@ func issueAuthCode(tx *storage.Connection, user *models.User, authenticationMeth
 	return flowState.AuthCode, nil
 }
 
-func isPKCEFlow(flowType models.FlowType) bool {
-	return flowType == models.PKCEFlow
+func isCodeFlow(flowType models.FlowType) bool {
+	return flowType == models.PKCEFlow || flowType == models.AuthCode
 }
 
 func isImplicitFlow(flowType models.FlowType) bool {

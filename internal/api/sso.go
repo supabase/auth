@@ -61,7 +61,7 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	flowType := getFlow(params.CodeChallenge, params.ResponseType)
 	var flowStateID *uuid.UUID
 	flowStateID = nil
-	if isPKCEFlow(flowType) {
+	if isCodeFlow(flowType) {
 		flowState, err := generateFlowState(db, models.SSOSAML.String(), models.SSOSAML, codeChallengeMethod, codeChallenge, nil)
 		if err != nil {
 			return err

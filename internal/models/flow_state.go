@@ -94,8 +94,8 @@ func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeCh
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: codeChallengeMethod.String(),
 		AuthCode:            authCode.String(),
-		// TODO: Populate this
-		FlowType:             "code",
+		// TODO: Populate this properly
+		FlowType:             "pkce",
 		AuthenticationMethod: authenticationMethod.String(),
 		UserID:               userID,
 	}

@@ -191,7 +191,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
 				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
-		} else if isPKCEFlow(flowType) {
+		} else if isCodeFlow(flowType) {
 			if authCode, terr = issueAuthCode(tx, user, authenticationMethod); terr != nil {
 				return badRequestError("No associated flow state found. %s", terr)
 			}
@@ -215,8 +215,8 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 		q := url.Values{}
 		q.Set("type", params.Type)
 		rurl = token.AsRedirectURL(rurl, q)
-	} else if isPKCEFlow(flowType) {
-		rurl, err = a.prepPKCERedirectURL(rurl, authCode)
+	} else if isCodeFlow(flowType) {
+		rurl, err = a.prepCodeRedirectURL(rurl, authCode)
 		if err != nil {
 			return err
 		}
@@ -467,7 +467,7 @@ func (a *API) prepRedirectURL(message string, rurl string, flowType models.FlowT
 	return u.String(), nil
 }
 
-func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
+func (a *API) prepCodeRedirectURL(rurl, code string) (string, error) {
 	u, err := url.Parse(rurl)
 	if err != nil {
 		return "", err
