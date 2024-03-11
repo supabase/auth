@@ -62,7 +62,7 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	var flowStateID *uuid.UUID
 	flowStateID = nil
 	if isCodeFlow(flowType) {
-		flowState, err := generateFlowState(db, models.SSOSAML.String(), models.SSOSAML, codeChallengeMethod, codeChallenge, nil)
+		flowState, err := generateFlowState(db, models.SSOSAML.String(), models.SSOSAML, codeChallengeMethod, codeChallenge, nil, flowType)
 		if err != nil {
 			return err
 		}

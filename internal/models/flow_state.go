@@ -85,17 +85,34 @@ func (FlowState) TableName() string {
 	return tableName
 }
 
-func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID) *FlowState {
+func NewPKCEFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID) *FlowState {
 	id := uuid.Must(uuid.NewV4())
 	authCode := uuid.Must(uuid.NewV4())
 	flowState := &FlowState{
-		ID:                  id,
-		ProviderType:        providerType,
-		CodeChallenge:       codeChallenge,
-		CodeChallengeMethod: codeChallengeMethod.String(),
-		AuthCode:            authCode.String(),
-		// TODO: Populate this properly
-		FlowType:             "pkce",
+		ID:                   id,
+		ProviderType:         providerType,
+		CodeChallenge:        codeChallenge,
+		CodeChallengeMethod:  codeChallengeMethod.String(),
+		AuthCode:             authCode.String(),
+		FlowType:             PKCEFlow.String(),
+		AuthenticationMethod: authenticationMethod.String(),
+		UserID:               userID,
+	}
+	return flowState
+}
+
+func NewAuthCodeFlowState(providerType string, authenticationMethod AuthenticationMethod, userID *uuid.UUID) *FlowState {
+	id := uuid.Must(uuid.NewV4())
+	authCode := uuid.Must(uuid.NewV4())
+	// TODO: decide whether to swap out placeholder values
+	codeChallenge := AuthCode.String() + "_" + uuid.Must(uuid.NewV4()).String()
+	flowState := &FlowState{
+		ID:                   id,
+		ProviderType:         providerType,
+		CodeChallenge:        codeChallenge,
+		CodeChallengeMethod:  Plain.String(),
+		AuthCode:             authCode.String(),
+		FlowType:             PKCEFlow.String(),
 		AuthenticationMethod: authenticationMethod.String(),
 		UserID:               userID,
 	}

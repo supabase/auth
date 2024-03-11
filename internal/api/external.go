@@ -81,7 +81,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 
 	flowStateID := ""
 	if isCodeFlow(flowType) {
-		flowState, err := generateFlowState(a.db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil)
+		flowState, err := generateFlowState(a.db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil, flowType)
 		if err != nil {
 			return "", err
 		}

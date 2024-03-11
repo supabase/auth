@@ -198,7 +198,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			referrer := utilities.GetReferrer(r, config)
 			flowType := getFlow(params.CodeChallenge, params.ResponseType)
 			if isCodeFlow(flowType) {
-				_, terr := generateFlowState(tx, models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
+				_, terr := generateFlowState(tx, models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID, flowType)
 				if terr != nil {
 					return terr
 				}
