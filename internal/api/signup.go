@@ -28,6 +28,7 @@ type SignupParams struct {
 	Channel             string                 `json:"channel"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 	CodeChallenge       string                 `json:"code_challenge"`
+	ResponseType        string                 `json:"response_type"`
 }
 
 func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
@@ -129,7 +130,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var err error
-	flowType := getFlowFromChallenge(params.CodeChallenge)
+	flowType := getFlow(params.CodeChallenge, params.ResponseType)
 
 	var user *models.User
 	var grantParams models.GrantParams

@@ -21,6 +21,7 @@ const InvalidCodeMethodError = "code challenge method not supported"
 type FlowState struct {
 	ID                   uuid.UUID  `json:"id" db:"id"`
 	UserID               *uuid.UUID `json:"user_id,omitempty" db:"user_id"`
+	FlowType             string     `json:"flow_type" db:"flow_type"`
 	AuthCode             string     `json:"auth_code" db:"auth_code"`
 	AuthenticationMethod string     `json:"authentication_method" db:"authentication_method"`
 	CodeChallenge        string     `json:"code_challenge" db:"code_challenge"`
@@ -63,6 +64,7 @@ type FlowType int
 
 const (
 	PKCEFlow FlowType = iota
+	AuthCode
 	ImplicitFlow
 )
 
@@ -70,6 +72,8 @@ func (flowType FlowType) String() string {
 	switch flowType {
 	case PKCEFlow:
 		return "pkce"
+	case AuthCode:
+		return "code"
 	case ImplicitFlow:
 		return "implicit"
 	}
@@ -85,11 +89,13 @@ func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeCh
 	id := uuid.Must(uuid.NewV4())
 	authCode := uuid.Must(uuid.NewV4())
 	flowState := &FlowState{
-		ID:                   id,
-		ProviderType:         providerType,
-		CodeChallenge:        codeChallenge,
-		CodeChallengeMethod:  codeChallengeMethod.String(),
-		AuthCode:             authCode.String(),
+		ID:                  id,
+		ProviderType:        providerType,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod.String(),
+		AuthCode:            authCode.String(),
+		// TODO: Populate this
+		FlowType:             "code",
 		AuthenticationMethod: authenticationMethod.String(),
 		UserID:               userID,
 	}

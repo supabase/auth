@@ -22,6 +22,7 @@ type UserUpdateParams struct {
 	AppData             map[string]interface{} `json:"app_metadata,omitempty"`
 	Phone               string                 `json:"phone"`
 	Channel             string                 `json:"channel"`
+	ResponseType        string                 `json:"response_type"`
 	CodeChallenge       string                 `json:"code_challenge"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 }
@@ -195,7 +196,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		if params.Email != "" && params.Email != user.GetEmail() {
 			mailer := a.Mailer(ctx)
 			referrer := utilities.GetReferrer(r, config)
-			flowType := getFlowFromChallenge(params.CodeChallenge)
+			flowType := getFlow(params.CodeChallenge, params.ResponseType)
 			if isPKCEFlow(flowType) {
 				_, terr := generateFlowState(tx, models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
 				if terr != nil {

@@ -71,9 +71,11 @@ func validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
 	return nil
 }
 
-func getFlowFromChallenge(codeChallenge string) models.FlowType {
+func getFlow(codeChallenge string, responseType string) models.FlowType {
 	if codeChallenge != "" {
 		return models.PKCEFlow
+	} else if responseType == "code" {
+		return models.AuthCode
 	} else {
 		return models.ImplicitFlow
 	}

@@ -20,6 +20,7 @@ type MagicLinkParams struct {
 	Data                map[string]interface{} `json:"data"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 	CodeChallenge       string                 `json:"code_challenge"`
+	ResponseType        string                 `json:"response_type"`
 }
 
 func (p *MagicLinkParams) Validate() error {
@@ -62,7 +63,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		params.Data = make(map[string]interface{})
 	}
 
-	flowType := getFlowFromChallenge(params.CodeChallenge)
+	flowType := getFlow(params.CodeChallenge, params.ResponseType)
 
 	var isNewUser bool
 	aud := a.requestAud(ctx, r)
@@ -91,6 +92,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 			Data:                params.Data,
 			CodeChallengeMethod: params.CodeChallengeMethod,
 			CodeChallenge:       params.CodeChallenge,
+			ResponseType:        params.ResponseType,
 		}
 		newBodyContent, err := json.Marshal(signUpParams)
 		if err != nil {
@@ -110,6 +112,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 				Data:                params.Data,
 				CodeChallengeMethod: params.CodeChallengeMethod,
 				CodeChallenge:       params.CodeChallenge,
+				ResponseType:        params.ResponseType,
 			}
 			metadata, err := json.Marshal(newBodyContent)
 			if err != nil {

@@ -76,7 +76,8 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
 		return "", err
 	}
-	flowType := getFlowFromChallenge(codeChallenge)
+	// TODO: Adjust this, currently default to PKCE
+	flowType := getFlow(codeChallenge, "")
 
 	flowStateID := ""
 	if isPKCEFlow(flowType) {
