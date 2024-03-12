@@ -53,6 +53,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	scopes := query.Get("scopes")
 	codeChallenge := query.Get("code_challenge")
 	codeChallengeMethod := query.Get("code_challenge_method")
+	responseType := query.Get("response_type")
 
 	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
@@ -73,7 +74,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	redirectURL := utilities.GetReferrer(r, config)
 	log := observability.GetLogEntry(r)
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
-	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
+	if err := validateCodeFlowParams(codeChallengeMethod, codeChallenge, responseType); err != nil {
 		return "", err
 	}
 	// TODO: Adjust this, currently default to PKCE
@@ -118,6 +119,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	query.Del("provider")
 	query.Del("code_challenge")
 	query.Del("code_challenge_method")
+	query.Del("response_type")
 	for key := range query {
 		if key == "workos_provider" {
 			// See https://workos.com/docs/reference/sso/authorize/get

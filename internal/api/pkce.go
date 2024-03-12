@@ -56,14 +56,29 @@ func isImplicitFlow(flowType models.FlowType) bool {
 	return flowType == models.ImplicitFlow
 }
 
-func validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
-	switch true {
-	case (codeChallenge == "") != (codeChallengeMethod == ""):
+func validateCodeFlowParams(codeChallengeMethod, codeChallenge, responseType string) error {
+	// TODO: simplify this, maybe handle implicit case and then everything else
+	// Immediately return error for implicit case
+	if responseType != "code" && ((codeChallenge != "") != (codeChallengeMethod != "")) {
 		return badRequestError(InvalidPKCEParamsErrorMessage)
-	case codeChallenge != "":
+	}
+	// Code flow case
+	switch true {
+	// PKCE Flow
+	case codeChallenge != "" && codeChallengeMethod != "" && responseType == "code":
 		if valid, err := isValidCodeChallenge(codeChallenge); !valid {
 			return err
 		}
+	// Valid Auth Code Flow
+	case (codeChallenge == "") && (codeChallengeMethod == "") && responseType == "code":
+		return nil
+	// invalid auth code or PKCE Flow
+	case ((codeChallenge != "") && (codeChallengeMethod == "")) && responseType == "code":
+		return badRequestError(InvalidPKCEParamsErrorMessage)
+
+	case (codeChallenge == "") && (codeChallengeMethod != "") && responseType == "code":
+		return badRequestError(InvalidPKCEParamsErrorMessage)
+
 	default:
 		// if both params are empty, just return nil
 		return nil
@@ -83,12 +98,12 @@ func getFlow(codeChallenge string, responseType string) models.FlowType {
 
 // Should only be used with Auth Code of PKCE Flows
 func generateFlowState(tx *storage.Connection, providerType string, authenticationMethod models.AuthenticationMethod, codeChallengeMethodParam string, codeChallenge string, userID *uuid.UUID, flowType models.FlowType) (*models.FlowState, error) {
-	codeChallengeMethod, err := models.ParseCodeChallengeMethod(codeChallengeMethodParam)
-	if err != nil {
-		return nil, err
-	}
 	var flowState *models.FlowState
 	if flowType == models.PKCEFlow {
+		codeChallengeMethod, err := models.ParseCodeChallengeMethod(codeChallengeMethodParam)
+		if err != nil {
+			return nil, err
+		}
 		flowState = models.NewPKCEFlowState(providerType, codeChallenge, codeChallengeMethod, authenticationMethod, userID)
 	} else if flowType == models.AuthCode {
 		flowState = models.NewAuthCodeFlowState(providerType, authenticationMethod, userID)

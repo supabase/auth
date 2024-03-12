@@ -32,7 +32,7 @@ func (p *MagicLinkParams) Validate() error {
 	if err != nil {
 		return err
 	}
-	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+	if err := validateCodeFlowParams(p.CodeChallengeMethod, p.CodeChallenge, p.ResponseType); err != nil {
 		return err
 	}
 	return nil

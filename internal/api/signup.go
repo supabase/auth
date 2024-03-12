@@ -51,7 +51,7 @@ func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
 	if p.Phone != "" && p.CodeChallenge != "" {
 		return badRequestError("PKCE not supported for phone signups")
 	}
-	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
+	if err := validateCodeFlowParams(p.CodeChallengeMethod, p.CodeChallenge, p.ResponseType); err != nil {
 		return err
 	}
 

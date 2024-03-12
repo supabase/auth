@@ -546,6 +546,7 @@ func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
 		CreateUser:          true,
 		CodeChallengeMethod: "s256",
 		CodeChallenge:       challenge,
+		ResponseType:        "code",
 	}))
 	req = httptest.NewRequest(http.MethodPost, "/otp", &buffer)
 	req.Header.Set("Content-Type", "application/json")

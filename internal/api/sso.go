@@ -54,8 +54,9 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	}
 	codeChallengeMethod := params.CodeChallengeMethod
 	codeChallenge := params.CodeChallenge
+	responseType := params.ResponseType
 
-	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
+	if err := validateCodeFlowParams(codeChallengeMethod, codeChallenge, responseType); err != nil {
 		return err
 	}
 	flowType := getFlow(params.CodeChallenge, params.ResponseType)
