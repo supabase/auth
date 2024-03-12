@@ -78,7 +78,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		return "", err
 	}
 	// TODO: Adjust this, currently default to PKCE
-	flowType := getFlow(codeChallenge, "")
+	flowType := getFlow(codeChallenge, responseType)
 
 	flowStateID := ""
 	if isCodeFlow(flowType) {

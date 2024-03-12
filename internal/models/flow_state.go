@@ -64,7 +64,7 @@ type FlowType int
 
 const (
 	PKCEFlow FlowType = iota
-	AuthCode
+	AuthCodeFlow
 	ImplicitFlow
 )
 
@@ -72,7 +72,7 @@ func (flowType FlowType) String() string {
 	switch flowType {
 	case PKCEFlow:
 		return "pkce"
-	case AuthCode:
+	case AuthCodeFlow:
 		return "code"
 	case ImplicitFlow:
 		return "implicit"
@@ -105,14 +105,14 @@ func NewAuthCodeFlowState(providerType string, authenticationMethod Authenticati
 	id := uuid.Must(uuid.NewV4())
 	authCode := uuid.Must(uuid.NewV4())
 	// TODO: decide whether to swap out placeholder values
-	codeChallenge := AuthCode.String() + "_" + uuid.Must(uuid.NewV4()).String()
+	codeChallenge := AuthCodeFlow.String() + "_" + uuid.Must(uuid.NewV4()).String()
 	flowState := &FlowState{
 		ID:                   id,
 		ProviderType:         providerType,
 		CodeChallenge:        codeChallenge,
 		CodeChallengeMethod:  Plain.String(),
 		AuthCode:             authCode.String(),
-		FlowType:             PKCEFlow.String(),
+		FlowType:             AuthCodeFlow.String(),
 		AuthenticationMethod: authenticationMethod.String(),
 		UserID:               userID,
 	}

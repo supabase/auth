@@ -123,7 +123,7 @@ func (a *API) AuthCode(ctx context.Context, w http.ResponseWriter, r *http.Reque
 
 	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
 	// Sanity check in case user ID was not set properly
-	if models.IsNotFoundError(err) || flowState.UserID == nil || flowState.FlowType != models.AuthCode.String() {
+	if models.IsNotFoundError(err) || flowState.UserID == nil || flowState.FlowType != models.AuthCodeFlow.String() {
 		return forbiddenError("invalid flow state, no valid flow state found")
 	} else if err != nil {
 		return err

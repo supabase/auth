@@ -135,8 +135,15 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 
 	flowType := models.ImplicitFlow
 	var authenticationMethod models.AuthenticationMethod
+	// TODO: simplify this
 	if strings.HasPrefix(params.Token, PKCEPrefix) {
 		flowType = models.PKCEFlow
+		authenticationMethod, err = models.ParseAuthenticationMethod(params.Type)
+		if err != nil {
+			return err
+		}
+	} else if strings.HasPrefix(params.Token, AuthCodePrefix) {
+		flowType = models.AuthCodeFlow
 		authenticationMethod, err = models.ParseAuthenticationMethod(params.Type)
 		if err != nil {
 			return err
@@ -459,7 +466,7 @@ func (a *API) prepRedirectURL(message string, rurl string, flowType models.FlowT
 	hq := url.Values{}
 	q := u.Query()
 	hq.Set("message", message)
-	if flowType == models.PKCEFlow {
+	if flowType == models.PKCEFlow || flowType == models.AuthCodeFlow {
 		q.Set("message", message)
 	}
 	u.RawQuery = q.Encode()

@@ -10,6 +10,7 @@ import (
 
 const (
 	PKCEPrefix                    = "pkce_"
+	AuthCodePrefix = "code_"
 	MinCodeChallengeLength        = 43
 	MaxCodeChallengeLength        = 128
 	InvalidPKCEParamsErrorMessage = "PKCE flow requires code_challenge_method and code_challenge"
@@ -49,7 +50,7 @@ func issueAuthCode(tx *storage.Connection, user *models.User, authenticationMeth
 }
 
 func isCodeFlow(flowType models.FlowType) bool {
-	return flowType == models.PKCEFlow || flowType == models.AuthCode
+	return flowType == models.PKCEFlow || flowType == models.AuthCodeFlow
 }
 
 func isImplicitFlow(flowType models.FlowType) bool {
@@ -90,7 +91,7 @@ func getFlow(codeChallenge string, responseType string) models.FlowType {
 	if codeChallenge != "" {
 		return models.PKCEFlow
 	} else if responseType == "code" {
-		return models.AuthCode
+		return models.AuthCodeFlow
 	} else {
 		return models.ImplicitFlow
 	}
@@ -105,7 +106,7 @@ func generateFlowState(tx *storage.Connection, providerType string, authenticati
 			return nil, err
 		}
 		flowState = models.NewPKCEFlowState(providerType, codeChallenge, codeChallengeMethod, authenticationMethod, userID)
-	} else if flowType == models.AuthCode {
+	} else if flowType == models.AuthCodeFlow {
 		flowState = models.NewAuthCodeFlowState(providerType, authenticationMethod, userID)
 	}
 	if err := tx.Create(flowState); err != nil {
