@@ -181,9 +181,9 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 		if terr := tx.Reload(user); err != nil {
 			return terr
 		}
+
 		if isImplicitFlow(flowType) {
 			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
-
 			if terr != nil {
 				return terr
 			}
