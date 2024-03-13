@@ -64,12 +64,16 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	session := getSession(ctx)
 	config := a.config
 
+	if session == nil || user == nil {
+		return internalServerError("A valid session and a registered user are required to enroll a factor")
+	}
+
 	params := &EnrollFactorParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
-	issuer := ""
 
+	issuer := ""
 	if params.FactorType != models.TOTP {
 		return badRequestError("factor_type needs to be totp")
 	}
@@ -84,10 +88,8 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		issuer = params.Issuer
 	}
 
-	factors, err := models.FindFactorsByUser(a.db, user)
-	if err != nil {
-		return internalServerError("error validating number of factors in system").WithInternalError(err)
-	}
+	factors := user.Factors
+
 	factorCount := len(factors)
 	numVerifiedFactors := 0
 	if err := models.DeleteExpiredFactors(a.db, config.MFA.FactorExpiryDuration); err != nil {
