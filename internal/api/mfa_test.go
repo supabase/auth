@@ -184,11 +184,12 @@ func (ts *MFATestSuite) TestMultipleEnrollsCleanupExpiredFactors() {
 	// All factors are deleted when a subsequent enroll is made
 	ts.API.config.MFA.FactorExpiryDuration = 0 * time.Second
 	// Verified factor should not be deleted (Factor 1)
-	_ = performTestSignupAndVerify(ts, ts.TestEmail, ts.TestPassword, true /* <- requireStatusOK */)
+	resp := performTestSignupAndVerify(ts, ts.TestEmail, ts.TestPassword, true /* <- requireStatusOK */)
 	numFactors := 5
-	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, ts.TestUser, nil, models.TOTPSignIn)
-	require.NoError(ts.T(), err)
+	accessTokenResp := &AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(resp.Body).Decode(&accessTokenResp))
 
+	token := accessTokenResp.Token
 	for i := 0; i < numFactors; i++ {
 		_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", http.StatusOK)
 	}
@@ -458,7 +459,7 @@ func performTestSignupAndVerify(ts *MFATestSuite, email, password string, requir
 
 func performEnrollFlow(ts *MFATestSuite, token, friendlyName, factorType, issuer string, expectedCode int) *httptest.ResponseRecorder {
 	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": friendlyName, "factor_type": factorType, "issuer": issuer}))
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(EnrollFactorParams{FriendlyName: friendlyName, FactorType: factorType, Issuer: issuer}))
 	w := ServeAuthenticatedRequest(ts, http.MethodPost, "http://localhost/factors/", token, buffer)
 	require.Equal(ts.T(), expectedCode, w.Code)
 	return w
