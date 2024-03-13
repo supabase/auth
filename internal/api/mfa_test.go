@@ -179,6 +179,34 @@ func (ts *MFATestSuite) TestDuplicateEnrollsReturnExpectedMessage() {
 	require.Contains(ts.T(), errorResponse.Message, expectedErrorMessage)
 }
 
+func (ts *MFATestSuite) TestMultipleEnrollsCleanupExpiredFactors() {
+	// All factors are deleted when a subsequent enroll is made
+	ts.API.config.MFA.FactorExpiryDuration = 0 * time.Second
+	// Verified factor should not be deleted (Factor 1)
+	resp := performTestSignupAndVerify(ts, ts.TestEmail, ts.TestPassword, true /* <- requireStatusOK */)
+	numFactors := 5
+	accessTokenResp := &AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(resp.Body).Decode(&accessTokenResp))
+
+	token := accessTokenResp.Token
+	for i := 0; i < numFactors; i++ {
+		_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", http.StatusOK)
+	}
+
+	// All Factors except last factor should be expired
+	factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
+	require.NoError(ts.T(), err)
+
+	// Make a challenge so last, unverified factor isn't deleted on next enroll (Factor 2)
+	_ = performChallengeFlow(ts, factors[len(factors)-1].ID, token)
+
+	// Enroll another Factor (Factor 3)
+	_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", http.StatusOK)
+	factors, err = models.FindFactorsByUser(ts.API.db, ts.TestUser)
+	require.NoError(ts.T(), err)
+	require.Equal(ts.T(), 3, len(factors))
+}
+
 func (ts *MFATestSuite) TestChallengeFactor() {
 	f := ts.TestUser.Factors[0]
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
@@ -430,7 +458,7 @@ func performTestSignupAndVerify(ts *MFATestSuite, email, password string, requir
 
 func performEnrollFlow(ts *MFATestSuite, token, friendlyName, factorType, issuer string, expectedCode int) *httptest.ResponseRecorder {
 	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]string{"friendly_name": friendlyName, "factor_type": factorType, "issuer": issuer}))
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(EnrollFactorParams{FriendlyName: friendlyName, FactorType: factorType, Issuer: issuer}))
 	w := ServeAuthenticatedRequest(ts, http.MethodPost, "http://localhost/factors/", token, buffer)
 	require.Equal(ts.T(), expectedCode, w.Code)
 	return w

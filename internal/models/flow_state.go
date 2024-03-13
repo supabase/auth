@@ -28,6 +28,7 @@ type FlowState struct {
 	ProviderType         string     `json:"provider_type" db:"provider_type"`
 	ProviderAccessToken  string     `json:"provider_access_token" db:"provider_access_token"`
 	ProviderRefreshToken string     `json:"provider_refresh_token" db:"provider_refresh_token"`
+	AuthCodeIssuedAt     *time.Time `json:"auth_code_issued_at" db:"auth_code_issued_at"`
 	CreatedAt            time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at" db:"updated_at"`
 }
@@ -152,5 +153,17 @@ func (f *FlowState) VerifyPKCE(codeVerifier string) error {
 }
 
 func (f *FlowState) IsExpired(expiryDuration time.Duration) bool {
+	if f.AuthCodeIssuedAt != nil && f.AuthenticationMethod == MagicLink.String() {
+		return time.Now().After(f.AuthCodeIssuedAt.Add(expiryDuration))
+	}
 	return time.Now().After(f.CreatedAt.Add(expiryDuration))
+}
+
+func (f *FlowState) RecordAuthCodeIssuedAtTime(tx *storage.Connection) error {
+	issueTime := time.Now()
+	f.AuthCodeIssuedAt = &issueTime
+	if err := tx.Update(f); err != nil {
+		return err
+	}
+	return nil
 }

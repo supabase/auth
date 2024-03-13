@@ -18,6 +18,7 @@ import (
 
 const defaultMinPasswordLength int = 6
 const defaultChallengeExpiryDuration float64 = 300
+const defaultFactorExpiryDuration time.Duration = 300 * time.Second
 const defaultFlowStateExpiryDuration time.Duration = 300 * time.Second
 
 // See: https://www.postgresql.org/docs/7.0/syntax525.htm
@@ -28,7 +29,7 @@ var postgresNamesRegexp = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`)
 // So this 4 * Math.ceil(24/3) = 32 and 4 * Math.ceil(64/3) = 88 for symmetric secrets
 // Since Ed25519 key is 32 bytes so we have 4 * Math.ceil(32/3) = 44
 var symmetricSecretFormat = regexp.MustCompile(`^v1,whsec_[A-Za-z0-9+/=]{32,88}`)
-var asymmetricSecretFormat = regexp.MustCompile(`^v1a,whpk_[A-Za-z0-9+/=]{44,};whsk_[A-Za-z0-9+/=]{44,}$`)
+var asymmetricSecretFormat = regexp.MustCompile(`^v1a,whpk_[A-Za-z0-9+/=]{44,}:whsk_[A-Za-z0-9+/=]{44,}$`)
 
 // Time is used to represent timestamps in the configuration, as envconfig has
 // trouble parsing empty strings, due to time.Time.UnmarshalText().
@@ -102,11 +103,12 @@ type JWTConfiguration struct {
 
 // MFAConfiguration holds all the MFA related Configuration
 type MFAConfiguration struct {
-	Enabled                     bool    `default:"false"`
-	ChallengeExpiryDuration     float64 `json:"challenge_expiry_duration" default:"300" split_words:"true"`
-	RateLimitChallengeAndVerify float64 `split_words:"true" default:"15"`
-	MaxEnrolledFactors          float64 `split_words:"true" default:"10"`
-	MaxVerifiedFactors          int     `split_words:"true" default:"10"`
+	Enabled                     bool          `default:"false"`
+	ChallengeExpiryDuration     float64       `json:"challenge_expiry_duration" default:"300" split_words:"true"`
+	FactorExpiryDuration        time.Duration `json:"factor_expiry_duration" default:"300s" split_words:"true"`
+	RateLimitChallengeAndVerify float64       `split_words:"true" default:"15"`
+	MaxEnrolledFactors          float64       `split_words:"true" default:"10"`
+	MaxVerifiedFactors          int           `split_words:"true" default:"10"`
 }
 
 type APIConfiguration struct {
@@ -452,11 +454,25 @@ type HookConfiguration struct {
 	CustomSMSProvider           ExtensibilityPointConfiguration `json:"custom_sms_provider" split_words:"true"`
 }
 
+type HTTPHookSecrets []string
+
+func (h *HTTPHookSecrets) Decode(value string) error {
+	parts := strings.Split(value, "|")
+	for _, part := range parts {
+		if part != "" {
+			*h = append(*h, part)
+		}
+	}
+
+	return nil
+}
+
 type ExtensibilityPointConfiguration struct {
-	URI             string   `json:"uri"`
-	Enabled         bool     `json:"enabled"`
-	HookName        string   `json:"hook_name"`
-	HTTPHookSecrets []string `json:"secrets"`
+	URI      string `json:"uri"`
+	Enabled  bool   `json:"enabled"`
+	HookName string `json:"hook_name"`
+	// We use | as a separator for keys and : as a separator for keys within a keypair. For instance: v1,whsec_test|v1a,whpk_myother:v1a,whsk_testkey|v1,whsec_secret3
+	HTTPHookSecrets []string `json:"secrets" envconfig:"secrets"`
 }
 
 func (h *HookConfiguration) Validate() error {
@@ -696,6 +712,9 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	}
 	if config.MFA.ChallengeExpiryDuration < defaultChallengeExpiryDuration {
 		config.MFA.ChallengeExpiryDuration = defaultChallengeExpiryDuration
+	}
+	if config.MFA.FactorExpiryDuration < defaultFactorExpiryDuration {
+		config.MFA.FactorExpiryDuration = defaultFactorExpiryDuration
 	}
 	if config.External.FlowStateExpiryDuration < defaultFlowStateExpiryDuration {
 		config.External.FlowStateExpiryDuration = defaultFlowStateExpiryDuration

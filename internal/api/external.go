@@ -227,6 +227,9 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 			flowState.ProviderAccessToken = providerAccessToken
 			flowState.ProviderRefreshToken = providerRefreshToken
 			flowState.UserID = &(user.ID)
+			issueTime := time.Now()
+			flowState.AuthCodeIssuedAt = &issueTime
+
 			terr = tx.Update(flowState)
 		} else {
 			token, terr = a.issueRefreshToken(ctx, tx, user, models.OAuth, grantParams)

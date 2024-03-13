@@ -217,3 +217,17 @@ func DeleteFactorsByUserId(tx *storage.Connection, userId uuid.UUID) error {
 	}
 	return nil
 }
+
+func DeleteExpiredFactors(tx *storage.Connection, validityDuration time.Duration) error {
+	totalSeconds := int64(validityDuration / time.Second)
+	validityInterval := fmt.Sprintf("interval '%d seconds'", totalSeconds)
+
+	factorTable := (&pop.Model{Value: Factor{}}).TableName()
+	challengeTable := (&pop.Model{Value: Challenge{}}).TableName()
+
+	query := fmt.Sprintf(`delete from %q where status != 'verified' and not exists (select * from %q where %q.id = %q.factor_id ) and created_at + %s < current_timestamp;`, factorTable, challengeTable, factorTable, challengeTable, validityInterval)
+	if err := tx.RawQuery(query).Exec(); err != nil {
+		return err
+	}
+	return nil
+}

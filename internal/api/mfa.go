@@ -64,11 +64,16 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	session := getSession(ctx)
 	config := a.config
 
+	if session == nil || user == nil {
+		return internalServerError("A valid session and a registered user are required to enroll a factor")
+	}
+
 	params := &EnrollFactorParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
+	issuer := ""
 	if params.FactorType != models.TOTP {
 		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be totp")
 	}
@@ -84,25 +89,26 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		issuer = params.Issuer
 	}
 
-	// Read from DB for certainty
-	factors, err := models.FindFactorsByUser(a.db, user)
-	if err != nil {
-		return internalServerError("error validating number of factors in system").WithInternalError(err)
-	}
+	factors := user.Factors
 
-	if len(factors) >= int(config.MFA.MaxEnrolledFactors) {
-		return unprocessableEntityError(ErrorCodeTooManyEnrolledMFAFactors, "Enrolled factors exceed allowed limit, unenroll to continue")
-	}
-
+	factorCount := len(factors)
 	numVerifiedFactors := 0
+	if err := models.DeleteExpiredFactors(a.db, config.MFA.FactorExpiryDuration); err != nil {
+		return err
+	}
+
 	for _, factor := range factors {
 		if factor.IsVerified() {
 			numVerifiedFactors += 1
 		}
 	}
 
+	if factorCount >= int(config.MFA.MaxEnrolledFactors) {
+		return forbiddenError("Enrolled factors exceed allowed limit, unenroll to continue")
+	}
+
 	if numVerifiedFactors >= config.MFA.MaxVerifiedFactors {
-		return forbiddenError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of enrolled factors reached, unenroll to continue")
+		return forbiddenError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of verified factors reached, unenroll to continue")
 	}
 
 	if numVerifiedFactors > 0 && !session.IsAAL2() {
@@ -116,6 +122,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return internalServerError(QRCodeGenerationErrorMessage).WithInternalError(err)
 	}
+
 	var buf bytes.Buffer
 	svgData := svg.New(&buf)
 	qrCode, _ := qr.Encode(key.String(), qr.H, qr.Auto)
