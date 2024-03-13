@@ -73,7 +73,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	issuer := ""
 	if params.FactorType != models.TOTP {
 		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be totp")
 	}
@@ -104,7 +103,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if factorCount >= int(config.MFA.MaxEnrolledFactors) {
-		return forbiddenError("Enrolled factors exceed allowed limit, unenroll to continue")
+		return forbiddenError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of verified factors reached, unenroll to continue")
 	}
 
 	if numVerifiedFactors >= config.MFA.MaxVerifiedFactors {
