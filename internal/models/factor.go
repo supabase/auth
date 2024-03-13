@@ -225,14 +225,7 @@ func DeleteExpiredFactors(tx *storage.Connection, validityDuration time.Duration
 	factorTable := (&pop.Model{Value: Factor{}}).TableName()
 	challengeTable := (&pop.Model{Value: Challenge{}}).TableName()
 
-	query := fmt.Sprintf(`delete from %q
-where status != 'verified'
-and not exists (
-    select *
-    from %q
-    where %q.id = %q.factor_id
-)
-and created_at + %s < current_timestamp;`, factorTable, challengeTable, factorTable, challengeTable, validityInterval)
+	query := fmt.Sprintf(`delete from %q where status != 'verified' and not exists (select * from %q where %q.id = %q.factor_id ) and created_at + %s < current_timestamp;`, factorTable, challengeTable, factorTable, challengeTable, validityInterval)
 	if err := tx.RawQuery(query).Exec(); err != nil {
 		return err
 	}
