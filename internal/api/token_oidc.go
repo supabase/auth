@@ -54,7 +54,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		if issuer == "" || !provider.IsAzureIssuer(issuer) {
 			detectedIssuer, err := provider.DetectAzureIDTokenIssuer(ctx, p.IdToken)
 			if err != nil {
-				return nil, nil, "", nil, badRequestError("Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
+				return nil, nil, "", nil, badRequestError(ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
 			}
 			issuer = detectedIssuer
 		}
@@ -95,12 +95,12 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		}
 
 		if !allowed {
-			return nil, nil, "", nil, badRequestError(fmt.Sprintf("Custom OIDC provider %q not allowed", p.Provider))
+			return nil, nil, "", nil, badRequestError(ErrorCodeValidationFailed, fmt.Sprintf("Custom OIDC provider %q not allowed", p.Provider))
 		}
 	}
 
 	if cfg != nil && !cfg.Enabled {
-		return nil, nil, "", nil, badRequestError(fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
+		return nil, nil, "", nil, badRequestError(ErrorCodeProviderDisabled, fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
 	}
 
 	oidcProvider, err := oidc.NewProvider(ctx, issuer)

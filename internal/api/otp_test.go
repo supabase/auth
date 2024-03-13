@@ -80,8 +80,9 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 			}{
 				http.StatusBadRequest,
 				map[string]interface{}{
-					"code": float64(http.StatusBadRequest),
-					"msg":  "PKCE flow requires code_challenge_method and code_challenge",
+					"code":       float64(http.StatusBadRequest),
+					"error_code": ErrorCodeValidationFailed,
+					"msg":        "PKCE flow requires code_challenge_method and code_challenge",
 				},
 			},
 		},
@@ -98,8 +99,9 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 			}{
 				http.StatusBadRequest,
 				map[string]interface{}{
-					"code": float64(http.StatusBadRequest),
-					"msg":  "PKCE flow requires code_challenge_method and code_challenge",
+					"code":       float64(http.StatusBadRequest),
+					"error_code": ErrorCodeValidationFailed,
+					"msg":        "PKCE flow requires code_challenge_method and code_challenge",
 				},
 			},
 		},
@@ -115,10 +117,10 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 				code     int
 				response map[string]interface{}
 			}{
-				http.StatusBadRequest,
+				http.StatusInternalServerError,
 				map[string]interface{}{
-					"code": float64(http.StatusBadRequest),
-					"msg":  "Error sending sms:",
+					"code": float64(http.StatusInternalServerError),
+					"msg":  "Unable to get SMS provider",
 				},
 			},
 		},
@@ -182,8 +184,9 @@ func (ts *OtpTestSuite) TestOtp() {
 			}{
 				http.StatusBadRequest,
 				map[string]interface{}{
-					"code": float64(http.StatusBadRequest),
-					"msg":  "Only an email address or phone number should be provided",
+					"code":       float64(http.StatusBadRequest),
+					"error_code": ErrorCodeValidationFailed,
+					"msg":        "Only an email address or phone number should be provided",
 				},
 			},
 		},
@@ -200,8 +203,9 @@ func (ts *OtpTestSuite) TestOtp() {
 			}{
 				http.StatusBadRequest,
 				map[string]interface{}{
-					"code": float64(http.StatusBadRequest),
-					"msg":  InvalidChannelError,
+					"code":       float64(http.StatusBadRequest),
+					"error_code": ErrorCodeValidationFailed,
+					"msg":        InvalidChannelError,
 				},
 			},
 		},
@@ -244,15 +248,16 @@ func (ts *OtpTestSuite) TestNoSignupsForOtp() {
 
 	ts.API.handler.ServeHTTP(w, req)
 
-	require.Equal(ts.T(), http.StatusBadRequest, w.Code)
+	require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
 
 	data := make(map[string]interface{})
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 
 	// response should be empty
 	assert.Equal(ts.T(), data, map[string]interface{}{
-		"code": float64(http.StatusBadRequest),
-		"msg":  "Signups not allowed for otp",
+		"code":       float64(http.StatusUnprocessableEntity),
+		"error_code": ErrorCodeOTPDisabled,
+		"msg":        "Signups not allowed for otp",
 	})
 }
 

@@ -63,7 +63,7 @@ func handler(fn apiHandler) http.HandlerFunc {
 
 func (h apiHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if err := h(w, r); err != nil {
-		handleError(err, w, r)
+		HandleResponseError(err, w, r)
 	}
 }
 
@@ -78,7 +78,7 @@ func (m middlewareHandler) handler(next http.Handler) http.Handler {
 func (m middlewareHandler) serve(next http.Handler, w http.ResponseWriter, r *http.Request) {
 	ctx, err := m(w, r)
 	if err != nil {
-		handleError(err, w, r)
+		HandleResponseError(err, w, r)
 		return
 	}
 	if ctx != nil {

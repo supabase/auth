@@ -96,7 +96,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 				},
 				Role: "authenticated",
 			},
-			ExpectedError: unauthorizedError("invalid claim: missing sub claim"),
+			ExpectedError: forbiddenError(ErrorCodeBadJWT, "invalid claim: missing sub claim"),
 			ExpectedUser:  nil,
 		},
 		{
@@ -118,7 +118,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 				},
 				Role: "authenticated",
 			},
-			ExpectedError: badRequestError("invalid claim: sub claim must be a UUID"),
+			ExpectedError: badRequestError(ErrorCodeBadJWT, "invalid claim: sub claim must be a UUID"),
 			ExpectedUser:  nil,
 		},
 		{

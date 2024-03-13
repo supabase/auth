@@ -18,7 +18,7 @@ type RecoverParams struct {
 
 func (p *RecoverParams) Validate() error {
 	if p.Email == "" {
-		return unprocessableEntityError("Password recovery requires an email")
+		return badRequestError(ErrorCodeValidationFailed, "Password recovery requires an email")
 	}
 	var err error
 	if p.Email, err = validateEmail(p.Email); err != nil {
@@ -73,7 +73,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {
-			return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
+			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "For security purposes, you can only request this once every 60 seconds")
 		}
 		return internalServerError("Unable to process request").WithInternalError(err)
 	}

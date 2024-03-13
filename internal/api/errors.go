@@ -8,7 +8,6 @@ import (
 	"runtime/debug"
 
 	"github.com/pkg/errors"
-	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/utilities"
 )
@@ -65,65 +64,43 @@ func (e *OAuthError) Cause() error {
 	return e
 }
 
-func invalidSignupError(config *conf.GlobalConfiguration) *HTTPError {
-	var msg string
-	if config.External.Email.Enabled && config.External.Phone.Enabled {
-		msg = "To signup, please provide your email or phone number"
-	} else if config.External.Email.Enabled {
-		msg = "To signup, please provide your email"
-	} else if config.External.Phone.Enabled {
-		msg = "To signup, please provide your phone number"
-	} else {
-		// 3rd party OAuth signups
-		msg = "To signup, please provide required fields"
-	}
-	return unprocessableEntityError(msg)
-}
-
 func oauthError(err string, description string) *OAuthError {
 	return &OAuthError{Err: err, Description: description}
 }
 
-func badRequestError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusBadRequest, fmtString, args...)
+func badRequestError(errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
+	return httpError(http.StatusBadRequest, errorCode, fmtString, args...)
 }
 
 func internalServerError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusInternalServerError, fmtString, args...)
+	return httpError(http.StatusInternalServerError, ErrorCodeUnexpectedFailure, fmtString, args...)
 }
 
-func notFoundError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusNotFound, fmtString, args...)
+func notFoundError(errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
+	return httpError(http.StatusNotFound, errorCode, fmtString, args...)
 }
 
-func expiredTokenError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusUnauthorized, fmtString, args...)
+func forbiddenError(errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
+	return httpError(http.StatusForbidden, errorCode, fmtString, args...)
 }
 
-func unauthorizedError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusUnauthorized, fmtString, args...)
+func unprocessableEntityError(errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
+	return httpError(http.StatusUnprocessableEntity, errorCode, fmtString, args...)
 }
 
-func forbiddenError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusForbidden, fmtString, args...)
-}
-
-func unprocessableEntityError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusUnprocessableEntity, fmtString, args...)
-}
-
-func tooManyRequestsError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusTooManyRequests, fmtString, args...)
+func tooManyRequestsError(errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
+	return httpError(http.StatusTooManyRequests, errorCode, fmtString, args...)
 }
 
 func conflictError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusConflict, fmtString, args...)
+	return httpError(http.StatusConflict, ErrorCodeConflict, fmtString, args...)
 }
 
 // HTTPError is an error with a message and an HTTP status code.
 type HTTPError struct {
-	Code            int    `json:"code"`
-	Message         string `json:"msg"`
+	HTTPStatus      int    `json:"code"`                 // do not rename the JSON tags!
+	ErrorCode       string `json:"error_code,omitempty"` // do not rename the JSON tags!
+	Message         string `json:"msg"`                  // do not rename the JSON tags!
 	InternalError   error  `json:"-"`
 	InternalMessage string `json:"-"`
 	ErrorID         string `json:"error_id,omitempty"`
@@ -133,7 +110,7 @@ func (e *HTTPError) Error() string {
 	if e.InternalMessage != "" {
 		return e.InternalMessage
 	}
-	return fmt.Sprintf("%d: %s", e.Code, e.Message)
+	return fmt.Sprintf("%d: %s", e.HTTPStatus, e.Message)
 }
 
 func (e *HTTPError) Is(target error) bool {
@@ -160,50 +137,12 @@ func (e *HTTPError) WithInternalMessage(fmtString string, args ...interface{}) *
 	return e
 }
 
-func httpError(code int, fmtString string, args ...interface{}) *HTTPError {
+func httpError(httpStatus int, errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
 	return &HTTPError{
-		Code:    code,
-		Message: fmt.Sprintf(fmtString, args...),
+		HTTPStatus: httpStatus,
+		ErrorCode:  errorCode,
+		Message:    fmt.Sprintf(fmtString, args...),
 	}
-}
-
-// OTPError is a custom error struct for phone auth errors
-type OTPError struct {
-	Err             string `json:"error"`
-	Description     string `json:"error_description,omitempty"`
-	InternalError   error  `json:"-"`
-	InternalMessage string `json:"-"`
-}
-
-func (e *OTPError) Error() string {
-	if e.InternalMessage != "" {
-		return e.InternalMessage
-	}
-	return fmt.Sprintf("%s: %s", e.Err, e.Description)
-}
-
-// WithInternalError adds internal error information to the error
-func (e *OTPError) WithInternalError(err error) *OTPError {
-	e.InternalError = err
-	return e
-}
-
-// WithInternalMessage adds internal message information to the error
-func (e *OTPError) WithInternalMessage(fmtString string, args ...interface{}) *OTPError {
-	e.InternalMessage = fmt.Sprintf(fmtString, args...)
-	return e
-}
-
-// Cause returns the root cause error
-func (e *OTPError) Cause() error {
-	if e.InternalError != nil {
-		return e.InternalError
-	}
-	return e
-}
-
-func otpError(err string, description string) *OTPError {
-	return &OTPError{Err: err, Description: description}
 }
 
 // Recoverer is a middleware that recovers from panics, logs the panic (and a
@@ -222,10 +161,10 @@ func recoverer(w http.ResponseWriter, r *http.Request) (context.Context, error) 
 			}
 
 			se := &HTTPError{
-				Code:    http.StatusInternalServerError,
-				Message: http.StatusText(http.StatusInternalServerError),
+				HTTPStatus: http.StatusInternalServerError,
+				Message:    http.StatusText(http.StatusInternalServerError),
 			}
-			handleError(se, w, r)
+			HandleResponseError(se, w, r)
 		}
 	}()
 
@@ -237,28 +176,61 @@ type ErrorCause interface {
 	Cause() error
 }
 
-func handleError(err error, w http.ResponseWriter, r *http.Request) {
+type HTTPErrorResponse20240101 struct {
+	Code    ErrorCode `json:"code"`
+	Message string    `json:"message"`
+}
+
+func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 	log := observability.GetLogEntry(r)
 	errorID := getRequestID(r.Context())
+
+	apiVersion, averr := DetermineClosestAPIVersion(r.Header.Get(APIVersionHeaderName))
+	if averr != nil {
+		log.WithError(averr).Warn("Invalid version passed to " + APIVersionHeaderName + " header, defaulting to initial version")
+	} else if apiVersion != APIVersionInitial {
+		// Echo back the determined API version from the request
+		w.Header().Set(APIVersionHeaderName, FormatAPIVersion(apiVersion))
+	}
+
 	switch e := err.(type) {
 	case *WeakPasswordError:
-		var output struct {
-			HTTPError
-			Payload struct {
-				Reasons []string `json:"reasons,omitempty"`
-			} `json:"weak_password,omitempty"`
-		}
+		if apiVersion.Compare(APIVersion20240101) >= 0 {
+			var output struct {
+				HTTPErrorResponse20240101
+				Payload struct {
+					Reasons []string `json:"reasons,omitempty"`
+				} `json:"weak_password,omitempty"`
+			}
 
-		output.Code = http.StatusUnprocessableEntity
-		output.Message = e.Message
-		output.Payload.Reasons = e.Reasons
+			output.Code = ErrorCodeWeakPassword
+			output.Message = e.Message
+			output.Payload.Reasons = e.Reasons
 
-		if jsonErr := sendJSON(w, output.Code, output); jsonErr != nil {
-			handleError(jsonErr, w, r)
+			if jsonErr := sendJSON(w, http.StatusUnprocessableEntity, output); jsonErr != nil {
+				HandleResponseError(jsonErr, w, r)
+			}
+
+		} else {
+			var output struct {
+				HTTPError
+				Payload struct {
+					Reasons []string `json:"reasons,omitempty"`
+				} `json:"weak_password,omitempty"`
+			}
+
+			output.HTTPStatus = http.StatusUnprocessableEntity
+			output.ErrorCode = ErrorCodeWeakPassword
+			output.Message = e.Message
+			output.Payload.Reasons = e.Reasons
+
+			if jsonErr := sendJSON(w, output.HTTPStatus, output); jsonErr != nil {
+				HandleResponseError(jsonErr, w, r)
+			}
 		}
 
 	case *HTTPError:
-		if e.Code >= http.StatusInternalServerError {
+		if e.HTTPStatus >= http.StatusInternalServerError {
 			e.ErrorID = errorID
 			// this will get us the stack trace too
 			log.WithError(e.Cause()).Error(e.Error())
@@ -266,35 +238,76 @@ func handleError(err error, w http.ResponseWriter, r *http.Request) {
 			log.WithError(e.Cause()).Info(e.Error())
 		}
 
-		// Provide better error messages for certain user-triggered Postgres errors.
-		if pgErr := utilities.NewPostgresError(e.InternalError); pgErr != nil {
-			if jsonErr := sendJSON(w, pgErr.HttpStatusCode, pgErr); jsonErr != nil {
-				handleError(jsonErr, w, r)
+		if apiVersion.Compare(APIVersion20240101) >= 0 {
+			resp := HTTPErrorResponse20240101{
+				Code:    e.ErrorCode,
+				Message: e.Message,
 			}
-			return
+
+			if resp.Code == "" {
+				if e.HTTPStatus == http.StatusInternalServerError {
+					resp.Code = ErrorCodeUnexpectedFailure
+				} else {
+					resp.Code = ErrorCodeUnknown
+				}
+			}
+
+			if jsonErr := sendJSON(w, e.HTTPStatus, resp); jsonErr != nil {
+				HandleResponseError(jsonErr, w, r)
+			}
+		} else {
+			if e.ErrorCode == "" {
+				if e.HTTPStatus == http.StatusInternalServerError {
+					e.ErrorCode = ErrorCodeUnexpectedFailure
+				} else {
+					e.ErrorCode = ErrorCodeUnknown
+				}
+			}
+
+			// Provide better error messages for certain user-triggered Postgres errors.
+			if pgErr := utilities.NewPostgresError(e.InternalError); pgErr != nil {
+				if jsonErr := sendJSON(w, pgErr.HttpStatusCode, pgErr); jsonErr != nil {
+					HandleResponseError(jsonErr, w, r)
+				}
+				return
+			}
+
+			if jsonErr := sendJSON(w, e.HTTPStatus, e); jsonErr != nil {
+				HandleResponseError(jsonErr, w, r)
+			}
 		}
 
-		if jsonErr := sendJSON(w, e.Code, e); jsonErr != nil {
-			handleError(jsonErr, w, r)
-		}
 	case *OAuthError:
 		log.WithError(e.Cause()).Info(e.Error())
 		if jsonErr := sendJSON(w, http.StatusBadRequest, e); jsonErr != nil {
-			handleError(jsonErr, w, r)
+			HandleResponseError(jsonErr, w, r)
 		}
-	case *OTPError:
-		log.WithError(e.Cause()).Info(e.Error())
-		if jsonErr := sendJSON(w, http.StatusBadRequest, e); jsonErr != nil {
-			handleError(jsonErr, w, r)
-		}
+
 	case ErrorCause:
-		handleError(e.Cause(), w, r)
+		HandleResponseError(e.Cause(), w, r)
+
 	default:
 		log.WithError(e).Errorf("Unhandled server error: %s", e.Error())
-		// hide real error details from response to prevent info leaks
-		w.WriteHeader(http.StatusInternalServerError)
-		if _, writeErr := w.Write([]byte(`{"code":500,"msg":"Internal server error","error_id":"` + errorID + `"}`)); writeErr != nil {
-			log.WithError(writeErr).Error("Error writing generic error message")
+
+		if apiVersion.Compare(APIVersion20240101) >= 0 {
+			resp := HTTPErrorResponse20240101{
+				Code:    ErrorCodeUnexpectedFailure,
+				Message: "Unexpected failure, please check server logs for more information",
+			}
+
+			if jsonErr := sendJSON(w, http.StatusInternalServerError, resp); jsonErr != nil {
+				HandleResponseError(jsonErr, w, r)
+			}
+		} else {
+			httpError := HTTPError{
+				HTTPStatus: http.StatusInternalServerError,
+				ErrorCode:  ErrorCodeUnexpectedFailure,
+				Message:    "Unexpected failure, please check server logs for more information",
+			}
+
+			if jsonErr := sendJSON(w, http.StatusInternalServerError, httpError); jsonErr != nil {
+				HandleResponseError(jsonErr, w, r)
+			}
 		}
 	}
 }

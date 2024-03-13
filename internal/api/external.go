@@ -56,7 +56,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 
 	p, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
-		return "", badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
+		return "", badRequestError(ErrorCodeValidationFailed, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
 
 	inviteToken := query.Get("invite_token")
@@ -64,7 +64,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		_, userErr := models.FindUserByConfirmationToken(db, inviteToken)
 		if userErr != nil {
 			if models.IsNotFoundError(userErr) {
-				return "", notFoundError(userErr.Error())
+				return "", notFoundError(ErrorCodeUserNotFound, "User identified by token not found")
 			}
 			return "", internalServerError("Database error finding user").WithInternalError(userErr)
 		}
@@ -127,6 +127,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	}
 
 	authURL := p.AuthCodeURL(tokenString, authUrlParams...)
+
 	return authURL, nil
 }
 
@@ -196,9 +197,12 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	// if there's a non-empty FlowStateID we perform PKCE Flow
 	if flowStateID := getFlowStateID(ctx); flowStateID != "" {
 		flowState, err = models.FindFlowStateByID(a.db, flowStateID)
-		if err != nil {
-			return err
+		if models.IsNotFoundError(err) {
+			return unprocessableEntityError(ErrorCodeFlowStateNotFound, "Flow state not found").WithInternalError(err)
+		} else if err != nil {
+			return internalServerError("Failed to find flow state").WithInternalError(err)
 		}
+
 	}
 
 	var user *models.User
@@ -300,7 +304,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 
 	case models.CreateAccount:
 		if config.DisableSignup {
-			return nil, forbiddenError("Signups not allowed for this instance")
+			return nil, unprocessableEntityError(ErrorCodeSignupDisabled, "Signups not allowed for this instance")
 		}
 
 		params := &SignupParams{
@@ -347,14 +351,14 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		}
 
 	case models.MultipleAccounts:
-		return nil, internalServerError(fmt.Sprintf("Multiple accounts with the same email address in the same linking domain detected: %v", decision.LinkingDomain))
+		return nil, internalServerError("Multiple accounts with the same email address in the same linking domain detected: %v", decision.LinkingDomain)
 
 	default:
-		return nil, internalServerError(fmt.Sprintf("Unknown automatic linking decision: %v", decision.Decision))
+		return nil, internalServerError("Unknown automatic linking decision: %v", decision.Decision)
 	}
 
 	if user.IsBanned() {
-		return nil, unauthorizedError("User is unauthorized")
+		return nil, forbiddenError(ErrorCodeUserBanned, "User is banned")
 	}
 
 	if !user.IsConfirmed() {
@@ -383,7 +387,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 				externalURL := getExternalHost(ctx)
 				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {
-						return nil, tooManyRequestsError("For security purposes, you can only request this once every minute")
+						return nil, tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "For security purposes, you can only request this once every minute")
 					}
 					return nil, internalServerError("Error sending confirmation mail").WithInternalError(terr)
 				}
@@ -391,9 +395,9 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			}
 			if !config.Mailer.AllowUnverifiedEmailSignIns {
 				if emailConfirmationSent {
-					return nil, storage.NewCommitWithError(unauthorizedError(fmt.Sprintf("Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType)))
+					return nil, storage.NewCommitWithError(unprocessableEntityError(ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType)))
 				}
-				return nil, storage.NewCommitWithError(unauthorizedError(fmt.Sprintf("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType)))
+				return nil, storage.NewCommitWithError(unprocessableEntityError(ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType)))
 			}
 		}
 	} else {
@@ -411,7 +415,7 @@ func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *p
 	user, err := models.FindUserByConfirmationToken(tx, inviteToken)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, notFoundError(err.Error())
+			return nil, notFoundError(ErrorCodeInviteNotFound, "Invite not found")
 		}
 		return nil, internalServerError("Database error finding user").WithInternalError(err)
 	}
@@ -427,7 +431,7 @@ func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *p
 	}
 
 	if emailData == nil {
-		return nil, badRequestError("Invited email does not match emails from external provider").WithInternalMessage("invited=%s external=%s", user.Email, strings.Join(emails, ", "))
+		return nil, badRequestError(ErrorCodeValidationFailed, "Invited email does not match emails from external provider").WithInternalMessage("invited=%s external=%s", user.Email, strings.Join(emails, ", "))
 	}
 
 	var identityData map[string]interface{}
@@ -480,8 +484,11 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
 		return []byte(config.JWT.Secret), nil
 	})
-	if err != nil || claims.Provider == "" {
-		return nil, badRequestError("OAuth state is invalid: %v", err)
+	if err != nil {
+		return nil, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state").WithInternalError(err)
+	}
+	if claims.Provider == "" {
+		return nil, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state (missing provider)")
 	}
 	if claims.InviteToken != "" {
 		ctx = withInviteToken(ctx, claims.InviteToken)
@@ -495,12 +502,12 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 	if claims.LinkingTargetID != "" {
 		linkingTargetUserID, err := uuid.FromString(claims.LinkingTargetID)
 		if err != nil {
-			return nil, badRequestError("invalid target user id")
+			return nil, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state (linking_target_id must be UUID)")
 		}
 		u, err := models.FindUserByID(a.db, linkingTargetUserID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return nil, notFoundError("Linking target user not found")
+				return nil, unprocessableEntityError(ErrorCodeUserNotFound, "Linking target user not found")
 			}
 			return nil, internalServerError("Database error loading user").WithInternalError(err)
 		}
@@ -591,12 +598,18 @@ func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.
 func getErrorQueryString(err error, errorID string, log logrus.FieldLogger, q url.Values) *url.Values {
 	switch e := err.(type) {
 	case *HTTPError:
-		if str, ok := oauthErrorMap[e.Code]; ok {
+		if e.ErrorCode == ErrorCodeSignupDisabled {
+			q.Set("error", "access_denied")
+		} else if e.ErrorCode == ErrorCodeUserBanned {
+			q.Set("error", "access_denied")
+		} else if e.ErrorCode == ErrorCodeProviderEmailNeedsVerification {
+			q.Set("error", "access_denied")
+		} else if str, ok := oauthErrorMap[e.HTTPStatus]; ok {
 			q.Set("error", str)
 		} else {
 			q.Set("error", "server_error")
 		}
-		if e.Code >= http.StatusInternalServerError {
+		if e.HTTPStatus >= http.StatusInternalServerError {
 			e.ErrorID = errorID
 			// this will get us the stack trace too
 			log.WithError(e.Cause()).Error(e.Error())
@@ -604,7 +617,7 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger, q ur
 			log.WithError(e.Cause()).Info(e.Error())
 		}
 		q.Set("error_description", e.Message)
-		q.Set("error_code", strconv.Itoa(e.Code))
+		q.Set("error_code", strconv.Itoa(e.HTTPStatus))
 	case *OAuthError:
 		q.Set("error", e.Err)
 		q.Set("error_description", e.Description)

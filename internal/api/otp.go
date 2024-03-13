@@ -34,10 +34,10 @@ type SmsParams struct {
 
 func (p *OtpParams) Validate() error {
 	if p.Email != "" && p.Phone != "" {
-		return badRequestError("Only an email address or phone number should be provided")
+		return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided")
 	}
 	if p.Email != "" && p.Channel != "" {
-		return badRequestError("Channel should only be specified with Phone OTP")
+		return badRequestError(ErrorCodeValidationFailed, "Channel should only be specified with Phone OTP")
 	}
 	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
 		return err
@@ -47,7 +47,7 @@ func (p *OtpParams) Validate() error {
 
 func (p *SmsParams) Validate(smsProvider string) error {
 	if p.Phone != "" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
-		return badRequestError(InvalidChannelError)
+		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 	}
 
 	var err error
@@ -80,7 +80,7 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if ok, err := a.shouldCreateUser(r, params); !ok {
-		return badRequestError("Signups not allowed for otp")
+		return unprocessableEntityError(ErrorCodeOTPDisabled, "Signups not allowed for otp")
 	} else if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 		return a.SmsOtp(w, r)
 	}
 
-	return otpError("unsupported_otp_type", "")
+	return badRequestError(ErrorCodeValidationFailed, "One of email or phone must be set")
 }
 
 type SmsOtpResponse struct {
@@ -105,7 +105,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 
 	if !config.External.Phone.Enabled {
-		return badRequestError("Unsupported phone provider")
+		return badRequestError(ErrorCodePhoneProviderDisabled, "Unsupported phone provider")
 	}
 	var err error
 
@@ -141,7 +141,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		// Sign them up with temporary password.
 		password, err := password.Generate(64, 10, 1, false, true)
 		if err != nil {
-			internalServerError("error creating user").WithInternalError(err)
+			return internalServerError("error creating user").WithInternalError(err)
 		}
 
 		signUpParams := &SignupParams{
@@ -152,7 +152,8 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		}
 		newBodyContent, err := json.Marshal(signUpParams)
 		if err != nil {
-			return badRequestError("Could not parse metadata: %v", err)
+			// SignupParams must be marshallable
+			panic(err)
 		}
 		r.Body = io.NopCloser(bytes.NewReader(newBodyContent))
 
@@ -170,7 +171,8 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 			}
 			newBodyContent, err := json.Marshal(signUpParams)
 			if err != nil {
-				return badRequestError("Could not parse metadata: %v", err)
+				// SignupParams must be marshallable
+				panic(err)
 			}
 			r.Body = io.NopCloser(bytes.NewReader(newBodyContent))
 			return a.SmsOtp(w, r)
@@ -191,11 +193,11 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		}
 		smsProvider, terr := sms_provider.GetSmsProvider(*config)
 		if terr != nil {
-			return badRequestError("Error sending sms: %v", terr)
+			return internalServerError("Unable to get SMS provider").WithInternalError(err)
 		}
 		mID, serr := a.sendPhoneConfirmation(tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel)
 		if serr != nil {
-			return badRequestError("Error sending sms OTP: %v", serr)
+			return badRequestError(ErrorCodeSMSSendFailed, "Error sending sms OTP: %v", serr).WithInternalError(serr)
 		}
 		messageID = mID
 		return nil

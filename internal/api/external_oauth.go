@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -30,7 +31,7 @@ func (a *API) loadFlowState(w http.ResponseWriter, r *http.Request) (context.Con
 	}
 
 	if state == "" {
-		return nil, badRequestError("OAuth state parameter missing")
+		return nil, badRequestError(ErrorCodeBadOAuthCallback, "OAuth state parameter missing")
 	}
 
 	ctx := r.Context()
@@ -60,12 +61,12 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 
 	oauthCode := rq.Get("code")
 	if oauthCode == "" {
-		return nil, badRequestError("Authorization code missing")
+		return nil, badRequestError(ErrorCodeBadOAuthCallback, "OAuth callback with missing authorization code missing")
 	}
 
 	oAuthProvider, err := a.OAuthProvider(ctx, providerType)
 	if err != nil {
-		return nil, badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
+		return nil, badRequestError(ErrorCodeOAuthProviderNotSupported, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
 
 	log := observability.GetLogEntry(r)
@@ -107,7 +108,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 func (a *API) oAuth1Callback(ctx context.Context, providerType string) (*OAuthProviderData, error) {
 	oAuthProvider, err := a.OAuthProvider(ctx, providerType)
 	if err != nil {
-		return nil, badRequestError("Unsupported provider: %+v", err).WithInternalError(err)
+		return nil, badRequestError(ErrorCodeOAuthProviderNotSupported, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
 	oauthToken := getRequestToken(ctx)
 	oauthVerifier := getOAuthVerifier(ctx)
@@ -145,6 +146,6 @@ func (a *API) OAuthProvider(ctx context.Context, name string) (provider.OAuthPro
 	case provider.OAuthProvider:
 		return p, nil
 	default:
-		return nil, badRequestError("Provider can not be used for OAuth")
+		return nil, fmt.Errorf("Provider %v cannot be used for OAuth", name)
 	}
 }

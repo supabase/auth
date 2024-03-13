@@ -34,21 +34,21 @@ func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
 	config := a.config
 
 	if p.Password == "" {
-		return unprocessableEntityError("Signup requires a valid password")
+		return badRequestError(ErrorCodeValidationFailed, "Signup requires a valid password")
 	}
 
 	if err := a.checkPasswordStrength(ctx, p.Password); err != nil {
 		return err
 	}
 	if p.Email != "" && p.Phone != "" {
-		return unprocessableEntityError("Only an email address or phone number should be provided on signup.")
+		return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided on signup.")
 	}
 	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, config.Sms.Provider) {
-		return badRequestError(InvalidChannelError)
+		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 	}
 	// PKCE not needed as phone signups already return access token in body
 	if p.Phone != "" && p.CodeChallenge != "" {
-		return badRequestError("PKCE not supported for phone signups")
+		return badRequestError(ErrorCodeValidationFailed, "PKCE not supported for phone signups")
 	}
 	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
 		return err
@@ -114,7 +114,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 
 	if config.DisableSignup {
-		return forbiddenError("Signups not allowed for this instance")
+		return unprocessableEntityError(ErrorCodeSignupDisabled, "Signups not allowed for this instance")
 	}
 
 	params := &SignupParams{}
@@ -141,7 +141,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	switch params.Provider {
 	case "email":
 		if !config.External.Email.Enabled {
-			return badRequestError("Email signups are disabled")
+			return badRequestError(ErrorCodeEmailProviderDisabled, "Email signups are disabled")
 		}
 		params.Email, err = validateEmail(params.Email)
 		if err != nil {
@@ -150,7 +150,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud, nil)
 	case "phone":
 		if !config.External.Phone.Enabled {
-			return badRequestError("Phone signups are disabled")
+			return badRequestError(ErrorCodePhoneProviderDisabled, "Phone signups are disabled")
 		}
 		params.Phone, err = validatePhone(params.Phone)
 		if err != nil {
@@ -158,7 +158,18 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		}
 		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, params.Aud)
 	default:
-		return invalidSignupError(config)
+		msg := ""
+		if config.External.Email.Enabled && config.External.Phone.Enabled {
+			msg = "Sign up only available with email or phone provider"
+		} else if config.External.Email.Enabled {
+			msg = "Sign up only available with email provider"
+		} else if config.External.Phone.Enabled {
+			msg = "Sign up only available with phone provider"
+		} else {
+			msg = "Sign up with this provider not possible"
+		}
+
+		return badRequestError(ErrorCodeValidationFailed, msg)
 	}
 
 	if err != nil && !models.IsNotFoundError(err) {
@@ -241,7 +252,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					if errors.Is(terr, MaxFrequencyLimitError) {
 						now := time.Now()
 						left := user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency).Sub(now) / time.Second
-						return tooManyRequestsError(fmt.Sprintf("For security purposes, you can only request this after %d seconds.", left))
+						return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, fmt.Sprintf("For security purposes, you can only request this after %d seconds.", left))
 					}
 					return internalServerError("Error sending confirmation mail").WithInternalError(terr)
 				}
@@ -265,10 +276,10 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}
 				smsProvider, terr := sms_provider.GetSmsProvider(*config)
 				if terr != nil {
-					return badRequestError("Error sending confirmation sms: %v", terr)
+					return internalServerError("Unable to get SMS provider").WithInternalError(terr)
 				}
 				if _, terr := a.sendPhoneConfirmation(tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); terr != nil {
-					return badRequestError("Error sending confirmation sms: %v", terr)
+					return unprocessableEntityError(ErrorCodeSMSSendFailed, "Error sending confirmation sms: %v", terr).WithInternalError(terr)
 				}
 			}
 		}
@@ -277,10 +288,14 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
-		if errors.Is(err, MaxFrequencyLimitError) {
-			return tooManyRequestsError("For security purposes, you can only request this once every minute")
+		reason := ErrorCodeOverEmailSendRateLimit
+		if params.Provider == "phone" {
+			reason = ErrorCodeOverSMSSendRateLimit
 		}
-		if errors.Is(err, UserExistsError) {
+
+		if errors.Is(err, MaxFrequencyLimitError) {
+			return tooManyRequestsError(reason, "For security purposes, you can only request this once every minute")
+		} else if errors.Is(err, UserExistsError) {
 			err = db.Transaction(func(tx *storage.Connection) error {
 				if terr := models.NewAuditLogEntry(r, tx, user, models.UserRepeatedSignUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
@@ -293,7 +308,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			if config.Mailer.Autoconfirm || config.Sms.Autoconfirm {
-				return badRequestError("User already registered")
+				return unprocessableEntityError(ErrorCodeUserAlreadyExists, "User already registered")
 			}
 			sanitizedUser, err := sanitizeUser(user, params)
 			if err != nil {

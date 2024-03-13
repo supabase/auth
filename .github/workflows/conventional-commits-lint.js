@@ -46,7 +46,12 @@ let failed = false;
 
 validate.forEach((payload) => {
   if (payload.title) {
-    const { groups } = payload.title.match(TITLE_PATTERN);
+    const match = payload.title.match(TITLE_PATTERN);
+    if (!match) {
+      return
+    }
+
+    const { groups } = match
 
     if (groups) {
       if (groups.breaking) {

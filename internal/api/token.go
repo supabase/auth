@@ -108,7 +108,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	config := a.config
 
 	if params.Email != "" && params.Phone != "" {
-		return unprocessableEntityError("Only an email address or phone number should be provided on login.")
+		return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided on login.")
 	}
 	var user *models.User
 	var grantParams models.GrantParams
@@ -120,13 +120,13 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	if params.Email != "" {
 		provider = "email"
 		if !config.External.Email.Enabled {
-			return badRequestError("Email logins are disabled")
+			return unprocessableEntityError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 		}
 		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 	} else if params.Phone != "" {
 		provider = "phone"
 		if !config.External.Phone.Enabled {
-			return badRequestError("Phone logins are disabled")
+			return unprocessableEntityError(ErrorCodePhoneProviderDisabled, "Phone logins are disabled")
 		}
 		params.Phone = formatPhoneNumber(params.Phone)
 		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
@@ -178,7 +178,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 					return err
 				}
 			}
-			return forbiddenError(output.Message)
+			return oauthError("invalid_grant", InvalidLoginMessage)
 		}
 	}
 	if !isValidPassword {
@@ -230,24 +230,23 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	grantParams.FillGrantParams(r)
 
 	params := &PKCEGrantParams{}
-
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
 	if params.AuthCode == "" || params.CodeVerifier == "" {
-		return badRequestError("invalid request: both auth code and code verifier should be non-empty")
+		return badRequestError(ErrorCodeValidationFailed, "invalid request: both auth code and code verifier should be non-empty")
 	}
 
 	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
 	// Sanity check in case user ID was not set properly
 	if models.IsNotFoundError(err) || flowState.UserID == nil {
-		return forbiddenError("invalid flow state, no valid flow state found")
+		return notFoundError(ErrorCodeFlowStateNotFound, "invalid flow state, no valid flow state found")
 	} else if err != nil {
 		return err
 	}
 	if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
-		return forbiddenError("invalid flow state, flow state has expired")
+		return unprocessableEntityError(ErrorCodeFlowStateExpired, "invalid flow state, flow state has expired")
 	}
 
 	user, err := models.FindUserByID(db, *flowState.UserID)
@@ -255,7 +254,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 	if err := flowState.VerifyPKCE(params.CodeVerifier); err != nil {
-		return forbiddenError(err.Error())
+		return badRequestError(ErrorBadCodeVerifier, err.Error())
 	}
 
 	var token *AccessTokenResponse
@@ -427,6 +426,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 	if err != nil {
 		return nil, internalServerError("Cannot read SessionId claim as UUID").WithInternalError(err)
 	}
+
 	err = tx.Transaction(func(tx *storage.Connection) error {
 		if terr := models.AddClaimToSession(tx, sessionId, authenticationMethod); terr != nil {
 			return terr
@@ -459,7 +459,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return err
 		}
 
-		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, &sessionId, models.TOTPSignIn)
+		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, &session.ID, models.TOTPSignIn)
 		if terr != nil {
 			httpErr, ok := terr.(*HTTPError)
 			if ok {

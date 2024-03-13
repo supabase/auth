@@ -162,7 +162,7 @@ func (ts *InviteTestSuite) TestInvite_WithoutAccess() {
 	w := httptest.NewRecorder()
 
 	ts.API.handler.ServeHTTP(w, req)
-	assert.Equal(ts.T(), http.StatusUnauthorized, w.Code)
+	assert.Equal(ts.T(), http.StatusUnauthorized, w.Code) // 401 OK because the invite request above has no Authorization header
 }
 
 func (ts *InviteTestSuite) TestVerifyInvite() {

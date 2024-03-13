@@ -343,7 +343,7 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			assert.Equal(ts.T(), http.StatusForbidden, w.Code)
+			assert.Equal(ts.T(), http.StatusNotFound, w.Code)
 		})
 	}
 }
@@ -618,7 +618,7 @@ func (ts *TokenTestSuite) TestPasswordVerificationHook() {
                 begin
                     return jsonb_build_object('decision', 'reject', 'message', 'You shall not pass!');
                 end; $$ language plpgsql;`,
-			expectedCode: http.StatusForbidden,
+			expectedCode: http.StatusBadRequest,
 		},
 	}
 	for _, c := range cases {
