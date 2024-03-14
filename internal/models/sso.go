@@ -115,6 +115,8 @@ type SAMLProvider struct {
 
 	AttributeMapping SAMLAttributeMapping `db:"attribute_mapping" json:"attribute_mapping,omitempty"`
 
+	NameIDFormat *string `db:"name_id_format" json:"name_id_format,omitempty"`
+
 	CreatedAt time.Time `db:"created_at" json:"-"`
 	UpdatedAt time.Time `db:"updated_at" json:"-"`
 }
