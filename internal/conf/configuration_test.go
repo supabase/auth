@@ -161,8 +161,10 @@ func TestValidateExtensibilityPointURI(t *testing.T) {
 		{desc: "Valid Postgres URI", uri: "pg-functions://postgres/auth/verification_hook_reject", expectError: false},
 		{desc: "Another Valid URI", uri: "pg-functions://postgres/user_management/add_user", expectError: false},
 		{desc: "Another Valid URI", uri: "pg-functions://postgres/MySpeCial/FUNCTION_THAT_YELLS_AT_YOU", expectError: false},
+		{desc: "Valid HTTP URI", uri: "http://localhost/functions/v1/custom-sms-sender", expectError: false},
 
 		// Negative test cases
+		{desc: "Invalid HTTP URI", uri: "http://asdfgggg.website.co/functions/v1/custom-sms-sender", expectError: true},
 		{desc: "Invalid HTTPS URI (HTTP)", uri: "http://asdfgggqqwwerty.supabase.co/functions/v1/custom-sms-sender", expectError: true},
 		{desc: "Invalid Schema Name", uri: "pg-functions://postgres/123auth/verification_hook_reject", expectError: true},
 		{desc: "Invalid Function Name", uri: "pg-functions://postgres/auth/123verification_hook_reject", expectError: true},
