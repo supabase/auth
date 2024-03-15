@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.144.1](https://github.com/supabase/gotrue/compare/v2.144.0...v2.144.1) (2024-03-15)
+
+
+### Bug Fixes
+
+* configurable NameID format for SAML provider ([#1482](https://github.com/supabase/gotrue/issues/1482)) ([4b2459f](https://github.com/supabase/gotrue/commit/4b2459ff4e5e35d149fb8ab884bf4c01b98ff31d))
+
 ## [2.144.0](https://github.com/supabase/gotrue/compare/v2.143.0...v2.144.0) (2024-03-04)
 
 
