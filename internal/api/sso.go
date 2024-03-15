@@ -98,8 +98,6 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Error parsing SAML Metadata for SAML provider").WithInternalError(err)
 	}
 
-	// TODO: fetch new metadata if validUntil < time.Now()
-
 	serviceProvider := a.getSAMLServiceProvider(entityDescriptor, false /* <- idpInitiated */)
 
 	authnRequest, err := serviceProvider.MakeAuthenticationRequest(
@@ -109,6 +107,12 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	)
 	if err != nil {
 		return internalServerError("Error creating SAML Authentication Request").WithInternalError(err)
+	}
+
+	// Some IdPs do not support the use of the `persistent` NameID format,
+	// and require a different format to be sent to work.
+	if ssoProvider.SAMLProvider.NameIDFormat != nil {
+		authnRequest.NameIDPolicy.Format = ssoProvider.SAMLProvider.NameIDFormat
 	}
 
 	relayState := models.SAMLRelayState{

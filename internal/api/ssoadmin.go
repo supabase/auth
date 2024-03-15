@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/crewjam/saml"
@@ -74,6 +75,7 @@ type CreateSSOProviderParams struct {
 	MetadataXML      string                      `json:"metadata_xml"`
 	Domains          []string                    `json:"domains"`
 	AttributeMapping models.SAMLAttributeMapping `json:"attribute_mapping"`
+	NameIDFormat     string                      `json:"name_id_format"`
 }
 
 func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
@@ -94,8 +96,22 @@ func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
 		}
 	}
 
-	// TODO validate p.AttributeMapping
-	// TODO validate domains
+	switch p.NameIDFormat {
+	case "",
+		string(saml.PersistentNameIDFormat),
+		string(saml.EmailAddressNameIDFormat),
+		string(saml.TransientNameIDFormat),
+		string(saml.UnspecifiedNameIDFormat):
+		// it's valid
+
+	default:
+		return badRequestError("name_id_format must be unspecified or one of %v", strings.Join([]string{
+			string(saml.PersistentNameIDFormat),
+			string(saml.EmailAddressNameIDFormat),
+			string(saml.TransientNameIDFormat),
+			string(saml.UnspecifiedNameIDFormat),
+		}, ", "))
+	}
 
 	return nil
 }
@@ -217,6 +233,10 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 		provider.SAMLProvider.MetadataURL = &params.MetadataURL
 	}
 
+	if params.NameIDFormat != "" {
+		provider.SAMLProvider.NameIDFormat = &params.NameIDFormat
+	}
+
 	provider.SAMLProvider.AttributeMapping = params.AttributeMapping
 
 	for _, domain := range params.Domains {
@@ -333,6 +353,21 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 	if updateAttributeMapping {
 		modified = true
 		provider.SAMLProvider.AttributeMapping = params.AttributeMapping
+	}
+
+	nameIDFormat := ""
+	if provider.SAMLProvider.NameIDFormat != nil {
+		nameIDFormat = *provider.SAMLProvider.NameIDFormat
+	}
+
+	if params.NameIDFormat != nameIDFormat {
+		modified = true
+
+		if params.NameIDFormat == "" {
+			provider.SAMLProvider.NameIDFormat = nil
+		} else {
+			provider.SAMLProvider.NameIDFormat = &params.NameIDFormat
+		}
 	}
 
 	if modified {
