@@ -1,6 +1,8 @@
 .env*
 vendor/
 gotrue
+halo
+halo-arm64
 gotrue-arm64
 gotrue.exe
 auth
