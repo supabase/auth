@@ -22,6 +22,7 @@ const IssuerAzureMicrosoft = "https://login.microsoftonline.com/9188040d-6c67-4c
 
 const (
 	defaultAzureAuthBase = "login.microsoftonline.com/common"
+	defaultAzureAPIBase  = "graph.microsoft.com"
 )
 
 type azureProvider struct {
@@ -36,6 +37,14 @@ type azureProvider struct {
 	// ID token received is issued by that specific issuer, and so
 	// ExpectedIssuer contains the issuer URL of that tenant.
 	ExpectedIssuer string
+	APIPath        string
+}
+
+type azureUser struct {
+	Name       string   `json:"name"`
+	Email      string   `json:"email"`
+	Sub        string   `json:"sub"`
+	OtherMails []string `json:"otherMails"`
 }
 
 var azureIssuerRegexp = regexp.MustCompile("^https://login[.]microsoftonline[.]com/([^/]+)/v2[.]0/?$")
@@ -57,6 +66,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	}
 
 	authHost := chooseHost(ext.URL, defaultAzureAuthBase)
+	apiPath := chooseHost(ext.ApiURL, defaultAzureAPIBase)
 	expectedIssuer := ""
 
 	if ext.URL != "" {
@@ -83,6 +93,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 			Scopes:      oauthScopes,
 		},
 		ExpectedIssuer: expectedIssuer,
+		APIPath:        apiPath,
 	}, nil
 }
 
@@ -113,44 +124,90 @@ func DetectAzureIDTokenIssuer(ctx context.Context, idToken string) (string, erro
 }
 
 func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	idToken := tok.Extra("id_token")
+	if g.APIPath == defaultAzureAPIBase {
+		idToken := tok.Extra("id_token")
 
-	if idToken != nil {
-		issuer, err := DetectAzureIDTokenIssuer(ctx, idToken.(string))
-		if err != nil {
+		if idToken != nil {
+			issuer, err := DetectAzureIDTokenIssuer(ctx, idToken.(string))
+			if err != nil {
+				return nil, err
+			}
+
+			if !IsAzureIssuer(issuer) {
+				return nil, fmt.Errorf("azure: ID token issuer not valid %q", issuer)
+			}
+
+			if g.ExpectedIssuer != "" && issuer != g.ExpectedIssuer {
+				// Since ExpectedIssuer was set, then the developer had
+				// setup GoTrue to use the tenant-specific
+				// authorization endpoint, which in-turn means that
+				// only those tenant's ID tokens will be accepted.
+				return nil, fmt.Errorf("azure: ID token issuer %q does not match expected issuer %q", issuer, g.ExpectedIssuer)
+			}
+
+			provider, err := oidc.NewProvider(ctx, issuer)
+			if err != nil {
+				return nil, err
+			}
+
+			_, data, err := ParseIDToken(ctx, provider, &oidc.Config{
+				ClientID: g.ClientID,
+			}, idToken.(string), ParseIDTokenOptions{
+				AccessToken: tok.AccessToken,
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			return data, nil
+		}
+
+		return nil, fmt.Errorf("azure: no OIDC ID token present in response")
+	} else {
+		var u azureUser
+		if err := makeRequest(ctx, tok, g.Config, g.APIPath+"/oidc/userinfo", &u); err != nil {
 			return nil, err
 		}
 
-		if !IsAzureIssuer(issuer) {
-			return nil, fmt.Errorf("azure: ID token issuer not valid %q", issuer)
+		var data UserProvidedData
+
+		data.Metadata = &Claims{
+			Issuer:  g.APIPath,
+			Subject: u.Sub,
+			Name:    u.Name,
+
+			// To be deprecated
+			FullName:   u.Name,
+			ProviderId: u.Sub,
 		}
 
-		if g.ExpectedIssuer != "" && issuer != g.ExpectedIssuer {
-			// Since ExpectedIssuer was set, then the developer had
-			// setup GoTrue to use the tenant-specific
-			// authorization endpoint, which in-turn means that
-			// only those tenant's ID tokens will be accepted.
-			return nil, fmt.Errorf("azure: ID token issuer %q does not match expected issuer %q", issuer, g.ExpectedIssuer)
+		if u.Email != "" {
+			data.Emails = append(data.Emails, Email{
+				Email:    u.Email,
+				Verified: true,
+			})
 		}
 
-		provider, err := oidc.NewProvider(ctx, issuer)
-		if err != nil {
-			return nil, err
+		if u.OtherMails != nil {
+			for _, mail := range u.OtherMails {
+				if mail != "" {
+					data.Emails = append(data.Emails, Email{
+						Email:    mail,
+						Verified: false,
+					})
+				}
+			}
 		}
 
-		_, data, err := ParseIDToken(ctx, provider, &oidc.Config{
-			ClientID: g.ClientID,
-		}, idToken.(string), ParseIDTokenOptions{
-			AccessToken: tok.AccessToken,
-		})
-		if err != nil {
-			return nil, err
+		if len(data.Emails) == 0 {
+			return nil, fmt.Errorf("unable to find email with Azure provider")
 		}
 
-		return data, nil
+		data.Emails[0].Primary = true
+
+		data.Metadata.Email = data.Emails[0].Email
+		data.Metadata.EmailVerified = data.Emails[0].Verified
+
+		return &data, nil
 	}
-
-	// Only ID tokens supported, UserInfo endpoint has a history of being less secure.
-
-	return nil, fmt.Errorf("azure: no OIDC ID token present in response")
 }
