@@ -11,7 +11,7 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
-func (a *API) runHook(ctx context.Context, tx *storage.Connection, name string, input, output any) ([]byte, error) {
+func (a *API) runPostgresHook(ctx context.Context, tx *storage.Connection, name string, input, output any) ([]byte, error) {
 	db := a.db.WithContext(ctx)
 
 	request, err := json.Marshal(input)
@@ -68,7 +68,7 @@ func (a *API) invokeHook(ctx context.Context, tx *storage.Connection, input, out
 			panic("output should be *hooks.MFAVerificationAttemptOutput")
 		}
 
-		if _, err := a.runHook(ctx, tx, config.Hook.MFAVerificationAttempt.HookName, input, output); err != nil {
+		if _, err := a.runPostgresHook(ctx, tx, config.Hook.MFAVerificationAttempt.HookName, input, output); err != nil {
 			return internalServerError("Error invoking MFA verification hook.").WithInternalError(err)
 		}
 
@@ -94,7 +94,7 @@ func (a *API) invokeHook(ctx context.Context, tx *storage.Connection, input, out
 			panic("output should be *hooks.PasswordVerificationAttemptOutput")
 		}
 
-		if _, err := a.runHook(ctx, tx, config.Hook.PasswordVerificationAttempt.HookName, input, output); err != nil {
+		if _, err := a.runPostgresHook(ctx, tx, config.Hook.PasswordVerificationAttempt.HookName, input, output); err != nil {
 			return internalServerError("Error invoking password verification hook.").WithInternalError(err)
 		}
 
@@ -120,7 +120,7 @@ func (a *API) invokeHook(ctx context.Context, tx *storage.Connection, input, out
 			panic("output should be *hooks.CustomAccessTokenOutput")
 		}
 
-		if _, err := a.runHook(ctx, tx, config.Hook.CustomAccessToken.HookName, input, output); err != nil {
+		if _, err := a.runPostgresHook(ctx, tx, config.Hook.CustomAccessToken.HookName, input, output); err != nil {
 			return internalServerError("Error invoking access token hook.").WithInternalError(err)
 		}
 
