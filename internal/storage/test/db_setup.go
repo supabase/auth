@@ -1,8 +1,8 @@
 package test
 
 import (
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/storage"
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/storage"
 )
 
 func SetupDBConnection(globalConfig *conf.GlobalConfiguration) (*storage.Connection, error) {

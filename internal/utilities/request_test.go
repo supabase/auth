@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	tst "testing"
 
+	"github.com/clanwyse/halo/internal/conf"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
 )
 
 func TestGetIPAddress(t *tst.T) {

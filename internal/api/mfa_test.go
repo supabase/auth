@@ -13,10 +13,10 @@ import (
 
 	"github.com/gofrs/uuid"
 
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/pquerna/otp"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/utilities"
 
 	"github.com/jackc/pgx/v4"
 

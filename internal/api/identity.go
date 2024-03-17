@@ -4,14 +4,14 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/clanwyse/halo/internal/api/provider"
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/storage"
+	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/fatih/structs"
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/auth/internal/api/provider"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {

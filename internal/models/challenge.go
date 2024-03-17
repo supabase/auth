@@ -2,10 +2,11 @@ package models
 
 import (
 	"database/sql"
+	"time"
+
+	"github.com/clanwyse/halo/internal/storage"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/auth/internal/storage"
-	"time"
 )
 
 type Challenge struct {

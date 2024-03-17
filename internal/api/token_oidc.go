@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/clanwyse/halo/internal/api/provider"
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/observability"
+	"github.com/clanwyse/halo/internal/storage"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/supabase/auth/internal/api/provider"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/storage"
 )
 
 // IdTokenGrantParams are the parameters the IdTokenGrant method accepts

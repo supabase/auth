@@ -8,14 +8,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/observability"
+	"github.com/clanwyse/halo/internal/storage"
+	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/crewjam/saml"
 	"github.com/crewjam/saml/samlsp"
 	"github.com/go-chi/chi"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 // loadSSOProvider looks for an idp_id parameter in the URL route and loads the SSO provider

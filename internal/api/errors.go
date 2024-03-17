@@ -7,9 +7,9 @@ import (
 	"os"
 	"runtime/debug"
 
+	"github.com/clanwyse/halo/internal/observability"
+	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/pkg/errors"
-	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 // Common error messages during signup flow

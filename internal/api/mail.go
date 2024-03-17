@@ -7,16 +7,16 @@ import (
 	"time"
 
 	"github.com/badoux/checkmail"
+	"github.com/clanwyse/halo/internal/api/provider"
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/crypto"
+	"github.com/clanwyse/halo/internal/mailer"
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/storage"
+	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/fatih/structs"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
-	"github.com/supabase/auth/internal/api/provider"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/crypto"
-	"github.com/supabase/auth/internal/mailer"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 var (

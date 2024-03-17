@@ -4,11 +4,11 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/supabase/auth/internal/api/sms_provider"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/crypto"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
+	"github.com/clanwyse/halo/internal/api/sms_provider"
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/crypto"
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/storage"
 )
 
 const InvalidNonceMessage = "Nonce has expired or is invalid"

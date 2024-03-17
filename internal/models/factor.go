@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/clanwyse/halo/internal/storage"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/auth/internal/storage"
 )
 
 type FactorState int

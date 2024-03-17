@@ -11,9 +11,9 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/clanwyse/halo/internal/models"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/models"
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalFigma() {

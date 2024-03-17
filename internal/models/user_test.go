@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/crypto"
+	"github.com/clanwyse/halo/internal/storage"
+	"github.com/clanwyse/halo/internal/storage/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/crypto"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/storage/test"
 )
 
 const modelsTestConfig = "../../hack/test.env"

@@ -3,9 +3,9 @@ package api
 import (
 	"net/http"
 
-	"github.com/supabase/auth/internal/metering"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
+	"github.com/clanwyse/halo/internal/metering"
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/storage"
 )
 
 func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {

@@ -3,7 +3,7 @@ package provider
 import (
 	"context"
 
-	"github.com/supabase/auth/internal/conf"
+	"github.com/clanwyse/halo/internal/conf"
 	"golang.org/x/oauth2"
 )
 

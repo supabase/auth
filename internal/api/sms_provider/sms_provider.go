@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/supabase/auth/internal/conf"
+	"github.com/clanwyse/halo/internal/conf"
 )
 
 var defaultTimeout time.Duration = time.Second * 10

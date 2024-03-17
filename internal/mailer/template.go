@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/badoux/checkmail"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/models"
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/models"
 )
 
 type MailClient interface {

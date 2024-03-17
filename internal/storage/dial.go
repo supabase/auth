@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/XSAM/otelsql"
+	"github.com/clanwyse/halo/internal/conf"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gobuffalo/pop/v6/columns"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/auth/internal/conf"
 )
 
 // Connection is the interface a storage provider must implement.

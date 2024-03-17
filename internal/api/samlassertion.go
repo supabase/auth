@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/clanwyse/halo/internal/models"
 	"github.com/crewjam/saml"
-	"github.com/supabase/auth/internal/models"
 )
 
 type SAMLAssertion struct {

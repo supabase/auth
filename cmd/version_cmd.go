@@ -3,8 +3,8 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/spf13/cobra"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 var versionCmd = cobra.Command{

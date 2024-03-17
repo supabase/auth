@@ -6,10 +6,10 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/clanwyse/halo/internal/api/sms_provider"
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/storage"
 	"github.com/sethvargo/go-password/password"
-	"github.com/supabase/auth/internal/api/sms_provider"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 // OtpParams contains the request body params for the otp endpoint

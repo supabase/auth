@@ -5,9 +5,9 @@ import (
 
 	"encoding/xml"
 
+	"github.com/clanwyse/halo/internal/models"
 	"github.com/crewjam/saml"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/models"
 )
 
 func TestSAMLAssertionUserID(t *tst.T) {

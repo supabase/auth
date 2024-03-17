@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/supabase/auth/internal/observability"
+	"github.com/clanwyse/halo/internal/observability"
 	"go.opentelemetry.io/otel/attribute"
 
 	"golang.org/x/crypto/bcrypt"

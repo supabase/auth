@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
+	"github.com/clanwyse/halo/internal/conf"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/oauth2"
 )
 

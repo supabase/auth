@@ -4,12 +4,12 @@ import (
 	"context"
 	"net"
 
+	"github.com/clanwyse/halo/internal/api"
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/storage"
+	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/supabase/auth/internal/api"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 var serveCmd = cobra.Command{

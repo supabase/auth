@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/models"
 	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/mailme"
 	"gopkg.in/gomail.v2"
 )

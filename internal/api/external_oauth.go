@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/clanwyse/halo/internal/api/provider"
+	"github.com/clanwyse/halo/internal/observability"
 	"github.com/mrjones/oauth"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/auth/internal/api/provider"
-	"github.com/supabase/auth/internal/observability"
 )
 
 // OAuthProviderData contains the userData and token returned by the oauth provider

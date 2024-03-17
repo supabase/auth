@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 
+	"github.com/clanwyse/halo/internal/conf"
 	"github.com/crewjam/saml"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
 )
 
 func TestSAMLMetadataWithAPI(t *tst.T) {

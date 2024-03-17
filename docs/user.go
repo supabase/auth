@@ -2,8 +2,8 @@
 package docs
 
 import (
-	"github.com/supabase/auth/internal/api"
-	"github.com/supabase/auth/internal/models"
+	"github.com/clanwyse/halo/internal/api"
+	"github.com/clanwyse/halo/internal/models"
 )
 
 // swagger:route GET /user user user-get

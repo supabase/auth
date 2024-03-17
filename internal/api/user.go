@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/clanwyse/halo/internal/api/sms_provider"
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/storage"
+	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/api/sms_provider"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 // UserUpdateParams parameters for updating a user

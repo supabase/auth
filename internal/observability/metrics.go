@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/clanwyse/halo/internal/conf"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/auth/internal/conf"
 
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"

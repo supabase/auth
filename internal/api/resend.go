@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/supabase/auth/internal/api/sms_provider"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
+	"github.com/clanwyse/halo/internal/api/sms_provider"
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/storage"
+	"github.com/clanwyse/halo/internal/utilities"
 )
 
 // ResendConfirmationParams holds the parameters for a resend request

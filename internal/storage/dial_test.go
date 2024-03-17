@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/clanwyse/halo/internal/conf"
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
 )
 
 type TestUser struct {

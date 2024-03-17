@@ -4,9 +4,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/storage"
+	"github.com/clanwyse/halo/internal/utilities"
 )
 
 // RecoverParams holds the parameters for a password recovery request

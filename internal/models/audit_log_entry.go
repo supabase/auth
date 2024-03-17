@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/clanwyse/halo/internal/observability"
+	"github.com/clanwyse/halo/internal/storage"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/storage"
 )
 
 type AuditAction string

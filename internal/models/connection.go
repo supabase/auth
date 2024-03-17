@@ -1,8 +1,8 @@
 package models
 
 import (
+	"github.com/clanwyse/halo/internal/storage"
 	"github.com/gobuffalo/pop/v6"
-	"github.com/supabase/auth/internal/storage"
 )
 
 type Pagination struct {

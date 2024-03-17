@@ -9,10 +9,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/storage"
+	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/sethvargo/go-password/password"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 // MagicLinkParams holds the parameters for a magic link request

@@ -11,8 +11,8 @@ import (
 	metricinstrument "go.opentelemetry.io/otel/metric/instrument"
 	otelasyncint64instrument "go.opentelemetry.io/otel/metric/instrument/asyncint64"
 
-	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/storage"
+	"github.com/clanwyse/halo/internal/observability"
+	"github.com/clanwyse/halo/internal/storage"
 )
 
 type Cleanup struct {

@@ -3,10 +3,10 @@ package api
 import (
 	"net/http"
 
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/storage"
 	"github.com/crewjam/saml"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 type SingleSignOnParams struct {

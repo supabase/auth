@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/clanwyse/halo/internal/crypto"
+	"github.com/clanwyse/halo/internal/storage"
+	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/auth/internal/crypto"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 // RefreshToken is the database model for refresh tokens.

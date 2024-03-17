@@ -14,12 +14,12 @@ import (
 	"github.com/golang-jwt/jwt"
 	"github.com/xeipuuv/gojsonschema"
 
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/hooks"
-	"github.com/supabase/auth/internal/metering"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/storage"
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/hooks"
+	"github.com/clanwyse/halo/internal/metering"
+	"github.com/clanwyse/halo/internal/models"
+	"github.com/clanwyse/halo/internal/observability"
+	"github.com/clanwyse/halo/internal/storage"
 )
 
 // AccessTokenClaims is a struct thats used for JWT claims

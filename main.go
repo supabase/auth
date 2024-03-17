@@ -7,10 +7,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/clanwyse/halo/cmd"
+	"github.com/clanwyse/halo/internal/api"
+	"github.com/clanwyse/halo/internal/observability"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/auth/cmd"
-	"github.com/supabase/auth/internal/api"
-	"github.com/supabase/auth/internal/observability"
 )
 
 func init() {

@@ -3,10 +3,10 @@ package cmd
 import (
 	"context"
 
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/observability"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/observability"
 )
 
 var configFile = ""

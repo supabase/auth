@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/mrjones/oauth"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
 

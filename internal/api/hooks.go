@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/supabase/auth/internal/hooks"
+	"github.com/clanwyse/halo/internal/hooks"
 
-	"github.com/supabase/auth/internal/storage"
+	"github.com/clanwyse/halo/internal/storage"
 )
 
 func (a *API) runPostgresHook(ctx context.Context, tx *storage.Connection, name string, input, output any) ([]byte, error) {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/clanwyse/halo/internal/conf"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
 )
 
 func TestPasswordStrengthChecks(t *testing.T) {

@@ -3,9 +3,9 @@ package models
 import (
 	"strings"
 
-	"github.com/supabase/auth/internal/api/provider"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/storage"
+	"github.com/clanwyse/halo/internal/api/provider"
+	"github.com/clanwyse/halo/internal/conf"
+	"github.com/clanwyse/halo/internal/storage"
 )
 
 // GetAccountLinkingDomain returns a string that describes the account linking

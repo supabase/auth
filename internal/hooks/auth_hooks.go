@@ -1,9 +1,9 @@
 package hooks
 
 import (
+	"github.com/clanwyse/halo/internal/models"
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
-	"github.com/supabase/auth/internal/models"
 )
 
 type HookType string
