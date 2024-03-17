@@ -30,7 +30,6 @@ const (
 	HTTPHookBackoffDuration = 2 * time.Second
 )
 
-
 func (a *API) runPostgresHook(ctx context.Context, tx *storage.Connection, name string, input, output any) ([]byte, error) {
 	db := a.db.WithContext(ctx)
 
