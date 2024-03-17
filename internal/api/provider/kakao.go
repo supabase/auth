@@ -23,13 +23,15 @@ type kakaoUser struct {
 	ID      int `json:"id"`
 	Account struct {
 		Profile struct {
-			Name            string `json:"nickname"`
+			Nickname        string `json:"nickname"`
 			ProfileImageURL string `json:"profile_image_url"`
 		} `json:"profile"`
+		Name          string `json:"name"`
 		Email         string `json:"email"`
 		Gender        string `json:"gender"`
 		Phone         string `json:"phone_number"`
-		Birthdate     string `json:"birthday"`
+		BirthYear     string `json:"birthyear"`
+		BirthDay      string `json:"birthday"`
 		EmailValid    bool   `json:"is_email_valid"`
 		EmailVerified bool   `json:"is_email_verified"`
 	} `json:"kakao_account"`
@@ -62,14 +64,22 @@ func (p kakaoProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 		Issuer:  p.APIHost,
 		Subject: strconv.Itoa(u.ID),
 
-		Name:              u.Account.Profile.Name,
-		PreferredUsername: u.Account.Profile.Name,
+		Name:              u.Account.Profile.Nickname,
+		NickName:          u.Account.Profile.Nickname,
+		PreferredUsername: u.Account.Profile.Nickname,
 
 		// To be deprecated
 		AvatarURL:   u.Account.Profile.ProfileImageURL,
-		FullName:    u.Account.Profile.Name,
+		FullName:    u.Account.Profile.Nickname,
 		ProviderId:  strconv.Itoa(u.ID),
-		UserNameKey: u.Account.Profile.Name,
+		UserNameKey: u.Account.Profile.Nickname,
+	}
+
+	if u.Account.Name != "" {
+		data.Metadata.Name = u.Account.Name
+		data.Metadata.FullName = u.Account.Name
+		data.Metadata.PreferredUsername = u.Account.Name
+		data.Metadata.UserNameKey = u.Account.Name
 	}
 
 	if u.Account.Gender != "" {
@@ -81,8 +91,13 @@ func (p kakaoProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 		data.Metadata.PhoneVerified = true
 	}
 
-	if u.Account.Birthdate != "" {
-		data.Metadata.Birthdate = u.Account.Birthdate
+	//
+	if u.Account.BirthDay != "" {
+		if u.Account.BirthYear == "" {
+			u.Account.BirthYear = "0000"
+		}
+		// format: YYYYMMDD
+		data.Metadata.Birthdate = u.Account.BirthYear + u.Account.BirthDay
 	}
 
 	return data, nil
