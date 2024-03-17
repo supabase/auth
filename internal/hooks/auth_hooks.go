@@ -22,6 +22,10 @@ const (
 	HookRejection = "reject"
 )
 
+type HTTPHookInput interface {
+	IsHTTPHook()
+}
+
 type HookOutput interface {
 	IsError() bool
 	Error() string
@@ -135,6 +139,17 @@ type CustomAccessTokenOutput struct {
 	HookError AuthHookError          `json:"error,omitempty"`
 }
 
+type CustomSMSProviderInput struct {
+	UserID uuid.UUID `json:"user_id"`
+	Phone  string    `json:"phone"`
+	OTP    string    `json:"otp"`
+}
+
+type CustomSMSProviderOutput struct {
+	Success   bool          `json:"success"`
+	HookError AuthHookError `json:"error,omitempty"`
+}
+
 func (mf *MFAVerificationAttemptOutput) IsError() bool {
 	return mf.HookError.Message != ""
 }
@@ -157,6 +172,18 @@ func (ca *CustomAccessTokenOutput) IsError() bool {
 
 func (ca *CustomAccessTokenOutput) Error() string {
 	return ca.HookError.Message
+}
+
+func (cs *CustomSMSProviderOutput) IsError() bool {
+	return cs.HookError.Message != ""
+}
+
+func (cs *CustomSMSProviderOutput) Error() string {
+	return cs.HookError.Message
+}
+
+func (cs *CustomSMSProviderOutput) IsHTTPHook() bool {
+	return true
 }
 
 type AuthHookError struct {

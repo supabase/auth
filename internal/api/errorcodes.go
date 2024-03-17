@@ -74,4 +74,5 @@ const (
 	ErrorCodeOverSMSSendRateLimit              ErrorCode = "over_sms_send_rate_limit"
 	ErrorBadCodeVerifier                       ErrorCode = "bad_code_verifier"
 	ErrorCodeAnonymousProviderDisabled         ErrorCode = "anonymous_provider_disabled"
+	ErrorHookTimeout                           ErrorCode = "hook_timeout"
 )
