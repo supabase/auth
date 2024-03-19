@@ -205,6 +205,17 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 			})
 		})
 
+		r.With(api.requireAuthentication).Route("/profile", func(r *router) {
+			r.Get("/", api.ProfileGet)
+			r.With(sharedLimiter).Put("/", api.ProfileUpdate)
+		})
+
+		r.With(api.requireAuthentication).Route("/clan", func(r *router) {
+			r.Get("/{clan_id}", api.ClanGet)
+			r.Post("/", api.ClanCreate)
+			r.With(sharedLimiter).Put("/", api.ClanUpdate)
+		})
+
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
 			r.Use(api.requireNotAnonymous)
 			r.Post("/", api.EnrollFactor)
@@ -314,8 +325,8 @@ type HealthCheckResponse struct {
 func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, HealthCheckResponse{
 		Version:     a.version,
-		Name:        "GoTrue",
-		Description: "GoTrue is a user registration and authentication API",
+		Name:        "Halo",
+		Description: "Halo is a user registration and authentication API",
 	})
 }
 

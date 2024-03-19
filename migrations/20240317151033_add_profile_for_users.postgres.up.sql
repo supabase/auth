@@ -10,11 +10,11 @@ CREATE TABLE IF NOT EXISTS {{ index .Options "Namespace" }}.profiles (
     bio text,
     is_banned boolean NOT NULL DEFAULT FALSE,
     suspended_until timestamp with time zone,
-    user_id uuid NOT NULL REFERENCES identities(user_id),
+    user_id uuid NOT NULL REFERENCES {{ index .Options "Namespace" }}.users(id),
     preferences json,
     created_at timestamptz NULL,
     updated_at timestamptz NULL,
-    CONSTRAINT profile_username_length CHECK (char_length(profile_username) >= 3)
+    CONSTRAINT username_length CHECK (char_length(username) >= 3)
 );
 
 CREATE OR REPLACE FUNCTION {{ index .Options "Namespace" }}.create_profile()
@@ -43,8 +43,8 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER {{ index .Options "Namespace" }}.on_user_insert
-    AFTER INSERT ON {{ index .Options "Namespace" }}.users
+CREATE TRIGGER on_user_insert
+    AFTER INSERT ON users
     FOR EACH ROW
-    EXECUTE FUNCTION {{ index .Options "Namespace" }}.create_profile();
+    EXECUTE FUNCTION create_profile();
 

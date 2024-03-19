@@ -17,6 +17,7 @@ const (
 	ErrorCodeNotAdmin                          ErrorCode = "not_admin"
 	ErrorCodeNoAuthorization                   ErrorCode = "no_authorization"
 	ErrorCodeUserNotFound                      ErrorCode = "user_not_found"
+	ErrorCodeProfileNotFound                   ErrorCode = "profile_not_found"
 	ErrorCodeSessionNotFound                   ErrorCode = "session_not_found"
 	ErrorCodeFlowStateNotFound                 ErrorCode = "flow_state_not_found"
 	ErrorCodeFlowStateExpired                  ErrorCode = "flow_state_expired"

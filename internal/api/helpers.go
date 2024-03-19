@@ -96,6 +96,8 @@ type RequestParams interface {
 		VerifyFactorParams |
 		VerifyParams |
 		adminUserUpdateFactorParams |
+		ProfileUpdateParams |
+		ClanCreateParams |
 		struct {
 			Email string `json:"email"`
 			Phone string `json:"phone"`

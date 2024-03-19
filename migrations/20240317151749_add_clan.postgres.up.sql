@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS {{ index .Options "Namespace" }}.clans(
     mission_statement_summary text,
     additional_traits jsonb,
     date_established date,
-    created_by uuid REFERENCES profiles(profile_id),
+    created_by uuid REFERENCES {{ index .Options "Namespace" }}.profiles(id),
     clan_type_id uuid NOT NULL REFERENCES clan_types(id),
     is_public boolean NOT NULL DEFAULT TRUE,
     is_banned boolean NOT NULL DEFAULT FALSE,
@@ -78,10 +78,10 @@ $$
 LANGUAGE plpgsql;
 
 -- Creating a trigger to invoke the trigger function AFTER INSERT on a specific table
-CREATE TRIGGER {{ index .Options "Namespace" }}.on_clan_insert
-    AFTER INSERT ON {{ index .Options "Namespace" }}.clans
+CREATE TRIGGER on_clan_insert
+    AFTER INSERT ON clans
     FOR EACH ROW
-    EXECUTE FUNCTION {{ index .Options "Namespace" }}.create_clan_helper();
+    EXECUTE FUNCTION create_clan_helper();
 
 --
 --

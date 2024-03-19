@@ -5,6 +5,8 @@ func IsNotFoundError(err error) bool {
 	switch err.(type) {
 	case UserNotFoundError, *UserNotFoundError:
 		return true
+	case ProfileNotFoundError, *ProfileNotFoundError:
+		return true
 	case SessionNotFoundError, *SessionNotFoundError:
 		return true
 	case ConfirmationTokenNotFoundError, *ConfirmationTokenNotFoundError:
@@ -40,6 +42,13 @@ type UserNotFoundError struct{}
 
 func (e UserNotFoundError) Error() string {
 	return "User not found"
+}
+
+// ProfileNotFoundError represents when a Profile is not found.
+type ProfileNotFoundError struct{}
+
+func (e ProfileNotFoundError) Error() string {
+	return "Profile not found"
 }
 
 // IdentityNotFoundError represents when an identity is not found.
