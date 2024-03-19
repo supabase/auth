@@ -94,7 +94,8 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 
 			var output hooks.CustomSMSProviderOutput
 			req, _ := http.NewRequest("POST", ts.Config.Hook.CustomSMSProvider.URI, nil)
-			body, err := ts.API.runHTTPHook(req, ts.Config.Hook.CustomSMSProvider, &input, &output)
+			ctx := req.Context()
+			body, err := ts.API.runHTTPHook(ctx, req, ts.Config.Hook.CustomSMSProvider, &input, &output)
 
 			if !tc.expectError {
 				require.NoError(ts.T(), err)
@@ -140,8 +141,9 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 	// Simulate the original HTTP request which triggered the hook
 	req, err := http.NewRequest("POST", "http://localhost:9998/otp", nil)
 	require.NoError(ts.T(), err)
+	ctx := req.Context()
 
-	body, err := ts.API.runHTTPHook(req, ts.Config.Hook.CustomSMSProvider, &input, &output)
+	body, err := ts.API.runHTTPHook(ctx, req, ts.Config.Hook.CustomSMSProvider, &input, &output)
 	require.NoError(ts.T(), err)
 
 	err = json.Unmarshal(body, &output)

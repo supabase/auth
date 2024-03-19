@@ -75,10 +75,14 @@ func (a *API) runPostgresHook(ctx context.Context, tx *storage.Connection, name 
 	return response, nil
 }
 
-func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointConfiguration, input, output any) ([]byte, error) {
+func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.ExtensibilityPointConfiguration, input, output any) ([]byte, error) {
 	client := http.Client{
 		Timeout: DefaultHTTPHookTimeout,
 	}
+	// TODO: Figure out what to do with ctx
+	_, cancel := context.WithTimeout(ctx, DefaultHTTPHookTimeout)
+	defer cancel()
+
 	log := observability.GetLogEntry(r)
 	requestURL := hookConfig.URI
 	hookLog := log.WithFields(logrus.Fields{
@@ -90,12 +94,8 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 	if err != nil {
 		return nil, err
 	}
-	start := time.Now()
 	for i := 0; i < DefaultHTTPHookRetries; i++ {
 		hookLog.Infof("invocation attempt: %d", i)
-		if time.Since(start) > time.Duration(i+1)*DefaultHTTPHookTimeout {
-			return []byte{}, unprocessableEntityError(ErrorCodeHookTimeout, "failed to reach hook within timeout")
-		}
 		msgID := uuid.Must(uuid.NewV4())
 		currentTime := time.Now()
 		signatureList, err := crypto.GenerateSignatures(hookConfig.HTTPHookSecrets, msgID, currentTime, inputPayload)
@@ -164,7 +164,7 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 	return nil, internalServerError("error executing hook")
 }
 
-func (a *API) invokeHTTPHook(r *http.Request, input, output any, hookURI string) error {
+func (a *API) invokeHTTPHook(ctx context.Context, r *http.Request, input, output any, hookURI string) error {
 	switch input.(type) {
 	case *hooks.CustomSMSProviderInput:
 		hookOutput, ok := output.(*hooks.CustomSMSProviderOutput)
@@ -174,7 +174,7 @@ func (a *API) invokeHTTPHook(r *http.Request, input, output any, hookURI string)
 		var response []byte
 		var err error
 
-		if response, err = a.runHTTPHook(r, a.config.Hook.CustomSMSProvider, input, output); err != nil {
+		if response, err = a.runHTTPHook(ctx, r, a.config.Hook.CustomSMSProvider, input, output); err != nil {
 			return internalServerError("Error invoking custom SMS provider hook.").WithInternalError(err)
 		}
 		if err != nil {

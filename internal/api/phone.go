@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"github.com/supabase/auth/internal/hooks"
 	"net/http"
 	"regexp"
@@ -42,7 +43,7 @@ func formatPhoneNumber(phone string) string {
 }
 
 // sendPhoneConfirmation sends an otp to the user's phone number
-func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string) (string, error) {
+func (a *API) sendPhoneConfirmation(ctx context.Context, r *http.Request, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string) (string, error) {
 	config := a.config
 
 	var token *string
@@ -100,7 +101,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 				OTP:    otp,
 			}
 			output := hooks.CustomSMSProviderOutput{}
-			err := a.invokeHTTPHook(r, &input, &output, config.Hook.CustomSMSProvider.URI)
+			err := a.invokeHTTPHook(ctx, r, &input, &output, config.Hook.CustomSMSProvider.URI)
 			if err != nil {
 				return "", err
 			}
