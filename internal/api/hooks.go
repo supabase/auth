@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httptrace"
 	"strings"
 	"time"
 
@@ -28,6 +27,7 @@ const (
 	DefaultHTTPHookTimeout  = 5 * time.Second
 	DefaultHTTPHookRetries  = 3
 	HTTPHookBackoffDuration = 2 * time.Second
+	PayloadLimit            = 20 * 1024 // 20KB
 )
 
 func (a *API) runPostgresHook(ctx context.Context, tx *storage.Connection, name string, input, output any) ([]byte, error) {
@@ -77,8 +77,7 @@ func (a *API) runPostgresHook(ctx context.Context, tx *storage.Connection, name 
 func readBodyWithLimit(rsp *http.Response) ([]byte, error) {
 	defer rsp.Body.Close()
 
-	const limit = 20 * 1024 // 20KB
-	limitedReader := io.LimitedReader{R: rsp.Body, N: limit}
+	limitedReader := io.LimitedReader{R: rsp.Body, N: PayloadLimit}
 
 	body, err := io.ReadAll(&limitedReader)
 	if err != nil {
@@ -116,7 +115,7 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 	for i := 0; i < DefaultHTTPHookRetries; i++ {
 		hookLog.Infof("invocation attempt: %d", i)
 		if time.Since(start) > time.Duration(i+1)*DefaultHTTPHookTimeout {
-			return []byte{}, gatewayTimeoutError(ErrorHookTimeout, "failed to reach hook within timeout")
+			return []byte{}, unprocessableEntityError(ErrorHookTimeout, "failed to reach hook within timeout")
 		}
 		msgID := uuid.Must(uuid.NewV4())
 		currentTime := time.Now()
@@ -127,7 +126,7 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 
 		req, err := http.NewRequest(http.MethodPost, requestURL, bytes.NewBuffer(inputPayload))
 		if err != nil {
-			return nil, internalServerError("Failed to make request object").WithInternalError(err)
+			panic("Failed to make requst object")
 		}
 
 		req.Header.Set("Content-Type", "application/json")
@@ -135,21 +134,14 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 		req.Header.Set("webhook-timestamp", fmt.Sprintf("%d", currentTime.Unix()))
 		req.Header.Set("webhook-signature", strings.Join(signatureList, ", "))
 
-		watcher, req := watchForConnection(req)
 		rsp, err := client.Do(req)
-
 		if err != nil {
-			if terr, ok := err.(net.Error); ok && terr.Timeout() {
+			if terr, ok := err.(net.Error); ok && terr.Timeout() || i < DefaultHTTPHookRetries-1 {
 				hookLog.Errorf("Request timed out for attempt %d with err %s", i, err)
 				time.Sleep(HTTPHookBackoffDuration)
 				continue
-			} else if !watcher.gotConn && i < DefaultHTTPHookRetries-1 {
-				hookLog.Errorf("Failed to establish a connection on attempt %d with err %s", i, err)
-				time.Sleep(HTTPHookBackoffDuration)
-				continue
 			} else if i == DefaultHTTPHookRetries-1 {
-				return nil, gatewayTimeoutError(ErrorHookTimeout, "Failed to reach hook within allotted interval")
-
+				return nil, unprocessableEntityError(ErrorHookTimeout, "Failed to reach hook within allotted interval")
 			} else {
 				return nil, internalServerError("Failed to trigger auth hook, error making HTTP request").WithInternalError(err)
 			}
@@ -183,24 +175,6 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 	return nil, internalServerError("error executing hook")
 }
 
-func watchForConnection(req *http.Request) (*connectionWatcher, *http.Request) {
-	w := new(connectionWatcher)
-	t := &httptrace.ClientTrace{
-		GotConn: w.GotConn,
-	}
-
-	req = req.WithContext(httptrace.WithClientTrace(req.Context(), t))
-	return w, req
-}
-
-type connectionWatcher struct {
-	gotConn bool
-}
-
-func (c *connectionWatcher) GotConn(_ httptrace.GotConnInfo) {
-	c.gotConn = true
-}
-
 func (a *API) invokeHTTPHook(r *http.Request, input, output any, hookURI string) error {
 	switch input.(type) {
 	case *hooks.CustomSMSProviderInput:
@@ -221,7 +195,6 @@ func (a *API) invokeHTTPHook(r *http.Request, input, output any, hookURI string)
 		if err := json.Unmarshal(response, hookOutput); err != nil {
 			return internalServerError("Error unmarshaling custom SMS provider hook output.").WithInternalError(err)
 		}
-		fmt.Printf("%v", hookOutput)
 
 	default:
 		panic("unknown HTTP hook type")

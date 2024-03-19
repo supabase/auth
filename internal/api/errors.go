@@ -96,10 +96,6 @@ func conflictError(fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusConflict, ErrorCodeConflict, fmtString, args...)
 }
 
-func gatewayTimeoutError(errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusGatewayTimeout, errorCode, fmtString, args...)
-}
-
 // HTTPError is an error with a message and an HTTP status code.
 type HTTPError struct {
 	HTTPStatus      int    `json:"code"`                 // do not rename the JSON tags!
