@@ -301,7 +301,20 @@ func (u *User) SetPassword(ctx context.Context, password string) error {
 
 // UpdatePassword updates the user's password. Use SetPassword outside of a transaction first!
 func (u *User) UpdatePassword(tx *storage.Connection, sessionID *uuid.UUID) error {
-	if err := tx.UpdateOnly(u, "encrypted_password"); err != nil {
+	// These need to be reset because password change may mean the user no longer trusts the actions performed by the previous password.
+	u.ConfirmationToken = ""
+	u.ConfirmationSentAt = nil
+	u.RecoveryToken = ""
+	u.RecoverySentAt = nil
+	u.EmailChangeTokenCurrent = ""
+	u.EmailChangeTokenNew = ""
+	u.EmailChangeSentAt = nil
+	u.PhoneChangeToken = ""
+	u.PhoneChangeSentAt = nil
+	u.ReauthenticationToken = ""
+	u.ReauthenticationSentAt = nil
+
+	if err := tx.UpdateOnly(u, "encrypted_password", "confirmation_token", "confirmation_sent_at", "recovery_token", "recovery_sent_at", "email_change_token_current", "email_change_token_new", "email_change_sent_at", "phone_change_token", "phone_change_sent_at", "reauthentication_token", "reauthentication_sent_at"); err != nil {
 		return err
 	}
 

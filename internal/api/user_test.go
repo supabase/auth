@@ -371,7 +371,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 
 	require.True(ts.T(), u.Authenticate(context.Background(), "newpass"))
 	require.Empty(ts.T(), u.ReauthenticationToken)
-	require.NotEmpty(ts.T(), u.ReauthenticationSentAt)
+	require.Nil(ts.T(), u.ReauthenticationSentAt)
 }
 
 func (ts *UserTestSuite) TestUserUpdatePasswordLogoutOtherSessions() {
