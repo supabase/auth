@@ -70,18 +70,27 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 		},
 		{
 			description: "Too many requests without retry header should not retry",
-			status:      http.StatusGatewayTimeout,
+			status:      http.StatusUnprocessableEntity,
 			expectError: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		ts.Run(tc.description, func() {
-			gock.New(ts.Config.Hook.CustomSMSProvider.URI).
-				Post("/").
-				MatchType("json").
-				Reply(tc.status).
-				JSON(tc.mockResponse)
+			if tc.status == http.StatusOK {
+				gock.New(ts.Config.Hook.CustomSMSProvider.URI).
+					Post("/").
+					MatchType("json").
+					Reply(tc.status).
+					JSON(tc.mockResponse).SetHeader("content-length", "21")
+			} else {
+				gock.New(ts.Config.Hook.CustomSMSProvider.URI).
+					Post("/").
+					MatchType("json").
+					Reply(tc.status).
+					JSON(tc.mockResponse)
+
+			}
 
 			var output hooks.CustomSMSProviderOutput
 			req, _ := http.NewRequest("POST", ts.Config.Hook.CustomSMSProvider.URI, nil)
@@ -117,14 +126,14 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 		Post("/").
 		MatchType("json").
 		Reply(http.StatusTooManyRequests).
-		SetHeader("retry-after", "true")
+		SetHeader("retry-after", "true").SetHeader("content-length", "21")
 
 	// Simulate an additional response for the retry attempt
 	gock.New(testURL).
 		Post("/").
 		MatchType("json").
 		Reply(http.StatusOK).
-		JSON(successOutput)
+		JSON(successOutput).SetHeader("content-length", "21")
 
 	var output hooks.CustomSMSProviderOutput
 

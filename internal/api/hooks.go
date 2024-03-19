@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -74,28 +75,6 @@ func (a *API) runPostgresHook(ctx context.Context, tx *storage.Connection, name 
 	return response, nil
 }
 
-func readBodyWithLimit(rsp *http.Response) ([]byte, error) {
-	defer rsp.Body.Close()
-
-	limitedReader := io.LimitedReader{R: rsp.Body, N: PayloadLimit}
-
-	body, err := io.ReadAll(&limitedReader)
-	if err != nil {
-		return nil, err
-	}
-
-	if limitedReader.N <= 0 {
-		// Attempt to read one more byte to check if we're exactly at the limit or over
-		_, err := rsp.Body.Read(make([]byte, 1))
-		if err == nil {
-			// If we could read more, then the payload was too large
-			return nil, fmt.Errorf("payload too large")
-		}
-	}
-
-	return body, nil
-}
-
 func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointConfiguration, input, output any) ([]byte, error) {
 	client := http.Client{
 		Timeout: DefaultHTTPHookTimeout,
@@ -115,7 +94,7 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 	for i := 0; i < DefaultHTTPHookRetries; i++ {
 		hookLog.Infof("invocation attempt: %d", i)
 		if time.Since(start) > time.Duration(i+1)*DefaultHTTPHookTimeout {
-			return []byte{}, unprocessableEntityError(ErrorHookTimeout, "failed to reach hook within timeout")
+			return []byte{}, unprocessableEntityError(ErrorCodeHookTimeout, "failed to reach hook within timeout")
 		}
 		msgID := uuid.Must(uuid.NewV4())
 		currentTime := time.Now()
@@ -141,7 +120,7 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 				time.Sleep(HTTPHookBackoffDuration)
 				continue
 			} else if i == DefaultHTTPHookRetries-1 {
-				return nil, unprocessableEntityError(ErrorHookTimeout, "Failed to reach hook within allotted interval")
+				return nil, unprocessableEntityError(ErrorCodeHookTimeout, "Failed to reach hook within allotted interval")
 			} else {
 				return nil, internalServerError("Failed to trigger auth hook, error making HTTP request").WithInternalError(err)
 			}
@@ -152,7 +131,17 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 			if rsp.Body == nil {
 				return nil, nil
 			}
-			body, err := readBodyWithLimit(rsp)
+			contentLengthEntry := rsp.Header.Get("content-length")
+			contentLength, err := strconv.Atoi(contentLengthEntry)
+			if err != nil {
+				return nil, err
+			}
+			if contentLength >= PayloadLimit {
+				return nil, unprocessableEntityError(ErrorCodeHookPayloadOverSizeLimit, "payload exceeded size limit")
+			}
+			defer rsp.Body.Close()
+			limitedReader := io.LimitedReader{R: rsp.Body, N: PayloadLimit}
+			body, err := io.ReadAll(&limitedReader)
 			if err != nil {
 				return nil, err
 			}

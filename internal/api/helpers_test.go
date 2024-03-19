@@ -37,7 +37,7 @@ func TestIsValidCodeChallenge(t *testing.T) {
 	}
 }
 
-func TestIsValidPKCEParmas(t *testing.T) {
+func TestIsValidPKCEParams(t *testing.T) {
 	cases := []struct {
 		challengeMethod string
 		challenge       string
