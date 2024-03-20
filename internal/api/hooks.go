@@ -110,6 +110,8 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 		req.Header.Set("webhook-id", msgID.String())
 		req.Header.Set("webhook-timestamp", fmt.Sprintf("%d", currentTime.Unix()))
 		req.Header.Set("webhook-signature", strings.Join(signatureList, ", "))
+		// By default, Go Client sets encoding to gzip, which does not carry a content length header.
+		req.Header.Set("Accept-Encoding", "identity")
 
 		rsp, err := client.Do(req)
 		if err != nil {
@@ -123,14 +125,13 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 				return nil, internalServerError("Failed to trigger auth hook, error making HTTP request").WithInternalError(err)
 			}
 		}
-
 		switch rsp.StatusCode {
 		case http.StatusOK, http.StatusNoContent, http.StatusAccepted:
 			if rsp.Body == nil {
 				return nil, nil
 			}
-			contentLength := rsp.ContentLength
 			// unknown content length is handled for by nil check on Body
+			contentLength := rsp.ContentLength
 			if contentLength == -1 {
 				return nil, unprocessableEntityError(ErrorCodeHookPayloadUnknown, "payload size not known")
 			}
@@ -146,7 +147,7 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 			return body, nil
 		case http.StatusTooManyRequests, http.StatusServiceUnavailable:
 			retryAfterHeader := rsp.Header.Get("retry-after")
-			// Check for truthy values to allow for flexibility to swtich to time duration
+			// Check for truthy values to allow for flexibility to switch to time duration
 			if retryAfterHeader != "" {
 				continue
 			}
