@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -28,7 +27,7 @@ const (
 	DefaultHTTPHookTimeout  = 5 * time.Second
 	DefaultHTTPHookRetries  = 3
 	HTTPHookBackoffDuration = 2 * time.Second
-	PayloadLimit            = 20 * 1024 // 20KB
+	PayloadLimit            = 200 * 1024 // 200KB
 )
 
 func (a *API) runPostgresHook(ctx context.Context, tx *storage.Connection, name string, input, output any) ([]byte, error) {
@@ -79,8 +78,7 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 	client := http.Client{
 		Timeout: DefaultHTTPHookTimeout,
 	}
-	// TODO: Figure out what to do with ctx
-	_, cancel := context.WithTimeout(ctx, DefaultHTTPHookTimeout)
+	ctx, cancel := context.WithTimeout(ctx, DefaultHTTPHookTimeout)
 	defer cancel()
 
 	log := observability.GetLogEntry(r)
@@ -103,9 +101,9 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 			return nil, err
 		}
 
-		req, err := http.NewRequest(http.MethodPost, requestURL, bytes.NewBuffer(inputPayload))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewBuffer(inputPayload))
 		if err != nil {
-			panic("Failed to make requst object")
+			panic("Failed to make request object")
 		}
 
 		req.Header.Set("Content-Type", "application/json")
@@ -131,10 +129,10 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 			if rsp.Body == nil {
 				return nil, nil
 			}
-			contentLengthEntry := rsp.Header.Get("content-length")
-			contentLength, err := strconv.Atoi(contentLengthEntry)
-			if err != nil {
-				return nil, err
+			contentLength := rsp.ContentLength
+			// unknown content length is handled for by nil check on Body
+			if contentLength == -1 {
+				return nil, unprocessableEntityError(ErrorCodeHookPayloadUnknown, "payload size not known")
 			}
 			if contentLength >= PayloadLimit {
 				return nil, unprocessableEntityError(ErrorCodeHookPayloadOverSizeLimit, "payload exceeded size limit")
@@ -156,7 +154,7 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 		case http.StatusBadRequest:
 			return nil, badRequestError(ErrorCodeValidationFailed, "Invalid payload sent to hook")
 		case http.StatusUnauthorized:
-			return []byte{}, httpError(http.StatusUnauthorized, ErrorCodeNoAuthorization, "Hook requires authorizaition token")
+			return []byte{}, forbiddenError(ErrorCodeNoAuthorization, "Hook requires authorization token")
 		default:
 			return []byte{}, internalServerError("Error executing Hook")
 		}

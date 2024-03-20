@@ -76,4 +76,5 @@ const (
 	ErrorCodeAnonymousProviderDisabled         ErrorCode = "anonymous_provider_disabled"
 	ErrorCodeHookTimeout                       ErrorCode = "hook_timeout"
 	ErrorCodeHookPayloadOverSizeLimit          ErrorCode = "hook_payload_over_size_limit"
+	ErrorCodeHookPayloadUnknown                ErrorCode = "hook_payload_unknown"
 )
