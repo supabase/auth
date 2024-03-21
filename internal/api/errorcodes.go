@@ -75,6 +75,7 @@ const (
 	ErrorBadCodeVerifier                       ErrorCode = "bad_code_verifier"
 	ErrorCodeAnonymousProviderDisabled         ErrorCode = "anonymous_provider_disabled"
 	ErrorCodeHookTimeout                       ErrorCode = "hook_timeout"
+	ErrorCodeHookTimeoutAfterRetry             ErrorCode = "hook_timeout_after_retry"
 	ErrorCodeHookPayloadOverSizeLimit          ErrorCode = "hook_payload_over_size_limit"
-	ErrorCodeHookPayloadUnknown                ErrorCode = "hook_payload_unknown"
+	ErrorCodeHookPayloadUnknownSize            ErrorCode = "hook_payload_unknown_size"
 )

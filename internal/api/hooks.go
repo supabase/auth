@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -114,13 +115,16 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 		req.Header.Set("Accept-Encoding", "identity")
 
 		rsp, err := client.Do(req)
-		if err != nil {
+		if err != nil && errors.Is(err, context.DeadlineExceeded) {
+			return nil, unprocessableEntityError(ErrorCodeHookTimeout, fmt.Sprintf("Failed to reach hook within maximum time of %f seconds", DefaultHTTPHookTimeout.Seconds()))
+
+		} else if err != nil {
 			if terr, ok := err.(net.Error); ok && terr.Timeout() || i < DefaultHTTPHookRetries-1 {
 				hookLog.Errorf("Request timed out for attempt %d with err %s", i, err)
 				time.Sleep(HTTPHookBackoffDuration)
 				continue
 			} else if i == DefaultHTTPHookRetries-1 {
-				return nil, unprocessableEntityError(ErrorCodeHookTimeout, "Failed to reach hook within allotted interval")
+				return nil, unprocessableEntityError(ErrorCodeHookTimeoutAfterRetry, "Failed to reach hook after maximum retries")
 			} else {
 				return nil, internalServerError("Failed to trigger auth hook, error making HTTP request").WithInternalError(err)
 			}
@@ -131,13 +135,12 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 			if rsp.Body == nil {
 				return nil, nil
 			}
-			// unknown content length is handled for by nil check on Body
 			contentLength := rsp.ContentLength
 			if contentLength == -1 {
-				return nil, unprocessableEntityError(ErrorCodeHookPayloadUnknown, "payload size not known")
+				return nil, unprocessableEntityError(ErrorCodeHookPayloadUnknownSize, "Payload size not known")
 			}
 			if contentLength >= PayloadLimit {
-				return nil, unprocessableEntityError(ErrorCodeHookPayloadOverSizeLimit, "payload exceeded size limit")
+				return nil, unprocessableEntityError(ErrorCodeHookPayloadOverSizeLimit, fmt.Sprintf("Payload size is: %d bytes exceeded size limit of %d bytes", contentLength, PayloadLimit))
 			}
 			limitedReader := io.LimitedReader{R: rsp.Body, N: PayloadLimit}
 			body, err := io.ReadAll(&limitedReader)
