@@ -199,7 +199,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 		}
-		identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email")
+		identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), params.Provider)
 		if terr != nil {
 			if !models.IsNotFoundError(terr) {
 				return terr
