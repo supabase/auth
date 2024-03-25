@@ -320,7 +320,7 @@ func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) error {
 }
 
 // Mailer returns NewMailer with the current tenant config
-func (a *API) Mailer(ctx context.Context) mailer.Mailer {
+func (a *API) Mailer() mailer.Mailer {
 	config := a.config
 	return mailer.NewMailer(config)
 }

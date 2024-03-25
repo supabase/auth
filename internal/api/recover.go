@@ -66,10 +66,9 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
-		mailer := a.Mailer(ctx)
 		referrer := utilities.GetReferrer(r, config)
 		externalURL := getExternalHost(ctx)
-		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, flowType)
+		return a.sendPasswordRecovery(tx, user, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, flowType)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {

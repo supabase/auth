@@ -13,7 +13,6 @@ import (
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
-	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
@@ -45,7 +44,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
-	mailer := a.Mailer(ctx)
+	mailer := a.Mailer()
 	adminUser := getAdminUser(ctx)
 	params := &GenerateLinkParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
@@ -263,7 +262,8 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, resp)
 }
 
-func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, externalURL *url.URL, otpLength int, flowType models.FlowType) error {
+func (a *API) sendConfirmation(tx *storage.Connection, u *models.User, maxFrequency time.Duration, referrerURL string, externalURL *url.URL, otpLength int, flowType models.FlowType) error {
+	mailer := a.Mailer()
 	var err error
 	if u.ConfirmationSentAt != nil && !u.ConfirmationSentAt.Add(maxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
@@ -290,7 +290,8 @@ func sendConfirmation(tx *storage.Connection, u *models.User, mailer mailer.Mail
 	return nil
 }
 
-func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, referrerURL string, externalURL *url.URL, otpLength int) error {
+func (a *API) sendInvite(tx *storage.Connection, u *models.User, referrerURL string, externalURL *url.URL, otpLength int) error {
+	mailer := a.Mailer()
 	var err error
 	oldToken := u.ConfirmationToken
 	otp, err := crypto.GenerateOtp(otpLength)
@@ -314,7 +315,8 @@ func sendInvite(tx *storage.Connection, u *models.User, mailer mailer.Mailer, re
 	return nil
 }
 
-func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, externalURL *url.URL, otpLength int, flowType models.FlowType) error {
+func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, maxFrequency time.Duration, referrerURL string, externalURL *url.URL, otpLength int, flowType models.FlowType) error {
+	mailer := a.Mailer()
 	var err error
 	if u.RecoverySentAt != nil && !u.RecoverySentAt.Add(maxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
@@ -342,7 +344,8 @@ func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, maile
 	return nil
 }
 
-func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, otpLength int) error {
+func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, maxFrequency time.Duration, otpLength int) error {
+	mailer := a.Mailer()
 	var err error
 	if u.ReauthenticationSentAt != nil && !u.ReauthenticationSentAt.Add(maxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
@@ -369,7 +372,8 @@ func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User, ma
 	return nil
 }
 
-func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer mailer.Mailer, maxFrequency time.Duration, referrerURL string, externalURL *url.URL, otpLength int, flowType models.FlowType) error {
+func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, maxFrequency time.Duration, referrerURL string, externalURL *url.URL, otpLength int, flowType models.FlowType) error {
+	mailer := a.Mailer()
 	var err error
 	// since Magic Link is just a recovery with a different template and behaviour
 	// around new users we will reuse the recovery db timer to prevent potential abuse
@@ -400,8 +404,9 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, mailer maile
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, mailer mailer.Mailer, email, referrerURL string, externalURL *url.URL, otpLength int, flowType models.FlowType) error {
+func (a *API) sendEmailChange(tx *storage.Connection, config *conf.GlobalConfiguration, u *models.User, email, referrerURL string, externalURL *url.URL, otpLength int, flowType models.FlowType) error {
 	var err error
+	mailer := a.Mailer()
 	if u.EmailChangeSentAt != nil && !u.EmailChangeSentAt.Add(config.SMTP.MaxFrequency).Before(time.Now()) {
 		return MaxFrequencyLimitError
 	}
