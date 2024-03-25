@@ -141,7 +141,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		}
 		referrer := utilities.GetReferrer(r, config)
 		externalURL := getExternalHost(ctx)
-		return a.sendMagicLink(tx, user, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, flowType)
+		return a.sendMagicLink(tx, user, referrer, externalURL, flowType)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {

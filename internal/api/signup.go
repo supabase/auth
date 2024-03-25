@@ -247,7 +247,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					}
 				}
 				externalURL := getExternalHost(ctx)
-				if terr = a.sendConfirmation(tx, user, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, flowType); terr != nil {
+				if terr = a.sendConfirmation(tx, user, referrer, externalURL, flowType); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {
 						now := time.Now()
 						left := user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency).Sub(now) / time.Second

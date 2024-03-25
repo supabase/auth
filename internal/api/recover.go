@@ -68,7 +68,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		}
 		referrer := utilities.GetReferrer(r, config)
 		externalURL := getExternalHost(ctx)
-		return a.sendPasswordRecovery(tx, user, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, flowType)
+		return a.sendPasswordRecovery(tx, user, referrer, externalURL, flowType)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {

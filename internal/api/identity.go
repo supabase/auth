@@ -134,7 +134,7 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 		if !userData.Metadata.EmailVerified {
 			referrer := utilities.GetReferrer(r, a.config)
 			externalURL := getExternalHost(ctx)
-			if terr := a.sendConfirmation(tx, targetUser, a.config.SMTP.MaxFrequency, referrer, externalURL, a.config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
+			if terr := a.sendConfirmation(tx, targetUser, referrer, externalURL, models.ImplicitFlow); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
 					return nil, tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "For security purposes, you can only request this once every minute")
 				}

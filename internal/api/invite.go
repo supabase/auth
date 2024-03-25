@@ -83,7 +83,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 
 		referrer := utilities.GetReferrer(r, config)
 		externalURL := getExternalHost(ctx)
-		if err := a.sendInvite(tx, user, referrer, externalURL, config.Mailer.OtpLength); err != nil {
+		if err := a.sendInvite(tx, user, referrer, externalURL); err != nil {
 			return internalServerError("Error inviting user").WithInternalError(err)
 		}
 		return nil

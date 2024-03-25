@@ -204,7 +204,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 			}
 			externalURL := getExternalHost(ctx)
-			if terr = a.sendEmailChange(tx, config, user, params.Email, referrer, externalURL, config.Mailer.OtpLength, flowType); terr != nil {
+			if terr = a.sendEmailChange(tx, user, params.Email, referrer, externalURL, flowType); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
 					return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "For security purposes, you can only request this once every 60 seconds")
 				}
