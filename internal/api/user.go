@@ -10,7 +10,6 @@ import (
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 // UserUpdateParams parameters for updating a user
@@ -194,7 +193,6 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Email != "" && params.Email != user.GetEmail() {
-			referrer := utilities.GetReferrer(r, config)
 			flowType := getFlowFromChallenge(params.CodeChallenge)
 			if isPKCEFlow(flowType) {
 				_, terr := generateFlowState(tx, models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
@@ -203,8 +201,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				}
 
 			}
-			externalURL := getExternalHost(ctx)
-			if terr = a.sendEmailChange(tx, user, params.Email, referrer, externalURL, flowType); terr != nil {
+			if terr = a.sendEmailChange(ctx, r, tx, user, params.Email, flowType); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
 					return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "For security purposes, you can only request this once every 60 seconds")
 				}

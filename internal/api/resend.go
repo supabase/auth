@@ -9,7 +9,6 @@ import (
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 // ResendConfirmationParams holds the parameters for a resend request
@@ -115,8 +114,6 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	messageID := ""
-	referrer := utilities.GetReferrer(r, config)
-	externalURL := getExternalHost(ctx)
 	err = db.Transaction(func(tx *storage.Connection) error {
 		switch params.Type {
 		case signupVerification:
@@ -124,7 +121,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 			// PKCE not implemented yet
-			return a.sendConfirmation(tx, user, referrer, externalURL, models.ImplicitFlow)
+			return a.sendConfirmation(ctx, r, tx, user, models.ImplicitFlow)
 		case smsVerification:
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
@@ -139,7 +136,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			}
 			messageID = mID
 		case emailChangeVerification:
-			return a.sendEmailChange(tx, user, user.EmailChange, referrer, externalURL, models.ImplicitFlow)
+			return a.sendEmailChange(ctx, r, tx, user, user.EmailChange, models.ImplicitFlow)
 		case phoneChangeVerification:
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)
 			if terr != nil {

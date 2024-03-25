@@ -1,8 +1,8 @@
 package api
 
 import (
+	"context"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -261,11 +261,13 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	return sendJSON(w, http.StatusOK, resp)
 }
 
-func (a *API) sendConfirmation(tx *storage.Connection, u *models.User, referrerURL string, externalURL *url.URL, flowType models.FlowType) error {
+func (a *API) sendConfirmation(ctx context.Context, r *http.Request, tx *storage.Connection, u *models.User, flowType models.FlowType) error {
 	mailer := a.Mailer()
 	config := a.config
 	otpLength := config.Mailer.OtpLength
 	maxFrequency := config.SMTP.MaxFrequency
+	referrerURL := utilities.GetReferrer(r, config)
+	externalURL := getExternalHost(ctx)
 	var err error
 	if err := validateSentWithinFrequencyLimit(u.ConfirmationSentAt, maxFrequency); err != nil {
 		return err
@@ -292,10 +294,12 @@ func (a *API) sendConfirmation(tx *storage.Connection, u *models.User, referrerU
 	return nil
 }
 
-func (a *API) sendInvite(tx *storage.Connection, u *models.User, referrerURL string, externalURL *url.URL) error {
+func (a *API) sendInvite(ctx context.Context, r *http.Request, tx *storage.Connection, u *models.User) error {
 	mailer := a.Mailer()
 	config := a.config
 	otpLength := config.Mailer.OtpLength
+	referrerURL := utilities.GetReferrer(r, config)
+	externalURL := getExternalHost(ctx)
 	var err error
 	oldToken := u.ConfirmationToken
 	otp, err := crypto.GenerateOtp(otpLength)
@@ -319,10 +323,12 @@ func (a *API) sendInvite(tx *storage.Connection, u *models.User, referrerURL str
 	return nil
 }
 
-func (a *API) sendPasswordRecovery(tx *storage.Connection, u *models.User, referrerURL string, externalURL *url.URL, flowType models.FlowType) error {
+func (a *API) sendPasswordRecovery(ctx context.Context, r *http.Request, tx *storage.Connection, u *models.User, flowType models.FlowType) error {
 	config := a.config
 	maxFrequency := config.SMTP.MaxFrequency
 	otpLength := config.Mailer.OtpLength
+	referrerURL := utilities.GetReferrer(r, config)
+	externalURL := getExternalHost(ctx)
 	mailer := a.Mailer()
 	var err error
 	if err := validateSentWithinFrequencyLimit(u.RecoverySentAt, maxFrequency); err != nil {
@@ -383,11 +389,13 @@ func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User) er
 	return nil
 }
 
-func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, referrerURL string, externalURL *url.URL, flowType models.FlowType) error {
+func (a *API) sendMagicLink(ctx context.Context, r *http.Request, tx *storage.Connection, u *models.User, flowType models.FlowType) error {
 	mailer := a.Mailer()
 	config := a.config
 	otpLength := config.Mailer.OtpLength
 	maxFrequency := config.SMTP.MaxFrequency
+	referrerURL := utilities.GetReferrer(r, config)
+	externalURL := getExternalHost(ctx)
 	var err error
 	// since Magic Link is just a recovery with a different template and behaviour
 	// around new users we will reuse the recovery db timer to prevent potential abuse
@@ -419,7 +427,7 @@ func (a *API) sendMagicLink(tx *storage.Connection, u *models.User, referrerURL 
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(tx *storage.Connection, u *models.User, email, referrerURL string, externalURL *url.URL, flowType models.FlowType) error {
+func (a *API) sendEmailChange(ctx context.Context, r *http.Request, tx *storage.Connection, u *models.User, email string, flowType models.FlowType) error {
 	config := a.config
 	otpLength := config.Mailer.OtpLength
 	var err error
@@ -427,6 +435,8 @@ func (a *API) sendEmailChange(tx *storage.Connection, u *models.User, email, ref
 	if err := validateSentWithinFrequencyLimit(u.EmailChangeSentAt, config.SMTP.MaxFrequency); err != nil {
 		return err
 	}
+	referrerURL := utilities.GetReferrer(r, config)
+	externalURL := getExternalHost(ctx)
 
 	otpNew, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
