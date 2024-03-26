@@ -5,13 +5,10 @@ import (
 	"net/http"
 	"time"
 
-
 	"github.com/clanwyse/halo/internal/api/sms_provider"
 	"github.com/clanwyse/halo/internal/conf"
 	"github.com/clanwyse/halo/internal/models"
 	"github.com/clanwyse/halo/internal/storage"
-	"github.com/clanwyse/halo/internal/utilities"
-
 )
 
 // ResendConfirmationParams holds the parameters for a resend request

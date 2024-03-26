@@ -11,9 +11,7 @@ import (
 
 	"github.com/clanwyse/halo/internal/models"
 	"github.com/clanwyse/halo/internal/storage"
-	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/sethvargo/go-password/password"
-
 )
 
 // MagicLinkParams holds the parameters for a magic link request

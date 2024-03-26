@@ -11,11 +11,9 @@ import (
 	"github.com/clanwyse/halo/internal/metering"
 	"github.com/clanwyse/halo/internal/models"
 	"github.com/clanwyse/halo/internal/storage"
-	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-
 )
 
 // SignupParams are the parameters the Signup endpoint accepts

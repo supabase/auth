@@ -9,9 +9,7 @@ import (
 	"github.com/clanwyse/halo/internal/api/sms_provider"
 	"github.com/clanwyse/halo/internal/models"
 	"github.com/clanwyse/halo/internal/storage"
-	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/gofrs/uuid"
-
 )
 
 // UserUpdateParams parameters for updating a user

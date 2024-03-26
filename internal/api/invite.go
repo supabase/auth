@@ -6,7 +6,6 @@ import (
 	"github.com/clanwyse/halo/internal/api/provider"
 	"github.com/clanwyse/halo/internal/models"
 	"github.com/clanwyse/halo/internal/storage"
-	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/fatih/structs"
 )
 
