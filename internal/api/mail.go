@@ -281,7 +281,7 @@ func (a *API) sendConfirmation(ctx context.Context, r *http.Request, tx *storage
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
-	if err := mailer.ConfirmationMail(u, otp, referrerURL, externalURL); err != nil {
+	if err := mailer.ConfirmationMail(ctx, r, u, otp, referrerURL, externalURL); err != nil {
 		u.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending confirmation email")
 	}
@@ -309,7 +309,7 @@ func (a *API) sendInvite(ctx context.Context, r *http.Request, tx *storage.Conne
 	}
 	u.ConfirmationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
-	if err := mailer.InviteMail(u, otp, referrerURL, externalURL); err != nil {
+	if err := mailer.InviteMail(ctx, r, u, otp, referrerURL, externalURL); err != nil {
 		u.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending invite email")
 	}
@@ -344,7 +344,7 @@ func (a *API) sendPasswordRecovery(ctx context.Context, r *http.Request, tx *sto
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
-	if err := mailer.RecoveryMail(u, otp, referrerURL, externalURL); err != nil {
+	if err := mailer.RecoveryMail(ctx, r, u, otp, referrerURL, externalURL); err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending recovery email")
 	}
@@ -357,7 +357,7 @@ func (a *API) sendPasswordRecovery(ctx context.Context, r *http.Request, tx *sto
 	return nil
 }
 
-func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User) error {
+func (a *API) sendReauthenticationOtp(ctx context.Context, r *http.Request, tx *storage.Connection, u *models.User) error {
 	config := a.config
 	maxFrequency := config.SMTP.MaxFrequency
 	otpLength := config.Mailer.OtpLength
@@ -376,7 +376,7 @@ func (a *API) sendReauthenticationOtp(tx *storage.Connection, u *models.User) er
 	}
 	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
-	if err := mailer.ReauthenticateMail(u, otp); err != nil {
+	if err := mailer.ReauthenticateMail(ctx, r, u, otp); err != nil {
 		u.ReauthenticationToken = oldToken
 		return errors.Wrap(err, "Error sending reauthentication email")
 	}
@@ -413,7 +413,7 @@ func (a *API) sendMagicLink(ctx context.Context, r *http.Request, tx *storage.Co
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 
 	now := time.Now()
-	if err := mailer.MagicLinkMail(u, otp, referrerURL, externalURL); err != nil {
+	if err := mailer.MagicLinkMail(ctx, r, u, otp, referrerURL, externalURL); err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending magic link email")
 	}
@@ -460,7 +460,7 @@ func (a *API) sendEmailChange(ctx context.Context, r *http.Request, tx *storage.
 
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
-	if err := mailer.EmailChangeMail(u, otpNew, otpCurrent, referrerURL, externalURL); err != nil {
+	if err := mailer.EmailChangeMail(ctx, r, u, otpNew, otpCurrent, referrerURL, externalURL); err != nil {
 		return err
 	}
 
