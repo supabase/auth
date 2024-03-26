@@ -112,13 +112,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	r.Use(recoverer)
 
 	if globalConfig.DB.CleanupEnabled {
-		cleanup := &models.Cleanup{
-			SessionTimebox:           globalConfig.Sessions.Timebox,
-			SessionInactivityTimeout: globalConfig.Sessions.InactivityTimeout,
-		}
-
-		cleanup.Setup()
-
+		cleanup := models.NewCleanup(globalConfig)
 		r.UseBypass(api.databaseCleanup(cleanup))
 	}
 
