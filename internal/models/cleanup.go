@@ -28,6 +28,7 @@ type Cleanup struct {
 }
 
 func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
+	tableUsers := User{}.TableName()
 	tableRefreshTokens := RefreshToken{}.TableName()
 	tableSessions := Session{}.TableName()
 	tableRelayStates := SAMLRelayState{}.TableName()
@@ -54,6 +55,12 @@ func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
 		fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '24 hours' and status = 'unverified' limit 100 for update skip locked);", tableMFAFactors, tableMFAFactors),
 	)
 
+	if config.External.AnonymousUsers.Enabled {
+		// delete anonymous users older than 30 days
+		c.cleanupStatements = append(c.cleanupStatements,
+			fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() and is_anonymous is true limit 100 for update skip locked);", tableUsers, tableUsers),
+		)
+	}
 
 	if config.Sessions.Timebox != nil {
 		timeboxSeconds := int((*config.Sessions.Timebox).Seconds())
