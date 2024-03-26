@@ -3,6 +3,7 @@ package hooks
 import (
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
+	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -146,6 +147,16 @@ type CustomSMSProviderInput struct {
 }
 
 type CustomSMSProviderOutput struct {
+	Success   bool          `json:"success"`
+	HookError AuthHookError `json:"error,omitempty"`
+}
+
+type SendEmailInput struct {
+	User      *models.User     `json:"user"`
+	EmailData mailer.EmailData `json:"email_data"`
+}
+
+type SendEmailOutput struct {
 	Success   bool          `json:"success"`
 	HookError AuthHookError `json:"error,omitempty"`
 }
