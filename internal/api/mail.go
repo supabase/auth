@@ -492,7 +492,7 @@ func validateEmail(email string) (string, error) {
 }
 
 func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration) error {
-	if sentAt != nil && !sentAt.Add(frequency).Before(time.Now()) {
+	if sentAt != nil && sentAt.Add(frequency).After(time.Now()) {
 		return MaxFrequencyLimitError
 	}
 	return nil
