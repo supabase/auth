@@ -11,7 +11,6 @@ import (
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
@@ -132,10 +131,7 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 			return nil, terr
 		}
 		if !userData.Metadata.EmailVerified {
-			mailer := a.Mailer(ctx)
-			referrer := utilities.GetReferrer(r, a.config)
-			externalURL := getExternalHost(ctx)
-			if terr := sendConfirmation(tx, targetUser, mailer, a.config.SMTP.MaxFrequency, referrer, externalURL, a.config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
+			if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
 					return nil, tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "For security purposes, you can only request this once every minute")
 				}
