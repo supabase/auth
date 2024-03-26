@@ -42,8 +42,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 		if email != "" {
-			mailer := a.Mailer(ctx)
-			return a.sendReauthenticationOtp(tx, user, mailer, config.SMTP.MaxFrequency, config.Mailer.OtpLength)
+			return a.sendReauthenticationOtp(r, tx, user)
 		} else if phone != "" {
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)
 			if terr != nil {

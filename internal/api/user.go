@@ -11,6 +11,7 @@ import (
 	"github.com/clanwyse/halo/internal/storage"
 	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/gofrs/uuid"
+
 )
 
 // UserUpdateParams parameters for updating a user
@@ -194,8 +195,6 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Email != "" && params.Email != user.GetEmail() {
-			mailer := a.Mailer(ctx)
-			referrer := utilities.GetReferrer(r, config)
 			flowType := getFlowFromChallenge(params.CodeChallenge)
 			if isPKCEFlow(flowType) {
 				_, terr := generateFlowState(tx, models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
@@ -204,8 +203,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				}
 
 			}
-			externalURL := getExternalHost(ctx)
-			if terr = a.sendEmailChange(tx, config, user, mailer, params.Email, referrer, externalURL, config.Mailer.OtpLength, flowType); terr != nil {
+			if terr = a.sendEmailChange(r, tx, user, params.Email, flowType); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
 					return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "For security purposes, you can only request this once every 60 seconds")
 				}

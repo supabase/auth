@@ -13,6 +13,7 @@ import (
 	"github.com/clanwyse/halo/internal/storage"
 	"github.com/clanwyse/halo/internal/utilities"
 	"github.com/sethvargo/go-password/password"
+
 )
 
 // MagicLinkParams holds the parameters for a magic link request
@@ -139,10 +140,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
-		mailer := a.Mailer(ctx)
-		referrer := utilities.GetReferrer(r, config)
-		externalURL := getExternalHost(ctx)
-		return a.sendMagicLink(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, flowType)
+		return a.sendMagicLink(r, tx, user, flowType)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {

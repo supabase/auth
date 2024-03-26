@@ -5,11 +5,13 @@ import (
 	"net/http"
 	"time"
 
+
 	"github.com/clanwyse/halo/internal/api/sms_provider"
 	"github.com/clanwyse/halo/internal/conf"
 	"github.com/clanwyse/halo/internal/models"
 	"github.com/clanwyse/halo/internal/storage"
 	"github.com/clanwyse/halo/internal/utilities"
+
 )
 
 // ResendConfirmationParams holds the parameters for a resend request
@@ -115,9 +117,6 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	messageID := ""
-	mailer := a.Mailer(ctx)
-	referrer := utilities.GetReferrer(r, config)
-	externalURL := getExternalHost(ctx)
 	err = db.Transaction(func(tx *storage.Connection) error {
 		switch params.Type {
 		case signupVerification:
@@ -125,7 +124,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 			// PKCE not implemented yet
-			return sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow)
+			return a.sendConfirmation(r, tx, user, models.ImplicitFlow)
 		case smsVerification:
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
@@ -140,7 +139,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			}
 			messageID = mID
 		case emailChangeVerification:
-			return a.sendEmailChange(tx, config, user, mailer, user.EmailChange, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow)
+			return a.sendEmailChange(r, tx, user, user.EmailChange, models.ImplicitFlow)
 		case phoneChangeVerification:
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)
 			if terr != nil {

@@ -2,6 +2,7 @@ package mailer
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 
 	"github.com/clanwyse/halo/internal/conf"
@@ -15,12 +16,12 @@ import (
 // Mailer defines the interface a mailer must implement.
 type Mailer interface {
 	Send(user *models.User, subject, body string, data map[string]interface{}) error
-	InviteMail(user *models.User, otp, referrerURL string, externalURL *url.URL) error
-	ConfirmationMail(user *models.User, otp, referrerURL string, externalURL *url.URL) error
-	RecoveryMail(user *models.User, otp, referrerURL string, externalURL *url.URL) error
-	MagicLinkMail(user *models.User, otp, referrerURL string, externalURL *url.URL) error
-	EmailChangeMail(user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error
-	ReauthenticateMail(user *models.User, otp string) error
+	InviteMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	ConfirmationMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	RecoveryMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	MagicLinkMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	EmailChangeMail(r *http.Request, user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error
+	ReauthenticateMail(r *http.Request, user *models.User, otp string) error
 	ValidateEmail(email string) error
 	GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error)
 }

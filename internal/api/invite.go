@@ -20,7 +20,6 @@ type InviteParams struct {
 func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
-	config := a.config
 	adminUser := getAdminUser(ctx)
 	params := &InviteParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
@@ -81,10 +80,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		mailer := a.Mailer(ctx)
-		referrer := utilities.GetReferrer(r, config)
-		externalURL := getExternalHost(ctx)
-		if err := sendInvite(tx, user, mailer, referrer, externalURL, config.Mailer.OtpLength); err != nil {
+		if err := a.sendInvite(r, tx, user); err != nil {
 			return internalServerError("Error inviting user").WithInternalError(err)
 		}
 		return nil

@@ -4,7 +4,7 @@ We would love to have contributions from each and every one of you in the commun
 
 ## Code Of Conduct
 
-Please help us keep all our projects open and inclusive. Kindly follow our [Code of Conduct](<(CODE_OF_CONDUCT.md)>) to keep the ecosystem healthy and friendly for all.
+Please help us keep all our projects open and inclusive. Kindly follow our [Code of Conduct](CODE_OF_CONDUCT.md) to keep the ecosystem healthy and friendly for all.
 
 ## Quick Start
 

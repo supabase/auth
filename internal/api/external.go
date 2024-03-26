@@ -382,10 +382,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		} else {
 			emailConfirmationSent := false
 			if decision.CandidateEmail.Email != "" {
-				mailer := a.Mailer(ctx)
-				referrer := utilities.GetReferrer(r, config)
-				externalURL := getExternalHost(ctx)
-				if terr = sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow); terr != nil {
+				if terr = a.sendConfirmation(r, tx, user, models.ImplicitFlow); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {
 						return nil, tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "For security purposes, you can only request this once every minute")
 					}
