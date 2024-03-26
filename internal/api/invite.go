@@ -79,7 +79,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		if err := a.sendInvite(ctx, r, tx, user); err != nil {
+		if err := a.sendInvite(r, tx, user); err != nil {
 			return internalServerError("Error inviting user").WithInternalError(err)
 		}
 		return nil

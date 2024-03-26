@@ -121,7 +121,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 			// PKCE not implemented yet
-			return a.sendConfirmation(ctx, r, tx, user, models.ImplicitFlow)
+			return a.sendConfirmation(r, tx, user, models.ImplicitFlow)
 		case smsVerification:
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
@@ -136,7 +136,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			}
 			messageID = mID
 		case emailChangeVerification:
-			return a.sendEmailChange(ctx, r, tx, user, user.EmailChange, models.ImplicitFlow)
+			return a.sendEmailChange(r, tx, user, user.EmailChange, models.ImplicitFlow)
 		case phoneChangeVerification:
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)
 			if terr != nil {

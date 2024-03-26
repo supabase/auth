@@ -64,7 +64,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
-		return a.sendPasswordRecovery(ctx, r, tx, user, flowType)
+		return a.sendPasswordRecovery(r, tx, user, flowType)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {

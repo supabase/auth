@@ -201,7 +201,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				}
 
 			}
-			if terr = a.sendEmailChange(ctx, r, tx, user, params.Email, flowType); terr != nil {
+			if terr = a.sendEmailChange(r, tx, user, params.Email, flowType); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
 					return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "For security purposes, you can only request this once every 60 seconds")
 				}

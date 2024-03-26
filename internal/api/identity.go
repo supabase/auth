@@ -131,7 +131,7 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 			return nil, terr
 		}
 		if !userData.Metadata.EmailVerified {
-			if terr := a.sendConfirmation(ctx, r, tx, targetUser, models.ImplicitFlow); terr != nil {
+			if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
 					return nil, tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "For security purposes, you can only request this once every minute")
 				}

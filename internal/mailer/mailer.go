@@ -1,7 +1,6 @@
 package mailer
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -17,12 +16,12 @@ import (
 // Mailer defines the interface a mailer must implement.
 type Mailer interface {
 	Send(user *models.User, subject, body string, data map[string]interface{}) error
-	InviteMail(ctx context.Context, r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
-	ConfirmationMail(ctx context.Context, r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
-	RecoveryMail(ctx context.Context, r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
-	MagicLinkMail(ctx context.Context, r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
-	EmailChangeMail(ctx context.Context, r *http.Request, user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error
-	ReauthenticateMail(ctx context.Context, r *http.Request, user *models.User, otp string) error
+	InviteMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	ConfirmationMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	RecoveryMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	MagicLinkMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	EmailChangeMail(r *http.Request, user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error
+	ReauthenticateMail(r *http.Request, user *models.User, otp string) error
 	ValidateEmail(email string) error
 	GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error)
 }

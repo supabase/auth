@@ -244,7 +244,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 						return terr
 					}
 				}
-				if terr = a.sendConfirmation(ctx, r, tx, user, flowType); terr != nil {
+				if terr = a.sendConfirmation(r, tx, user, flowType); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {
 						now := time.Now()
 						left := user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency).Sub(now) / time.Second

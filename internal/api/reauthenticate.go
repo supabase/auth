@@ -42,7 +42,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 		if email != "" {
-			return a.sendReauthenticationOtp(ctx, r, tx, user)
+			return a.sendReauthenticationOtp(r, tx, user)
 		} else if phone != "" {
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)
 			if terr != nil {

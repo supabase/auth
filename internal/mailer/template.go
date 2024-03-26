@@ -1,7 +1,6 @@
 package mailer
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -77,7 +76,7 @@ func (m TemplateMailer) ValidateEmail(email string) error {
 }
 
 // InviteMail sends a invite mail to a new user
-func (m *TemplateMailer) InviteMail(ctx context.Context, r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
+func (m *TemplateMailer) InviteMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
 	path, err := getPath(m.Config.Mailer.URLPaths.Invite, &EmailParams{
 		Token:      user.ConfirmationToken,
 		Type:       "invite",
@@ -108,7 +107,7 @@ func (m *TemplateMailer) InviteMail(ctx context.Context, r *http.Request, user *
 }
 
 // ConfirmationMail sends a signup confirmation mail to a new user
-func (m *TemplateMailer) ConfirmationMail(ctx context.Context, r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
+func (m *TemplateMailer) ConfirmationMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
 	path, err := getPath(m.Config.Mailer.URLPaths.Confirmation, &EmailParams{
 		Token:      user.ConfirmationToken,
 		Type:       "signup",
@@ -138,7 +137,7 @@ func (m *TemplateMailer) ConfirmationMail(ctx context.Context, r *http.Request, 
 }
 
 // ReauthenticateMail sends a reauthentication mail to an authenticated user
-func (m *TemplateMailer) ReauthenticateMail(ctx context.Context, r *http.Request, user *models.User, otp string) error {
+func (m *TemplateMailer) ReauthenticateMail(r *http.Request, user *models.User, otp string) error {
 	data := map[string]interface{}{
 		"SiteURL": m.Config.SiteURL,
 		"Email":   user.Email,
@@ -156,7 +155,7 @@ func (m *TemplateMailer) ReauthenticateMail(ctx context.Context, r *http.Request
 }
 
 // EmailChangeMail sends an email change confirmation mail to a user
-func (m *TemplateMailer) EmailChangeMail(ctx context.Context, r *http.Request, user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error {
+func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error {
 	type Email struct {
 		Address   string
 		Otp       string
@@ -231,7 +230,7 @@ func (m *TemplateMailer) EmailChangeMail(ctx context.Context, r *http.Request, u
 }
 
 // RecoveryMail sends a password recovery mail
-func (m *TemplateMailer) RecoveryMail(ctx context.Context, r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
+func (m *TemplateMailer) RecoveryMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
 	path, err := getPath(m.Config.Mailer.URLPaths.Recovery, &EmailParams{
 		Token:      user.RecoveryToken,
 		Type:       "recovery",
@@ -260,7 +259,7 @@ func (m *TemplateMailer) RecoveryMail(ctx context.Context, r *http.Request, user
 }
 
 // MagicLinkMail sends a login link mail
-func (m *TemplateMailer) MagicLinkMail(ctx context.Context, r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
+func (m *TemplateMailer) MagicLinkMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
 	path, err := getPath(m.Config.Mailer.URLPaths.Recovery, &EmailParams{
 		Token:      user.RecoveryToken,
 		Type:       "magiclink",
