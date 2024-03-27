@@ -12,7 +12,7 @@ Auth is a user management and authentication server written in Go that powers
 - Sign in with external providers (Google, Apple, Facebook, Discord, ...)
 
 It is originally based on the excellent
-[Auth codebase by Netlify](https://github.com/netlify/auth), however both have diverged significantly in features and capabilities.
+[GoTrue codebase by Netlify](https://github.com/netlify/gotrue), however both have diverged significantly in features and capabilities.
 
 If you wish to contribute to the project, please refer to the [contributing guide](/CONTRIBUTING.md).
 
