@@ -94,7 +94,11 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 		return nil, err
 	}
 	for i := 0; i < DefaultHTTPHookRetries; i++ {
-		hookLog.Infof("invocation attempt: %d", i)
+		if i == 0 {
+			hookLog.Debugf("invocation attempt: %d", i)
+		} else {
+			hookLog.Infof("invocation attempt: %d", i)
+		}
 		msgID := uuid.Must(uuid.NewV4())
 		currentTime := time.Now()
 		signatureList, err := crypto.GenerateSignatures(hookConfig.HTTPHookSecrets, msgID, currentTime, inputPayload)
@@ -158,14 +162,14 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 			}
 			return nil, internalServerError("Service currently unavailable due to hook")
 		case http.StatusBadRequest:
-			return nil, badRequestError(ErrorCodeValidationFailed, "Invalid payload sent to hook")
+			return nil, internalServerError("Invalid payload sent to hook")
 		case http.StatusUnauthorized:
-			return []byte{}, forbiddenError(ErrorCodeNoAuthorization, "Hook requires authorization token")
+			return nil, internalServerError("Hook requires authorization token")
 		default:
-			return []byte{}, internalServerError("Error executing Hook")
+			return nil, internalServerError("Error executing Hook")
 		}
 	}
-	return nil, internalServerError("error executing hook")
+	return nil, nil
 }
 
 func (a *API) invokeHTTPHook(ctx context.Context, r *http.Request, input, output any, hookURI string) error {
