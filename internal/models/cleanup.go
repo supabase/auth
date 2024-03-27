@@ -58,7 +58,7 @@ func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
 	if config.External.AnonymousUsers.Enabled {
 		// delete anonymous users older than 30 days
 		c.cleanupStatements = append(c.cleanupStatements,
-			fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() and is_anonymous is true limit 100 for update skip locked);", tableUsers, tableUsers),
+			fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '30 days' and is_anonymous is true limit 100 for update skip locked);", tableUsers, tableUsers),
 		)
 	}
 
