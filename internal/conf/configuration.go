@@ -503,12 +503,12 @@ func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
 		return validatePostgresPath(u)
 	case "http":
 		hostname := u.Hostname()
-		if hostname == "localhost" || hostname == "127.0.0.1" || hostname == "::1" {
-			return validateHTTPSHookSecrets(e.HTTPHookSecrets)
+		if hostname == "localhost" || hostname == "127.0.0.1" || hostname == "::1" || hostname == "host.docker.internal" {
+			return validateHTTPHookSecrets(e.HTTPHookSecrets)
 		}
 		return fmt.Errorf("only localhost, 127.0.0.1, and ::1 are supported with http")
 	case "https":
-		return validateHTTPSHookSecrets(e.HTTPHookSecrets)
+		return validateHTTPHookSecrets(e.HTTPHookSecrets)
 	default:
 		return fmt.Errorf("only postgres hooks and HTTPS functions are supported at the moment")
 	}
@@ -536,7 +536,7 @@ func isValidSecretFormat(secret string) bool {
 	return symmetricSecretFormat.MatchString(secret) || asymmetricSecretFormat.MatchString(secret)
 }
 
-func validateHTTPSHookSecrets(secrets []string) error {
+func validateHTTPHookSecrets(secrets []string) error {
 	for _, secret := range secrets {
 		if !isValidSecretFormat(secret) {
 			return fmt.Errorf("invalid secret format")
@@ -546,9 +546,6 @@ func validateHTTPSHookSecrets(secrets []string) error {
 }
 
 func (e *ExtensibilityPointConfiguration) PopulateExtensibilityPoint() error {
-	if err := e.ValidateExtensibilityPoint(); err != nil {
-		return err
-	}
 	u, err := url.Parse(e.URI)
 	if err != nil {
 		return err

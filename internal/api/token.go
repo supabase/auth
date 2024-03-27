@@ -164,7 +164,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			Valid:  isValidPassword,
 		}
 		output := hooks.PasswordVerificationAttemptOutput{}
-		err := a.invokeHook(ctx, nil, &input, &output)
+		err := a.invokePostgresHook(ctx, nil, &input, &output, config.Hook.PasswordVerificationAttempt.URI)
 		if err != nil {
 			return err
 		}
@@ -339,7 +339,7 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 
 		output := hooks.CustomAccessTokenOutput{}
 
-		err := a.invokeHook(ctx, tx, &input, &output)
+		err := a.invokePostgresHook(ctx, tx, &input, &output, config.Hook.CustomAccessToken.URI)
 		if err != nil {
 			return "", 0, err
 		}

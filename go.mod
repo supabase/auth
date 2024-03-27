@@ -70,6 +70,7 @@ require (
 	github.com/fatih/structs v1.1.0
 	github.com/gobuffalo/pop/v6 v6.1.1
 	github.com/jackc/pgx/v4 v4.18.2
+	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20240303152453-e0e82adf1721
 	github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869
 	github.com/supabase/mailme v0.0.0-20230628061017-01f68480c747
 	github.com/xeipuuv/gojsonschema v1.2.0
@@ -146,4 +147,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-go 1.21
+go 1.21.0
+
+toolchain go1.21.6

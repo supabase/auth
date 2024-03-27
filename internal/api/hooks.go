@@ -1,14 +1,34 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"strings"
+	"time"
 
+	"github.com/gofrs/uuid"
+	"github.com/supabase/auth/internal/observability"
+
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
+
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/hooks"
 
 	"github.com/supabase/auth/internal/storage"
+)
+
+const (
+	DefaultHTTPHookTimeout  = 5 * time.Second
+	DefaultHTTPHookRetries  = 3
+	HTTPHookBackoffDuration = 2 * time.Second
+	PayloadLimit            = 200 * 1024 // 200KB
 )
 
 func (a *API) runPostgresHook(ctx context.Context, tx *storage.Connection, name string, input, output any) ([]byte, error) {
@@ -55,12 +75,137 @@ func (a *API) runPostgresHook(ctx context.Context, tx *storage.Connection, name 
 	return response, nil
 }
 
-// invokeHook invokes the hook code. tx can be nil, in which case a new
+func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.ExtensibilityPointConfiguration, input, output any) ([]byte, error) {
+	client := http.Client{
+		Timeout: DefaultHTTPHookTimeout,
+	}
+	ctx, cancel := context.WithTimeout(ctx, DefaultHTTPHookTimeout)
+	defer cancel()
+
+	log := observability.GetLogEntry(r)
+	requestURL := hookConfig.URI
+	hookLog := log.WithFields(logrus.Fields{
+		"component": "auth_hook",
+		"url":       requestURL,
+	})
+
+	inputPayload, err := json.Marshal(input)
+	if err != nil {
+		return nil, err
+	}
+	for i := 0; i < DefaultHTTPHookRetries; i++ {
+		if i == 0 {
+			hookLog.Debugf("invocation attempt: %d", i)
+		} else {
+			hookLog.Infof("invocation attempt: %d", i)
+		}
+		msgID := uuid.Must(uuid.NewV4())
+		currentTime := time.Now()
+		signatureList, err := crypto.GenerateSignatures(hookConfig.HTTPHookSecrets, msgID, currentTime, inputPayload)
+		if err != nil {
+			return nil, err
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bytes.NewBuffer(inputPayload))
+		if err != nil {
+			panic("Failed to make request object")
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("webhook-id", msgID.String())
+		req.Header.Set("webhook-timestamp", fmt.Sprintf("%d", currentTime.Unix()))
+		req.Header.Set("webhook-signature", strings.Join(signatureList, ", "))
+		// By default, Go Client sets encoding to gzip, which does not carry a content length header.
+		req.Header.Set("Accept-Encoding", "identity")
+
+		rsp, err := client.Do(req)
+		if err != nil && errors.Is(err, context.DeadlineExceeded) {
+			return nil, unprocessableEntityError(ErrorCodeHookTimeout, fmt.Sprintf("Failed to reach hook within maximum time of %f seconds", DefaultHTTPHookTimeout.Seconds()))
+
+		} else if err != nil {
+			if terr, ok := err.(net.Error); ok && terr.Timeout() || i < DefaultHTTPHookRetries-1 {
+				hookLog.Errorf("Request timed out for attempt %d with err %s", i, err)
+				time.Sleep(HTTPHookBackoffDuration)
+				continue
+			} else if i == DefaultHTTPHookRetries-1 {
+				return nil, unprocessableEntityError(ErrorCodeHookTimeoutAfterRetry, "Failed to reach hook after maximum retries")
+			} else {
+				return nil, internalServerError("Failed to trigger auth hook, error making HTTP request").WithInternalError(err)
+			}
+		}
+
+		defer rsp.Body.Close()
+
+		switch rsp.StatusCode {
+		case http.StatusOK, http.StatusNoContent, http.StatusAccepted:
+			if rsp.Body == nil {
+				return nil, nil
+			}
+			contentLength := rsp.ContentLength
+			if contentLength == -1 {
+				return nil, unprocessableEntityError(ErrorCodeHookPayloadUnknownSize, "Payload size not known")
+			}
+			if contentLength >= PayloadLimit {
+				return nil, unprocessableEntityError(ErrorCodeHookPayloadOverSizeLimit, fmt.Sprintf("Payload size is: %d bytes exceeded size limit of %d bytes", contentLength, PayloadLimit))
+			}
+			limitedReader := io.LimitedReader{R: rsp.Body, N: contentLength}
+			body, err := io.ReadAll(&limitedReader)
+			if err != nil {
+				return nil, err
+			}
+			return body, nil
+		case http.StatusTooManyRequests, http.StatusServiceUnavailable:
+			retryAfterHeader := rsp.Header.Get("retry-after")
+			// Check for truthy values to allow for flexibility to switch to time duration
+			if retryAfterHeader != "" {
+				continue
+			}
+			return nil, internalServerError("Service currently unavailable due to hook")
+		case http.StatusBadRequest:
+			return nil, internalServerError("Invalid payload sent to hook")
+		case http.StatusUnauthorized:
+			return nil, internalServerError("Hook requires authorization token")
+		default:
+			return nil, internalServerError("Error executing Hook")
+		}
+	}
+	return nil, nil
+}
+
+func (a *API) invokeHTTPHook(ctx context.Context, r *http.Request, input, output any, hookURI string) error {
+	switch input.(type) {
+	case *hooks.CustomSMSProviderInput:
+		hookOutput, ok := output.(*hooks.CustomSMSProviderOutput)
+		if !ok {
+			panic("output should be *hooks.CustomSMSProviderOutput")
+		}
+		var response []byte
+		var err error
+
+		if response, err = a.runHTTPHook(ctx, r, a.config.Hook.CustomSMSProvider, input, output); err != nil {
+			return internalServerError("Error invoking custom SMS provider hook.").WithInternalError(err)
+		}
+		if err != nil {
+			return err
+		}
+
+		if err := json.Unmarshal(response, hookOutput); err != nil {
+			return internalServerError("Error unmarshaling custom SMS provider hook output.").WithInternalError(err)
+		}
+
+	default:
+		panic("unknown HTTP hook type")
+	}
+	return nil
+}
+
+// invokePostgresHook invokes the hook code. tx can be nil, in which case a new
 // transaction is opened. If calling invokeHook within a transaction, always
-// pass the current transaciton, as pool-exhaustion deadlocks are very easy to
+// pass the current transaction, as pool-exhaustion deadlocks are very easy to
 // trigger.
-func (a *API) invokeHook(ctx context.Context, tx *storage.Connection, input, output any) error {
+func (a *API) invokePostgresHook(ctx context.Context, conn *storage.Connection, input, output any, hookURI string) error {
 	config := a.config
+	// Switch based on hook type
 	switch input.(type) {
 	case *hooks.MFAVerificationAttemptInput:
 		hookOutput, ok := output.(*hooks.MFAVerificationAttemptOutput)
@@ -68,7 +213,7 @@ func (a *API) invokeHook(ctx context.Context, tx *storage.Connection, input, out
 			panic("output should be *hooks.MFAVerificationAttemptOutput")
 		}
 
-		if _, err := a.runPostgresHook(ctx, tx, config.Hook.MFAVerificationAttempt.HookName, input, output); err != nil {
+		if _, err := a.runPostgresHook(ctx, conn, config.Hook.MFAVerificationAttempt.HookName, input, output); err != nil {
 			return internalServerError("Error invoking MFA verification hook.").WithInternalError(err)
 		}
 
@@ -94,7 +239,7 @@ func (a *API) invokeHook(ctx context.Context, tx *storage.Connection, input, out
 			panic("output should be *hooks.PasswordVerificationAttemptOutput")
 		}
 
-		if _, err := a.runPostgresHook(ctx, tx, config.Hook.PasswordVerificationAttempt.HookName, input, output); err != nil {
+		if _, err := a.runPostgresHook(ctx, conn, config.Hook.PasswordVerificationAttempt.HookName, input, output); err != nil {
 			return internalServerError("Error invoking password verification hook.").WithInternalError(err)
 		}
 
@@ -120,7 +265,7 @@ func (a *API) invokeHook(ctx context.Context, tx *storage.Connection, input, out
 			panic("output should be *hooks.CustomAccessTokenOutput")
 		}
 
-		if _, err := a.runPostgresHook(ctx, tx, config.Hook.CustomAccessToken.HookName, input, output); err != nil {
+		if _, err := a.runPostgresHook(ctx, conn, config.Hook.CustomAccessToken.HookName, input, output); err != nil {
 			return internalServerError("Error invoking access token hook.").WithInternalError(err)
 		}
 
@@ -155,6 +300,6 @@ func (a *API) invokeHook(ctx context.Context, tx *storage.Connection, input, out
 		return nil
 
 	default:
-		panic("unknown hook input type")
+		panic("unknown Postgres hook input type")
 	}
 }
