@@ -3,7 +3,6 @@ package models
 import (
 	"fmt"
 	"sync/atomic"
-	"time"
 
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
@@ -11,14 +10,12 @@ import (
 	metricinstrument "go.opentelemetry.io/otel/metric/instrument"
 	otelasyncint64instrument "go.opentelemetry.io/otel/metric/instrument/asyncint64"
 
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
 )
 
 type Cleanup struct {
-	SessionTimebox           *time.Duration
-	SessionInactivityTimeout *time.Duration
-
 	cleanupStatements []string
 
 	// cleanupNext holds an atomically incrementing value that determines which of
@@ -30,13 +27,16 @@ type Cleanup struct {
 	cleanupAffectedRows otelasyncint64instrument.Counter
 }
 
-func (c *Cleanup) Setup() {
+func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
+	tableUsers := User{}.TableName()
 	tableRefreshTokens := RefreshToken{}.TableName()
 	tableSessions := Session{}.TableName()
 	tableRelayStates := SAMLRelayState{}.TableName()
 	tableFlowStates := FlowState{}.TableName()
 	tableMFAChallenges := Challenge{}.TableName()
 	tableMFAFactors := Factor{}.TableName()
+
+	c := &Cleanup{}
 
 	// These statements intentionally use SELECT ... FOR UPDATE SKIP LOCKED
 	// as this makes sure that only rows that are not being used in another
@@ -55,14 +55,21 @@ func (c *Cleanup) Setup() {
 		fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '24 hours' and status = 'unverified' limit 100 for update skip locked);", tableMFAFactors, tableMFAFactors),
 	)
 
-	if c.SessionTimebox != nil {
-		timeboxSeconds := int((*c.SessionTimebox).Seconds())
+	if config.External.AnonymousUsers.Enabled {
+		// delete anonymous users older than 30 days
+		c.cleanupStatements = append(c.cleanupStatements,
+			fmt.Sprintf("delete from %q where id in (select id from %q where created_at < now() - interval '30 days' and is_anonymous is true limit 100 for update skip locked);", tableUsers, tableUsers),
+		)
+	}
+
+	if config.Sessions.Timebox != nil {
+		timeboxSeconds := int((*config.Sessions.Timebox).Seconds())
 
 		c.cleanupStatements = append(c.cleanupStatements, fmt.Sprintf("delete from %q where id in (select id from %q where created_at + interval '%d seconds' < now() - interval '24 hours' limit 100 for update skip locked);", tableSessions, tableSessions, timeboxSeconds))
 	}
 
-	if c.SessionInactivityTimeout != nil {
-		inactivitySeconds := int((*c.SessionInactivityTimeout).Seconds())
+	if config.Sessions.InactivityTimeout != nil {
+		inactivitySeconds := int((*config.Sessions.InactivityTimeout).Seconds())
 
 		// delete sessions with a refreshed_at column
 		c.cleanupStatements = append(c.cleanupStatements, fmt.Sprintf("delete from %q where id in (select id from %q where refreshed_at is not null and refreshed_at + interval '%d seconds' < now() - interval '24 hours' limit 100 for update skip locked);", tableSessions, tableSessions, inactivitySeconds))
@@ -81,6 +88,8 @@ func (c *Cleanup) Setup() {
 	}
 
 	c.cleanupAffectedRows = cleanupAffectedRows
+
+	return c
 }
 
 // Cleanup removes stale entities in the database. You can call it on each

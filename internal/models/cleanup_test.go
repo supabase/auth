@@ -16,15 +16,13 @@ func TestCleanup(t *testing.T) {
 	conn, err := test.SetupDBConnection(globalConfig)
 	require.NoError(t, err)
 
-	sessionTimebox := 10 * time.Second
-	sessionInactivityTimeout := 5 * time.Second
+	timebox := 10 * time.Second
+	inactivityTimeout := 5 * time.Second
+	globalConfig.Sessions.Timebox = &timebox
+	globalConfig.Sessions.InactivityTimeout = &inactivityTimeout
+	globalConfig.External.AnonymousUsers.Enabled = true
 
-	cleanup := &Cleanup{
-		SessionTimebox:           &sessionTimebox,
-		SessionInactivityTimeout: &sessionInactivityTimeout,
-	}
-
-	cleanup.Setup()
+	cleanup := NewCleanup(globalConfig)
 
 	for i := 0; i < 100; i += 1 {
 		_, err := cleanup.Clean(conn)
