@@ -129,7 +129,9 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 				return nil, internalServerError("Failed to trigger auth hook, error making HTTP request").WithInternalError(err)
 			}
 		}
+
 		defer rsp.Body.Close()
+
 		switch rsp.StatusCode {
 		case http.StatusOK, http.StatusNoContent, http.StatusAccepted:
 			if rsp.Body == nil {
@@ -142,7 +144,7 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 			if contentLength >= PayloadLimit {
 				return nil, unprocessableEntityError(ErrorCodeHookPayloadOverSizeLimit, fmt.Sprintf("Payload size is: %d bytes exceeded size limit of %d bytes", contentLength, PayloadLimit))
 			}
-			limitedReader := io.LimitedReader{R: rsp.Body, N: PayloadLimit}
+			limitedReader := io.LimitedReader{R: rsp.Body, N: contentLength}
 			body, err := io.ReadAll(&limitedReader)
 			if err != nil {
 				return nil, err
@@ -154,7 +156,7 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 			if retryAfterHeader != "" {
 				continue
 			}
-			return []byte{}, internalServerError("Service currently unavailable")
+			return nil, internalServerError("Service currently unavailable due to hook")
 		case http.StatusBadRequest:
 			return nil, badRequestError(ErrorCodeValidationFailed, "Invalid payload sent to hook")
 		case http.StatusUnauthorized:
