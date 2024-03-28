@@ -663,7 +663,7 @@ func cleanupHook(ts *MFATestSuite, hookName string) {
 	require.NoError(ts.T(), err)
 }
 
-// FindFactorsByUser returns all factors belonging to a user ordered by timestamp
+// FindFactorsByUser returns all factors belonging to a user ordered by timestamp. Don't use this outside of tests.
 func FindFactorsByUser(tx *storage.Connection, user *models.User) ([]*models.Factor, error) {
 	factors := []*models.Factor{}
 	if err := tx.Q().Where("user_id = ?", user.ID).Order("created_at asc").All(&factors); err != nil {
