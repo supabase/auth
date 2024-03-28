@@ -177,9 +177,13 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 		req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
 		req.Header.Set("Content-Type", "application/json")
 
-		// Generate access token for request
+		// Generate access token for request and a mock session
 		var token string
-		token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, nil, models.MagicLink)
+		session, err := models.NewSession(u.ID, nil)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), ts.API.db.Create(session))
+
+		token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, &session.ID, models.MagicLink)
 		require.NoError(ts.T(), err)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 

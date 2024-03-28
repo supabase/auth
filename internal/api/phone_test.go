@@ -160,7 +160,9 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
 	var token string
-	token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, nil, models.OTP)
+	session, err := models.FindSessionByUserID(ts.API.db, u.ID)
+	require.NoError(ts.T(), err)
+	token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, &session.ID, models.OTP)
 	require.NoError(ts.T(), err)
 
 	cases := []struct {

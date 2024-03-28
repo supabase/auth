@@ -56,11 +56,16 @@ func (ts *InviteTestSuite) makeSuperAdmin(email string) string {
 
 	u, err := models.NewUser("123456789", email, "test", ts.Config.JWT.Aud, map[string]interface{}{"full_name": "Test User"})
 	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u))
 
 	u.Role = "supabase_admin"
 
 	var token string
-	token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, nil, models.Invite)
+
+	session, err := models.NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(session))
+	token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, &session.ID, models.Invite)
 
 	require.NoError(ts.T(), err, "Error generating access token")
 

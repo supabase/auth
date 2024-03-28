@@ -44,6 +44,7 @@ func (ts *UserTestSuite) SetupTest() {
 	u, err := models.NewUser("123456789", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+
 }
 
 func (ts *UserTestSuite) generateToken(user *models.User, sessionId *uuid.UUID) string {
@@ -52,10 +53,20 @@ func (ts *UserTestSuite) generateToken(user *models.User, sessionId *uuid.UUID) 
 	return token
 }
 
+func (ts *UserTestSuite) generateTokenWithSession(user *models.User) string {
+	session, err := models.NewSession(user.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(session))
+
+	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, user, &session.ID, models.PasswordGrant)
+	require.NoError(ts.T(), err, "Error generating access token")
+	return token
+}
+
 func (ts *UserTestSuite) TestUserGet() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err, "Error finding user")
-	token := ts.generateToken(u, nil)
+	token := ts.generateTokenWithSession(u)
 
 	require.NoError(ts.T(), err, "Error generating access token")
 
@@ -120,7 +131,7 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 			require.NoError(ts.T(), u.SetPhone(ts.API.db, c.userData["phone"]), "Error setting user phone")
 			require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user")
 
-			token := ts.generateToken(u, nil)
+			token := ts.generateTokenWithSession(u)
 
 			require.NoError(ts.T(), err, "Error generating access token")
 
@@ -183,7 +194,7 @@ func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			token := ts.generateToken(u, nil)
+			token := ts.generateTokenWithSession(u)
 			require.NoError(ts.T(), err, "Error generating access token")
 
 			var buffer bytes.Buffer
@@ -330,7 +341,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	u.EmailConfirmedAt = &now
 	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
-	token := ts.generateToken(u, nil)
+	token := ts.generateTokenWithSession(u)
 
 	// request for reauthentication nonce
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/reauthenticate", nil)
