@@ -54,7 +54,6 @@ func (ts *AuditTestSuite) makeSuperAdmin(email string) string {
 	require.NoError(ts.T(), ts.API.db.Create(session))
 
 	var token string
-
 	token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, &session.ID, models.PasswordGrant)
 	require.NoError(ts.T(), err, "Error generating access token")
 
