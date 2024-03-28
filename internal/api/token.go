@@ -323,7 +323,7 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 		UserMetaData:                  user.UserMetaData,
 		Role:                          user.Role,
 		SessionId:                     sid,
-		AuthenticatorAssuranceLevel:   aal,
+		AuthenticatorAssuranceLevel:   aal.String(),
 		AuthenticationMethodReference: amr,
 		IsAnonymous:                   user.IsAnonymous,
 	}
@@ -451,10 +451,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return terr
 		}
 
-		if err := session.UpdateAssociatedFactor(tx, grantParams.FactorID); err != nil {
-			return err
-		}
-		if err := session.UpdateAssociatedAAL(tx, aal); err != nil {
+		if err := session.UpdateAALAndAssociatedFactor(tx, aal, grantParams.FactorID); err != nil {
 			return err
 		}
 

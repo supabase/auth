@@ -272,21 +272,18 @@ func LogoutAllExceptMe(tx *storage.Connection, sessionId uuid.UUID, userID uuid.
 	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Session{}}).TableName()+" WHERE id != ? AND user_id = ?", sessionId, userID).Exec()
 }
 
-func (s *Session) UpdateAssociatedFactor(tx *storage.Connection, factorID *uuid.UUID) error {
+func (s *Session) UpdateAALAndAssociatedFactor(tx *storage.Connection, aal AuthenticatorAssuranceLevel, factorID *uuid.UUID) error {
 	s.FactorID = factorID
-	return tx.Update(s)
+	aalAsString := aal.String()
+	s.AAL = &aalAsString
+	return tx.UpdateOnly(s, "aal", "factor_id")
 }
 
-func (s *Session) UpdateAssociatedAAL(tx *storage.Connection, aal string) error {
-	s.AAL = &aal
-	return tx.Update(s)
-}
-
-func (s *Session) CalculateAALAndAMR(user *User) (aal string, amr []AMREntry, err error) {
-	amr, aal = []AMREntry{}, AAL1.String()
+func (s *Session) CalculateAALAndAMR(user *User) (aal AuthenticatorAssuranceLevel, amr []AMREntry, err error) {
+	amr, aal = []AMREntry{}, AAL1
 	for _, claim := range s.AMRClaims {
 		if *claim.AuthenticationMethod == TOTPSignIn.String() {
-			aal = AAL2.String()
+			aal = AAL2
 		}
 		amr = append(amr, AMREntry{Method: claim.GetAuthenticationMethod(), Timestamp: claim.UpdatedAt.Unix()})
 	}
