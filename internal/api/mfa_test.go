@@ -13,9 +13,12 @@ import (
 
 	"github.com/gofrs/uuid"
 
+	"database/sql"
+	"github.com/pkg/errors"
 	"github.com/pquerna/otp"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
 
 	"github.com/jackc/pgx/v4"
@@ -143,7 +146,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		ts.Run(c.desc, func() {
 			w := performEnrollFlow(ts, token, c.friendlyName, c.factorType, c.issuer, c.expectedCode)
 
-			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
+			factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
 			ts.Require().NoError(err)
 			addedFactor := factors[len(factors)-1]
 			require.False(ts.T(), addedFactor.IsVerified())
@@ -194,7 +197,7 @@ func (ts *MFATestSuite) TestMultipleEnrollsCleanupExpiredFactors() {
 	}
 
 	// All Factors except last factor should be expired
-	factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
+	factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
 	require.NoError(ts.T(), err)
 
 	// Make a challenge so last, unverified factor isn't deleted on next enroll (Factor 2)
@@ -202,7 +205,7 @@ func (ts *MFATestSuite) TestMultipleEnrollsCleanupExpiredFactors() {
 
 	// Enroll another Factor (Factor 3)
 	_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", http.StatusOK)
-	factors, err = models.FindFactorsByUser(ts.API.db, ts.TestUser)
+	factors, err = FindFactorsByUser(ts.API.db, ts.TestUser)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), 3, len(factors))
 }
@@ -248,7 +251,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			require.NoError(ts.T(), err)
 
 			sharedSecret := ts.TestOTPKey.Secret()
-			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
+			factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
 			f := factors[0]
 			f.Secret = sharedSecret
 			require.NoError(ts.T(), err)
@@ -321,7 +324,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			var buffer bytes.Buffer
 
 			// Create Session to test behaviour which downgrades other sessions
-			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
+			factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
 			require.NoError(ts.T(), err, "error finding factors")
 			f := factors[0]
 			f.Secret = ts.TestOTPKey.Secret()
@@ -658,4 +661,16 @@ func cleanupHook(ts *MFATestSuite, hookName string) {
 	cleanupHookSQL := fmt.Sprintf("drop function if exists %s", hookName)
 	err := ts.API.db.RawQuery(cleanupHookSQL).Exec()
 	require.NoError(ts.T(), err)
+}
+
+// FindFactorsByUser returns all factors belonging to a user ordered by timestamp
+func FindFactorsByUser(tx *storage.Connection, user *models.User) ([]*models.Factor, error) {
+	factors := []*models.Factor{}
+	if err := tx.Q().Where("user_id = ?", user.ID).Order("created_at asc").All(&factors); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return factors, nil
+		}
+		return nil, errors.Wrap(err, "Database error when finding MFA factors associated to user")
+	}
+	return factors, nil
 }
