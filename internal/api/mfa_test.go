@@ -319,9 +319,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 	for _, v := range cases {
 		ts.Run(v.desc, func() {
 			var buffer bytes.Buffer
-			if v.isAAL2 {
-				ts.TestSession.UpdateAssociatedAAL(ts.API.db, models.AAL2.String())
-			}
+
 			// Create Session to test behaviour which downgrades other sessions
 			factors, err := models.FindFactorsByUser(ts.API.db, ts.TestUser)
 			require.NoError(ts.T(), err, "error finding factors")
@@ -329,7 +327,9 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			f.Secret = ts.TestOTPKey.Secret()
 			require.NoError(ts.T(), f.UpdateStatus(ts.API.db, models.FactorStateVerified))
 			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
-
+			if v.isAAL2 {
+				ts.TestSession.UpdateAALAndAssociatedFactor(ts.API.db, models.AAL2, &f.ID)
+			}
 			token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 			w := ServeAuthenticatedRequest(ts, http.MethodDelete, fmt.Sprintf("/factors/%s", f.ID), token, buffer)
 			require.Equal(ts.T(), v.expectedHTTPCode, w.Code)
