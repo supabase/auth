@@ -159,7 +159,11 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 	u.PhoneConfirmedAt = &now
 	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
-	token := ts.generateAccessTokenAndSession(context.Background(), u, models.OTP)
+	s, err := models.NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(s))
+
+	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, u, &s.ID, models.PasswordGrant)
 	require.NoError(ts.T(), err)
 
 	cases := []struct {
@@ -256,15 +260,4 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 			})
 		}
 	}
-}
-
-func (ts *PhoneTestSuite) generateAccessTokenAndSession(ctx context.Context, u *models.User, authenticationMethod models.AuthenticationMethod) string {
-	s, err := models.NewSession(u.ID, nil)
-	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.API.db.Create(s))
-
-	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, u, &s.ID, models.PasswordGrant)
-	require.NoError(ts.T(), err)
-	return token
-
 }
