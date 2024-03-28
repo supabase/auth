@@ -294,17 +294,17 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, int64, error) {
 	config := a.config
 	aal, amr := models.AAL1.String(), []models.AMREntry{}
-	sid := ""
-	if sessionId != nil {
-		sid = sessionId.String()
-		session, terr := models.FindSessionByID(tx, *sessionId, false)
-		if terr != nil {
-			return "", 0, terr
-		}
-		aal, amr, terr = session.CalculateAALAndAMR(user)
-		if terr != nil {
-			return "", 0, terr
-		}
+	if sessionId == nil {
+		return "", "", internalServerError("Session is required to issue access token")
+	}
+	sid := sessionId.String()
+	session, terr := models.FindSessionByID(tx, *sessionId, false)
+	if terr != nil {
+		return "", 0, terr
+	}
+	aal, amr, terr = session.CalculateAALAndAMR(user)
+	if terr != nil {
+		return "", 0, terr
 	}
 
 	issuedAt := time.Now().UTC()
