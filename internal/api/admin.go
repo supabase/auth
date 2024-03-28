@@ -545,11 +545,7 @@ func (a *API) adminUserDeleteFactor(w http.ResponseWriter, r *http.Request) erro
 func (a *API) adminUserGetFactors(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
-	factors, terr := models.FindFactorsByUser(a.db, user)
-	if terr != nil {
-		return terr
-	}
-	return sendJSON(w, http.StatusOK, factors)
+	return sendJSON(w, http.StatusOK, user.Factors)
 }
 
 // adminUserUpdate updates a single factor object

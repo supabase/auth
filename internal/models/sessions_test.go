@@ -84,7 +84,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	aal, amr, err := session.CalculateAALAndAMR(u)
 	require.NoError(ts.T(), err)
 
-	require.Equal(ts.T(), AAL2.String(), aal)
+	require.Equal(ts.T(), AAL2, aal)
 	require.Equal(ts.T(), totalDistinctClaims, len(amr))
 
 	found := false
