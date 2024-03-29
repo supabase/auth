@@ -243,7 +243,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 
 		output := hooks.MFAVerificationAttemptOutput{}
 
-		err := a.invokePostgresHook(ctx, nil, &input, &output, config.Hook.MFAVerificationAttempt.URI)
+		err := a.invokePostgresHook(ctx, nil, &input, &output)
 		if err != nil {
 			return err
 		}

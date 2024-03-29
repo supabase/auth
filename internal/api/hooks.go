@@ -172,7 +172,7 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 	return nil, nil
 }
 
-func (a *API) invokeHTTPHook(ctx context.Context, r *http.Request, input, output any, hookURI string) error {
+func (a *API) invokeHTTPHook(ctx context.Context, r *http.Request, input, output any) error {
 	switch input.(type) {
 	case *hooks.CustomSMSProviderInput:
 		hookOutput, ok := output.(*hooks.CustomSMSProviderOutput)
@@ -184,9 +184,6 @@ func (a *API) invokeHTTPHook(ctx context.Context, r *http.Request, input, output
 
 		if response, err = a.runHTTPHook(ctx, r, a.config.Hook.CustomSMSProvider, input, output); err != nil {
 			return internalServerError("Error invoking custom SMS provider hook.").WithInternalError(err)
-		}
-		if err != nil {
-			return err
 		}
 
 		if err := json.Unmarshal(response, hookOutput); err != nil {
@@ -203,7 +200,7 @@ func (a *API) invokeHTTPHook(ctx context.Context, r *http.Request, input, output
 // transaction is opened. If calling invokeHook within a transaction, always
 // pass the current transaction, as pool-exhaustion deadlocks are very easy to
 // trigger.
-func (a *API) invokePostgresHook(ctx context.Context, conn *storage.Connection, input, output any, hookURI string) error {
+func (a *API) invokePostgresHook(ctx context.Context, conn *storage.Connection, input, output any) error {
 	config := a.config
 	// Switch based on hook type
 	switch input.(type) {
