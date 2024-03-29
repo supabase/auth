@@ -3,12 +3,13 @@ package api
 import (
 	"bytes"
 	"context"
-	"github.com/supabase/auth/internal/hooks"
 	"net/http"
 	"regexp"
 	"strings"
 	"text/template"
 	"time"
+
+	"github.com/supabase/auth/internal/hooks"
 
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/sms_provider"
@@ -101,7 +102,7 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, r *http.Request, tx *st
 				OTP:    otp,
 			}
 			output := hooks.CustomSMSProviderOutput{}
-			err := a.invokeHTTPHook(ctx, r, &input, &output, config.Hook.CustomSMSProvider.URI)
+			err := a.invokeHTTPHook(ctx, r, &input, &output)
 			if err != nil {
 				return "", err
 			}
