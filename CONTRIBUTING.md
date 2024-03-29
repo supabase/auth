@@ -484,11 +484,16 @@ export GOTRUE_DB_DATABASE_URL="postgres://supabase_auth_admin:root@localhost:743
 ## Helpful Docker Commands
 
 ```
+// file: docker-compose-dev.yml
+container_name: auth_postgres
+```
+
+```
 # Command line into bash on the PostgreSQL container
-docker exec -it auth_postgresql bash
+docker exec -it auth_postgres bash
 
 # Removes Container
-docker container rm -f auth_postgresql
+docker container rm -f auth_postgres
 
 # Removes volume
 docker volume rm postgres_data
