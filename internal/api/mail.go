@@ -489,6 +489,9 @@ func validateEmail(email string) (string, error) {
 	if email == "" {
 		return "", badRequestError(ErrorCodeValidationFailed, "An email address is required")
 	}
+	if len(email) > 255 {
+		return "", badRequestError(ErrorCodeValidationFailed, "An email address is too long")
+	}
 	if err := checkmail.ValidateFormat(email); err != nil {
 		return "", badRequestError(ErrorCodeValidationFailed, "Unable to validate email address: "+err.Error())
 	}
