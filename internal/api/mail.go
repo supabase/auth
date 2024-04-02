@@ -279,7 +279,7 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
-	err = a.sendEmail(r, u, otp, mail.SignupVerification)
+	err = a.sendEmail(r, u, otp, mail.SignupVerification, "")
 	if err != nil {
 		u.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending confirmation email")
@@ -305,7 +305,7 @@ func (a *API) sendInvite(r *http.Request, tx *storage.Connection, u *models.User
 	}
 	u.ConfirmationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
-	err = a.sendEmail(r, u, otp, mail.InviteVerification)
+	err = a.sendEmail(r, u, otp, mail.InviteVerification, "")
 	if err != nil {
 		u.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending invite email")
@@ -338,7 +338,7 @@ func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *m
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
-	err = a.sendEmail(r, u, otp, mail.RecoveryVerification)
+	err = a.sendEmail(r, u, otp, mail.RecoveryVerification, "")
 	if err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending recovery email")
@@ -370,7 +370,7 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 	}
 	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
-	err = a.sendEmail(r, u, otp, mail.ReauthenticationVerification)
+	err = a.sendEmail(r, u, otp, mail.ReauthenticationVerification, "")
 	if err != nil {
 		u.ReauthenticationToken = oldToken
 		return errors.Wrap(err, "Error sending reauthentication email")
@@ -405,7 +405,7 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 
 	now := time.Now()
-	err = a.sendEmail(r, u, otp, mail.MagicLinkVerification)
+	err = a.sendEmail(r, u, otp, mail.MagicLinkVerification, "")
 	if err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending magic link email")
@@ -421,16 +421,12 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 
 // sendEmailChange sends out an email change token to the new email.
 func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models.User, email string, flowType models.FlowType) error {
-	ctx := r.Context()
 	config := a.config
 	otpLength := config.Mailer.OtpLength
 	var err error
-	mailer := a.Mailer()
 	if err := validateSentWithinFrequencyLimit(u.EmailChangeSentAt, config.SMTP.MaxFrequency); err != nil {
 		return err
 	}
-	referrerURL := utilities.GetReferrer(r, config)
-	externalURL := getExternalHost(ctx)
 
 	otpNew, err := crypto.GenerateOtp(otpLength)
 	if err != nil {
@@ -454,7 +450,8 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
-	if err := mailer.EmailChangeMail(r, u, otpNew, otpCurrent, referrerURL, externalURL); err != nil {
+	err = a.sendEmail(r, u, mail.EmailChangeVerification, otpCurrent, otpNew)
+	if err != nil {
 		return err
 	}
 
@@ -492,7 +489,7 @@ func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration
 	return nil
 }
 
-func (a *API) sendEmail(r *http.Request, u *models.User, otp, emailVerificationType string) error {
+func (a *API) sendEmail(r *http.Request, u *models.User, emailVerificationType, otp, otpNew string) error {
 	mailer := a.Mailer()
 	ctx := r.Context()
 	config := a.config
@@ -510,6 +507,8 @@ func (a *API) sendEmail(r *http.Request, u *models.User, otp, emailVerificationT
 		return mailer.RecoveryMail(r, u, otp, referrerURL, externalURL)
 	case mail.InviteVerification:
 		return mailer.InviteMail(r, u, otp, referrerURL, externalURL)
+	case mail.EmailChangeVerification:
+		return mailer.EmailChangeMail(r, u, otpNew, otp, referrerURL, externalURL)
 
 	}
 	return nil
