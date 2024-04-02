@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	mail "github.com/supabase/auth/internal/mailer"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -105,7 +106,7 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 			assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
 			assert.False(ts.T(), u.IsConfirmed())
 
-			reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", recoveryVerification, u.RecoveryToken)
+			reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.RecoveryVerification, u.RecoveryToken)
 			req = httptest.NewRequest(http.MethodGet, reqURL, nil)
 
 			w = httptest.NewRecorder()
@@ -199,7 +200,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 		assert.False(ts.T(), u.IsConfirmed())
 
 		// Verify new email
-		reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", emailChangeVerification, u.EmailChangeTokenNew)
+		reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.EmailChangeVerification, u.EmailChangeTokenNew)
 		req = httptest.NewRequest(http.MethodGet, reqURL, nil)
 
 		w = httptest.NewRecorder()
@@ -228,7 +229,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 		assert.Equal(ts.T(), singleConfirmation, u.EmailChangeConfirmStatus)
 
 		// Verify old email
-		reqURL = fmt.Sprintf("http://localhost/verify?type=%s&token=%s", emailChangeVerification, u.EmailChangeTokenCurrent)
+		reqURL = fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.EmailChangeVerification, u.EmailChangeTokenCurrent)
 		req = httptest.NewRequest(http.MethodGet, reqURL, nil)
 
 		w = httptest.NewRecorder()
@@ -270,7 +271,7 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	require.NoError(ts.T(), ts.API.db.Update(u))
 
 	// Setup request
-	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", signupVerification, u.ConfirmationToken)
+	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.SignupVerification, u.ConfirmationToken)
 	req := httptest.NewRequest(http.MethodGet, reqURL, nil)
 
 	// Setup response recorder
@@ -350,7 +351,7 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 			desc:     "Invalid Email OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":  signupVerification,
+				"type":  mail.SignupVerification,
 				"token": "invalid_otp",
 				"email": u.GetEmail(),
 			},
@@ -806,7 +807,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			desc:     "Valid Confirmation OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":      signupVerification,
+				"type":      mail.SignupVerification,
 				"tokenHash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 				"token":     "123456",
 				"email":     u.GetEmail(),
@@ -820,7 +821,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			desc:     "Valid Recovery OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":      recoveryVerification,
+				"type":      mail.RecoveryVerification,
 				"tokenHash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 				"token":     "123456",
 				"email":     u.GetEmail(),
@@ -834,7 +835,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			desc:     "Valid Email OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":      emailOTPVerification,
+				"type":      mail.EmailOTPVerification,
 				"tokenHash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 				"token":     "123456",
 				"email":     u.GetEmail(),
@@ -848,7 +849,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			desc:     "Valid Email Change OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":      emailChangeVerification,
+				"type":      mail.EmailChangeVerification,
 				"tokenHash": crypto.GenerateTokenHash(u.EmailChange, "123456"),
 				"token":     "123456",
 				"email":     u.EmailChange,
@@ -876,7 +877,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			desc:     "Valid Signup Token Hash",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":       signupVerification,
+				"type":       mail.SignupVerification,
 				"token_hash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 			},
 			expected: expected{
@@ -888,7 +889,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			desc:     "Valid Email Change Token Hash",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":       emailChangeVerification,
+				"type":       mail.EmailChangeVerification,
 				"token_hash": crypto.GenerateTokenHash(u.EmailChange, "123456"),
 			},
 			expected: expected{
@@ -900,7 +901,7 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			desc:     "Valid Email Verification Type",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
-				"type":       emailOTPVerification,
+				"type":       mail.EmailOTPVerification,
 				"token_hash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 			},
 			expected: expected{
@@ -958,11 +959,11 @@ func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
 		{
 			desc: "Secure Email Change with Token Hash (Success)",
 			firstVerificationBody: map[string]interface{}{
-				"type":       emailChangeVerification,
+				"type":       mail.EmailChangeVerification,
 				"token_hash": currentEmailChangeToken,
 			},
 			secondVerificationBody: map[string]interface{}{
-				"type":       emailChangeVerification,
+				"type":       mail.EmailChangeVerification,
 				"token_hash": newEmailChangeToken,
 			},
 			expectedStatus: http.StatusOK,
@@ -970,11 +971,11 @@ func (ts *VerifyTestSuite) TestSecureEmailChangeWithTokenHash() {
 		{
 			desc: "Secure Email Change with Token Hash. Reusing a token hash twice should fail",
 			firstVerificationBody: map[string]interface{}{
-				"type":       emailChangeVerification,
+				"type":       mail.EmailChangeVerification,
 				"token_hash": currentEmailChangeToken,
 			},
 			secondVerificationBody: map[string]interface{}{
-				"type":       emailChangeVerification,
+				"type":       mail.EmailChangeVerification,
 				"token_hash": currentEmailChangeToken,
 			},
 			expectedStatus: http.StatusForbidden,

@@ -34,6 +34,18 @@ func encodeRedirectURL(referrerURL string) string {
 	return referrerURL
 }
 
+const (
+	SignupVerification             = "signup"
+	RecoveryVerification           = "recovery"
+	InviteVerification             = "invite"
+	MagicLinkVerification          = "magiclink"
+	EmailChangeVerification        = "email_change"
+	EmailOTPVerification           = "email"
+	EmailChangeCurrentVerification = "email_change_current"
+	EmailChangeNewVerification     = "email_change_new"
+	ReauthenticationVerification   = "reauthentication"
+)
+
 const defaultInviteMail = `<h2>You have been invited</h2>
 
 <p>You have been invited to create a user on {{ .SiteURL }}. Follow this link to accept the invite:</p>

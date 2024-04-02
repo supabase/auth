@@ -14,6 +14,7 @@ import (
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/crypto"
+	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -21,15 +22,9 @@ import (
 )
 
 const (
-	signupVerification      = "signup"
-	recoveryVerification    = "recovery"
-	inviteVerification      = "invite"
-	magicLinkVerification   = "magiclink"
-	emailChangeVerification = "email_change"
 	smsVerification         = "sms"
 	phoneChangeVerification = "phone_change"
 	// includes signupVerification and magicLinkVerification
-	emailOTPVerification = "email"
 )
 
 const (
@@ -150,11 +145,11 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 			return terr
 		}
 		switch params.Type {
-		case signupVerification, inviteVerification:
+		case mail.SignupVerification, mail.InviteVerification:
 			user, terr = a.signupVerify(r, ctx, tx, user)
-		case recoveryVerification, magicLinkVerification:
+		case mail.RecoveryVerification, mail.MagicLinkVerification:
 			user, terr = a.recoverVerify(r, tx, user)
-		case emailChangeVerification:
+		case mail.EmailChangeVerification:
 			user, terr = a.emailChangeVerify(r, tx, params, user)
 			if user == nil && terr == nil {
 				// when double confirmation is required
@@ -254,11 +249,11 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 		}
 
 		switch params.Type {
-		case signupVerification, inviteVerification:
+		case mail.SignupVerification, mail.InviteVerification:
 			user, terr = a.signupVerify(r, ctx, tx, user)
-		case recoveryVerification, magicLinkVerification:
+		case mail.RecoveryVerification, mail.MagicLinkVerification:
 			user, terr = a.recoverVerify(r, tx, user)
-		case emailChangeVerification:
+		case mail.EmailChangeVerification:
 			user, terr = a.emailChangeVerify(r, tx, params, user)
 			if user == nil && terr == nil {
 				isSingleConfirmationResponse = true
@@ -555,14 +550,14 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 	var user *models.User
 	var err error
 	switch params.Type {
-	case emailOTPVerification:
+	case mail.EmailOTPVerification:
 		// need to find user by confirmation token or recovery token with the token hash
 		user, err = models.FindUserByConfirmationOrRecoveryToken(conn, params.TokenHash)
-	case signupVerification, inviteVerification:
+	case mail.SignupVerification, mail.InviteVerification:
 		user, err = models.FindUserByConfirmationToken(conn, params.TokenHash)
-	case recoveryVerification, magicLinkVerification:
+	case mail.RecoveryVerification, mail.MagicLinkVerification:
 		user, err = models.FindUserByRecoveryToken(conn, params.TokenHash)
-	case emailChangeVerification:
+	case mail.EmailChangeVerification:
 		user, err = models.FindUserByEmailChangeToken(conn, params.TokenHash)
 	default:
 		return nil, badRequestError(ErrorCodeValidationFailed, "Invalid email verification type")
@@ -581,7 +576,7 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 
 	var isExpired bool
 	switch params.Type {
-	case emailOTPVerification:
+	case mail.EmailOTPVerification:
 		sentAt := user.ConfirmationSentAt
 		params.Type = "signup"
 		if user.RecoveryToken == params.TokenHash {
@@ -589,11 +584,11 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 			params.Type = "magiclink"
 		}
 		isExpired = isOtpExpired(sentAt, config.Mailer.OtpExp)
-	case signupVerification, inviteVerification:
+	case mail.SignupVerification, mail.InviteVerification:
 		isExpired = isOtpExpired(user.ConfirmationSentAt, config.Mailer.OtpExp)
-	case recoveryVerification, magicLinkVerification:
+	case mail.RecoveryVerification, mail.MagicLinkVerification:
 		isExpired = isOtpExpired(user.RecoverySentAt, config.Mailer.OtpExp)
-	case emailChangeVerification:
+	case mail.EmailChangeVerification:
 		isExpired = isOtpExpired(user.EmailChangeSentAt, config.Mailer.OtpExp)
 	}
 
@@ -617,7 +612,7 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 		user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
 	case smsVerification:
 		user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
-	case emailChangeVerification:
+	case mail.EmailChangeVerification:
 		// Since the email change could be trigger via the implicit or PKCE flow,
 		// the query used has to also check if the token saved in the db contains the pkce_ prefix
 		user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
@@ -640,22 +635,22 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 
 	smsProvider, _ := sms_provider.GetSmsProvider(*config)
 	switch params.Type {
-	case emailOTPVerification:
+	case mail.EmailOTPVerification:
 		// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
 		if isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp) {
 			isValid = true
-			params.Type = signupVerification
+			params.Type = mail.SignupVerification
 		} else if isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp) {
 			isValid = true
-			params.Type = magicLinkVerification
+			params.Type = mail.MagicLinkVerification
 		} else {
 			isValid = false
 		}
-	case signupVerification, inviteVerification:
+	case mail.SignupVerification, mail.InviteVerification:
 		isValid = isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp)
-	case recoveryVerification, magicLinkVerification:
+	case mail.RecoveryVerification, mail.MagicLinkVerification:
 		isValid = isOtpValid(tokenHash, user.RecoveryToken, user.RecoverySentAt, config.Mailer.OtpExp)
-	case emailChangeVerification:
+	case mail.EmailChangeVerification:
 		isValid = isOtpValid(tokenHash, user.EmailChangeTokenCurrent, user.EmailChangeSentAt, config.Mailer.OtpExp) ||
 			isOtpValid(tokenHash, user.EmailChangeTokenNew, user.EmailChangeSentAt, config.Mailer.OtpExp)
 	case phoneChangeVerification, smsVerification:

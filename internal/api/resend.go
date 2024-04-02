@@ -7,6 +7,7 @@ import (
 
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
+	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -20,14 +21,14 @@ type ResendConfirmationParams struct {
 
 func (p *ResendConfirmationParams) Validate(config *conf.GlobalConfiguration) error {
 	switch p.Type {
-	case signupVerification, emailChangeVerification, smsVerification, phoneChangeVerification:
+	case mail.SignupVerification, mail.EmailChangeVerification, smsVerification, phoneChangeVerification:
 		break
 	default:
 		// type does not match one of the above
 		return badRequestError(ErrorCodeValidationFailed, "Missing one of these types: signup, email_change, sms, phone_change")
 
 	}
-	if p.Email == "" && p.Type == signupVerification {
+	if p.Email == "" && p.Type == mail.SignupVerification {
 		return badRequestError(ErrorCodeValidationFailed, "Type provided requires an email address")
 	}
 	if p.Phone == "" && p.Type == smsVerification {
@@ -91,7 +92,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	switch params.Type {
-	case signupVerification:
+	case mail.SignupVerification:
 		if user.IsConfirmed() {
 			// if the user's email is confirmed already, we don't need to send a confirmation email again
 			return sendJSON(w, http.StatusOK, map[string]string{})
@@ -101,7 +102,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			// if the user's phone is confirmed already, we don't need to send a confirmation sms again
 			return sendJSON(w, http.StatusOK, map[string]string{})
 		}
-	case emailChangeVerification:
+	case mail.EmailChangeVerification:
 		// do not resend if user doesn't have a new email address
 		if user.EmailChange == "" {
 			return sendJSON(w, http.StatusOK, map[string]string{})
@@ -116,7 +117,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	messageID := ""
 	err = db.Transaction(func(tx *storage.Connection) error {
 		switch params.Type {
-		case signupVerification:
+		case mail.SignupVerification:
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", nil); terr != nil {
 				return terr
 			}
@@ -135,7 +136,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 			messageID = mID
-		case emailChangeVerification:
+		case mail.EmailChangeVerification:
 			return a.sendEmailChange(r, tx, user, user.EmailChange, models.ImplicitFlow)
 		case phoneChangeVerification:
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)

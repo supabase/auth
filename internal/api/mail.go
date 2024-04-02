@@ -1,6 +1,7 @@
 package api
 
 import (
+	mail "github.com/supabase/auth/internal/mailer"
 	"net/http"
 	"strings"
 	"time"
@@ -64,8 +65,8 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			switch params.Type {
-			case magicLinkVerification:
-				params.Type = signupVerification
+			case mail.MagicLinkVerification:
+				params.Type = mail.SignupVerification
 				params.Password, err = password.Generate(64, 10, 1, false, true)
 				if err != nil {
 					// password generation must always succeed
@@ -91,7 +92,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
 
 	var signupUser *models.User
-	if params.Type == signupVerification && user == nil {
+	if params.Type == mail.SignupVerification && user == nil {
 		signupParams := &SignupParams{
 			Email:    params.Email,
 			Password: params.Password,
@@ -113,7 +114,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
-		case magicLinkVerification, recoveryVerification:
+		case mail.MagicLinkVerification, mail.RecoveryVerification:
 			if terr = models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
 			}
@@ -123,7 +124,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error updating user for recovery")
 			}
-		case inviteVerification:
+		case mail.InviteVerification:
 			if user != nil {
 				if user.IsConfirmed() {
 					return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
@@ -170,7 +171,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error updating user for invite")
 			}
-		case signupVerification:
+		case mail.SignupVerification:
 			if user != nil {
 				if user.IsConfirmed() {
 					return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
@@ -202,7 +203,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error updating user for confirmation")
 			}
-		case "email_change_current", "email_change_new":
+		case mail.EmailChangeCurrentVerification, mail.EmailChangeNewVerification:
 			if !config.Mailer.SecureEmailChangeEnabled && params.Type == "email_change_current" {
 				return badRequestError(ErrorCodeValidationFailed, "Enable secure email change to generate link for current email")
 			}
