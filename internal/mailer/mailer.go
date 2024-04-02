@@ -32,14 +32,6 @@ type EmailParams struct {
 	RedirectTo string
 }
 
-type EmailData struct {
-	OTP             string `json:"otp"`
-	TokenHash       string `json:"token_hash"`
-	RedirectTo      string `json:"redirect_to"`
-	EmailActionType string `json:"email_action_type"`
-	SiteURL         string `json:"site_url"`
-}
-
 // NewMailer returns a new gotrue mailer
 func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
 	mail := gomail.NewMessage()
