@@ -100,11 +100,8 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	r := newRouter()
 	r.Use(addRequestID(globalConfig))
 
-	// request tracing should be added only when tracing or metrics is
-	// enabled
-	if globalConfig.Tracing.Enabled {
-		r.UseBypass(observability.RequestTracing())
-	} else if globalConfig.Metrics.Enabled {
+	// request tracing should be added only when tracing or metrics is enabled
+	if globalConfig.Tracing.Enabled || globalConfig.Metrics.Enabled {
 		r.UseBypass(observability.RequestTracing())
 	}
 
