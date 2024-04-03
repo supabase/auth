@@ -451,8 +451,8 @@ type HookConfiguration struct {
 	MFAVerificationAttempt      ExtensibilityPointConfiguration `json:"mfa_verification_attempt" split_words:"true"`
 	PasswordVerificationAttempt ExtensibilityPointConfiguration `json:"password_verification_attempt" split_words:"true"`
 	CustomAccessToken           ExtensibilityPointConfiguration `json:"custom_access_token" split_words:"true"`
-	CustomSMSProvider           ExtensibilityPointConfiguration `json:"custom_sms_provider" split_words:"true"`
 	SendEmail                   ExtensibilityPointConfiguration `json:"send_email" split_words:"true"`
+	SendSMS                     ExtensibilityPointConfiguration `json:"send_sms" split_words:"true"`
 }
 
 type HTTPHookSecrets []string
@@ -481,7 +481,7 @@ func (h *HookConfiguration) Validate() error {
 		h.MFAVerificationAttempt,
 		h.PasswordVerificationAttempt,
 		h.CustomAccessToken,
-		h.CustomSMSProvider,
+		h.SendSMS,
 	}
 	for _, point := range points {
 		if err := point.ValidateExtensibilityPoint(); err != nil {
@@ -583,8 +583,8 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		}
 	}
 
-	if config.Hook.CustomSMSProvider.Enabled {
-		if err := config.Hook.CustomSMSProvider.PopulateExtensibilityPoint(); err != nil {
+	if config.Hook.SendSMS.Enabled {
+		if err := config.Hook.SendSMS.PopulateExtensibilityPoint(); err != nil {
 			return nil, err
 		}
 	}
