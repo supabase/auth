@@ -406,7 +406,7 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 
 	now := time.Now()
-	err = a.sendEmail(r, u, otp, mail.MagicLinkVerification, "", u.RecoveryToken)
+	err = a.sendEmail(r, u, mail.MagicLinkVerification, otp, "", u.RecoveryToken)
 	if err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending magic link email")
