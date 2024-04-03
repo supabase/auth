@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/supabase/auth/internal/hooks"
 	mail "github.com/supabase/auth/internal/mailer"
 	"net/http"
 	"strings"
@@ -279,7 +280,7 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
-	err = a.sendEmail(r, u, otp, mail.SignupVerification, "", u.ConfirmationToken)
+	err = a.sendEmail(r, u, mail.SignupVerification, otp, "", u.ConfirmationToken)
 	if err != nil {
 		u.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending confirmation email")
@@ -305,7 +306,7 @@ func (a *API) sendInvite(r *http.Request, tx *storage.Connection, u *models.User
 	}
 	u.ConfirmationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
-	err = a.sendEmail(r, u, otp, mail.InviteVerification, "", u.ConfirmationToken)
+	err = a.sendEmail(r, u, mail.InviteVerification, otp, "", u.ConfirmationToken)
 	if err != nil {
 		u.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending invite email")
@@ -338,7 +339,7 @@ func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *m
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
-	err = a.sendEmail(r, u, otp, mail.RecoveryVerification, "", u.RecoveryToken)
+	err = a.sendEmail(r, u, mail.RecoveryVerification, otp, "", u.RecoveryToken)
 	if err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending recovery email")
@@ -370,7 +371,7 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 	}
 	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
-	err = a.sendEmail(r, u, otp, mail.ReauthenticationVerification, "", u.ReauthenticationToken)
+	err = a.sendEmail(r, u, mail.ReauthenticationVerification, otp, "", u.ReauthenticationToken)
 	if err != nil {
 		u.ReauthenticationToken = oldToken
 		return errors.Wrap(err, "Error sending reauthentication email")
@@ -495,7 +496,6 @@ func (a *API) sendEmail(r *http.Request, u *models.User, emailActionType, otp, o
 	config := a.config
 	referrerURL := utilities.GetReferrer(r, config)
 	externalURL := getExternalHost(ctx)
-
 	if config.Hook.SendEmail.Enabled {
 		emailData := mail.EmailData{
 			OTP:             otp,
@@ -504,11 +504,17 @@ func (a *API) sendEmail(r *http.Request, u *models.User, emailActionType, otp, o
 			SiteURL:         externalURL.String(),
 			TokenHash:       tokenHash,
 		}
+		input := hooks.SendEmailInput{
+			User:      u,
+			EmailData: emailData,
+		}
 
 		if emailActionType == mail.EmailChangeVerification && config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
 			emailData.OTPNew = otpNew
 			emailData.TokenHashNew = u.EmailChangeTokenCurrent
 		}
+		output := hooks.SendEmailOutput{}
+		return a.invokeHTTPHook(ctx, r, &input, &output)
 	}
 
 	switch emailActionType {
