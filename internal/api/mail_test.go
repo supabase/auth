@@ -65,7 +65,19 @@ func (ts *MailTestSuite) TestGenerateLink() {
 		ExpectedResponse map[string]interface{}
 	}{
 		{
-			Desc: "Generate signup link",
+			Desc: "Generate signup link for new user",
+			Body: GenerateLinkParams{
+				Email:    "new_user@example.com",
+				Password: "secret123",
+				Type:     "signup",
+			},
+			ExpectedCode: http.StatusOK,
+			ExpectedResponse: map[string]interface{}{
+				"redirect_to": ts.Config.SiteURL,
+			},
+		},
+		{
+			Desc: "Generate signup link for existing user",
 			Body: GenerateLinkParams{
 				Email:    "test@example.com",
 				Password: "secret123",

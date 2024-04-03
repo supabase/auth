@@ -1,10 +1,11 @@
 package api
 
 import (
-	mail "github.com/supabase/auth/internal/mailer"
 	"net/http"
 	"strings"
 	"time"
+
+	mail "github.com/supabase/auth/internal/mailer"
 
 	"github.com/badoux/checkmail"
 	"github.com/fatih/structs"
@@ -72,8 +73,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 					// password generation must always succeed
 					panic(err)
 				}
-
-			default:
+			case mail.RecoveryVerification, mail.EmailChangeCurrentVerification, mail.EmailChangeNewVerification:
 				return notFoundError(ErrorCodeUserNotFound, "User with this email not found")
 			}
 		} else {
