@@ -7,8 +7,6 @@ import (
 	"strings"
 	"time"
 
-	mail "github.com/supabase/auth/internal/mailer"
-
 	"github.com/badoux/checkmail"
 	"github.com/fatih/structs"
 	"github.com/pkg/errors"
@@ -491,7 +489,7 @@ func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration
 	return nil
 }
 
-func (a *API) sendEmail(r *http.Request, u *models.User, emailActionType, otp, otpNew, tokenHash string) error {
+func (a *API) sendEmail(r *http.Request, u *models.User, emailActionType, otp, otpNew, tokenHashWithPrefix string) error {
 	mailer := a.Mailer()
 	ctx := r.Context()
 	config := a.config
@@ -503,7 +501,7 @@ func (a *API) sendEmail(r *http.Request, u *models.User, emailActionType, otp, o
 			EmailActionType: emailActionType,
 			RedirectTo:      referrerURL,
 			SiteURL:         externalURL.String(),
-			TokenHash:       tokenHash,
+			TokenHash:       tokenHashWithPrefix,
 		}
 		input := hooks.SendEmailInput{
 			User:      u,
@@ -512,6 +510,7 @@ func (a *API) sendEmail(r *http.Request, u *models.User, emailActionType, otp, o
 
 		if emailActionType == mail.EmailChangeVerification && config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
 			emailData.OTPNew = otpNew
+			//
 			emailData.TokenHashNew = u.EmailChangeTokenCurrent
 		}
 		output := hooks.SendEmailOutput{}
@@ -531,7 +530,7 @@ func (a *API) sendEmail(r *http.Request, u *models.User, emailActionType, otp, o
 		return mailer.InviteMail(r, u, otp, referrerURL, externalURL)
 	case mail.EmailChangeVerification:
 		return mailer.EmailChangeMail(r, u, otpNew, otp, referrerURL, externalURL)
+	default:
+		return errors.New("invalid email action type")
 	}
-	return nil
-
 }
