@@ -139,13 +139,13 @@ type CustomAccessTokenOutput struct {
 	HookError AuthHookError          `json:"error,omitempty"`
 }
 
-type CustomSMSProviderInput struct {
+type SendSMSInput struct {
 	UserID uuid.UUID `json:"user_id"`
 	Phone  string    `json:"phone"`
 	OTP    string    `json:"otp"`
 }
 
-type CustomSMSProviderOutput struct {
+type SendSMSOutput struct {
 	Success   bool          `json:"success"`
 	HookError AuthHookError `json:"error,omitempty"`
 }
@@ -174,15 +174,15 @@ func (ca *CustomAccessTokenOutput) Error() string {
 	return ca.HookError.Message
 }
 
-func (cs *CustomSMSProviderOutput) IsError() bool {
+func (cs *SendSMSOutput) IsError() bool {
 	return cs.HookError.Message != ""
 }
 
-func (cs *CustomSMSProviderOutput) Error() string {
+func (cs *SendSMSOutput) Error() string {
 	return cs.HookError.Message
 }
 
-func (cs *CustomSMSProviderOutput) IsHTTPHook() bool {
+func (cs *SendSMSOutput) IsHTTPHook() bool {
 	return true
 }
 
