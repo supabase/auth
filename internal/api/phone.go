@@ -95,13 +95,13 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, r *http.Request, tx *st
 		if err != nil {
 			return "", err
 		}
-		if config.Hook.CustomSMSProvider.Enabled {
-			input := hooks.CustomSMSProviderInput{
+		if config.Hook.SendSMS.Enabled {
+			input := hooks.SendSMSInput{
 				UserID: user.ID,
 				Phone:  user.Phone.String(),
 				OTP:    otp,
 			}
-			output := hooks.CustomSMSProviderOutput{}
+			output := hooks.SendSMSOutput{}
 			err := a.invokeHTTPHook(ctx, r, &input, &output)
 			if err != nil {
 				return "", err

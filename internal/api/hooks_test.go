@@ -47,14 +47,14 @@ func TestHooks(t *testing.T) {
 func (ts *HooksTestSuite) TestRunHTTPHook() {
 	defer gock.OffAll()
 
-	input := hooks.CustomSMSProviderInput{
+	input := hooks.SendSMSInput{
 		UserID: uuid.Must(uuid.NewV4()),
 		Phone:  "1234567890",
 		OTP:    "123456",
 	}
-	successOutput := hooks.CustomSMSProviderOutput{Success: true}
+	successOutput := hooks.SendSMSOutput{Success: true}
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
-	ts.Config.Hook.CustomSMSProvider.URI = testURL
+	ts.Config.Hook.SendSMS.URI = testURL
 
 	testCases := []struct {
 		description  string
@@ -78,13 +78,13 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 	for _, tc := range testCases {
 		ts.Run(tc.description, func() {
 			if tc.status == http.StatusOK {
-				gock.New(ts.Config.Hook.CustomSMSProvider.URI).
+				gock.New(ts.Config.Hook.SendSMS.URI).
 					Post("/").
 					MatchType("json").
 					Reply(tc.status).
 					JSON(tc.mockResponse).SetHeader("content-length", "21")
 			} else {
-				gock.New(ts.Config.Hook.CustomSMSProvider.URI).
+				gock.New(ts.Config.Hook.SendSMS.URI).
 					Post("/").
 					MatchType("json").
 					Reply(tc.status).
@@ -92,10 +92,10 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 
 			}
 
-			var output hooks.CustomSMSProviderOutput
-			req, _ := http.NewRequest("POST", ts.Config.Hook.CustomSMSProvider.URI, nil)
+			var output hooks.SendSMSOutput
+			req, _ := http.NewRequest("POST", ts.Config.Hook.SendSMS.URI, nil)
 			ctx := req.Context()
-			body, err := ts.API.runHTTPHook(ctx, req, ts.Config.Hook.CustomSMSProvider, &input, &output)
+			body, err := ts.API.runHTTPHook(ctx, req, ts.Config.Hook.SendSMS, &input, &output)
 
 			if !tc.expectError {
 				require.NoError(ts.T(), err)
@@ -114,14 +114,14 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 	defer gock.OffAll()
 
-	input := hooks.CustomSMSProviderInput{
+	input := hooks.SendSMSInput{
 		UserID: uuid.Must(uuid.NewV4()),
 		Phone:  "1234567890",
 		OTP:    "123456",
 	}
-	successOutput := hooks.CustomSMSProviderOutput{Success: true}
+	successOutput := hooks.SendSMSOutput{Success: true}
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
-	ts.Config.Hook.CustomSMSProvider.URI = testURL
+	ts.Config.Hook.SendSMS.URI = testURL
 
 	gock.New(testURL).
 		Post("/").
@@ -136,14 +136,14 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 		Reply(http.StatusOK).
 		JSON(successOutput).SetHeader("content-length", "21")
 
-	var output hooks.CustomSMSProviderOutput
+	var output hooks.SendSMSOutput
 
 	// Simulate the original HTTP request which triggered the hook
 	req, err := http.NewRequest("POST", "http://localhost:9998/otp", nil)
 	require.NoError(ts.T(), err)
 	ctx := req.Context()
 
-	body, err := ts.API.runHTTPHook(ctx, req, ts.Config.Hook.CustomSMSProvider, &input, &output)
+	body, err := ts.API.runHTTPHook(ctx, req, ts.Config.Hook.SendSMS, &input, &output)
 	require.NoError(ts.T(), err)
 
 	err = json.Unmarshal(body, &output)

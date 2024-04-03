@@ -174,15 +174,15 @@ func (a *API) runHTTPHook(ctx context.Context, r *http.Request, hookConfig conf.
 
 func (a *API) invokeHTTPHook(ctx context.Context, r *http.Request, input, output any) error {
 	switch input.(type) {
-	case *hooks.CustomSMSProviderInput:
-		hookOutput, ok := output.(*hooks.CustomSMSProviderOutput)
+	case *hooks.SendSMSInput:
+		hookOutput, ok := output.(*hooks.SendSMSOutput)
 		if !ok {
-			panic("output should be *hooks.CustomSMSProviderOutput")
+			panic("output should be *hooks.SendSMSOutput")
 		}
 		var response []byte
 		var err error
 
-		if response, err = a.runHTTPHook(ctx, r, a.config.Hook.CustomSMSProvider, input, output); err != nil {
+		if response, err = a.runHTTPHook(ctx, r, a.config.Hook.SendSMS, input, output); err != nil {
 			return internalServerError("Error invoking custom SMS provider hook.").WithInternalError(err)
 		}
 
