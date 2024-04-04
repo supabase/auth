@@ -503,14 +503,13 @@ func (a *API) sendEmail(r *http.Request, u *models.User, emailActionType, otp, o
 			SiteURL:         externalURL.String(),
 			TokenHash:       tokenHashWithPrefix,
 		}
-		input := hooks.SendEmailInput{
-			User:      u,
-			EmailData: emailData,
-		}
-
 		if emailActionType == mail.EmailChangeVerification && config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
 			emailData.OTPNew = otpNew
 			emailData.TokenHashNew = u.EmailChangeTokenCurrent
+		}
+		input := hooks.SendEmailInput{
+			User:      u,
+			EmailData: emailData,
 		}
 		output := hooks.SendEmailOutput{}
 		return a.invokeHTTPHook(ctx, r, &input, &output)
