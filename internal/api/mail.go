@@ -497,14 +497,14 @@ func (a *API) sendEmail(r *http.Request, u *models.User, emailActionType, otp, o
 	externalURL := getExternalHost(ctx)
 	if config.Hook.SendEmail.Enabled {
 		emailData := mail.EmailData{
-			OTP:             otp,
+			Token:           otp,
 			EmailActionType: emailActionType,
 			RedirectTo:      referrerURL,
 			SiteURL:         externalURL.String(),
 			TokenHash:       tokenHashWithPrefix,
 		}
 		if emailActionType == mail.EmailChangeVerification && config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
-			emailData.OTPNew = otpNew
+			emailData.TokenNew = otpNew
 			emailData.TokenHashNew = u.EmailChangeTokenCurrent
 		}
 		input := hooks.SendEmailInput{

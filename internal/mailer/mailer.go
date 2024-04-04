@@ -33,12 +33,12 @@ type EmailParams struct {
 }
 
 type EmailData struct {
-	OTP             string `json:"otp"`
+	Token           string `json:"token"`
 	TokenHash       string `json:"token_hash"`
 	RedirectTo      string `json:"redirect_to"`
 	EmailActionType string `json:"email_action_type"`
 	SiteURL         string `json:"site_url"`
-	OTPNew          string `json:"otp_new"`
+	TokenNew        string `json:"token_new"`
 	TokenHashNew    string `json:"token_hash_new"`
 }
 
