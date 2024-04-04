@@ -451,6 +451,7 @@ type HookConfiguration struct {
 	MFAVerificationAttempt      ExtensibilityPointConfiguration `json:"mfa_verification_attempt" split_words:"true"`
 	PasswordVerificationAttempt ExtensibilityPointConfiguration `json:"password_verification_attempt" split_words:"true"`
 	CustomAccessToken           ExtensibilityPointConfiguration `json:"custom_access_token" split_words:"true"`
+	SendEmail                   ExtensibilityPointConfiguration `json:"send_email" split_words:"true"`
 	SendSMS                     ExtensibilityPointConfiguration `json:"send_sms" split_words:"true"`
 }
 

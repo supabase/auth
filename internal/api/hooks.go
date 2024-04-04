@@ -183,11 +183,30 @@ func (a *API) invokeHTTPHook(ctx context.Context, r *http.Request, input, output
 		var err error
 
 		if response, err = a.runHTTPHook(ctx, r, a.config.Hook.SendSMS, input, output); err != nil {
-			return internalServerError("Error invoking custom SMS provider hook.").WithInternalError(err)
+			return internalServerError("Error invoking Send SMS hook.").WithInternalError(err)
 		}
 
 		if err := json.Unmarshal(response, hookOutput); err != nil {
-			return internalServerError("Error unmarshaling custom SMS provider hook output.").WithInternalError(err)
+			return internalServerError("Error unmarshaling Send SMS output.").WithInternalError(err)
+		}
+	case *hooks.SendEmailInput:
+		hookOutput, ok := output.(*hooks.SendEmailOutput)
+		if !ok {
+			panic("output should be *hooks.SendEmailOutput")
+		}
+
+		var response []byte
+		var err error
+
+		if response, err = a.runHTTPHook(ctx, r, a.config.Hook.SendEmail, input, output); err != nil {
+			return internalServerError("Error invoking Send Email hook.").WithInternalError(err)
+		}
+		if err != nil {
+			return err
+		}
+
+		if err := json.Unmarshal(response, hookOutput); err != nil {
+			return internalServerError("Error unmarshaling Send Email hook output.").WithInternalError(err)
 		}
 
 	default:
