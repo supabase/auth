@@ -510,7 +510,6 @@ func (a *API) sendEmail(r *http.Request, u *models.User, emailActionType, otp, o
 
 		if emailActionType == mail.EmailChangeVerification && config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
 			emailData.OTPNew = otpNew
-			//
 			emailData.TokenHashNew = u.EmailChangeTokenCurrent
 		}
 		output := hooks.SendEmailOutput{}
