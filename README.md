@@ -660,7 +660,6 @@ Default Content (if template is unavailable):
 <p><a href="{{ .ConfirmationURL }}">Change Email</a></p>
 ```
 
-
 ### Phone Auth
 
 `SMS_AUTOCONFIRM` - `bool`
@@ -716,6 +715,12 @@ Retrieve from hcaptcha or turnstile account
 `SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` - `bool`
 
 Enforce reauthentication on password update.
+
+### Anonymous Sign-Ins
+
+`GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED` - `bool`
+
+Use this to enable/disable anonymous sign-ins.
 
 ## Endpoints
 
