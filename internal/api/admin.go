@@ -500,10 +500,6 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 			if terr := models.Logout(tx, user.ID); terr != nil {
 				return internalServerError("Error deleting user's sessions").WithInternalError(terr)
 			}
-			// for backward compatibility: hard delete all associated refresh tokens
-			if terr := models.LogoutAllRefreshTokens(tx, user.ID); terr != nil {
-				return internalServerError("Error deleting user's refresh tokens").WithInternalError(terr)
-			}
 		} else {
 			if terr := tx.Destroy(user); terr != nil {
 				return internalServerError("Database error deleting user").WithInternalError(terr)
