@@ -48,10 +48,6 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
-		if s == nil {
-			return models.LogoutAllRefreshTokens(tx, u.ID)
-		}
-
 		switch scope {
 		case LogoutLocal:
 			return models.LogoutSession(tx, s.ID)
