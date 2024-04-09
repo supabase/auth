@@ -473,7 +473,7 @@ type ExtensibilityPointConfiguration struct {
 	Enabled  bool   `json:"enabled"`
 	HookName string `json:"hook_name"`
 	// We use | as a separator for keys and : as a separator for keys within a keypair. For instance: v1,whsec_test|v1a,whpk_myother:v1a,whsk_testkey|v1,whsec_secret3
-	HTTPHookSecrets []string `json:"secrets" envconfig:"secrets"`
+	HTTPHookSecrets HTTPHookSecrets `json:"secrets" envconfig:"secrets"`
 }
 
 func (h *HookConfiguration) Validate() error {
@@ -482,6 +482,7 @@ func (h *HookConfiguration) Validate() error {
 		h.PasswordVerificationAttempt,
 		h.CustomAccessToken,
 		h.SendSMS,
+		h.SendEmail,
 	}
 	for _, point := range points {
 		if err := point.ValidateExtensibilityPoint(); err != nil {
@@ -585,6 +586,11 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 
 	if config.Hook.SendSMS.Enabled {
 		if err := config.Hook.SendSMS.PopulateExtensibilityPoint(); err != nil {
+			return nil, err
+		}
+	}
+	if config.Hook.SendEmail.Enabled {
+		if err := config.Hook.SendEmail.PopulateExtensibilityPoint(); err != nil {
 			return nil, err
 		}
 	}
