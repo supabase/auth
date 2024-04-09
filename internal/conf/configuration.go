@@ -569,6 +569,7 @@ func loadEnvironment(filename string) error {
 
 // Moving away from the existing HookConfig so we can get a fresh start.
 type HookConfiguration struct {
+	AllowedLocalHostNames       []string                        `json:"allowed_local_names" split_words:"true"`
 	MFAVerificationAttempt      ExtensibilityPointConfiguration `json:"mfa_verification_attempt" split_words:"true"`
 	PasswordVerificationAttempt ExtensibilityPointConfiguration `json:"password_verification_attempt" split_words:"true"`
 	CustomAccessToken           ExtensibilityPointConfiguration `json:"custom_access_token" split_words:"true"`
@@ -607,14 +608,23 @@ func (h *HookConfiguration) Validate() error {
 		h.SendEmail,
 	}
 	for _, point := range points {
-		if err := point.ValidateExtensibilityPoint(); err != nil {
+		if err := point.ValidateExtensibilityPoint(h.AllowedLocalHostNames); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
+func isStringInSlice(checkValue string, list []string) bool {
+	for _, val := range list {
+		if val == checkValue {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint(allowedHTTPHostNames []string) error {
 	if e.URI == "" {
 		return nil
 	}
@@ -627,10 +637,10 @@ func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint() error {
 		return validatePostgresPath(u)
 	case "http":
 		hostname := u.Hostname()
-		if hostname == "localhost" || hostname == "127.0.0.1" || hostname == "::1" || hostname == "host.docker.internal" || hostname == "kong" || hostname == "edge_runtime" {
+		if isStringInSlice(hostname, allowedHTTPHostNames) {
 			return validateHTTPHookSecrets(e.HTTPHookSecrets)
 		}
-		return fmt.Errorf("only localhost, 127.0.0.1, and ::1 are supported with http")
+		return fmt.Errorf("hostname is %q: only %s are supported with http", hostname, strings.Join(allowedHTTPHostNames, ", "))
 	case "https":
 		return validateHTTPHookSecrets(e.HTTPHookSecrets)
 	default:

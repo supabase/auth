@@ -155,6 +155,14 @@ func TestHTTPHookSecretsDecode(t *testing.T) {
 }
 
 func TestValidateExtensibilityPointURI(t *testing.T) {
+	allowedLocalHostNames := []string{
+		"localhost",
+		"127.0.0.1",
+		"::1",
+		"host.docker.internal",
+		"kong",
+		"edge_runtime",
+	}
 	cases := []struct {
 		desc        string
 		uri         string
@@ -168,7 +176,7 @@ func TestValidateExtensibilityPointURI(t *testing.T) {
 		{desc: "Another Valid URI", uri: "pg-functions://postgres/MySpeCial/FUNCTION_THAT_YELLS_AT_YOU", expectError: false},
 		{desc: "Valid HTTP URI", uri: "http://localhost/functions/v1/custom-sms-sender", expectError: false},
 		{desc: "Valid localhost URI with kong alias", uri: "http://kong:8000/functions/v1/custom-sms-sender", expectError: false},
-		{desc: "Valid localhost URI with edge_runtime", uri: "http://edge_runtime:8000/functions/v1/custom-sms-sender", expectError: false},
+		{desc: "Valid localhost URI with edge_runtime", uri: "http://edge_runtime:54321/functions/v1/custom-sms-sender", expectError: false},
 
 		// Negative test cases
 		{desc: "Invalid HTTP URI", uri: "http://asdfgggg.website.co/functions/v1/custom-sms-sender", expectError: true},
@@ -180,7 +188,7 @@ func TestValidateExtensibilityPointURI(t *testing.T) {
 
 	for _, tc := range cases {
 		ep := ExtensibilityPointConfiguration{URI: tc.uri}
-		err := ep.ValidateExtensibilityPoint()
+		err := ep.ValidateExtensibilityPoint(allowedLocalHostNames)
 		if tc.expectError {
 			require.Error(t, err)
 		} else {
@@ -206,8 +214,9 @@ func TestValidateExtensibilityPointSecrets(t *testing.T) {
 		{desc: "Invalid Symmetric Secret", secret: []string{"tommy"}, expectError: true},
 	}
 	for _, tc := range cases {
+		allowedLocalHostNames := []string{}
 		ep := ExtensibilityPointConfiguration{URI: validHTTPSURI, HTTPHookSecrets: tc.secret}
-		err := ep.ValidateExtensibilityPoint()
+		err := ep.ValidateExtensibilityPoint(allowedLocalHostNames)
 		if tc.expectError {
 			require.Error(t, err)
 		} else {
