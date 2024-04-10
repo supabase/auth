@@ -36,6 +36,7 @@ type SAMLAttribute struct {
 	Name    string      `json:"name,omitempty"`
 	Names   []string    `json:"names,omitempty"`
 	Default interface{} `json:"default,omitempty"`
+	Array   bool        `json:"array,omitempty"`
 }
 
 type SAMLAttributeMapping struct {
@@ -76,6 +77,10 @@ func (m *SAMLAttributeMapping) Equal(o *SAMLAttributeMapping) bool {
 		}
 
 		if mvalue.Default != value.Default {
+			return false
+		}
+
+		if mvalue.Array != value.Array {
 			return false
 		}
 	}

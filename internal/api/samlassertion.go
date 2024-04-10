@@ -128,9 +128,18 @@ func (a *SAMLAssertion) Process(mapping models.SAMLAttributeMapping) map[string]
 		for _, name := range names {
 			for _, attr := range a.Attribute(name) {
 				if attr.Value != "" {
-					ret[key] = attr.Value
 					setKey = true
-					break
+
+					if mapper.Array {
+						if ret[key] == nil {
+							ret[key] = []string{}
+						}
+
+						ret[key] = append(ret[key].([]string), attr.Value)
+					} else {
+						ret[key] = attr.Value
+						break
+					}
 				}
 			}
 
