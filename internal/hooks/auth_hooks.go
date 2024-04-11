@@ -193,8 +193,12 @@ func (cs *SendSMSOutput) Error() string {
 	return cs.HookError.Message
 }
 
-func (cs *SendSMSOutput) IsHTTPHook() bool {
-	return true
+func (cs *SendEmailOutput) IsError() bool {
+	return cs.HookError.Message != ""
+}
+
+func (cs *SendEmailOutput) Error() string {
+	return cs.HookError.Message
 }
 
 type AuthHookError struct {

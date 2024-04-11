@@ -279,7 +279,7 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
-	err = a.sendEmail(r, u, mail.SignupVerification, otp, "", u.ConfirmationToken)
+	err = a.sendEmail(r, tx, u, mail.SignupVerification, otp, "", u.ConfirmationToken)
 	if err != nil {
 		u.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending confirmation email")
@@ -305,7 +305,7 @@ func (a *API) sendInvite(r *http.Request, tx *storage.Connection, u *models.User
 	}
 	u.ConfirmationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
-	err = a.sendEmail(r, u, mail.InviteVerification, otp, "", u.ConfirmationToken)
+	err = a.sendEmail(r, tx, u, mail.InviteVerification, otp, "", u.ConfirmationToken)
 	if err != nil {
 		u.ConfirmationToken = oldToken
 		return errors.Wrap(err, "Error sending invite email")
@@ -338,7 +338,7 @@ func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *m
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 	now := time.Now()
-	err = a.sendEmail(r, u, mail.RecoveryVerification, otp, "", u.RecoveryToken)
+	err = a.sendEmail(r, tx, u, mail.RecoveryVerification, otp, "", u.RecoveryToken)
 	if err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending recovery email")
@@ -370,7 +370,7 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 	}
 	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
-	err = a.sendEmail(r, u, mail.ReauthenticationVerification, otp, "", u.ReauthenticationToken)
+	err = a.sendEmail(r, tx, u, mail.ReauthenticationVerification, otp, "", u.ReauthenticationToken)
 	if err != nil {
 		u.ReauthenticationToken = oldToken
 		return errors.Wrap(err, "Error sending reauthentication email")
@@ -405,7 +405,7 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
 
 	now := time.Now()
-	err = a.sendEmail(r, u, mail.MagicLinkVerification, otp, "", u.RecoveryToken)
+	err = a.sendEmail(r, tx, u, mail.MagicLinkVerification, otp, "", u.RecoveryToken)
 	if err != nil {
 		u.RecoveryToken = oldToken
 		return errors.Wrap(err, "Error sending magic link email")
@@ -450,7 +450,7 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
-	err = a.sendEmail(r, u, mail.EmailChangeVerification, otpCurrent, otpNew, u.EmailChangeTokenNew)
+	err = a.sendEmail(r, tx, u, mail.EmailChangeVerification, otpCurrent, otpNew, u.EmailChangeTokenNew)
 	if err != nil {
 		return err
 	}
@@ -489,7 +489,7 @@ func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration
 	return nil
 }
 
-func (a *API) sendEmail(r *http.Request, u *models.User, emailActionType, otp, otpNew, tokenHashWithPrefix string) error {
+func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, emailActionType, otp, otpNew, tokenHashWithPrefix string) error {
 	mailer := a.Mailer()
 	ctx := r.Context()
 	config := a.config
@@ -512,7 +512,7 @@ func (a *API) sendEmail(r *http.Request, u *models.User, emailActionType, otp, o
 			EmailData: emailData,
 		}
 		output := hooks.SendEmailOutput{}
-		return a.invokeHTTPHook(ctx, r, &input, &output)
+		return a.invokeHook(tx, r, &input, &output, a.config.Hook.SendEmail.URI)
 	}
 
 	switch emailActionType {

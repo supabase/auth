@@ -552,8 +552,10 @@ func (e *ExtensibilityPointConfiguration) PopulateExtensibilityPoint() error {
 	if err != nil {
 		return err
 	}
-	pathParts := strings.Split(u.Path, "/")
-	e.HookName = fmt.Sprintf("%q.%q", pathParts[1], pathParts[2])
+	if u.Scheme == "pg-functions" {
+		pathParts := strings.Split(u.Path, "/")
+		e.HookName = fmt.Sprintf("%q.%q", pathParts[1], pathParts[2])
+	}
 	return nil
 }
 
