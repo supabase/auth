@@ -98,6 +98,11 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	logger := observability.NewStructuredLogger(logrus.StandardLogger(), globalConfig)
 
 	r := newRouter()
+
+	if globalConfig.API.MaxRequestDuration > 0 {
+		r.UseBypass(api.timeoutMiddleware(globalConfig.API.MaxRequestDuration))
+	}
+
 	r.Use(addRequestID(globalConfig))
 
 	// request tracing should be added only when tracing or metrics is enabled

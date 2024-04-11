@@ -112,11 +112,12 @@ type MFAConfiguration struct {
 }
 
 type APIConfiguration struct {
-	Host            string
-	Port            string `envconfig:"PORT" default:"8081"`
-	Endpoint        string
-	RequestIDHeader string `envconfig:"REQUEST_ID_HEADER"`
-	ExternalURL     string `json:"external_url" envconfig:"API_EXTERNAL_URL" required:"true"`
+	Host               string
+	Port               string `envconfig:"PORT" default:"8081"`
+	Endpoint           string
+	RequestIDHeader    string        `envconfig:"REQUEST_ID_HEADER"`
+	ExternalURL        string        `json:"external_url" envconfig:"API_EXTERNAL_URL" required:"true"`
+	MaxRequestDuration time.Duration `json:"max_request_duration" split_words:"true" default:"10s"`
 }
 
 func (a *APIConfiguration) Validate() error {
