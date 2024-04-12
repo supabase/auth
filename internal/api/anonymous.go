@@ -40,7 +40,7 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		token, terr = a.issueRefreshToken(ctx, tx, newUser, models.Anonymous, grantParams)
+		token, terr = a.issueRefreshToken(r, tx, newUser, models.Anonymous, grantParams)
 		if terr != nil {
 			return terr
 		}

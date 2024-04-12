@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	mail "github.com/supabase/auth/internal/mailer"
@@ -184,7 +183,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 		require.NoError(ts.T(), err)
 		require.NoError(ts.T(), ts.API.db.Create(session))
 
-		token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, &session.ID, models.MagicLink)
+		token, _, err = ts.API.generateAccessToken(req, ts.API.db, u, &session.ID, models.MagicLink)
 		require.NoError(ts.T(), err)
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
