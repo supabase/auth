@@ -368,6 +368,7 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 
 func (a *API) issueRefreshToken(r *http.Request, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 	config := a.config
+	ctx := r.Context()
 
 	now := time.Now()
 	user.LastSignInAt = &now

@@ -179,7 +179,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 		}
 
 		if isImplicitFlow(flowType) {
-			token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
+			token, terr = a.issueRefreshToken(r, tx, user, models.OTP, grantParams)
 			if terr != nil {
 				return terr
 			}
@@ -278,7 +278,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 		if terr := tx.Reload(user); terr != nil {
 			return terr
 		}
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.OTP, grantParams)
+		token, terr = a.issueRefreshToken(r, tx, user, models.OTP, grantParams)
 		if terr != nil {
 			return terr
 		}
