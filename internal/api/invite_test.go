@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -65,7 +64,9 @@ func (ts *InviteTestSuite) makeSuperAdmin(email string) string {
 	session, err := models.NewSession(u.ID, nil)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Create(session))
-	token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, &session.ID, models.Invite)
+
+	req := httptest.NewRequest(http.MethodPost, "/invite", nil)
+	token, _, err = ts.API.generateAccessToken(req, ts.API.db, u, &session.ID, models.Invite)
 
 	require.NoError(ts.T(), err, "Error generating access token")
 

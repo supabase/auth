@@ -95,7 +95,9 @@ func (ts *MFATestSuite) SetupTest() {
 }
 
 func (ts *MFATestSuite) generateAAL1Token(user *models.User, sessionId *uuid.UUID) string {
-	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, user, sessionId, models.TOTPSignIn)
+	// Not an actual path. Dummy request to simulate a signup request that we can use in generateAccessToken
+	req := httptest.NewRequest(http.MethodPost, "/factors", nil)
+	token, _, err := ts.API.generateAccessToken(req, ts.API.db, user, sessionId, models.TOTPSignIn)
 	require.NoError(ts.T(), err, "Error generating access token")
 	return token
 }

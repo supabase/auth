@@ -210,7 +210,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				issuedToken = newToken
 			}
 
-			tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, issuedToken.SessionId, models.TokenRefresh)
+			tokenString, expiresAt, terr = a.generateAccessToken(r, tx, user, issuedToken.SessionId, models.TokenRefresh)
 			if terr != nil {
 				httpErr, ok := terr.(*HTTPError)
 				if ok {

@@ -47,7 +47,8 @@ func (ts *UserTestSuite) SetupTest() {
 }
 
 func (ts *UserTestSuite) generateToken(user *models.User, sessionId *uuid.UUID) string {
-	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, user, sessionId, models.PasswordGrant)
+	req := httptest.NewRequest(http.MethodPost, "/token?grant_type=password", nil)
+	token, _, err := ts.API.generateAccessToken(req, ts.API.db, user, sessionId, models.PasswordGrant)
 	require.NoError(ts.T(), err, "Error generating access token")
 	return token
 }
@@ -57,7 +58,8 @@ func (ts *UserTestSuite) generateAccessTokenAndSession(user *models.User) string
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Create(session))
 
-	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, user, &session.ID, models.PasswordGrant)
+	req := httptest.NewRequest(http.MethodPost, "/token?grant_type=password", nil)
+	token, _, err := ts.API.generateAccessToken(req, ts.API.db, user, &session.ID, models.PasswordGrant)
 	require.NoError(ts.T(), err, "Error generating access token")
 	return token
 }
