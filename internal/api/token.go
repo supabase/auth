@@ -434,7 +434,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		if terr != nil {
 			return terr
 		}
-		currentToken, terr := models.FindTokenBySessionID(tx, &session.ID)
+		currentToken, terr := session.FindCurrentlyActiveRefreshToken(tx)
 		if terr != nil {
 			return terr
 		}
