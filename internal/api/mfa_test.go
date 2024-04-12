@@ -95,7 +95,8 @@ func (ts *MFATestSuite) SetupTest() {
 }
 
 func (ts *MFATestSuite) generateAAL1Token(user *models.User, sessionId *uuid.UUID) string {
-	token, _, err := ts.API.generateAccessToken(context.Background(), ts.API.db, user, sessionId, models.TOTPSignIn)
+	req := httptest.NewRequest(http.MethodPost, "/signup", nil)
+	token, _, err := ts.API.generateAccessToken(req, ts.API.db, user, sessionId, models.TOTPSignIn)
 	require.NoError(ts.T(), err, "Error generating access token")
 	return token
 }
