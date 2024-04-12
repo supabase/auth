@@ -162,7 +162,7 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Create(s))
 
-	req := httptest.NewRequest(http.MethodPost, "/signup", nil)
+	req := httptest.NewRequest(http.MethodPost, "/token?grant_type=password", nil)
 	token, _, err := ts.API.generateAccessToken(req, ts.API.db, u, &s.ID, models.PasswordGrant)
 	require.NoError(ts.T(), err)
 
