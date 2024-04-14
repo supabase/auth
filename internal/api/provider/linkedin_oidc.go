@@ -41,7 +41,7 @@ func NewLinkedinOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string)
 	// Linkedin uses a different issuer from it's oidc discovery url
 	// https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2#validating-id-tokens
 	ctx := oidc.InsecureIssuerURLContext(context.Background(), IssuerLinkedin)
-	oidcProvider, err := oidc.NewProvider(ctx, IssuerLinkedin+"/oauth")
+	oidcProvider, err := oidc.NewProvider(ctx, IssuerLinkedin)
 	if err != nil {
 		return nil, err
 	}
