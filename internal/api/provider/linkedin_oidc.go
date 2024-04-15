@@ -11,7 +11,7 @@ import (
 
 const (
 	defaultLinkedinOIDCAPIBase = "api.linkedin.com"
-	IssuerLinkedin             = "https://www.linkedin.com"
+	IssuerLinkedin             = "https://www.linkedin.com/oauth"
 )
 
 type linkedinOIDCProvider struct {
@@ -38,10 +38,7 @@ func NewLinkedinOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string)
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
-	// Linkedin uses a different issuer from it's oidc discovery url
-	// https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2#validating-id-tokens
-	ctx := oidc.InsecureIssuerURLContext(context.Background(), IssuerLinkedin)
-	oidcProvider, err := oidc.NewProvider(ctx, IssuerLinkedin)
+	oidcProvider, err := oidc.NewProvider(context.Background(), IssuerLinkedin)
 	if err != nil {
 		return nil, err
 	}
