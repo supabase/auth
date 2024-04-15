@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -137,6 +138,15 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 		}
 
 		defer rsp.Body.Close()
+		// Header.Get is case insensitive
+		contentType := rsp.Header.Get("Content-Type")
+		mediaType, _, err := mime.ParseMediaType(contentType)
+		if err != nil {
+			return nil, internalServerError("Invalid Content-Type header")
+		}
+		if mediaType != "application/json" {
+			return nil, internalServerError("Expected JSON response from hook, received: " + contentType)
+		}
 
 		switch rsp.StatusCode {
 		case http.StatusOK, http.StatusNoContent, http.StatusAccepted:
@@ -342,7 +352,6 @@ func (a *API) runHook(r *http.Request, conn *storage.Connection, hookConfig conf
 	switch strings.ToLower(scheme) {
 	case "http", "https":
 		response, err = a.runHTTPHook(r, hookConfig, input, output)
-
 	case "pg-functions":
 		response, err = a.runPostgresHook(ctx, conn, hookConfig, input, output)
 	default:

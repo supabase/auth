@@ -129,14 +129,14 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 		Post("/").
 		MatchType("json").
 		Reply(http.StatusTooManyRequests).
-		SetHeader("retry-after", "true").SetHeader("content-length", "21")
+		SetHeader("retry-after", "true").SetHeader("content-type", "application/json")
 
 	// Simulate an additional response for the retry attempt
 	gock.New(testURL).
 		Post("/").
 		MatchType("json").
 		Reply(http.StatusOK).
-		JSON(successOutput).SetHeader("content-length", "21")
+		JSON(successOutput).SetHeader("content-type", "application/json")
 
 	var output hooks.SendSMSOutput
 
@@ -169,20 +169,19 @@ func (ts *HooksTestSuite) TestInvokeHookIntegration() {
 	testHTTPUri := "http://myauthservice.com/signup"
 	testHTTPSUri := "https://myauthservice.com/signup"
 	testPGUri := "pg-functions://postgres/auth/invoke_test"
-	mockContentLength := "20"
 	successOutput := map[string]interface{}{}
 	authEndpoint := "https://app.myapp.com/otp"
 	gock.New(testHTTPUri).
 		Post("/").
 		MatchType("json").
 		Reply(http.StatusOK).
-		JSON(successOutput).SetHeader("content-length", mockContentLength)
+		JSON(successOutput).SetHeader("content-type", "application/json")
 
 	gock.New(testHTTPSUri).
 		Post("/").
 		MatchType("json").
 		Reply(http.StatusOK).
-		JSON(successOutput).SetHeader("content-length", mockContentLength)
+		JSON(successOutput).SetHeader("content-type", "application/json")
 
 	tests := []struct {
 		description   string
