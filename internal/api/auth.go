@@ -123,8 +123,11 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 			return ctx, forbiddenError(ErrorCodeBadJWT, "invalid claim: session_id claim must be a UUID").WithInternalError(err)
 		}
 		session, err = models.FindSessionByID(db, sessionId, false)
-		if err != nil && !models.IsNotFoundError(err) {
-			return ctx, forbiddenError(ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist")
+		if err != nil {
+			if models.IsNotFoundError(err) {
+				return ctx, forbiddenError(ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist")
+			}
+			return ctx, err
 		}
 		ctx = withSession(ctx, session)
 	}

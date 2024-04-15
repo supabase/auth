@@ -158,6 +158,19 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 			ExpectedUser:    u,
 			ExpectedSession: s,
 		},
+		{
+			Desc: "Session ID doesn't exist",
+			UserJwtClaims: &AccessTokenClaims{
+				StandardClaims: jwt.StandardClaims{
+					Subject: u.ID.String(),
+				},
+				Role:      "authenticated",
+				SessionId: "73bf9ee0-9e8c-453b-b484-09cb93e2f341",
+			},
+			ExpectedError:   forbiddenError(ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist"),
+			ExpectedUser:    u,
+			ExpectedSession: nil,
+		},
 	}
 
 	for _, c := range cases {
