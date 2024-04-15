@@ -145,7 +145,7 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 			return nil, internalServerError("Invalid Content-Type header")
 		}
 		if mediaType != "application/json" {
-			return nil, internalServerError("Expected JSON response from hook, received: " + contentType)
+			return nil, internalServerError("Invalid JSON response. Received content-type: " + contentType)
 		}
 
 		switch rsp.StatusCode {

@@ -155,6 +155,35 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 	require.True(ts.T(), gock.IsDone(), "Expected all mocks to have been called including retry")
 }
 
+func (ts *HooksTestSuite) TestShouldReturnErrorForNonJSONContentType() {
+	defer gock.OffAll()
+
+	input := hooks.SendSMSInput{
+		UserID: uuid.Must(uuid.NewV4()),
+		Phone:  "1234567890",
+		OTP:    "123456",
+	}
+	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
+	ts.Config.Hook.SendSMS.URI = testURL
+
+	gock.New(testURL).
+		Post("/").
+		MatchType("json").
+		Reply(http.StatusOK).
+		SetHeader("content-type", "text/plain")
+
+	var output hooks.SendSMSOutput
+
+	req, err := http.NewRequest("POST", "http://localhost:9999/otp", nil)
+	require.NoError(ts.T(), err)
+
+	_, err = ts.API.runHTTPHook(req, ts.Config.Hook.SendSMS, &input, &output)
+	require.Error(ts.T(), err, "Expected an error due to wrong content type")
+	require.Contains(ts.T(), err.Error(), "Invalid JSON response.")
+
+	require.True(ts.T(), gock.IsDone(), "Expected all mocks to have been called")
+}
+
 func (ts *HooksTestSuite) TestInvokeHookIntegration() {
 	// We use the Send Email Hook as illustration
 	defer gock.OffAll()
