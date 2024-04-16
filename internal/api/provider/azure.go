@@ -39,9 +39,14 @@ type azureProvider struct {
 }
 
 var azureIssuerRegexp = regexp.MustCompile("^https://login[.]microsoftonline[.]com/([^/]+)/v2[.]0/?$")
+var azureCIAMIssuerRegexp = regexp.MustCompile("^https://[a-z0-9-]+[.]ciamlogin[.]com/([^/]+)/v2[.]0/?$")
 
 func IsAzureIssuer(issuer string) bool {
 	return azureIssuerRegexp.MatchString(issuer)
+}
+
+func IsAzureCIAMIssuer(issuer string) bool {
+	return azureCIAMIssuerRegexp.MatchString(issuer)
 }
 
 // NewAzureProvider creates a Azure account provider.
@@ -62,7 +67,7 @@ func NewAzureProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	if ext.URL != "" {
 		expectedIssuer = authHost + "/v2.0"
 
-		if !IsAzureIssuer(expectedIssuer) || expectedIssuer == IssuerAzureCommon || expectedIssuer == IssuerAzureOrganizations {
+		if !IsAzureIssuer(expectedIssuer) || !IsAzureCIAMIssuer(expectedIssuer) || expectedIssuer == IssuerAzureCommon || expectedIssuer == IssuerAzureOrganizations {
 			// in tests, the URL is a local server which should not
 			// be the expected issuer
 			// also, IssuerAzure (common) never actually issues any
@@ -121,7 +126,10 @@ func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 			return nil, err
 		}
 
-		if !IsAzureIssuer(issuer) {
+		// Allow basic Azure issuers, except when the expected issuer
+		// is configured to be the Azure CIAM issuer, allow CIAM
+		// issuers to pass.
+		if !IsAzureIssuer(issuer) || (IsAzureCIAMIssuer(g.ExpectedIssuer) && !IsAzureCIAMIssuer(issuer)) {
 			return nil, fmt.Errorf("azure: ID token issuer not valid %q", issuer)
 		}
 
