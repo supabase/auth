@@ -64,6 +64,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 				reason = ErrorCodeOverSMSSendRateLimit
 			}
 
+			// TODO: convert this
 			return tooManyRequestsError(reason, "For security purposes, you can only request this once every 60 seconds")
 		}
 		return err

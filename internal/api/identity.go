@@ -106,6 +106,7 @@ func (a *API) LinkIdentity(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *storage.Connection, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
+	config := a.config
 	targetUser := getTargetUser(ctx)
 	identity, terr := models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType)
 	if terr != nil {
@@ -133,7 +134,7 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 		if !userData.Metadata.EmailVerified {
 			if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
 				if errors.Is(terr, MaxFrequencyLimitError) {
-					return nil, tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "For security purposes, you can only request this once every minute")
+					return nil, tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(targetUser.ConfirmationSentAt, config.Sms.MaxFrequency))
 				}
 			}
 			return nil, storage.NewCommitWithError(unprocessableEntityError(ErrorCodeEmailNotConfirmed, "Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType))

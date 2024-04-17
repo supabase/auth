@@ -32,6 +32,7 @@ func (p *RecoverParams) Validate() error {
 // Recover sends a recovery email
 func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	config := a.config
 	db := a.db.WithContext(ctx)
 	params := &RecoverParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
@@ -68,7 +69,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {
-			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "For security purposes, you can only request this once every 60 seconds")
+			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(user.RecoverySentAt, config.SMTP.MaxFrequency))
 		}
 		return internalServerError("Unable to process request").WithInternalError(err)
 	}

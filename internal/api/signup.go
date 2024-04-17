@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -246,9 +245,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}
 				if terr = a.sendConfirmation(r, tx, user, flowType); terr != nil {
 					if errors.Is(terr, MaxFrequencyLimitError) {
-						now := time.Now()
-						left := user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency).Sub(now) / time.Second
-						return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, fmt.Sprintf("For security purposes, you can only request this after %d seconds.", left))
+						return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(user.ConfirmationSentAt, config.SMTP.MaxFrequency))
 					}
 					return internalServerError("Error sending confirmation mail").WithInternalError(terr)
 				}
@@ -284,13 +281,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
-		reason := ErrorCodeOverEmailSendRateLimit
-		if params.Provider == "phone" {
-			reason = ErrorCodeOverSMSSendRateLimit
-		}
-
 		if errors.Is(err, MaxFrequencyLimitError) {
-			return tooManyRequestsError(reason, "For security purposes, you can only request this once every minute")
+			if params.Provider == "phone" {
+				return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(user.ConfirmationSentAt, config.Sms.MaxFrequency))
+			}
+			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(user.ConfirmationSentAt, config.SMTP.MaxFrequency))
 		} else if errors.Is(err, UserExistsError) {
 			err = db.Transaction(func(tx *storage.Connection) error {
 				if terr := models.NewAuditLogEntry(r, tx, user, models.UserRepeatedSignUpAction, "", map[string]interface{}{

@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
@@ -154,12 +153,15 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {
 			reason := ErrorCodeOverEmailSendRateLimit
-			if params.Type == smsVerification || params.Type == phoneChangeVerification {
+			if params.Type == smsVerification {
 				reason = ErrorCodeOverSMSSendRateLimit
+				return tooManyRequestsError(reason, generateFrequencyLimitErrorMessage(user.ConfirmationSentAt, config.Sms.MaxFrequency))
+			} else if params.Type == phoneChangeVerification {
+				reason = ErrorCodeOverSMSSendRateLimit
+				return tooManyRequestsError(reason, generateFrequencyLimitErrorMessage(user.PhoneChangeSentAt, config.Sms.MaxFrequency))
 			}
 
-			until := time.Until(user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency)) / time.Second
-			return tooManyRequestsError(reason, "For security purposes, you can only request this once every %d seconds.", until)
+			return tooManyRequestsError(reason, generateFrequencyLimitErrorMessage(user.ConfirmationSentAt, config.SMTP.MaxFrequency))
 		}
 		return internalServerError("Unable to process request").WithInternalError(err)
 	}
