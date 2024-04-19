@@ -123,7 +123,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHub_PKCE() {
 			require.NoError(ts.T(), err)
 			require.NotEmpty(ts.T(), authCode)
 
-			// Check for valid provider access token, mock does not return refresh toekn
+			// Check for valid provider access token, mock does not return refresh token
 			user, err := models.FindUserByEmailAndAudience(ts.API.db, "github@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 			require.NotEmpty(ts.T(), user)
@@ -276,7 +276,7 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenVerifiedFalse() {
 
 	u := performAuthorization(ts, "github", code, "")
 
-	assertAuthorizationFailure(ts, u, "Unverified email with github. A confirmation email has been sent to your github email", "unauthorized_client", "")
+	assertAuthorizationFailure(ts, u, "Unverified email with github. A confirmation email has been sent to your github email", "access_denied", "")
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenUserBanned() {
@@ -296,5 +296,5 @@ func (ts *ExternalTestSuite) TestSignupExternalGitHubErrorWhenUserBanned() {
 	require.NoError(ts.T(), ts.API.db.UpdateOnly(user, "banned_until"))
 
 	u = performAuthorization(ts, "github", code, "")
-	assertAuthorizationFailure(ts, u, "User is unauthorized", "unauthorized_client", "")
+	assertAuthorizationFailure(ts, u, "User is banned", "access_denied", "")
 }

@@ -9,6 +9,11 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gofrs/uuid"
+	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
 
 	"github.com/pkg/errors"
 )
@@ -40,4 +45,27 @@ func GenerateOtp(digits int) (string, error) {
 }
 func GenerateTokenHash(emailOrPhone, otp string) string {
 	return fmt.Sprintf("%x", sha256.Sum224([]byte(emailOrPhone+otp)))
+}
+
+func GenerateSignatures(secrets []string, msgID uuid.UUID, currentTime time.Time, inputPayload []byte) ([]string, error) {
+	SymmetricSignaturePrefix := "v1,"
+	// TODO(joel): Handle asymmetric case once library has been upgraded
+	var signatureList []string
+	for _, secret := range secrets {
+		if strings.HasPrefix(secret, SymmetricSignaturePrefix) {
+			trimmedSecret := strings.TrimPrefix(secret, SymmetricSignaturePrefix)
+			wh, err := standardwebhooks.NewWebhook(trimmedSecret)
+			if err != nil {
+				return nil, err
+			}
+			signature, err := wh.Sign(msgID.String(), currentTime, inputPayload)
+			if err != nil {
+				return nil, err
+			}
+			signatureList = append(signatureList, signature)
+		} else {
+			return nil, errors.New("invalid signature format")
+		}
+	}
+	return signatureList, nil
 }

@@ -20,7 +20,7 @@ func (a *API) adminAuditLog(w http.ResponseWriter, r *http.Request) error {
 	// aud := a.requestAud(ctx, r)
 	pageParams, err := paginate(r)
 	if err != nil {
-		return badRequestError("Bad Pagination Parameters: %v", err)
+		return badRequestError(ErrorCodeValidationFailed, "Bad Pagination Parameters: %v", err)
 	}
 
 	var col []string
@@ -31,7 +31,7 @@ func (a *API) adminAuditLog(w http.ResponseWriter, r *http.Request) error {
 		qparts := strings.SplitN(q, ":", 2)
 		col, exists = filterColumnMap[qparts[0]]
 		if !exists || len(qparts) < 2 {
-			return badRequestError("Invalid query scope: %s", q)
+			return badRequestError(ErrorCodeValidationFailed, "Invalid query scope: %s", q)
 		}
 		qval = qparts[1]
 	}

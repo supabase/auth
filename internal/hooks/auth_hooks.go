@@ -3,6 +3,7 @@ package hooks
 import (
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt"
+	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -21,6 +22,10 @@ const (
 const (
 	HookRejection = "reject"
 )
+
+type HTTPHookInput interface {
+	IsHTTPHook()
+}
 
 type HookOutput interface {
 	IsError() bool
@@ -97,6 +102,7 @@ type AccessTokenClaims struct {
 	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
 	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
+	IsAnonymous                   bool                   `json:"is_anonymous"`
 }
 
 type MFAVerificationAttemptInput struct {
@@ -134,6 +140,27 @@ type CustomAccessTokenOutput struct {
 	HookError AuthHookError          `json:"error,omitempty"`
 }
 
+type SendSMSInput struct {
+	UserID uuid.UUID `json:"user_id"`
+	Phone  string    `json:"phone"`
+	OTP    string    `json:"otp"`
+}
+
+type SendSMSOutput struct {
+	Success   bool          `json:"success"`
+	HookError AuthHookError `json:"error,omitempty"`
+}
+
+type SendEmailInput struct {
+	User      *models.User     `json:"user"`
+	EmailData mailer.EmailData `json:"email_data"`
+}
+
+type SendEmailOutput struct {
+	Success   bool          `json:"success"`
+	HookError AuthHookError `json:"error,omitempty"`
+}
+
 func (mf *MFAVerificationAttemptOutput) IsError() bool {
 	return mf.HookError.Message != ""
 }
@@ -156,6 +183,22 @@ func (ca *CustomAccessTokenOutput) IsError() bool {
 
 func (ca *CustomAccessTokenOutput) Error() string {
 	return ca.HookError.Message
+}
+
+func (cs *SendSMSOutput) IsError() bool {
+	return cs.HookError.Message != ""
+}
+
+func (cs *SendSMSOutput) Error() string {
+	return cs.HookError.Message
+}
+
+func (cs *SendEmailOutput) IsError() bool {
+	return cs.HookError.Message != ""
+}
+
+func (cs *SendEmailOutput) Error() string {
+	return cs.HookError.Message
 }
 
 type AuthHookError struct {

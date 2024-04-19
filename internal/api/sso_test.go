@@ -277,7 +277,7 @@ func (ts *SSOTestSuite) TestAdminCreateSSOProvider() {
 			},
 		},
 		{
-			StatusCode: http.StatusBadRequest,
+			StatusCode: http.StatusUnprocessableEntity,
 			Request: map[string]interface{}{
 				"type":         "saml",
 				"metadata_xml": validSAMLIDPMetadata("https://accounts.google.com/o/saml2?idpid=EXAMPLE-DUPLICATE"),

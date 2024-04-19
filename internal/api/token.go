@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -34,6 +33,7 @@ type AccessTokenClaims struct {
 	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
 	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
+	IsAnonymous                   bool                   `json:"is_anonymous"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -100,38 +100,33 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	db := a.db.WithContext(ctx)
 
 	params := &PasswordGrantParams{}
-
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read password grant params: %v", err)
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
 	aud := a.requestAud(ctx, r)
 	config := a.config
 
 	if params.Email != "" && params.Phone != "" {
-		return unprocessableEntityError("Only an email address or phone number should be provided on login.")
+		return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided on login.")
 	}
 	var user *models.User
 	var grantParams models.GrantParams
 	var provider string
+	var err error
 
 	grantParams.FillGrantParams(r)
 
 	if params.Email != "" {
 		provider = "email"
 		if !config.External.Email.Enabled {
-			return badRequestError("Email logins are disabled")
+			return unprocessableEntityError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 		}
 		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 	} else if params.Phone != "" {
 		provider = "phone"
 		if !config.External.Phone.Enabled {
-			return badRequestError("Phone logins are disabled")
+			return unprocessableEntityError(ErrorCodePhoneProviderDisabled, "Phone logins are disabled")
 		}
 		params.Phone = formatPhoneNumber(params.Phone)
 		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
@@ -169,7 +164,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			Valid:  isValidPassword,
 		}
 		output := hooks.PasswordVerificationAttemptOutput{}
-		err := a.invokeHook(ctx, &input, &output)
+		err := a.invokeHook(nil, r, &input, &output, a.config.Hook.PasswordVerificationAttempt.URI)
 		if err != nil {
 			return err
 		}
@@ -183,7 +178,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 					return err
 				}
 			}
-			return forbiddenError(output.Message)
+			return oauthError("invalid_grant", InvalidLoginMessage)
 		}
 	}
 	if !isValidPassword {
@@ -204,7 +199,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		}); terr != nil {
 			return terr
 		}
-		token, terr = a.issueRefreshToken(ctx, tx, user, models.PasswordGrant, grantParams)
+		token, terr = a.issueRefreshToken(r, tx, user, models.PasswordGrant, grantParams)
 		if terr != nil {
 			return terr
 		}
@@ -235,28 +230,23 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	grantParams.FillGrantParams(r)
 
 	params := &PKCEGrantParams{}
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return internalServerError("Could not read body").WithInternalError(err)
-	}
-
-	if err = json.Unmarshal(body, params); err != nil {
-		return badRequestError("invalid body: unable to parse JSON").WithInternalError(err)
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
 	if params.AuthCode == "" || params.CodeVerifier == "" {
-		return badRequestError("invalid request: both auth code and code verifier should be non-empty")
+		return badRequestError(ErrorCodeValidationFailed, "invalid request: both auth code and code verifier should be non-empty")
 	}
 
 	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
 	// Sanity check in case user ID was not set properly
 	if models.IsNotFoundError(err) || flowState.UserID == nil {
-		return forbiddenError("invalid flow state, no valid flow state found")
+		return notFoundError(ErrorCodeFlowStateNotFound, "invalid flow state, no valid flow state found")
 	} else if err != nil {
 		return err
 	}
 	if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
-		return forbiddenError("invalid flow state, flow state has expired")
+		return unprocessableEntityError(ErrorCodeFlowStateExpired, "invalid flow state, flow state has expired")
 	}
 
 	user, err := models.FindUserByID(db, *flowState.UserID)
@@ -264,7 +254,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 	if err := flowState.VerifyPKCE(params.CodeVerifier); err != nil {
-		return forbiddenError(err.Error())
+		return badRequestError(ErrorBadCodeVerifier, err.Error())
 	}
 
 	var token *AccessTokenResponse
@@ -279,7 +269,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		}); terr != nil {
 			return terr
 		}
-		token, terr = a.issueRefreshToken(ctx, tx, user, authMethod, grantParams)
+		token, terr = a.issueRefreshToken(r, tx, user, authMethod, grantParams)
 		if terr != nil {
 			return oauthError("server_error", terr.Error())
 		}
@@ -301,20 +291,19 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, int64, error) {
+func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, int64, error) {
 	config := a.config
-	aal, amr := models.AAL1.String(), []models.AMREntry{}
-	sid := ""
-	if sessionId != nil {
-		sid = sessionId.String()
-		session, terr := models.FindSessionByID(tx, *sessionId, false)
-		if terr != nil {
-			return "", 0, terr
-		}
-		aal, amr, terr = session.CalculateAALAndAMR(user)
-		if terr != nil {
-			return "", 0, terr
-		}
+	if sessionId == nil {
+		return "", 0, internalServerError("Session is required to issue access token")
+	}
+	sid := sessionId.String()
+	session, terr := models.FindSessionByID(tx, *sessionId, false)
+	if terr != nil {
+		return "", 0, terr
+	}
+	aal, amr, terr := session.CalculateAALAndAMR(user)
+	if terr != nil {
+		return "", 0, terr
 	}
 
 	issuedAt := time.Now().UTC()
@@ -334,8 +323,9 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 		UserMetaData:                  user.UserMetaData,
 		Role:                          user.Role,
 		SessionId:                     sid,
-		AuthenticatorAssuranceLevel:   aal,
+		AuthenticatorAssuranceLevel:   aal.String(),
 		AuthenticationMethodReference: amr,
+		IsAnonymous:                   user.IsAnonymous,
 	}
 
 	var token *jwt.Token
@@ -348,7 +338,7 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 
 		output := hooks.CustomAccessTokenOutput{}
 
-		err := a.invokeHook(ctx, &input, &output)
+		err := a.invokeHook(tx, r, &input, &output, a.config.Hook.CustomAccessToken.URI)
 		if err != nil {
 			return "", 0, err
 		}
@@ -376,7 +366,7 @@ func (a *API) generateAccessToken(ctx context.Context, tx *storage.Connection, u
 	return signed, expiresAt, nil
 }
 
-func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
+func (a *API) issueRefreshToken(r *http.Request, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 	config := a.config
 
 	now := time.Now()
@@ -399,7 +389,7 @@ func (a *API) issueRefreshToken(ctx context.Context, conn *storage.Connection, u
 			return terr
 		}
 
-		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, refreshToken.SessionId, authenticationMethod)
+		tokenString, expiresAt, terr = a.generateAccessToken(r, tx, user, refreshToken.SessionId, authenticationMethod)
 		if terr != nil {
 			// Account for Hook Error
 			httpErr, ok := terr.(*HTTPError)
@@ -435,6 +425,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 	if err != nil {
 		return nil, internalServerError("Cannot read SessionId claim as UUID").WithInternalError(err)
 	}
+
 	err = tx.Transaction(func(tx *storage.Connection) error {
 		if terr := models.AddClaimToSession(tx, sessionId, authenticationMethod); terr != nil {
 			return terr
@@ -460,14 +451,11 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return terr
 		}
 
-		if err := session.UpdateAssociatedFactor(tx, grantParams.FactorID); err != nil {
-			return err
-		}
-		if err := session.UpdateAssociatedAAL(tx, aal); err != nil {
+		if err := session.UpdateAALAndAssociatedFactor(tx, aal, grantParams.FactorID); err != nil {
 			return err
 		}
 
-		tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, &sessionId, models.TOTPSignIn)
+		tokenString, expiresAt, terr = a.generateAccessToken(r, tx, user, &session.ID, models.TOTPSignIn)
 		if terr != nil {
 			httpErr, ok := terr.(*HTTPError)
 			if ok {

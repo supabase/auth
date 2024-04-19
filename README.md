@@ -12,7 +12,7 @@ Auth is a user management and authentication server written in Go that powers
 - Sign in with external providers (Google, Apple, Facebook, Discord, ...)
 
 It is originally based on the excellent
-[Auth codebase by Netlify](https://github.com/netlify/auth), however both have diverged significantly in features and capabilities.
+[GoTrue codebase by Netlify](https://github.com/netlify/gotrue), however both have diverged significantly in features and capabilities.
 
 If you wish to contribute to the project, please refer to the [contributing guide](/CONTRIBUTING.md).
 
@@ -660,7 +660,6 @@ Default Content (if template is unavailable):
 <p><a href="{{ .ConfirmationURL }}">Change Email</a></p>
 ```
 
-
 ### Phone Auth
 
 `SMS_AUTOCONFIRM` - `bool`
@@ -716,6 +715,12 @@ Retrieve from hcaptcha or turnstile account
 `SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` - `bool`
 
 Enforce reauthentication on password update.
+
+### Anonymous Sign-Ins
+
+`GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED` - `bool`
+
+Use this to enable/disable anonymous sign-ins.
 
 ## Endpoints
 

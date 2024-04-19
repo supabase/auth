@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	mathRand "math/rand"
 	"net/http"
 	"time"
@@ -26,14 +25,8 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	config := a.config
 
 	params := &RefreshTokenGrantParams{}
-
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read refresh token grant params: %v", err)
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
 	if params.RefreshToken == "" {
@@ -217,7 +210,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				issuedToken = newToken
 			}
 
-			tokenString, expiresAt, terr = a.generateAccessToken(ctx, tx, user, issuedToken.SessionId, models.TokenRefresh)
+			tokenString, expiresAt, terr = a.generateAccessToken(r, tx, user, issuedToken.SessionId, models.TokenRefresh)
 			if terr != nil {
 				httpErr, ok := terr.(*HTTPError)
 				if ok {
@@ -261,12 +254,6 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 			return nil
 		})
-		if err == nil {
-			// success
-			metering.RecordLogin("token", user.ID)
-			return sendJSON(w, http.StatusOK, newTokenResponse)
-		}
-
 		if err != nil {
 			if retry && models.IsNotFoundError(err) {
 				// refresh token and session row were likely locked, so
@@ -278,6 +265,8 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				return err
 			}
 		}
+		metering.RecordLogin("token", user.ID)
+		return sendJSON(w, http.StatusOK, newTokenResponse)
 	}
 
 	return conflictError("Too many concurrent token refresh requests on the same session or refresh token")

@@ -558,7 +558,7 @@ func (ts *AdminTestSuite) TestAdminUserDelete() {
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
 			u, err := signupParams.ToUserModel(false /* <- isSSOUser */)
 			require.NoError(ts.T(), err)
-			u, err = ts.API.signupNewUser(context.Background(), ts.API.db, u)
+			u, err = ts.API.signupNewUser(ts.API.db, u)
 			require.NoError(ts.T(), err)
 
 			// Setup request

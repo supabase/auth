@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	mail "github.com/supabase/auth/internal/mailer"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -132,7 +133,7 @@ func (ts *SignupTestSuite) TestVerifySignup() {
 	require.NoError(ts.T(), err)
 
 	// Setup request
-	reqUrl := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", signupVerification, u.ConfirmationToken)
+	reqUrl := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.SignupVerification, u.ConfirmationToken)
 	req := httptest.NewRequest(http.MethodGet, reqUrl, nil)
 
 	// Setup response recorder

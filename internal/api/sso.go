@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/crewjam/saml"
@@ -28,9 +27,9 @@ func (p *SingleSignOnParams) validate() (bool, error) {
 	hasDomain := p.Domain != ""
 
 	if hasProviderID && hasDomain {
-		return hasProviderID, badRequestError("Only one of provider_id or domain supported")
+		return hasProviderID, badRequestError(ErrorCodeValidationFailed, "Only one of provider_id or domain supported")
 	} else if !hasProviderID && !hasDomain {
-		return hasProviderID, badRequestError("A provider_id or domain needs to be provided")
+		return hasProviderID, badRequestError(ErrorCodeValidationFailed, "A provider_id or domain needs to be provided")
 	}
 
 	return hasProviderID, nil
@@ -41,17 +40,12 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return internalServerError("Unable to read request body").WithInternalError(err)
+	params := &SingleSignOnParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
-	var params SingleSignOnParams
-
-	if err := json.Unmarshal(body, &params); err != nil {
-		return badRequestError("Unable to parse request body as JSON").WithInternalError(err)
-	}
-
+	var err error
 	hasProviderID := false
 
 	if hasProviderID, err = params.validate(); err != nil {
@@ -66,16 +60,9 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	flowType := getFlowFromChallenge(params.CodeChallenge)
 	var flowStateID *uuid.UUID
 	flowStateID = nil
-	if flowType == models.PKCEFlow {
-		codeChallengeMethodType, err := models.ParseCodeChallengeMethod(codeChallengeMethod)
+	if isPKCEFlow(flowType) {
+		flowState, err := generateFlowState(db, models.SSOSAML.String(), models.SSOSAML, codeChallengeMethod, codeChallenge, nil)
 		if err != nil {
-			return err
-		}
-		flowState, err := models.NewFlowState(models.SSOSAML.String(), codeChallenge, codeChallengeMethodType, models.SSOSAML)
-		if err != nil {
-			return err
-		}
-		if err := a.db.Create(flowState); err != nil {
 			return err
 		}
 		flowStateID = &flowState.ID
@@ -86,14 +73,14 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	if hasProviderID {
 		ssoProvider, err = models.FindSSOProviderByID(db, params.ProviderID)
 		if models.IsNotFoundError(err) {
-			return notFoundError("No such SSO provider")
+			return notFoundError(ErrorCodeSSOProviderNotFound, "No such SSO provider")
 		} else if err != nil {
 			return internalServerError("Unable to find SSO provider by ID").WithInternalError(err)
 		}
 	} else {
 		ssoProvider, err = models.FindSSOProviderByDomain(db, params.Domain)
 		if models.IsNotFoundError(err) {
-			return notFoundError("No SSO provider assigned for this domain")
+			return notFoundError(ErrorCodeSSOProviderNotFound, "No SSO provider assigned for this domain")
 		} else if err != nil {
 			return internalServerError("Unable to find SSO provider by domain").WithInternalError(err)
 		}
@@ -104,8 +91,6 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Error parsing SAML Metadata for SAML provider").WithInternalError(err)
 	}
 
-	// TODO: fetch new metadata if validUntil < time.Now()
-
 	serviceProvider := a.getSAMLServiceProvider(entityDescriptor, false /* <- idpInitiated */)
 
 	authnRequest, err := serviceProvider.MakeAuthenticationRequest(
@@ -115,6 +100,12 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	)
 	if err != nil {
 		return internalServerError("Error creating SAML Authentication Request").WithInternalError(err)
+	}
+
+	// Some IdPs do not support the use of the `persistent` NameID format,
+	// and require a different format to be sent to work.
+	if ssoProvider.SAMLProvider.NameIDFormat != nil {
+		authnRequest.NameIDPolicy.Format = ssoProvider.SAMLProvider.NameIDFormat
 	}
 
 	relayState := models.SAMLRelayState{

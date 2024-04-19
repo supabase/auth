@@ -105,7 +105,7 @@ func RevokeTokenFamily(tx *storage.Connection, token *RefreshToken) error {
 
 func FindTokenBySessionID(tx *storage.Connection, sessionId *uuid.UUID) (*RefreshToken, error) {
 	refreshToken := &RefreshToken{}
-	err := tx.Q().Where("session_id = ?", sessionId).Order("created_at asc").First(refreshToken)
+	err := tx.Q().Where("instance_id = ? and session_id = ?", uuid.Nil, sessionId).Order("created_at asc").First(refreshToken)
 	if err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, RefreshTokenNotFoundError{}
@@ -163,10 +163,4 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 		return nil, errors.Wrap(err, "error update user`s last_sign_in field")
 	}
 	return token, nil
-}
-
-// Deprecated. For backward compatibility, some access tokens may not have a sessionId. Use models.Logout instead.
-// LogoutAllRefreshTokens deletes all sessions for a user.
-func LogoutAllRefreshTokens(tx *storage.Connection, userId uuid.UUID) error {
-	return tx.RawQuery("DELETE FROM "+(&pop.Model{Value: RefreshToken{}}).TableName()+" WHERE user_id = ?", userId).Exec()
 }

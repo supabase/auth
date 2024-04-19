@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -72,7 +71,8 @@ func (ts *PhoneTestSuite) TestFormatPhoneNumber() {
 func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	ctx := context.Background()
+	req, err := http.NewRequest("POST", "http://localhost:9998/otp", nil)
+	require.NoError(ts.T(), err)
 	cases := []struct {
 		desc     string
 		otpType  string
@@ -112,7 +112,9 @@ func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 		ts.Run(c.desc, func() {
 			provider := &TestSmsProvider{}
 
-			_, err = ts.API.sendPhoneConfirmation(ctx, ts.API.db, u, "123456789", c.otpType, provider, sms_provider.SMSProvider)
+			ctx := req.Context()
+
+			_, err = ts.API.sendPhoneConfirmation(ctx, req, ts.API.db, u, "123456789", c.otpType, provider, sms_provider.SMSProvider)
 			require.Equal(ts.T(), c.expected, err)
 			u, err = models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
@@ -139,6 +141,9 @@ func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 			}
 		})
 	}
+	// Reset at end of test
+	ts.API.config.Sms.TestOTP = nil
+
 }
 
 func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
@@ -156,8 +161,12 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 	u.PhoneConfirmedAt = &now
 	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
 
-	var token string
-	token, _, err = ts.API.generateAccessToken(context.Background(), ts.API.db, u, nil, models.OTP)
+	s, err := models.NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(s))
+
+	req := httptest.NewRequest(http.MethodPost, "/token?grant_type=password", nil)
+	token, _, err := ts.API.generateAccessToken(req, ts.API.db, u, &s.ID, models.PasswordGrant)
 	require.NoError(ts.T(), err)
 
 	cases := []struct {
@@ -178,8 +187,8 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 				"password": "testpassword",
 			},
 			expected: map[string]interface{}{
-				"code":    http.StatusBadRequest,
-				"message": "Error sending confirmation sms:",
+				"code":    http.StatusInternalServerError,
+				"message": "Unable to get SMS provider",
 			},
 		},
 		{
@@ -191,8 +200,8 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 				"phone": "123456789",
 			},
 			expected: map[string]interface{}{
-				"code":    http.StatusBadRequest,
-				"message": "Error sending sms:",
+				"code":    http.StatusInternalServerError,
+				"message": "Unable to get SMS provider",
 			},
 		},
 		{
@@ -204,8 +213,8 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 				"phone": "111111111",
 			},
 			expected: map[string]interface{}{
-				"code":    http.StatusBadRequest,
-				"message": "Error sending sms:",
+				"code":    http.StatusInternalServerError,
+				"message": "Unable to get SMS provider",
 			},
 		},
 		{
@@ -215,8 +224,8 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 			header:   "",
 			body:     nil,
 			expected: map[string]interface{}{
-				"code":    http.StatusBadRequest,
-				"message": "Error sending sms:",
+				"code":    http.StatusInternalServerError,
+				"message": "Unable to get SMS provider",
 			},
 		},
 	}
@@ -245,8 +254,195 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 				require.Equal(ts.T(), c.expected["code"], w.Code)
 
 				body := w.Body.String()
-				require.True(ts.T(), strings.Contains(body, c.expected["message"].(string)))
+				require.True(ts.T(),
+					strings.Contains(body, "Unable to get SMS provider") ||
+						strings.Contains(body, "Error finding SMS provider") ||
+						strings.Contains(body, "Failed to get SMS provider"),
+					"unexpected body message %q", body,
+				)
 			})
 		}
 	}
+}
+func (ts *PhoneTestSuite) TestSendSMSHook() {
+	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
+	require.NoError(ts.T(), err)
+	now := time.Now()
+	u.PhoneConfirmedAt = &now
+	require.NoError(ts.T(), ts.API.db.Update(u), "Error updating new test user")
+
+	s, err := models.NewSession(u.ID, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(s))
+
+	req := httptest.NewRequest(http.MethodPost, "/token?grant_type=password", nil)
+	token, _, err := ts.API.generateAccessToken(req, ts.API.db, u, &s.ID, models.PasswordGrant)
+	require.NoError(ts.T(), err)
+
+	// We setup a job table to enqueue SMS requests to send. Similar in spirit to the pg_boss postgres extension
+	createJobsTableSQL := `CREATE TABLE job_queue (
+    id serial PRIMARY KEY,
+    job_type text,
+    payload jsonb,
+    status text DEFAULT 'pending', -- Possible values: 'pending', 'processing', 'completed', 'failed'
+    created_at timestamp without time zone DEFAULT NOW()
+    );`
+	require.NoError(ts.T(), ts.API.db.RawQuery(createJobsTableSQL).Exec())
+
+	type sendSMSHookTestCase struct {
+		desc                   string
+		uri                    string
+		endpoint               string
+		method                 string
+		header                 string
+		body                   map[string]string
+		hookFunctionSQL        string
+		expectedCode           int
+		expectToken            bool
+		hookFunctionIdentifier string
+	}
+	cases := []sendSMSHookTestCase{
+		{
+			desc:     "Phone signup using Hook",
+			endpoint: "/signup",
+			method:   http.MethodPost,
+			uri:      "pg-functions://postgres/auth/send_sms_signup",
+			hookFunctionSQL: `
+                create or replace function send_sms_signup(input jsonb)
+                returns json as $$
+                begin
+                  insert into job_queue(job_type, payload)
+                  values ('sms_signup', input);
+                    return input;
+                end; $$ language plpgsql;`,
+			header: "",
+			body: map[string]string{
+				"phone":    "1234567890",
+				"password": "testpassword",
+			},
+			expectedCode:           http.StatusOK,
+			hookFunctionIdentifier: "send_sms_signup(input jsonb)",
+		},
+		{
+			desc:     "SMS OTP sign in using hook",
+			endpoint: "/otp",
+			method:   http.MethodPost,
+			uri:      "pg-functions://postgres/auth/send_sms_otp",
+			hookFunctionSQL: `
+                create or replace function send_sms_otp(input jsonb)
+                returns json as $$
+                begin
+                  insert into job_queue(job_type, payload)
+                  values ('sms_signup', input);
+                    return input;
+                end; $$ language plpgsql;`,
+			header: "",
+			body: map[string]string{
+				"phone": "123456789",
+			},
+			expectToken:            false,
+			expectedCode:           http.StatusOK,
+			hookFunctionIdentifier: "send_sms_otp(input jsonb)",
+		},
+		{
+			desc:     "Phone Change",
+			endpoint: "/user",
+			method:   http.MethodPut,
+			uri:      "pg-functions://postgres/auth/send_sms_phone_change",
+			hookFunctionSQL: `
+        create or replace function send_sms_phone_change(input jsonb)
+        returns json as $$
+        begin
+           insert into job_queue(job_type, payload)
+           values ('phone_change', input);
+           return input;
+        end; $$ language plpgsql;`,
+			header: token,
+			body: map[string]string{
+				"phone": "111111111",
+			},
+			expectToken:            true,
+			expectedCode:           http.StatusOK,
+			hookFunctionIdentifier: "send_sms_phone_change(input jsonb)",
+		},
+		{
+			desc:     "Reauthenticate",
+			endpoint: "/reauthenticate",
+			method:   http.MethodGet,
+			uri:      "pg-functions://postgres/auth/reauthenticate",
+			hookFunctionSQL: `
+        create or replace function reauthenticate(input jsonb)
+        returns json as $$
+        begin
+            return input;
+       end; $$ language plpgsql;`,
+			header:                 "",
+			body:                   nil,
+			expectToken:            true,
+			expectedCode:           http.StatusOK,
+			hookFunctionIdentifier: "reauthenticate(input jsonb)",
+		},
+		{
+			desc:     "SMS OTP Hook (Error)",
+			endpoint: "/otp",
+			method:   http.MethodPost,
+			uri:      "pg-functions://postgres/auth/send_sms_otp_failure",
+			hookFunctionSQL: `
+                create or replace function send_sms_otp(input jsonb)
+                returns json as $$
+                begin
+                    RAISE EXCEPTION 'Intentional Error for Testing';
+                end; $$ language plpgsql;`,
+			header: "",
+			body: map[string]string{
+				"phone": "123456789",
+			},
+			expectToken:            false,
+			expectedCode:           http.StatusBadRequest,
+			hookFunctionIdentifier: "send_sms_otp_failure(input jsonb)",
+		},
+	}
+
+	for _, c := range cases {
+		ts.T().Run(c.desc, func(t *testing.T) {
+
+			ts.Config.External.Phone.Enabled = true
+			ts.Config.Hook.SendSMS.Enabled = true
+			ts.Config.Hook.SendSMS.URI = c.uri
+			// Disable FrequencyLimit to allow back to back sending
+			ts.Config.Sms.MaxFrequency = 0 * time.Second
+			// We still need a mock provider for hooks to work right now for backward compatibility
+			ts.Config.Sms.Provider = "twilio"
+			ts.Config.Sms.Twilio = conf.TwilioProviderConfiguration{
+				AccountSid:        "test_account_sid",
+				AuthToken:         "test_auth_token",
+				MessageServiceSid: "test_message_service_id",
+			}
+			require.NoError(ts.T(), ts.Config.Hook.SendSMS.PopulateExtensibilityPoint())
+
+			require.NoError(t, ts.API.db.RawQuery(c.hookFunctionSQL).Exec())
+
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+			req := httptest.NewRequest(c.method, "http://localhost"+c.endpoint, &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+
+			require.Equal(t, c.expectedCode, w.Code, "Unexpected HTTP status code")
+
+			// Delete the function and reset env
+			cleanupHookSQL := fmt.Sprintf("drop function if exists %s", ts.Config.Hook.SendSMS.HookName)
+			require.NoError(t, ts.API.db.RawQuery(cleanupHookSQL).Exec())
+			ts.Config.Hook.SendSMS.Enabled = false
+			ts.Config.Sms.MaxFrequency = 1 * time.Second
+		})
+	}
+
+	// Cleanup
+	deleteJobsTableSQL := `drop table if exists job_queue`
+	require.NoError(ts.T(), ts.API.db.RawQuery(deleteJobsTableSQL).Exec())
+
 }

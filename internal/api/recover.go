@@ -1,13 +1,11 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 // RecoverParams holds the parameters for a password recovery request
@@ -19,7 +17,7 @@ type RecoverParams struct {
 
 func (p *RecoverParams) Validate() error {
 	if p.Email == "" {
-		return unprocessableEntityError("Password recovery requires an email")
+		return badRequestError(ErrorCodeValidationFailed, "Password recovery requires an email")
 	}
 	var err error
 	if p.Email, err = validateEmail(p.Email); err != nil {
@@ -35,16 +33,9 @@ func (p *RecoverParams) Validate() error {
 func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
-	config := a.config
 	params := &RecoverParams{}
-
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read verification params: %v", err)
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
 	flowType := getFlowFromChallenge(params.CodeChallenge)
@@ -53,6 +44,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var user *models.User
+	var err error
 	aud := a.requestAud(ctx, r)
 
 	user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
@@ -62,28 +54,21 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		}
 		return internalServerError("Unable to process request").WithInternalError(err)
 	}
+	if isPKCEFlow(flowType) {
+		if _, err := generateFlowState(db, models.Recovery.String(), models.Recovery, params.CodeChallengeMethod, params.CodeChallenge, &(user.ID)); err != nil {
+			return err
+		}
+	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 			return terr
 		}
-		mailer := a.Mailer(ctx)
-		referrer := utilities.GetReferrer(r, config)
-		if isPKCEFlow(flowType) {
-			codeChallengeMethod, terr := models.ParseCodeChallengeMethod(params.CodeChallengeMethod)
-			if terr != nil {
-				return terr
-			}
-			if terr := models.NewFlowStateWithUserID(tx, models.Recovery.String(), params.CodeChallenge, codeChallengeMethod, models.Recovery, &(user.ID)); terr != nil {
-				return terr
-			}
-		}
-		externalURL := getExternalHost(ctx)
-		return a.sendPasswordRecovery(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, flowType)
+		return a.sendPasswordRecovery(r, tx, user, flowType)
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {
-			return tooManyRequestsError("For security purposes, you can only request this once every 60 seconds")
+			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "For security purposes, you can only request this once every 60 seconds")
 		}
 		return internalServerError("Unable to process request").WithInternalError(err)
 	}

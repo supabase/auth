@@ -116,7 +116,7 @@ func (ts *ExternalTestSuite) TestSignupExternalFly_PKCE() {
 			require.NoError(ts.T(), err)
 			require.NotEmpty(ts.T(), authCode)
 
-			// Check for valid provider access token, mock does not return refresh toekn
+			// Check for valid provider access token, mock does not return refresh token
 			user, err := models.FindUserByEmailAndAudience(ts.API.db, "fly@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 			require.NotEmpty(ts.T(), user)
@@ -260,5 +260,5 @@ func (ts *ExternalTestSuite) TestSignupExternalFlyErrorWhenUserBanned() {
 	require.NoError(ts.T(), ts.API.db.UpdateOnly(user, "banned_until"))
 
 	u = performAuthorization(ts, "fly", code, "")
-	assertAuthorizationFailure(ts, u, "User is unauthorized", "unauthorized_client", "")
+	assertAuthorizationFailure(ts, u, "User is banned", "access_denied", "")
 }

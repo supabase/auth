@@ -2,6 +2,7 @@ package mailer
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 
 	"github.com/gofrs/uuid"
@@ -15,12 +16,12 @@ import (
 // Mailer defines the interface a mailer must implement.
 type Mailer interface {
 	Send(user *models.User, subject, body string, data map[string]interface{}) error
-	InviteMail(user *models.User, otp, referrerURL string, externalURL *url.URL) error
-	ConfirmationMail(user *models.User, otp, referrerURL string, externalURL *url.URL) error
-	RecoveryMail(user *models.User, otp, referrerURL string, externalURL *url.URL) error
-	MagicLinkMail(user *models.User, otp, referrerURL string, externalURL *url.URL) error
-	EmailChangeMail(user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error
-	ReauthenticateMail(user *models.User, otp string) error
+	InviteMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	ConfirmationMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	RecoveryMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	MagicLinkMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
+	EmailChangeMail(r *http.Request, user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error
+	ReauthenticateMail(r *http.Request, user *models.User, otp string) error
 	ValidateEmail(email string) error
 	GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error)
 }
@@ -29,6 +30,16 @@ type EmailParams struct {
 	Token      string
 	Type       string
 	RedirectTo string
+}
+
+type EmailData struct {
+	Token           string `json:"token"`
+	TokenHash       string `json:"token_hash"`
+	RedirectTo      string `json:"redirect_to"`
+	EmailActionType string `json:"email_action_type"`
+	SiteURL         string `json:"site_url"`
+	TokenNew        string `json:"token_new"`
+	TokenHashNew    string `json:"token_hash_new"`
 }
 
 // NewMailer returns a new gotrue mailer

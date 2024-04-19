@@ -66,6 +66,7 @@ type User struct {
 	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
 	BannedUntil *time.Time `json:"banned_until,omitempty" db:"banned_until"`
 	DeletedAt   *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
+	IsAnonymous bool       `json:"is_anonymous" db:"is_anonymous"`
 
 	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 }
@@ -229,7 +230,7 @@ func (u *User) UpdateAppMetaDataProviders(tx *storage.Connection) error {
 
 // UpdateUserEmail updates the user's email to one of the identity's email
 // if the current email used doesn't match any of the identities email
-func (u *User) UpdateUserEmail(tx *storage.Connection) error {
+func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
 	identities, terr := FindIdentitiesByUserID(tx, u.ID)
 	if terr != nil {
 		return terr
@@ -246,6 +247,8 @@ func (u *User) UpdateUserEmail(tx *storage.Connection) error {
 	for _, i := range identities {
 		if _, terr := FindUserByEmailAndAudience(tx, i.GetEmail(), u.Aud); terr != nil {
 			if IsNotFoundError(terr) {
+				// the identity's email is not used by another user
+				// so we can set it as the primary identity
 				primaryIdentity = i
 				break
 			}
@@ -258,6 +261,12 @@ func (u *User) UpdateUserEmail(tx *storage.Connection) error {
 	// default to the first identity's email
 	if terr := u.SetEmail(tx, primaryIdentity.GetEmail()); terr != nil {
 		return terr
+	}
+	if primaryIdentity.GetEmail() == "" {
+		u.EmailConfirmedAt = nil
+		if terr := tx.UpdateOnly(u, "email_confirmed_at"); terr != nil {
+			return terr
+		}
 	}
 	return nil
 }
@@ -292,7 +301,20 @@ func (u *User) SetPassword(ctx context.Context, password string) error {
 
 // UpdatePassword updates the user's password. Use SetPassword outside of a transaction first!
 func (u *User) UpdatePassword(tx *storage.Connection, sessionID *uuid.UUID) error {
-	if err := tx.UpdateOnly(u, "encrypted_password"); err != nil {
+	// These need to be reset because password change may mean the user no longer trusts the actions performed by the previous password.
+	u.ConfirmationToken = ""
+	u.ConfirmationSentAt = nil
+	u.RecoveryToken = ""
+	u.RecoverySentAt = nil
+	u.EmailChangeTokenCurrent = ""
+	u.EmailChangeTokenNew = ""
+	u.EmailChangeSentAt = nil
+	u.PhoneChangeToken = ""
+	u.PhoneChangeSentAt = nil
+	u.ReauthenticationToken = ""
+	u.ReauthenticationSentAt = nil
+
+	if err := tx.UpdateOnly(u, "encrypted_password", "confirmation_token", "confirmation_sent_at", "recovery_token", "recovery_sent_at", "email_change_token_current", "email_change_token_new", "email_change_sent_at", "phone_change_token", "phone_change_sent_at", "reauthentication_token", "reauthentication_sent_at"); err != nil {
 		return err
 	}
 
@@ -700,10 +722,12 @@ func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
 
 // RemoveUnconfirmedIdentities removes potentially malicious unconfirmed identities from a user (if any)
 func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection, identity *Identity) error {
-	// user is unconfirmed so the password should be reset
-	u.EncryptedPassword = ""
-	if terr := tx.UpdateOnly(u, "encrypted_password"); terr != nil {
-		return terr
+	if identity.Provider != "email" && identity.Provider != "phone" {
+		// user is unconfirmed so the password should be reset
+		u.EncryptedPassword = ""
+		if terr := tx.UpdateOnly(u, "encrypted_password"); terr != nil {
+			return terr
+		}
 	}
 
 	// user is unconfirmed so existing user_metadata should be overwritten
@@ -713,16 +737,6 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection, identity *Ide
 		return terr
 	}
 
-	// user is unconfirmed so none of the providers associated to it are verified yet
-	// only the current provider should be kept
-	if _, ok := u.AppMetaData["providers"].([]string); ok {
-		u.AppMetaData["providers"] = []string{identity.Provider}
-		u.AppMetaData["provider"] = identity.Provider
-		if terr := u.UpdateAppMetaData(tx, u.AppMetaData); terr != nil {
-			return terr
-		}
-	}
-
 	// finally, remove all identities except the current identity being authenticated
 	for i := range u.Identities {
 		if u.Identities[i].ID != identity.ID {
@@ -730,6 +744,12 @@ func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection, identity *Ide
 				return terr
 			}
 		}
+	}
+
+	// user is unconfirmed so none of the providers associated to it are verified yet
+	// only the current provider should be kept
+	if terr := u.UpdateAppMetaDataProviders(tx); terr != nil {
+		return terr
 	}
 	return nil
 }

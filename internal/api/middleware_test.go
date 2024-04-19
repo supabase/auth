@@ -176,7 +176,7 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 			w := httptest.NewRecorder()
 
 			_, err := ts.API.verifyCaptcha(w, req)
-			require.Equal(ts.T(), c.expectedCode, err.(*HTTPError).Code)
+			require.Equal(ts.T(), c.expectedCode, err.(*HTTPError).HTTPStatus)
 			require.Equal(ts.T(), c.expectedMsg, err.(*HTTPError).Message)
 		})
 	}
@@ -201,8 +201,8 @@ func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
 			},
 		},
 		{
-			desc:             "Sms rate limit exceeded",
-			expectedErrorMsg: "429: Sms rate limit exceeded",
+			desc:             "SMS rate limit exceeded",
+			expectedErrorMsg: "429: SMS rate limit exceeded",
 			requestBody: map[string]interface{}{
 				"phone": "+1233456789",
 			},
@@ -269,7 +269,7 @@ func (ts *MiddlewareTestSuite) TestRequireSAMLEnabled() {
 		{
 			desc:        "SAML not enabled",
 			isEnabled:   false,
-			expectedErr: notFoundError("SAML 2.0 is disabled"),
+			expectedErr: notFoundError(ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled"),
 		},
 		{
 			desc:        "SAML enabled",

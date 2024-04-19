@@ -36,7 +36,7 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 			scope = LogoutOthers
 
 		default:
-			return badRequestError(fmt.Sprintf("Unsupported logout scope %q", r.URL.Query().Get("scope")))
+			return badRequestError(ErrorCodeValidationFailed, fmt.Sprintf("Unsupported logout scope %q", r.URL.Query().Get("scope")))
 		}
 	}
 
@@ -46,10 +46,6 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 	err := db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, u, models.LogoutAction, "", nil); terr != nil {
 			return terr
-		}
-
-		if s == nil {
-			return models.LogoutAllRefreshTokens(tx, u.ID)
 		}
 
 		switch scope {

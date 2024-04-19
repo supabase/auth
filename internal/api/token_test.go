@@ -306,8 +306,7 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 	invalidVerifier := codeVerifier + "123"
 	codeChallenge := sha256.Sum256([]byte(codeVerifier))
 	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
-	flowState, err := models.NewFlowState("github", challenge, models.SHA256, models.OAuth)
-	require.NoError(ts.T(), err)
+	flowState := models.NewFlowState("github", challenge, models.SHA256, models.OAuth, nil)
 	flowState.AuthCode = authCode
 	require.NoError(ts.T(), ts.API.db.Create(flowState))
 	cases := []struct {
@@ -344,7 +343,7 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			assert.Equal(ts.T(), http.StatusForbidden, w.Code)
+			assert.Equal(ts.T(), http.StatusNotFound, w.Code)
 		})
 	}
 }
@@ -619,7 +618,7 @@ func (ts *TokenTestSuite) TestPasswordVerificationHook() {
                 begin
                     return jsonb_build_object('decision', 'reject', 'message', 'You shall not pass!');
                 end; $$ language plpgsql;`,
-			expectedCode: http.StatusForbidden,
+			expectedCode: http.StatusBadRequest,
 		},
 	}
 	for _, c := range cases {

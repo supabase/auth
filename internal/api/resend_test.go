@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -194,15 +195,15 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 			require.Equal(ts.T(), http.StatusOK, w.Code)
 
 			switch c.params["type"] {
-			case signupVerification, emailChangeVerification:
+			case mail.SignupVerification, mail.EmailChangeVerification:
 				dbUser, err := models.FindUserByID(ts.API.db, c.user.ID)
 				require.NoError(ts.T(), err)
 				require.NotEmpty(ts.T(), dbUser)
 
-				if c.params["type"] == signupVerification {
+				if c.params["type"] == mail.SignupVerification {
 					require.NotEqual(ts.T(), dbUser.ConfirmationToken, c.user.ConfirmationToken)
 					require.NotEqual(ts.T(), dbUser.ConfirmationSentAt, c.user.ConfirmationSentAt)
-				} else if c.params["type"] == emailChangeVerification {
+				} else if c.params["type"] == mail.EmailChangeVerification {
 					require.NotEqual(ts.T(), dbUser.EmailChangeTokenNew, c.user.EmailChangeTokenNew)
 					require.NotEqual(ts.T(), dbUser.EmailChangeSentAt, c.user.EmailChangeSentAt)
 				}

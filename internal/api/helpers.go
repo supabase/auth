@@ -75,3 +75,41 @@ func isStringInSlice(checkValue string, list []string) bool {
 func getBodyBytes(req *http.Request) ([]byte, error) {
 	return utilities.GetBodyBytes(req)
 }
+
+type RequestParams interface {
+	AdminUserParams |
+		CreateSSOProviderParams |
+		EnrollFactorParams |
+		GenerateLinkParams |
+		IdTokenGrantParams |
+		InviteParams |
+		OtpParams |
+		PKCEGrantParams |
+		PasswordGrantParams |
+		RecoverParams |
+		RefreshTokenGrantParams |
+		ResendConfirmationParams |
+		SignupParams |
+		SingleSignOnParams |
+		SmsParams |
+		UserUpdateParams |
+		VerifyFactorParams |
+		VerifyParams |
+		adminUserUpdateFactorParams |
+		struct {
+			Email string `json:"email"`
+			Phone string `json:"phone"`
+		}
+}
+
+// retrieveRequestParams is a generic method that unmarshals the request body into the params struct provided
+func retrieveRequestParams[A RequestParams](r *http.Request, params *A) error {
+	body, err := getBodyBytes(r)
+	if err != nil {
+		return internalServerError("Could not read body into byte slice").WithInternalError(err)
+	}
+	if err := json.Unmarshal(body, params); err != nil {
+		return badRequestError(ErrorCodeBadJSON, "Could not parse request body as JSON: %v", err)
+	}
+	return nil
+}

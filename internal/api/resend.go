@@ -1,16 +1,15 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
+	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 // ResendConfirmationParams holds the parameters for a resend request
@@ -22,26 +21,26 @@ type ResendConfirmationParams struct {
 
 func (p *ResendConfirmationParams) Validate(config *conf.GlobalConfiguration) error {
 	switch p.Type {
-	case signupVerification, emailChangeVerification, smsVerification, phoneChangeVerification:
+	case mail.SignupVerification, mail.EmailChangeVerification, smsVerification, phoneChangeVerification:
 		break
 	default:
 		// type does not match one of the above
-		return badRequestError("Missing one of these types: signup, email_change, sms, phone_change")
+		return badRequestError(ErrorCodeValidationFailed, "Missing one of these types: signup, email_change, sms, phone_change")
 
 	}
-	if p.Email == "" && p.Type == signupVerification {
-		return badRequestError("Type provided requires an email address")
+	if p.Email == "" && p.Type == mail.SignupVerification {
+		return badRequestError(ErrorCodeValidationFailed, "Type provided requires an email address")
 	}
 	if p.Phone == "" && p.Type == smsVerification {
-		return badRequestError("Type provided requires a phone number")
+		return badRequestError(ErrorCodeValidationFailed, "Type provided requires a phone number")
 	}
 
 	var err error
 	if p.Email != "" && p.Phone != "" {
-		return badRequestError("Only an email address or phone number should be provided.")
+		return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided.")
 	} else if p.Email != "" {
 		if !config.External.Email.Enabled {
-			return badRequestError("Email logins are disabled")
+			return badRequestError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 		}
 		p.Email, err = validateEmail(p.Email)
 		if err != nil {
@@ -49,7 +48,7 @@ func (p *ResendConfirmationParams) Validate(config *conf.GlobalConfiguration) er
 		}
 	} else if p.Phone != "" {
 		if !config.External.Phone.Enabled {
-			return badRequestError("Phone logins are disabled")
+			return badRequestError(ErrorCodePhoneProviderDisabled, "Phone logins are disabled")
 		}
 		p.Phone, err = validatePhone(p.Phone)
 		if err != nil {
@@ -57,7 +56,7 @@ func (p *ResendConfirmationParams) Validate(config *conf.GlobalConfiguration) er
 		}
 	} else {
 		// both email and phone are empty
-		return badRequestError("Missing email address or phone number")
+		return badRequestError(ErrorCodeValidationFailed, "Missing email address or phone number")
 	}
 	return nil
 }
@@ -68,14 +67,8 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 	config := a.config
 	params := &ResendConfirmationParams{}
-
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return badRequestError("Could not read body").WithInternalError(err)
-	}
-
-	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError("Could not read params: %v", err)
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
 	}
 
 	if err := params.Validate(config); err != nil {
@@ -83,6 +76,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var user *models.User
+	var err error
 	aud := a.requestAud(ctx, r)
 	if params.Email != "" {
 		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
@@ -98,7 +92,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	switch params.Type {
-	case signupVerification:
+	case mail.SignupVerification:
 		if user.IsConfirmed() {
 			// if the user's email is confirmed already, we don't need to send a confirmation email again
 			return sendJSON(w, http.StatusOK, map[string]string{})
@@ -108,7 +102,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			// if the user's phone is confirmed already, we don't need to send a confirmation sms again
 			return sendJSON(w, http.StatusOK, map[string]string{})
 		}
-	case emailChangeVerification:
+	case mail.EmailChangeVerification:
 		// do not resend if user doesn't have a new email address
 		if user.EmailChange == "" {
 			return sendJSON(w, http.StatusOK, map[string]string{})
@@ -121,17 +115,14 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	messageID := ""
-	mailer := a.Mailer(ctx)
-	referrer := utilities.GetReferrer(r, config)
-	externalURL := getExternalHost(ctx)
 	err = db.Transaction(func(tx *storage.Connection) error {
 		switch params.Type {
-		case signupVerification:
+		case mail.SignupVerification:
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", nil); terr != nil {
 				return terr
 			}
 			// PKCE not implemented yet
-			return sendConfirmation(tx, user, mailer, config.SMTP.MaxFrequency, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow)
+			return a.sendConfirmation(r, tx, user, models.ImplicitFlow)
 		case smsVerification:
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
@@ -140,19 +131,19 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
-			mID, terr := a.sendPhoneConfirmation(ctx, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, sms_provider.SMSProvider)
+			mID, terr := a.sendPhoneConfirmation(ctx, r, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, sms_provider.SMSProvider)
 			if terr != nil {
 				return terr
 			}
 			messageID = mID
-		case emailChangeVerification:
-			return a.sendEmailChange(tx, config, user, mailer, user.EmailChange, referrer, externalURL, config.Mailer.OtpLength, models.ImplicitFlow)
+		case mail.EmailChangeVerification:
+			return a.sendEmailChange(r, tx, user, user.EmailChange, models.ImplicitFlow)
 		case phoneChangeVerification:
 			smsProvider, terr := sms_provider.GetSmsProvider(*config)
 			if terr != nil {
 				return terr
 			}
-			mID, terr := a.sendPhoneConfirmation(ctx, tx, user, user.PhoneChange, phoneChangeVerification, smsProvider, sms_provider.SMSProvider)
+			mID, terr := a.sendPhoneConfirmation(ctx, r, tx, user, user.PhoneChange, phoneChangeVerification, smsProvider, sms_provider.SMSProvider)
 			if terr != nil {
 				return terr
 			}
@@ -162,8 +153,13 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		if errors.Is(err, MaxFrequencyLimitError) {
+			reason := ErrorCodeOverEmailSendRateLimit
+			if params.Type == smsVerification || params.Type == phoneChangeVerification {
+				reason = ErrorCodeOverSMSSendRateLimit
+			}
+
 			until := time.Until(user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency)) / time.Second
-			return tooManyRequestsError("For security purposes, you can only request this once every %d seconds.", until)
+			return tooManyRequestsError(reason, "For security purposes, you can only request this once every %d seconds.", until)
 		}
 		return internalServerError("Unable to process request").WithInternalError(err)
 	}
