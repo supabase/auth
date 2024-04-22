@@ -32,6 +32,11 @@ type HookOutput interface {
 	Error() string
 }
 
+// TODO(joel): Move this to phone package
+type PhoneData struct {
+	OTP string
+}
+
 // #nosec
 const MinimumViableTokenSchema = `{
   "$schema": "http://json-schema.org/draft-07/schema#",
@@ -141,9 +146,8 @@ type CustomAccessTokenOutput struct {
 }
 
 type SendSMSInput struct {
-	User  *models.User `json:"user"`
-	Phone string       `json:"phone"`
-	OTP   string       `json:"otp"`
+	User      *models.User `json:"user"`
+	PhoneData PhoneData    `json:"phone_data"`
 }
 
 type SendSMSOutput struct {

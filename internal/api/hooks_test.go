@@ -60,9 +60,10 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 	defer gock.OffAll()
 
 	input := hooks.SendSMSInput{
-		User:  ts.TestUser,
-		Phone: "1234567890",
-		OTP:   "123456",
+		User: ts.TestUser,
+		PhoneData: hooks.PhoneData{
+			OTP: "123456",
+		},
 	}
 	successOutput := hooks.SendSMSOutput{Success: true}
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
@@ -126,9 +127,10 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 	defer gock.OffAll()
 
 	input := hooks.SendSMSInput{
-		User:  ts.TestUser,
-		Phone: "1234567890",
-		OTP:   "123456",
+		User: ts.TestUser,
+		PhoneData: hooks.PhoneData{
+			OTP: "123456",
+		},
 	}
 	successOutput := hooks.SendSMSOutput{Success: true}
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
@@ -168,9 +170,10 @@ func (ts *HooksTestSuite) TestShouldReturnErrorForNonJSONContentType() {
 	defer gock.OffAll()
 
 	input := hooks.SendSMSInput{
-		User:  ts.TestUser,
-		Phone: "1234567890",
-		OTP:   "123456",
+		User: ts.TestUser,
+		PhoneData: hooks.PhoneData{
+			OTP: "123456",
+		},
 	}
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
 	ts.Config.Hook.SendSMS.URI = testURL
