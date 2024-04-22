@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	"errors"
-	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks"
+	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 	"net/http/httptest"
 
@@ -22,8 +22,9 @@ var handleApiRequest func(*http.Request) (*http.Response, error)
 
 type HooksTestSuite struct {
 	suite.Suite
-	API    *API
-	Config *conf.GlobalConfiguration
+	API      *API
+	Config   *conf.GlobalConfiguration
+	TestUser *models.User
 }
 
 type MockHttpClient struct {
@@ -47,13 +48,22 @@ func TestHooks(t *testing.T) {
 	suite.Run(t, ts)
 }
 
+func (ts *HooksTestSuite) SetupTest() {
+	models.TruncateAll(ts.API.db)
+	u, err := models.NewUser("123456789", "testemail@gmail.com", "securetestpassword", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error creating test user model")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+	ts.TestUser = u
+}
+
 func (ts *HooksTestSuite) TestRunHTTPHook() {
 	defer gock.OffAll()
 
 	input := hooks.SendSMSInput{
-		UserID: uuid.Must(uuid.NewV4()),
-		Phone:  "1234567890",
-		OTP:    "123456",
+		User: ts.TestUser,
+		SMS: hooks.SMS{
+			OTP: "123456",
+		},
 	}
 	successOutput := hooks.SendSMSOutput{Success: true}
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
@@ -117,9 +127,10 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 	defer gock.OffAll()
 
 	input := hooks.SendSMSInput{
-		UserID: uuid.Must(uuid.NewV4()),
-		Phone:  "1234567890",
-		OTP:    "123456",
+		User: ts.TestUser,
+		SMS: hooks.SMS{
+			OTP: "123456",
+		},
 	}
 	successOutput := hooks.SendSMSOutput{Success: true}
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
@@ -159,9 +170,10 @@ func (ts *HooksTestSuite) TestShouldReturnErrorForNonJSONContentType() {
 	defer gock.OffAll()
 
 	input := hooks.SendSMSInput{
-		UserID: uuid.Must(uuid.NewV4()),
-		Phone:  "1234567890",
-		OTP:    "123456",
+		User: ts.TestUser,
+		SMS: hooks.SMS{
+			OTP: "123456",
+		},
 	}
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
 	ts.Config.Hook.SendSMS.URI = testURL
