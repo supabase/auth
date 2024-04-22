@@ -33,7 +33,7 @@ type HookOutput interface {
 }
 
 // TODO(joel): Move this to phone package
-type PhoneData struct {
+type SMS struct {
 	OTP string `json:"otp,omitempty"`
 }
 
@@ -146,8 +146,8 @@ type CustomAccessTokenOutput struct {
 }
 
 type SendSMSInput struct {
-	User      *models.User `json:"user,omitempty"`
-	PhoneData PhoneData    `json:"phone_data,omitempty"`
+	User *models.User `json:"user,omitempty"`
+	SMS  SMS          `json:"sms,omitempty"`
 }
 
 type SendSMSOutput struct {

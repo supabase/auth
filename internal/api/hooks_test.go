@@ -61,7 +61,7 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 
 	input := hooks.SendSMSInput{
 		User: ts.TestUser,
-		PhoneData: hooks.PhoneData{
+		SMS: hooks.SMS{
 			OTP: "123456",
 		},
 	}
@@ -128,7 +128,7 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 
 	input := hooks.SendSMSInput{
 		User: ts.TestUser,
-		PhoneData: hooks.PhoneData{
+		SMS: hooks.SMS{
 			OTP: "123456",
 		},
 	}
@@ -171,7 +171,7 @@ func (ts *HooksTestSuite) TestShouldReturnErrorForNonJSONContentType() {
 
 	input := hooks.SendSMSInput{
 		User: ts.TestUser,
-		PhoneData: hooks.PhoneData{
+		SMS: hooks.SMS{
 			OTP: "123456",
 		},
 	}
