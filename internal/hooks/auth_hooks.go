@@ -141,9 +141,9 @@ type CustomAccessTokenOutput struct {
 }
 
 type SendSMSInput struct {
-	UserID uuid.UUID `json:"user_id"`
-	Phone  string    `json:"phone"`
-	OTP    string    `json:"otp"`
+	User  *models.User `json:"user"`
+	Phone string       `json:"phone"`
+	OTP   string       `json:"otp"`
 }
 
 type SendSMSOutput struct {

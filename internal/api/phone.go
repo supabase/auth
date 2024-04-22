@@ -97,9 +97,9 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, r *http.Request, tx *st
 		}
 		if config.Hook.SendSMS.Enabled {
 			input := hooks.SendSMSInput{
-				UserID: user.ID,
-				Phone:  user.Phone.String(),
-				OTP:    otp,
+				User:  user,
+				Phone: user.Phone.String(),
+				OTP:   otp,
 			}
 			output := hooks.SendSMSOutput{}
 			err := a.invokeHook(tx, r, &input, &output, a.config.Hook.SendSMS.URI)
