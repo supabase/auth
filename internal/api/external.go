@@ -298,6 +298,10 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			return nil, terr
 		}
 
+		if terr = user.UpdateUserMetaData(tx, identityData); terr != nil {
+			return nil, terr
+		}
+
 		if terr = user.UpdateAppMetaDataProviders(tx); terr != nil {
 			return nil, terr
 		}
