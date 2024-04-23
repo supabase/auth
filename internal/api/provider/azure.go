@@ -129,7 +129,7 @@ func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 		// Allow basic Azure issuers, except when the expected issuer
 		// is configured to be the Azure CIAM issuer, allow CIAM
 		// issuers to pass.
-		if !IsAzureIssuer(issuer) || (IsAzureCIAMIssuer(g.ExpectedIssuer) && !IsAzureCIAMIssuer(issuer)) {
+		if !IsAzureIssuer(issuer) && (IsAzureCIAMIssuer(g.ExpectedIssuer) && !IsAzureCIAMIssuer(issuer)) {
 			return nil, fmt.Errorf("azure: ID token issuer not valid %q", issuer)
 		}
 
