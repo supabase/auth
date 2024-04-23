@@ -47,7 +47,6 @@ const (
 	ErrorCodeSMSSendFailed                     ErrorCode = "sms_send_failed"
 	ErrorCodeEmailNotConfirmed                 ErrorCode = "email_not_confirmed"
 	ErrorCodePhoneNotConfirmed                 ErrorCode = "phone_not_confirmed"
-	ErrorCodeReauthNonceMissing                ErrorCode = "reauth_nonce_missing"
 	ErrorCodeSAMLRelayStateNotFound            ErrorCode = "saml_relay_state_not_found"
 	ErrorCodeSAMLRelayStateExpired             ErrorCode = "saml_relay_state_expired"
 	ErrorCodeSAMLIdPNotFound                   ErrorCode = "saml_idp_not_found"
