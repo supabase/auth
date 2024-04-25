@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -270,13 +271,18 @@ type timeoutResponseWriter struct {
 	ctx   context.Context
 	w     http.ResponseWriter
 	wrote int32
+	mu    sync.Mutex
 }
 
 func (t *timeoutResponseWriter) Header() http.Header {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	return t.w.Header()
 }
 
 func (t *timeoutResponseWriter) Write(bytes []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.ctx.Err() == context.DeadlineExceeded {
 		if atomic.LoadInt32(&t.wrote) == 0 {
 			return 0, context.DeadlineExceeded
@@ -287,12 +293,14 @@ func (t *timeoutResponseWriter) Write(bytes []byte) (int, error) {
 		// through
 	}
 
-	atomic.AddInt32(&t.wrote, 1)
+	t.wrote = 1
 
 	return t.w.Write(bytes)
 }
 
 func (t *timeoutResponseWriter) WriteHeader(statusCode int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.ctx.Err() == context.DeadlineExceeded {
 		if atomic.LoadInt32(&t.wrote) == 0 {
 			return
@@ -303,7 +311,7 @@ func (t *timeoutResponseWriter) WriteHeader(statusCode int) {
 		// through
 	}
 
-	atomic.AddInt32(&t.wrote, 1)
+	t.wrote = 1
 
 	t.w.WriteHeader(statusCode)
 }
@@ -325,7 +333,9 @@ func (a *API) timeoutMiddleware(timeout time.Duration) func(http.Handler) http.H
 				err := ctx.Err()
 
 				if err == context.DeadlineExceeded {
-					if atomic.LoadInt32(&timeoutWriter.wrote) == 0 {
+					timeoutWriter.mu.Lock()
+					defer timeoutWriter.mu.Unlock()
+					if timeoutWriter.wrote == 0 {
 						// writer wasn't written to, so we're sending the error payload
 
 						httpError := &HTTPError{
