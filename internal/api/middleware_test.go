@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/assert"
@@ -311,4 +312,26 @@ func TestFunctionHooksUnmarshalJSON(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (ts *MiddlewareTestSuite) TestTimeoutMiddleware() {
+	ts.Config.API.MaxRequestDuration = 5 * time.Microsecond
+	req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+	w := httptest.NewRecorder()
+
+	timeoutHandler := ts.API.timeoutMiddleware(ts.Config.API.MaxRequestDuration)
+
+	slowHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Sleep for 1 second to simulate a slow handler which should trigger the timeout
+		time.Sleep(1 * time.Second)
+		ts.API.handler.ServeHTTP(w, r)
+	})
+	timeoutHandler(slowHandler).ServeHTTP(w, req)
+	assert.Equal(ts.T(), http.StatusGatewayTimeout, w.Code)
+
+	var data map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.Equal(ts.T(), ErrorCodeRequestTimeout, data["error_code"])
+	require.Equal(ts.T(), float64(504), data["code"])
+	require.NotNil(ts.T(), data["msg"])
 }
