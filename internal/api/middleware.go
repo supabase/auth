@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/supabase/auth/internal/models"
@@ -257,6 +259,99 @@ func (a *API) databaseCleanup(cleanup *models.Cleanup) func(http.Handler) http.H
 			} else if affectedRows > 0 {
 				log.WithField("affected_rows", affectedRows).Debug("cleaned up expired or stale rows")
 			}
+		})
+	}
+}
+
+// timeoutResponseWriter is a http.ResponseWriter that prevents subsequent
+// writes after the context contained in it has exceeded the deadline. If a
+// partial write occurs before the deadline is exceeded, but the writing is not
+// complete it will allow further writes.
+type timeoutResponseWriter struct {
+	ctx   context.Context
+	w     http.ResponseWriter
+	wrote int32
+	mu    sync.Mutex
+}
+
+func (t *timeoutResponseWriter) Header() http.Header {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.w.Header()
+}
+
+func (t *timeoutResponseWriter) Write(bytes []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.ctx.Err() == context.DeadlineExceeded {
+		if atomic.LoadInt32(&t.wrote) == 0 {
+			return 0, context.DeadlineExceeded
+		}
+
+		// writing started before the deadline exceeded, but the
+		// deadline came in the middle, so letting the writes go
+		// through
+	}
+
+	t.wrote = 1
+
+	return t.w.Write(bytes)
+}
+
+func (t *timeoutResponseWriter) WriteHeader(statusCode int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.ctx.Err() == context.DeadlineExceeded {
+		if atomic.LoadInt32(&t.wrote) == 0 {
+			return
+		}
+
+		// writing started before the deadline exceeded, but the
+		// deadline came in the middle, so letting the writes go
+		// through
+	}
+
+	t.wrote = 1
+
+	t.w.WriteHeader(statusCode)
+}
+
+func (a *API) timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(r.Context(), timeout)
+			defer cancel()
+
+			timeoutWriter := &timeoutResponseWriter{
+				w:   w,
+				ctx: ctx,
+			}
+
+			go func() {
+				<-ctx.Done()
+
+				err := ctx.Err()
+
+				if err == context.DeadlineExceeded {
+					timeoutWriter.mu.Lock()
+					defer timeoutWriter.mu.Unlock()
+					if timeoutWriter.wrote == 0 {
+						// writer wasn't written to, so we're sending the error payload
+
+						httpError := &HTTPError{
+							HTTPStatus: http.StatusGatewayTimeout,
+							ErrorCode:  ErrorCodeRequestTimeout,
+							Message:    "Processing this request timed out, please retry after a moment.",
+						}
+
+						httpError = httpError.WithInternalError(err)
+
+						HandleResponseError(httpError, w, r)
+					}
+				}
+			}()
+
+			next.ServeHTTP(timeoutWriter, r.WithContext(ctx))
 		})
 	}
 }

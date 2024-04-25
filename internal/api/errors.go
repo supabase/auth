@@ -207,7 +207,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			output.Message = e.Message
 			output.Payload.Reasons = e.Reasons
 
-			if jsonErr := sendJSON(w, http.StatusUnprocessableEntity, output); jsonErr != nil {
+			if jsonErr := sendJSON(w, http.StatusUnprocessableEntity, output); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 				HandleResponseError(jsonErr, w, r)
 			}
 
@@ -224,7 +224,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			output.Message = e.Message
 			output.Payload.Reasons = e.Reasons
 
-			if jsonErr := sendJSON(w, output.HTTPStatus, output); jsonErr != nil {
+			if jsonErr := sendJSON(w, output.HTTPStatus, output); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 				HandleResponseError(jsonErr, w, r)
 			}
 		}
@@ -252,7 +252,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			if jsonErr := sendJSON(w, e.HTTPStatus, resp); jsonErr != nil {
+			if jsonErr := sendJSON(w, e.HTTPStatus, resp); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 				HandleResponseError(jsonErr, w, r)
 			}
 		} else {
@@ -266,20 +266,20 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 
 			// Provide better error messages for certain user-triggered Postgres errors.
 			if pgErr := utilities.NewPostgresError(e.InternalError); pgErr != nil {
-				if jsonErr := sendJSON(w, pgErr.HttpStatusCode, pgErr); jsonErr != nil {
+				if jsonErr := sendJSON(w, pgErr.HttpStatusCode, pgErr); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 					HandleResponseError(jsonErr, w, r)
 				}
 				return
 			}
 
-			if jsonErr := sendJSON(w, e.HTTPStatus, e); jsonErr != nil {
+			if jsonErr := sendJSON(w, e.HTTPStatus, e); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 				HandleResponseError(jsonErr, w, r)
 			}
 		}
 
 	case *OAuthError:
 		log.WithError(e.Cause()).Info(e.Error())
-		if jsonErr := sendJSON(w, http.StatusBadRequest, e); jsonErr != nil {
+		if jsonErr := sendJSON(w, http.StatusBadRequest, e); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 			HandleResponseError(jsonErr, w, r)
 		}
 
@@ -295,7 +295,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 				Message: "Unexpected failure, please check server logs for more information",
 			}
 
-			if jsonErr := sendJSON(w, http.StatusInternalServerError, resp); jsonErr != nil {
+			if jsonErr := sendJSON(w, http.StatusInternalServerError, resp); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 				HandleResponseError(jsonErr, w, r)
 			}
 		} else {
@@ -305,7 +305,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 				Message:    "Unexpected failure, please check server logs for more information",
 			}
 
-			if jsonErr := sendJSON(w, http.StatusInternalServerError, httpError); jsonErr != nil {
+			if jsonErr := sendJSON(w, http.StatusInternalServerError, httpError); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 				HandleResponseError(jsonErr, w, r)
 			}
 		}
