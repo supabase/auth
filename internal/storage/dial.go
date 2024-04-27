@@ -72,6 +72,7 @@ func Dial(config *conf.GlobalConfiguration) (*Connection, error) {
 		Pool:            config.DB.MaxPoolSize,
 		IdlePool:        config.DB.MaxIdlePoolSize,
 		ConnMaxLifetime: config.DB.ConnMaxLifetime,
+		ConnMaxIdleTime: config.DB.ConnMaxIdleTime,
 		Options:         options,
 	})
 	if err != nil {
