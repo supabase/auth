@@ -52,6 +52,7 @@ jobs:
         run: |
           set -x
           go install honnef.co/go/tools/cmd/staticcheck@latest
+          go install github.com/nishanths/exhaustive/cmd/exhaustive@latest
           make static
       - name: Check gosec
         run: |

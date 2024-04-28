@@ -91,7 +91,7 @@ func setPopLogger(sql string) {
 		}
 
 		switch lvl {
-		case logging.Debug:
+		case logging.SQL, logging.Debug:
 			l.Debug(s)
 		case logging.Info:
 			l.Info(s)
