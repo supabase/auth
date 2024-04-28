@@ -318,6 +318,10 @@ func (u *User) UpdatePassword(tx *storage.Connection, sessionID *uuid.UUID) erro
 		return err
 	}
 
+	if err := ClearAllOneTimeTokensForUser(tx, u.ID); err != nil {
+		return err
+	}
+
 	if sessionID == nil {
 		// log out user from all sessions to ensure reauthentication after password change
 		return Logout(tx, u.ID)
@@ -336,7 +340,15 @@ func (u *User) Authenticate(ctx context.Context, password string) bool {
 // ConfirmReauthentication resets the reauthentication token
 func (u *User) ConfirmReauthentication(tx *storage.Connection) error {
 	u.ReauthenticationToken = ""
-	return tx.UpdateOnly(u, "reauthentication_token")
+	if err := tx.UpdateOnly(u, "reauthentication_token"); err != nil {
+		return err
+	}
+
+	if err := ClearAllOneTimeTokensForUser(tx, u.ID); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Confirm resets the confimation token and sets the confirm timestamp
@@ -344,7 +356,16 @@ func (u *User) Confirm(tx *storage.Connection) error {
 	u.ConfirmationToken = ""
 	now := time.Now()
 	u.EmailConfirmedAt = &now
-	return tx.UpdateOnly(u, "confirmation_token", "email_confirmed_at")
+
+	if err := tx.UpdateOnly(u, "confirmation_token", "email_confirmed_at"); err != nil {
+		return err
+	}
+
+	if err := ClearAllOneTimeTokensForUser(tx, u.ID); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // ConfirmPhone resets the confimation token and sets the confirm timestamp
@@ -352,7 +373,11 @@ func (u *User) ConfirmPhone(tx *storage.Connection) error {
 	u.ConfirmationToken = ""
 	now := time.Now()
 	u.PhoneConfirmedAt = &now
-	return tx.UpdateOnly(u, "confirmation_token", "phone_confirmed_at")
+	if err := tx.UpdateOnly(u, "confirmation_token", "phone_confirmed_at"); err != nil {
+		return nil
+	}
+
+	return ClearAllOneTimeTokensForUser(tx, u.ID)
 }
 
 // UpdateLastSignInAt update field last_sign_in_at for user according to specified field
@@ -378,6 +403,10 @@ func (u *User) ConfirmEmailChange(tx *storage.Connection, status int) error {
 		"email_change_token_new",
 		"email_change_confirm_status",
 	); err != nil {
+		return err
+	}
+
+	if err := ClearAllOneTimeTokensForUser(tx, u.ID); err != nil {
 		return err
 	}
 
@@ -426,6 +455,10 @@ func (u *User) ConfirmPhoneChange(tx *storage.Connection) error {
 		return err
 	}
 
+	if err := ClearAllOneTimeTokensForUser(tx, u.ID); err != nil {
+		return err
+	}
+
 	identity, err := FindIdentityByIdAndProvider(tx, u.ID.String(), "phone")
 	if err != nil {
 		if IsNotFoundError(err) {
@@ -450,7 +483,11 @@ func (u *User) ConfirmPhoneChange(tx *storage.Connection) error {
 // Recover resets the recovery token
 func (u *User) Recover(tx *storage.Connection) error {
 	u.RecoveryToken = ""
-	return tx.UpdateOnly(u, "recovery_token")
+	if err := tx.UpdateOnly(u, "recovery_token"); err != nil {
+		return err
+	}
+
+	return ClearAllOneTimeTokensForUser(tx, u.ID)
 }
 
 // CountOtherUsers counts how many other users exist besides the one provided
@@ -471,24 +508,6 @@ func findUser(tx *storage.Connection, query string, args ...interface{}) (*User,
 	return obj, nil
 }
 
-// FindUserByConfirmationToken finds users with the matching confirmation token.
-func FindUserByConfirmationOrRecoveryToken(tx *storage.Connection, token string) (*User, error) {
-	user, err := findUser(tx, "(confirmation_token = ? or recovery_token = ?) and is_sso_user = false", token, token)
-	if err != nil {
-		return nil, ConfirmationOrRecoveryTokenNotFoundError{}
-	}
-	return user, nil
-}
-
-// FindUserByConfirmationToken finds users with the matching confirmation token.
-func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, error) {
-	user, err := findUser(tx, "confirmation_token = ? and is_sso_user = false", token)
-	if err != nil {
-		return nil, ConfirmationTokenNotFoundError{}
-	}
-	return user, nil
-}
-
 // FindUserByEmailAndAudience finds a user with the matching email and audience.
 func FindUserByEmailAndAudience(tx *storage.Connection, email, aud string) (*User, error) {
 	return findUser(tx, "instance_id = ? and LOWER(email) = ? and aud = ? and is_sso_user = false", uuid.Nil, strings.ToLower(email), aud)
@@ -502,16 +521,6 @@ func FindUserByPhoneAndAudience(tx *storage.Connection, phone, aud string) (*Use
 // FindUserByID finds a user matching the provided ID.
 func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
 	return findUser(tx, "instance_id = ? and id = ?", uuid.Nil, id)
-}
-
-// FindUserByRecoveryToken finds a user with the matching recovery token.
-func FindUserByRecoveryToken(tx *storage.Connection, token string) (*User, error) {
-	return findUser(tx, "recovery_token = ? and is_sso_user = false", token)
-}
-
-// FindUserByEmailChangeToken finds a user with the matching email change token.
-func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, error) {
-	return findUser(tx, "is_sso_user = false and (email_change_token_current = ? or email_change_token_new = ?)", token, token)
 }
 
 // FindUserWithRefreshToken finds a user from the provided refresh token. If
@@ -599,41 +608,6 @@ func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Paginat
 	}
 
 	return users, err
-}
-
-// FindUserByEmailChangeCurrentAndAudience finds a user with the matching email change and audience.
-func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
-	return findUser(
-		tx,
-		"instance_id = ? and LOWER(email) = ? and aud = ? and is_sso_user = false and (email_change_token_current = 'pkce_' || ? or email_change_token_current = ?)",
-		uuid.Nil, strings.ToLower(email), aud, token, token,
-	)
-}
-
-// FindUserByEmailChangeNewAndAudience finds a user with the matching email change and audience.
-func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
-	return findUser(
-		tx,
-		"instance_id = ? and LOWER(email_change) = ? and aud = ? and is_sso_user = false and (email_change_token_new = 'pkce_' || ? or email_change_token_new = ?)",
-		uuid.Nil, strings.ToLower(email), aud, token, token,
-	)
-}
-
-// FindUserForEmailChange finds a user requesting for an email change
-func FindUserForEmailChange(tx *storage.Connection, email, token, aud string, secureEmailChangeEnabled bool) (*User, error) {
-	if secureEmailChangeEnabled {
-		if user, err := FindUserByEmailChangeCurrentAndAudience(tx, email, token, aud); err == nil {
-			return user, err
-		} else if !IsNotFoundError(err) {
-			return nil, err
-		}
-	}
-	return FindUserByEmailChangeNewAndAudience(tx, email, token, aud)
-}
-
-// FindUserByPhoneChangeAndAudience finds a user with the matching phone change and audience.
-func FindUserByPhoneChangeAndAudience(tx *storage.Connection, phone, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ? and is_sso_user = false", uuid.Nil, phone, aud)
 }
 
 // IsDuplicatedEmail returns whether a user exists with a matching email and audience.
@@ -788,6 +762,10 @@ func (u *User) SoftDeleteUser(tx *storage.Connection) error {
 		return err
 	}
 
+	if err := ClearAllOneTimeTokensForUser(tx, u.ID); err != nil {
+		return err
+	}
+
 	// set raw_user_meta_data to {}
 	userMetaDataUpdates := map[string]interface{}{}
 	for k := range u.UserMetaData {
@@ -805,6 +783,10 @@ func (u *User) SoftDeleteUser(tx *storage.Connection) error {
 	}
 
 	if err := u.UpdateAppMetaData(tx, appMetaDataUpdates); err != nil {
+		return err
+	}
+
+	if err := Logout(tx, u.ID); err != nil {
 		return err
 	}
 
@@ -858,4 +840,9 @@ func obfuscatePhone(u *User, phone string) string {
 
 func obfuscateIdentityProviderId(identity *Identity) string {
 	return obfuscateValue(identity.UserID, identity.Provider+":"+identity.ProviderID)
+}
+
+// FindUserByPhoneChangeAndAudience finds a user with the matching phone change and audience.
+func FindUserByPhoneChangeAndAudience(tx *storage.Connection, phone, aud string) (*User, error) {
+	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ? and is_sso_user = false", uuid.Nil, phone, aud)
 }
