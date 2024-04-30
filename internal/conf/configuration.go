@@ -692,6 +692,15 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.Sms.OtpLength = 6
 	}
 
+	if config.Sms.TestOTP != nil {
+		formatTestOtps := make(map[string]string)
+		for phone, otp := range config.Sms.TestOTP {
+			phone = strings.ReplaceAll(strings.TrimPrefix(phone, "+"), " ", "")
+			formatTestOtps[phone] = otp
+		}
+		config.Sms.TestOTP = formatTestOtps
+	}
+
 	if len(config.Sms.Template) == 0 {
 		config.Sms.Template = ""
 	}
