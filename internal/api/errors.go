@@ -208,7 +208,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			output.Payload.Reasons = e.Reasons
 
 			if jsonErr := sendJSON(w, http.StatusUnprocessableEntity, output); jsonErr != nil && jsonErr != context.DeadlineExceeded {
-				HandleResponseError(jsonErr, w, r)
+				log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 			}
 
 		} else {
@@ -225,7 +225,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			output.Payload.Reasons = e.Reasons
 
 			if jsonErr := sendJSON(w, output.HTTPStatus, output); jsonErr != nil && jsonErr != context.DeadlineExceeded {
-				HandleResponseError(jsonErr, w, r)
+				log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 			}
 		}
 
@@ -253,7 +253,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			}
 
 			if jsonErr := sendJSON(w, e.HTTPStatus, resp); jsonErr != nil && jsonErr != context.DeadlineExceeded {
-				HandleResponseError(jsonErr, w, r)
+				log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 			}
 		} else {
 			if e.ErrorCode == "" {
@@ -267,20 +267,20 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			// Provide better error messages for certain user-triggered Postgres errors.
 			if pgErr := utilities.NewPostgresError(e.InternalError); pgErr != nil {
 				if jsonErr := sendJSON(w, pgErr.HttpStatusCode, pgErr); jsonErr != nil && jsonErr != context.DeadlineExceeded {
-					HandleResponseError(jsonErr, w, r)
+					log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 				}
 				return
 			}
 
 			if jsonErr := sendJSON(w, e.HTTPStatus, e); jsonErr != nil && jsonErr != context.DeadlineExceeded {
-				HandleResponseError(jsonErr, w, r)
+				log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 			}
 		}
 
 	case *OAuthError:
 		log.WithError(e.Cause()).Info(e.Error())
 		if jsonErr := sendJSON(w, http.StatusBadRequest, e); jsonErr != nil && jsonErr != context.DeadlineExceeded {
-			HandleResponseError(jsonErr, w, r)
+			log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 		}
 
 	case ErrorCause:
@@ -296,7 +296,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			}
 
 			if jsonErr := sendJSON(w, http.StatusInternalServerError, resp); jsonErr != nil && jsonErr != context.DeadlineExceeded {
-				HandleResponseError(jsonErr, w, r)
+				log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 			}
 		} else {
 			httpError := HTTPError{
@@ -306,7 +306,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			}
 
 			if jsonErr := sendJSON(w, http.StatusInternalServerError, httpError); jsonErr != nil && jsonErr != context.DeadlineExceeded {
-				HandleResponseError(jsonErr, w, r)
+				log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 			}
 		}
 	}
