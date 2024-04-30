@@ -95,7 +95,8 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, r *http.Request, tx *st
 		if err != nil {
 			return "", err
 		}
-		if config.Hook.SendSMS.Enabled {
+		// We call sendPhoneConfirmation even when autoconfirm is enabled
+		if config.Hook.SendSMS.Enabled && !config.Sms.Autoconfirm {
 			input := hooks.SendSMSInput{
 				User: user,
 				SMS: hooks.SMS{
