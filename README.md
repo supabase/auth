@@ -268,10 +268,6 @@ Chooses what dialect of database you want. Must be `postgres`.
 
 Connection string for the database.
 
-`GOTRUE_DB_MAX_POOL_SIZE` - `int`
-
-Sets the maximum number of open connections to the database. Defaults to 0 which is equivalent to an "unlimited" number of connections.
-
 `DB_NAMESPACE` - `string`
 
 Adds a prefix to all table names.
