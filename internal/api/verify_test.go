@@ -24,15 +24,11 @@ import (
 type VerifyVariant int
 
 const (
-	VerifyWithoutOTT VerifyVariant = iota
-	VerifyWithOTT
+	VerifyWithOTT VerifyVariant = iota
 )
 
 func (v VerifyVariant) String() string {
 	switch v {
-	case VerifyWithoutOTT:
-		return "WithoutOTT"
-
 	case VerifyWithOTT:
 		return "WithOTT"
 
@@ -71,7 +67,6 @@ func (ts *VerifyTestSuite) SetupTest() {
 
 func (ts *VerifyTestSuite) VerifyWithVariants(fn func(variant VerifyVariant)) {
 	variants := []VerifyVariant{
-		VerifyWithoutOTT,
 		VerifyWithOTT,
 	}
 
@@ -145,10 +140,6 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 				assert.False(ts.T(), u.IsConfirmed())
 
 				recoveryToken := u.RecoveryToken
-
-				if variant == VerifyWithoutOTT {
-					require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
-				}
 
 				reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.RecoveryVerification, recoveryToken)
 				req = httptest.NewRequest(http.MethodGet, reqURL, nil)
@@ -249,10 +240,6 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 			currentTokenHash := u.EmailChangeTokenCurrent
 			newTokenHash := u.EmailChangeTokenNew
 
-			if variant == VerifyWithoutOTT {
-				require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
-			}
-
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
@@ -332,6 +319,7 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 	sentTime := time.Now().Add(-48 * time.Hour)
 	u.ConfirmationSentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
 
 	// Setup request
 	reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.SignupVerification, u.ConfirmationToken)
@@ -363,6 +351,8 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 	u.PhoneChangeToken = "123456"
 	u.PhoneChangeSentAt = &sentTime
 	require.NoError(ts.T(), ts.API.db.Update(u))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.PhoneChange, u.PhoneChangeToken, models.PhoneChangeToken))
 
 	type ResponseBody struct {
 		Code int    `json:"code"`
@@ -685,6 +675,7 @@ func (ts *VerifyTestSuite) TestVerifySignupWithRedirectURLContainedPath() {
 			sendTime := time.Now().Add(time.Hour)
 			u.ConfirmationSentAt = &sendTime
 			require.NoError(ts.T(), ts.API.db.Update(u))
+			require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
 
 			reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s&redirect_to=%s", "signup", u.ConfirmationToken, redirectURL)
 			req := httptest.NewRequest(http.MethodGet, reqURL, nil)
@@ -713,6 +704,8 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 	u.EmailChangeSentAt = &t
 
 	require.NoError(ts.T(), ts.API.db.Update(u))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken))
 
 	cases := []struct {
 		desc                 string
@@ -780,6 +773,10 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 	t = time.Now().Add(24 * time.Hour)
 	u.BannedUntil = &t
 	require.NoError(ts.T(), ts.API.db.Update(u))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.EmailChangeTokenNew, models.EmailChangeTokenNew))
 
 	cases := []struct {
 		desc    string
@@ -1001,10 +998,6 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 				require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, "relates_to not used", u.RecoveryToken, models.RecoveryToken))
 				require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, "relates_to not used", u.EmailChangeTokenNew, models.EmailChangeTokenNew))
 				require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, "relates_to not used", u.PhoneChangeToken, models.PhoneChangeToken))
-
-				if variant == VerifyWithoutOTT {
-					require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
-				}
 
 				require.NoError(ts.T(), ts.API.db.Update(u))
 
