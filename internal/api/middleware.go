@@ -209,6 +209,9 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 		baseUrl = fmt.Sprintf("%s://%s", xForwardedProto, xForwardedHost)
 	} else if req.URL.Scheme != "" && req.URL.Hostname() != "" {
 		baseUrl = fmt.Sprintf("%s://%s", req.URL.Scheme, req.URL.Hostname())
+		// Restores enforced external URLs by adding in an envionment variable. API_FORCE_EXTERNAL_URL
+	} else if config.API.ForceExternalURL != "" {
+		baseUrl := config.API.ExternalURL
 	}
 	if u, err = url.ParseRequestURI(baseUrl); err != nil {
 		// fallback to the default hostname
