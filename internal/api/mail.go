@@ -182,7 +182,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			}
 			terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken)
 			if terr != nil {
-				terr = errors.Wrap(terr, "Database error reating confirmation token for invite in admin")
+				terr = errors.Wrap(terr, "Database error creating confirmation token for invite in admin")
 				return terr
 			}
 		case mail.SignupVerification:
@@ -220,7 +220,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			}
 			terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken)
 			if terr != nil {
-				terr = errors.Wrap(terr, "Database error reating confirmation token for signup in admin")
+				terr = errors.Wrap(terr, "Database error creating confirmation token for signup in admin")
 				return terr
 			}
 		case mail.EmailChangeCurrentVerification, mail.EmailChangeNewVerification:
