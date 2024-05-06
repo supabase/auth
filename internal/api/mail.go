@@ -1,11 +1,12 @@
 package api
 
 import (
-	"github.com/supabase/auth/internal/hooks"
-	mail "github.com/supabase/auth/internal/mailer"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/supabase/auth/internal/hooks"
+	mail "github.com/supabase/auth/internal/mailer"
 
 	"github.com/badoux/checkmail"
 	"github.com/fatih/structs"
@@ -123,6 +124,13 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			terr = tx.UpdateOnly(user, "recovery_token", "recovery_sent_at")
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error updating user for recovery")
+				return terr
+			}
+
+			terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.RecoveryToken, models.RecoveryToken)
+			if terr != nil {
+				terr = errors.Wrap(terr, "Database error creating recovery token in admin")
+				return terr
 			}
 		case mail.InviteVerification:
 			if user != nil {
@@ -170,6 +178,12 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			terr = tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at", "invited_at")
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error updating user for invite")
+				return terr
+			}
+			terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken)
+			if terr != nil {
+				terr = errors.Wrap(terr, "Database error creating confirmation token for invite in admin")
+				return terr
 			}
 		case mail.SignupVerification:
 			if user != nil {
@@ -202,6 +216,12 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			terr = tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at")
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error updating user for confirmation")
+				return terr
+			}
+			terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken)
+			if terr != nil {
+				terr = errors.Wrap(terr, "Database error creating confirmation token for signup in admin")
+				return terr
 			}
 		case mail.EmailChangeCurrentVerification, mail.EmailChangeNewVerification:
 			if !config.Mailer.SecureEmailChangeEnabled && params.Type == "email_change_current" {
@@ -228,6 +248,21 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			terr = tx.UpdateOnly(user, "email_change_token_current", "email_change_token_new", "email_change", "email_change_sent_at", "email_change_confirm_status")
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error updating user for email change")
+				return terr
+			}
+			if user.EmailChangeTokenCurrent != "" {
+				terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent)
+				if terr != nil {
+					terr = errors.Wrap(terr, "Database error creating email change token current in admin")
+					return terr
+				}
+			}
+			if user.EmailChangeTokenNew != "" {
+				terr = models.CreateOneTimeToken(tx, user.ID, user.EmailChange, user.EmailChangeTokenNew, models.EmailChangeTokenNew)
+				if terr != nil {
+					terr = errors.Wrap(terr, "Database error creating email change token new in admin")
+					return terr
+				}
 			}
 		default:
 			return badRequestError(ErrorCodeValidationFailed, "Invalid email action link type requested: %v", params.Type)
@@ -290,6 +325,11 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 		return errors.Wrap(err, "Database error updating user for confirmation")
 	}
 
+	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken)
+	if err != nil {
+		return errors.Wrap(err, "Database error creating confirmation token")
+	}
+
 	return nil
 }
 
@@ -315,6 +355,11 @@ func (a *API) sendInvite(r *http.Request, tx *storage.Connection, u *models.User
 	err = tx.UpdateOnly(u, "confirmation_token", "confirmation_sent_at", "invited_at")
 	if err != nil {
 		return errors.Wrap(err, "Database error updating user for invite")
+	}
+
+	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken)
+	if err != nil {
+		return errors.Wrap(err, "Database error creating confirmation token for invite")
 	}
 
 	return nil
@@ -349,6 +394,11 @@ func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *m
 		return errors.Wrap(err, "Database error updating user for recovery")
 	}
 
+	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken)
+	if err != nil {
+		return errors.Wrap(err, "Database error creating recovery token")
+	}
+
 	return nil
 }
 
@@ -379,6 +429,11 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 	err = tx.UpdateOnly(u, "reauthentication_token", "reauthentication_sent_at")
 	if err != nil {
 		return errors.Wrap(err, "Database error updating user for reauthentication")
+	}
+
+	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ReauthenticationToken, models.ReauthenticationToken)
+	if err != nil {
+		return errors.Wrap(err, "Database error creating reauthentication token")
 	}
 
 	return nil
@@ -414,6 +469,11 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 	err = tx.UpdateOnly(u, "recovery_token", "recovery_sent_at")
 	if err != nil {
 		return errors.Wrap(err, "Database error updating user for recovery")
+	}
+
+	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken)
+	if err != nil {
+		return errors.Wrap(err, "Database error creating recovery token")
 	}
 
 	return nil
@@ -467,6 +527,20 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 
 	if err != nil {
 		return errors.Wrap(err, "Database error updating user for email change")
+	}
+
+	if u.EmailChangeTokenCurrent != "" {
+		err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent)
+		if err != nil {
+			return errors.Wrap(err, "Database error creating email change token current")
+		}
+	}
+
+	if u.EmailChangeTokenNew != "" {
+		err = models.CreateOneTimeToken(tx, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew)
+		if err != nil {
+			return errors.Wrap(err, "Database error creating email change token new")
+		}
 	}
 
 	return nil
