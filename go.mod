@@ -72,7 +72,7 @@ require (
 	github.com/jackc/pgx/v4 v4.18.2
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20240303152453-e0e82adf1721
 	github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869
-	github.com/supabase/mailme v0.1.0
+	github.com/supabase/mailme v0.2.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 )
 
