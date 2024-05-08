@@ -492,6 +492,8 @@ github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869 h1:VDuRtwen5Z7QQ5ctu
 github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869/go.mod h1:eHX5nlSMSnyPjUrbYzeqrA8snCe2SKyfizKjU3dkfOw=
 github.com/supabase/mailme v0.1.0 h1:1InJqMMPTFqZfRZ/gnsCwOc+oUWCFuxSXhlCCG6zYUo=
 github.com/supabase/mailme v0.1.0/go.mod h1:kWsnmPfUBZTavlXYkfJrE9unzmmRAIi/kqsxXfEWEY8=
+github.com/supabase/mailme v0.2.0 h1:39LHZ4+YOeqoN4MiuncPBC3JarExAa0flmokM24qHNU=
+github.com/supabase/mailme v0.2.0/go.mod h1:kWsnmPfUBZTavlXYkfJrE9unzmmRAIi/kqsxXfEWEY8=
 github.com/twmb/murmur3 v1.1.6 h1:mqrRot1BRxm+Yct+vavLMou2/iJt0tNVTTC0QoIjaZg=
 github.com/twmb/murmur3 v1.1.6/go.mod h1:Qq/R7NUyOfr65zD+6Q5IHKsJLwP7exErjN6lyyq3OSQ=
 github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f h1:J9EGpcZtP0E/raorCMxlFGSTBrsSlaDGf3jU/qvAE2c=
