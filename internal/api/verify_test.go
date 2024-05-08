@@ -696,16 +696,11 @@ func (ts *VerifyTestSuite) TestVerifySignupWithRedirectURLContainedPath() {
 func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	u.ConfirmationToken = "pkce_confirmation_token"
-	u.RecoveryToken = "pkce_recovery_token"
 	t := time.Now()
 	u.ConfirmationSentAt = &t
 	u.RecoverySentAt = &t
 	u.EmailChangeSentAt = &t
-
 	require.NoError(ts.T(), ts.API.db.Update(u))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken))
 
 	cases := []struct {
 		desc                 string
@@ -713,10 +708,10 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 		authenticationMethod models.AuthenticationMethod
 	}{
 		{
-			desc: "Verify banned user on signup",
+			desc: "Verify user on signup",
 			payload: &VerifyParams{
 				Type:  "signup",
-				Token: u.ConfirmationToken,
+				Token: "pkce_confirmation_token",
 			},
 			authenticationMethod: models.EmailSignup,
 		},
@@ -724,7 +719,7 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 			desc: "Verify magiclink",
 			payload: &VerifyParams{
 				Type:  "magiclink",
-				Token: u.RecoveryToken,
+				Token: "pkce_recovery_token",
 			},
 			authenticationMethod: models.MagicLink,
 		},
@@ -732,8 +727,16 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			var buffer bytes.Buffer
+			// since the test user is the same, the tokens are being cleared after each successful verification attempt
+			// so we create them on each run
+			if c.payload.Type == "signup" {
+				require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), c.payload.Token, models.ConfirmationToken))
+			} else if c.payload.Type == "magiclink" {
+				require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), c.payload.Token, models.RecoveryToken))
+			}
+
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.payload))
-			codeChallenge := "codechallengecodechallengcodechallengcodechallengcodechallenge" + c.payload.Type
+			codeChallenge := "codechallengecodechallengcodechallengcodechallengcodechallenge"
 			flowState := models.NewFlowState(c.authenticationMethod.String(), codeChallenge, models.SHA256, c.authenticationMethod, &u.ID)
 			require.NoError(ts.T(), ts.API.db.Create(flowState))
 
