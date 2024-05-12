@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -77,66 +78,112 @@ func (ts *AnonymousTestSuite) TestAnonymousLogins() {
 
 func (ts *AnonymousTestSuite) TestConvertAnonymousUserToPermanent() {
 	ts.Config.External.AnonymousUsers.Enabled = true
-	// Request body
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{}))
+	ts.Config.Sms.TestOTP = map[string]string{"1234567890": "000000"}
+	// test OTPs still require setting up an sms provider
+	ts.Config.Sms.Provider = "twilio"
+	ts.Config.Sms.Twilio.AccountSid = "fake-sid"
+	ts.Config.Sms.Twilio.AuthToken = "fake-token"
+	ts.Config.Sms.Twilio.MessageServiceSid = "fake-message-service-sid"
 
-	req := httptest.NewRequest(http.MethodPost, "/signup", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+	cases := []struct {
+		desc             string
+		body             map[string]interface{}
+		verificationType string
+	}{
+		{
+			desc: "convert anonymous user to permanent user with email",
+			body: map[string]interface{}{
+				"email": "test@example.com",
+			},
+			verificationType: "email_change",
+		},
+		{
+			desc: "convert anonymous user to permanent user with email",
+			body: map[string]interface{}{
+				"phone": "1234567890",
+			},
+			verificationType: "phone_change",
+		},
+	}
 
-	w := httptest.NewRecorder()
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			// Request body
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{}))
 
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
+			req := httptest.NewRequest(http.MethodPost, "/signup", &buffer)
+			req.Header.Set("Content-Type", "application/json")
 
-	signupResponse := &AccessTokenResponse{}
-	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&signupResponse))
+			w := httptest.NewRecorder()
 
-	// Add email to anonymous user
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"email": "test@example.com",
-	}))
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	req = httptest.NewRequest(http.MethodPut, "/user", &buffer)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", signupResponse.Token))
+			signupResponse := &AccessTokenResponse{}
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&signupResponse))
 
-	w = httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
+			// Add email to anonymous user
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
 
-	// Check if anonymous user is still anonymous
-	user, err := models.FindUserByID(ts.API.db, signupResponse.User.ID)
-	require.NoError(ts.T(), err)
-	require.NotEmpty(ts.T(), user)
-	require.True(ts.T(), user.IsAnonymous)
+			req = httptest.NewRequest(http.MethodPut, "/user", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", signupResponse.Token))
 
-	// Verify email change
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"token_hash": user.EmailChangeTokenNew,
-		"type":       "email_change",
-	}))
+			w = httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	req = httptest.NewRequest(http.MethodPost, "/verify", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+			// Check if anonymous user is still anonymous
+			user, err := models.FindUserByID(ts.API.db, signupResponse.User.ID)
+			require.NoError(ts.T(), err)
+			require.NotEmpty(ts.T(), user)
+			require.True(ts.T(), user.IsAnonymous)
 
-	w = httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
-	require.Equal(ts.T(), http.StatusOK, w.Code)
+			switch c.verificationType {
+			case mail.EmailChangeVerification:
+				require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+					"token_hash": user.EmailChangeTokenNew,
+					"type":       c.verificationType,
+				}))
+			case phoneChangeVerification:
+				require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+					"phone": "1234567890",
+					"token": "000000",
+					"type":  c.verificationType,
+				}))
+			}
 
-	data := &AccessTokenResponse{}
-	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			req = httptest.NewRequest(http.MethodPost, "/verify", &buffer)
+			req.Header.Set("Content-Type", "application/json")
 
-	// User is a permanent user and not anonymous anymore
-	assert.Equal(ts.T(), signupResponse.User.ID, data.User.ID)
-	assert.Equal(ts.T(), ts.Config.JWT.Aud, data.User.Aud)
-	assert.Equal(ts.T(), "test@example.com", data.User.GetEmail())
-	assert.Equal(ts.T(), models.JSONMap(models.JSONMap{"provider": "email", "providers": []interface{}{"email"}}), data.User.AppMetaData)
-	assert.False(ts.T(), data.User.IsAnonymous)
-	assert.NotEmpty(ts.T(), data.User.EmailConfirmedAt)
+			w = httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	// User should have an email identity
-	assert.Len(ts.T(), data.User.Identities, 1)
+			data := &AccessTokenResponse{}
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+			// User is a permanent user and not anonymous anymore
+			assert.Equal(ts.T(), signupResponse.User.ID, data.User.ID)
+			assert.Equal(ts.T(), ts.Config.JWT.Aud, data.User.Aud)
+			assert.False(ts.T(), data.User.IsAnonymous)
+
+			// User should have an identity
+			assert.Len(ts.T(), data.User.Identities, 1)
+
+			switch c.verificationType {
+			case mail.EmailChangeVerification:
+				assert.Equal(ts.T(), "test@example.com", data.User.GetEmail())
+				assert.Equal(ts.T(), models.JSONMap(models.JSONMap{"provider": "email", "providers": []interface{}{"email"}}), data.User.AppMetaData)
+				assert.NotEmpty(ts.T(), data.User.EmailConfirmedAt)
+			case phoneChangeVerification:
+				assert.Equal(ts.T(), "1234567890", data.User.GetPhone())
+				assert.Equal(ts.T(), models.JSONMap(models.JSONMap{"provider": "phone", "providers": []interface{}{"phone"}}), data.User.AppMetaData)
+				assert.NotEmpty(ts.T(), data.User.PhoneConfirmedAt)
+			}
+		})
+	}
 }
 
 func (ts *AnonymousTestSuite) TestRateLimitAnonymousSignups() {
