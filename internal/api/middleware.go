@@ -145,7 +145,7 @@ func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) 
 		return nil, err
 	}
 
-	return a.requireAdmin(ctx, req)
+	return a.requireAdmin(ctx)
 }
 
 func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (context.Context, error) {
