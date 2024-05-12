@@ -406,6 +406,13 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 			}
 		}
 
+		if user.IsAnonymous {
+			user.IsAnonymous = false
+			if terr := tx.UpdateOnly(user, "is_anonymous"); terr != nil {
+				return terr
+			}
+		}
+
 		if terr := tx.Load(user, "Identities"); terr != nil {
 			return internalServerError("Error refetching identities").WithInternalError(terr)
 		}
