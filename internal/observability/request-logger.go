@@ -29,7 +29,6 @@ func (l *structuredLogger) NewLogEntry(r *http.Request) chimiddleware.LogEntry {
 		"path":        r.URL.Path,
 		"remote_addr": utilities.GetIPAddress(r),
 		"referer":     referrer,
-		"timestamp":   time.Now().UTC().Format(time.RFC3339),
 	}
 
 	if reqID := r.Context().Value("request_id"); reqID != nil {
