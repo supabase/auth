@@ -98,7 +98,7 @@ func (ts *AnonymousTestSuite) TestConvertAnonymousUserToPermanent() {
 			verificationType: "email_change",
 		},
 		{
-			desc: "convert anonymous user to permanent user with email",
+			desc: "convert anonymous user to permanent user with phone",
 			body: map[string]interface{}{
 				"phone": "1234567890",
 			},
