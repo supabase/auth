@@ -8,7 +8,6 @@ require (
 	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc
 	github.com/coreos/go-oidc/v3 v3.6.0
 	github.com/didip/tollbooth/v5 v5.1.1
-	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/gobuffalo/validate/v3 v3.3.3 // indirect
 	github.com/gobwas/glob v0.2.3
 	github.com/gofrs/uuid v4.3.1+incompatible
@@ -68,6 +67,7 @@ require (
 	github.com/crewjam/saml v0.4.14
 	github.com/deepmap/oapi-codegen v1.12.4
 	github.com/fatih/structs v1.1.0
+	github.com/go-chi/chi/v5 v5.0.12
 	github.com/gobuffalo/pop/v6 v6.1.1
 	github.com/jackc/pgx/v4 v4.18.2
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20240303152453-e0e82adf1721

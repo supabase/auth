@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/fatih/structs"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/provider"
