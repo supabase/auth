@@ -426,7 +426,7 @@ func (a *API) prepErrorRedirectURL(err *HTTPError, r *http.Request, rurl string,
 
 	// Maintain separate query params for hash and query
 	hq := url.Values{}
-	log := observability.GetLogEntry(r)
+	log := observability.GetLogEntry(r).Entry
 	errorID := utilities.GetRequestID(r.Context())
 	err.ErrorID = errorID
 	log.WithError(err.Cause()).Info(err.Error())

@@ -49,7 +49,7 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 
 	db := a.db.WithContext(ctx)
 	config := a.config
-	log := observability.GetLogEntry(r)
+	log := observability.GetLogEntry(r).Entry
 
 	relayStateValue := r.FormValue("RelayState")
 	relayStateUUID := uuid.FromStringOrNil(relayStateValue)

@@ -111,7 +111,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	}
 
 	r.UseBypass(xffmw.Handler)
-	r.Use(recoverer)
+	r.UseBypass(recoverer)
 
 	if globalConfig.DB.CleanupEnabled {
 		cleanup := models.NewCleanup(globalConfig)

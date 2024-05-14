@@ -25,7 +25,7 @@ type IdTokenGrantParams struct {
 }
 
 func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, *conf.OAuthProviderConfiguration, string, []string, error) {
-	log := observability.GetLogEntry(r)
+	log := observability.GetLogEntry(r).Entry
 
 	var cfg *conf.OAuthProviderConfiguration
 	var issuer string
@@ -113,7 +113,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 
 // IdTokenGrant implements the id_token grant type flow
 func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	log := observability.GetLogEntry(r)
+	log := observability.GetLogEntry(r).Entry
 
 	db := a.db.WithContext(ctx)
 	config := a.config

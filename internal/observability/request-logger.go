@@ -22,7 +22,7 @@ type structuredLogger struct {
 
 func (l *structuredLogger) NewLogEntry(r *http.Request) chimiddleware.LogEntry {
 	referrer := utilities.GetReferrer(r, l.Config)
-	entry := &structuredLoggerEntry{Logger: logrus.NewEntry(l.Logger)}
+	e := &logEntry{Entry: logrus.NewEntry(l.Logger)}
 	logFields := logrus.Fields{
 		"component":   "api",
 		"method":      r.Method,
@@ -35,51 +35,50 @@ func (l *structuredLogger) NewLogEntry(r *http.Request) chimiddleware.LogEntry {
 		logFields["request_id"] = reqID
 	}
 
-	entry.Logger = entry.Logger.WithFields(logFields)
-	entry.Logger.Infoln("request started")
-	return entry
+	e.Entry = e.Entry.WithFields(logFields)
+	e.Entry.Info("request started")
+	return e
 }
 
-type structuredLoggerEntry struct {
-	Logger logrus.FieldLogger
+// logEntry implements the chiMiddleware.LogEntry interface
+type logEntry struct {
+	Entry *logrus.Entry
 }
 
-func (l *structuredLoggerEntry) Write(status, bytes int, elapsed time.Duration) {
-	l.Logger = l.Logger.WithFields(logrus.Fields{
+func (e *logEntry) Write(status, bytes int, elapsed time.Duration) {
+	entry := e.Entry.WithFields(logrus.Fields{
 		"status":   status,
 		"duration": elapsed.Nanoseconds(),
 	})
-
-	l.Logger.Info("request completed")
+	entry.Info("request completed")
+	e.Entry = entry
 }
 
-func (l *structuredLoggerEntry) Panic(v interface{}, stack []byte) {
-	l.Logger.WithFields(logrus.Fields{
+func (e *logEntry) Panic(v interface{}, stack []byte) {
+	entry := e.Entry.WithFields(logrus.Fields{
 		"stack": string(stack),
 		"panic": fmt.Sprintf("%+v", v),
-	}).Panic("unhandled request panic")
+	})
+	entry.Error("request panicked")
+	e.Entry = entry
 }
 
-func GetLogEntry(r *http.Request) logrus.FieldLogger {
-	entry, _ := chimiddleware.GetLogEntry(r).(*structuredLoggerEntry)
-	if entry == nil {
-		return logrus.NewEntry(logrus.StandardLogger())
+func GetLogEntry(r *http.Request) *logEntry {
+	l, _ := chimiddleware.GetLogEntry(r).(*logEntry)
+	if l == nil {
+		return &logEntry{Entry: logrus.NewEntry(logrus.StandardLogger())}
 	}
-	return entry.Logger
+	return l
 }
 
-func LogEntrySetField(r *http.Request, key string, value interface{}) logrus.FieldLogger {
-	if entry, ok := r.Context().Value(chimiddleware.LogEntryCtxKey).(*structuredLoggerEntry); ok {
-		entry.Logger = entry.Logger.WithField(key, value)
-		return entry.Logger
+func LogEntrySetField(r *http.Request, key string, value interface{}) {
+	if l, ok := r.Context().Value(chimiddleware.LogEntryCtxKey).(*logEntry); ok {
+		l.Entry = l.Entry.WithField(key, value)
 	}
-	return nil
 }
 
-func LogEntrySetFields(r *http.Request, fields logrus.Fields) logrus.FieldLogger {
-	if entry, ok := r.Context().Value(chimiddleware.LogEntryCtxKey).(*structuredLoggerEntry); ok {
-		entry.Logger = entry.Logger.WithFields(fields)
-		return entry.Logger
+func LogEntrySetFields(r *http.Request, fields logrus.Fields) {
+	if l, ok := r.Context().Value(chimiddleware.LogEntryCtxKey).(*logEntry); ok {
+		l.Entry = l.Entry.WithFields(fields)
 	}
-	return nil
 }

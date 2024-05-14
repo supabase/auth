@@ -69,7 +69,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		return nil, badRequestError(ErrorCodeOAuthProviderNotSupported, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
 
-	log := observability.GetLogEntry(r)
+	log := observability.GetLogEntry(r).Entry
 	log.WithFields(logrus.Fields{
 		"provider": providerType,
 		"code":     oauthCode,

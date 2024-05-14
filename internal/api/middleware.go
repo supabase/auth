@@ -62,7 +62,7 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 			key := req.Header.Get(limitHeader)
 
 			if key == "" {
-				log := observability.GetLogEntry(req)
+				log := observability.GetLogEntry(req).Entry
 				log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
 				return c, nil
 			} else {
@@ -212,7 +212,7 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 	}
 	if u, err = url.ParseRequestURI(baseUrl); err != nil {
 		// fallback to the default hostname
-		log := observability.GetLogEntry(req)
+		log := observability.GetLogEntry(req).Entry
 		log.WithField("request_url", baseUrl).Warn(err)
 		if u, err = url.ParseRequestURI(config.API.ExternalURL); err != nil {
 			return ctx, err
@@ -251,7 +251,7 @@ func (a *API) databaseCleanup(cleanup *models.Cleanup) func(http.Handler) http.H
 			}
 
 			db := a.db.WithContext(r.Context())
-			log := observability.GetLogEntry(r)
+			log := observability.GetLogEntry(r).Entry
 
 			affectedRows, err := cleanup.Clean(db)
 			if err != nil {

@@ -71,7 +71,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	}
 
 	redirectURL := utilities.GetReferrer(r, config)
-	log := observability.GetLogEntry(r)
+	log := observability.GetLogEntry(r).Entry
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
 		return "", err
@@ -573,7 +573,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 
 func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {
 	ctx := r.Context()
-	log := observability.GetLogEntry(r)
+	log := observability.GetLogEntry(r).Entry
 	errorID := utilities.GetRequestID(ctx)
 	err := handler(w, r)
 	if err != nil {

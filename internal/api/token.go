@@ -153,7 +153,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			if wpe, ok := err.(*WeakPasswordError); ok {
 				weakPasswordError = wpe
 			} else {
-				observability.GetLogEntry(r).WithError(err).Warn("Password strength check on sign-in failed")
+				observability.GetLogEntry(r).Entry.WithError(err).Warn("Password strength check on sign-in failed")
 			}
 		}
 	}

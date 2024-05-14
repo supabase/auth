@@ -85,7 +85,7 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 	ctx, cancel := context.WithTimeout(ctx, DefaultHTTPHookTimeout)
 	defer cancel()
 
-	log := observability.GetLogEntry(r)
+	log := observability.GetLogEntry(r).Entry
 	requestURL := hookConfig.URI
 	hookLog := log.WithFields(logrus.Fields{
 		"component": "auth_hook",
