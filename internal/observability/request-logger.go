@@ -31,8 +31,8 @@ func (l *structuredLogger) NewLogEntry(r *http.Request) chimiddleware.LogEntry {
 		"referer":     referrer,
 	}
 
-	if reqID := r.Context().Value("request_id"); reqID != nil {
-		logFields["request_id"] = reqID.(string)
+	if reqID := utilities.GetRequestID(r.Context()); reqID != "" {
+		logFields["request_id"] = reqID
 	}
 
 	entry.Logger = entry.Logger.WithFields(logFields)

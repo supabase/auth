@@ -15,17 +15,12 @@ import (
 
 func addRequestID(globalConfig *conf.GlobalConfiguration) middlewareHandler {
 	return func(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-		id := ""
+		id := uuid.Must(uuid.NewV4()).String()
 		if globalConfig.API.RequestIDHeader != "" {
 			id = r.Header.Get(globalConfig.API.RequestIDHeader)
 		}
-		if id == "" {
-			uid := uuid.Must(uuid.NewV4())
-			id = uid.String()
-		}
-
 		ctx := r.Context()
-		ctx = withRequestID(ctx, id)
+		ctx = utilities.WithRequestID(ctx, id)
 		return ctx, nil
 	}
 }

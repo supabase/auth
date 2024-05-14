@@ -183,7 +183,7 @@ type HTTPErrorResponse20240101 struct {
 
 func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 	log := observability.GetLogEntry(r)
-	errorID := getRequestID(r.Context())
+	errorID := utilities.GetRequestID(r.Context())
 
 	apiVersion, averr := DetermineClosestAPIVersion(r.Header.Get(APIVersionHeaderName))
 	if averr != nil {
