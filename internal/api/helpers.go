@@ -6,24 +6,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/utilities"
 )
-
-func addRequestID(globalConfig *conf.GlobalConfiguration) middlewareHandler {
-	return func(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-		id := uuid.Must(uuid.NewV4()).String()
-		if globalConfig.API.RequestIDHeader != "" {
-			id = r.Header.Get(globalConfig.API.RequestIDHeader)
-		}
-		ctx := r.Context()
-		ctx = utilities.WithRequestID(ctx, id)
-		return ctx, nil
-	}
-}
 
 func sendJSON(w http.ResponseWriter, status int, obj interface{}) error {
 	w.Header().Set("Content-Type", "application/json")
