@@ -281,11 +281,13 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
+		reason := ErrorCodeOverEmailSendRateLimit
+		if params.Provider == "phone" {
+			reason = ErrorCodeOverSMSSendRateLimit
+		}
+
 		if errors.Is(err, MaxFrequencyLimitError) {
-			if params.Provider == "phone" {
-				return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(user.ConfirmationSentAt, config.Sms.MaxFrequency))
-			}
-			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(user.ConfirmationSentAt, config.SMTP.MaxFrequency))
+			return tooManyRequestsError(reason, "For security purposes, you can only request this once every minute")
 		} else if errors.Is(err, UserExistsError) {
 			err = db.Transaction(func(tx *storage.Connection) error {
 				if terr := models.NewAuditLogEntry(r, tx, user, models.UserRepeatedSignUpAction, "", map[string]interface{}{
