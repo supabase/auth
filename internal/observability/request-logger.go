@@ -52,7 +52,6 @@ func (l *structuredLogger) NewLogEntry(r *http.Request) chimiddleware.LogEntry {
 	}
 
 	e.Entry = e.Entry.WithFields(logFields)
-	e.Entry.Info("request started")
 	return e
 }
 
