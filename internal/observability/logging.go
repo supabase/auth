@@ -3,6 +3,7 @@ package observability
 import (
 	"os"
 	"sync"
+	"time"
 
 	"github.com/bombsimon/logrusr/v3"
 	"github.com/gobuffalo/pop/v6"
@@ -22,11 +23,31 @@ var (
 	loggingOnce sync.Once
 )
 
+type CustomFormatter struct {
+	logrus.JSONFormatter
+}
+
+func NewCustomFormatter() *CustomFormatter {
+	return &CustomFormatter{
+		JSONFormatter: logrus.JSONFormatter{
+			DisableTimestamp: false,
+			TimestampFormat:  time.RFC3339,
+		},
+	}
+}
+
+func (f *CustomFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	// logrus doesn't support formatting the time in UTC so we need to use a custom formatter
+	entry.Time = entry.Time.UTC()
+	return f.JSONFormatter.Format(entry)
+}
+
 func ConfigureLogging(config *conf.LoggingConfig) error {
 	var err error
 
 	loggingOnce.Do(func() {
-		logrus.SetFormatter(&logrus.JSONFormatter{})
+		formatter := NewCustomFormatter()
+		logrus.SetFormatter(formatter)
 
 		// use a file if you want
 		if config.File != "" {

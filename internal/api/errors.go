@@ -148,27 +148,28 @@ func httpError(httpStatus int, errorCode ErrorCode, fmtString string, args ...in
 // Recoverer is a middleware that recovers from panics, logs the panic (and a
 // backtrace), and returns a HTTP 500 (Internal Server Error) status if
 // possible. Recoverer prints a request ID if one is provided.
-func recoverer(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	defer func() {
-		if rvr := recover(); rvr != nil {
+func recoverer(next http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rvr := recover(); rvr != nil {
+				logEntry := observability.GetLogEntry(r)
+				if logEntry != nil {
+					logEntry.Panic(rvr, debug.Stack())
+				} else {
+					fmt.Fprintf(os.Stderr, "Panic: %+v\n", rvr)
+					debug.PrintStack()
+				}
 
-			logEntry := observability.GetLogEntry(r)
-			if logEntry != nil {
-				logEntry.Panic(rvr, debug.Stack())
-			} else {
-				fmt.Fprintf(os.Stderr, "Panic: %+v\n", rvr)
-				debug.PrintStack()
+				se := &HTTPError{
+					HTTPStatus: http.StatusInternalServerError,
+					Message:    http.StatusText(http.StatusInternalServerError),
+				}
+				HandleResponseError(se, w, r)
 			}
-
-			se := &HTTPError{
-				HTTPStatus: http.StatusInternalServerError,
-				Message:    http.StatusText(http.StatusInternalServerError),
-			}
-			HandleResponseError(se, w, r)
-		}
-	}()
-
-	return nil, nil
+		}()
+		next.ServeHTTP(w, r)
+	}
+	return http.HandlerFunc(fn)
 }
 
 // ErrorCause is an error interface that contains the method Cause() for returning root cause errors
@@ -182,8 +183,8 @@ type HTTPErrorResponse20240101 struct {
 }
 
 func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
-	log := observability.GetLogEntry(r)
-	errorID := getRequestID(r.Context())
+	log := observability.GetLogEntry(r).Entry
+	errorID := utilities.GetRequestID(r.Context())
 
 	apiVersion, averr := DetermineClosestAPIVersion(r.Header.Get(APIVersionHeaderName))
 	if averr != nil {

@@ -16,7 +16,6 @@ func (c contextKey) String() string {
 
 const (
 	tokenKey                = contextKey("jwt")
-	requestIDKey            = contextKey("request_id")
 	inviteTokenKey          = contextKey("invite_token")
 	signatureKey            = contextKey("signature")
 	externalProviderTypeKey = contextKey("external_provider_type")
@@ -55,21 +54,6 @@ func getClaims(ctx context.Context) *AccessTokenClaims {
 		return nil
 	}
 	return token.Claims.(*AccessTokenClaims)
-}
-
-// withRequestID adds the provided request ID to the context.
-func withRequestID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, requestIDKey, id)
-}
-
-// getRequestID reads the request ID from the context.
-func getRequestID(ctx context.Context) string {
-	obj := ctx.Value(requestIDKey)
-	if obj == nil {
-		return ""
-	}
-
-	return obj.(string)
 }
 
 // withUser adds the user to the context.
