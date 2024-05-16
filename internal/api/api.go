@@ -98,20 +98,19 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	logger := observability.NewStructuredLogger(logrus.StandardLogger(), globalConfig)
 
 	r := newRouter()
+	r.UseBypass(observability.AddRequestID(globalConfig))
+	r.UseBypass(logger)
+	r.UseBypass(xffmw.Handler)
+	r.UseBypass(recoverer)
 
 	if globalConfig.API.MaxRequestDuration > 0 {
 		r.UseBypass(api.timeoutMiddleware(globalConfig.API.MaxRequestDuration))
 	}
 
-	r.Use(addRequestID(globalConfig))
-
 	// request tracing should be added only when tracing or metrics is enabled
 	if globalConfig.Tracing.Enabled || globalConfig.Metrics.Enabled {
 		r.UseBypass(observability.RequestTracing())
 	}
-
-	r.UseBypass(xffmw.Handler)
-	r.Use(recoverer)
 
 	if globalConfig.DB.CleanupEnabled {
 		cleanup := models.NewCleanup(globalConfig)
@@ -121,7 +120,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	r.Get("/health", api.HealthCheck)
 
 	r.Route("/callback", func(r *router) {
-		r.UseBypass(logger)
 		r.Use(api.isValidExternalHost)
 		r.Use(api.loadFlowState)
 
@@ -130,7 +128,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	})
 
 	r.Route("/", func(r *router) {
-		r.UseBypass(logger)
 		r.Use(api.isValidExternalHost)
 
 		r.Get("/settings", api.Settings)
