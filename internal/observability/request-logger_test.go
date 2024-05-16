@@ -47,3 +47,26 @@ func TestLogger(t *testing.T) {
 	require.Equal(t, "test-request-id", logs["request_id"])
 	require.NotNil(t, logs["time"])
 }
+
+func TestExcludeHealthFromLogs(t *testing.T) {
+	var logBuffer bytes.Buffer
+	config, err := conf.LoadGlobal(apiTestConfig)
+	require.NoError(t, err)
+
+	config.Logging.Level = "info"
+	require.NoError(t, ConfigureLogging(&config.Logging))
+
+	// logrus should write to the buffer so we can check if the logs are output correctly
+	logrus.SetOutput(&logBuffer)
+
+	logHandler := NewStructuredLogger(logrus.StandardLogger(), config)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	}))
+	w := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "http://example.com/health", nil)
+	require.NoError(t, err)
+	logHandler.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	require.Empty(t, logBuffer)
+}

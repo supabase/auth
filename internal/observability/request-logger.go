@@ -28,7 +28,15 @@ func AddRequestID(globalConfig *conf.GlobalConfiguration) func(next http.Handler
 }
 
 func NewStructuredLogger(logger *logrus.Logger, config *conf.GlobalConfiguration) func(next http.Handler) http.Handler {
-	return chimiddleware.RequestLogger(&structuredLogger{logger, config})
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/health" {
+				next.ServeHTTP(w, r)
+			} else {
+				chimiddleware.RequestLogger(&structuredLogger{logger, config})(next).ServeHTTP(w, r)
+			}
+		})
+	}
 }
 
 type structuredLogger struct {
