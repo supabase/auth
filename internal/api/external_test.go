@@ -56,6 +56,10 @@ func (ts *ExternalTestSuite) createUser(providerId string, email string, name st
 	ts.Require().NoError(err, "Error making new user")
 	ts.Require().NoError(ts.API.db.Create(u), "Error creating user")
 
+	if confirmationToken != "" {
+		ts.Require().NoError(models.CreateOneTimeToken(ts.API.db, u.ID, email, u.ConfirmationToken, models.ConfirmationToken), "Error creating one-time confirmation/invite token")
+	}
+
 	i, err := models.NewIdentity(u, "email", map[string]interface{}{
 		"sub":   u.ID.String(),
 		"email": email,
