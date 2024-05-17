@@ -1,14 +1,12 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"regexp"
 	"time"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
-	"github.com/go-chi/chi"
 	"github.com/rs/cors"
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
@@ -51,7 +49,7 @@ func (a *API) Now() time.Time {
 
 // NewAPI instantiates a new REST API
 func NewAPI(globalConfig *conf.GlobalConfiguration, db *storage.Connection) *API {
-	return NewAPIWithVersion(context.Background(), globalConfig, db, defaultVersion)
+	return NewAPIWithVersion(globalConfig, db, defaultVersion)
 }
 
 func (a *API) deprecationNotices() {
@@ -69,7 +67,7 @@ func (a *API) deprecationNotices() {
 }
 
 // NewAPIWithVersion creates a new REST API using the specified version
-func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
+func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
 	api := &API{config: globalConfig, db: db, version: version}
 
 	if api.config.Password.HIBP.Enabled {
@@ -293,7 +291,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		AllowCredentials: true,
 	})
 
-	api.handler = corsHandler.Handler(chi.ServerBaseContext(ctx, r))
+	api.handler = corsHandler.Handler(r)
 	return api
 }
 

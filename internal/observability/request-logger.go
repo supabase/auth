@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	chimiddleware "github.com/go-chi/chi/middleware"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
@@ -68,7 +68,7 @@ type logEntry struct {
 	Entry *logrus.Entry
 }
 
-func (e *logEntry) Write(status, bytes int, elapsed time.Duration) {
+func (e *logEntry) Write(status, bytes int, header http.Header, elapsed time.Duration, extra interface{}) {
 	entry := e.Entry.WithFields(logrus.Fields{
 		"status":   status,
 		"duration": elapsed.Nanoseconds(),
