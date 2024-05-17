@@ -320,16 +320,13 @@ func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), timeout)
-			defer cancel()
-
 			timeoutWriter := &timeoutResponseWriter{
 				w:   w,
 				ctx: ctx,
 			}
 
-			go func() {
-				<-ctx.Done()
-
+			defer func() {
+				cancel()
 				err := ctx.Err()
 
 				if err == context.DeadlineExceeded {
@@ -337,20 +334,16 @@ func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 					defer timeoutWriter.mu.Unlock()
 					if timeoutWriter.wrote == 0 {
 						// writer wasn't written to, so we're sending the error payload
-
 						httpError := &HTTPError{
 							HTTPStatus: http.StatusGatewayTimeout,
 							ErrorCode:  ErrorCodeRequestTimeout,
 							Message:    "Processing this request timed out, please retry after a moment.",
 						}
-
 						httpError = httpError.WithInternalError(err)
-
 						HandleResponseError(httpError, w, r)
 					}
 				}
 			}()
-
 			next.ServeHTTP(timeoutWriter, r.WithContext(ctx))
 		})
 	}
