@@ -319,7 +319,7 @@ func (ts *MiddlewareTestSuite) TestTimeoutMiddleware() {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
 	w := httptest.NewRecorder()
 
-	timeoutHandler := ts.API.timeoutMiddleware(ts.Config.API.MaxRequestDuration)
+	timeoutHandler := timeoutMiddleware(ts.Config.API.MaxRequestDuration)
 
 	slowHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Sleep for 1 second to simulate a slow handler which should trigger the timeout
