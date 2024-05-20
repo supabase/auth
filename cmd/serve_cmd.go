@@ -32,7 +32,7 @@ func serve(ctx context.Context) {
 	}
 	defer db.Close()
 
-	api := api.NewAPIWithVersion(ctx, config, db, utilities.Version)
+	api := api.NewAPIWithVersion(config, db, utilities.Version)
 
 	addr := net.JoinHostPort(config.API.Host, config.API.Port)
 	logrus.Infof("GoTrue API started on: %s", addr)

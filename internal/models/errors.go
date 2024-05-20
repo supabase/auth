@@ -25,6 +25,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case FlowStateNotFoundError, *FlowStateNotFoundError:
 		return true
+	case OneTimeTokenNotFoundError, *OneTimeTokenNotFoundError:
+		return true
 	}
 	return false
 }

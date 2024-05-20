@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
+	"strings"
 
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt"
@@ -44,11 +44,10 @@ func (a *API) requireNotAnonymous(w http.ResponseWriter, r *http.Request) (conte
 	return ctx, nil
 }
 
-func (a *API) requireAdmin(ctx context.Context, r *http.Request) (context.Context, error) {
+func (a *API) requireAdmin(ctx context.Context) (context.Context, error) {
 	// Find the administrative user
 	claims := getClaims(ctx)
 	if claims == nil {
-		fmt.Printf("[%s] %s %s %d %s\n", time.Now().Format("2006-01-02 15:04:05"), r.Method, r.RequestURI, http.StatusForbidden, "Invalid token")
 		return nil, forbiddenError(ErrorCodeBadJWT, "Invalid token")
 	}
 
@@ -59,8 +58,7 @@ func (a *API) requireAdmin(ctx context.Context, r *http.Request) (context.Contex
 		return withAdminUser(ctx, &models.User{Role: claims.Role, Email: storage.NullString(claims.Role)}), nil
 	}
 
-	fmt.Printf("[%s] %s %s %d %s\n", time.Now().Format("2006-01-02 15:04:05"), r.Method, r.RequestURI, http.StatusForbidden, "this token needs role 'supabase_admin' or 'service_role'")
-	return nil, forbiddenError(ErrorCodeNotAdmin, "User not allowed")
+	return nil, forbiddenError(ErrorCodeNotAdmin, "User not allowed").WithInternalMessage(fmt.Sprintf("this token needs to have one of the following roles: %v", strings.Join(adminRoles, ", ")))
 }
 
 func (a *API) extractBearerToken(r *http.Request) (string, error) {

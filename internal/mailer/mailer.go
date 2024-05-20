@@ -50,6 +50,7 @@ func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
 	mail.SetHeader("Message-ID", fmt.Sprintf("<%s@gotrue-mailer>", uuid.Must(uuid.NewV4()).String()))
 
 	from := mail.FormatAddress(globalConfig.SMTP.AdminEmail, globalConfig.SMTP.SenderName)
+	u, _ := url.ParseRequestURI(globalConfig.API.ExternalURL)
 
 	var mailClient MailClient
 	if globalConfig.SMTP.Host == "" {
@@ -57,13 +58,14 @@ func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
 		mailClient = &noopMailClient{}
 	} else {
 		mailClient = &mailme.Mailer{
-			Host:    globalConfig.SMTP.Host,
-			Port:    globalConfig.SMTP.Port,
-			User:    globalConfig.SMTP.User,
-			Pass:    globalConfig.SMTP.Pass,
-			From:    from,
-			BaseURL: globalConfig.SiteURL,
-			Logger:  logrus.StandardLogger(),
+			Host:      globalConfig.SMTP.Host,
+			Port:      globalConfig.SMTP.Port,
+			User:      globalConfig.SMTP.User,
+			Pass:      globalConfig.SMTP.Pass,
+			LocalName: u.Hostname(),
+			From:      from,
+			BaseURL:   globalConfig.SiteURL,
+			Logger:    logrus.StandardLogger(),
 		}
 	}
 

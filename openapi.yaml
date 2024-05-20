@@ -1840,7 +1840,7 @@ components:
         identities:
           type: array
           items:
-            type: object
+            $ref: "#/components/schemas/IdentitySchema"
         banned_until:
           type: string
           format: date-time
@@ -1853,6 +1853,8 @@ components:
         deleted_at:
           type: string
           format: date-time
+        is_anonymous:
+          type: boolean
 
     SAMLAttributeMappingSchema:
       type: object
@@ -1957,6 +1959,35 @@ components:
           description: |-
             Usually one of:
             - totp
+
+    IdentitySchema:
+      type: object
+      properties:
+        identity_id:
+          type: string
+          format: uuid
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        identity_data:
+          type: object
+        provider:
+          type: string
+        last_sign_in_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        email:
+          type: string
+          format: email
 
   responses:
     OAuthCallbackRedirectResponse:
