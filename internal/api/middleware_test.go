@@ -335,3 +335,24 @@ func (ts *MiddlewareTestSuite) TestTimeoutMiddleware() {
 	require.Equal(ts.T(), float64(504), data["code"])
 	require.NotNil(ts.T(), data["msg"])
 }
+
+func TestTimeoutResponseWriter(t *testing.T) {
+	// timeoutResponseWriter should exhitbit a similar behavior as http.ResponseWriter
+	req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+	w1 := httptest.NewRecorder()
+	w2 := httptest.NewRecorder()
+
+	timeoutHandler := timeoutMiddleware(time.Second * 10)
+
+	redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// tries to redirect twice
+		http.Redirect(w, r, "http://localhost:3001/#message=first_message", http.StatusSeeOther)
+
+		// overwrites the first
+		http.Redirect(w, r, "http://localhost:3001/second", http.StatusSeeOther)
+	})
+	timeoutHandler(redirectHandler).ServeHTTP(w1, req)
+	redirectHandler.ServeHTTP(w2, req)
+
+	require.Equal(t, w1.Result(), w2.Result())
+}

@@ -272,6 +272,7 @@ type timeoutResponseWriter struct {
 
 	header      http.Header
 	wroteHeader bool
+	snapHeader  http.Header // snapshot of the header at the time WriteHeader was called
 	statusCode  int
 	buf         bytes.Buffer
 }
@@ -298,8 +299,15 @@ func (t *timeoutResponseWriter) WriteHeader(statusCode int) {
 	t.Lock()
 	defer t.Unlock()
 
+	if t.wroteHeader {
+		// ignore multiple calls to WriteHeader
+		// once WriteHeader has been called once, a snapshot of the header map is taken
+		// and saved in snapHeader to be used in finallyWrite
+		return
+	}
 	t.statusCode = statusCode
 	t.wroteHeader = true
+	t.snapHeader = t.header.Clone()
 }
 
 func (t *timeoutResponseWriter) finallyWrite(w http.ResponseWriter) {
@@ -307,14 +315,13 @@ func (t *timeoutResponseWriter) finallyWrite(w http.ResponseWriter) {
 	defer t.Unlock()
 
 	dst := w.Header()
-	for k, vv := range t.header {
+	for k, vv := range t.snapHeader {
 		dst[k] = vv
 	}
+
 	if !t.wroteHeader {
 		t.statusCode = http.StatusOK
 	}
-
-	fmt.Printf("@@@@@@@@@@@@@@@@@@@@@@ %v %v\n", t.header, dst)
 
 	w.WriteHeader(t.statusCode)
 	if _, err := w.Write(t.buf.Bytes()); err != nil {
