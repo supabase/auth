@@ -4,15 +4,12 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
-	metricglobal "go.opentelemetry.io/otel/metric/global"
-	metricinstrument "go.opentelemetry.io/otel/metric/instrument"
-	otelasyncint64instrument "go.opentelemetry.io/otel/metric/instrument/asyncint64"
 
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
+	"go.opentelemetry.io/otel/metric"
 )
 
 type Cleanup struct {
@@ -24,7 +21,7 @@ type Cleanup struct {
 
 	// cleanupAffectedRows tracks an OpenTelemetry metric on the total number of
 	// cleaned up rows.
-	cleanupAffectedRows otelasyncint64instrument.Counter
+	cleanupAffectedRows metric.Int64Observer
 }
 
 func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
@@ -79,15 +76,19 @@ func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
 		c.cleanupStatements = append(c.cleanupStatements, fmt.Sprintf("delete from %q where id in (select %q.id as id from %q, %q where %q.session_id = %q.id and %q.refreshed_at is null and %q.revoked is false and %q.updated_at + interval '%d seconds' < now() - interval '24 hours' limit 100 for update skip locked)", tableSessions, tableSessions, tableSessions, tableRefreshTokens, tableRefreshTokens, tableSessions, tableSessions, tableRefreshTokens, tableRefreshTokens, inactivitySeconds))
 	}
 
-	cleanupAffectedRows, err := metricglobal.Meter("gotrue").AsyncInt64().Counter(
-		"gotrue_cleanup_affected_rows",
-		metricinstrument.WithDescription("Number of affected rows from cleaning up stale entities"),
-	)
-	if err != nil {
-		logrus.WithError(err).Error("unable to get gotrue.gotrue_cleanup_rows counter metric")
-	}
+	//meter := otel.Meter("example")
 
-	c.cleanupAffectedRows = cleanupAffectedRows
+	//  cleanupAffectedRows, err := meter.Int64ObservableCounter(
+	//     "gotrue_cleanup_affected_rows",
+	//     metric.WithDescription("Number of affected rows from cleaning up stale entities"),
+	// )
+
+	// if err != nil {
+	// 	logrus.WithError(err).Error("unable to get gotrue.gotrue_cleanup_rows counter metric")
+	// }
+
+	// c.cleanupAffectedRows = nil
+	// cleanupAffectedRows
 
 	return c
 }
@@ -120,10 +121,7 @@ func (c *Cleanup) Clean(db *storage.Connection) (int, error) {
 	}); err != nil {
 		return affectedRows, err
 	}
-
-	if c.cleanupAffectedRows != nil {
-		c.cleanupAffectedRows.Observe(ctx, int64(affectedRows))
-	}
+	// atomic.AddInt64(&c.cleanupAffectedRowCount, int64(affectedRows))
 
 	return affectedRows, nil
 }

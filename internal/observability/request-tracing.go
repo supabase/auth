@@ -1,16 +1,15 @@
 package observability
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	metricglobal "go.opentelemetry.io/otel/metric/global"
-	metricinstrument "go.opentelemetry.io/otel/metric/instrument"
-	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
+	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -80,14 +79,10 @@ func (w *interceptingResponseWriter) Header() http.Header {
 	return w.writer.Header()
 }
 
-type metricCounter interface {
-	Add(ctx context.Context, incr int64, attrs ...attribute.KeyValue)
-}
-
 // countStatusCodesSafely counts the number of HTTP status codes per route that
 // occurred while GoTrue was running. If it is not able to identify the route
 // via chi.RouteContext(ctx).RoutePattern() it counts with a noroute attribute.
-func countStatusCodesSafely(w *interceptingResponseWriter, r *http.Request, counter metricCounter) {
+func countStatusCodesSafely(w *interceptingResponseWriter, r *http.Request, counter metric.Int64Counter) {
 	if counter == nil {
 		return
 	}
@@ -95,12 +90,12 @@ func countStatusCodesSafely(w *interceptingResponseWriter, r *http.Request, coun
 	defer func() {
 		if rec := recover(); rec != nil {
 			logrus.WithField("error", rec).Error("unable to count status codes safely, metrics may be off")
-
 			counter.Add(
 				r.Context(),
 				1,
-				attribute.Bool("noroute", true),
-				attribute.Int("code", w.statusCode),
+				metric.WithAttributes(
+					attribute.Bool("noroute", true),
+					attribute.Int("code", w.statusCode)),
 			)
 		}
 	}()
@@ -113,8 +108,7 @@ func countStatusCodesSafely(w *interceptingResponseWriter, r *http.Request, coun
 	counter.Add(
 		ctx,
 		1,
-		attribute.Int("code", w.statusCode),
-		routePattern,
+		metric.WithAttributes(attribute.Int("code", w.statusCode), routePattern),
 	)
 }
 
@@ -122,10 +116,10 @@ func countStatusCodesSafely(w *interceptingResponseWriter, r *http.Request, coun
 // in. Supports Chi routers, so this should be one of the first middlewares on
 // the router.
 func RequestTracing() func(http.Handler) http.Handler {
-	meter := metricglobal.Meter("gotrue")
-	statusCodes, err := meter.SyncInt64().Counter(
+	meter := otel.Meter("gotrue")
+	statusCodes, err := meter.Int64Counter(
 		"http_status_codes",
-		metricinstrument.WithDescription("Number of returned HTTP status codes"),
+		metric.WithDescription("Number of returned HTTP status codes"),
 	)
 	if err != nil {
 		logrus.WithError(err).Error("unable to get gotrue.http_status_codes counter metric")
