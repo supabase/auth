@@ -9,7 +9,6 @@ import (
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
-	"go.opentelemetry.io/otel/metric"
 )
 
 type Cleanup struct {
@@ -21,7 +20,7 @@ type Cleanup struct {
 
 	// cleanupAffectedRows tracks an OpenTelemetry metric on the total number of
 	// cleaned up rows.
-	cleanupAffectedRows metric.Int64Observer
+	// cleanupAffectedRows metric.Int64Observer
 }
 
 func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
