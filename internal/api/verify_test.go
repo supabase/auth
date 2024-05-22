@@ -168,110 +168,112 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 	}
 
 	for _, c := range cases {
-		u, err := models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
-		require.NoError(ts.T(), err)
+		ts.Run(c.desc, func() {
+			u, err := models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
 
-		// reset user
-		u.EmailChangeSentAt = nil
-		u.EmailChangeTokenCurrent = ""
-		u.EmailChangeTokenNew = ""
-		require.NoError(ts.T(), ts.API.db.Update(u))
-		require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
+			// reset user
+			u.EmailChangeSentAt = nil
+			u.EmailChangeTokenCurrent = ""
+			u.EmailChangeTokenNew = ""
+			require.NoError(ts.T(), ts.API.db.Update(u))
+			require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
 
-		// Request body
-		var buffer bytes.Buffer
-		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+			// Request body
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
 
-		// Setup request
-		req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
-		req.Header.Set("Content-Type", "application/json")
+			// Setup request
+			req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+			req.Header.Set("Content-Type", "application/json")
 
-		// Generate access token for request and a mock session
-		var token string
-		session, err := models.NewSession(u.ID, nil)
-		require.NoError(ts.T(), err)
-		require.NoError(ts.T(), ts.API.db.Create(session))
+			// Generate access token for request and a mock session
+			var token string
+			session, err := models.NewSession(u.ID, nil)
+			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), ts.API.db.Create(session))
 
-		token, _, err = ts.API.generateAccessToken(req, ts.API.db, u, &session.ID, models.MagicLink)
-		require.NoError(ts.T(), err)
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+			token, _, err = ts.API.generateAccessToken(req, ts.API.db, u, &session.ID, models.MagicLink)
+			require.NoError(ts.T(), err)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
-		// Setup response recorder
-		w := httptest.NewRecorder()
-		ts.API.handler.ServeHTTP(w, req)
-		assert.Equal(ts.T(), http.StatusOK, w.Code)
+			// Setup response recorder
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-		u, err = models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
-		require.NoError(ts.T(), err)
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
 
-		currentTokenHash := u.EmailChangeTokenCurrent
-		newTokenHash := u.EmailChangeTokenNew
+			currentTokenHash := u.EmailChangeTokenCurrent
+			newTokenHash := u.EmailChangeTokenNew
 
-		u, err = models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
-		require.NoError(ts.T(), err)
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
 
-		assert.WithinDuration(ts.T(), time.Now(), *u.EmailChangeSentAt, 1*time.Second)
-		assert.False(ts.T(), u.IsConfirmed())
+			assert.WithinDuration(ts.T(), time.Now(), *u.EmailChangeSentAt, 1*time.Second)
+			assert.False(ts.T(), u.IsConfirmed())
 
-		// Verify new email
-		reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.EmailChangeVerification, newTokenHash)
-		req = httptest.NewRequest(http.MethodGet, reqURL, nil)
+			// Verify new email
+			reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.EmailChangeVerification, newTokenHash)
+			req = httptest.NewRequest(http.MethodGet, reqURL, nil)
 
-		w = httptest.NewRecorder()
-		ts.API.handler.ServeHTTP(w, req)
+			w = httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
 
-		require.Equal(ts.T(), http.StatusSeeOther, w.Code)
-		urlVal, err := url.Parse(w.Result().Header.Get("Location"))
-		ts.Require().NoError(err, "redirect url parse failed")
-		var v url.Values
-		if !c.isPKCE {
-			v, err = url.ParseQuery(urlVal.Fragment)
-			ts.Require().NoError(err)
-			ts.Require().NotEmpty(v.Get("message"))
-		} else if c.isPKCE {
-			v, err = url.ParseQuery(urlVal.RawQuery)
-			ts.Require().NoError(err)
-			ts.Require().NotEmpty(v.Get("message"))
+			require.Equal(ts.T(), http.StatusSeeOther, w.Code)
+			urlVal, err := url.Parse(w.Result().Header.Get("Location"))
+			ts.Require().NoError(err, "redirect url parse failed")
+			var v url.Values
+			if !c.isPKCE {
+				v, err = url.ParseQuery(urlVal.Fragment)
+				ts.Require().NoError(err)
+				ts.Require().NotEmpty(v.Get("message"))
+			} else if c.isPKCE {
+				v, err = url.ParseQuery(urlVal.RawQuery)
+				ts.Require().NoError(err)
+				ts.Require().NotEmpty(v.Get("message"))
 
-			v, err = url.ParseQuery(urlVal.Fragment)
-			ts.Require().NoError(err)
-			ts.Require().NotEmpty(v.Get("message"))
-		}
+				v, err = url.ParseQuery(urlVal.Fragment)
+				ts.Require().NoError(err)
+				ts.Require().NotEmpty(v.Get("message"))
+			}
 
-		u, err = models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
-		require.NoError(ts.T(), err)
-		assert.Equal(ts.T(), singleConfirmation, u.EmailChangeConfirmStatus)
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+			assert.Equal(ts.T(), singleConfirmation, u.EmailChangeConfirmStatus)
 
-		// Verify old email
-		reqURL = fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.EmailChangeVerification, currentTokenHash)
-		req = httptest.NewRequest(http.MethodGet, reqURL, nil)
+			// Verify old email
+			reqURL = fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.EmailChangeVerification, currentTokenHash)
+			req = httptest.NewRequest(http.MethodGet, reqURL, nil)
 
-		w = httptest.NewRecorder()
-		ts.API.handler.ServeHTTP(w, req)
-		require.Equal(ts.T(), http.StatusSeeOther, w.Code)
+			w = httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusSeeOther, w.Code)
 
-		urlVal, err = url.Parse(w.Header().Get("Location"))
-		ts.Require().NoError(err, "redirect url parse failed")
-		if !c.isPKCE {
-			v, err = url.ParseQuery(urlVal.Fragment)
-			ts.Require().NoError(err)
-			ts.Require().NotEmpty(v.Get("access_token"))
-			ts.Require().NotEmpty(v.Get("expires_in"))
-			ts.Require().NotEmpty(v.Get("refresh_token"))
-		} else if c.isPKCE {
-			v, err = url.ParseQuery(urlVal.RawQuery)
-			ts.Require().NoError(err)
-			ts.Require().NotEmpty(v.Get("code"))
-		}
+			urlVal, err = url.Parse(w.Header().Get("Location"))
+			ts.Require().NoError(err, "redirect url parse failed")
+			if !c.isPKCE {
+				v, err = url.ParseQuery(urlVal.Fragment)
+				ts.Require().NoError(err)
+				ts.Require().NotEmpty(v.Get("access_token"))
+				ts.Require().NotEmpty(v.Get("expires_in"))
+				ts.Require().NotEmpty(v.Get("refresh_token"))
+			} else if c.isPKCE {
+				v, err = url.ParseQuery(urlVal.RawQuery)
+				ts.Require().NoError(err)
+				ts.Require().NotEmpty(v.Get("code"))
+			}
 
-		// user's email should've been updated to newEmail
-		u, err = models.FindUserByEmailAndAudience(ts.API.db, c.newEmail, ts.Config.JWT.Aud)
-		require.NoError(ts.T(), err)
-		require.Equal(ts.T(), zeroConfirmation, u.EmailChangeConfirmStatus)
+			// user's email should've been updated to newEmail
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, c.newEmail, ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), zeroConfirmation, u.EmailChangeConfirmStatus)
 
-		// Reset confirmation status after each test
-		u.EmailConfirmedAt = nil
-		require.NoError(ts.T(), ts.API.db.Update(u))
+			// Reset confirmation status after each test
+			u.EmailConfirmedAt = nil
+			require.NoError(ts.T(), ts.API.db.Update(u))
+		})
 	}
 }
 

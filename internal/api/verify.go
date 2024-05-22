@@ -125,6 +125,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 		err         error
 		token       *AccessTokenResponse
 		authCode    string
+		rurl        string
 	)
 
 	grantParams.FillGrantParams(r)
@@ -138,6 +139,7 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 			return err
 		}
 	}
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		user, terr = a.verifyTokenHash(tx, params)
@@ -152,12 +154,11 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 		case mail.EmailChangeVerification:
 			user, terr = a.emailChangeVerify(r, tx, params, user)
 			if user == nil && terr == nil {
-				// when double confirmation is required
-				rurl, err := a.prepRedirectURL(singleConfirmationAccepted, params.RedirectTo, flowType)
-				if err != nil {
-					return err
+				// only one OTP is confirmed at this point, so we return early and ask the user to confirm the second OTP
+				rurl, terr = a.prepRedirectURL(singleConfirmationAccepted, params.RedirectTo, flowType)
+				if terr != nil {
+					return terr
 				}
-				http.Redirect(w, r, rurl, http.StatusSeeOther)
 				return nil
 			}
 		default:
@@ -198,15 +199,17 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 	if err != nil {
 		var herr *HTTPError
 		if errors.As(err, &herr) {
-			rurl, err := a.prepErrorRedirectURL(herr, r, params.RedirectTo, flowType)
+			rurl, err = a.prepErrorRedirectURL(herr, r, params.RedirectTo, flowType)
 			if err != nil {
 				return err
 			}
-			http.Redirect(w, r, rurl, http.StatusSeeOther)
-			return nil
 		}
 	}
-	rurl := params.RedirectTo
+	if rurl != "" {
+		http.Redirect(w, r, rurl, http.StatusSeeOther)
+		return nil
+	}
+	rurl = params.RedirectTo
 	if isImplicitFlow(flowType) && token != nil {
 		q := url.Values{}
 		q.Set("type", params.Type)
