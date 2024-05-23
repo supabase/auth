@@ -50,8 +50,7 @@ func enablePrometheusMetrics(ctx context.Context, mc *conf.MetricsConfig) error 
 		baseContext, cancel := context.WithCancel(context.Background())
 
 		server := &http.Server{
-			Addr: addr,
-			// TODO: Check this does what is needed
+			Addr:    addr,
 			Handler: promhttp.Handler(),
 			BaseContext: func(net.Listener) context.Context {
 				return baseContext
