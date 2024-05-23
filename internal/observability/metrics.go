@@ -86,7 +86,6 @@ func enablePrometheusMetrics(ctx context.Context, mc *conf.MetricsConfig) error 
 }
 
 func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) error {
-
 	switch mc.ExporterProtocol {
 	case "grpc":
 		metricExporter, err := otlpmetricgrpc.New(ctx)
@@ -151,6 +150,7 @@ func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) err
 	default: // http/json for example
 		return fmt.Errorf("unsupported OpenTelemetry exporter protocol %q", mc.ExporterProtocol)
 	}
+	return nil
 
 }
 

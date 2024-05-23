@@ -1,7 +1,11 @@
 package models
 
 import (
+	"context"
 	"fmt"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 	"sync/atomic"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -20,7 +24,7 @@ type Cleanup struct {
 
 	// cleanupAffectedRows tracks an OpenTelemetry metric on the total number of
 	// cleaned up rows.
-	// cleanupAffectedRows metric.Int64Observer
+	cleanupAffectedRows int64
 }
 
 func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
@@ -75,19 +79,20 @@ func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
 		c.cleanupStatements = append(c.cleanupStatements, fmt.Sprintf("delete from %q where id in (select %q.id as id from %q, %q where %q.session_id = %q.id and %q.refreshed_at is null and %q.revoked is false and %q.updated_at + interval '%d seconds' < now() - interval '24 hours' limit 100 for update skip locked)", tableSessions, tableSessions, tableSessions, tableRefreshTokens, tableRefreshTokens, tableSessions, tableSessions, tableRefreshTokens, tableRefreshTokens, inactivitySeconds))
 	}
 
-	//meter := otel.Meter("example")
+	meter := otel.Meter("gotrue")
 
-	//  cleanupAffectedRows, err := meter.Int64ObservableCounter(
-	//     "gotrue_cleanup_affected_rows",
-	//     metric.WithDescription("Number of affected rows from cleaning up stale entities"),
-	// )
+	_, err := meter.Int64ObservableCounter(
+		"gotrue_cleanup_affected_rows",
+		metric.WithDescription("Number of affected rows from cleaning up stale entities"),
+		metric.WithInt64Callback(func(_ context.Context, o metric.Int64Observer) error {
+			o.Observe(atomic.LoadInt64(&c.cleanupAffectedRows))
+			return nil
+		}),
+	)
 
-	// if err != nil {
-	// 	logrus.WithError(err).Error("unable to get gotrue.gotrue_cleanup_rows counter metric")
-	// }
-
-	// c.cleanupAffectedRows = nil
-	// cleanupAffectedRows
+	if err != nil {
+		logrus.WithError(err).Error("unable to get gotrue.gotrue_cleanup_rows counter metric")
+	}
 
 	return c
 }
@@ -120,7 +125,7 @@ func (c *Cleanup) Clean(db *storage.Connection) (int, error) {
 	}); err != nil {
 		return affectedRows, err
 	}
-	// atomic.AddInt64(&c.cleanupAffectedRowCount, int64(affectedRows))
+	atomic.AddInt64(&c.cleanupAffectedRows, int64(affectedRows))
 
 	return affectedRows, nil
 }
