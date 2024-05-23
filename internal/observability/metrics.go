@@ -94,7 +94,6 @@ func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) err
 		}
 		meterProvider := sdkmetric.NewMeterProvider(
 			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
-			// 	sdkmetric.WithResource(res),
 		)
 
 		otel.SetMeterProvider(meterProvider)
@@ -124,7 +123,6 @@ func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) err
 		}
 		meterProvider := sdkmetric.NewMeterProvider(
 			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter)),
-			// 	sdkmetric.WithResource(res),
 		)
 
 		otel.SetMeterProvider(meterProvider)
@@ -150,7 +148,6 @@ func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) err
 	default: // http/json for example
 		return fmt.Errorf("unsupported OpenTelemetry exporter protocol %q", mc.ExporterProtocol)
 	}
-	return nil
 
 }
 
