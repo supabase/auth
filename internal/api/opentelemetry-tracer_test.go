@@ -82,9 +82,6 @@ func (ts *OpenTelemetryTracerTestSuite) TestOpenTelemetryTracer_Spans() {
 		statusCode1 := getAttribute(attributes1, semconv.HTTPStatusCodeKey)
 		assert.Equal(ts.T(), int64(404), statusCode1.AsInt64())
 
-		// userAgent1 := getAttribute(attributes1, semconv.HTTPUserAgentKey)
-		// assert.Equal(ts.T(), "stripped", userAgent1.AsString())
-
 		attributes2 := spans[1].Attributes()
 		method2 := getAttribute(attributes2, semconv.HTTPMethodKey)
 		assert.Equal(ts.T(), "GET", method2.AsString())
@@ -92,8 +89,5 @@ func (ts *OpenTelemetryTracerTestSuite) TestOpenTelemetryTracer_Spans() {
 		assert.Equal(ts.T(), "/something2", url2.AsString())
 		statusCode2 := getAttribute(attributes2, semconv.HTTPStatusCodeKey)
 		assert.Equal(ts.T(), int64(404), statusCode2.AsInt64())
-
-		// userAgent2 := getAttribute(attributes2, semconv.HTTPUserAgentKey)
-		// assert.Equal(ts.T(), "stripped", userAgent2.AsString())
 	}
 }
