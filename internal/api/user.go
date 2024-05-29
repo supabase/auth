@@ -153,12 +153,23 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		password := *params.Password
 		if password != "" {
-			if user.EncryptedPassword != "" && user.Authenticate(ctx, password) {
+			isSamePassword := false
+
+			if user.EncryptedPassword != "" {
+				auth, _, err := user.Authenticate(ctx, password, config.Security.DBEncryption.DecryptionKeys, false, "")
+				if err != nil {
+					return err
+				}
+
+				isSamePassword = auth
+			}
+
+			if isSamePassword {
 				return unprocessableEntityError(ErrorCodeSamePassword, "New password should be different from the old password.")
 			}
 		}
 
-		if err := user.SetPassword(ctx, password); err != nil {
+		if err := user.SetPassword(ctx, password, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
 			return err
 		}
 	}

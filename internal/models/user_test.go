@@ -372,9 +372,9 @@ func (ts *UserTestSuite) TestSetPasswordTooLong() {
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(user))
 
-	err = user.SetPassword(ts.db.Context(), strings.Repeat("a", crypto.MaxPasswordLength+1))
+	err = user.SetPassword(ts.db.Context(), strings.Repeat("a", crypto.MaxPasswordLength+1), false, "", "")
 	require.Error(ts.T(), err)
 
-	err = user.SetPassword(ts.db.Context(), strings.Repeat("a", crypto.MaxPasswordLength))
+	err = user.SetPassword(ts.db.Context(), strings.Repeat("a", crypto.MaxPasswordLength), false, "", "")
 	require.NoError(ts.T(), err)
 }

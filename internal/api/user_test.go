@@ -310,7 +310,10 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
-			require.Equal(ts.T(), c.expected.isAuthenticated, u.Authenticate(context.Background(), c.newPassword))
+			isAuthenticated, _, err := u.Authenticate(context.Background(), c.newPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
+			require.NoError(ts.T(), err)
+
+			require.Equal(ts.T(), c.expected.isAuthenticated, isAuthenticated)
 		})
 	}
 }
@@ -369,7 +372,10 @@ func (ts *UserTestSuite) TestUserUpdatePasswordNoReauthenticationRequired() {
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
-			require.Equal(ts.T(), c.expected.isAuthenticated, u.Authenticate(context.Background(), c.newPassword))
+			isAuthenticated, _, err := u.Authenticate(context.Background(), c.newPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
+			require.NoError(ts.T(), err)
+
+			require.Equal(ts.T(), c.expected.isAuthenticated, isAuthenticated)
 		})
 	}
 }
@@ -424,7 +430,10 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	require.True(ts.T(), u.Authenticate(context.Background(), "newpass"))
+	isAuthenticated, _, err := u.Authenticate(context.Background(), "newpass", ts.Config.Security.DBEncryption.DecryptionKeys, ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID)
+	require.NoError(ts.T(), err)
+
+	require.True(ts.T(), isAuthenticated)
 	require.Empty(ts.T(), u.ReauthenticationToken)
 	require.Nil(ts.T(), u.ReauthenticationSentAt)
 }

@@ -283,7 +283,7 @@ func (u *User) SetPhone(tx *storage.Connection, phone string) error {
 	return tx.UpdateOnly(u, "phone")
 }
 
-func (u *User) SetPassword(ctx context.Context, password string) error {
+func (u *User) SetPassword(ctx context.Context, password string, encrypt bool, encryptionKeyID, encryptionKey string) error {
 	if password == "" {
 		u.EncryptedPassword = ""
 		return nil
@@ -295,6 +295,14 @@ func (u *User) SetPassword(ctx context.Context, password string) error {
 	}
 
 	u.EncryptedPassword = pw
+	if encrypt {
+		es, err := crypto.NewEncryptedString(u.ID.String(), []byte(pw), encryptionKeyID, encryptionKey)
+		if err != nil {
+			return err
+		}
+
+		u.EncryptedPassword = es.String()
+	}
 
 	return nil
 }
@@ -332,9 +340,22 @@ func (u *User) UpdatePassword(tx *storage.Connection, sessionID *uuid.UUID) erro
 }
 
 // Authenticate a user from a password
-func (u *User) Authenticate(ctx context.Context, password string) bool {
-	err := crypto.CompareHashAndPassword(ctx, u.EncryptedPassword, password)
-	return err == nil
+func (u *User) Authenticate(ctx context.Context, password string, decryptionKeys map[string]string, encrypt bool, encryptionKeyID string) (bool, bool, error) {
+	hash := u.EncryptedPassword
+
+	es := crypto.ParseEncryptedString(u.EncryptedPassword)
+	if es != nil {
+		h, err := es.Decrypt(u.ID.String(), decryptionKeys)
+		if err != nil {
+			return false, false, err
+		}
+
+		hash = string(h)
+	}
+
+	compareErr := crypto.CompareHashAndPassword(ctx, hash, password)
+
+	return compareErr == nil, encrypt && (es == nil || es.ShouldReEncrypt(encryptionKeyID)), nil
 }
 
 // ConfirmReauthentication resets the reauthentication token
