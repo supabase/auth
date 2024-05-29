@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -42,8 +41,6 @@ func NewSlackProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	if scopes != "" {
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
-
-	fmt.Println("Scopes:", oauthScopes)
 
 	return &slackProvider{
 		Config: &oauth2.Config{
