@@ -297,6 +297,7 @@ type ProviderConfiguration struct {
 	LinkedinOIDC            OAuthProviderConfiguration     `json:"linkedin_oidc" envconfig:"LINKEDIN_OIDC"`
 	Spotify                 OAuthProviderConfiguration     `json:"spotify"`
 	Slack                   OAuthProviderConfiguration     `json:"slack"`
+	SlackLegacy             OAuthProviderConfiguration     `json:"slack_legacy"`
 	Twitter                 OAuthProviderConfiguration     `json:"twitter"`
 	Twitch                  OAuthProviderConfiguration     `json:"twitch"`
 	WorkOS                  OAuthProviderConfiguration     `json:"workos"`

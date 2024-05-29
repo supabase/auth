@@ -253,6 +253,7 @@ To see the current settings, make a request to `http://localhost:9999/settings` 
     "facebook": false,
     "spotify": false,
     "slack": false,
+    "slack_legacy": false,
     "twitch": true,
     "twitter": false,
     "email": true,
