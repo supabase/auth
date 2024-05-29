@@ -102,7 +102,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	r.UseBypass(recoverer)
 
 	if globalConfig.API.MaxRequestDuration > 0 {
-		r.UseBypass(api.timeoutMiddleware(globalConfig.API.MaxRequestDuration))
+		r.UseBypass(timeoutMiddleware(globalConfig.API.MaxRequestDuration))
 	}
 
 	// request tracing should be added only when tracing or metrics is enabled
