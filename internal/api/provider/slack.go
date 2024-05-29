@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -30,7 +31,7 @@ func NewSlackProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	}
 
 	apiPath := chooseHost(ext.URL, defaultSlackApiBase) + "/api"
-	authPath := chooseHost(ext.URL, defaultSlackApiBase) + "/oauth"
+	authPath := chooseHost(ext.URL, defaultSlackApiBase) + "/openid"
 
 	oauthScopes := []string{
 		"profile",
@@ -42,13 +43,15 @@ func NewSlackProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 		oauthScopes = append(oauthScopes, strings.Split(scopes, ",")...)
 	}
 
+	fmt.Println("Scopes:", oauthScopes)
+
 	return &slackProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
-				AuthURL:  authPath + "/authorize",
-				TokenURL: apiPath + "/oauth.access",
+				AuthURL:  authPath + "/connect/authorize",
+				TokenURL: apiPath + "/openid.connect.token",
 			},
 			Scopes:      oauthScopes,
 			RedirectURL: ext.RedirectURI,
