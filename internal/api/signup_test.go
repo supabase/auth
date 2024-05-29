@@ -128,7 +128,8 @@ func (ts *SignupTestSuite) TestVerifySignup() {
 	user.ConfirmationSentAt = &now
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Create(user))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken))
+	_, err = models.CreateOneTimeToken(ts.API.db, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken)
+	require.NoError(ts.T(), err)
 
 	// Find test user
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)

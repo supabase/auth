@@ -127,7 +127,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 
-			terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.RecoveryToken, models.RecoveryToken)
+			_, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.RecoveryToken, models.RecoveryToken)
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error creating recovery token in admin")
 				return terr
@@ -180,7 +180,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				terr = errors.Wrap(terr, "Database error updating user for invite")
 				return terr
 			}
-			terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken)
+			_, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken)
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error creating confirmation token for invite in admin")
 				return terr
@@ -218,7 +218,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				terr = errors.Wrap(terr, "Database error updating user for confirmation")
 				return terr
 			}
-			terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken)
+			_, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken)
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error creating confirmation token for signup in admin")
 				return terr
@@ -251,14 +251,14 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 			if user.EmailChangeTokenCurrent != "" {
-				terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent)
+				_, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent)
 				if terr != nil {
 					terr = errors.Wrap(terr, "Database error creating email change token current in admin")
 					return terr
 				}
 			}
 			if user.EmailChangeTokenNew != "" {
-				terr = models.CreateOneTimeToken(tx, user.ID, user.EmailChange, user.EmailChangeTokenNew, models.EmailChangeTokenNew)
+				_, terr = models.CreateOneTimeToken(tx, user.ID, user.EmailChange, user.EmailChangeTokenNew, models.EmailChangeTokenNew)
 				if terr != nil {
 					terr = errors.Wrap(terr, "Database error creating email change token new in admin")
 					return terr
@@ -325,7 +325,7 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 		return errors.Wrap(err, "Database error updating user for confirmation")
 	}
 
-	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken)
+	_, err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken)
 	if err != nil {
 		return errors.Wrap(err, "Database error creating confirmation token")
 	}
@@ -357,7 +357,7 @@ func (a *API) sendInvite(r *http.Request, tx *storage.Connection, u *models.User
 		return errors.Wrap(err, "Database error updating user for invite")
 	}
 
-	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken)
+	_, err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken)
 	if err != nil {
 		return errors.Wrap(err, "Database error creating confirmation token for invite")
 	}
@@ -394,7 +394,7 @@ func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *m
 		return errors.Wrap(err, "Database error updating user for recovery")
 	}
 
-	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken)
+	_, err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken)
 	if err != nil {
 		return errors.Wrap(err, "Database error creating recovery token")
 	}
@@ -431,7 +431,7 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 		return errors.Wrap(err, "Database error updating user for reauthentication")
 	}
 
-	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ReauthenticationToken, models.ReauthenticationToken)
+	_, err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.ReauthenticationToken, models.ReauthenticationToken)
 	if err != nil {
 		return errors.Wrap(err, "Database error creating reauthentication token")
 	}
@@ -471,7 +471,7 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 		return errors.Wrap(err, "Database error updating user for recovery")
 	}
 
-	err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken)
+	_, err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.RecoveryToken, models.RecoveryToken)
 	if err != nil {
 		return errors.Wrap(err, "Database error creating recovery token")
 	}
@@ -530,14 +530,14 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 	}
 
 	if u.EmailChangeTokenCurrent != "" {
-		err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent)
+		_, err = models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent)
 		if err != nil {
 			return errors.Wrap(err, "Database error creating email change token current")
 		}
 	}
 
 	if u.EmailChangeTokenNew != "" {
-		err = models.CreateOneTimeToken(tx, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew)
+		_, err = models.CreateOneTimeToken(tx, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew)
 		if err != nil {
 			return errors.Wrap(err, "Database error creating email change token new")
 		}

@@ -128,8 +128,10 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	u.EmailChangeSentAt = &now
 	u.EmailChangeTokenNew = "123456"
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew))
+	_, err = models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken)
+	require.NoError(ts.T(), err)
+	_, err = models.CreateOneTimeToken(ts.API.db, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew)
+	require.NoError(ts.T(), err)
 
 	phoneUser, err := models.NewUser("1234567890", "", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
@@ -137,7 +139,8 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	phoneUser.EmailChangeSentAt = &now
 	phoneUser.EmailChangeTokenNew = "123456"
 	require.NoError(ts.T(), ts.API.db.Create(phoneUser), "Error saving new test user")
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.EmailChange, phoneUser.EmailChangeTokenNew, models.EmailChangeTokenNew))
+	_, err = models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.EmailChange, phoneUser.EmailChangeTokenNew, models.EmailChangeTokenNew)
+	require.NoError(ts.T(), err)
 
 	emailUser, err := models.NewUser("", "bar@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
@@ -145,7 +148,8 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	phoneUser.PhoneChangeSentAt = &now
 	phoneUser.PhoneChangeToken = "123456"
 	require.NoError(ts.T(), ts.API.db.Create(emailUser), "Error saving new test user")
-	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.PhoneChange, phoneUser.PhoneChangeToken, models.PhoneChangeToken))
+	_, err = models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.PhoneChange, phoneUser.PhoneChangeToken, models.PhoneChangeToken)
+	require.NoError(ts.T(), err)
 
 	cases := []struct {
 		desc   string

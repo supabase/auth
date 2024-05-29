@@ -134,15 +134,15 @@ func (a *API) sendPhoneConfirmation(ctx context.Context, r *http.Request, tx *st
 
 	switch otpType {
 	case phoneConfirmationOtp:
-		if err := models.CreateOneTimeToken(tx, user.ID, user.GetPhone(), user.ConfirmationToken, models.ConfirmationToken); err != nil {
+		if _, err := models.CreateOneTimeToken(tx, user.ID, user.GetPhone(), user.ConfirmationToken, models.ConfirmationToken); err != nil {
 			return messageID, errors.Wrap(err, "Database error creating confirmation token for phone")
 		}
 	case phoneChangeVerification:
-		if err := models.CreateOneTimeToken(tx, user.ID, user.PhoneChange, user.PhoneChangeToken, models.PhoneChangeToken); err != nil {
+		if _, err := models.CreateOneTimeToken(tx, user.ID, user.PhoneChange, user.PhoneChangeToken, models.PhoneChangeToken); err != nil {
 			return messageID, errors.Wrap(err, "Database error creating phone change token")
 		}
 	case phoneReauthenticationOtp:
-		if err := models.CreateOneTimeToken(tx, user.ID, user.GetPhone(), user.ReauthenticationToken, models.ReauthenticationToken); err != nil {
+		if _, err := models.CreateOneTimeToken(tx, user.ID, user.GetPhone(), user.ReauthenticationToken, models.ReauthenticationToken); err != nil {
 			return messageID, errors.Wrap(err, "Database error creating reauthentication token for phone")
 		}
 	}
