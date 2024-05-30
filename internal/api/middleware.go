@@ -288,10 +288,6 @@ func (t *timeoutResponseWriter) Write(bytes []byte) (int, error) {
 	t.Lock()
 	defer t.Unlock()
 
-	if !t.wroteHeader {
-		t.WriteHeader(http.StatusOK)
-	}
-
 	return t.buf.Write(bytes)
 }
 
