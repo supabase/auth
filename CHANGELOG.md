@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.152.1](https://github.com/supabase/auth/compare/v2.152.0...v2.152.1) (2024-05-30)
+
+
+### Bug Fixes
+
+* `WriteHeader` deadlock in timeout writer ([#1600](https://github.com/supabase/auth/issues/1600)) ([60fc1da](https://github.com/supabase/auth/commit/60fc1da55e331fe690a5408c67f841aa81f13a52))
+
 ## [2.152.0](https://github.com/supabase/auth/compare/v2.151.0...v2.152.0) (2024-05-22)
 
 
