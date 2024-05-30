@@ -288,6 +288,10 @@ func (t *timeoutResponseWriter) Write(bytes []byte) (int, error) {
 	t.Lock()
 	defer t.Unlock()
 
+	if !t.wroteHeader {
+		t.writeHeaderLocked(http.StatusOK)
+	}
+
 	return t.buf.Write(bytes)
 }
 
@@ -295,12 +299,17 @@ func (t *timeoutResponseWriter) WriteHeader(statusCode int) {
 	t.Lock()
 	defer t.Unlock()
 
+	t.writeHeaderLocked(statusCode)
+}
+
+func (t *timeoutResponseWriter) writeHeaderLocked(statusCode int) {
 	if t.wroteHeader {
 		// ignore multiple calls to WriteHeader
 		// once WriteHeader has been called once, a snapshot of the header map is taken
 		// and saved in snapHeader to be used in finallyWrite
 		return
 	}
+
 	t.statusCode = statusCode
 	t.wroteHeader = true
 	t.snapHeader = t.header.Clone()
