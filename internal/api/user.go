@@ -223,7 +223,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				if terr != nil {
 					return internalServerError("Error finding SMS provider").WithInternalError(terr)
 				}
-				if _, terr := a.sendPhoneConfirmation(ctx, r, tx, user, params.Phone, phoneChangeVerification, smsProvider, params.Channel); terr != nil {
+				if _, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneChangeVerification, smsProvider, params.Channel); terr != nil {
 					return internalServerError("Error sending phone change otp").WithInternalError(terr)
 				}
 			}
