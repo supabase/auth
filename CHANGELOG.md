@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.153.1](https://github.com/nickmitchko/auth/compare/v2.153.0...v2.153.1) (2024-05-30)
+
+
+### Bug Fixes
+
+* call write header in write if not written ([#1598](https://github.com/nickmitchko/auth/issues/1598)) ([0ef7eb3](https://github.com/nickmitchko/auth/commit/0ef7eb30619d4c365e06a94a79b9cb0333d792da))
+* deadlock issue with timeout middleware write ([#1595](https://github.com/nickmitchko/auth/issues/1595)) ([6c9fbd4](https://github.com/nickmitchko/auth/commit/6c9fbd4bd5623c729906fca7857ab508166a3056))
+
 ## [2.153.0](https://github.com/nickmitchko/auth/compare/v2.152.0...v2.153.0) (2024-05-29)
 
 
