@@ -113,7 +113,7 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 							emailRateLimitCounter.Add(
 								req.Context(),
 								1,
-								metric.WithAttributes(attribute.String("path", req.URL.Path)),
+								metric.WithAttributeSet(attribute.NewSet(attribute.String("path", req.URL.Path))),
 							)
 							return c, tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "Email rate limit exceeded")
 						}
