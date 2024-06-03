@@ -179,7 +179,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	if !correctAudience {
-		return oauthError("invalid request", "Unacceptable audience in id_token")
+		return oauthError("invalid request", fmt.Sprintf("Unacceptable audience in id_token: %v", idToken.Audience))
 	}
 
 	if !oauthConfig.SkipNonceCheck {
