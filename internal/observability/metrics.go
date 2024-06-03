@@ -112,8 +112,6 @@ func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) err
 				logrus.Info("OpenTelemetry metric exporter shut down")
 			}
 		}()
-		logrus.Info("OpenTelemetry metrics exporter started")
-		return nil
 
 	case "http/protobuf":
 		metricExporter, err := otlpmetrichttp.New(ctx)
@@ -141,12 +139,12 @@ func enableOpenTelemetryMetrics(ctx context.Context, mc *conf.MetricsConfig) err
 				logrus.Info("OpenTelemetry metric exporter shut down")
 			}
 		}()
-		logrus.Info("OpenTelemetry metrics exporter started")
-		return nil
 
 	default: // http/json for example
 		return fmt.Errorf("unsupported OpenTelemetry exporter protocol %q", mc.ExporterProtocol)
 	}
+	logrus.Info("OpenTelemetry metrics exporter started")
+	return nil
 
 }
 

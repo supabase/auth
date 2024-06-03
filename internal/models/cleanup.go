@@ -24,7 +24,7 @@ type Cleanup struct {
 
 	// cleanupAffectedRows tracks an OpenTelemetry metric on the total number of
 	// cleaned up rows.
-	cleanupAffectedRows int64
+	cleanupAffectedRows atomic.Int64
 }
 
 func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
@@ -85,7 +85,7 @@ func NewCleanup(config *conf.GlobalConfiguration) *Cleanup {
 		"gotrue_cleanup_affected_rows",
 		metric.WithDescription("Number of affected rows from cleaning up stale entities"),
 		metric.WithInt64Callback(func(_ context.Context, o metric.Int64Observer) error {
-			o.Observe(atomic.LoadInt64(&c.cleanupAffectedRows))
+			o.Observe(c.cleanupAffectedRows.Load())
 			return nil
 		}),
 	)
@@ -125,7 +125,7 @@ func (c *Cleanup) Clean(db *storage.Connection) (int, error) {
 	}); err != nil {
 		return affectedRows, err
 	}
-	atomic.AddInt64(&c.cleanupAffectedRows, int64(affectedRows))
+	c.cleanupAffectedRows.Add(int64(affectedRows))
 
 	return affectedRows, nil
 }
