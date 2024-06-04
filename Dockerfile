@@ -17,7 +17,7 @@ COPY . /go/src/github.com/supabase/auth
 # Make sure you change the RELEASE_VERSION value before publishing an image.
 RUN RELEASE_VERSION=unspecified make build
 
-FROM alpine:3.17
+FROM alpine:3.20
 RUN adduser -D -u 1000 supabase
 
 RUN apk add --no-cache ca-certificates
