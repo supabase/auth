@@ -8,7 +8,7 @@ import (
 	jwt "github.com/golang-jwt/jwt"
 )
 
-func (ts *ExternalTestSuite) TestSignupExternalSlack() {
+func (ts *ExternalTestSuite) TestSignupExternalSlackOIDC() {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=slack_oidc", nil)
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
