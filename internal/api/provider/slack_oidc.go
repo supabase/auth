@@ -23,7 +23,6 @@ type slackOIDCUser struct {
 	TeamID    string `json:"https://slack.com/team_id"`
 }
 
-
 // NewSlackOIDCProvider creates a Slack account provider with Sign in with Slack.
 func NewSlackOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
@@ -93,4 +92,3 @@ func (g slackOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (
 	}
 	return data, nil
 }
-
