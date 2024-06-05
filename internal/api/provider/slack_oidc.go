@@ -8,13 +8,13 @@ import (
 )
 
 // NewSlackProvider creates a Slack account provider.
-func NewSlackLegacyProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
+func NewSlackOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
 
 	apiPath := chooseHost(ext.URL, defaultSlackApiBase) + "/api"
-	authPath := chooseHost(ext.URL, defaultSlackApiBase) + "/oauth"
+	authPath := chooseHost(ext.URL, defaultSlackApiBase) + "/openid"
 
 	oauthScopes := []string{
 		"profile",
@@ -31,8 +31,8 @@ func NewSlackLegacyProvider(ext conf.OAuthProviderConfiguration, scopes string) 
 			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
-				AuthURL:  authPath + "/authorize",
-				TokenURL: apiPath + "/oauth.access",
+				AuthURL:  authPath + "/connect/authorize",
+				TokenURL: apiPath + "/openid.connect.token",
 			},
 			Scopes:      oauthScopes,
 			RedirectURL: ext.RedirectURI,

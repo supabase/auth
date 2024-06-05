@@ -9,7 +9,7 @@ import (
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalSlack() {
-	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=slack", nil)
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/authorize?provider=slack_oidc", nil)
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	ts.Require().Equal(http.StatusFound, w.Code)

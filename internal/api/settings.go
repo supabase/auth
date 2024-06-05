@@ -21,7 +21,7 @@ type ProviderSettings struct {
 	Notion         bool `json:"notion"`
 	Spotify        bool `json:"spotify"`
 	Slack          bool `json:"slack"`
-	Slack_Legacy   bool `json:"slack_legacy"`
+	SlackOIDC      bool `json:"slack_oidc"`
 	WorkOS         bool `json:"workos"`
 	Twitch         bool `json:"twitch"`
 	Twitter        bool `json:"twitter"`

@@ -30,7 +30,7 @@ func NewSlackProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	}
 
 	apiPath := chooseHost(ext.URL, defaultSlackApiBase) + "/api"
-	authPath := chooseHost(ext.URL, defaultSlackApiBase) + "/openid"
+	authPath := chooseHost(ext.URL, defaultSlackApiBase) + "/oauth"
 
 	oauthScopes := []string{
 		"profile",
@@ -47,8 +47,8 @@ func NewSlackProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
-				AuthURL:  authPath + "/connect/authorize",
-				TokenURL: apiPath + "/openid.connect.token",
+				AuthURL:  authPath + "/authorize",
+				TokenURL: apiPath + "/oauth.access",
 			},
 			Scopes:      oauthScopes,
 			RedirectURL: ext.RedirectURI,
