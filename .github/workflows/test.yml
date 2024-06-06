@@ -5,13 +5,13 @@ on:
   push:
     branches:
       - master
-    tags: ['*']
+    tags: ["*"]
 
 jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.21.x]
+        go-version: [1.22.x]
     runs-on: ubuntu-20.04
     services:
       postgres:

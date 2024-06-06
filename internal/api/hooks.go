@@ -77,7 +77,7 @@ func (a *API) runPostgresHook(ctx context.Context, tx *storage.Connection, hookC
 	return response, nil
 }
 
-func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointConfiguration, input, output any) ([]byte, error) {
+func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointConfiguration, input any) ([]byte, error) {
 	ctx := r.Context()
 	client := http.Client{
 		Timeout: DefaultHTTPHookTimeout,
@@ -351,7 +351,7 @@ func (a *API) runHook(r *http.Request, conn *storage.Connection, hookConfig conf
 	var err error
 	switch strings.ToLower(scheme) {
 	case "http", "https":
-		response, err = a.runHTTPHook(r, hookConfig, input, output)
+		response, err = a.runHTTPHook(r, hookConfig, input)
 	case "pg-functions":
 		response, err = a.runPostgresHook(ctx, conn, hookConfig, input, output)
 	default:

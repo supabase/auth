@@ -48,7 +48,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return internalServerError("Failed to get SMS provider").WithInternalError(terr)
 			}
-			mID, err := a.sendPhoneConfirmation(ctx, r, tx, user, phone, phoneReauthenticationOtp, smsProvider, sms_provider.SMSProvider)
+			mID, err := a.sendPhoneConfirmation(r, tx, user, phone, phoneReauthenticationOtp, smsProvider, sms_provider.SMSProvider)
 			if err != nil {
 				return err
 			}
