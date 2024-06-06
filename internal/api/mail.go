@@ -112,6 +112,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	var ott *models.OneTimeToken
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
@@ -119,15 +120,14 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr = models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
 			}
-			user.RecoveryToken = hashedToken
 			user.RecoverySentAt = &now
-			terr = tx.UpdateOnly(user, "recovery_token", "recovery_sent_at")
+			terr = tx.UpdateOnly(user, "recovery_sent_at")
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error updating user for recovery")
 				return terr
 			}
 
-			_, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.RecoveryToken, models.RecoveryToken)
+			ott, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), hashedToken, models.RecoveryToken)
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error creating recovery token in admin")
 				return terr
@@ -172,15 +172,14 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			}); terr != nil {
 				return terr
 			}
-			user.ConfirmationToken = hashedToken
 			user.ConfirmationSentAt = &now
 			user.InvitedAt = &now
-			terr = tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at", "invited_at")
+			terr = tx.UpdateOnly(user, "confirmation_sent_at", "invited_at")
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error updating user for invite")
 				return terr
 			}
-			_, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken)
+			ott, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), hashedToken, models.ConfirmationToken)
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error creating confirmation token for invite in admin")
 				return terr
@@ -211,20 +210,19 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				}
 				user.Identities = []models.Identity{*identity}
 			}
-			user.ConfirmationToken = hashedToken
 			user.ConfirmationSentAt = &now
-			terr = tx.UpdateOnly(user, "confirmation_token", "confirmation_sent_at")
+			terr = tx.UpdateOnly(user, "confirmation_sent_at")
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error updating user for confirmation")
 				return terr
 			}
-			_, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken)
+			ott, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), hashedToken, models.ConfirmationToken)
 			if terr != nil {
 				terr = errors.Wrap(terr, "Database error creating confirmation token for signup in admin")
 				return terr
 			}
-		case mail.EmailChangeCurrentVerification, mail.EmailChangeNewVerification:
-			if !config.Mailer.SecureEmailChangeEnabled && params.Type == "email_change_current" {
+		case mail.EmailChangeCurrentVerification:
+			if !config.Mailer.SecureEmailChangeEnabled {
 				return badRequestError(ErrorCodeValidationFailed, "Enable secure email change to generate link for current email")
 			}
 			params.NewEmail, terr = validateEmail(params.NewEmail)
@@ -240,29 +238,33 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			user.EmailChangeSentAt = &now
 			user.EmailChange = params.NewEmail
 			user.EmailChangeConfirmStatus = zeroConfirmation
-			if params.Type == "email_change_current" {
-				user.EmailChangeTokenCurrent = hashedToken
-			} else if params.Type == "email_change_new" {
-				user.EmailChangeTokenNew = crypto.GenerateTokenHash(params.NewEmail, otp)
+			if terr := tx.UpdateOnly(user, "email_change", "email_change_sent_at", "email_change_confirm_status"); terr != nil {
+				return errors.Wrap(terr, "Database error updating user for email change")
 			}
-			terr = tx.UpdateOnly(user, "email_change_token_current", "email_change_token_new", "email_change", "email_change_sent_at", "email_change_confirm_status")
+			ott, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), hashedToken, models.EmailChangeTokenCurrent)
 			if terr != nil {
-				terr = errors.Wrap(terr, "Database error updating user for email change")
+				return errors.Wrap(terr, "Database error creating email change token current in admin")
+			}
+		case mail.EmailChangeNewVerification:
+			params.NewEmail, terr = validateEmail(params.NewEmail)
+			if terr != nil {
 				return terr
 			}
-			if user.EmailChangeTokenCurrent != "" {
-				_, terr = models.CreateOneTimeToken(tx, user.ID, user.GetEmail(), user.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent)
-				if terr != nil {
-					terr = errors.Wrap(terr, "Database error creating email change token current in admin")
-					return terr
-				}
+			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud, user); terr != nil {
+				return internalServerError("Database error checking email").WithInternalError(terr)
+			} else if duplicateUser != nil {
+				return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
 			}
-			if user.EmailChangeTokenNew != "" {
-				_, terr = models.CreateOneTimeToken(tx, user.ID, user.EmailChange, user.EmailChangeTokenNew, models.EmailChangeTokenNew)
-				if terr != nil {
-					terr = errors.Wrap(terr, "Database error creating email change token new in admin")
-					return terr
-				}
+			now := time.Now()
+			user.EmailChangeSentAt = &now
+			user.EmailChange = params.NewEmail
+			user.EmailChangeConfirmStatus = zeroConfirmation
+			if terr := tx.UpdateOnly(user, "email_change", "email_change_sent_at", "email_change_confirm_status"); terr != nil {
+				return errors.Wrap(terr, "Database error updating user for email change")
+			}
+			ott, terr = models.CreateOneTimeToken(tx, user.ID, user.EmailChange, crypto.GenerateTokenHash(params.NewEmail, otp), models.EmailChangeTokenNew)
+			if terr != nil {
+				return errors.Wrap(terr, "Database error creating email change token new in admin")
 			}
 		default:
 			return badRequestError(ErrorCodeValidationFailed, "Invalid email action link type requested: %v", params.Type)
@@ -273,9 +275,9 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		externalURL := getExternalHost(ctx)
-		url, terr = mailer.GetEmailActionLink(user, params.Type, referrer, externalURL)
+		url, terr = mailer.GetEmailActionLink(ott, params.Type, referrer, externalURL)
 		if terr != nil {
-			return terr
+			return internalServerError("Error generating email action link").WithInternalError(terr)
 		}
 		return nil
 	})

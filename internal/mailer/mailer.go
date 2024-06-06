@@ -23,7 +23,7 @@ type Mailer interface {
 	EmailChangeMail(r *http.Request, user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error
 	ReauthenticateMail(r *http.Request, user *models.User, otp string) error
 	ValidateEmail(email string) error
-	GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error)
+	GetEmailActionLink(ott *models.OneTimeToken, actionType, referrerURL string, externalURL *url.URL) (string, error)
 }
 
 type EmailParams struct {

@@ -312,44 +312,48 @@ func (m TemplateMailer) Send(user *models.User, subject, body string, data map[s
 }
 
 // GetEmailActionLink returns a magiclink, recovery or invite link based on the actionType passed.
-func (m TemplateMailer) GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error) {
+func (m TemplateMailer) GetEmailActionLink(ott *models.OneTimeToken, actionType, referrerURL string, externalURL *url.URL) (string, error) {
+	if ott == nil {
+		return "", fmt.Errorf("ott is nil")
+	}
+
 	var err error
 	var path *url.URL
 
 	switch actionType {
 	case "magiclink":
 		path, err = getPath(m.Config.Mailer.URLPaths.Recovery, &EmailParams{
-			Token:      user.RecoveryToken,
+			Token:      ott.TokenHash,
 			Type:       "magiclink",
 			RedirectTo: referrerURL,
 		})
 	case "recovery":
 		path, err = getPath(m.Config.Mailer.URLPaths.Recovery, &EmailParams{
-			Token:      user.RecoveryToken,
+			Token:      ott.TokenHash,
 			Type:       "recovery",
 			RedirectTo: referrerURL,
 		})
 	case "invite":
 		path, err = getPath(m.Config.Mailer.URLPaths.Invite, &EmailParams{
-			Token:      user.ConfirmationToken,
+			Token:      ott.TokenHash,
 			Type:       "invite",
 			RedirectTo: referrerURL,
 		})
 	case "signup":
 		path, err = getPath(m.Config.Mailer.URLPaths.Confirmation, &EmailParams{
-			Token:      user.ConfirmationToken,
+			Token:      ott.TokenHash,
 			Type:       "signup",
 			RedirectTo: referrerURL,
 		})
 	case "email_change_current":
 		path, err = getPath(m.Config.Mailer.URLPaths.EmailChange, &EmailParams{
-			Token:      user.EmailChangeTokenCurrent,
+			Token:      ott.TokenHash,
 			Type:       "email_change",
 			RedirectTo: referrerURL,
 		})
 	case "email_change_new":
 		path, err = getPath(m.Config.Mailer.URLPaths.EmailChange, &EmailParams{
-			Token:      user.EmailChangeTokenNew,
+			Token:      ott.TokenHash,
 			Type:       "email_change",
 			RedirectTo: referrerURL,
 		})
