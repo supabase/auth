@@ -112,9 +112,7 @@ func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 		ts.Run(c.desc, func() {
 			provider := &TestSmsProvider{}
 
-			ctx := req.Context()
-
-			_, err = ts.API.sendPhoneConfirmation(ctx, req, ts.API.db, u, "123456789", c.otpType, provider, sms_provider.SMSProvider)
+			_, err = ts.API.sendPhoneConfirmation(req, ts.API.db, u, "123456789", c.otpType, provider, sms_provider.SMSProvider)
 			require.Equal(ts.T(), c.expected, err)
 			u, err = models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)

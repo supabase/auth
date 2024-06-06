@@ -23,6 +23,8 @@ type SAMLConfiguration struct {
 	RSAPublicKey  *rsa.PublicKey    `json:"-"`
 	Certificate   *x509.Certificate `json:"-"`
 
+	ExternalURL string `json:"external_url,omitempty" split_words:"true"`
+
 	RateLimitAssertion float64 `default:"15" split_words:"true"`
 }
 
@@ -53,6 +55,13 @@ func (c *SAMLConfiguration) Validate() error {
 
 		if c.RelayStateValidityPeriod < 0 {
 			return errors.New("SAML RelayState validity period should be a positive duration")
+		}
+
+		if c.ExternalURL != "" {
+			_, err := url.ParseRequestURI(c.ExternalURL)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

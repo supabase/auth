@@ -134,7 +134,7 @@ func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			token := ts.generateAccessTokenAndSession(context.Background(), c.user, models.PasswordGrant)
+			token := ts.generateAccessTokenAndSession(c.user)
 			req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("/user/identities/%s", c.identityId), nil)
 			require.NoError(ts.T(), err)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
@@ -183,7 +183,7 @@ func (ts *IdentityTestSuite) TestUnlinkIdentity() {
 			identity, err := models.FindIdentityByIdAndProvider(ts.API.db, u.ID.String(), c.provider)
 			require.NoError(ts.T(), err)
 
-			token := ts.generateAccessTokenAndSession(context.Background(), u, models.PasswordGrant)
+			token := ts.generateAccessTokenAndSession(u)
 			req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("/user/identities/%s", identity.ID), nil)
 			require.NoError(ts.T(), err)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
@@ -214,7 +214,7 @@ func (ts *IdentityTestSuite) TestUnlinkIdentity() {
 
 }
 
-func (ts *IdentityTestSuite) generateAccessTokenAndSession(ctx context.Context, u *models.User, authenticationMethod models.AuthenticationMethod) string {
+func (ts *IdentityTestSuite) generateAccessTokenAndSession(u *models.User) string {
 	s, err := models.NewSession(u.ID, nil)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Create(s))
