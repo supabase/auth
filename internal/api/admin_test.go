@@ -628,13 +628,17 @@ func (ts *AdminTestSuite) TestAdminUserSoftDeletion() {
 	deletedUser, err := models.FindUserByID(ts.API.db, u.ID)
 	require.NoError(ts.T(), err)
 
-	// TODO(km): remove once the db columns are removed
+	//lint:ignore SA1019 to be removed once the db columns are removed
 	require.Empty(ts.T(), deletedUser.ConfirmationToken)
+	//lint:ignore SA1019 to be removed once the db columns are removed
 	require.Empty(ts.T(), deletedUser.RecoveryToken)
+	//lint:ignore SA1019 to be removed once the db columns are removed
 	require.Empty(ts.T(), deletedUser.EmailChangeTokenCurrent)
+	//lint:ignore SA1019 to be removed once the db columns are removed
 	require.Empty(ts.T(), deletedUser.EmailChangeTokenNew)
-	require.Empty(ts.T(), deletedUser.EncryptedPassword)
+	//lint:ignore SA1019 to be removed once the db columns are removed
 	require.Empty(ts.T(), deletedUser.PhoneChangeToken)
+	require.Empty(ts.T(), deletedUser.EncryptedPassword)
 
 	// one time tokens table should be empty after a soft deletion
 	require.Empty(ts.T(), u.OneTimeTokens)
