@@ -124,14 +124,14 @@ func compareHashAndPasswordArgon2(ctx context.Context, hash, password string) er
 		attribute.Int("len", len(rawHash)),
 	}
 
-	compareHashAndPasswordSubmittedCounter.Add(ctx, 1, attributes...)
+	compareHashAndPasswordSubmittedCounter.Add(ctx, 1, metric.WithAttributes(attributes...))
 	defer func() {
 		attributes = append(attributes, attribute.Bool(
 			"match",
 			match,
 		))
 
-		compareHashAndPasswordCompletedCounter.Add(ctx, 1, attributes...)
+		compareHashAndPasswordCompletedCounter.Add(ctx, 1, metric.WithAttributes(attributes...))
 	}()
 
 	switch alg {
