@@ -80,7 +80,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 
 // verifyReauthentication checks if the nonce provided is valid
 func (a *API) verifyReauthentication(nonce string, tx *storage.Connection, config *conf.GlobalConfiguration, user *models.User) error {
-	if user.ReauthenticationToken == "" || user.ReauthenticationSentAt == nil {
+	if user.ReauthenticationSentAt == nil {
 		return unprocessableEntityError(ErrorCodeReauthenticationNotValid, InvalidNonceMessage)
 	}
 	var isValid bool

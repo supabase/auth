@@ -501,18 +501,16 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 
 			user.EmailChangeConfirmStatus = singleConfirmation
 
-			if params.Token == user.EmailChangeTokenCurrent || params.TokenHash == user.EmailChangeTokenCurrent || (currentOTT != nil && params.TokenHash == currentOTT.TokenHash) {
-				user.EmailChangeTokenCurrent = ""
+			if currentOTT != nil && params.TokenHash == currentOTT.TokenHash {
 				if terr := models.ClearOneTimeTokenForUser(tx, user.ID, models.EmailChangeTokenCurrent); terr != nil {
 					return terr
 				}
-			} else if params.Token == user.EmailChangeTokenNew || params.TokenHash == user.EmailChangeTokenNew || (newOTT != nil && params.TokenHash == newOTT.TokenHash) {
-				user.EmailChangeTokenNew = ""
+			} else if newOTT != nil && params.TokenHash == newOTT.TokenHash {
 				if terr := models.ClearOneTimeTokenForUser(tx, user.ID, models.EmailChangeTokenNew); terr != nil {
 					return terr
 				}
 			}
-			if terr := tx.UpdateOnly(user, "email_change_confirm_status", "email_change_token_current", "email_change_token_new"); terr != nil {
+			if terr := tx.UpdateOnly(user, "email_change_confirm_status"); terr != nil {
 				return terr
 			}
 			return nil
@@ -606,7 +604,10 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 	case mail.EmailOTPVerification:
 		sentAt := user.ConfirmationSentAt
 		params.Type = "signup"
-		if user.RecoveryToken == params.TokenHash {
+		if _, err := models.FindOneTimeToken(conn, params.TokenHash, models.ReauthenticationToken); err != nil {
+			if !models.IsNotFoundError(err) {
+				return nil, internalServerError("Database error finding token").WithInternalError(err)
+			}
 			sentAt = user.RecoverySentAt
 			params.Type = "magiclink"
 		}
