@@ -16,11 +16,12 @@ type slackOIDCProvider struct {
 }
 
 type slackOIDCUser struct {
-	ID        string `json:"https://slack.com/user_id"`
-	Email     string `json:"email"`
-	Name      string `json:"name"`
-	AvatarURL string `json:"picture"`
-	TeamID    string `json:"https://slack.com/team_id"`
+	ID        		string 	`json:"https://slack.com/user_id"`
+	TeamID    		string 	`json:"https://slack.com/team_id"`
+	Email     		string 	`json:"email"`
+	EmailVerified bool 		`json:"email_verified"`
+	Name      		string 	`json:"name"`
+	AvatarURL 		string 	`json:"picture"`
 }
 
 // NewSlackOIDCProvider creates a Slack account provider with Sign in with Slack.
@@ -71,7 +72,7 @@ func (g slackOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (
 	if u.Email != "" {
 		data.Emails = []Email{{
 			Email:    u.Email,
-			Verified: true, // Slack doesn't provide data on if email is verified.
+			Verified: u.EmailVerified,
 			Primary:  true,
 		}}
 	}
