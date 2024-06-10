@@ -63,19 +63,6 @@ type User struct {
 	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
 
 	OneTimeTokens []OneTimeToken `json:"-" has_many:"one_time_tokens"`
-
-	// Deprecated: use the one_time_tokens model instead
-	ConfirmationToken string `json:"-" db:"confirmation_token"`
-	// Deprecated: use the one_time_tokens model instead
-	RecoveryToken string `json:"-" db:"recovery_token"`
-	// Deprecated: use the one_time_tokens model instead
-	EmailChangeTokenCurrent string `json:"-" db:"email_change_token_current"`
-	// Deprecated: use the one_time_tokens model instead
-	EmailChangeTokenNew string `json:"-" db:"email_change_token_new"`
-	// Deprecated: use the one_time_tokens model instead
-	PhoneChangeToken string `json:"-" db:"phone_change_token"`
-	// Deprecated: use the one_time_tokens model instead
-	ReauthenticationToken string `json:"-" db:"reauthentication_token"`
 }
 
 // NewUser initializes a new user from an email, password and user data.

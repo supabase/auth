@@ -7,6 +7,7 @@ import (
 
 	"github.com/supabase/auth/internal/hooks"
 	mail "github.com/supabase/auth/internal/mailer"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/badoux/checkmail"
 	"github.com/fatih/structs"
@@ -577,19 +578,14 @@ func (a *API) sendEmailChangeEmails(r *http.Request, tx *storage.Connection, u *
 		return a.invokeHook(tx, r, &input, &output, config.Hook.SendEmail.URI)
 	}
 
-	errors := make(chan error)
+	wg := new(errgroup.Group)
 	if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
-		go func(c chan error) {
-			c <- mailer.EmailChangeMail(r, u, ottCurrent, otp, referrerURL, externalURL)
-		}(errors)
+		go mailer.EmailChangeMail(r, u, ottCurrent, otp, referrerURL, externalURL)
 	}
-	go func(c chan error) {
-		c <- mailer.EmailChangeMail(r, u, ottNew, otpNew, referrerURL, externalURL)
-	}(errors)
-
-	// we return the first error that's sent to the channel
-	if e := <-errors; e != nil {
-		return e
+	go mailer.EmailChangeMail(r, u, ottNew, otpNew, referrerURL, externalURL)
+	if err := wg.Wait(); err != nil {
+		// we return the first not-nil error observed
+		return err
 	}
 	return nil
 }
