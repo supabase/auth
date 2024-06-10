@@ -40,6 +40,7 @@ func TestSettings_DefaultProviders(t *testing.T) {
 	require.True(t, p.Kakao)
 	require.True(t, p.Keycloak)
 	require.True(t, p.Linkedin)
+	require.True(t, p.LinkedinOIDC)
 	require.True(t, p.GitHub)
 	require.True(t, p.GitLab)
 	require.True(t, p.Twitch)

@@ -28,6 +28,6 @@ func (ts *ExternalTestSuite) TestSignupExternalSlackOIDC() {
 	})
 	ts.Require().NoError(err)
 
-	ts.Equal("slack", claims.Provider)
+	ts.Equal("slack_oidc", claims.Provider)
 	ts.Equal(ts.Config.SiteURL, claims.SiteURL)
 }

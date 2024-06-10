@@ -63,6 +63,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Notion:         config.External.Notion.Enabled,
 			Spotify:        config.External.Spotify.Enabled,
 			Slack:          config.External.Slack.Enabled,
+			SlackOIDC:      config.External.SlackOIDC.Enabled,
 			Twitch:         config.External.Twitch.Enabled,
 			Twitter:        config.External.Twitter.Enabled,
 			WorkOS:         config.External.WorkOS.Enabled,
