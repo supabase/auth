@@ -16,12 +16,12 @@ type slackOIDCProvider struct {
 }
 
 type slackOIDCUser struct {
-	ID        		string 	`json:"https://slack.com/user_id"`
-	TeamID    		string 	`json:"https://slack.com/team_id"`
-	Email     		string 	`json:"email"`
-	EmailVerified bool 		`json:"email_verified"`
-	Name      		string 	`json:"name"`
-	AvatarURL 		string 	`json:"picture"`
+	ID            string `json:"https://slack.com/user_id"`
+	TeamID        string `json:"https://slack.com/team_id"`
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"email_verified"`
+	Name          string `json:"name"`
+	AvatarURL     string `json:"picture"`
 }
 
 // NewSlackOIDCProvider creates a Slack account provider with Sign in with Slack.
@@ -33,6 +33,8 @@ func NewSlackOIDCProvider(ext conf.OAuthProviderConfiguration, scopes string) (O
 	apiPath := chooseHost(ext.URL, defaultSlackOIDCApiBase) + "/api"
 	authPath := chooseHost(ext.URL, defaultSlackOIDCApiBase) + "/openid"
 
+	// these are required scopes for slack's OIDC flow
+	// see https://api.slack.com/authentication/sign-in-with-slack#implementation
 	oauthScopes := []string{
 		"profile",
 		"email",
@@ -71,7 +73,9 @@ func (g slackOIDCProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (
 	data := &UserProvidedData{}
 	if u.Email != "" {
 		data.Emails = []Email{{
-			Email:    u.Email,
+			Email: u.Email,
+			// email_verified is returned as part of the response
+			// see: https://api.slack.com/authentication/sign-in-with-slack#response
 			Verified: u.EmailVerified,
 			Primary:  true,
 		}}
