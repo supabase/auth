@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
 	mail "github.com/supabase/auth/internal/mailer"
 
 	"github.com/stretchr/testify/assert"
@@ -746,6 +747,60 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 		})
 	}
 
+}
+
+func (ts *VerifyTestSuite) TestVerifyPostPKCE() {
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":                 "test@example.com",
+		"password":              "test-password",
+		"code_challenge":        "codechallengecodechallengcodechallengcodechallengcodechallenge",
+		"code_challenge_method": "plain",
+	}))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var data map[string]interface{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	userId, err := uuid.FromString(data["id"].(string))
+	require.NoError(ts.T(), err)
+	u, err := models.FindUserByID(ts.API.db, userId)
+	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), u.OneTimeTokens)
+
+	// update the token hash to a known value for subsequent verification
+	ott := u.OneTimeTokens[0]
+	ott.TokenHash = addFlowPrefixToToken(crypto.GenerateTokenHash("test@example.com", "123456"), models.PKCEFlow)
+	require.NoError(ts.T(), ts.API.db.Update(&ott))
+
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email": "test@example.com",
+		"token": "123456",
+		"type":  "email",
+	}))
+	req = httptest.NewRequest(http.MethodPost, "http://localhost/verify", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// check that the response contains an access and refresh token
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+	require.Contains(ts.T(), data, "access_token")
+	require.Contains(ts.T(), data, "refresh_token")
+
+	// check that the user in the db is confirmed
+	u, err = models.FindUserByID(ts.API.db, userId)
+	require.NoError(ts.T(), err)
+	require.True(ts.T(), u.IsConfirmed())
+
+	// // one time tokens should be cleared after successful verification
+	require.Empty(ts.T(), u.OneTimeTokens)
 }
 
 func (ts *VerifyTestSuite) TestVerifyBannedUser() {

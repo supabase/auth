@@ -604,7 +604,7 @@ func (a *API) verifyTokenHash(conn *storage.Connection, params *VerifyParams) (*
 	case mail.EmailOTPVerification:
 		sentAt := user.ConfirmationSentAt
 		params.Type = "signup"
-		if _, err := models.FindOneTimeToken(conn, params.TokenHash, models.ReauthenticationToken); err != nil {
+		if _, err := models.FindOneTimeToken(conn, params.TokenHash, models.RecoveryToken); err != nil {
 			if !models.IsNotFoundError(err) {
 				return nil, internalServerError("Database error finding token").WithInternalError(err)
 			}
@@ -665,7 +665,6 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 	switch params.Type {
 	case mail.EmailOTPVerification:
 		// if the type is emailOTPVerification, we'll check both the confirmation_token and recovery_token columns
-		// if isOtpValid(tokenHash, user.ConfirmationToken, user.ConfirmationSentAt, config.Mailer.OtpExp) {
 		isValid, otpErr = isOtpValid(conn, tokenHash, config.Mailer.OtpExp, models.ConfirmationToken)
 		if otpErr == nil {
 			params.Type = mail.SignupVerification
@@ -676,7 +675,6 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 			params.Type = mail.MagicLinkVerification
 			break
 		}
-		// need some way to figure out whether to set the param type to signup or magiclink
 	case mail.SignupVerification, mail.InviteVerification:
 		isValid, otpErr = isOtpValid(conn, tokenHash, config.Mailer.OtpExp, models.ConfirmationToken)
 	case mail.RecoveryVerification, mail.MagicLinkVerification:
@@ -716,16 +714,21 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 func isOtpValid(tx *storage.Connection, tokenHash string, otpExp uint, tokenTypes ...models.OneTimeTokenType) (bool, error) {
 	token, err := models.FindOneTimeToken(tx, tokenHash, tokenTypes...)
 	if err != nil {
-		if models.IsNotFoundError(err) {
-			return false, nil
+		if !models.IsNotFoundError(err) {
+			return false, err
 		}
-		return false, err
+		// try again with the pkce prefix
+		token, err = models.FindOneTimeToken(tx, "pkce_"+tokenHash, tokenTypes...)
+		if err != nil {
+			if models.IsNotFoundError(err) {
+				return false, nil
+			}
+			return false, err
+		}
 	}
 	if isOtpExpired(&token.CreatedAt, otpExp) {
 		return false, nil
 	}
-
-	// return !isOtpExpired(sentAt, otpExp) && ((actual == expected) || ("pkce_"+actual == expected))
 	return true, nil
 }
 
