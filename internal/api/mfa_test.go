@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -14,14 +13,14 @@ import (
 	"github.com/gofrs/uuid"
 
 	"database/sql"
+
 	"github.com/pkg/errors"
 	"github.com/pquerna/otp"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
-
-	"github.com/jackc/pgx/v4"
 
 	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
@@ -62,7 +61,8 @@ func (ts *MFATestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 	// Create Factor
-	f := models.NewFactor(u, "test_factor", models.TOTP, models.FactorStateUnverified, "secretkey")
+	f := models.NewFactor(u, "test_factor", models.TOTP, models.FactorStateUnverified)
+	require.NoError(ts.T(), f.SetSecret("secretkey", ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey))
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 	// Create corresponding session
 	s, err := models.NewSession(u.ID, &f.ID)
@@ -482,14 +482,19 @@ func ServeAuthenticatedRequest(ts *MFATestSuite, method, path, token string, buf
 func performVerifyFlow(ts *MFATestSuite, challengeID, factorID uuid.UUID, token string, requireStatusOK bool) *httptest.ResponseRecorder {
 	var buffer bytes.Buffer
 
-	conn, err := pgx.Connect(context.Background(), ts.API.db.URL())
+	factor, err := models.FindFactorByFactorID(ts.API.db, factorID)
 	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), factor)
 
-	defer conn.Close(context.Background())
+	totpSecret := factor.Secret
 
-	var totpSecret string
-	err = conn.QueryRow(context.Background(), "select secret from mfa_factors where id=$1", factorID).Scan(&totpSecret)
-	require.NoError(ts.T(), err)
+	if es := crypto.ParseEncryptedString(factor.Secret); es != nil {
+		secret, err := es.Decrypt(factor.ID.String(), ts.API.config.Security.DBEncryption.DecryptionKeys)
+		require.NoError(ts.T(), err)
+		require.NotNil(ts.T(), secret)
+
+		totpSecret = string(secret)
+	}
 
 	code, err := totp.GenerateCode(totpSecret, time.Now().UTC())
 	require.NoError(ts.T(), err)

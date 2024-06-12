@@ -134,6 +134,7 @@ func (a *API) adminUserGet(w http.ResponseWriter, r *http.Request) error {
 func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
+	config := a.config
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
 	params, err := a.getAdminParams(r)
@@ -175,7 +176,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		if err := user.SetPassword(ctx, password); err != nil {
+		if err := user.SetPassword(ctx, password, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
 			return err
 		}
 	}

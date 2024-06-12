@@ -304,6 +304,8 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 }
 
 func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
+	config := a.config
+
 	if user.EncryptedPassword == "" && user.InvitedAt != nil {
 		// sign them up with temporary password, and require application
 		// to present the user with a password set form
@@ -313,7 +315,7 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 			panic(err)
 		}
 
-		if err := user.SetPassword(ctx, password); err != nil {
+		if err := user.SetPassword(ctx, password, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
 			return nil, err
 		}
 	}

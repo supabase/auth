@@ -2,6 +2,7 @@ package conf
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -421,16 +422,74 @@ func (c *CaptchaConfiguration) Validate() error {
 	return nil
 }
 
+// DatabaseEncryptionConfiguration configures Auth to encrypt certain columns.
+// Once Encrypt is set to true, data will start getting encrypted with the
+// provided encryption key. Setting it to false just stops encryption from
+// going on further, but DecryptionKeys would have to contain the same key so
+// the encrypted data remains accessible.
+type DatabaseEncryptionConfiguration struct {
+	Encrypt bool `json:"encrypt"`
+
+	EncryptionKeyID string `json:"encryption_key_id" split_words:"true"`
+	EncryptionKey   string `json:"-" split_words:"true"`
+
+	DecryptionKeys map[string]string `json:"-" split_words:"true"`
+}
+
+func (c *DatabaseEncryptionConfiguration) Validate() error {
+	if c.Encrypt {
+		if c.EncryptionKeyID == "" {
+			return errors.New("conf: encryption key ID must be specified")
+		}
+
+		decodedKey, err := base64.RawURLEncoding.DecodeString(c.EncryptionKey)
+		if err != nil {
+			return err
+		}
+
+		if len(decodedKey) != 256/8 {
+			return errors.New("conf: encryption key is not 256 bits")
+		}
+
+		if c.DecryptionKeys == nil || c.DecryptionKeys[c.EncryptionKeyID] == "" {
+			return errors.New("conf: encryption key must also be present in decryption keys")
+		}
+	}
+
+	for id, key := range c.DecryptionKeys {
+		decodedKey, err := base64.RawURLEncoding.DecodeString(key)
+		if err != nil {
+			return err
+		}
+
+		if len(decodedKey) != 256/8 {
+			return fmt.Errorf("conf: decryption key with ID %q must be 256 bits", id)
+		}
+	}
+
+	return nil
+}
+
 type SecurityConfiguration struct {
 	Captcha                               CaptchaConfiguration `json:"captcha"`
 	RefreshTokenRotationEnabled           bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
 	RefreshTokenReuseInterval             int                  `json:"refresh_token_reuse_interval" split_words:"true"`
 	UpdatePasswordRequireReauthentication bool                 `json:"update_password_require_reauthentication" split_words:"true"`
 	ManualLinkingEnabled                  bool                 `json:"manual_linking_enabled" split_words:"true" default:"false"`
+
+	DBEncryption DatabaseEncryptionConfiguration `json:"database_encryption" split_words:"true"`
 }
 
 func (c *SecurityConfiguration) Validate() error {
-	return c.Captcha.Validate()
+	if err := c.Captcha.Validate(); err != nil {
+		return err
+	}
+
+	if err := c.DBEncryption.Validate(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func loadEnvironment(filename string) error {
