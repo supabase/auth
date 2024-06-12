@@ -23,7 +23,7 @@ type slackUser struct {
 	TeamID    string `json:"https://slack.com/team_id"`
 }
 
-// NewSlackProvider creates a Slack account provider.
+// NewSlackProvider creates a Slack account provider with Legacy Slack OAuth.
 func NewSlackProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func (g slackProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 	if u.Email != "" {
 		data.Emails = []Email{{
 			Email:    u.Email,
-			Verified: true, // Slack dosen't provide data on if email is verified.
+			Verified: true, // Slack doesn't provide data on if email is verified.
 			Primary:  true,
 		}}
 	}
