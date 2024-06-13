@@ -337,7 +337,9 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 		}
 
 		if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email"); terr != nil {
-			return terr
+			if !models.IsNotFoundError(terr) {
+				return terr
+			}
 		} else {
 			if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
 				"email_verified": true,
