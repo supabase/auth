@@ -335,6 +335,16 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 		if terr = user.Confirm(tx); terr != nil {
 			return internalServerError("Error confirming user").WithInternalError(terr)
 		}
+
+		if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email"); terr != nil {
+			return terr
+		} else {
+			if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
+				"email_verified": true,
+			}); terr != nil {
+				return terr
+			}
+		}
 		return nil
 	})
 	if err != nil {
