@@ -223,6 +223,7 @@ type GlobalConfiguration struct {
 	RateLimitTokenRefresh   float64 `split_words:"true" default:"150"`
 	RateLimitSso            float64 `split_words:"true" default:"30"`
 	RateLimitAnonymousUsers float64 `split_words:"true" default:"30"`
+	RateLimitOtp            float64 `split_words:"true" default:"30"`
 
 	SiteURL         string   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList    []string `json:"uri_allow_list" split_words:"true"`

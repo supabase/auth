@@ -136,9 +136,14 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		r.With(sharedLimiter).With(api.requireAdminCredentials).Post("/invite", api.Invite)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Route("/signup", func(r *router) {
 			// rate limit per hour
-			limiter := tollbooth.NewLimiter(api.config.RateLimitAnonymousUsers/(60*60), &limiter.ExpirableOptions{
+			limitAnonymousSignIns := tollbooth.NewLimiter(api.config.RateLimitAnonymousUsers/(60*60), &limiter.ExpirableOptions{
 				DefaultExpirationTTL: time.Hour,
 			}).SetBurst(int(api.config.RateLimitAnonymousUsers)).SetMethods([]string{"POST"})
+
+			limitSignups := tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(30)
+
 			r.Post("/", func(w http.ResponseWriter, r *http.Request) error {
 				params := &SignupParams{}
 				if err := retrieveRequestParams(r, params); err != nil {
@@ -148,19 +153,50 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 					if !api.config.External.AnonymousUsers.Enabled {
 						return unprocessableEntityError(ErrorCodeAnonymousProviderDisabled, "Anonymous sign-ins are disabled")
 					}
-					if _, err := api.limitHandler(limiter)(w, r); err != nil {
+					if _, err := api.limitHandler(limitAnonymousSignIns)(w, r); err != nil {
 						return err
 					}
 					return api.SignupAnonymously(w, r)
 				}
+
+				// apply ip-based rate limiting on otps
+				if _, err := api.limitHandler(limitSignups)(w, r); err != nil {
+					return err
+				}
+				// apply shared rate limiting on email / phone
+				if _, err := sharedLimiter(w, r); err != nil {
+					return err
+				}
 				return api.Signup(w, r)
 			})
 		})
-		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
-		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/resend", api.Resend)
-		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
+		r.With(api.limitHandler(
+			// Allow requests at the specified rate per 5 minutes
+			tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(30),
+		)).With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
 
-		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
+		r.With(api.limitHandler(
+			// Allow requests at the specified rate per 5 minutes
+			tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(30),
+		)).With(sharedLimiter).With(api.verifyCaptcha).Post("/resend", api.Resend)
+
+		r.With(api.limitHandler(
+			// Allow requests at the specified rate per 5 minutes
+			tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(30),
+		)).With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
+
+		r.With(api.limitHandler(
+			// Allow requests at the specified rate per 5 minutes
+			tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(30),
+		)).With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
 
 		r.With(api.limitHandler(
 			// Allow requests at the specified rate per 5 minutes.
@@ -187,7 +223,12 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.With(api.requireAuthentication).Route("/user", func(r *router) {
 			r.Get("/", api.UserGet)
-			r.With(sharedLimiter).Put("/", api.UserUpdate)
+			r.With(api.limitHandler(
+				// Allow requests at the specified rate per 5 minutes
+				tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
+					DefaultExpirationTTL: time.Hour,
+				}).SetBurst(30),
+			)).With(sharedLimiter).Put("/", api.UserUpdate)
 
 			r.Route("/identities", func(r *router) {
 				r.Use(api.requireManualLinkingEnabled)
