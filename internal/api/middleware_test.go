@@ -390,3 +390,103 @@ func (ts *MiddlewareTestSuite) TestLimitHandler() {
 	ts.API.limitHandler(lmt).handler(okHandler).ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
 }
+
+func (ts *MiddlewareTestSuite) TestLimitHandlerWithSharedLimiter() {
+	// setup config for shared limiter and ip-based limiter to work
+	ts.Config.RateLimitHeader = "X-Rate-Limit"
+	ts.Config.External.Email.Enabled = true
+	ts.Config.External.Phone.Enabled = true
+	ts.Config.Mailer.Autoconfirm = false
+	ts.Config.Sms.Autoconfirm = false
+
+	ipBasedLimiter := func(max float64) *limiter.Limiter {
+		return tollbooth.NewLimiter(max, &limiter.ExpirableOptions{
+			DefaultExpirationTTL: time.Hour,
+		})
+	}
+
+	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	cases := []struct {
+		desc                 string
+		sharedLimiterConfig  *conf.GlobalConfiguration
+		ipBasedLimiterConfig float64
+		body                 map[string]interface{}
+		expectedErrorCode    string
+	}{
+		{
+			desc: "Exceed ip-based rate limit before shared limiter",
+			sharedLimiterConfig: &conf.GlobalConfiguration{
+				RateLimitEmailSent: 10,
+				RateLimitSmsSent:   10,
+			},
+			ipBasedLimiterConfig: 1,
+			body: map[string]interface{}{
+				"email": "foo@example.com",
+			},
+			expectedErrorCode: ErrorCodeOverRequestRateLimit,
+		},
+		{
+			desc: "Exceed email shared limiter",
+			sharedLimiterConfig: &conf.GlobalConfiguration{
+				RateLimitEmailSent: 1,
+				RateLimitSmsSent:   1,
+			},
+			ipBasedLimiterConfig: 10,
+			body: map[string]interface{}{
+				"email": "foo@example.com",
+			},
+			expectedErrorCode: ErrorCodeOverEmailSendRateLimit,
+		},
+		{
+			desc: "Exceed sms shared limiter",
+			sharedLimiterConfig: &conf.GlobalConfiguration{
+				RateLimitEmailSent: 1,
+				RateLimitSmsSent:   1,
+			},
+			ipBasedLimiterConfig: 10,
+			body: map[string]interface{}{
+				"phone": "123456789",
+			},
+			expectedErrorCode: ErrorCodeOverSMSSendRateLimit,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			ts.Config.RateLimitEmailSent = c.sharedLimiterConfig.RateLimitEmailSent
+			ts.Config.RateLimitSmsSent = c.sharedLimiterConfig.RateLimitSmsSent
+			lmt := ts.API.limitHandler(ipBasedLimiter(c.ipBasedLimiterConfig))
+			sharedLimiter := ts.API.limitEmailOrPhoneSentHandler()
+
+			// get the minimum amount to reach the threshold just before the rate limit is exceeded
+			threshold := min(c.sharedLimiterConfig.RateLimitEmailSent, c.sharedLimiterConfig.RateLimitSmsSent, c.ipBasedLimiterConfig)
+			for i := 0; i < int(threshold); i++ {
+				var buffer bytes.Buffer
+				require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+				req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)
+				req.Header.Add(ts.Config.RateLimitHeader, "0.0.0.0")
+
+				w := httptest.NewRecorder()
+				lmt.handler(sharedLimiter.handler(okHandler)).ServeHTTP(w, req)
+				require.Equal(ts.T(), http.StatusOK, w.Code)
+			}
+
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+			req := httptest.NewRequest(http.MethodPost, "http://localhost", &buffer)
+			req.Header.Add(ts.Config.RateLimitHeader, "0.0.0.0")
+
+			// check if the rate limit is exceeded with the expected error code
+			w := httptest.NewRecorder()
+			lmt.handler(sharedLimiter.handler(okHandler)).ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
+
+			var data map[string]interface{}
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			require.Equal(ts.T(), c.expectedErrorCode, data["error_code"])
+		})
+	}
+}
