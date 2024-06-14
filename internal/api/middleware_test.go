@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/didip/tollbooth/v5"
+	"github.com/didip/tollbooth/v5/limiter"
 	jwt "github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -355,4 +357,36 @@ func TestTimeoutResponseWriter(t *testing.T) {
 	redirectHandler.ServeHTTP(w2, req)
 
 	require.Equal(t, w1.Result(), w2.Result())
+}
+
+func (ts *MiddlewareTestSuite) TestLimitHandler() {
+	ts.Config.RateLimitHeader = "X-Rate-Limit"
+	lmt := tollbooth.NewLimiter(5, &limiter.ExpirableOptions{
+		DefaultExpirationTTL: time.Hour,
+	})
+
+	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		b, _ := json.Marshal(map[string]interface{}{"message": "ok"})
+		w.Write([]byte(b))
+	})
+
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+		req.Header.Add(ts.Config.RateLimitHeader, "0.0.0.0")
+		w := httptest.NewRecorder()
+		ts.API.limitHandler(lmt).handler(okHandler).ServeHTTP(w, req)
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+
+		var data map[string]interface{}
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+		require.Equal(ts.T(), "ok", data["message"])
+	}
+
+	// 6th request should fail and return a rate limit exceeded error
+	req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
+	req.Header.Add(ts.Config.RateLimitHeader, "0.0.0.0")
+	w := httptest.NewRecorder()
+	ts.API.limitHandler(lmt).handler(okHandler).ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
 }
