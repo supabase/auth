@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gofrs/uuid"
+	jwt "github.com/golang-jwt/jwt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -221,4 +223,86 @@ func (ts *AnonymousTestSuite) TestRateLimitAnonymousSignups() {
 	w = httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusBadRequest, w.Code)
+}
+
+func (ts *AnonymousTestSuite) TestAdminUpdateAnonymousUser() {
+	claims := &AccessTokenClaims{
+		Role: "supabase_admin",
+	}
+	adminJwt, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))
+	require.NoError(ts.T(), err)
+
+	u1, err := models.NewUser("", "", "", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	u1.IsAnonymous = true
+	require.NoError(ts.T(), ts.API.db.Create(u1))
+
+	u2, err := models.NewUser("", "", "", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	u2.IsAnonymous = true
+	require.NoError(ts.T(), ts.API.db.Create(u2))
+
+	cases := []struct {
+		desc               string
+		userId             uuid.UUID
+		body               map[string]interface{}
+		expected           map[string]interface{}
+		expectedIdentities int
+	}{
+		{
+			desc:   "update anonymous user with email and email confirm true",
+			userId: u1.ID,
+			body: map[string]interface{}{
+				"email":         "foo@example.com",
+				"email_confirm": true,
+			},
+			expected: map[string]interface{}{
+				"email":        "foo@example.com",
+				"is_anonymous": false,
+			},
+			expectedIdentities: 1,
+		},
+		{
+			desc:   "update anonymous user with email and email confirm false",
+			userId: u2.ID,
+			body: map[string]interface{}{
+				"email":         "bar@example.com",
+				"email_confirm": false,
+			},
+			expected: map[string]interface{}{
+				"email":        "bar@example.com",
+				"is_anonymous": true,
+			},
+			expectedIdentities: 1,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			// Request body
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+
+			req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s", c.userId), &buffer)
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", adminJwt))
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusOK, w.Code)
+
+			var data models.User
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+			require.NotNil(ts.T(), data)
+			require.Len(ts.T(), data.Identities, c.expectedIdentities)
+
+			actual := map[string]interface{}{
+				"email":        data.GetEmail(),
+				"is_anonymous": data.IsAnonymous,
+			}
+
+			require.Equal(ts.T(), c.expected, actual)
+		})
+	}
 }
