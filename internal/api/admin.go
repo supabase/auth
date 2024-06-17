@@ -214,8 +214,9 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 				// if the user doesn't have an existing email
 				// then updating the user's email should create a new email identity
 				i, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
-					Subject: user.ID.String(),
-					Email:   params.Email,
+					Subject:       user.ID.String(),
+					Email:         params.Email,
+					EmailVerified: params.EmailConfirm,
 				}))
 				if terr != nil {
 					return terr
@@ -224,11 +225,19 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			} else {
 				// update the existing email identity
 				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
-					"email": params.Email,
+					"email":          params.Email,
+					"email_verified": params.EmailConfirm,
 				}); terr != nil {
 					return terr
 				}
 			}
+			if user.IsAnonymous && params.EmailConfirm {
+				user.IsAnonymous = false
+				if terr := tx.UpdateOnly(user, "is_anonymous"); terr != nil {
+					return terr
+				}
+			}
+
 			if terr := user.SetEmail(tx, params.Email); terr != nil {
 				return terr
 			}
@@ -241,8 +250,9 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 				// if the user doesn't have an existing phone
 				// then updating the user's phone should create a new phone identity
 				identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
-					Subject: user.ID.String(),
-					Phone:   params.Phone,
+					Subject:       user.ID.String(),
+					Phone:         params.Phone,
+					PhoneVerified: params.PhoneConfirm,
 				}))
 				if terr != nil {
 					return terr
@@ -251,8 +261,15 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			} else {
 				// update the existing phone identity
 				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
-					"phone": params.Phone,
+					"phone":          params.Phone,
+					"phone_verified": params.PhoneConfirm,
 				}); terr != nil {
+					return terr
+				}
+			}
+			if user.IsAnonymous && params.PhoneConfirm {
+				user.IsAnonymous = false
+				if terr := tx.UpdateOnly(user, "is_anonymous"); terr != nil {
 					return terr
 				}
 			}
