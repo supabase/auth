@@ -25,6 +25,7 @@ jobs:
             supabase/gotrue
             public.ecr.aws/supabase/gotrue
             ghcr.io/supabase/gotrue
+            ghcr.io/supabase/auth
             436098097459.dkr.ecr.us-east-1.amazonaws.com/gotrue
             646182064048.dkr.ecr.us-east-1.amazonaws.com/gotrue
             supabase/auth
