@@ -322,6 +322,7 @@ type ProviderConfiguration struct {
 	SlackOIDC               OAuthProviderConfiguration     `json:"slack_oidc" envconfig:"SLACK_OIDC"`
 	Twitter                 OAuthProviderConfiguration     `json:"twitter"`
 	Twitch                  OAuthProviderConfiguration     `json:"twitch"`
+	VercelMarketplace       OAuthProviderConfiguration     `json:"vercel_marketplace" envconfig:"VERCEL_MARKETPLACE"`
 	WorkOS                  OAuthProviderConfiguration     `json:"workos"`
 	Email                   EmailProviderConfiguration     `json:"email"`
 	Phone                   PhoneProviderConfiguration     `json:"phone"`

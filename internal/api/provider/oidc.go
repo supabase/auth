@@ -61,6 +61,8 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 		token, data, err = parseLinkedinIDToken(token)
 	case IssuerKakao:
 		token, data, err = parseKakaoIDToken(token)
+	case IssuerVercelMarketplace:
+		token, data, err = parseVercelMarketplaceIDToken(token)
 	default:
 		if IsAzureIssuer(token.Issuer) {
 			token, data, err = parseAzureIDToken(token)
@@ -346,6 +348,63 @@ func parseKakaoIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 		PreferredUsername: claims.Nickname,
 		ProviderId:        token.Subject,
 		Picture:           claims.Picture,
+	}
+
+	return token, &data, nil
+}
+
+type VercelMarketplaceIDTokenClaims struct {
+	jwt.RegisteredClaims
+
+	InstallationId string `json:"installation_id"`
+	AccountId      string `json:"account_id"`
+	UserId         string `json:"user_id"`
+	UserRole       string `json:"user_role"`
+	UserAvatarUrl  string `json:"user_avatar_url"`
+	UserName       string `json:"user_name"`
+}
+
+func parseVercelMarketplaceIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
+	var claims VercelMarketplaceIDTokenClaims
+
+	if err := token.Claims(&claims); err != nil {
+		return nil, nil, err
+	}
+
+	var data UserProvidedData
+
+	// TODO(kamil): They are still evolving so I shoved everything inside `CustomClaims` for now
+	data.Metadata = &Claims{
+		Issuer:       token.Issuer,
+		Subject:      token.Subject,
+		ProviderId:   token.Subject,
+		CustomClaims: make(map[string]any),
+	}
+
+	//. TODO(kamil): This is faked as claims do not have user_email yet
+	data.Emails = append(data.Emails, Email{
+		Email:    fmt.Sprintf("%s@customer.vercel.com", claims.UserId),
+		Verified: true,
+		Primary:  true,
+	})
+
+	if claims.InstallationId != "" {
+		data.Metadata.CustomClaims["installation_id"] = claims.InstallationId
+	}
+	if claims.AccountId != "" {
+		data.Metadata.CustomClaims["account_id"] = claims.AccountId
+	}
+	if claims.UserId != "" {
+		data.Metadata.CustomClaims["user_id"] = claims.UserId
+	}
+	if claims.UserRole != "" {
+		data.Metadata.CustomClaims["user_role"] = claims.UserRole
+	}
+	if claims.UserAvatarUrl != "" {
+		data.Metadata.CustomClaims["user_avatar_url"] = claims.UserAvatarUrl
+	}
+	if claims.UserName != "" {
+		data.Metadata.CustomClaims["user_name"] = claims.UserName
 	}
 
 	return token, &data, nil
