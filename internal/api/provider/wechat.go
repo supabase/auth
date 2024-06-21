@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/supabase/gotrue/internal/conf"
 	"golang.org/x/oauth2"
-	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -92,12 +92,13 @@ func (idp weChatProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
+	defer func() {
+		err := tokenResponse.Body.Close()
 		if err != nil {
+			log.Fatalf("Failed to close response body: %v", err)
 			return
 		}
-	}(tokenResponse.Body)
+	}()
 	buf := new(bytes.Buffer)
 	_, err = buf.ReadFrom(tokenResponse.Body)
 	if err != nil {
@@ -157,12 +158,13 @@ func (idp weChatProvider) GetUserData(ctx context.Context, token *oauth2.Token) 
 		return nil, fmt.Errorf("get user info error: %v", err)
 
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
+	defer func() {
+		err := resp.Body.Close()
 		if err != nil {
+			log.Fatalf("Failed to close response body: %v", err)
 			return
 		}
-	}(resp.Body)
+	}()
 	buf := new(bytes.Buffer)
 	_, err = buf.ReadFrom(resp.Body)
 	if err != nil {
@@ -194,9 +196,9 @@ func (idp weChatProvider) GetUserData(ctx context.Context, token *oauth2.Token) 
 
 func mapGender(sex int) string {
 	switch sex {
-	case 1:
+	case 0:
 		return "male"
-	case 2:
+	case 1:
 		return "female"
 	default:
 		return "unknown"
