@@ -192,10 +192,6 @@ func (idp weChatProvider) GetUserData(ctx context.Context, token *oauth2.Token) 
 	return &userData, nil
 }
 
-func (idp weChatProvider) RevokeToken(token *oauth2.Token) error {
-	return nil
-}
-
 func mapGender(sex int) string {
 	switch sex {
 	case 1:
