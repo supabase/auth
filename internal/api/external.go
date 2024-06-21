@@ -558,6 +558,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewWorkOSProvider(config.External.WorkOS)
 	case "zoom":
 		return provider.NewZoomProvider(config.External.Zoom)
+	case "wechat":
+		return provider.NewWeChatProvider(config.External.WeChat)
 	default:
 		return nil, fmt.Errorf("Provider %s could not be found", name)
 	}
