@@ -40,6 +40,7 @@ begin
     -- auth.jwt() function
     create or replace function {{ index .Options "Namespace" }}.jwt()
         returns jsonb
+        set search_path to ''
     as $func$
       select
         coalesce(
