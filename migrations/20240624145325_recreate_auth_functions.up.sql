@@ -2,7 +2,7 @@
 do $$ 
 begin
     -- auth.uid() function
-    create or replace function auth.uid() 
+    create or replace function {{ index .Options "Namespace" }}.uid() 
         returns uuid 
         set search_path to '' 
     as $func$
