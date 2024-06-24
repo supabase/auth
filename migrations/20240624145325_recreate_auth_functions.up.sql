@@ -6,12 +6,10 @@ begin
         returns uuid 
         set search_path to '' 
     as $func$
-        select nullif(
-           coalesce(
-             current_setting('request.jwt.claim.sub', true),
-             (current_setting('request.jwt.claims', true)::jsonb ->> 'sub')
-           ),
-           ''
+      select
+        coalesce(
+          nullif(current_setting('request.jwt.claim.sub', true), ''),
+          (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
         )::uuid
     $func$ language sql stable;
 
@@ -20,28 +18,28 @@ begin
         returns text 
         set search_path to ''
     as $func$
-        select
-         coalesce(
-           nullif(current_setting('request.jwt.claim.role', true), ''),
-           (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role')
-         )::text
+      select
+        coalesce(
+          nullif(current_setting('request.jwt.claim.role', true), ''),
+          (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role')
+        )::text
     $func$ language sql stable;
 
     -- auth.email() function
     create or replace function {{ index .Options "Namespace" }}.email()
-       returns text
-       set search_path to ''
+        returns text
+        set search_path to ''
     as $func$
-       select
-         coalesce(
-           nullif(current_setting('request.jwt.claim.email', true), ''),
-           (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email')
-         )::text
+      select
+        coalesce(
+          nullif(current_setting('request.jwt.claim.email', true), ''),
+          (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email')
+        )::text
     $func$ language sql stable;
 
     -- auth.jwt() function
     create or replace function {{ index .Options "Namespace" }}.jwt()
-       returns jsonb
+        returns jsonb
     as $func$
       select
         coalesce(
