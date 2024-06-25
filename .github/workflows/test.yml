@@ -58,9 +58,7 @@ jobs:
       - name: Check gosec
         run: |
           set -x
-          go get -u golang.org/x/tools@v0.1.5
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          go mod tidy
           make sec
       - name: Init Database
         run: psql -f hack/init_postgres.sql postgresql://postgres:root@localhost:5432/postgres
