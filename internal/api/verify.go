@@ -306,7 +306,7 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
 	config := a.config
 
-	if user.EncryptedPassword == "" && user.InvitedAt != nil {
+	if !user.HasPassword() && user.InvitedAt != nil {
 		// sign them up with temporary password, and require application
 		// to present the user with a password set form
 		password, err := password.Generate(64, 10, 0, false, true)
@@ -322,7 +322,7 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if user.EncryptedPassword == "" && user.InvitedAt != nil {
+		if !user.HasPassword() && user.InvitedAt != nil {
 			if terr = user.UpdatePassword(tx, nil); terr != nil {
 				return internalServerError("Error storing password").WithInternalError(terr)
 			}

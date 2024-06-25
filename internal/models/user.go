@@ -25,7 +25,7 @@ type User struct {
 	Email     storage.NullString `json:"email" db:"email"`
 	IsSSOUser bool               `json:"-" db:"is_sso_user"`
 
-	EncryptedPassword string     `json:"-" db:"encrypted_password"`
+	EncryptedPassword *string    `json:"-" db:"encrypted_password"`
 	EmailConfirmedAt  *time.Time `json:"email_confirmed_at,omitempty" db:"email_confirmed_at"`
 	InvitedAt         *time.Time `json:"invited_at,omitempty" db:"invited_at"`
 
@@ -95,7 +95,7 @@ func NewUser(phone, email, password, aud string, userData map[string]interface{}
 		Email:             storage.NullString(strings.ToLower(email)),
 		Phone:             storage.NullString(phone),
 		UserMetaData:      userData,
-		EncryptedPassword: passwordHash,
+		EncryptedPassword: &passwordHash,
 	}
 	return user, nil
 }
@@ -104,6 +104,16 @@ func NewUser(phone, email, password, aud string, userData map[string]interface{}
 func (User) TableName() string {
 	tableName := "users"
 	return tableName
+}
+
+func (u *User) HasPassword() bool {
+	var pwd string
+
+	if u.EncryptedPassword != nil {
+		pwd = *u.EncryptedPassword
+	}
+
+	return pwd != ""
 }
 
 // BeforeSave is invoked before the user is saved to the database
@@ -285,7 +295,7 @@ func (u *User) SetPhone(tx *storage.Connection, phone string) error {
 
 func (u *User) SetPassword(ctx context.Context, password string, encrypt bool, encryptionKeyID, encryptionKey string) error {
 	if password == "" {
-		u.EncryptedPassword = ""
+		u.EncryptedPassword = nil
 		return nil
 	}
 
@@ -294,14 +304,15 @@ func (u *User) SetPassword(ctx context.Context, password string, encrypt bool, e
 		return err
 	}
 
-	u.EncryptedPassword = pw
+	u.EncryptedPassword = &pw
 	if encrypt {
 		es, err := crypto.NewEncryptedString(u.ID.String(), []byte(pw), encryptionKeyID, encryptionKey)
 		if err != nil {
 			return err
 		}
 
-		u.EncryptedPassword = es.String()
+		encryptedPassword := es.String()
+		u.EncryptedPassword = &encryptedPassword
 	}
 
 	return nil
@@ -341,9 +352,13 @@ func (u *User) UpdatePassword(tx *storage.Connection, sessionID *uuid.UUID) erro
 
 // Authenticate a user from a password
 func (u *User) Authenticate(ctx context.Context, password string, decryptionKeys map[string]string, encrypt bool, encryptionKeyID string) (bool, bool, error) {
-	hash := u.EncryptedPassword
+	if u.EncryptedPassword == nil {
+		return false, false, nil
+	}
 
-	es := crypto.ParseEncryptedString(u.EncryptedPassword)
+	hash := *u.EncryptedPassword
+
+	es := crypto.ParseEncryptedString(hash)
 	if es != nil {
 		h, err := es.Decrypt(u.ID.String(), decryptionKeys)
 		if err != nil {
@@ -719,7 +734,7 @@ func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
 func (u *User) RemoveUnconfirmedIdentities(tx *storage.Connection, identity *Identity) error {
 	if identity.Provider != "email" && identity.Provider != "phone" {
 		// user is unconfirmed so the password should be reset
-		u.EncryptedPassword = ""
+		u.EncryptedPassword = nil
 		if terr := tx.UpdateOnly(u, "encrypted_password"); terr != nil {
 			return terr
 		}
@@ -755,7 +770,7 @@ func (u *User) SoftDeleteUser(tx *storage.Connection) error {
 	u.Phone = storage.NullString(obfuscatePhone(u, u.GetPhone()))
 	u.EmailChange = obfuscateEmail(u, u.EmailChange)
 	u.PhoneChange = obfuscatePhone(u, u.PhoneChange)
-	u.EncryptedPassword = ""
+	u.EncryptedPassword = nil
 	u.ConfirmationToken = ""
 	u.RecoveryToken = ""
 	u.EmailChangeTokenCurrent = ""

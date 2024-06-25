@@ -155,7 +155,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		if password != "" {
 			isSamePassword := false
 
-			if user.EncryptedPassword != "" {
+			if user.HasPassword() {
 				auth, _, err := user.Authenticate(ctx, password, config.Security.DBEncryption.DecryptionKeys, false, "")
 				if err != nil {
 					return err
