@@ -38,19 +38,8 @@ require (
 )
 
 require (
-	github.com/Bowery/prompt v0.0.0-20190916142128-fa8279994f75 // indirect
-	github.com/dchest/safefile v0.0.0-20151022103144-855e8d98f185 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
 	github.com/gobuffalo/nulls v0.4.2 // indirect
-	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
-	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/kardianos/govendor v1.0.9 // indirect
-	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
-	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/tjfoc/gmsm v1.4.1 // indirect
-	go.mongodb.org/mongo-driver v1.12.0 // indirect
-	golang.org/x/tools v0.6.0 // indirect
-	gopkg.in/ini.v1 v1.67.0 // indirect
 )
 
 require (
@@ -112,7 +101,6 @@ require (
 	github.com/gorilla/css v1.0.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.7.0 // indirect
 	github.com/h2non/parth v0.0.0-20190131123155-b4df798d6542 // indirect
-	github.com/huaweicloud/huaweicloud-sdk-go-v3 v0.1.61
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
