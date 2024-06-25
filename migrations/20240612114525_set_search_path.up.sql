@@ -6,7 +6,10 @@ begin
         returns uuid 
         set search_path to '' 
     as $func$
-        select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
+        select coalesce(
+            nullif(current_setting('request.jwt.claim.sub', true), ''),
+            (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
+        )::uuid
     $func$ language sql stable;
 
     -- auth.role() function
@@ -14,7 +17,10 @@ begin
         returns text 
         set search_path to ''
     as $func$
-        select nullif(current_setting('request.jwt.claim.role', true), '')::text;
+        select coalesce(
+            nullif(current_setting('request.jwt.claim.role', true), ''),
+            (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role')
+        )::text
     $func$ language sql stable;
 
     -- auth.email() function
