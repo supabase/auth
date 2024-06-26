@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/url"
 
-	jwt "github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/models"
 )
 
