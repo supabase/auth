@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/aaronarduino/goqrsvg"
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
 	"github.com/gofrs/uuid"
+	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/hooks"
@@ -244,7 +246,12 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Database error verifying MFA TOTP secret").WithInternalError(err)
 	}
 
-	valid := totp.Validate(params.Code, secret)
+	valid, verr := totp.ValidateCustom(params.Code, secret, time.Now().UTC(), totp.ValidateOpts{
+		Period:    30,
+		Skew:      1,
+		Digits:    otp.DigitsSix,
+		Algorithm: otp.AlgorithmSHA1,
+	})
 
 	if config.Hook.MFAVerificationAttempt.Enabled {
 		input := hooks.MFAVerificationAttemptInput{
@@ -282,7 +289,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 		}
-		return unprocessableEntityError(ErrorCodeMFAVerificationFailed, "Invalid TOTP code entered")
+		return unprocessableEntityError(ErrorCodeMFAVerificationFailed, "Invalid TOTP code entered").WithInternalError(verr)
 	}
 
 	var token *AccessTokenResponse

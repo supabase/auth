@@ -22,7 +22,7 @@ require (
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/mrjones/oauth v0.0.0-20190623134757-126b35219450
 	github.com/pkg/errors v0.9.1
-	github.com/pquerna/otp v1.3.0
+	github.com/pquerna/otp v1.4.0
 	github.com/rs/cors v1.9.0
 	github.com/sebest/xff v0.0.0-20160910043805-6c115e0ffa35
 	github.com/sethvargo/go-password v0.2.0
