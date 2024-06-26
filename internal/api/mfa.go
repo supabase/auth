@@ -289,7 +289,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 		}
-		return unprocessableEntityError(ErrorCodeMFAVerificationFailed, "Invalid TOTP code entered: %v", params.Code).WithInternalError(verr)
+		return unprocessableEntityError(ErrorCodeMFAVerificationFailed, "Invalid TOTP code entered").WithInternalError(verr)
 	}
 
 	var token *AccessTokenResponse
