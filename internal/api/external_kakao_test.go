@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	jwt "github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
@@ -27,7 +27,7 @@ func (ts *ExternalTestSuite) TestSignupExternalKakao() {
 	ts.Equal("code", q.Get("response_type"))
 
 	claims := ExternalProviderClaims{}
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
 	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
 		return []byte(ts.Config.JWT.Secret), nil
 	})

@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	"github.com/gofrs/uuid"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/supabase/auth/internal/conf"
@@ -24,7 +24,7 @@ import (
 
 // AccessTokenClaims is a struct thats used for JWT claims
 type AccessTokenClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 	Email                         string                 `json:"email"`
 	Phone                         string                 `json:"phone"`
 	AppMetaData                   map[string]interface{} `json:"app_metadata"`
@@ -324,14 +324,14 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 	}
 
 	issuedAt := time.Now().UTC()
-	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp)).Unix()
+	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
 
 	claims := &hooks.AccessTokenClaims{
-		StandardClaims: jwt.StandardClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID.String(),
-			Audience:  user.Aud,
-			IssuedAt:  issuedAt.Unix(),
-			ExpiresAt: expiresAt,
+			Audience:  []string{user.Aud},
+			IssuedAt:  jwt.NewNumericDate(issuedAt),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			Issuer:    config.JWT.Issuer,
 		},
 		Email:                         user.GetEmail(),
@@ -380,7 +380,7 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		return "", 0, err
 	}
 
-	return signed, expiresAt, nil
+	return signed, expiresAt.Unix(), nil
 }
 
 func (a *API) issueRefreshToken(r *http.Request, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {

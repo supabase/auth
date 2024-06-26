@@ -66,7 +66,8 @@ func (a *API) UserGet(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	if aud != claims.Audience {
+	audienceFromClaims, _ := claims.GetAudience()
+	if len(audienceFromClaims) == 0 || aud != audienceFromClaims[0] {
 		return badRequestError(ErrorCodeValidationFailed, "Token audience doesn't match request audience")
 	}
 

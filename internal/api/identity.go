@@ -27,7 +27,8 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	if aud != claims.Audience {
+	audienceFromClaims, _ := claims.GetAudience()
+	if len(audienceFromClaims) == 0 || aud != audienceFromClaims[0] {
 		return forbiddenError(ErrorCodeUnexpectedAudience, "Token audience doesn't match request audience")
 	}
 
