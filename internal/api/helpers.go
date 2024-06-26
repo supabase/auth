@@ -36,10 +36,12 @@ func (a *API) requestAud(ctx context.Context, r *http.Request) string {
 
 	// Then check the token
 	claims := getClaims(ctx)
-	aud, _ := claims.GetAudience()
 
-	if claims != nil && len(aud) != 0 {
-		return aud[0]
+	if claims != nil {
+		aud, _ := claims.GetAudience()
+		if len(aud) != 0 {
+			return aud[0]
+		}
 	}
 
 	// Finally, return the default if none of the above methods are successful
