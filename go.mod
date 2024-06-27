@@ -11,7 +11,6 @@ require (
 	github.com/gobuffalo/validate/v3 v3.3.3 // indirect
 	github.com/gobwas/glob v0.2.3
 	github.com/gofrs/uuid v4.3.1+incompatible
-	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/jackc/pgconn v1.14.3
 	github.com/jackc/pgerrcode v0.0.0-20201024163028-a0d42d470451
 	github.com/jackc/pgproto3/v2 v2.3.3 // indirect
@@ -38,6 +37,7 @@ require (
 	github.com/bits-and-blooms/bitset v1.10.0 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.3 // indirect
 	github.com/gobuffalo/nulls v0.4.2 // indirect
+	github.com/jackc/pgx/v4 v4.18.2 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	golang.org/x/mod v0.9.0 // indirect
@@ -67,7 +67,7 @@ require (
 	github.com/fatih/structs v1.1.0
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/gobuffalo/pop/v6 v6.1.1
-	github.com/jackc/pgx/v4 v4.18.2
+	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20240303152453-e0e82adf1721
 	github.com/supabase/hibp v0.0.0-20231124125943-d225752ae869
 	github.com/supabase/mailme v0.2.0

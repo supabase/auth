@@ -20,13 +20,13 @@ import (
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
-	jwt "github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v5"
 )
 
 type FunctionHooks map[string][]string
 
 type AuthMicroserviceClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 	SiteURL       string        `json:"site_url"`
 	InstanceID    string        `json:"id"`
 	FunctionHooks FunctionHooks `json:"function_hooks"`

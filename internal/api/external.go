@@ -12,7 +12,7 @@ import (
 
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
-	jwt "github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
@@ -89,8 +89,8 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 
 	claims := ExternalProviderClaims{
 		AuthMicroserviceClaims: AuthMicroserviceClaims{
-			StandardClaims: jwt.StandardClaims{
-				ExpiresAt: time.Now().Add(5 * time.Minute).Unix(),
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
 			},
 			SiteURL:    config.SiteURL,
 			InstanceID: uuid.Nil.String(),
@@ -481,7 +481,7 @@ func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *p
 func (a *API) loadExternalState(ctx context.Context, state string) (context.Context, error) {
 	config := a.config
 	claims := ExternalProviderClaims{}
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
 		return []byte(config.JWT.Secret), nil
 	})
