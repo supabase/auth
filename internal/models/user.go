@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // User respresents a registered user with email/password authentication
@@ -69,6 +70,31 @@ type User struct {
 	IsAnonymous bool       `json:"is_anonymous" db:"is_anonymous"`
 
 	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
+}
+
+func NewUserWithPasswordHash(phone, email, passwordHash, aud string, userData map[string]interface{}) (*User, error) {
+	if strings.HasPrefix(passwordHash, "$argon2") {
+		_, err := crypto.ParseArgon2Hash(passwordHash)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// verify that the hash is a bcrypt hash
+		_, err := bcrypt.Cost([]byte(passwordHash))
+		if err != nil {
+			return nil, err
+		}
+	}
+	id := uuid.Must(uuid.NewV4())
+	user := &User{
+		ID:                id,
+		Aud:               aud,
+		Email:             storage.NullString(strings.ToLower(email)),
+		Phone:             storage.NullString(phone),
+		UserMetaData:      userData,
+		EncryptedPassword: &passwordHash,
+	}
+	return user, nil
 }
 
 // NewUser initializes a new user from an email, password and user data.

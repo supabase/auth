@@ -378,3 +378,55 @@ func (ts *UserTestSuite) TestSetPasswordTooLong() {
 	err = user.SetPassword(ts.db.Context(), strings.Repeat("a", crypto.MaxPasswordLength), false, "", "")
 	require.NoError(ts.T(), err)
 }
+
+func (ts *UserTestSuite) TestNewUserWithPasswordHashSuccess() {
+	cases := []struct {
+		desc string
+		hash string
+	}{
+		{
+			desc: "Valid bcrypt hash",
+			hash: "$2y$10$SXEz2HeT8PUIGQXo9yeUIem8KzNxgG0d7o/.eGj2rj8KbRgAuRVlq",
+		},
+		{
+			desc: "Valid argon2i hash",
+			hash: "$argon2i$v=19$m=16,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
+		},
+		{
+			desc: "Valid argon2id hash",
+			hash: "$argon2id$v=19$m=32,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			u, err := NewUserWithPasswordHash("", "", c.hash, "", nil)
+			require.NoError(ts.T(), err)
+			require.NotNil(ts.T(), u)
+		})
+	}
+}
+
+func (ts *UserTestSuite) TestNewUserWithPasswordHashFailure() {
+	cases := []struct {
+		desc string
+		hash string
+	}{
+		{
+			desc: "Invalid argon2i hash",
+			hash: "$argon2id$test",
+		},
+		{
+			desc: "Invalid bcrypt hash",
+			hash: "plaintest_password",
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			u, err := NewUserWithPasswordHash("", "", c.hash, "", nil)
+			require.Error(ts.T(), err)
+			require.Nil(ts.T(), u)
+		})
+	}
+}
