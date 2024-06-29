@@ -32,6 +32,8 @@ const (
 
 	// BCrypt hashed passwords have a 72 character limit
 	MaxPasswordLength = 72
+
+	Argon2Prefix = "$argon2"
 )
 
 // PasswordHashCost is the current pasword hashing cost
@@ -177,7 +179,7 @@ func compareHashAndPasswordArgon2(ctx context.Context, hash, password string) er
 // password, returns nil if equal otherwise an error. Context can be used to
 // cancel the hashing if the algorithm supports it.
 func CompareHashAndPassword(ctx context.Context, hash, password string) error {
-	if strings.HasPrefix(hash, "$argon2") {
+	if strings.HasPrefix(hash, Argon2Prefix) {
 		return compareHashAndPasswordArgon2(ctx, hash, password)
 	}
 

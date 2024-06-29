@@ -73,7 +73,7 @@ type User struct {
 }
 
 func NewUserWithPasswordHash(phone, email, passwordHash, aud string, userData map[string]interface{}) (*User, error) {
-	if strings.HasPrefix(passwordHash, "$argon2") {
+	if strings.HasPrefix(passwordHash, crypto.Argon2Prefix) {
 		_, err := crypto.ParseArgon2Hash(passwordHash)
 		if err != nil {
 			return nil, err
@@ -377,7 +377,7 @@ func (u *User) UpdatePassword(tx *storage.Connection, sessionID *uuid.UUID) erro
 }
 
 // Authenticate a user from a password
-func (u *User) Authenticate(ctx context.Context, password string, decryptionKeys map[string]string, encrypt bool, encryptionKeyID string) (bool, bool, error) {
+func (u *User) Authenticate(ctx context.Context, tx *storage.Connection, password string, decryptionKeys map[string]string, encrypt bool, encryptionKeyID string) (bool, bool, error) {
 	if u.EncryptedPassword == nil {
 		return false, false, nil
 	}
@@ -395,6 +395,22 @@ func (u *User) Authenticate(ctx context.Context, password string, decryptionKeys
 	}
 
 	compareErr := crypto.CompareHashAndPassword(ctx, hash, password)
+
+	if !strings.HasPrefix(hash, crypto.Argon2Prefix) {
+		// check if cost exceeds default cost or is too low
+		cost, err := bcrypt.Cost([]byte(hash))
+		if err != nil {
+			return compareErr == nil, false, err
+		}
+
+		if cost > bcrypt.DefaultCost || cost == bcrypt.MinCost {
+			// don't bother with encrypting the password in Authenticate
+			// since it's handled separately
+			if err := u.SetPassword(ctx, password, false, "", ""); err != nil {
+				return compareErr == nil, false, err
+			}
+		}
+	}
 
 	return compareErr == nil, encrypt && (es == nil || es.ShouldReEncrypt(encryptionKeyID)), nil
 }
