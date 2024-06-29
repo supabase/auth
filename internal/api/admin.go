@@ -470,7 +470,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
-		if strings.Contains("invalid format for ban duration", err.Error()) {
+		if strings.Contains(err.Error(), "invalid format for ban duration") {
 			return err
 		}
 		return internalServerError("Database error creating new user").WithInternalError(err)

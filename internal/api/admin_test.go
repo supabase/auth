@@ -839,5 +839,49 @@ func (ts *AdminTestSuite) TestAdminUserUpdateFactor() {
 			require.Equal(ts.T(), c.ExpectedCode, w.Code)
 		})
 	}
+}
 
+func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
+	cases := []struct {
+		desc   string
+		params map[string]interface{}
+	}{
+		{
+			desc: "create user without email and phone",
+			params: map[string]interface{}{
+				"password": "test_password",
+			},
+		},
+		{
+			desc: "create user with password and password hash",
+			params: map[string]interface{}{
+				"email":         "test@example.com",
+				"password":      "test_password",
+				"password_hash": "$2y$10$Tk6yEdmTbb/eQ/haDMaCsuCsmtPVprjHMcij1RqiJdLGPDXnL3L1a",
+			},
+		},
+		{
+			desc: "invalid ban duration",
+			params: map[string]interface{}{
+				"email":        "test@example.com",
+				"ban_duration": "never",
+			},
+		},
+	}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.params))
+			req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusBadRequest, w.Code, w)
+
+			data := map[string]interface{}{}
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+			require.Equal(ts.T(), data["error_code"], ErrorCodeValidationFailed)
+		})
+
+	}
 }
