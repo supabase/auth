@@ -318,9 +318,14 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 	u.PhoneChange = "22222222"
 	u.PhoneChangeToken = "123456"
 	u.PhoneChangeSentAt = &sentTime
+	u.EmailChange = "test@gmail.com"
+	u.EmailChangeTokenNew = "123456"
+	u.EmailChangeTokenCurrent = "123456"
 	require.NoError(ts.T(), ts.API.db.Update(u))
 	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
 	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.PhoneChange, u.PhoneChangeToken, models.PhoneChangeToken))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew))
 
 	type ResponseBody struct {
 		Code int    `json:"code"`
@@ -373,6 +378,16 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":  mail.SignupVerification,
+				"token": "invalid_otp",
+				"email": u.GetEmail(),
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Invalid Email Change",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  mail.EmailChangeVerification,
 				"token": "invalid_otp",
 				"email": u.GetEmail(),
 			},
@@ -814,6 +829,7 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 }
 
 func (ts *VerifyTestSuite) TestVerifyValidOtp() {
+	ts.Config.Mailer.SecureEmailChangeEnabled = true
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.EmailChange = "new@example.com"
