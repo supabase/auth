@@ -18,6 +18,7 @@ import (
 )
 
 type AdminUserParams struct {
+	Id           string                 `json:"id"`
 	Aud          string                 `json:"aud"`
 	Role         string                 `json:"role"`
 	Email        string                 `json:"email"`
@@ -378,6 +379,17 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 
 	if err != nil {
 		return internalServerError("Error creating user").WithInternalError(err)
+	}
+
+	if params.Id != "" {
+		customId, err := uuid.FromString(params.Id)
+		if err != nil {
+			return badRequestError(ErrorCodeValidationFailed, "ID must conform to the uuid v4 format")
+		}
+		if customId == uuid.Nil {
+			return badRequestError(ErrorCodeValidationFailed, "ID cannot be a nil uuid")
+		}
+		user.ID = customId
 	}
 
 	user.AppMetaData = map[string]interface{}{

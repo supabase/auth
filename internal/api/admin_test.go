@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -325,6 +326,23 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"password":        "test",
 			},
 		},
+		{
+			desc: "With custom id",
+			params: map[string]interface{}{
+				"id":       "fc56ab41-2010-4870-a9b9-767c1dc573fb",
+				"email":    "test6@example.com",
+				"password": "test",
+			},
+			expected: map[string]interface{}{
+				"id":              "fc56ab41-2010-4870-a9b9-767c1dc573fb",
+				"email":           "test6@example.com",
+				"phone":           "",
+				"isAuthenticated": true,
+				"provider":        "email",
+				"providers":       []string{"email"},
+				"password":        "test",
+			},
+		},
 	}
 
 	for _, c := range cases {
@@ -364,15 +382,18 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				}
 			}
 
-			var expectedPassword string
 			if _, ok := c.expected["password"]; ok {
-				expectedPassword = fmt.Sprintf("%v", c.expected["password"])
+				expectedPassword := fmt.Sprintf("%v", c.expected["password"])
+				isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, expectedPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
+				require.NoError(ts.T(), err)
+				require.Equal(ts.T(), c.expected["isAuthenticated"], isAuthenticated)
 			}
 
-			isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, expectedPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
-			require.NoError(ts.T(), err)
-
-			assert.Equal(ts.T(), c.expected["isAuthenticated"], isAuthenticated)
+			if id, ok := c.expected["id"]; ok {
+				uid, err := uuid.FromString(id.(string))
+				require.NoError(ts.T(), err)
+				require.Equal(ts.T(), uid, data.ID)
+			}
 
 			// remove created user after each case
 			require.NoError(ts.T(), ts.API.db.Destroy(u))
@@ -865,6 +886,20 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 			params: map[string]interface{}{
 				"email":        "test@example.com",
 				"ban_duration": "never",
+			},
+		},
+		{
+			desc: "custom id is nil",
+			params: map[string]interface{}{
+				"id":    "00000000-0000-0000-0000-000000000000",
+				"email": "test@example.com",
+			},
+		},
+		{
+			desc: "bad id format",
+			params: map[string]interface{}{
+				"id":    "bad_uuid_format",
+				"email": "test@example.com",
 			},
 		},
 	}
