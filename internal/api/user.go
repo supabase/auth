@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -205,19 +206,30 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Email != "" && params.Email != user.GetEmail() {
-			flowType := getFlowFromChallenge(params.CodeChallenge)
-			if isPKCEFlow(flowType) {
-				_, terr := generateFlowState(tx, models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
-				if terr != nil {
+			if config.Mailer.Autoconfirm {
+				user.EmailChange = params.Email
+				if _, terr := a.emailChangeVerify(r, tx, &VerifyParams{
+					Type:  mailer.EmailChangeVerification,
+					Email: params.Email,
+				}, user); terr != nil {
 					return terr
 				}
 
-			}
-			if terr = a.sendEmailChange(r, tx, user, params.Email, flowType); terr != nil {
-				if errors.Is(terr, MaxFrequencyLimitError) {
-					return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(user.EmailChangeSentAt, config.SMTP.MaxFrequency))
+			} else {
+				flowType := getFlowFromChallenge(params.CodeChallenge)
+				if isPKCEFlow(flowType) {
+					_, terr := generateFlowState(tx, models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
+					if terr != nil {
+						return terr
+					}
+
 				}
-				return internalServerError("Error sending change email").WithInternalError(terr)
+				if terr = a.sendEmailChange(r, tx, user, params.Email, flowType); terr != nil {
+					if errors.Is(terr, MaxFrequencyLimitError) {
+						return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(user.EmailChangeSentAt, config.SMTP.MaxFrequency))
+					}
+					return internalServerError("Error sending change email").WithInternalError(terr)
+				}
 			}
 		}
 
