@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/fatih/structs"
@@ -18,11 +17,13 @@ import (
 )
 
 type AdminUserParams struct {
+	Id           string                 `json:"id"`
 	Aud          string                 `json:"aud"`
 	Role         string                 `json:"role"`
 	Email        string                 `json:"email"`
 	Phone        string                 `json:"phone"`
 	Password     *string                `json:"password"`
+	PasswordHash string                 `json:"password_hash"`
 	EmailConfirm bool                   `json:"email_confirm"`
 	PhoneConfirm bool                   `json:"phone_confirm"`
 	UserMetaData map[string]interface{} `json:"user_metadata"`
@@ -156,6 +157,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	var banDuration *time.Duration
 	if params.BanDuration != "" {
 		duration := time.Duration(0)
 		if params.BanDuration != "none" {
@@ -164,9 +166,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 				return badRequestError(ErrorCodeValidationFailed, "invalid format for ban duration: %v", err)
 			}
 		}
-		if terr := user.Ban(a.db, duration); terr != nil {
-			return terr
-		}
+		banDuration = &duration
 	}
 
 	if params.Password != nil {
@@ -291,6 +291,12 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
+		if banDuration != nil {
+			if terr := user.Ban(tx, *banDuration); terr != nil {
+				return terr
+			}
+		}
+
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserModifiedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
@@ -356,7 +362,11 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		providers = append(providers, "phone")
 	}
 
-	if params.Password == nil || *params.Password == "" {
+	if params.Password != nil && params.PasswordHash != "" {
+		return badRequestError(ErrorCodeValidationFailed, "Only a password or a password hash should be provided")
+	}
+
+	if (params.Password == nil || *params.Password == "") && params.PasswordHash == "" {
 		password, err := password.Generate(64, 10, 0, false, true)
 		if err != nil {
 			return internalServerError("Error generating password").WithInternalError(err)
@@ -364,9 +374,26 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		params.Password = &password
 	}
 
-	user, err := models.NewUser(params.Phone, params.Email, *params.Password, aud, params.UserMetaData)
+	var user *models.User
+	if params.PasswordHash != "" {
+		user, err = models.NewUserWithPasswordHash(params.Phone, params.Email, params.PasswordHash, aud, params.UserMetaData)
+	} else {
+		user, err = models.NewUser(params.Phone, params.Email, *params.Password, aud, params.UserMetaData)
+	}
+
 	if err != nil {
 		return internalServerError("Error creating user").WithInternalError(err)
+	}
+
+	if params.Id != "" {
+		customId, err := uuid.FromString(params.Id)
+		if err != nil {
+			return badRequestError(ErrorCodeValidationFailed, "ID must conform to the uuid v4 format")
+		}
+		if customId == uuid.Nil {
+			return badRequestError(ErrorCodeValidationFailed, "ID cannot be a nil uuid")
+		}
+		user.ID = customId
 	}
 
 	user.AppMetaData = map[string]interface{}{
@@ -374,6 +401,18 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		// default to the first provider in the providers slice
 		"provider":  providers[0],
 		"providers": providers,
+	}
+
+	var banDuration *time.Duration
+	if params.BanDuration != "" {
+		duration := time.Duration(0)
+		if params.BanDuration != "none" {
+			duration, err = time.ParseDuration(params.BanDuration)
+			if err != nil {
+				return badRequestError(ErrorCodeValidationFailed, "invalid format for ban duration: %v", err)
+			}
+		}
+		banDuration = &duration
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
@@ -442,15 +481,8 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if params.BanDuration != "" {
-			duration := time.Duration(0)
-			if params.BanDuration != "none" {
-				duration, err = time.ParseDuration(params.BanDuration)
-				if err != nil {
-					return badRequestError(ErrorCodeValidationFailed, "invalid format for ban duration: %v", err)
-				}
-			}
-			if terr := user.Ban(a.db, duration); terr != nil {
+		if banDuration != nil {
+			if terr := user.Ban(tx, *banDuration); terr != nil {
 				return terr
 			}
 		}
@@ -459,9 +491,6 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
-		if strings.Contains("invalid format for ban duration", err.Error()) {
-			return err
-		}
 		return internalServerError("Database error creating new user").WithInternalError(err)
 	}
 
