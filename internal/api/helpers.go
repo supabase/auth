@@ -39,7 +39,7 @@ func (a *API) requestAud(ctx context.Context, r *http.Request) string {
 
 	if claims != nil {
 		aud, _ := claims.GetAudience()
-		if len(aud) != 0 {
+		if len(aud) != 0 && aud[0] != "" {
 			return aud[0]
 		}
 	}
