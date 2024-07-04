@@ -84,6 +84,7 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 		desc                       string
 		userData                   map[string]string
 		isSecureEmailChangeEnabled bool
+		isMailerAutoconfirmEnabled bool
 		expectedCode               int
 	}{
 		{
@@ -93,6 +94,7 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 				"phone": "",
 			},
 			isSecureEmailChangeEnabled: false,
+			isMailerAutoconfirmEnabled: false,
 			expectedCode:               http.StatusOK,
 		},
 		{
@@ -102,6 +104,7 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 				"phone": "234567890",
 			},
 			isSecureEmailChangeEnabled: true,
+			isMailerAutoconfirmEnabled: false,
 			expectedCode:               http.StatusOK,
 		},
 		{
@@ -111,6 +114,7 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 				"phone": "",
 			},
 			isSecureEmailChangeEnabled: false,
+			isMailerAutoconfirmEnabled: false,
 			expectedCode:               http.StatusOK,
 		},
 		{
@@ -120,6 +124,17 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 				"phone": "",
 			},
 			isSecureEmailChangeEnabled: true,
+			isMailerAutoconfirmEnabled: false,
+			expectedCode:               http.StatusOK,
+		},
+		{
+			desc: "Update email with mailer autoconfirm enabled",
+			userData: map[string]string{
+				"email": "bar@example.com",
+				"phone": "",
+			},
+			isSecureEmailChangeEnabled: true,
+			isMailerAutoconfirmEnabled: true,
 			expectedCode:               http.StatusOK,
 		},
 	}
@@ -146,8 +161,21 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 
 			w := httptest.NewRecorder()
 			ts.Config.Mailer.SecureEmailChangeEnabled = c.isSecureEmailChangeEnabled
+			ts.Config.Mailer.Autoconfirm = c.isMailerAutoconfirmEnabled
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), c.expectedCode, w.Code)
+
+			var data models.User
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+			if c.isMailerAutoconfirmEnabled {
+				require.Empty(ts.T(), data.EmailChange)
+				require.Equal(ts.T(), "new@example.com", data.GetEmail())
+				require.Len(ts.T(), data.Identities, 1)
+			} else {
+				require.Equal(ts.T(), "new@example.com", data.EmailChange)
+				require.Len(ts.T(), data.Identities, 0)
+			}
 
 			// remove user after each case
 			require.NoError(ts.T(), ts.API.db.Destroy(u))
