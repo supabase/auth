@@ -236,6 +236,9 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 					return internalServerError("Error finding SMS provider").WithInternalError(terr)
 				}
 				if _, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneChangeVerification, smsProvider, params.Channel); terr != nil {
+					if errors.Is(terr, MaxFrequencyLimitError) {
+						return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(user.PhoneChangeSentAt, config.Sms.MaxFrequency))
+					}
 					return internalServerError("Error sending phone change otp").WithInternalError(terr)
 				}
 			}
