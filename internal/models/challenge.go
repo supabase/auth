@@ -1,6 +1,9 @@
 package models
 
 import (
+	"database/sql"
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
@@ -16,11 +19,52 @@ type Challenge struct {
 	Factor     *Factor    `json:"factor,omitempty" belongs_to:"factor"`
 	OtpCode    string     `json:"otp_code,omitempty" db:"otp_code"`
 	SentAt     *time.Time `json:"sent_at,omitempty" db:"sent_at"`
+	WebauthnChallenge *string    `json:"webauthn_challenge,omitempty" db:"webauthn_challenge"`
+	UserVerification  *string    `json:"user_verification,omitempty" db:"user_verification"`
 }
 
 func (Challenge) TableName() string {
 	tableName := "mfa_challenges"
 	return tableName
+}
+
+
+func FindChallengeByID(conn *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
+	var challenge Challenge
+	err := conn.Find(&challenge, challengeID)
+	if err != nil && errors.Cause(err) == sql.ErrNoRows {
+		return nil, ChallengeNotFoundError{}
+	} else if err != nil {
+		return nil, err
+	}
+	return &challenge, nil
+}
+
+
+func NewWebauthnChallenge(factor *Factor, ipAddress string, webauthnChallenge string) *Challenge {
+	id := uuid.Must(uuid.NewV4())
+	defaultVerification := "prefeerred"
+
+	challenge := &Challenge{
+		ID:                id,
+		FactorID:          factor.ID,
+		IPAddress:         ipAddress,
+		WebauthnChallenge: &webauthnChallenge,
+		//TODO: Have a more sane default
+		UserVerification: &defaultVerification,
+	}
+	return challenge
+}
+
+func FindChallengeByID(conn *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
+	var challenge Challenge
+	err := conn.Find(&challenge, challengeID)
+	if err != nil && errors.Cause(err) == sql.ErrNoRows {
+		return nil, ChallengeNotFoundError{}
+	} else if err != nil {
+		return nil, err
+	}
+	return &challenge, nil
 }
 
 // Update the verification timestamp
@@ -63,5 +107,30 @@ func (c *Challenge) GetOtpCode(decryptionKeys map[string]string, encrypt bool, e
 	}
 
 	return c.OtpCode, encrypt, nil
+}
+
+func (c *Challenge) ToSession(userID uuid.UUID, challengeExpiryDuration float64) webauthn.SessionData {
+	return webauthn.SessionData{
+		Challenge:        *c.WebauthnChallenge,
+		UserID:           []byte(userID.String()),
+		Expires:          c.GetExpiryTime(challengeExpiryDuration),
+		UserVerification: protocol.UserVerificationRequirement(*c.UserVerification),
+	}
+}
+
+type WebauthnSession struct {
+	*webauthn.SessionData
+}
+
+func (ws *WebauthnSession) ToChallenge(factorID uuid.UUID, ipAddress string) *Challenge {
+	id := uuid.Must(uuid.NewV4())
+	defaultVerification := "preferred"
+	return &Challenge{
+		ID:                id,
+		FactorID:          factorID,
+		IPAddress:         ipAddress,
+		UserVerification:  &defaultVerification,
+		WebauthnChallenge: &ws.Challenge,
+	}
 
 }
