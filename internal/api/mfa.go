@@ -54,6 +54,12 @@ type ChallengeFactorParams struct {
 type WebauthnRegisterStartResponse struct {
 	PublicKeyCredentialRequestOptions *protocol.CredentialCreation `json:"public_key_credential_request_options"`
 	FactorID                          uuid.UUID                    `json:"factor_id"`
+	// TODO: Decide whether to remove
+	ChallengeID uuid.UUID `json:"challenge_id"`
+}
+
+// TODO: CHange this to return token
+type WebauthnRegisterFinishResponse struct {
 }
 
 type VerifyFactorParams struct {
@@ -184,20 +190,26 @@ func (a *API) enrollWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 	return sendJSON(w, http.StatusOK, &WebauthnRegisterStartResponse{
 		PublicKeyCredentialRequestOptions: options,
 		FactorID:                          factor.ID,
+		ChallengeID:                       challenge.ID,
 		// TODO: move the challenge creation logic to "Challenge"
+		// Or maybe return Challenge directly
 	})
 
 }
 
-func (a *API) handleWebauthnVerification(w http.ResponseWriter, r *http.Request, params *VerifyFactorParams) error {
+// TODO: Figure out why params aren't being passed properly
+func (a *API) handleWebauthnVerification(w http.ResponseWriter, r *http.Request, challengeID uuid.UUID) error {
 	// TODO: don't reuse this
 	ctx := r.Context()
 	user := getUser(ctx)
 	config := a.config
 	factor := getFactor(ctx)
 	webAuthn := config.MFA.Webauthn.Webauthn
-	// db := a.db.WithContext(ctx)
-	challenge, err := models.FindChallengeByID(a.db, params.ChallengeID)
+
+	db := a.db.WithContext(ctx)
+	fmt.Println("we are here")
+	fmt.Println(challengeID)
+	challenge, err := models.FindChallengeByID(a.db, challengeID)
 	if err != nil {
 		return err
 	}
@@ -209,8 +221,19 @@ func (a *API) handleWebauthnVerification(w http.ResponseWriter, r *http.Request,
 		if err != nil {
 			return err
 		}
+		err = db.Transaction(func(tx *storage.Connection) error {
+			if !factor.IsVerified() {
+				if terr := factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
+					return terr
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 		// TODO: Do verify the credential
-		return badRequestError(ErrorCodeValidationFailed, "registration here")
+		return sendJSON(w, http.StatusOK, &WebauthnRegisterFinishResponse{})
 	}
 
 	// Login case where factor is verified
@@ -447,7 +470,10 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	if factor.FactorType == models.Webauthn {
 		// Maybe vary behaviour based on whether it is registration or login flow
 		webAuthn := a.config.MFA.Webauthn.Webauthn
+		// TODO: Maybe Need to distinguish between a webauthn factor that has been registered and a webauthn factor
+		// that is attempting a login
 		// if factor is not verified or it is not a webauthn factor then return
+		// TODO: Update the Credentials() method in user. It should fetch all mfa factors and call ToCredentials() and then return it
 		options, session, err := webAuthn.BeginLogin(user)
 		if err != nil {
 			return err
@@ -648,7 +674,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	// Branch off for webauthn type factors.
 	if factor.FactorType == models.Webauthn {
-		return a.handleWebauthnVerification(w, r, params)
+		return a.handleWebauthnVerification(w, r, params.ChallengeID)
 	}
 
 	challenge, err := factor.FindChallengeByID(db, params.ChallengeID)
