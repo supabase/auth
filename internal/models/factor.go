@@ -2,7 +2,12 @@ package models
 
 import (
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
+
+	"encoding/json"
+	"github.com/go-webauthn/webauthn/webauthn"
+
 	"strings"
 	"time"
 
@@ -32,7 +37,7 @@ func (factorState FactorState) String() string {
 
 const TOTP = "totp"
 const Phone = "phone"
-const Webauthn = "webauthn"
+const WebAuthn = "webauthn"
 
 type AuthenticationMethod int
 
@@ -50,6 +55,7 @@ const (
 	EmailChange
 	TokenRefresh
 	Anonymous
+	MFAWebAuthn
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -80,6 +86,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "anonymous"
 	case MFAPhone:
 		return "mfa/phone"
+	case MFAWebAuthn:
+		return "mfa/webauthn"
 	}
 	return ""
 }
@@ -113,6 +121,8 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return TokenRefresh, nil
 	case "mfa/sms":
 		return MFAPhone, nil
+	case "mfa/webauthn":
+		return MFAWebAuthn, nil
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }
@@ -129,6 +139,24 @@ type Factor struct {
 	FactorType   string             `json:"factor_type" db:"factor_type"`
 	Challenge    []Challenge        `json:"-" has_many:"challenges"`
 	Phone        storage.NullString `json:"phone" db:"phone"`
+	Credential   *Credential        `json:"-" db:"credential"`
+}
+
+type Credential struct {
+	webauthn.Credential
+}
+
+func (c *Credential) Value() (driver.Value, error) {
+	return json.Marshal(c)
+}
+
+func (c *Credential) Scan(value interface{}) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("expected byte array but got %T", value)
+	}
+
+	return json.Unmarshal(bytes, c)
 }
 
 func (Factor) TableName() string {
@@ -145,6 +173,19 @@ func NewFactor(user *User, friendlyName string, factorType string, state FactorS
 		Status:       state.String(),
 		FriendlyName: friendlyName,
 		FactorType:   factorType,
+	}
+	return factor
+}
+
+func NewWebAuthnFactor(user *User, friendlyName string) *Factor {
+	id := uuid.Must(uuid.NewV4())
+
+	factor := &Factor{
+		ID:           id,
+		UserID:       user.ID,
+		Status:       FactorStateUnverified.String(),
+		FriendlyName: friendlyName,
+		FactorType:   WebAuthn,
 	}
 	return factor
 }
@@ -233,6 +274,13 @@ func (f *Factor) UpdateStatus(tx *storage.Connection, state FactorState) error {
 	return tx.UpdateOnly(f, "status", "updated_at")
 }
 
+func (f *Factor) SaveWebAuthnCredential(tx *storage.Connection, credential *webauthn.Credential) error {
+	f.Credential = &Credential{
+		Credential: *credential,
+	}
+	return tx.UpdateOnly(f, "credential", "updated_at")
+}
+
 // UpdateFactorType modifies the factor type
 func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) error {
 	f.FactorType = factorType
@@ -241,6 +289,10 @@ func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) err
 
 func (f *Factor) IsTOTPFactor() bool {
 	return f.FactorType == TOTP
+}
+
+func (f *Factor) IsWebAuthnFactor() bool {
+	return f.FactorType == WebAuthn
 }
 
 func (f *Factor) IsPhoneFactor() bool {
@@ -266,6 +318,10 @@ func (f *Factor) IsOwnedBy(user *User) bool {
 
 func (f *Factor) IsVerified() bool {
 	return f.Status == FactorStateVerified.String()
+}
+
+func (f *Factor) IsUnverified() bool {
+	return f.Status == FactorStateUnverified.String()
 }
 
 func (f *Factor) FindChallengeByID(conn *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {

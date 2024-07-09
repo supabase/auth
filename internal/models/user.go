@@ -889,12 +889,21 @@ func (user *User) WebAuthnDisplayName() string {
 }
 
 func (user *User) WebAuthnIcon() string {
+	// This field is currently not populated
 	return ""
 }
 
 func (user *User) WebAuthnCredentials() []webauthn.Credential {
-	// TODO: Look through factors, select webauthn factors and  write a factor.ToCredential() which filters out id and type
-	return []webauthn.Credential{}
+	var credentials []webauthn.Credential
+
+	for _, factor := range user.Factors {
+		if factor.FactorType == WebAuthn {
+			credential := factor.Credential.Credential
+			credentials = append(credentials, credential)
+		}
+	}
+
+	return credentials
 }
 
 // SoftDeleteUserIdentities performs a soft deletion on all identities associated to a user

@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gobwas/glob"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
@@ -16,15 +15,8 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/gobwas/glob"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/joho/godotenv"
-	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwk"
-
-	"github.com/gobwas/glob"
-	"github.com/joho/godotenv"
-	"github.com/kelseyhightower/envconfig"
 )
 
 const defaultMinPasswordLength int = 6
@@ -129,35 +121,10 @@ type PhoneFactorTypeConfiguration struct {
 	Template      string             `json:"template"`
 }
 
-type WebauthnConfiguration struct {
-	Enabled bool `default:"false"`
-	// TODO: Come up with more sensible defaults for these
-	RPDisplayName string   `json:"rp_display_name" split_words:"true" default:"Go Webauthn"`
-	RPID          string   `json:"rp_id"`
-	RPOrigins     []string `json:"rp_origins" split_words:"true"`
-	// TODO: Parse and set this from config
-	Webauthn *webauthn.WebAuthn `json:"overall_configuration" split_words:"true"`
-}
-
-func (w *WebauthnConfiguration) PopulateWebauthnConfiguration() error {
-	// TODO: Decide whether to remove since there's already vlaidation in .New at library level
-	if w.RPDisplayName == "" || w.RPID == "" || len(w.RPOrigins) == 0 {
-		return fmt.Errorf("display name, ID, and origins need to be populated")
-	}
-	wconfig := &webauthn.Config{
-		RPDisplayName: w.RPDisplayName,
-		RPID:          w.RPID,
-		RPOrigins:     w.RPOrigins,
-	}
-	var (
-		webAuthn *webauthn.WebAuthn
-		err      error
-	)
-	if webAuthn, err = webauthn.New(wconfig); err != nil {
-		return fmt.Errorf("invalid webauthn configuration: %v", err)
-	}
-	w.Webauthn = webAuthn
-	return nil
+type WebAuthnConfiguration struct {
+	// Default to false in order to ensure Phone MFA is opt-in
+	EnrollEnabled bool `json:"enroll_enabled" split_words:"true" default:"false"`
+	VerifyEnabled bool `json:"verify_enabled" split_words:"true" default:"false"`
 }
 
 // MFAConfiguration holds all the MFA related Configuration
@@ -170,7 +137,7 @@ type MFAConfiguration struct {
 	MaxVerifiedFactors          int                          `split_words:"true" default:"10"`
 	Phone                       PhoneFactorTypeConfiguration `split_words:"true"`
 	TOTP                        MFAFactorTypeConfiguration   `split_words:"true"`
-	Webauthn                    WebauthnConfiguration `json:"webauthn" split_words:"true"`
+	WebAuthn                    WebAuthnConfiguration        `json:"web_authn" split_words:"true"`
 }
 
 type APIConfiguration struct {
@@ -701,12 +668,6 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 
 	if err := config.Validate(); err != nil {
 		return nil, err
-	}
-
-	if config.MFA.Enabled && config.MFA.Webauthn.Enabled {
-		if err := config.MFA.Webauthn.PopulateWebauthnConfiguration(); err != nil {
-			return nil, err
-		}
 	}
 
 	if config.Hook.PasswordVerificationAttempt.Enabled {
