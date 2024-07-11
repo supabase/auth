@@ -301,7 +301,7 @@ func TestSAMLAssertionProcessing(t *tst.T) {
 			},
 		},
 		{
-			desc: "use default value even if attribute exists but is not specified in mapping",
+			desc: "use value in XML when attribute exists and is specified in mapping",
 			xml: `<?xml version="1.0" encoding="UTF-8"?>
 <saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="_72591c79da230cac1457d0ea0f2771ab" IssueInstant="2022-08-11T14:53:38.260Z" Version="2.0">
 	<saml2:AttributeStatement>
