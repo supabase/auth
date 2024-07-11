@@ -120,7 +120,10 @@ func (a *SAMLAssertion) Process(mapping models.SAMLAttributeMapping) map[string]
 	ret := make(map[string]interface{})
 
 	for key, mapper := range mapping.Keys {
-		names := []string{mapper.Name}
+		names := []string{}
+		if mapper.Name != "" {
+			names = append(names, mapper.Name)
+		}
 		names = append(names, mapper.Names...)
 
 		setKey := false
