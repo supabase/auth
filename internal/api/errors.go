@@ -232,11 +232,14 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 		}
 
 	case *HTTPError:
-		if e.HTTPStatus >= http.StatusInternalServerError {
+		switch {
+		case e.HTTPStatus >= http.StatusInternalServerError:
 			e.ErrorID = errorID
 			// this will get us the stack trace too
 			log.WithError(e.Cause()).Error(e.Error())
-		} else {
+		case e.HTTPStatus == http.StatusTooManyRequests:
+			log.WithError(e.Cause()).Warn(e.Error())
+		default:
 			log.WithError(e.Cause()).Info(e.Error())
 		}
 
