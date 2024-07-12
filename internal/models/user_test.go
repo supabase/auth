@@ -2,7 +2,6 @@ package models
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -367,18 +366,6 @@ func (ts *UserTestSuite) TestUpdateUserEmailFailure() {
 	//  since userB is using the secondary identity's email
 	require.ErrorIs(ts.T(), userA.UpdateUserEmailFromIdentities(ts.db), UserEmailUniqueConflictError{})
 	require.Equal(ts.T(), primaryIdentity.GetEmail(), userA.GetEmail())
-}
-
-func (ts *UserTestSuite) TestSetPasswordTooLong() {
-	user, err := NewUser("", "", strings.Repeat("a", crypto.MaxPasswordLength), "", nil)
-	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(user))
-
-	err = user.SetPassword(ts.db.Context(), strings.Repeat("a", crypto.MaxPasswordLength+1), false, "", "")
-	require.Error(ts.T(), err)
-
-	err = user.SetPassword(ts.db.Context(), strings.Repeat("a", crypto.MaxPasswordLength), false, "", "")
-	require.NoError(ts.T(), err)
 }
 
 func (ts *UserTestSuite) TestNewUserWithPasswordHashSuccess() {

@@ -85,6 +85,12 @@ func TestPasswordStrengthChecks(t *testing.T) {
 			Password: "abc123",
 			Reasons:  nil,
 		},
+		{
+			MinLength:          6,
+			RequiredCharacters: []string{},
+			Password:           "zZgXb5gzyCNrV36qwbOSbKVQsVJd28mC1TwRpeB0y6sFNICJyjD6bILKJMsjyKDzBdaY5tmi8zY9BWJYmt3vULLmyafjIDLYjy8qhETu0mS2jj1uQBgSAzJn9Zjm8EFa",
+			Reasons:            nil,
+		},
 	}
 
 	for i, example := range examples {
@@ -98,10 +104,14 @@ func TestPasswordStrengthChecks(t *testing.T) {
 		}
 
 		err := api.checkPasswordStrength(context.Background(), example.Password)
-		if example.Reasons == nil {
+
+		switch e := err.(type) {
+		case *WeakPasswordError:
+			require.Equal(t, e.Reasons, example.Reasons, "Example %d failed with wrong reasons", i)
+		case *HTTPError:
+			require.Equal(t, e.ErrorCode, ErrorCodeValidationFailed, "Example %d failed with wrong error code", i)
+		default:
 			require.NoError(t, err, "Example %d failed with error", i)
-		} else {
-			require.Equal(t, err.(*WeakPasswordError).Reasons, example.Reasons, "Example %d failed with wrong reasons", i)
 		}
 	}
 }

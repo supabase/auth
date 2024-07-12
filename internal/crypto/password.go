@@ -30,9 +30,6 @@ const (
 	// useful for tests only.
 	QuickHashCost HashCost = iota
 
-	// BCrypt hashed passwords have a 72 character limit
-	MaxPasswordLength = 72
-
 	Argon2Prefix = "$argon2"
 )
 
@@ -213,10 +210,6 @@ func CompareHashAndPassword(ctx context.Context, hash, password string) error {
 // if the algorithm supports it.
 func GenerateFromPassword(ctx context.Context, password string) (string, error) {
 	var hashCost int
-
-	if len(password) > MaxPasswordLength {
-		return "", fmt.Errorf("password cannot be longer than %d characters", MaxPasswordLength)
-	}
 
 	switch PasswordHashCost {
 	case QuickHashCost:
