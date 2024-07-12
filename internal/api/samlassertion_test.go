@@ -160,14 +160,14 @@ func TestSAMLAssertionProcessing(t *tst.T) {
 		{
 			desc: "valid attribute and mapping",
 			xml: `<?xml version="1.0" encoding="UTF-8"?>
-<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="_72591c79da230cac1457d0ea0f2771ab" IssueInstant="2022-08-11T14:53:38.260Z" Version="2.0">
-	<saml2:AttributeStatement>
-		<saml2:Attribute Name="urn:oid:0.9.2342.19200300.100.1.3" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
-			<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">someone@example.com</saml2:AttributeValue>
-		</saml2:Attribute>
-	</saml2:AttributeStatement>
-</saml2:Assertion>
-`,
+		<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="_72591c79da230cac1457d0ea0f2771ab" IssueInstant="2022-08-11T14:53:38.260Z" Version="2.0">
+			<saml2:AttributeStatement>
+				<saml2:Attribute Name="urn:oid:0.9.2342.19200300.100.1.3" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
+					<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">someone@example.com</saml2:AttributeValue>
+				</saml2:Attribute>
+			</saml2:AttributeStatement>
+		</saml2:Assertion>
+		`,
 			mapping: models.SAMLAttributeMapping{
 				Keys: map[string]models.SAMLAttribute{
 					"email": {
@@ -182,17 +182,17 @@ func TestSAMLAssertionProcessing(t *tst.T) {
 		{
 			desc: "valid attributes, use first attribute found in Names",
 			xml: `<?xml version="1.0" encoding="UTF-8"?>
-<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="_72591c79da230cac1457d0ea0f2771ab" IssueInstant="2022-08-11T14:53:38.260Z" Version="2.0">
-	<saml2:AttributeStatement>
-		<saml2:Attribute Name="http://schemas.xmlsoap.org/claims/EmailAddress" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
-			<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">old-soap@example.com</saml2:AttributeValue>
-		</saml2:Attribute>
-		<saml2:Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
-			<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">soap@example.com</saml2:AttributeValue>
-		</saml2:Attribute>
-	</saml2:AttributeStatement>
-</saml2:Assertion>
-`,
+		<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="_72591c79da230cac1457d0ea0f2771ab" IssueInstant="2022-08-11T14:53:38.260Z" Version="2.0">
+			<saml2:AttributeStatement>
+				<saml2:Attribute Name="http://schemas.xmlsoap.org/claims/EmailAddress" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
+					<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">old-soap@example.com</saml2:AttributeValue>
+				</saml2:Attribute>
+				<saml2:Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
+					<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">soap@example.com</saml2:AttributeValue>
+				</saml2:Attribute>
+			</saml2:AttributeStatement>
+		</saml2:Assertion>
+		`,
 			mapping: models.SAMLAttributeMapping{
 				Keys: map[string]models.SAMLAttribute{
 					"email": {
@@ -210,18 +210,18 @@ func TestSAMLAssertionProcessing(t *tst.T) {
 		{
 			desc: "valid groups attribute",
 			xml: `<?xml version="1.0" encoding="UTF-8"?>
-<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="_72591c79da230cac1457d0ea0f2771ab" IssueInstant="2022-08-11T14:53:38.260Z" Version="2.0">
-	<saml2:AttributeStatement>
-		<saml2:Attribute Name="http://whatever.com/groups" FriendlyName="groups" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:string">
-			<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">group1</saml2:AttributeValue>
-			<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">group2</saml2:AttributeValue>
-		</saml2:Attribute>
-		<saml2:Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
-			<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">soap@example.com</saml2:AttributeValue>
-		</saml2:Attribute>
-	</saml2:AttributeStatement>
-</saml2:Assertion>
-`,
+		<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="_72591c79da230cac1457d0ea0f2771ab" IssueInstant="2022-08-11T14:53:38.260Z" Version="2.0">
+			<saml2:AttributeStatement>
+				<saml2:Attribute Name="http://whatever.com/groups" FriendlyName="groups" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:string">
+					<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">group1</saml2:AttributeValue>
+					<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">group2</saml2:AttributeValue>
+				</saml2:Attribute>
+				<saml2:Attribute Name="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
+					<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">soap@example.com</saml2:AttributeValue>
+				</saml2:Attribute>
+			</saml2:AttributeStatement>
+		</saml2:Assertion>
+		`,
 			mapping: models.SAMLAttributeMapping{
 				Keys: map[string]models.SAMLAttribute{
 					"email": {
@@ -245,11 +245,11 @@ func TestSAMLAssertionProcessing(t *tst.T) {
 			},
 		},
 		{
-			desc: "missing attribute, use default value",
+			desc: "missing attribute use default value",
 			xml: `<?xml version="1.0" encoding="UTF-8"?>
 <saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="_72591c79da230cac1457d0ea0f2771ab" IssueInstant="2022-08-11T14:53:38.260Z" Version="2.0">
 	<saml2:AttributeStatement>
-		<saml2:Attribute Name="urn:oid:0.9.2342.19200300.100.1.3" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
+		<saml2:Attribute Name="email" FriendlyName="" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic">
 			<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">someone@example.com</saml2:AttributeValue>
 		</saml2:Attribute>
 	</saml2:AttributeStatement>
@@ -258,10 +258,9 @@ func TestSAMLAssertionProcessing(t *tst.T) {
 			mapping: models.SAMLAttributeMapping{
 				Keys: map[string]models.SAMLAttribute{
 					"email": {
-						Name: "mail",
+						Name: "email",
 					},
 					"role": {
-						Name:    "role",
 						Default: "member",
 					},
 				},
@@ -274,17 +273,17 @@ func TestSAMLAssertionProcessing(t *tst.T) {
 		{
 			desc: "use default value even if attribute exists but is not specified in mapping",
 			xml: `<?xml version="1.0" encoding="UTF-8"?>
-<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="_72591c79da230cac1457d0ea0f2771ab" IssueInstant="2022-08-11T14:53:38.260Z" Version="2.0">
-	<saml2:AttributeStatement>
-		<saml2:Attribute Name="urn:oid:0.9.2342.19200300.100.1.3" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
-			<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">someone@example.com</saml2:AttributeValue>
-		</saml2:Attribute>
-		<saml2:Attribute Name="urn:oid:0.9.2342.19200300.100.1.3" FriendlyName="role" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
-			<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">admin</saml2:AttributeValue>
-		</saml2:Attribute>
-	</saml2:AttributeStatement>
-</saml2:Assertion>
-`,
+		<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="_72591c79da230cac1457d0ea0f2771ab" IssueInstant="2022-08-11T14:53:38.260Z" Version="2.0">
+			<saml2:AttributeStatement>
+				<saml2:Attribute Name="urn:oid:0.9.2342.19200300.100.1.3" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
+					<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">someone@example.com</saml2:AttributeValue>
+				</saml2:Attribute>
+				<saml2:Attribute Name="urn:oid:0.9.2342.19200300.100.1.3" FriendlyName="role" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
+					<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">admin</saml2:AttributeValue>
+				</saml2:Attribute>
+			</saml2:AttributeStatement>
+		</saml2:Assertion>
+		`,
 			mapping: models.SAMLAttributeMapping{
 				Keys: map[string]models.SAMLAttribute{
 					"email": {
@@ -303,17 +302,17 @@ func TestSAMLAssertionProcessing(t *tst.T) {
 		{
 			desc: "use value in XML when attribute exists and is specified in mapping",
 			xml: `<?xml version="1.0" encoding="UTF-8"?>
-<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="_72591c79da230cac1457d0ea0f2771ab" IssueInstant="2022-08-11T14:53:38.260Z" Version="2.0">
-	<saml2:AttributeStatement>
-		<saml2:Attribute Name="urn:oid:0.9.2342.19200300.100.1.3" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
-			<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">someone@example.com</saml2:AttributeValue>
-		</saml2:Attribute>
-		<saml2:Attribute Name="urn:oid:0.9.2342.19200300.100.1.3" FriendlyName="role" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
-			<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">admin</saml2:AttributeValue>
-		</saml2:Attribute>
-	</saml2:AttributeStatement>
-</saml2:Assertion>
-`,
+		<saml2:Assertion xmlns:saml2="urn:oasis:names:tc:SAML:2.0:assertion" xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="_72591c79da230cac1457d0ea0f2771ab" IssueInstant="2022-08-11T14:53:38.260Z" Version="2.0">
+			<saml2:AttributeStatement>
+				<saml2:Attribute Name="urn:oid:0.9.2342.19200300.100.1.3" FriendlyName="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
+					<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">someone@example.com</saml2:AttributeValue>
+				</saml2:Attribute>
+				<saml2:Attribute Name="urn:oid:0.9.2342.19200300.100.1.3" FriendlyName="role" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:uri">
+					<saml2:AttributeValue xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="xsd:string">admin</saml2:AttributeValue>
+				</saml2:Attribute>
+			</saml2:AttributeStatement>
+		</saml2:Assertion>
+		`,
 			mapping: models.SAMLAttributeMapping{
 				Keys: map[string]models.SAMLAttribute{
 					"email": {
@@ -333,15 +332,16 @@ func TestSAMLAssertionProcessing(t *tst.T) {
 	}
 
 	for i, example := range examples {
-		rawAssertion := saml.Assertion{}
-		require.NoError(t, xml.Unmarshal([]byte(example.xml), &rawAssertion))
+		t.Run(example.desc, func(t *tst.T) {
+			rawAssertion := saml.Assertion{}
+			require.NoError(t, xml.Unmarshal([]byte(example.xml), &rawAssertion))
 
-		assertion := SAMLAssertion{
-			&rawAssertion,
-		}
+			assertion := SAMLAssertion{
+				&rawAssertion,
+			}
 
-		result := assertion.Process(example.mapping)
-
-		require.Equal(t, example.expected, result, "example %d had different processing", i)
+			result := assertion.Process(example.mapping)
+			require.Equal(t, example.expected, result, "example %d had different processing", i)
+		})
 	}
 }
