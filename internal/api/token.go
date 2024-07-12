@@ -329,7 +329,7 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 	claims := &hooks.AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID.String(),
-			Audience:  []string{user.Aud},
+			Audience:  jwt.ClaimStrings{user.Aud},
 			IssuedAt:  jwt.NewNumericDate(issuedAt),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			Issuer:    config.JWT.Issuer,
@@ -375,6 +375,8 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		token.Header["kid"] = config.JWT.KeyID
 	}
 
+	// this serializes the aud claim was a string
+	jwt.MarshalSingleStringAsArray = false
 	signed, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
 		return "", 0, err
