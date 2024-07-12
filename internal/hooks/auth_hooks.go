@@ -43,7 +43,7 @@ const MinimumViableTokenSchema = `{
   "type": "object",
   "properties": {
     "aud": {
-      "type": "array"
+      "type": ["string", "array"]
     },
     "exp": {
       "type": "integer"
