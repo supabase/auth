@@ -123,7 +123,7 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 		session, err = models.FindSessionByID(db, sessionId, false)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return ctx, forbiddenError(ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist")
+				return ctx, forbiddenError(ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist").WithInternalError(err).WithInternalMessage(fmt.Sprintf("session id (%s) doesn't exist", sessionId))
 			}
 			return ctx, err
 		}
