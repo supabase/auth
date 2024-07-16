@@ -234,7 +234,7 @@ func (ts *UserTestSuite) TestRemoveUnconfirmedIdentities() {
 	// reload the user
 	require.NoError(ts.T(), ts.db.Load(user))
 
-	require.False(ts.T(), user.IsConfirmed(), "user's email must not be confirmed")
+	require.False(ts.T(), user.IsConfirmed(false), "user's email must not be confirmed")
 
 	require.NoError(ts.T(), user.RemoveUnconfirmedIdentities(ts.db, idTwitter))
 

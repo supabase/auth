@@ -106,7 +106,7 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 			require.NoError(ts.T(), err)
 
 			assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
-			assert.False(ts.T(), u.IsConfirmed())
+			assert.False(ts.T(), u.IsConfirmed(false))
 
 			recoveryToken := u.RecoveryToken
 
@@ -119,7 +119,7 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
-			assert.True(ts.T(), u.IsConfirmed())
+			assert.True(ts.T(), u.IsConfirmed(false))
 
 			if c.isPKCE {
 				rURL, _ := w.Result().Location()
@@ -212,7 +212,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 			require.NoError(ts.T(), err)
 
 			assert.WithinDuration(ts.T(), time.Now(), *u.EmailChangeSentAt, 1*time.Second)
-			assert.False(ts.T(), u.IsConfirmed())
+			assert.False(ts.T(), u.IsConfirmed(false))
 
 			// Verify new email
 			reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.EmailChangeVerification, newTokenHash)
@@ -478,7 +478,7 @@ func (ts *VerifyTestSuite) TestVerifyPermitedCustomUri() {
 	require.NoError(ts.T(), err)
 
 	assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
-	assert.False(ts.T(), u.IsConfirmed())
+	assert.False(ts.T(), u.IsConfirmed(false))
 
 	redirectURL, _ := url.Parse(ts.Config.URIAllowList[0])
 
@@ -493,7 +493,7 @@ func (ts *VerifyTestSuite) TestVerifyPermitedCustomUri() {
 
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	assert.True(ts.T(), u.IsConfirmed())
+	assert.True(ts.T(), u.IsConfirmed(false))
 }
 
 func (ts *VerifyTestSuite) TestVerifyNotPermitedCustomUri() {
@@ -524,7 +524,7 @@ func (ts *VerifyTestSuite) TestVerifyNotPermitedCustomUri() {
 	require.NoError(ts.T(), err)
 
 	assert.WithinDuration(ts.T(), time.Now(), *u.RecoverySentAt, 1*time.Second)
-	assert.False(ts.T(), u.IsConfirmed())
+	assert.False(ts.T(), u.IsConfirmed(false))
 
 	fakeredirectURL, _ := url.Parse("http://custom-url.com")
 	siteURL, _ := url.Parse(ts.Config.SiteURL)
@@ -540,7 +540,7 @@ func (ts *VerifyTestSuite) TestVerifyNotPermitedCustomUri() {
 
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	assert.True(ts.T(), u.IsConfirmed())
+	assert.True(ts.T(), u.IsConfirmed(false))
 }
 
 func (ts *VerifyTestSuite) TestVerifySignupWithRedirectURLContainedPath() {
@@ -671,7 +671,7 @@ func (ts *VerifyTestSuite) TestVerifySignupWithRedirectURLContainedPath() {
 
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
-			assert.True(ts.T(), u.IsConfirmed())
+			assert.True(ts.T(), u.IsConfirmed(false))
 		})
 	}
 }
@@ -734,7 +734,7 @@ func (ts *VerifyTestSuite) TestVerifyPKCEOTP() {
 
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
-			assert.True(ts.T(), u.IsConfirmed())
+			assert.True(ts.T(), u.IsConfirmed(false))
 
 			f, err := url.ParseQuery(rURL.RawQuery)
 			require.NoError(ts.T(), err)

@@ -187,7 +187,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if user != nil {
-			if (params.Provider == "email" && user.IsConfirmed()) || (params.Provider == "phone" && user.IsPhoneConfirmed()) {
+			if (params.Provider == "email" && user.IsConfirmed(config.Mailer.Autoconfirm)) || (params.Provider == "phone" && user.IsPhoneConfirmed()) {
 				return UserExistsError
 			}
 			// do not update the user because we can't be sure of their claimed identity
@@ -221,16 +221,15 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		}
 		user.Identities = []models.Identity{*identity}
 
-		if params.Provider == "email" && !user.IsConfirmed() {
+		if params.Provider == "email" && !user.IsConfirmed(config.Mailer.Autoconfirm) {
 			if config.Mailer.Autoconfirm {
 				if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
 				}); terr != nil {
 					return terr
 				}
-				if terr = user.Confirm(tx); terr != nil {
-					return internalServerError("Database error updating user").WithInternalError(terr)
-				}
+
+				// note the lack of user.Confirm() call here, as "autoconfirm" no longer sets the email_confirmed_at column, but leaves it to be null
 			} else {
 				if terr = models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", map[string]interface{}{
 					"provider": params.Provider,
@@ -313,7 +312,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// handles case where Mailer.Autoconfirm is true or Phone.Autoconfirm is true
-	if user.IsConfirmed() || user.IsPhoneConfirmed() {
+	if user.IsConfirmed(config.Mailer.Autoconfirm) || user.IsPhoneConfirmed() {
 		var token *AccessTokenResponse
 		err = db.Transaction(func(tx *storage.Connection) error {
 			var terr error

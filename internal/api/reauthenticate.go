@@ -27,7 +27,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if email != "" {
-		if !user.IsConfirmed() {
+		if !user.IsConfirmed(config.Mailer.Autoconfirm) {
 			return unprocessableEntityError(ErrorCodeEmailNotConfirmed, "Please verify your email first.")
 		}
 	} else if phone != "" {
