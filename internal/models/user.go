@@ -384,6 +384,10 @@ func (u *User) Authenticate(ctx context.Context, tx *storage.Connection, passwor
 
 	hash := *u.EncryptedPassword
 
+	if hash == "" {
+		return false, false, nil
+	}
+
 	es := crypto.ParseEncryptedString(hash)
 	if es != nil {
 		h, err := es.Decrypt(u.ID.String(), decryptionKeys)
