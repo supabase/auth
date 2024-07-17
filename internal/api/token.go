@@ -141,6 +141,10 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return internalServerError("Database error querying schema").WithInternalError(err)
 	}
 
+	if !user.HasPassword() {
+		return oauthError("invalid_grant", InvalidLoginMessage)
+	}
+
 	if user.IsBanned() {
 		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
