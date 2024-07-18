@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
+	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/metering"
@@ -27,6 +29,7 @@ type EnrollFactorParams struct {
 	FriendlyName string `json:"friendly_name"`
 	FactorType   string `json:"factor_type"`
 	Issuer       string `json:"issuer"`
+	PhoneNumber  string `json:"phone_number"`
 }
 
 type TOTPObject struct {
@@ -40,6 +43,11 @@ type EnrollFactorResponse struct {
 	Type         string     `json:"type"`
 	FriendlyName string     `json:"friendly_name"`
 	TOTP         TOTPObject `json:"totp,omitempty"`
+	PhoneNumber  string     `json:"phone_number,omitempty"`
+}
+
+type ChallengeFactorParams struct {
+	Channel string `json:"channel"`
 }
 
 type VerifyFactorParams struct {
@@ -61,6 +69,74 @@ const (
 	QRCodeGenerationErrorMessage   = "Error generating QR Code"
 )
 
+func (a *API) enrollSMSFactor(w http.ResponseWriter, r *http.Request, user *models.User, session *models.Session, params *EnrollFactorParams) error {
+	ctx := r.Context()
+	config := a.config
+	db := a.db.WithContext(ctx)
+	if !config.MFA.SMS.EnrollEnabled {
+		return unprocessableEntityError(ErrorCodeMFAEnrollDisabled, "mfa enroll is disabled for sms")
+	}
+	if params.PhoneNumber == "" {
+		return badRequestError(ErrorCodeValidationFailed, "Phone number required to enroll SMS factor")
+	}
+
+	phone, err := validatePhone(params.PhoneNumber)
+	if err != nil {
+		return badRequestError(ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
+	}
+	factors := user.Factors
+
+	factorCount := len(factors)
+	numVerifiedFactors := 0
+	if err := models.DeleteExpiredFactors(db, config.MFA.FactorExpiryDuration); err != nil {
+		return err
+	}
+
+	for _, factor := range factors {
+		if factor.IsVerified() {
+			numVerifiedFactors += 1
+		}
+	}
+
+	if factorCount >= int(config.MFA.MaxEnrolledFactors) {
+		return forbiddenError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of verified factors reached, unenroll to continue")
+	}
+
+	if numVerifiedFactors >= config.MFA.MaxVerifiedFactors {
+		return forbiddenError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of verified factors reached, unenroll to continue")
+	}
+
+	if numVerifiedFactors > 0 && !session.IsAAL2() {
+		return forbiddenError(ErrorCodeInsufficientAAL, "AAL2 required to enroll a new factor")
+	}
+	factor := models.NewSMSFactor(user, phone, params.FriendlyName, params.FactorType, models.FactorStateUnverified)
+	err = db.Transaction(func(tx *storage.Connection) error {
+		if terr := tx.Create(factor); terr != nil {
+			pgErr := utilities.NewPostgresError(terr)
+			if pgErr.IsUniqueConstraintViolated() {
+				return unprocessableEntityError(ErrorCodeMFAFactorNameConflict, fmt.Sprintf("A factor with the friendly name %q for this user likely already exists", factor.FriendlyName))
+			}
+			return terr
+
+		}
+		if terr := models.NewAuditLogEntry(r, tx, user, models.EnrollFactorAction, r.RemoteAddr, map[string]interface{}{
+			"factor_id": factor.ID,
+		}); terr != nil {
+			return terr
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
+		ID:           factor.ID,
+		Type:         models.SMS,
+		FriendlyName: factor.FriendlyName,
+		PhoneNumber:  *factor.PhoneNumber,
+	})
+}
+
 func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := getUser(ctx)
@@ -71,14 +147,21 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if session == nil || user == nil {
 		return internalServerError("A valid session and a registered user are required to enroll a factor")
 	}
-
 	params := &EnrollFactorParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
-	if params.FactorType != models.TOTP {
-		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be totp")
+	if params.FactorType == models.SMS {
+		return a.enrollSMSFactor(w, r, user, session, params)
+	}
+	if params.FactorType != models.TOTP && params.FactorType != models.SMS {
+		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be totp or sms")
+	}
+	if params.FactorType == models.TOTP {
+		if !config.MFA.TOTP.EnrollEnabled {
+			return unprocessableEntityError(ErrorCodeMFAEnrollDisabled, "MFA enroll is not enabled for TOTP Factors")
+		}
 	}
 
 	issuer := ""
@@ -117,7 +200,9 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if numVerifiedFactors > 0 && !session.IsAAL2() {
 		return forbiddenError(ErrorCodeInsufficientAAL, "AAL2 required to enroll a new factor")
 	}
-
+	var factor *models.Factor
+	var buf bytes.Buffer
+	var key *otp.Key
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      issuer,
 		AccountName: user.GetEmail(),
@@ -126,7 +211,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError(QRCodeGenerationErrorMessage).WithInternalError(err)
 	}
 
-	var buf bytes.Buffer
 	svgData := svg.New(&buf)
 	qrCode, _ := qr.Encode(key.String(), qr.H, qr.Auto)
 	qs := goqrsvg.NewQrSVG(qrCode, DefaultQRSize)
@@ -136,7 +220,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	svgData.End()
 
-	factor := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified)
+	factor = models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified)
 	if err := factor.SetSecret(key.Secret(), config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
 		return err
 	}
@@ -160,7 +244,6 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:           factor.ID,
 		Type:         models.TOTP,
@@ -174,6 +257,80 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
+func (a *API) challengeSMSFactor(w http.ResponseWriter, r *http.Request, user *models.User, factor *models.Factor) error {
+	ctx := r.Context()
+	config := a.config
+	db := a.db.WithContext(ctx)
+	ipAddress := utilities.GetIPAddress(r)
+	params := &ChallengeFactorParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
+	}
+	channel := params.Channel
+
+	if channel == "" {
+		channel = sms_provider.SMSProvider
+	}
+	if !sms_provider.IsValidMessageChannel(channel, config.Sms.Provider) {
+		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
+	}
+
+	otp, err := crypto.GenerateOtp(config.MFA.SMS.OtpLength)
+	if err != nil {
+		panic(err)
+	}
+	challenge := factor.CreateSMSChallenge(ipAddress, otp)
+	message, err := generateSMSFromTemplate(config.MFA.SMS.SMSTemplate, otp)
+	if err != nil {
+		return internalServerError("error generating sms template").WithInternalError(err)
+	}
+	// TODO: Refactor this into a function together with phone maybe.
+	if config.Hook.SendSMS.Enabled {
+		input := hooks.SendSMSInput{
+			User: user,
+			SMS: hooks.SMS{
+				OTP: otp,
+			},
+		}
+		output := hooks.SendSMSOutput{}
+		err := a.invokeHook(a.db, r, &input, &output, a.config.Hook.SendSMS.URI)
+		if err != nil {
+			return internalServerError("error invoking hook")
+		}
+	} else {
+		if !challenge.SentAt.Add(config.MFA.SMS.MaxFrequency).Before(time.Now()) {
+			return MaxFrequencyLimitError
+		}
+		smsProvider, terr := sms_provider.GetSmsProvider(*config)
+		if terr != nil {
+			return internalServerError("Unable to get SMS provider").WithInternalError(terr)
+		}
+
+		messageID, err := smsProvider.SendMessage(*factor.PhoneNumber, message, channel, otp)
+		if err != nil {
+			return internalServerError(fmt.Sprintf("error sending message: %v", messageID)).WithInternalError(err)
+		}
+	}
+	if err := db.Transaction(func(tx *storage.Connection) error {
+		if terr := tx.Create(challenge); terr != nil {
+			return terr
+		}
+		if terr := models.NewAuditLogEntry(r, tx, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
+			"factor_id":     factor.ID,
+			"factor_status": factor.Status,
+		}); terr != nil {
+			return terr
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
+		ID:        challenge.ID,
+		ExpiresAt: challenge.GetExpiryTime(config.MFA.ChallengeExpiryDuration).Unix(),
+	})
+}
+
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
@@ -182,8 +339,10 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
+	if factor.IsSMSFactor() {
+		return a.challengeSMSFactor(w, r, user, factor)
+	}
 	challenge := factor.CreateChallenge(ipAddress)
-
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(challenge); terr != nil {
 			return terr
@@ -205,6 +364,115 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
+func (a *API) verifySMSFactor(w http.ResponseWriter, r *http.Request, user *models.User, factor *models.Factor, params *VerifyFactorParams) error {
+	ctx := r.Context()
+	config := a.config
+	db := a.db.WithContext(ctx)
+	if !config.MFA.SMS.VerifyEnabled {
+		// TODO: Replace with appropriate factor type
+		return unprocessableEntityError(ErrorCodeMFAVerifyDisabled, "mfa verification is disabled for sms factors")
+	}
+	currentIP := utilities.GetIPAddress(r)
+
+	if !factor.IsOwnedBy(user) {
+		return internalServerError(InvalidFactorOwnerErrorMessage)
+	}
+
+	challenge, err := models.FindChallengeByID(db, params.ChallengeID)
+	if err != nil && models.IsNotFoundError(err) {
+		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor with the provided challenge ID not found")
+	} else if err != nil {
+		return internalServerError("Database error finding Challenge").WithInternalError(err)
+	}
+
+	if challenge.VerifiedAt != nil || challenge.IPAddress != currentIP {
+		return unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch")
+	}
+
+	if challenge.HasExpired(config.MFA.ChallengeExpiryDuration) {
+		if err := db.Destroy(challenge); err != nil {
+			return internalServerError("Database error deleting challenge").WithInternalError(err)
+		}
+		return unprocessableEntityError(ErrorCodeMFAChallengeExpired, "MFA challenge %v has expired, verify against another challenge or create a new challenge.", challenge.ID)
+	}
+	valid := subtle.ConstantTimeCompare([]byte(challenge.OtpCode), []byte(params.Code)) == 1
+	if config.Hook.MFAVerificationAttempt.Enabled {
+		input := hooks.MFAVerificationAttemptInput{
+			UserID:   user.ID,
+			FactorID: factor.ID,
+			Valid:    valid,
+		}
+
+		output := hooks.MFAVerificationAttemptOutput{}
+		err := a.invokeHook(nil, r, &input, &output, a.config.Hook.MFAVerificationAttempt.URI)
+		if err != nil {
+			return err
+		}
+
+		if output.Decision == hooks.HookRejection {
+			if err := models.Logout(db, user.ID); err != nil {
+				return err
+			}
+
+			if output.Message == "" {
+				output.Message = hooks.DefaultMFAHookRejectionMessage
+			}
+
+			return forbiddenError(ErrorCodeMFAVerificationRejected, output.Message)
+		}
+	}
+	if !valid {
+		return unprocessableEntityError(ErrorCodeMFAVerificationFailed, "Invalid SMS code entered")
+	}
+
+	var token *AccessTokenResponse
+
+	err = db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		if terr = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
+			"factor_id":    factor.ID,
+			"challenge_id": challenge.ID,
+		}); terr != nil {
+			return terr
+		}
+		if terr = challenge.Verify(tx); terr != nil {
+			return terr
+		}
+		if !factor.IsVerified() {
+			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
+				return terr
+			}
+		}
+		user, terr = models.FindUserByID(tx, user.ID)
+		if terr != nil {
+			return terr
+		}
+
+		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.MFASMS, models.GrantParams{
+			FactorID: &factor.ID,
+		})
+		if terr != nil {
+			return terr
+		}
+		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+			return internalServerError("Failed to set JWT cookie. %s", terr)
+		}
+		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
+			return internalServerError("Failed to update sessions. %s", terr)
+		}
+		if terr = models.DeleteUnverifiedFactors(tx, user); terr != nil {
+			return internalServerError("Error removing unverified factors. %s", terr)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
+
+	return sendJSON(w, http.StatusOK, token)
+}
+
 func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	var err error
 	ctx := r.Context()
@@ -216,6 +484,13 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	params := &VerifyFactorParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
+	}
+
+	if factor.FactorType == models.SMS {
+		return a.verifySMSFactor(w, r, user, factor, params)
+	}
+	if !config.MFA.TOTP.VerifyEnabled {
+		return unprocessableEntityError(ErrorCodeMFAVerifyDisabled, "mfa verification is disabled for TOTP factors")
 	}
 	currentIP := utilities.GetIPAddress(r)
 
@@ -252,6 +527,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		Digits:    otp.DigitsSix,
 		Algorithm: otp.AlgorithmSHA1,
 	})
+	if verr != nil {
+		return verr
+	}
 
 	if config.Hook.MFAVerificationAttempt.Enabled {
 		input := hooks.MFAVerificationAttemptInput{
@@ -278,7 +556,6 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			return forbiddenError(ErrorCodeMFAVerificationRejected, output.Message)
 		}
 	}
-
 	if !valid {
 		if shouldReEncrypt && config.Security.DBEncryption.Encrypt {
 			if err := factor.SetSecret(secret, true, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
@@ -293,6 +570,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var token *AccessTokenResponse
+
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
@@ -309,7 +587,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 		}
-		if shouldReEncrypt && config.Security.DBEncryption.Encrypt {
+		if shouldReEncrypt && config.Security.DBEncryption.Encrypt && factor.IsTOTPFactor() {
 			es, terr := crypto.NewEncryptedString(factor.ID.String(), []byte(secret), config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
 			if terr != nil {
 				return terr
@@ -324,6 +602,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
+
 		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.TOTPSignIn, models.GrantParams{
 			FactorID: &factor.ID,
 		})

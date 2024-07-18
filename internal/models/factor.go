@@ -31,6 +31,7 @@ func (factorState FactorState) String() string {
 }
 
 const TOTP = "totp"
+const SMS = "sms"
 
 type AuthenticationMethod int
 
@@ -39,6 +40,7 @@ const (
 	PasswordGrant
 	OTP
 	TOTPSignIn
+	MFASMS
 	SSOSAML
 	Recovery
 	Invite
@@ -75,6 +77,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "token_refresh"
 	case Anonymous:
 		return "anonymous"
+	case MFASMS:
+		return "mfa/sms"
 	}
 	return ""
 }
@@ -106,6 +110,8 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return EmailChange, nil
 	case "token_refresh":
 		return TokenRefresh, nil
+	case "mfa/sms":
+		return MFASMS, nil
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }
@@ -121,6 +127,7 @@ type Factor struct {
 	Secret       string      `json:"-" db:"secret"`
 	FactorType   string      `json:"factor_type" db:"factor_type"`
 	Challenge    []Challenge `json:"-" has_many:"challenges"`
+	PhoneNumber  *string     `json:"phone_number" db:"phone_number"`
 }
 
 func (Factor) TableName() string {
@@ -138,6 +145,12 @@ func NewFactor(user *User, friendlyName string, factorType string, state FactorS
 		FriendlyName: friendlyName,
 		FactorType:   factorType,
 	}
+	return factor
+}
+
+func NewSMSFactor(user *User, phone, friendlyName string, factorType string, state FactorState) *Factor {
+	factor := NewFactor(user, friendlyName, factorType, state)
+	factor.PhoneNumber = &phone
 	return factor
 }
 
@@ -197,6 +210,14 @@ func (f *Factor) CreateChallenge(ipAddress string) *Challenge {
 	return challenge
 }
 
+func (f *Factor) CreateSMSChallenge(ipAddress string, otpCode string) *Challenge {
+	smsChallenge := f.CreateChallenge(ipAddress)
+	smsChallenge.OtpCode = otpCode
+	now := time.Now()
+	smsChallenge.SentAt = &now
+	return smsChallenge
+}
+
 // UpdateFriendlyName changes the friendly name
 func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	f.FriendlyName = friendlyName
@@ -213,6 +234,14 @@ func (f *Factor) UpdateStatus(tx *storage.Connection, state FactorState) error {
 func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) error {
 	f.FactorType = factorType
 	return tx.UpdateOnly(f, "factor_type", "updated_at")
+}
+
+func (f *Factor) IsTOTPFactor() bool {
+	return f.FactorType == TOTP
+}
+
+func (f *Factor) IsSMSFactor() bool {
+	return f.FactorType == SMS
 }
 
 func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {

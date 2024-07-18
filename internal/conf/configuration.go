@@ -106,14 +106,28 @@ type JWTConfiguration struct {
 	ValidMethods     []string       `json:"-"`
 }
 
+type MFAFactorTypeConfiguration struct {
+	EnrollEnabled bool `split_words:"true" default:"true"`
+	VerifyEnabled bool `split_words:"true" default:"true"`
+}
+
+type SMSFactorTypeConfiguration struct {
+	MFAFactorTypeConfiguration
+	SMSTemplate  *template.Template `json:"-"`
+	OtpLength    int                `json:"otp_length" split_words:"true"`
+	MaxFrequency time.Duration      `json:"max_frequency" split_words:"true"`
+}
+
 // MFAConfiguration holds all the MFA related Configuration
 type MFAConfiguration struct {
-	Enabled                     bool          `default:"false"`
-	ChallengeExpiryDuration     float64       `json:"challenge_expiry_duration" default:"300" split_words:"true"`
-	FactorExpiryDuration        time.Duration `json:"factor_expiry_duration" default:"300s" split_words:"true"`
-	RateLimitChallengeAndVerify float64       `split_words:"true" default:"15"`
-	MaxEnrolledFactors          float64       `split_words:"true" default:"10"`
-	MaxVerifiedFactors          int           `split_words:"true" default:"10"`
+	Enabled                     bool                       `default:"false"`
+	ChallengeExpiryDuration     float64                    `json:"challenge_expiry_duration" default:"300" split_words:"true"`
+	FactorExpiryDuration        time.Duration              `json:"factor_expiry_duration" default:"300s" split_words:"true"`
+	RateLimitChallengeAndVerify float64                    `split_words:"true" default:"15"`
+	MaxEnrolledFactors          float64                    `split_words:"true" default:"10"`
+	MaxVerifiedFactors          int                        `split_words:"true" default:"10"`
+	SMS                         SMSFactorTypeConfiguration `split_words:"true"`
+	TOTP                        MFAFactorTypeConfiguration `split_words:"true"`
 }
 
 type APIConfiguration struct {

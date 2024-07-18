@@ -78,4 +78,6 @@ const (
 	ErrorCodeHookPayloadOverSizeLimit          ErrorCode = "hook_payload_over_size_limit"
 	ErrorCodeHookPayloadUnknownSize            ErrorCode = "hook_payload_unknown_size"
 	ErrorCodeRequestTimeout                    ErrorCode = "request_timeout"
+	ErrorCodeMFAEnrollDisabled                 ErrorCode = "mfa_enroll_not_enabled"
+	ErrorCodeMFAVerifyDisabled                 ErrorCode = "mfa_verify_not_enabled"
 )
