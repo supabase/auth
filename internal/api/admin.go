@@ -9,11 +9,13 @@ import (
 	"github.com/fatih/structs"
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
+	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type AdminUserParams struct {
@@ -382,6 +384,9 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if err != nil {
+		if errors.Is(err, bcrypt.ErrPasswordTooLong) {
+			return badRequestError(ErrorCodeValidationFailed, err.Error())
+		}
 		return internalServerError("Error creating user").WithInternalError(err)
 	}
 
