@@ -187,6 +187,16 @@ func DeleteUnverifiedFactors(tx *storage.Connection, user *User) error {
 	return nil
 }
 
+func (f *Factor) CreateChallenge(ipAddress string) *Challenge {
+	id := uuid.Must(uuid.NewV4())
+	challenge := &Challenge{
+		ID:        id,
+		FactorID:  f.ID,
+		IPAddress: ipAddress,
+	}
+	return challenge
+}
+
 // UpdateFriendlyName changes the friendly name
 func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	f.FriendlyName = friendlyName

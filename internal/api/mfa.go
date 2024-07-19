@@ -182,7 +182,7 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
-	challenge := models.NewChallenge(factor, ipAddress)
+	challenge := factor.CreateChallenge(ipAddress)
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(challenge); terr != nil {
