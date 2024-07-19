@@ -22,7 +22,6 @@ func (Challenge) TableName() string {
 	return tableName
 }
 
-
 func FindChallengeByID(conn *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
 	var challenge Challenge
 	err := conn.Find(&challenge, challengeID)
