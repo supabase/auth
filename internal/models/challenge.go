@@ -22,17 +22,6 @@ func (Challenge) TableName() string {
 	return tableName
 }
 
-func NewChallenge(factor *Factor, ipAddress string) *Challenge {
-	id := uuid.Must(uuid.NewV4())
-
-	challenge := &Challenge{
-		ID:        id,
-		FactorID:  factor.ID,
-		IPAddress: ipAddress,
-	}
-	return challenge
-}
-
 func FindChallengeByID(conn *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
 	var challenge Challenge
 	err := conn.Find(&challenge, challengeID)

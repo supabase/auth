@@ -70,6 +70,8 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 }
 
 func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
 	factorID, err := uuid.FromString(chi.URLParam(r, "factor_id"))
 	if err != nil {
 		return nil, notFoundError(ErrorCodeValidationFailed, "factor_id must be an UUID")
@@ -77,14 +79,14 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 
 	observability.LogEntrySetField(r, "factor_id", factorID)
 
-	f, err := models.FindFactorByFactorID(a.db, factorID)
+	f, err := models.FindFactorByFactorID(db, factorID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return nil, notFoundError(ErrorCodeMFAFactorNotFound, "Factor not found")
 		}
 		return nil, internalServerError("Database error loading factor").WithInternalError(err)
 	}
-	return withFactor(r.Context(), f), nil
+	return withFactor(ctx, f), nil
 }
 
 func (a *API) getAdminParams(r *http.Request) (*AdminUserParams, error) {

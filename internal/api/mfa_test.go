@@ -265,7 +265,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
 			testIPAddress := utilities.GetIPAddress(req)
-			c := models.NewChallenge(f, testIPAddress)
+			c := f.CreateChallenge(testIPAddress)
 			require.NoError(ts.T(), ts.API.db.Create(c), "Error saving new test challenge")
 			if !v.validChallenge {
 				// Set challenge creation so that it has expired in present time.
