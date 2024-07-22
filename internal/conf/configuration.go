@@ -3,6 +3,7 @@ package conf
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -92,14 +93,31 @@ func (c *DBConfiguration) Validate() error {
 
 // JWTConfiguration holds all the JWT related configuration.
 type JWTConfiguration struct {
-	Secret           string   `json:"secret" required:"true"`
-	Exp              int      `json:"exp"`
-	Aud              string   `json:"aud"`
-	AdminGroupName   string   `json:"admin_group_name" split_words:"true"`
-	AdminRoles       []string `json:"admin_roles" split_words:"true"`
-	DefaultGroupName string   `json:"default_group_name" split_words:"true"`
-	Issuer           string   `json:"issuer"`
-	KeyID            string   `json:"key_id" split_words:"true"`
+	Secret           string         `json:"secret" required:"true"`
+	Exp              int            `json:"exp"`
+	Aud              string         `json:"aud"`
+	AdminGroupName   string         `json:"admin_group_name" split_words:"true"`
+	AdminRoles       []string       `json:"admin_roles" split_words:"true"`
+	DefaultGroupName string         `json:"default_group_name" split_words:"true"`
+	Issuer           string         `json:"issuer"`
+	KeyID            string         `json:"key_id" split_words:"true"`
+	Keys             JwtKeysDecoder `json:"keys"`
+}
+
+type JwtKeysDecoder map[string]KeyInfo
+
+func (j *JwtKeysDecoder) Decode(value string) error {
+	if err := json.Unmarshal([]byte(value), j); err != nil {
+		return err
+	}
+	return nil
+}
+
+type KeyInfo struct {
+	Type       string `json:"type"`
+	PublicKey  string `json:"public_key"`
+	PrivateKey string `json:"private_key"`
+	InUse      bool   `json:"in_use"`
 }
 
 // MFAConfiguration holds all the MFA related Configuration
@@ -705,6 +723,16 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 
 	if config.JWT.Exp == 0 {
 		config.JWT.Exp = 3600
+	}
+
+	if config.JWT.Keys == nil {
+		config.JWT.Keys = make(JwtKeysDecoder)
+		config.JWT.Keys[config.JWT.KeyID] = KeyInfo{
+			Type:       "hmac",
+			PublicKey:  "",
+			PrivateKey: config.JWT.Secret,
+			InUse:      true,
+		}
 	}
 
 	if config.Mailer.Autoconfirm && config.Mailer.AllowUnverifiedEmailSignIns {
