@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type ParseIDTokenOptions struct {
@@ -120,7 +120,7 @@ func parseGoogleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, 
 }
 
 type AppleIDTokenClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 
 	Email string `json:"email"`
 
@@ -165,7 +165,7 @@ func parseAppleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 }
 
 type LinkedinIDTokenClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 
 	Email         string `json:"email"`
 	EmailVerified string `json:"email_verified"`
@@ -210,7 +210,7 @@ func parseLinkedinIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData
 }
 
 type AzureIDTokenClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 
 	Email                              string `json:"email"`
 	Name                               string `json:"name"`
@@ -315,7 +315,7 @@ func parseAzureIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 }
 
 type KakaoIDTokenClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 
 	Email    string `json:"email"`
 	Nickname string `json:"nickname"`

@@ -24,8 +24,7 @@ func (a *SAMLAssertion) Attribute(name string) []saml.AttributeValue {
 
 	for _, stmt := range a.AttributeStatements {
 		for _, attr := range stmt.Attributes {
-			// TODO: maybe this should be case-insentivite equality?
-			if attr.Name == name || attr.FriendlyName == name {
+			if strings.EqualFold(attr.Name, name) || strings.EqualFold(attr.FriendlyName, name) {
 				values = append(values, attr.Values...)
 			}
 		}
@@ -120,7 +119,10 @@ func (a *SAMLAssertion) Process(mapping models.SAMLAttributeMapping) map[string]
 	ret := make(map[string]interface{})
 
 	for key, mapper := range mapping.Keys {
-		names := []string{mapper.Name}
+		names := []string{}
+		if mapper.Name != "" {
+			names = append(names, mapper.Name)
+		}
 		names = append(names, mapper.Names...)
 
 		setKey := false

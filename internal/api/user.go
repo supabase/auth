@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -66,7 +67,8 @@ func (a *API) UserGet(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	if aud != claims.Audience {
+	audienceFromClaims, _ := claims.GetAudience()
+	if len(audienceFromClaims) == 0 || aud != audienceFromClaims[0] {
 		return badRequestError(ErrorCodeValidationFailed, "Token audience doesn't match request audience")
 	}
 
@@ -153,12 +155,23 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		password := *params.Password
 		if password != "" {
-			if user.EncryptedPassword != "" && user.Authenticate(ctx, password) {
+			isSamePassword := false
+
+			if user.HasPassword() {
+				auth, _, err := user.Authenticate(ctx, db, password, config.Security.DBEncryption.DecryptionKeys, false, "")
+				if err != nil {
+					return err
+				}
+
+				isSamePassword = auth
+			}
+
+			if isSamePassword {
 				return unprocessableEntityError(ErrorCodeSamePassword, "New password should be different from the old password.")
 			}
 		}
 
-		if err := user.SetPassword(ctx, password); err != nil {
+		if err := user.SetPassword(ctx, password, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
 			return err
 		}
 	}
@@ -193,19 +206,30 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Email != "" && params.Email != user.GetEmail() {
-			flowType := getFlowFromChallenge(params.CodeChallenge)
-			if isPKCEFlow(flowType) {
-				_, terr := generateFlowState(tx, models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
-				if terr != nil {
+			if config.Mailer.Autoconfirm {
+				user.EmailChange = params.Email
+				if _, terr := a.emailChangeVerify(r, tx, &VerifyParams{
+					Type:  mailer.EmailChangeVerification,
+					Email: params.Email,
+				}, user); terr != nil {
 					return terr
 				}
 
-			}
-			if terr = a.sendEmailChange(r, tx, user, params.Email, flowType); terr != nil {
-				if errors.Is(terr, MaxFrequencyLimitError) {
-					return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "For security purposes, you can only request this once every 60 seconds")
+			} else {
+				flowType := getFlowFromChallenge(params.CodeChallenge)
+				if isPKCEFlow(flowType) {
+					_, terr := generateFlowState(tx, models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
+					if terr != nil {
+						return terr
+					}
+
 				}
-				return internalServerError("Error sending change email").WithInternalError(terr)
+				if terr = a.sendEmailChange(r, tx, user, params.Email, flowType); terr != nil {
+					if errors.Is(terr, MaxFrequencyLimitError) {
+						return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(user.EmailChangeSentAt, config.SMTP.MaxFrequency))
+					}
+					return internalServerError("Error sending change email").WithInternalError(terr)
+				}
 			}
 		}
 
@@ -224,6 +248,9 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 					return internalServerError("Error finding SMS provider").WithInternalError(terr)
 				}
 				if _, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneChangeVerification, smsProvider, params.Channel); terr != nil {
+					if errors.Is(terr, MaxFrequencyLimitError) {
+						return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(user.PhoneChangeSentAt, config.Sms.MaxFrequency))
+					}
 					return internalServerError("Error sending phone change otp").WithInternalError(terr)
 				}
 			}

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/gofrs/uuid"
-	jwt "github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
@@ -91,7 +91,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 		{
 			Desc: "Missing Subject Claim",
 			UserJwtClaims: &AccessTokenClaims{
-				StandardClaims: jwt.StandardClaims{
+				RegisteredClaims: jwt.RegisteredClaims{
 					Subject: "",
 				},
 				Role: "authenticated",
@@ -102,7 +102,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 		{
 			Desc: "Valid Subject Claim",
 			UserJwtClaims: &AccessTokenClaims{
-				StandardClaims: jwt.StandardClaims{
+				RegisteredClaims: jwt.RegisteredClaims{
 					Subject: u.ID.String(),
 				},
 				Role: "authenticated",
@@ -113,7 +113,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 		{
 			Desc: "Invalid Subject Claim",
 			UserJwtClaims: &AccessTokenClaims{
-				StandardClaims: jwt.StandardClaims{
+				RegisteredClaims: jwt.RegisteredClaims{
 					Subject: "invalid-subject-claim",
 				},
 				Role: "authenticated",
@@ -124,7 +124,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 		{
 			Desc: "Empty Session ID Claim",
 			UserJwtClaims: &AccessTokenClaims{
-				StandardClaims: jwt.StandardClaims{
+				RegisteredClaims: jwt.RegisteredClaims{
 					Subject: u.ID.String(),
 				},
 				Role:      "authenticated",
@@ -136,7 +136,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 		{
 			Desc: "Invalid Session ID Claim",
 			UserJwtClaims: &AccessTokenClaims{
-				StandardClaims: jwt.StandardClaims{
+				RegisteredClaims: jwt.RegisteredClaims{
 					Subject: u.ID.String(),
 				},
 				Role:      "authenticated",
@@ -148,7 +148,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 		{
 			Desc: "Valid Session ID Claim",
 			UserJwtClaims: &AccessTokenClaims{
-				StandardClaims: jwt.StandardClaims{
+				RegisteredClaims: jwt.RegisteredClaims{
 					Subject: u.ID.String(),
 				},
 				Role:      "authenticated",
@@ -161,13 +161,13 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 		{
 			Desc: "Session ID doesn't exist",
 			UserJwtClaims: &AccessTokenClaims{
-				StandardClaims: jwt.StandardClaims{
+				RegisteredClaims: jwt.RegisteredClaims{
 					Subject: u.ID.String(),
 				},
 				Role:      "authenticated",
 				SessionId: "73bf9ee0-9e8c-453b-b484-09cb93e2f341",
 			},
-			ExpectedError:   forbiddenError(ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist"),
+			ExpectedError:   forbiddenError(ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist").WithInternalError(models.SessionNotFoundError{}).WithInternalMessage("session id (73bf9ee0-9e8c-453b-b484-09cb93e2f341) doesn't exist"),
 			ExpectedUser:    u,
 			ExpectedSession: nil,
 		},

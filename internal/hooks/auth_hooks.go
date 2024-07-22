@@ -2,7 +2,7 @@ package hooks
 
 import (
 	"github.com/gofrs/uuid"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 )
@@ -43,7 +43,7 @@ const MinimumViableTokenSchema = `{
   "type": "object",
   "properties": {
     "aud": {
-      "type": "string"
+      "type": ["string", "array"]
     },
     "exp": {
       "type": "integer"
@@ -98,7 +98,7 @@ const MinimumViableTokenSchema = `{
 
 // AccessTokenClaims is a struct thats used for JWT claims
 type AccessTokenClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 	Email                         string                 `json:"email"`
 	Phone                         string                 `json:"phone"`
 	AppMetaData                   map[string]interface{} `json:"app_metadata"`

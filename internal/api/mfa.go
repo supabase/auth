@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/aaronarduino/goqrsvg"
 	svg "github.com/ajstarks/svgo"
 	"github.com/boombuler/barcode/qr"
 	"github.com/gofrs/uuid"
+	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
@@ -63,6 +66,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	session := getSession(ctx)
 	config := a.config
+	db := a.db.WithContext(ctx)
 
 	if session == nil || user == nil {
 		return internalServerError("A valid session and a registered user are required to enroll a factor")
@@ -92,7 +96,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	factorCount := len(factors)
 	numVerifiedFactors := 0
-	if err := models.DeleteExpiredFactors(a.db, config.MFA.FactorExpiryDuration); err != nil {
+	if err := models.DeleteExpiredFactors(db, config.MFA.FactorExpiryDuration); err != nil {
 		return err
 	}
 
@@ -132,9 +136,12 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	svgData.End()
 
-	factor := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified, key.Secret())
+	factor := models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified)
+	if err := factor.SetSecret(key.Secret(), config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
+		return err
+	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(factor); terr != nil {
 			pgErr := utilities.NewPostgresError(terr)
 			if pgErr.IsUniqueConstraintViolated() {
@@ -161,7 +168,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		TOTP: TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
 			QRCode: buf.String(),
-			Secret: factor.Secret,
+			Secret: key.Secret(),
 			URI:    key.URL(),
 		},
 	})
@@ -170,13 +177,14 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
+	db := a.db.WithContext(ctx)
 
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
-	challenge := models.NewChallenge(factor, ipAddress)
+	challenge := factor.CreateChallenge(ipAddress)
 
-	if err := a.db.Transaction(func(tx *storage.Connection) error {
+	if err := db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(challenge); terr != nil {
 			return terr
 		}
@@ -203,6 +211,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	config := a.config
+	db := a.db.WithContext(ctx)
 
 	params := &VerifyFactorParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
@@ -214,7 +223,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
 
-	challenge, err := models.FindChallengeByID(a.db, params.ChallengeID)
+	challenge, err := models.FindChallengeByID(db, params.ChallengeID)
 	if err != nil && models.IsNotFoundError(err) {
 		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor with the provided challenge ID not found")
 	} else if err != nil {
@@ -226,13 +235,23 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if challenge.HasExpired(config.MFA.ChallengeExpiryDuration) {
-		if err := a.db.Destroy(challenge); err != nil {
+		if err := db.Destroy(challenge); err != nil {
 			return internalServerError("Database error deleting challenge").WithInternalError(err)
 		}
 		return unprocessableEntityError(ErrorCodeMFAChallengeExpired, "MFA challenge %v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
 
-	valid := totp.Validate(params.Code, factor.Secret)
+	secret, shouldReEncrypt, err := factor.GetSecret(config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
+	if err != nil {
+		return internalServerError("Database error verifying MFA TOTP secret").WithInternalError(err)
+	}
+
+	valid, verr := totp.ValidateCustom(params.Code, secret, time.Now().UTC(), totp.ValidateOpts{
+		Period:    30,
+		Skew:      1,
+		Digits:    otp.DigitsSix,
+		Algorithm: otp.AlgorithmSHA1,
+	})
 
 	if config.Hook.MFAVerificationAttempt.Enabled {
 		input := hooks.MFAVerificationAttemptInput{
@@ -248,7 +267,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if output.Decision == hooks.HookRejection {
-			if err := models.Logout(a.db, user.ID); err != nil {
+			if err := models.Logout(db, user.ID); err != nil {
 				return err
 			}
 
@@ -259,12 +278,22 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 			return forbiddenError(ErrorCodeMFAVerificationRejected, output.Message)
 		}
 	}
+
 	if !valid {
-		return unprocessableEntityError(ErrorCodeMFAVerificationFailed, "Invalid TOTP code entered")
+		if shouldReEncrypt && config.Security.DBEncryption.Encrypt {
+			if err := factor.SetSecret(secret, true, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
+				return err
+			}
+
+			if err := db.UpdateOnly(factor, "secret"); err != nil {
+				return err
+			}
+		}
+		return unprocessableEntityError(ErrorCodeMFAVerificationFailed, "Invalid TOTP code entered").WithInternalError(verr)
 	}
 
 	var token *AccessTokenResponse
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":    factor.ID,
@@ -277,6 +306,17 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		if !factor.IsVerified() {
 			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
+				return terr
+			}
+		}
+		if shouldReEncrypt && config.Security.DBEncryption.Encrypt {
+			es, terr := crypto.NewEncryptedString(factor.ID.String(), []byte(secret), config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
+			if terr != nil {
+				return terr
+			}
+
+			factor.Secret = es.String()
+			if terr := tx.UpdateOnly(factor, "secret"); terr != nil {
 				return terr
 			}
 		}
@@ -316,6 +356,8 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	session := getSession(ctx)
+	db := a.db.WithContext(ctx)
+
 	if factor == nil || session == nil || user == nil {
 		return internalServerError("A valid session and factor are required to unenroll a factor")
 	}
@@ -327,7 +369,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr := tx.Destroy(factor); terr != nil {
 			return terr

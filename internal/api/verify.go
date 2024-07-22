@@ -304,7 +304,10 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 }
 
 func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.Connection, user *models.User) (*models.User, error) {
-	if user.EncryptedPassword == "" && user.InvitedAt != nil {
+	config := a.config
+
+	shouldUpdatePassword := false
+	if !user.HasPassword() && user.InvitedAt != nil {
 		// sign them up with temporary password, and require application
 		// to present the user with a password set form
 		password, err := password.Generate(64, 10, 0, false, true)
@@ -313,14 +316,15 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 			panic(err)
 		}
 
-		if err := user.SetPassword(ctx, password); err != nil {
+		if err := user.SetPassword(ctx, password, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
 			return nil, err
 		}
+		shouldUpdatePassword = true
 	}
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if user.EncryptedPassword == "" && user.InvitedAt != nil {
+		if shouldUpdatePassword {
 			if terr = user.UpdatePassword(tx, nil); terr != nil {
 				return internalServerError("Error storing password").WithInternalError(terr)
 			}
@@ -487,7 +491,10 @@ func (a *API) prepPKCERedirectURL(rurl, code string) (string, error) {
 
 func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, params *VerifyParams, user *models.User) (*models.User, error) {
 	config := a.config
-	if config.Mailer.SecureEmailChangeEnabled && user.EmailChangeConfirmStatus == zeroConfirmation && user.GetEmail() != "" {
+	if !config.Mailer.Autoconfirm &&
+		config.Mailer.SecureEmailChangeEnabled &&
+		user.EmailChangeConfirmStatus == zeroConfirmation &&
+		user.GetEmail() != "" {
 		err := conn.Transaction(func(tx *storage.Connection) error {
 			currentOTT, terr := models.FindOneTimeToken(tx, params.TokenHash, models.EmailChangeTokenCurrent)
 			if terr != nil && !models.IsNotFoundError(terr) {

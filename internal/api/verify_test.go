@@ -322,6 +322,7 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 	u.ConfirmationSentAt = &sentTime
 	u.PhoneChange = "22222222"
 	u.PhoneChangeSentAt = &sentTime
+	u.EmailChange = "test@gmail.com"
 	require.NoError(ts.T(), ts.API.db.Update(u))
 	confirmationOtt, err := models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), "123456", models.ConfirmationToken)
 	require.NoError(ts.T(), err)
@@ -389,6 +390,16 @@ func (ts *VerifyTestSuite) TestInvalidOtp() {
 			sentTime: time.Now(),
 			body: map[string]interface{}{
 				"type":  mail.SignupVerification,
+				"token": "invalid_otp",
+				"email": u.GetEmail(),
+			},
+			expected: expectedResponse,
+		},
+		{
+			desc:     "Invalid Email Change",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  mail.EmailChangeVerification,
 				"token": "invalid_otp",
 				"email": u.GetEmail(),
 			},
@@ -886,6 +897,7 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 }
 
 func (ts *VerifyTestSuite) TestVerifyValidOtp() {
+	ts.Config.Mailer.SecureEmailChangeEnabled = true
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 	u.EmailChange = "new@example.com"

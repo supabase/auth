@@ -229,6 +229,9 @@ func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, toke
 			return nil, err
 		}
 	}
+	if ott == nil {
+		return nil, err
+	}
 
 	user, err := FindUserByID(tx, ott.UserID)
 	if err != nil {
@@ -254,6 +257,9 @@ func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email, token, a
 		if err != nil && !IsNotFoundError(err) {
 			return nil, err
 		}
+	}
+	if ott == nil {
+		return nil, err
 	}
 
 	user, err := FindUserByID(tx, ott.UserID)

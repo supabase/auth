@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	"github.com/gofrs/uuid"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/supabase/auth/internal/conf"
@@ -24,7 +24,7 @@ import (
 
 // AccessTokenClaims is a struct thats used for JWT claims
 type AccessTokenClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 	Email                         string                 `json:"email"`
 	Phone                         string                 `json:"phone"`
 	AppMetaData                   map[string]interface{} `json:"app_metadata"`
@@ -141,11 +141,18 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return internalServerError("Database error querying schema").WithInternalError(err)
 	}
 
+	if !user.HasPassword() {
+		return oauthError("invalid_grant", InvalidLoginMessage)
+	}
+
 	if user.IsBanned() {
 		return oauthError("invalid_grant", InvalidLoginMessage)
 	}
 
-	isValidPassword := user.Authenticate(ctx, params.Password)
+	isValidPassword, shouldReEncrypt, err := user.Authenticate(ctx, db, params.Password, config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
+	if err != nil {
+		return err
+	}
 
 	var weakPasswordError *WeakPasswordError
 	if isValidPassword {
@@ -154,6 +161,20 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 				weakPasswordError = wpe
 			} else {
 				observability.GetLogEntry(r).Entry.WithError(err).Warn("Password strength check on sign-in failed")
+			}
+		}
+
+		if shouldReEncrypt {
+			if err := user.SetPassword(ctx, params.Password, true, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
+				return err
+			}
+
+			// directly change this in the database without
+			// calling user.UpdatePassword() because this
+			// is not a password change, just encryption
+			// change in the database
+			if err := db.UpdateOnly(user, "encrypted_password"); err != nil {
+				return err
 			}
 		}
 	}
@@ -307,14 +328,14 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 	}
 
 	issuedAt := time.Now().UTC()
-	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp)).Unix()
+	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
 
 	claims := &hooks.AccessTokenClaims{
-		StandardClaims: jwt.StandardClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID.String(),
-			Audience:  user.Aud,
-			IssuedAt:  issuedAt.Unix(),
-			ExpiresAt: expiresAt,
+			Audience:  jwt.ClaimStrings{user.Aud},
+			IssuedAt:  jwt.NewNumericDate(issuedAt),
+			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			Issuer:    config.JWT.Issuer,
 		},
 		Email:                         user.GetEmail(),
@@ -358,12 +379,14 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		token.Header["kid"] = config.JWT.KeyID
 	}
 
+	// this serializes the aud claim was a string
+	jwt.MarshalSingleStringAsArray = false
 	signed, err := token.SignedString([]byte(config.JWT.Secret))
 	if err != nil {
 		return "", 0, err
 	}
 
-	return signed, expiresAt, nil
+	return signed, expiresAt.Unix(), nil
 }
 
 func (a *API) issueRefreshToken(r *http.Request, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {

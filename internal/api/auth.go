@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/gofrs/uuid"
-	jwt "github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -75,7 +75,7 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request) (context.Context, e
 	ctx := r.Context()
 	config := a.config
 
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
 	token, err := p.ParseWithClaims(bearer, &AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(config.JWT.Secret), nil
 	})
@@ -123,7 +123,7 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 		session, err = models.FindSessionByID(db, sessionId, false)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return ctx, forbiddenError(ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist")
+				return ctx, forbiddenError(ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist").WithInternalError(err).WithInternalMessage(fmt.Sprintf("session id (%s) doesn't exist", sessionId))
 			}
 			return ctx, err
 		}

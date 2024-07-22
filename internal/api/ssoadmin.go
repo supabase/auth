@@ -349,10 +349,13 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	updateAttributeMapping := !provider.SAMLProvider.AttributeMapping.Equal(&params.AttributeMapping)
-	if updateAttributeMapping {
-		modified = true
-		provider.SAMLProvider.AttributeMapping = params.AttributeMapping
+	updateAttributeMapping := false
+	if params.AttributeMapping.Keys != nil {
+		updateAttributeMapping = !provider.SAMLProvider.AttributeMapping.Equal(&params.AttributeMapping)
+		if updateAttributeMapping {
+			modified = true
+			provider.SAMLProvider.AttributeMapping = params.AttributeMapping
+		}
 	}
 
 	nameIDFormat := ""

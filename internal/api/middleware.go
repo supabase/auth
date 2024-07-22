@@ -16,16 +16,17 @@ import (
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/security"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
-	jwt "github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v5"
 )
 
 type FunctionHooks map[string][]string
 
 type AuthMicroserviceClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 	SiteURL       string        `json:"site_url"`
 	InstanceID    string        `json:"id"`
 	FunctionHooks FunctionHooks `json:"function_hooks"`
@@ -113,7 +114,7 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 							emailRateLimitCounter.Add(
 								req.Context(),
 								1,
-								attribute.String("path", req.URL.Path),
+								metric.WithAttributeSet(attribute.NewSet(attribute.String("path", req.URL.Path))),
 							)
 							return c, tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "Email rate limit exceeded")
 						}
