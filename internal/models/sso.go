@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"time"
 
@@ -76,7 +77,7 @@ func (m *SAMLAttributeMapping) Equal(o *SAMLAttributeMapping) bool {
 			}
 		}
 
-		if mvalue.Default != value.Default {
+		if !reflect.DeepEqual(mvalue.Default, value.Default) {
 			return false
 		}
 
