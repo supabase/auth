@@ -104,7 +104,7 @@ func GetSigningKey(k *jwk.Key) (any, error) {
 	switch (*k).KeyType() {
 	case "oct":
 		var symmetricKey []byte
-		if err := (*k).Raw(symmetricKey); err != nil {
+		if err := (*k).Raw(&symmetricKey); err != nil {
 			return nil, err
 		}
 		return symmetricKey, nil
@@ -137,6 +137,20 @@ func GetSigningAlg(k *jwk.Key) jwt.SigningMethod {
 
 	// return HS256 to preserve existing behaviour
 	return jwt.SigningMethodHS256
+}
+
+func GetKeyByKid(kid string, config *JWTConfiguration) (any, error) {
+	if kid == config.KeyID {
+		return []byte(config.Secret), nil
+	}
+	if k, ok := config.Keys[kid]; ok {
+		var key interface{}
+		if err := k.PublicKey.Raw(&key); err != nil {
+			return nil, err
+		}
+		return key, nil
+	}
+	return nil, fmt.Errorf("invalid kid: %s", kid)
 }
 
 func getSymmetricKey(config *JWTConfiguration) (*jwk.Key, error) {

@@ -101,6 +101,7 @@ type JWTConfiguration struct {
 	Issuer           string         `json:"issuer"`
 	KeyID            string         `json:"key_id" split_words:"true"`
 	Keys             JwtKeysDecoder `json:"keys"`
+	ValidMethods     []string       `json:"-"`
 }
 
 // MFAConfiguration holds all the MFA related Configuration
@@ -714,9 +715,21 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 			return err
 		}
 		config.JWT.Keys = make(JwtKeysDecoder)
+
+		// symmetric keys use the same key to verify and encrypt a JWT
 		config.JWT.Keys[config.JWT.KeyID] = JwkInfo{
+			PublicKey:  *key,
 			PrivateKey: *key,
 		}
+	}
+
+	if config.JWT.ValidMethods == nil {
+		config.JWT.ValidMethods = []string{}
+		for _, key := range config.JWT.Keys {
+			alg := GetSigningAlg(&key.PublicKey)
+			config.JWT.ValidMethods = append(config.JWT.ValidMethods, alg.Alg())
+		}
+
 	}
 
 	if config.Mailer.Autoconfirm && config.Mailer.AllowUnverifiedEmailSignIns {

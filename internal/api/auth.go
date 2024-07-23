@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -75,9 +76,12 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request) (context.Context, e
 	ctx := r.Context()
 	config := a.config
 
-	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
+	p := jwt.NewParser(jwt.WithValidMethods(config.JWT.ValidMethods))
 	token, err := p.ParseWithClaims(bearer, &AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(config.JWT.Secret), nil
+		if kid, ok := token.Header["kid"].(string); ok {
+			return conf.GetKeyByKid(kid, &config.JWT)
+		}
+		return nil, fmt.Errorf("invalid JWT: missing kid")
 	})
 	if err != nil {
 		return nil, forbiddenError(ErrorCodeBadJWT, "invalid JWT: unable to parse or verify signature, %v", err).WithInternalError(err)
