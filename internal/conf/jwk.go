@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
@@ -78,6 +79,66 @@ func (j *JwtKeysDecoder) Validate() error {
 	return nil
 }
 
+func GetSigningJwk(config *JWTConfiguration) (*jwk.Key, error) {
+	if config.Keys == nil {
+		symmetricJwk, err := getSymmetricKey(config)
+		if err != nil {
+			return nil, err
+		}
+		return symmetricJwk, nil
+	}
+	for _, key := range config.Keys {
+		if key.PrivateKey.KeyUsage() == "enc" {
+			return &key.PrivateKey, nil
+		}
+	}
+	// return symmetric secret anyway to preserve existing behavior
+	symmetricJwk, err := getSymmetricKey(config)
+	if err != nil {
+		return nil, err
+	}
+	return symmetricJwk, nil
+}
+
+func GetSigningKey(k *jwk.Key) (any, error) {
+	switch (*k).KeyType() {
+	case "oct":
+		var symmetricKey []byte
+		if err := (*k).Raw(symmetricKey); err != nil {
+			return nil, err
+		}
+		return symmetricKey, nil
+	default:
+		var key interface{}
+		if err := (*k).Raw(&key); err != nil {
+			return nil, err
+		}
+		return key, nil
+	}
+}
+
+func GetSigningAlg(k *jwk.Key) jwt.SigningMethod {
+	if k == nil {
+		return jwt.SigningMethodHS256
+	}
+
+	switch (*k).Algorithm().String() {
+	case "RS256":
+		return jwt.SigningMethodRS256
+	case "RS512":
+		return jwt.SigningMethodRS512
+	case "ES256":
+		return jwt.SigningMethodES256
+	case "ES512":
+		return jwt.SigningMethodES512
+	case "EdDSA":
+		return jwt.SigningMethodEdDSA
+	}
+
+	// return HS256 to preserve existing behaviour
+	return jwt.SigningMethodHS256
+}
+
 func getSymmetricKey(config *JWTConfiguration) (*jwk.Key, error) {
 	if config.Secret != "" {
 		bytes, err := base64.StdEncoding.DecodeString(config.Secret)
@@ -90,6 +151,16 @@ func getSymmetricKey(config *JWTConfiguration) (*jwk.Key, error) {
 		}
 		if config.KeyID != "" {
 			if err := privKey.Set(jwk.KeyIDKey, config.KeyID); err != nil {
+				return nil, err
+			}
+		}
+		if privKey.Algorithm().String() == "" {
+			if err := privKey.Set(jwk.AlgorithmKey, "HS256"); err != nil {
+				return nil, err
+			}
+		}
+		if privKey.KeyUsage() == "" {
+			if err := privKey.Set(jwk.KeyUsageKey, "enc"); err != nil {
 				return nil, err
 			}
 		}
