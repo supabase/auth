@@ -93,7 +93,7 @@ func TestGetReferrer(t *tst.T) {
 		SiteURL:      "https://example.com",
 		URIAllowList: []string{"http://localhost:8000/*"},
 	}
-	config.ApplyDefaults()
+	require.NoError(t, config.ApplyDefaults())
 	cases := []struct {
 		desc        string
 		redirectURL string

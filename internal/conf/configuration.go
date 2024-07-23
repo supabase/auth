@@ -710,17 +710,19 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	}
 
 	if config.JWT.Keys == nil {
-		config.JWT.Keys = make(JwtKeysDecoder)
-		derBytes, err := base64.StdEncoding.DecodeString(config.JWT.Secret)
-		if err != nil {
-			derBytes = []byte(config.JWT.Secret)
-		}
-		privKey, err := jwk.FromRaw(derBytes)
-		if err != nil {
-			return err
-		}
-		config.JWT.Keys[config.JWT.KeyID] = JwkInfo{
-			PrivateKey: privKey,
+		if config.JWT.KeyID != "" && config.JWT.Secret != "" {
+			config.JWT.Keys = make(JwtKeysDecoder)
+			derBytes, err := base64.StdEncoding.DecodeString(config.JWT.Secret)
+			if err != nil {
+				derBytes = []byte(config.JWT.Secret)
+			}
+			privKey, err := jwk.FromRaw(derBytes)
+			if err != nil {
+				return err
+			}
+			config.JWT.Keys[config.JWT.KeyID] = JwkInfo{
+				PrivateKey: privKey,
+			}
 		}
 	}
 
