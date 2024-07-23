@@ -713,7 +713,7 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.JWT.Keys = make(JwtKeysDecoder)
 		derBytes, err := base64.StdEncoding.DecodeString(config.JWT.Secret)
 		if err != nil {
-			return err
+			derBytes = []byte(config.JWT.Secret)
 		}
 		privKey, err := jwk.FromRaw(derBytes)
 		if err != nil {

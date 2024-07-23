@@ -40,7 +40,7 @@ func (j *JwtKeysDecoder) Decode(value string) error {
 		// all private keys should be stored as der binary strings in base64
 		derBytes, err := base64.StdEncoding.DecodeString(key.PrivateKey)
 		if err != nil {
-			return err
+			derBytes = []byte(key.PrivateKey)
 		}
 
 		var privKey any
@@ -116,8 +116,11 @@ func (j *JwtKeysDecoder) Validate() error {
 		if err := key.PrivateKey.Validate(); err != nil {
 			return err
 		}
-		if err := key.PublicKey.Validate(); err != nil {
-			return err
+		// symmetric keys don't have public keys
+		if key.PublicKey != nil {
+			if err := key.PublicKey.Validate(); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
