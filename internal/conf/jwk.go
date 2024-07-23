@@ -1,10 +1,6 @@
 package conf
 
 import (
-	"crypto/ecdsa"
-	"crypto/ed25519"
-	"crypto/rsa"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -19,80 +15,36 @@ type JwkInfo struct {
 	PrivateKey jwk.Key `json:"private_key"`
 }
 
-// KeyInfo is used to store the initial config of the keys
-// The private key should be in DER format and base64 encoded
-type KeyInfo struct {
-	Type       string `json:"type"`
-	PrivateKey string `json:"private_key"`
-	InUse      bool   `json:"in_use"`
-}
-
 // Decode implements the Decoder interface
 // which transforms the keys stored as der binary strings into jwks
 func (j *JwtKeysDecoder) Decode(value string) error {
-	data := map[string]KeyInfo{}
+	data := make([]map[string]interface{}, 0)
 	if err := json.Unmarshal([]byte(value), &data); err != nil {
 		return err
 	}
 
 	config := JwtKeysDecoder{}
-	for kid, key := range data {
-		// all private keys should be stored as der binary strings in base64
-		derBytes, err := base64.StdEncoding.DecodeString(key.PrivateKey)
-		if err != nil {
-			derBytes = []byte(key.PrivateKey)
-		}
-
-		var privKey any
-		if key.Type == "hmac" {
-			privKey = derBytes
-		} else {
-			// assume key is asymmetric
-			privKey, err = x509.ParsePKCS8PrivateKey(derBytes)
-			if err != nil {
-				return err
-			}
-		}
-		alg := getAlg(privKey)
-		if alg == "" {
-			return fmt.Errorf("unsupported key alg: %v", kid)
-		}
-
-		privJwk, err := jwk.FromRaw(privKey)
+	for _, key := range data {
+		bytes, err := json.Marshal(key)
 		if err != nil {
 			return err
 		}
-		// Set kid, alg and use claims for private key
-		if err := privJwk.Set(jwk.KeyIDKey, kid); err != nil {
+		privJwk, err := jwk.ParseKey(bytes)
+		if err != nil {
 			return err
 		}
-		if err := privJwk.Set(jwk.AlgorithmKey, alg); err != nil {
-			return err
-		}
-
-		switch key.InUse {
-		case true:
-			// only the key that's in use should be used for encryption
-			if err := privJwk.Set(jwk.KeyUsageKey, "enc"); err != nil {
-				return err
-			}
-		default:
-			if err := privJwk.Set(jwk.KeyUsageKey, "sig"); err != nil {
-				return err
-			}
-		}
-
 		pubJwk, err := jwk.PublicKeyOf(privJwk)
 		if err != nil {
 			return err
 		}
 
-		// public keys are always used for signature verification only
-		if err := pubJwk.Set(jwk.KeyUsageKey, "sig"); err != nil {
-			return err
+		// all public keys will be used for signature verification
+		if pubJwk.KeyUsage() == "enc" {
+			if err := pubJwk.Set(jwk.KeyUsageKey, "sig"); err != nil {
+				return err
+			}
 		}
-
-		config[kid] = JwkInfo{
+		config[pubJwk.KeyID()] = JwkInfo{
 			PublicKey:  pubJwk,
 			PrivateKey: privJwk,
 		}
@@ -126,32 +78,22 @@ func (j *JwtKeysDecoder) Validate() error {
 	return nil
 }
 
-func getAlg(key any) string {
-	var alg string
-	switch p := key.(type) {
-	case []byte:
-		alg = "HS256"
-	case *ecdsa.PrivateKey:
-		switch p.Curve.Params().Name {
-		case "P-256":
-			alg = "ES256"
-		case "P-384":
-			alg = "ES384"
-		case "P-521":
-			alg = "ES512"
+func getSymmetricKey(config *JWTConfiguration) (*jwk.Key, error) {
+	if config.Secret != "" {
+		bytes, err := base64.StdEncoding.DecodeString(config.Secret)
+		if err != nil {
+			bytes = []byte(config.Secret)
 		}
-	case *rsa.PrivateKey:
-		switch p.N.BitLen() {
-		case 2048:
-			alg = "RS256"
-		case 4096:
-			alg = "RS512"
+		privKey, err := jwk.FromRaw(bytes)
+		if err != nil {
+			return nil, err
 		}
-	case *ed25519.PrivateKey:
-		// Ed25519 is still experimental based on https://github.com/lestrrat-go/jwx/tree/develop/v2/jwk#supported-key-types
-		alg = "EdDSA"
-	default:
-		return ""
+		if config.KeyID != "" {
+			if err := privKey.Set(jwk.KeyIDKey, config.KeyID); err != nil {
+				return nil, err
+			}
+		}
+		return &privKey, nil
 	}
-	return alg
+	return nil, fmt.Errorf("missing symmetric key")
 }

@@ -12,15 +12,13 @@ type JwksResponse struct {
 
 func (a *API) Jwks(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
-
-	keys := []jwk.Key{}
 	resp := JwksResponse{
-		Keys: keys,
+		Keys: []jwk.Key{},
 	}
 
 	for _, key := range config.JWT.Keys {
 		// don't expose hmac jwk in endpoint
-		if key.PrivateKey.Algorithm().String() == "HS256" {
+		if key.PublicKey == nil || key.PublicKey.KeyType() == "oct" {
 			continue
 		}
 		resp.Keys = append(resp.Keys, key.PublicKey)
