@@ -3,7 +3,6 @@ package conf
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -16,6 +15,7 @@ import (
 	"github.com/gobwas/glob"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
 const defaultMinPasswordLength int = 6
@@ -102,22 +102,6 @@ type JWTConfiguration struct {
 	Issuer           string         `json:"issuer"`
 	KeyID            string         `json:"key_id" split_words:"true"`
 	Keys             JwtKeysDecoder `json:"keys"`
-}
-
-type JwtKeysDecoder map[string]KeyInfo
-
-func (j *JwtKeysDecoder) Decode(value string) error {
-	if err := json.Unmarshal([]byte(value), j); err != nil {
-		return err
-	}
-	return nil
-}
-
-type KeyInfo struct {
-	Type       string `json:"type"`
-	PublicKey  string `json:"public_key"`
-	PrivateKey string `json:"private_key"`
-	InUse      bool   `json:"in_use"`
 }
 
 // MFAConfiguration holds all the MFA related Configuration
@@ -727,11 +711,16 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 
 	if config.JWT.Keys == nil {
 		config.JWT.Keys = make(JwtKeysDecoder)
-		config.JWT.Keys[config.JWT.KeyID] = KeyInfo{
-			Type:       "hmac",
-			PublicKey:  "",
-			PrivateKey: config.JWT.Secret,
-			InUse:      true,
+		derBytes, err := base64.StdEncoding.DecodeString(config.JWT.Secret)
+		if err != nil {
+			return err
+		}
+		privKey, err := jwk.FromRaw(derBytes)
+		if err != nil {
+			return err
+		}
+		config.JWT.Keys[config.JWT.KeyID] = JwkInfo{
+			PrivateKey: privKey,
 		}
 	}
 
@@ -852,6 +841,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Security,
 		&c.Sessions,
 		&c.Hook,
+		&c.JWT.Keys,
 	}
 
 	for _, validatable := range validatables {
