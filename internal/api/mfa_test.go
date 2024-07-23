@@ -113,6 +113,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		friendlyName string
 		factorType   string
 		issuer       string
+		phoneNumber  string
 		expectedCode int
 	}{
 		{
@@ -120,6 +121,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			friendlyName: alternativeFriendlyName,
 			factorType:   models.TOTP,
 			issuer:       "",
+			phoneNumber:  "",
 			expectedCode: http.StatusOK,
 		},
 		{
@@ -127,6 +129,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			friendlyName: testFriendlyName,
 			factorType:   "invalid_factor",
 			issuer:       ts.TestDomain,
+			phoneNumber:  "",
 			expectedCode: http.StatusBadRequest,
 		},
 		{
@@ -134,6 +137,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			friendlyName: testFriendlyName,
 			factorType:   models.TOTP,
 			issuer:       ts.TestDomain,
+			phoneNumber:  "",
 			expectedCode: http.StatusOK,
 		},
 		{
@@ -141,12 +145,27 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			friendlyName: "",
 			factorType:   models.TOTP,
 			issuer:       ts.TestDomain,
+			phoneNumber:  "",
 			expectedCode: http.StatusOK,
+		},
+		{
+			desc:         "SMS: Enroll with friendly name",
+			friendlyName: "sms_factor",
+			factorType:   models.SMS,
+			phoneNumber:  "+12345677889",
+			expectedCode: http.StatusOK,
+		},
+		{
+			desc:         "SMS: Enroll without phone number should return error",
+			friendlyName: "sms_factor_fail",
+			factorType:   models.SMS,
+			phoneNumber:  "",
+			expectedCode: http.StatusBadRequest,
 		},
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			w := performEnrollFlow(ts, token, c.friendlyName, c.factorType, c.issuer, c.expectedCode)
+			w := performEnrollFlow(ts, token, c.friendlyName, c.factorType, c.issuer, c.phoneNumber, c.expectedCode)
 
 			factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
 			ts.Require().NoError(err)
@@ -156,7 +175,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 				require.Equal(ts.T(), c.friendlyName, addedFactor.FriendlyName)
 			}
 
-			if w.Code == http.StatusOK {
+			if w.Code == http.StatusOK && c.factorType == models.TOTP {
 				enrollResp := EnrollFactorResponse{}
 				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
 				qrCode := enrollResp.TOTP.QRCode
@@ -168,12 +187,12 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 	}
 }
 
-func (ts *MFATestSuite) TestDuplicateEnrollsReturnExpectedMessage() {
+func (ts *MFATestSuite) TestDuplicateTOTPEnrollsReturnExpectedMessage() {
 	friendlyName := "mary"
 	issuer := "https://issuer.com"
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
-	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, http.StatusOK)
-	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, http.StatusUnprocessableEntity)
+	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, "", http.StatusOK)
+	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, "", http.StatusUnprocessableEntity)
 
 	var errorResponse HTTPError
 	err := json.NewDecoder(response.Body).Decode(&errorResponse)
@@ -195,7 +214,7 @@ func (ts *MFATestSuite) TestMultipleEnrollsCleanupExpiredFactors() {
 
 	token := accessTokenResp.Token
 	for i := 0; i < numFactors; i++ {
-		_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", http.StatusOK)
+		_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", "", http.StatusOK)
 	}
 
 	// All Factors except last factor should be expired
@@ -206,13 +225,14 @@ func (ts *MFATestSuite) TestMultipleEnrollsCleanupExpiredFactors() {
 	_ = performChallengeFlow(ts, factors[len(factors)-1].ID, token)
 
 	// Enroll another Factor (Factor 3)
-	_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", http.StatusOK)
+	_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", "", http.StatusOK)
 	factors, err = FindFactorsByUser(ts.API.db, ts.TestUser)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), 3, len(factors))
 }
 
 func (ts *MFATestSuite) TestChallengeFactor() {
+	// TODO: Challenge SMS Factor with and without channel
 	f := ts.TestUser.Factors[0]
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 	w := performChallengeFlow(ts, f.ID, token)
@@ -220,6 +240,7 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 }
 
 func (ts *MFATestSuite) TestMFAVerifyFactor() {
+	// TODO: Add case for SMS factor  and add three case - valid code, invalid code, and valid /verify
 	cases := []struct {
 		desc             string
 		validChallenge   bool
@@ -460,9 +481,9 @@ func performTestSignupAndVerify(ts *MFATestSuite, email, password string, requir
 
 }
 
-func performEnrollFlow(ts *MFATestSuite, token, friendlyName, factorType, issuer string, expectedCode int) *httptest.ResponseRecorder {
+func performEnrollFlow(ts *MFATestSuite, token, friendlyName, factorType, issuer string, phoneNumber string, expectedCode int) *httptest.ResponseRecorder {
 	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(EnrollFactorParams{FriendlyName: friendlyName, FactorType: factorType, Issuer: issuer}))
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(EnrollFactorParams{FriendlyName: friendlyName, FactorType: factorType, Issuer: issuer, PhoneNumber: phoneNumber}))
 	w := ServeAuthenticatedRequest(ts, http.MethodPost, "http://localhost/factors/", token, buffer)
 	require.Equal(ts.T(), expectedCode, w.Code)
 	return w
@@ -520,7 +541,7 @@ func performChallengeFlow(ts *MFATestSuite, factorID uuid.UUID, token string) *h
 }
 
 func performEnrollAndVerify(ts *MFATestSuite, token string, requireStatusOK bool) *httptest.ResponseRecorder {
-	w := performEnrollFlow(ts, token, "", models.TOTP, ts.TestDomain, http.StatusOK)
+	w := performEnrollFlow(ts, token, "", models.TOTP, ts.TestDomain, "", http.StatusOK)
 	enrollResp := EnrollFactorResponse{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
 	factorID := enrollResp.ID
