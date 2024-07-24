@@ -81,7 +81,13 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request) (context.Context, e
 		if kid, ok := token.Header["kid"].(string); ok {
 			return conf.GetKeyByKid(kid, &config.JWT)
 		}
-		return nil, fmt.Errorf("invalid JWT: missing kid")
+		if alg, ok := token.Header["alg"]; ok {
+			if alg == jwt.SigningMethodHS256.Name {
+				// preserve backward compatibility for cases where the kid is not set
+				return []byte(config.JWT.Secret), nil
+			}
+		}
+		return nil, fmt.Errorf("missing kid")
 	})
 	if err != nil {
 		return nil, forbiddenError(ErrorCodeBadJWT, "invalid JWT: unable to parse or verify signature, %v", err).WithInternalError(err)
