@@ -107,11 +107,11 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if factorCount >= int(config.MFA.MaxEnrolledFactors) {
-		return forbiddenError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of verified factors reached, unenroll to continue")
+		return unprocessableEntityError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of verified factors reached, unenroll to continue")
 	}
 
 	if numVerifiedFactors >= config.MFA.MaxVerifiedFactors {
-		return forbiddenError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of verified factors reached, unenroll to continue")
+		return unprocessableEntityError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of verified factors reached, unenroll to continue")
 	}
 
 	if numVerifiedFactors > 0 && !session.IsAAL2() {
