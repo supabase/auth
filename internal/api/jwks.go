@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	jwk "github.com/lestrrat-go/jwx/v2/jwk"
 )
 
@@ -18,7 +19,7 @@ func (a *API) Jwks(w http.ResponseWriter, r *http.Request) error {
 
 	for _, key := range config.JWT.Keys {
 		// don't expose hmac jwk in endpoint
-		if key.PublicKey == nil || key.PublicKey.KeyType() == "oct" {
+		if key.PublicKey == nil || key.PublicKey.KeyType() == jwa.OctetSeq {
 			continue
 		}
 		resp.Keys = append(resp.Keys, key.PublicKey)
