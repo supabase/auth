@@ -78,8 +78,10 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request) (context.Context, e
 
 	p := jwt.NewParser(jwt.WithValidMethods(config.JWT.ValidMethods))
 	token, err := p.ParseWithClaims(bearer, &AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
-		if kid, ok := token.Header["kid"].(string); ok {
-			return conf.GetKeyByKid(kid, &config.JWT)
+		if kid, ok := token.Header["kid"]; ok {
+			if kidStr, ok := kid.(string); ok {
+				return conf.FindPublicKeyByKid(kidStr, &config.JWT)
+			}
 		}
 		if alg, ok := token.Header["alg"]; ok {
 			if alg == jwt.SigningMethodHS256.Name {

@@ -25,5 +25,6 @@ func (a *API) Jwks(w http.ResponseWriter, r *http.Request) error {
 		resp.Keys = append(resp.Keys, key.PublicKey)
 	}
 
+	w.Header().Set("Cache-Control", "public, max-age=600")
 	return sendJSON(w, http.StatusOK, resp)
 }

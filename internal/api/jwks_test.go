@@ -29,7 +29,7 @@ func TestJwks(t *testing.T) {
 		expectedLen int
 	}{
 		{
-			desc: "only hmac key in config",
+			desc: "hmac key should not be returned",
 			config: conf.JWTConfiguration{
 				Aud:    "authenticated",
 				Secret: "test-secret",
@@ -37,7 +37,7 @@ func TestJwks(t *testing.T) {
 			expectedLen: 0,
 		},
 		{
-			desc: "rsa key in config",
+			desc: "rsa public key returned",
 			config: conf.JWTConfiguration{
 				Aud:    "authenticated",
 				Secret: "test-secret",
@@ -66,6 +66,14 @@ func TestJwks(t *testing.T) {
 			var data map[string]interface{}
 			require.NoError(t, json.NewDecoder(w.Body).Decode(&data))
 			require.Len(t, data["keys"], c.expectedLen)
+
+			for _, key := range data["keys"].([]interface{}) {
+				bytes, err := json.Marshal(key)
+				require.NoError(t, err)
+				actualKey, err := jwk.ParseKey(bytes)
+				require.NoError(t, err)
+				require.Equal(t, c.config.Keys[kid].PublicKey, actualKey)
+			}
 		})
 	}
 }

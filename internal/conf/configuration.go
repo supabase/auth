@@ -15,6 +15,7 @@ import (
 	"github.com/gobwas/glob"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
 const defaultMinPasswordLength int = 6
@@ -710,16 +711,38 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	}
 
 	if config.JWT.Keys == nil {
-		key, err := getSymmetricKey(&config.JWT)
+		// transform the secret into a JWK for consistency
+		bytes, err := base64.StdEncoding.DecodeString(config.JWT.Secret)
+		if err != nil {
+			bytes = []byte(config.JWT.Secret)
+		}
+		privKey, err := jwk.FromRaw(bytes)
+		if err != nil {
+			return err
+		}
+		if config.JWT.KeyID != "" {
+			if err := privKey.Set(jwk.KeyIDKey, config.JWT.KeyID); err != nil {
+				return err
+			}
+		}
+		if privKey.Algorithm().String() == "" {
+			if err := privKey.Set(jwk.AlgorithmKey, "HS256"); err != nil {
+				return err
+			}
+		}
+		if privKey.KeyUsage() == "" {
+			if err := privKey.Set(jwk.KeyUsageKey, "enc"); err != nil {
+				return err
+			}
+		}
+		pubKey, err := privKey.PublicKey()
 		if err != nil {
 			return err
 		}
 		config.JWT.Keys = make(JwtKeysDecoder)
-
-		// symmetric keys use the same key to verify and encrypt a JWT
 		config.JWT.Keys[config.JWT.KeyID] = JwkInfo{
-			PublicKey:  *key,
-			PrivateKey: *key,
+			PublicKey:  pubKey,
+			PrivateKey: privKey,
 		}
 	}
 

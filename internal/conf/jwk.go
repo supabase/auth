@@ -4,7 +4,6 @@ import (
 	"crypto/ecdh"
 	"crypto/ed25519"
 	"crypto/rsa"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -23,18 +22,14 @@ type JwkInfo struct {
 // Decode implements the Decoder interface
 // which transforms the keys stored as der binary strings into jwks
 func (j *JwtKeysDecoder) Decode(value string) error {
-	data := make([]map[string]interface{}, 0)
+	data := make([]json.RawMessage, 0)
 	if err := json.Unmarshal([]byte(value), &data); err != nil {
 		return err
 	}
 
 	config := JwtKeysDecoder{}
 	for _, key := range data {
-		bytes, err := json.Marshal(key)
-		if err != nil {
-			return err
-		}
-		privJwk, err := jwk.ParseKey(bytes)
+		privJwk, err := jwk.ParseKey(key)
 		if err != nil {
 			return err
 		}
@@ -84,24 +79,12 @@ func (j *JwtKeysDecoder) Validate() error {
 }
 
 func GetSigningJwk(config *JWTConfiguration) (*jwk.Key, error) {
-	if config.Keys == nil {
-		symmetricJwk, err := getSymmetricKey(config)
-		if err != nil {
-			return nil, err
-		}
-		return symmetricJwk, nil
-	}
 	for _, key := range config.Keys {
 		if key.PrivateKey.KeyUsage() == "enc" {
 			return &key.PrivateKey, nil
 		}
 	}
-	// return symmetric secret anyway to preserve existing behavior
-	symmetricJwk, err := getSymmetricKey(config)
-	if err != nil {
-		return nil, err
-	}
-	return symmetricJwk, nil
+	return nil, fmt.Errorf("no signing key found")
 }
 
 func GetSigningKey(k *jwk.Key) (any, error) {
@@ -147,46 +130,16 @@ func GetSigningAlg(k *jwk.Key) jwt.SigningMethod {
 	return jwt.SigningMethodHS256
 }
 
-func GetKeyByKid(kid string, config *JWTConfiguration) (any, error) {
-	if kid == config.KeyID {
-		return []byte(config.Secret), nil
-	}
+func FindPublicKeyByKid(kid string, config *JWTConfiguration) (any, error) {
 	if k, ok := config.Keys[kid]; ok {
-		var key interface{}
-		if err := k.PublicKey.Raw(&key); err != nil {
+		key, err := GetSigningKey(&k.PublicKey)
+		if err != nil {
 			return nil, err
 		}
 		return key, nil
 	}
-	return nil, fmt.Errorf("invalid kid: %s", kid)
-}
-
-func getSymmetricKey(config *JWTConfiguration) (*jwk.Key, error) {
-	if config.Secret != "" {
-		bytes, err := base64.StdEncoding.DecodeString(config.Secret)
-		if err != nil {
-			bytes = []byte(config.Secret)
-		}
-		privKey, err := jwk.FromRaw(bytes)
-		if err != nil {
-			return nil, err
-		}
-		if config.KeyID != "" {
-			if err := privKey.Set(jwk.KeyIDKey, config.KeyID); err != nil {
-				return nil, err
-			}
-		}
-		if privKey.Algorithm().String() == "" {
-			if err := privKey.Set(jwk.AlgorithmKey, "HS256"); err != nil {
-				return nil, err
-			}
-		}
-		if privKey.KeyUsage() == "" {
-			if err := privKey.Set(jwk.KeyUsageKey, "enc"); err != nil {
-				return nil, err
-			}
-		}
-		return &privKey, nil
+	if kid == config.KeyID {
+		return []byte(config.Secret), nil
 	}
-	return nil, fmt.Errorf("missing symmetric key")
+	return nil, fmt.Errorf("invalid kid: %s", kid)
 }
