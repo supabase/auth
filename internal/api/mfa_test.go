@@ -395,7 +395,11 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 				c = f.CreateSMSChallenge(utilities.GetIPAddress(req), code)
 			}
 
-			if !v.validCode {
+			// TODO: Automatically infer factor type?
+			if !v.validCode && v.factorType == models.TOTP {
+				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC().Add(-1*time.Minute*time.Duration(1)))
+
+			} else if !v.validCode && v.factorType == models.SMS {
 				invalidSuffix := "1"
 				code += invalidSuffix
 			}

@@ -74,7 +74,7 @@ func (a *API) enrollSMSFactor(w http.ResponseWriter, r *http.Request, user *mode
 	config := a.config
 	db := a.db.WithContext(ctx)
 	if !config.MFA.SMS.EnrollEnabled {
-		return unprocessableEntityError(ErrorCodeMFAEnrollDisabled, "mfa enroll is disabled for sms")
+		return unprocessableEntityError(ErrorCodeMFASMSEnrollDisabled, "mfa enroll is disabled for sms")
 	}
 	if params.PhoneNumber == "" {
 		return badRequestError(ErrorCodeValidationFailed, "Phone number required to enroll SMS factor")
@@ -160,7 +160,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	if params.FactorType == models.TOTP {
 		if !config.MFA.TOTP.EnrollEnabled {
-			return unprocessableEntityError(ErrorCodeMFAEnrollDisabled, "MFA enroll is not enabled for TOTP Factors")
+			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA enroll is not enabled for TOTP Factors")
 		}
 	}
 
@@ -288,7 +288,8 @@ func (a *API) challengeSMSFactor(w http.ResponseWriter, r *http.Request, user *m
 		input := hooks.SendSMSInput{
 			User: user,
 			SMS: hooks.SMS{
-				OTP: otp,
+				OTP:     otp,
+				SMSType: "mfa",
 			},
 		}
 		output := hooks.SendSMSOutput{}
@@ -368,7 +369,7 @@ func (a *API) verifySMSFactor(w http.ResponseWriter, r *http.Request, user *mode
 	config := a.config
 	db := a.db.WithContext(ctx)
 	if !config.MFA.SMS.VerifyEnabled {
-		return unprocessableEntityError(ErrorCodeMFAVerifyDisabled, "MFA verification is disabled for sms factors")
+		return unprocessableEntityError(ErrorCodeMFASMSVerifyDisabled, "MFA verification is disabled for sms factors")
 	}
 	currentIP := utilities.GetIPAddress(r)
 
@@ -489,7 +490,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return a.verifySMSFactor(w, r, user, factor, params)
 	}
 	if !config.MFA.TOTP.VerifyEnabled {
-		return unprocessableEntityError(ErrorCodeMFAVerifyDisabled, "mfa verification is disabled for TOTP factors")
+		return unprocessableEntityError(ErrorCodeMFATOTPVerifyDisabled, "MFA verification is disabled for TOTP factors")
 	}
 	currentIP := utilities.GetIPAddress(r)
 

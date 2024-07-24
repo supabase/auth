@@ -34,7 +34,8 @@ type HookOutput interface {
 
 // TODO(joel): Move this to phone package
 type SMS struct {
-	OTP string `json:"otp,omitempty"`
+	OTP     string `json:"otp,omitempty"`
+	SMSType string `json:"sms_type,omitempty"`
 }
 
 // #nosec
