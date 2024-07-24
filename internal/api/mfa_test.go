@@ -16,6 +16,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/pquerna/otp"
+	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
@@ -239,15 +240,69 @@ func (ts *MFATestSuite) TestMultipleEnrollsCleanupExpiredFactors() {
 }
 
 func (ts *MFATestSuite) TestChallengeFactor() {
-	// TODO: Challenge SMS Factor with and without channel
 	f := ts.TestUser.Factors[0]
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 	w := performChallengeFlow(ts, f.ID, token)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
+func (ts *MFATestSuite) TestChallengeSMSFactor() {
+	// Challenge should still work with phone provider disabled
+	ts.Config.External.Phone.Enabled = false
+	ts.Config.Hook.SendSMS.Enabled = true
+	ts.Config.Hook.SendSMS.URI = "pg-functions://postgres/auth/send_sms_mfa_mock"
+
+	ts.Config.MFA.SMS.MaxFrequency = 0 * time.Second
+
+	require.NoError(ts.T(), ts.Config.Hook.SendSMS.PopulateExtensibilityPoint())
+	require.NoError(ts.T(), ts.API.db.RawQuery(`
+        create or replace function send_sms_mfa_mock(input jsonb)
+        returns json as $$
+        begin
+            return input;
+       end; $$ language plpgsql;`).Exec())
+	// We still need a mock provider for hooks to work right now for backward compatibility
+	// The WhatsApp channel is only valid when twilio or twilio verify is set.
+	ts.Config.Sms.Provider = "twilio"
+	ts.Config.Sms.Twilio = conf.TwilioProviderConfiguration{
+		AccountSid:        "test_account_sid",
+		AuthToken:         "test_auth_token",
+		MessageServiceSid: "test_message_service_id",
+	}
+
+	phoneNumber := "+1234567"
+	friendlyName := "testchallengesmsfactor"
+
+	f := models.NewSMSFactor(ts.TestUser, phoneNumber, friendlyName, models.SMS, models.FactorStateUnverified)
+	require.NoError(ts.T(), ts.API.db.Create(f), "Error creating new SMS factor")
+	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
+
+	var cases = []struct {
+		desc         string
+		channel      string
+		expectedCode int
+	}{
+		{
+			desc:         "SMS Channel",
+			channel:      sms_provider.SMSProvider,
+			expectedCode: http.StatusOK,
+		},
+		{
+			desc:         "WhatsApp Channel",
+			channel:      sms_provider.WhatsappProvider,
+			expectedCode: http.StatusOK,
+		},
+	}
+
+	for _, tc := range cases {
+		ts.Run(tc.desc, func() {
+			w := performSMSChallengeFlow(ts, f.ID, token, tc.channel)
+			require.Equal(ts.T(), tc.expectedCode, w.Code, tc.desc)
+		})
+	}
+}
+
 func (ts *MFATestSuite) TestMFAVerifyFactor() {
-	// TODO: Add case for SMS factor  and add three case - valid code, invalid code, and valid /verify
 	cases := []struct {
 		desc             string
 		validChallenge   bool
@@ -309,7 +364,6 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			var sharedSecret string
 
 			if v.factorType == models.TOTP {
-				// TODO: Update this section so the tests pass
 				friendlyName := uuid.Must(uuid.NewV4()).String()
 				f = models.NewFactor(ts.TestUser, friendlyName, models.TOTP, models.FactorStateUnverified)
 				sharedSecret = ts.TestOTPKey.Secret()
@@ -347,7 +401,6 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			}
 
 			require.NoError(ts.T(), ts.API.db.Create(c), "Error saving new test challenge")
-
 			if !v.validChallenge {
 				// Set challenge creation so that it has expired in present time.
 				newCreatedAt := time.Now().UTC().Add(-1 * time.Second * time.Duration(ts.Config.MFA.ChallengeExpiryDuration+1))
@@ -588,6 +641,21 @@ func performVerifyFlow(ts *MFATestSuite, challengeID, factorID uuid.UUID, token 
 
 func performChallengeFlow(ts *MFATestSuite, factorID uuid.UUID, token string) *httptest.ResponseRecorder {
 	var buffer bytes.Buffer
+	w := ServeAuthenticatedRequest(ts, http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), token, buffer)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	return w
+
+}
+
+func performSMSChallengeFlow(ts *MFATestSuite, factorID uuid.UUID, token, channel string) *httptest.ResponseRecorder {
+	params := ChallengeFactorParams{
+		Channel: channel,
+	}
+	var buffer bytes.Buffer
+	if err := json.NewEncoder(&buffer).Encode(params); err != nil {
+		panic(err) // handle the error appropriately in real code
+	}
+
 	w := ServeAuthenticatedRequest(ts, http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), token, buffer)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 	return w

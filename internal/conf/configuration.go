@@ -113,9 +113,10 @@ type MFAFactorTypeConfiguration struct {
 
 type SMSFactorTypeConfiguration struct {
 	MFAFactorTypeConfiguration
-	SMSTemplate  *template.Template `json:"-"`
 	OtpLength    int                `json:"otp_length" split_words:"true"`
+	SMSTemplate  *template.Template `json:"-"`
 	MaxFrequency time.Duration      `json:"max_frequency" split_words:"true"`
+	Template     string             `json:"template"`
 }
 
 // MFAConfiguration holds all the MFA related Configuration
@@ -708,6 +709,19 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		}
 		config.Sms.SMSTemplate = template
 	}
+
+	if config.MFA.SMS.EnrollEnabled || config.MFA.SMS.VerifyEnabled {
+		SMSTemplate := config.MFA.SMS.Template
+		if SMSTemplate == "" {
+			SMSTemplate = "Your code is {{ .Code }}"
+		}
+		template, err := template.New("").Parse(SMSTemplate)
+		if err != nil {
+			return nil, err
+		}
+		config.MFA.SMS.SMSTemplate = template
+	}
+
 	return config, nil
 }
 
@@ -865,6 +879,12 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.MFA.FactorExpiryDuration < defaultFactorExpiryDuration {
 		config.MFA.FactorExpiryDuration = defaultFactorExpiryDuration
 	}
+
+	if config.MFA.SMS.OtpLength == 0 || config.MFA.SMS.OtpLength < 6 || config.MFA.SMS.OtpLength > 10 {
+		// 6-digit otp by default
+		config.MFA.SMS.OtpLength = 6
+	}
+
 	if config.External.FlowStateExpiryDuration < defaultFlowStateExpiryDuration {
 		config.External.FlowStateExpiryDuration = defaultFlowStateExpiryDuration
 	}

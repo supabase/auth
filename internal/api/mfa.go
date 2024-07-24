@@ -284,7 +284,6 @@ func (a *API) challengeSMSFactor(w http.ResponseWriter, r *http.Request, user *m
 	if err != nil {
 		return internalServerError("error generating sms template").WithInternalError(err)
 	}
-	// TODO: Refactor this into a function together with phone maybe.
 	if config.Hook.SendSMS.Enabled {
 		input := hooks.SendSMSInput{
 			User: user,
@@ -369,8 +368,7 @@ func (a *API) verifySMSFactor(w http.ResponseWriter, r *http.Request, user *mode
 	config := a.config
 	db := a.db.WithContext(ctx)
 	if !config.MFA.SMS.VerifyEnabled {
-		// TODO: Replace with appropriate factor type
-		return unprocessableEntityError(ErrorCodeMFAVerifyDisabled, "mfa verification is disabled for sms factors")
+		return unprocessableEntityError(ErrorCodeMFAVerifyDisabled, "MFA verification is disabled for sms factors")
 	}
 	currentIP := utilities.GetIPAddress(r)
 
@@ -389,6 +387,7 @@ func (a *API) verifySMSFactor(w http.ResponseWriter, r *http.Request, user *mode
 		return unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch")
 	}
 
+	// TODO: Maybe highlight that we may need to decouple Challenge expiry from SMS OTP Expiry in future
 	if challenge.HasExpired(config.MFA.ChallengeExpiryDuration) {
 		if err := db.Destroy(challenge); err != nil {
 			return internalServerError("Database error deleting challenge").WithInternalError(err)
