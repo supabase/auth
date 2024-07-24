@@ -710,7 +710,7 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.JWT.Exp = 3600
 	}
 
-	if config.JWT.Keys == nil {
+	if config.JWT.Keys == nil || len(config.JWT.Keys) == 0 {
 		// transform the secret into a JWK for consistency
 		bytes, err := base64.StdEncoding.DecodeString(config.JWT.Secret)
 		if err != nil {
