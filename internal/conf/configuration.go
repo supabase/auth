@@ -749,7 +749,7 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.JWT.ValidMethods == nil {
 		config.JWT.ValidMethods = []string{}
 		for _, key := range config.JWT.Keys {
-			alg := GetSigningAlg(&key.PublicKey)
+			alg := GetSigningAlg(key.PublicKey)
 			config.JWT.ValidMethods = append(config.JWT.ValidMethods, alg.Alg())
 		}
 

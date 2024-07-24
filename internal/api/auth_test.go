@@ -98,7 +98,7 @@ func (ts *AuthTestSuite) TestParseJWTClaims() {
 
 			userJwtToken := jwt.NewWithClaims(signingMethod, userClaims)
 			require.NoError(ts.T(), err)
-			userJwtToken.Header["kid"] = (*jwk).KeyID()
+			userJwtToken.Header["kid"] = jwk.KeyID()
 			userJwt, err := userJwtToken.SignedString(signingKey)
 			require.NoError(ts.T(), err)
 

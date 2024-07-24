@@ -379,7 +379,7 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 	}
 
 	if _, ok := token.Header["kid"]; !ok {
-		kid := (*signingJwk).KeyID()
+		kid := signingJwk.KeyID()
 		token.Header["kid"] = kid
 	}
 

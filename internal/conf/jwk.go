@@ -78,18 +78,18 @@ func (j *JwtKeysDecoder) Validate() error {
 	return nil
 }
 
-func GetSigningJwk(config *JWTConfiguration) (*jwk.Key, error) {
+func GetSigningJwk(config *JWTConfiguration) (jwk.Key, error) {
 	for _, key := range config.Keys {
 		if key.PrivateKey.KeyUsage() == "enc" {
-			return &key.PrivateKey, nil
+			return key.PrivateKey, nil
 		}
 	}
 	return nil, fmt.Errorf("no signing key found")
 }
 
-func GetSigningKey(k *jwk.Key) (any, error) {
+func GetSigningKey(k jwk.Key) (any, error) {
 	var key any
-	switch (*k).KeyType() {
+	switch k.KeyType() {
 	case jwa.OctetSeq:
 		key = []byte{}
 	case jwa.EC:
@@ -102,18 +102,18 @@ func GetSigningKey(k *jwk.Key) (any, error) {
 	case jwa.InvalidKeyType:
 		return nil, jwt.ErrInvalidKeyType
 	}
-	if err := (*k).Raw(&key); err != nil {
+	if err := k.Raw(&key); err != nil {
 		return nil, err
 	}
 	return key, nil
 }
 
-func GetSigningAlg(k *jwk.Key) jwt.SigningMethod {
+func GetSigningAlg(k jwk.Key) jwt.SigningMethod {
 	if k == nil {
 		return jwt.SigningMethodHS256
 	}
 
-	switch (*k).Algorithm().String() {
+	switch (k).Algorithm().String() {
 	case "RS256":
 		return jwt.SigningMethodRS256
 	case "RS512":
@@ -132,7 +132,7 @@ func GetSigningAlg(k *jwk.Key) jwt.SigningMethod {
 
 func FindPublicKeyByKid(kid string, config *JWTConfiguration) (any, error) {
 	if k, ok := config.Keys[kid]; ok {
-		key, err := GetSigningKey(&k.PublicKey)
+		key, err := GetSigningKey(k.PublicKey)
 		if err != nil {
 			return nil, err
 		}
