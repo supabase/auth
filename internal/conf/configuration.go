@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gobwas/glob"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -726,12 +727,12 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 			}
 		}
 		if privKey.Algorithm().String() == "" {
-			if err := privKey.Set(jwk.AlgorithmKey, "HS256"); err != nil {
+			if err := privKey.Set(jwk.AlgorithmKey, jwt.SigningMethodHS256.Name); err != nil {
 				return err
 			}
 		}
-		if privKey.KeyUsage() == "" {
-			if err := privKey.Set(jwk.KeyUsageKey, "enc"); err != nil {
+		if len(privKey.KeyOps()) == 0 {
+			if err := privKey.Set(jwk.KeyOpsKey, jwk.KeyOperationList{jwk.KeyOpSign, jwk.KeyOpVerify}); err != nil {
 				return err
 			}
 		}

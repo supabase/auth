@@ -38,12 +38,11 @@ func (j *JwtKeysDecoder) Decode(value string) error {
 			return err
 		}
 
-		// all public keys will be used for signature verification
-		if pubJwk.KeyUsage() == "enc" {
-			if err := pubJwk.Set(jwk.KeyUsageKey, "sig"); err != nil {
-				return err
-			}
+		// ensures that all public keys only have 'verify' as the key_ops
+		if err := pubJwk.Set(jwk.KeyOpsKey, jwk.KeyOperationList{jwk.KeyOpVerify}); err != nil {
+			return err
 		}
+
 		config[pubJwk.KeyID()] = JwkInfo{
 			PublicKey:  pubJwk,
 			PrivateKey: privJwk,
@@ -80,8 +79,10 @@ func (j *JwtKeysDecoder) Validate() error {
 
 func GetSigningJwk(config *JWTConfiguration) (jwk.Key, error) {
 	for _, key := range config.Keys {
-		if key.PrivateKey.KeyUsage() == "enc" {
-			return key.PrivateKey, nil
+		for _, op := range key.PrivateKey.KeyOps() {
+			if op == jwk.KeyOpSign {
+				return key.PrivateKey, nil
+			}
 		}
 	}
 	return nil, fmt.Errorf("no signing key found")
