@@ -1,5 +1,5 @@
 do $$ begin
-    alter type factor_type add value 'sms';
+    alter type {{ index .Options "Namespace" }}.factor_type add value 'sms';
 exception
     when duplicate_object then null;
 end $$;
