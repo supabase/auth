@@ -29,13 +29,13 @@ type EnrollFactorParams struct {
 	FriendlyName string `json:"friendly_name"`
 	FactorType   string `json:"factor_type"`
 	Issuer       string `json:"issuer"`
-	PhoneNumber  string `json:"phone_number"`
+	Phone        string `json:"phone"`
 }
 
 type TOTPObject struct {
-	QRCode string `json:"qr_code"`
-	Secret string `json:"secret"`
-	URI    string `json:"uri"`
+	QRCode string `json:"qr_code,omitempty"`
+	Secret string `json:"secret,omitempty"`
+	URI    string `json:"uri,omitempty"`
 }
 
 type EnrollFactorResponse struct {
@@ -43,7 +43,7 @@ type EnrollFactorResponse struct {
 	Type         string     `json:"type"`
 	FriendlyName string     `json:"friendly_name"`
 	TOTP         TOTPObject `json:"totp,omitempty"`
-	PhoneNumber  string     `json:"phone_number,omitempty"`
+	Phone        string     `json:"phone,omitempty"`
 }
 
 type ChallengeFactorParams struct {
@@ -69,18 +69,17 @@ const (
 	QRCodeGenerationErrorMessage   = "Error generating QR Code"
 )
 
-func (a *API) enrollSMSFactor(w http.ResponseWriter, r *http.Request, user *models.User, session *models.Session, params *EnrollFactorParams) error {
+func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *EnrollFactorParams) error {
 	ctx := r.Context()
 	config := a.config
+	user := getUser(ctx)
+	session := getSession(ctx)
 	db := a.db.WithContext(ctx)
-	if !config.MFA.SMS.EnrollEnabled {
-		return unprocessableEntityError(ErrorCodeMFASMSEnrollDisabled, "mfa enroll is disabled for sms")
-	}
-	if params.PhoneNumber == "" {
+	if params.Phone == "" {
 		return badRequestError(ErrorCodeValidationFailed, "Phone number required to enroll SMS factor")
 	}
 
-	phone, err := validatePhone(params.PhoneNumber)
+	phone, err := validatePhone(params.Phone)
 	if err != nil {
 		return badRequestError(ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
 	}
@@ -99,11 +98,11 @@ func (a *API) enrollSMSFactor(w http.ResponseWriter, r *http.Request, user *mode
 	}
 
 	if factorCount >= int(config.MFA.MaxEnrolledFactors) {
-		return forbiddenError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of verified factors reached, unenroll to continue")
+		return unprocessableEntityError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of verified factors reached, unenroll to continue")
 	}
 
 	if numVerifiedFactors >= config.MFA.MaxVerifiedFactors {
-		return forbiddenError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of verified factors reached, unenroll to continue")
+		return unprocessableEntityError(ErrorCodeTooManyEnrolledMFAFactors, "Maximum number of verified factors reached, unenroll to continue")
 	}
 
 	if numVerifiedFactors > 0 && !session.IsAAL2() {
@@ -131,9 +130,9 @@ func (a *API) enrollSMSFactor(w http.ResponseWriter, r *http.Request, user *mode
 	}
 	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
 		ID:           factor.ID,
-		Type:         models.SMS,
+		Type:         models.Phone,
 		FriendlyName: factor.FriendlyName,
-		PhoneNumber:  *factor.PhoneNumber,
+		Phone:        string(factor.Phone),
 	})
 }
 
@@ -152,16 +151,18 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	if params.FactorType == models.SMS {
-		return a.enrollSMSFactor(w, r, user, session, params)
-	}
-	if params.FactorType != models.TOTP && params.FactorType != models.SMS {
-		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be totp or sms")
-	}
-	if params.FactorType == models.TOTP {
-		if !config.MFA.TOTP.EnrollEnabled {
-			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA enroll is not enabled for TOTP Factors")
+	switch params.FactorType {
+	case models.Phone:
+		if !config.MFA.Phone.EnrollEnabled {
+			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA enroll is disabled for SMS")
 		}
+		return a.enrollPhoneFactor(w, r, params)
+	case models.TOTP:
+		if !config.MFA.TOTP.EnrollEnabled {
+			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA enroll is disabled for TOTP")
+		}
+	default:
+		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be totp or sms")
 	}
 
 	issuer := ""
@@ -257,10 +258,12 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-func (a *API) challengeSMSFactor(w http.ResponseWriter, r *http.Request, user *models.User, factor *models.Factor) error {
+func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
 	db := a.db.WithContext(ctx)
+	user := getUser(ctx)
+	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
 	params := &ChallengeFactorParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
@@ -271,16 +274,24 @@ func (a *API) challengeSMSFactor(w http.ResponseWriter, r *http.Request, user *m
 	if channel == "" {
 		channel = sms_provider.SMSProvider
 	}
+	smsProvider, err := sms_provider.GetSmsProvider(*config)
+	if err != nil {
+		return internalServerError("Failed to get SMS provider").WithInternalError(err)
+	}
 	if !sms_provider.IsValidMessageChannel(channel, config.Sms.Provider) {
 		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 	}
 
-	otp, err := crypto.GenerateOtp(config.MFA.SMS.OtpLength)
+	otp, err := crypto.GenerateOtp(config.MFA.Phone.OtpLength)
 	if err != nil {
 		panic(err)
 	}
-	challenge := factor.CreateSMSChallenge(ipAddress, otp)
-	message, err := generateSMSFromTemplate(config.MFA.SMS.SMSTemplate, otp)
+	fmt.Println(otp)
+	challenge, err := factor.CreateSMSChallenge(ipAddress, otp, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
+	if err != nil {
+		return internalServerError("error creating SMS Challenge")
+	}
+	message, err := generateSMSFromTemplate(config.MFA.Phone.SMSTemplate, otp)
 	if err != nil {
 		return internalServerError("error generating sms template").WithInternalError(err)
 	}
@@ -298,17 +309,13 @@ func (a *API) challengeSMSFactor(w http.ResponseWriter, r *http.Request, user *m
 			return internalServerError("error invoking hook")
 		}
 	} else {
-		if !challenge.SentAt.Add(config.MFA.SMS.MaxFrequency).Before(time.Now()) {
-			return MaxFrequencyLimitError
-		}
-		smsProvider, terr := sms_provider.GetSmsProvider(*config)
-		if terr != nil {
-			return internalServerError("Unable to get SMS provider").WithInternalError(terr)
+		if !challenge.SentAt.Add(config.MFA.Phone.MaxFrequency).Before(time.Now()) {
+			return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(challenge.SentAt, config.MFA.Phone.MaxFrequency))
 		}
 
-		messageID, err := smsProvider.SendMessage(*factor.PhoneNumber, message, channel, otp)
+		messageID, err := smsProvider.SendMessage(string(factor.Phone), message, channel, otp)
 		if err != nil {
-			return internalServerError(fmt.Sprintf("error sending message: %v", messageID)).WithInternalError(err)
+			return internalServerError("error sending message").WithInternalError(err)
 		}
 	}
 	if err := db.Transaction(func(tx *storage.Connection) error {
@@ -339,8 +346,8 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
-	if factor.IsSMSFactor() {
-		return a.challengeSMSFactor(w, r, user, factor)
+	if factor.IsPhoneFactor() {
+		return a.challengePhoneFactor(w, r)
 	}
 	challenge := factor.CreateChallenge(ipAddress)
 	if err := db.Transaction(func(tx *storage.Connection) error {
@@ -364,17 +371,17 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-func (a *API) verifySMSFactor(w http.ResponseWriter, r *http.Request, user *models.User, factor *models.Factor, params *VerifyFactorParams) error {
+func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *VerifyFactorParams) error {
 	ctx := r.Context()
 	config := a.config
+	user := getUser(ctx)
+	factor := getFactor(ctx)
 	db := a.db.WithContext(ctx)
-	if !config.MFA.SMS.VerifyEnabled {
-		return unprocessableEntityError(ErrorCodeMFASMSVerifyDisabled, "MFA verification is disabled for sms factors")
-	}
 	currentIP := utilities.GetIPAddress(r)
 
 	if !factor.IsOwnedBy(user) {
-		return internalServerError(InvalidFactorOwnerErrorMessage)
+		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
+
 	}
 
 	challenge, err := models.FindChallengeByID(db, params.ChallengeID)
@@ -388,14 +395,17 @@ func (a *API) verifySMSFactor(w http.ResponseWriter, r *http.Request, user *mode
 		return unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch")
 	}
 
-	// TODO: Maybe highlight that we may need to decouple Challenge expiry from SMS OTP Expiry in future
 	if challenge.HasExpired(config.MFA.ChallengeExpiryDuration) {
 		if err := db.Destroy(challenge); err != nil {
 			return internalServerError("Database error deleting challenge").WithInternalError(err)
 		}
 		return unprocessableEntityError(ErrorCodeMFAChallengeExpired, "MFA challenge %v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
-	valid := subtle.ConstantTimeCompare([]byte(challenge.OtpCode), []byte(params.Code)) == 1
+	otpCode, shouldReEncrypt, err := challenge.GetOtpCode(config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
+	if err != nil {
+		return internalServerError("Database error verifying MFA TOTP secret").WithInternalError(err)
+	}
+	valid := subtle.ConstantTimeCompare([]byte(otpCode), []byte(params.Code)) == 1
 	if config.Hook.MFAVerificationAttempt.Enabled {
 		input := hooks.MFAVerificationAttemptInput{
 			UserID:     user.ID,
@@ -423,6 +433,15 @@ func (a *API) verifySMSFactor(w http.ResponseWriter, r *http.Request, user *mode
 		}
 	}
 	if !valid {
+		if shouldReEncrypt && config.Security.DBEncryption.Encrypt {
+			if err := challenge.SetOtpCode(otpCode, true, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
+				return err
+			}
+
+			if err := db.UpdateOnly(challenge, "otp_code"); err != nil {
+				return err
+			}
+		}
 		return unprocessableEntityError(ErrorCodeMFAVerificationFailed, "Invalid SMS code entered")
 	}
 
@@ -449,7 +468,7 @@ func (a *API) verifySMSFactor(w http.ResponseWriter, r *http.Request, user *mode
 			return terr
 		}
 
-		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.MFASMS, models.GrantParams{
+		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.MFAPhone, models.GrantParams{
 			FactorID: &factor.ID,
 		})
 		if terr != nil {
@@ -487,12 +506,20 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	if factor.FactorType == models.SMS {
-		return a.verifySMSFactor(w, r, user, factor, params)
+	switch factor.FactorType {
+	case models.Phone:
+		if !config.MFA.Phone.VerifyEnabled {
+			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA verification is disabled for SMS")
+		}
+		return a.verifyPhoneFactor(w, r, params)
+	case models.TOTP:
+		if !config.MFA.TOTP.VerifyEnabled {
+			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA verification is disabled for TOTP")
+		}
+	default:
+		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be totp or sms")
 	}
-	if !config.MFA.TOTP.VerifyEnabled {
-		return unprocessableEntityError(ErrorCodeMFATOTPVerifyDisabled, "MFA verification is disabled for TOTP factors")
-	}
+
 	currentIP := utilities.GetIPAddress(r)
 
 	if !factor.IsOwnedBy(user) {

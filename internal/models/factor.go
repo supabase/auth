@@ -31,7 +31,7 @@ func (factorState FactorState) String() string {
 }
 
 const TOTP = "totp"
-const SMS = "sms"
+const Phone = "phone"
 
 type AuthenticationMethod int
 
@@ -40,7 +40,7 @@ const (
 	PasswordGrant
 	OTP
 	TOTPSignIn
-	MFASMS
+	MFAPhone
 	SSOSAML
 	Recovery
 	Invite
@@ -77,8 +77,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "token_refresh"
 	case Anonymous:
 		return "anonymous"
-	case MFASMS:
-		return "mfa/sms"
+	case MFAPhone:
+		return "mfa/phone"
 	}
 	return ""
 }
@@ -111,23 +111,23 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 	case "token_refresh":
 		return TokenRefresh, nil
 	case "mfa/sms":
-		return MFASMS, nil
+		return MFAPhone, nil
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }
 
 type Factor struct {
-	ID           uuid.UUID   `json:"id" db:"id"`
-	User         User        `json:"-" belongs_to:"user"`
-	UserID       uuid.UUID   `json:"-" db:"user_id"`
-	CreatedAt    time.Time   `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time   `json:"updated_at" db:"updated_at"`
-	Status       string      `json:"status" db:"status"`
-	FriendlyName string      `json:"friendly_name,omitempty" db:"friendly_name"`
-	Secret       string      `json:"-" db:"secret"`
-	FactorType   string      `json:"factor_type" db:"factor_type"`
-	Challenge    []Challenge `json:"-" has_many:"challenges"`
-	PhoneNumber  *string     `json:"phone_number" db:"phone_number"`
+	ID           uuid.UUID          `json:"id" db:"id"`
+	User         User               `json:"-" belongs_to:"user"`
+	UserID       uuid.UUID          `json:"-" db:"user_id"`
+	CreatedAt    time.Time          `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at" db:"updated_at"`
+	Status       string             `json:"status" db:"status"`
+	FriendlyName string             `json:"friendly_name,omitempty" db:"friendly_name"`
+	Secret       string             `json:"-" db:"secret"`
+	FactorType   string             `json:"factor_type" db:"factor_type"`
+	Challenge    []Challenge        `json:"-" has_many:"challenges"`
+	Phone        storage.NullString `json:"phone" db:"phone"`
 }
 
 func (Factor) TableName() string {
@@ -150,7 +150,7 @@ func NewFactor(user *User, friendlyName string, factorType string, state FactorS
 
 func NewSMSFactor(user *User, phone, friendlyName string, factorType string, state FactorState) *Factor {
 	factor := NewFactor(user, friendlyName, factorType, state)
-	factor.PhoneNumber = &phone
+	factor.Phone = storage.NullString(phone)
 	return factor
 }
 
@@ -210,12 +210,14 @@ func (f *Factor) CreateChallenge(ipAddress string) *Challenge {
 	return challenge
 }
 
-func (f *Factor) CreateSMSChallenge(ipAddress string, otpCode string) *Challenge {
+func (f *Factor) CreateSMSChallenge(ipAddress string, otpCode string, encrypt bool, encryptionKeyID, encryptionKey string) (*Challenge, error) {
 	smsChallenge := f.CreateChallenge(ipAddress)
-	smsChallenge.OtpCode = otpCode
+	if err := smsChallenge.SetOtpCode(otpCode, encrypt, encryptionKeyID, encryptionKey); err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	smsChallenge.SentAt = &now
-	return smsChallenge
+	return smsChallenge, nil
 }
 
 // UpdateFriendlyName changes the friendly name
@@ -240,8 +242,8 @@ func (f *Factor) IsTOTPFactor() bool {
 	return f.FactorType == TOTP
 }
 
-func (f *Factor) IsSMSFactor() bool {
-	return f.FactorType == SMS
+func (f *Factor) IsPhoneFactor() bool {
+	return f.FactorType == Phone
 }
 
 func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {

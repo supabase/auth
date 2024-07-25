@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 	"time"
 )
@@ -48,4 +49,32 @@ func (c *Challenge) HasExpired(expiryDuration float64) bool {
 
 func (c *Challenge) GetExpiryTime(expiryDuration float64) time.Time {
 	return c.CreatedAt.Add(time.Second * time.Duration(expiryDuration))
+}
+
+func (c *Challenge) SetOtpCode(otpCode string, encrypt bool, encryptionKeyID, encryptionKey string) error {
+	c.OtpCode = otpCode
+	if encrypt {
+		es, err := crypto.NewEncryptedString(c.ID.String(), []byte(otpCode), encryptionKeyID, encryptionKey)
+		if err != nil {
+			return err
+		}
+
+		c.OtpCode = es.String()
+	}
+	return nil
+
+}
+
+func (c *Challenge) GetOtpCode(decryptionKeys map[string]string, encrypt bool, encryptionKeyID string) (string, bool, error) {
+	if es := crypto.ParseEncryptedString(c.OtpCode); es != nil {
+		bytes, err := es.Decrypt(c.ID.String(), decryptionKeys)
+		if err != nil {
+			return "", false, err
+		}
+
+		return string(bytes), encrypt && es.ShouldReEncrypt(encryptionKeyID), nil
+	}
+
+	return c.OtpCode, encrypt, nil
+
 }

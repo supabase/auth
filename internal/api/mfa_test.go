@@ -114,7 +114,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		friendlyName string
 		factorType   string
 		issuer       string
-		phoneNumber  string
+		phone        string
 		expectedCode int
 	}{
 		{
@@ -122,7 +122,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			friendlyName: alternativeFriendlyName,
 			factorType:   models.TOTP,
 			issuer:       "",
-			phoneNumber:  "",
+			phone:        "",
 			expectedCode: http.StatusOK,
 		},
 		{
@@ -130,7 +130,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			friendlyName: testFriendlyName,
 			factorType:   "invalid_factor",
 			issuer:       ts.TestDomain,
-			phoneNumber:  "",
+			phone:        "",
 			expectedCode: http.StatusBadRequest,
 		},
 		{
@@ -138,7 +138,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			friendlyName: testFriendlyName,
 			factorType:   models.TOTP,
 			issuer:       ts.TestDomain,
-			phoneNumber:  "",
+			phone:        "",
 			expectedCode: http.StatusOK,
 		},
 		{
@@ -146,34 +146,34 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			friendlyName: "",
 			factorType:   models.TOTP,
 			issuer:       ts.TestDomain,
-			phoneNumber:  "",
+			phone:        "",
 			expectedCode: http.StatusOK,
 		},
 		{
-			desc:         "SMS: Enroll with friendly name",
+			desc:         "Phone: Enroll with friendly name",
 			friendlyName: "sms_factor",
-			factorType:   models.SMS,
-			phoneNumber:  "+12345677889",
+			factorType:   models.Phone,
+			phone:        "+12345677889",
 			expectedCode: http.StatusOK,
 		},
 		{
-			desc:         "SMS: Enroll with invalid phone number",
-			friendlyName: "sms_factor",
-			factorType:   models.SMS,
-			phoneNumber:  "+1",
+			desc:         "Phone: Enroll with invalid phone number",
+			friendlyName: "phone_factor",
+			factorType:   models.Phone,
+			phone:        "+1",
 			expectedCode: http.StatusBadRequest,
 		},
 		{
-			desc:         "SMS: Enroll without phone number should return error",
-			friendlyName: "sms_factor_fail",
-			factorType:   models.SMS,
-			phoneNumber:  "",
+			desc:         "Phone: Enroll without phone number should return error",
+			friendlyName: "phone_factor_fail",
+			factorType:   models.Phone,
+			phone:        "",
 			expectedCode: http.StatusBadRequest,
 		},
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			w := performEnrollFlow(ts, token, c.friendlyName, c.factorType, c.issuer, c.phoneNumber, c.expectedCode)
+			w := performEnrollFlow(ts, token, c.friendlyName, c.factorType, c.issuer, c.phone, c.expectedCode)
 
 			factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
 			ts.Require().NoError(err)
@@ -252,7 +252,7 @@ func (ts *MFATestSuite) TestChallengeSMSFactor() {
 	ts.Config.Hook.SendSMS.Enabled = true
 	ts.Config.Hook.SendSMS.URI = "pg-functions://postgres/auth/send_sms_mfa_mock"
 
-	ts.Config.MFA.SMS.MaxFrequency = 0 * time.Second
+	ts.Config.MFA.Phone.MaxFrequency = 0 * time.Second
 
 	require.NoError(ts.T(), ts.Config.Hook.SendSMS.PopulateExtensibilityPoint())
 	require.NoError(ts.T(), ts.API.db.RawQuery(`
@@ -270,10 +270,10 @@ func (ts *MFATestSuite) TestChallengeSMSFactor() {
 		MessageServiceSid: "test_message_service_id",
 	}
 
-	phoneNumber := "+1234567"
+	phone := "+1234567"
 	friendlyName := "testchallengesmsfactor"
 
-	f := models.NewSMSFactor(ts.TestUser, phoneNumber, friendlyName, models.SMS, models.FactorStateUnverified)
+	f := models.NewSMSFactor(ts.TestUser, phone, friendlyName, models.Phone, models.FactorStateUnverified)
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error creating new SMS factor")
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 
@@ -335,21 +335,21 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			desc:             "Invalid: Valid code and expired challenge (SMS)",
 			validChallenge:   false,
 			validCode:        true,
-			factorType:       models.SMS,
+			factorType:       models.Phone,
 			expectedHTTPCode: http.StatusUnprocessableEntity,
 		},
 		{
 			desc:             "Invalid: Invalid code and valid challenge (SMS)",
 			validChallenge:   true,
 			validCode:        false,
-			factorType:       models.SMS,
+			factorType:       models.Phone,
 			expectedHTTPCode: http.StatusUnprocessableEntity,
 		},
 		{
 			desc:             "Valid /verify request (SMS)",
 			validChallenge:   true,
 			validCode:        true,
-			factorType:       models.SMS,
+			factorType:       models.Phone,
 			expectedHTTPCode: http.StatusOK,
 		},
 	}
@@ -369,13 +369,13 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 				sharedSecret = ts.TestOTPKey.Secret()
 				f.Secret = sharedSecret
 				require.NoError(ts.T(), ts.API.db.Create(f), "Error updating new test factor")
-			} else if v.factorType == models.SMS {
+			} else if v.factorType == models.Phone {
 				friendlyName := uuid.Must(uuid.NewV4()).String()
 				numDigits := 10
 				otp, err := crypto.GenerateOtp(numDigits)
 				require.NoError(ts.T(), err)
-				phoneNumber := fmt.Sprintf("+%s", otp)
-				f = models.NewSMSFactor(ts.TestUser, phoneNumber, friendlyName, models.SMS, models.FactorStateUnverified)
+				phone := fmt.Sprintf("+%s", otp)
+				f = models.NewSMSFactor(ts.TestUser, phone, friendlyName, models.Phone, models.FactorStateUnverified)
 				require.NoError(ts.T(), ts.API.db.Create(f), "Error creating new SMS factor")
 			}
 
@@ -390,16 +390,17 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 				// Verify TOTP code
 				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC())
 				require.NoError(ts.T(), err)
-			} else if v.factorType == models.SMS {
+			} else if v.factorType == models.Phone {
 				code = "123456"
-				c = f.CreateSMSChallenge(utilities.GetIPAddress(req), code)
+				c, err = f.CreateSMSChallenge(utilities.GetIPAddress(req), code, ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey)
+				require.NoError(ts.T(), err)
 			}
 
 			if !v.validCode && v.factorType == models.TOTP {
 				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC().Add(-1*time.Minute*time.Duration(1)))
 				require.NoError(ts.T(), err)
 
-			} else if !v.validCode && v.factorType == models.SMS {
+			} else if !v.validCode && v.factorType == models.Phone {
 				invalidSuffix := "1"
 				code += invalidSuffix
 			}
@@ -592,9 +593,9 @@ func performTestSignupAndVerify(ts *MFATestSuite, email, password string, requir
 
 }
 
-func performEnrollFlow(ts *MFATestSuite, token, friendlyName, factorType, issuer string, phoneNumber string, expectedCode int) *httptest.ResponseRecorder {
+func performEnrollFlow(ts *MFATestSuite, token, friendlyName, factorType, issuer string, phone string, expectedCode int) *httptest.ResponseRecorder {
 	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(EnrollFactorParams{FriendlyName: friendlyName, FactorType: factorType, Issuer: issuer, PhoneNumber: phoneNumber}))
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(EnrollFactorParams{FriendlyName: friendlyName, FactorType: factorType, Issuer: issuer, Phone: phone}))
 	w := ServeAuthenticatedRequest(ts, http.MethodPost, "http://localhost/factors/", token, buffer)
 	require.Equal(ts.T(), expectedCode, w.Code)
 	return w
