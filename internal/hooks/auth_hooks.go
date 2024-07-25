@@ -93,7 +93,7 @@ const MinimumViableTokenSchema = `{
       "type": "string"
     }
   },
-  "required": ["aud", "exp", "iat", "sub", "email", "phone", "role", "aal", "session_id"]
+  "required": ["aud", "exp", "iat", "sub", "email", "phone", "role", "aal", "session_id", "is_anonymous"]
 }`
 
 // AccessTokenClaims is a struct thats used for JWT claims
