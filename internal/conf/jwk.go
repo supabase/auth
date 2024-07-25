@@ -1,14 +1,10 @@
 package conf
 
 import (
-	"crypto/ecdh"
-	"crypto/ed25519"
-	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
@@ -80,6 +76,7 @@ func (j *JwtKeysDecoder) Validate() error {
 func GetSigningJwk(config *JWTConfiguration) (jwk.Key, error) {
 	for _, key := range config.Keys {
 		for _, op := range key.PrivateKey.KeyOps() {
+			// the private JWK with key_ops "sign" should be used as the signing key
 			if op == jwk.KeyOpSign {
 				return key.PrivateKey, nil
 			}
@@ -90,19 +87,6 @@ func GetSigningJwk(config *JWTConfiguration) (jwk.Key, error) {
 
 func GetSigningKey(k jwk.Key) (any, error) {
 	var key any
-	switch k.KeyType() {
-	case jwa.OctetSeq:
-		key = []byte{}
-	case jwa.EC:
-		key = ecdh.PrivateKey{}
-	case jwa.RSA:
-		key = rsa.PrivateKey{}
-	case jwa.OKP:
-		// OKP is used for EdDSA keys
-		key = ed25519.PrivateKey{}
-	case jwa.InvalidKeyType:
-		return nil, jwt.ErrInvalidKeyType
-	}
 	if err := k.Raw(&key); err != nil {
 		return nil, err
 	}
