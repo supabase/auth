@@ -206,7 +206,9 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Email != "" && params.Email != user.GetEmail() {
-			if config.Mailer.Autoconfirm {
+			if user.IsAnonymous && config.Mailer.Autoconfirm {
+				// anonymous users can add an email with automatic confirmation, which is similar to signing up
+				// permanent users always need to verify their email address when changing it
 				user.EmailChange = params.Email
 				if _, terr := a.emailChangeVerify(r, tx, &VerifyParams{
 					Type:  mailer.EmailChangeVerification,
