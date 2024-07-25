@@ -398,9 +398,10 @@ func (a *API) verifySMSFactor(w http.ResponseWriter, r *http.Request, user *mode
 	valid := subtle.ConstantTimeCompare([]byte(challenge.OtpCode), []byte(params.Code)) == 1
 	if config.Hook.MFAVerificationAttempt.Enabled {
 		input := hooks.MFAVerificationAttemptInput{
-			UserID:   user.ID,
-			FactorID: factor.ID,
-			Valid:    valid,
+			UserID:     user.ID,
+			FactorID:   factor.ID,
+			FactorType: factor.FactorType,
+			Valid:      valid,
 		}
 
 		output := hooks.MFAVerificationAttemptOutput{}
