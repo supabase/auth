@@ -13,4 +13,4 @@ alter table {{ index .Options "Namespace" }}.mfa_challenges add column if not ex
 
 create unique index unique_verified_phone_factor on {{ index .Options "Namespace" }}.mfa_factors (user_id, phone) where status = 'verified';
 
-alter table {{ index .Options "Namespace" }}.mfa_factors add constraint check_phone_required_for_sms check (factor_type != 'phone' or (phone is not null and phone != ''));
+alter table {{ index .Options "Namespace" }}.mfa_factors add constraint check_phone_number_required_for_phone_factor check (factor_type != 'phone' or (phone is not null and phone != ''));

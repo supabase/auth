@@ -210,14 +210,14 @@ func (f *Factor) CreateChallenge(ipAddress string) *Challenge {
 	return challenge
 }
 
-func (f *Factor) CreateSMSChallenge(ipAddress string, otpCode string, encrypt bool, encryptionKeyID, encryptionKey string) (*Challenge, error) {
-	smsChallenge := f.CreateChallenge(ipAddress)
-	if err := smsChallenge.SetOtpCode(otpCode, encrypt, encryptionKeyID, encryptionKey); err != nil {
+func (f *Factor) CreatePhoneChallenge(ipAddress string, otpCode string, encrypt bool, encryptionKeyID, encryptionKey string) (*Challenge, error) {
+	phoneChallenge := f.CreateChallenge(ipAddress)
+	if err := phoneChallenge.SetOtpCode(otpCode, encrypt, encryptionKeyID, encryptionKey); err != nil {
 		return nil, err
 	}
 	now := time.Now()
-	smsChallenge.SentAt = &now
-	return smsChallenge, nil
+	phoneChallenge.SentAt = &now
+	return phoneChallenge, nil
 }
 
 // UpdateFriendlyName changes the friendly name

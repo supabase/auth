@@ -392,7 +392,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 				require.NoError(ts.T(), err)
 			} else if v.factorType == models.Phone {
 				code = "123456"
-				c, err = f.CreateSMSChallenge(utilities.GetIPAddress(req), code, ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey)
+				c, err = f.CreatePhoneChallenge(utilities.GetIPAddress(req), code, ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey)
 				require.NoError(ts.T(), err)
 			}
 
