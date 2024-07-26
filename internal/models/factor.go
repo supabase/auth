@@ -297,7 +297,7 @@ func (f *Factor) FindLatestUnexpiredChallenge(tx *storage.Connection, expiryDura
 		First(&challenge)
 
 	if err != nil && errors.Cause(err) == sql.ErrNoRows {
-		return nil, FactorNotFoundError{}
+		return nil, ChallengeNotFoundError{}
 	} else if err != nil {
 		return nil, err
 	}
