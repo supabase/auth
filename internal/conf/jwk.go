@@ -16,7 +16,6 @@ type JwkInfo struct {
 }
 
 // Decode implements the Decoder interface
-// which transforms the keys stored as der binary strings into jwks
 func (j *JwtKeysDecoder) Decode(value string) error {
 	data := make([]json.RawMessage, 0)
 	if err := json.Unmarshal([]byte(value), &data); err != nil {
@@ -61,9 +60,10 @@ func (j *JwtKeysDecoder) Validate() error {
 	// Instead, it checks for things such as the _presence_ of some required fields,
 	// or if certain keys' values are of particular length.
 	//
-	// Note that depending on th underlying key type, use of this method requires
+	// Note that depending on the underlying key type, use of this method requires
 	// that multiple fields in the key are properly populated. For example, an EC
 	// key's "x", "y" fields cannot be validated unless the "crv" field is populated first.
+	signingKeys := []jwk.Key{}
 	for _, key := range *j {
 		if err := key.PrivateKey.Validate(); err != nil {
 			return err
@@ -74,7 +74,22 @@ func (j *JwtKeysDecoder) Validate() error {
 				return err
 			}
 		}
+
+		for _, op := range key.PrivateKey.KeyOps() {
+			if op == jwk.KeyOpSign {
+				signingKeys = append(signingKeys, key.PrivateKey)
+				break
+			}
+		}
 	}
+
+	switch {
+	case len(signingKeys) == 0:
+		return fmt.Errorf("no signing key detected")
+	case len(signingKeys) > 1:
+		return fmt.Errorf("multiple signing keys detected, only 1 signing key is supported")
+	}
+
 	return nil
 }
 
