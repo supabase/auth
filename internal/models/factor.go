@@ -293,7 +293,7 @@ func (f *Factor) FindLatestUnexpiredChallenge(tx *storage.Connection, expiryDura
 	var challenge Challenge
 
 	err := tx.Where("sent_at + interval '1 second' * ? > ?", expiryDuration, now).
-		Order("sent_at asc").
+		Order("sent_at desc").
 		First(&challenge)
 
 	if err != nil && errors.Cause(err) == sql.ErrNoRows {
