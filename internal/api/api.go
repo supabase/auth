@@ -116,6 +116,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	}
 
 	r.Get("/health", api.HealthCheck)
+	r.Get("/.well-known/jwks.json", api.Jwks)
 
 	r.Route("/callback", func(r *router) {
 		r.Use(api.isValidExternalHost)

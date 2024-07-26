@@ -350,6 +350,7 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 	}
 
 	var token *jwt.Token
+	var gotrueClaims jwt.Claims = claims
 	if config.Hook.CustomAccessToken.Enabled {
 		input := hooks.CustomAccessTokenInput{
 			UserID:               user.ID,
@@ -363,25 +364,32 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		if err != nil {
 			return "", 0, err
 		}
-		goTrueClaims := jwt.MapClaims(output.Claims)
-
-		token = jwt.NewWithClaims(jwt.SigningMethodHS256, goTrueClaims)
-
-	} else {
-		token = jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		gotrueClaims = jwt.MapClaims(output.Claims)
 	}
 
-	if config.JWT.KeyID != "" {
-		if token.Header == nil {
-			token.Header = make(map[string]interface{})
-		}
-
-		token.Header["kid"] = config.JWT.KeyID
+	signingJwk, err := conf.GetSigningJwk(&config.JWT)
+	if err != nil {
+		return "", 0, err
 	}
 
-	// this serializes the aud claim was a string
+	signingMethod := conf.GetSigningAlg(signingJwk)
+	token = jwt.NewWithClaims(signingMethod, gotrueClaims)
+	if token.Header == nil {
+		token.Header = make(map[string]interface{})
+	}
+
+	if _, ok := token.Header["kid"]; !ok {
+		kid := signingJwk.KeyID()
+		token.Header["kid"] = kid
+	}
+
+	// this serializes the aud claim to a string
 	jwt.MarshalSingleStringAsArray = false
-	signed, err := token.SignedString([]byte(config.JWT.Secret))
+	signingKey, err := conf.GetSigningKey(signingJwk)
+	if err != nil {
+		return "", 0, err
+	}
+	signed, err := token.SignedString(signingKey)
 	if err != nil {
 		return "", 0, err
 	}

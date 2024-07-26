@@ -13,8 +13,10 @@ import (
 	"time"
 
 	"github.com/gobwas/glob"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
 const defaultMinPasswordLength int = 6
@@ -92,14 +94,16 @@ func (c *DBConfiguration) Validate() error {
 
 // JWTConfiguration holds all the JWT related configuration.
 type JWTConfiguration struct {
-	Secret           string   `json:"secret" required:"true"`
-	Exp              int      `json:"exp"`
-	Aud              string   `json:"aud"`
-	AdminGroupName   string   `json:"admin_group_name" split_words:"true"`
-	AdminRoles       []string `json:"admin_roles" split_words:"true"`
-	DefaultGroupName string   `json:"default_group_name" split_words:"true"`
-	Issuer           string   `json:"issuer"`
-	KeyID            string   `json:"key_id" split_words:"true"`
+	Secret           string         `json:"secret" required:"true"`
+	Exp              int            `json:"exp"`
+	Aud              string         `json:"aud"`
+	AdminGroupName   string         `json:"admin_group_name" split_words:"true"`
+	AdminRoles       []string       `json:"admin_roles" split_words:"true"`
+	DefaultGroupName string         `json:"default_group_name" split_words:"true"`
+	Issuer           string         `json:"issuer"`
+	KeyID            string         `json:"key_id" split_words:"true"`
+	Keys             JwtKeysDecoder `json:"keys"`
+	ValidMethods     []string       `json:"-"`
 }
 
 // MFAConfiguration holds all the MFA related Configuration
@@ -707,6 +711,54 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.JWT.Exp = 3600
 	}
 
+	if config.JWT.Keys == nil || len(config.JWT.Keys) == 0 {
+		// transform the secret into a JWK for consistency
+		bytes, err := base64.StdEncoding.DecodeString(config.JWT.Secret)
+		if err != nil {
+			bytes = []byte(config.JWT.Secret)
+		}
+		privKey, err := jwk.FromRaw(bytes)
+		if err != nil {
+			return err
+		}
+		if config.JWT.KeyID != "" {
+			if err := privKey.Set(jwk.KeyIDKey, config.JWT.KeyID); err != nil {
+				return err
+			}
+		}
+		if privKey.Algorithm().String() == "" {
+			if err := privKey.Set(jwk.AlgorithmKey, jwt.SigningMethodHS256.Name); err != nil {
+				return err
+			}
+		}
+		if err := privKey.Set(jwk.KeyUsageKey, "sig"); err != nil {
+			return err
+		}
+		if len(privKey.KeyOps()) == 0 {
+			if err := privKey.Set(jwk.KeyOpsKey, jwk.KeyOperationList{jwk.KeyOpSign, jwk.KeyOpVerify}); err != nil {
+				return err
+			}
+		}
+		pubKey, err := privKey.PublicKey()
+		if err != nil {
+			return err
+		}
+		config.JWT.Keys = make(JwtKeysDecoder)
+		config.JWT.Keys[config.JWT.KeyID] = JwkInfo{
+			PublicKey:  pubKey,
+			PrivateKey: privKey,
+		}
+	}
+
+	if config.JWT.ValidMethods == nil {
+		config.JWT.ValidMethods = []string{}
+		for _, key := range config.JWT.Keys {
+			alg := GetSigningAlg(key.PublicKey)
+			config.JWT.ValidMethods = append(config.JWT.ValidMethods, alg.Alg())
+		}
+
+	}
+
 	if config.Mailer.Autoconfirm && config.Mailer.AllowUnverifiedEmailSignIns {
 		return errors.New("cannot enable both GOTRUE_MAILER_AUTOCONFIRM and GOTRUE_MAILER_ALLOW_UNVERIFIED_EMAIL_SIGN_INS")
 	}
@@ -824,6 +876,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Security,
 		&c.Sessions,
 		&c.Hook,
+		&c.JWT.Keys,
 	}
 
 	for _, validatable := range validatables {
