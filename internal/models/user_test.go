@@ -85,7 +85,8 @@ func (ts *UserTestSuite) TestUpdateUserMetadata() {
 func (ts *UserTestSuite) TestFindUserByConfirmationToken() {
 	u := ts.createUser()
 	tokenHash := "test_confirmation_token"
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, ConfirmationToken))
+	_, err := CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, ConfirmationToken)
+	require.NoError(ts.T(), err)
 
 	n, err := FindUserByConfirmationToken(ts.db, tokenHash)
 	require.NoError(ts.T(), err)
@@ -140,7 +141,8 @@ func (ts *UserTestSuite) TestFindUserByID() {
 func (ts *UserTestSuite) TestFindUserByRecoveryToken() {
 	u := ts.createUser()
 	tokenHash := "test_recovery_token"
-	require.NoError(ts.T(), CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, RecoveryToken))
+	_, err := CreateOneTimeToken(ts.db, u.ID, "relates_to not used", tokenHash, RecoveryToken)
+	require.NoError(ts.T(), err)
 
 	n, err := FindUserByRecoveryToken(ts.db, tokenHash)
 	require.NoError(ts.T(), err)

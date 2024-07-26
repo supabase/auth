@@ -33,27 +33,19 @@ type User struct {
 	Phone            storage.NullString `json:"phone" db:"phone"`
 	PhoneConfirmedAt *time.Time         `json:"phone_confirmed_at,omitempty" db:"phone_confirmed_at"`
 
-	ConfirmationToken  string     `json:"-" db:"confirmation_token"`
 	ConfirmationSentAt *time.Time `json:"confirmation_sent_at,omitempty" db:"confirmation_sent_at"`
 
 	// For backward compatibility only. Use EmailConfirmedAt or PhoneConfirmedAt instead.
-	ConfirmedAt *time.Time `json:"confirmed_at,omitempty" db:"confirmed_at" rw:"r"`
-
-	RecoveryToken  string     `json:"-" db:"recovery_token"`
+	ConfirmedAt    *time.Time `json:"confirmed_at,omitempty" db:"confirmed_at" rw:"r"`
 	RecoverySentAt *time.Time `json:"recovery_sent_at,omitempty" db:"recovery_sent_at"`
 
-	EmailChangeTokenCurrent  string     `json:"-" db:"email_change_token_current"`
-	EmailChangeTokenNew      string     `json:"-" db:"email_change_token_new"`
+	ReauthenticationSentAt *time.Time `json:"reauthentication_sent_at,omitempty" db:"reauthentication_sent_at"`
+
 	EmailChange              string     `json:"new_email,omitempty" db:"email_change"`
 	EmailChangeSentAt        *time.Time `json:"email_change_sent_at,omitempty" db:"email_change_sent_at"`
 	EmailChangeConfirmStatus int        `json:"-" db:"email_change_confirm_status"`
-
-	PhoneChangeToken  string     `json:"-" db:"phone_change_token"`
-	PhoneChange       string     `json:"new_phone,omitempty" db:"phone_change"`
-	PhoneChangeSentAt *time.Time `json:"phone_change_sent_at,omitempty" db:"phone_change_sent_at"`
-
-	ReauthenticationToken  string     `json:"-" db:"reauthentication_token"`
-	ReauthenticationSentAt *time.Time `json:"reauthentication_sent_at,omitempty" db:"reauthentication_sent_at"`
+	PhoneChange              string     `json:"new_phone,omitempty" db:"phone_change"`
+	PhoneChangeSentAt        *time.Time `json:"phone_change_sent_at,omitempty" db:"phone_change_sent_at"`
 
 	LastSignInAt *time.Time `json:"last_sign_in_at,omitempty" db:"last_sign_in_at"`
 
@@ -70,6 +62,8 @@ type User struct {
 	IsAnonymous bool       `json:"is_anonymous" db:"is_anonymous"`
 
 	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
+
+	OneTimeTokens []OneTimeToken `json:"-" has_many:"one_time_tokens"`
 }
 
 func NewUserWithPasswordHash(phone, email, passwordHash, aud string, userData map[string]interface{}) (*User, error) {
@@ -347,19 +341,13 @@ func (u *User) SetPassword(ctx context.Context, password string, encrypt bool, e
 // UpdatePassword updates the user's password. Use SetPassword outside of a transaction first!
 func (u *User) UpdatePassword(tx *storage.Connection, sessionID *uuid.UUID) error {
 	// These need to be reset because password change may mean the user no longer trusts the actions performed by the previous password.
-	u.ConfirmationToken = ""
 	u.ConfirmationSentAt = nil
-	u.RecoveryToken = ""
 	u.RecoverySentAt = nil
-	u.EmailChangeTokenCurrent = ""
-	u.EmailChangeTokenNew = ""
 	u.EmailChangeSentAt = nil
-	u.PhoneChangeToken = ""
 	u.PhoneChangeSentAt = nil
-	u.ReauthenticationToken = ""
 	u.ReauthenticationSentAt = nil
 
-	if err := tx.UpdateOnly(u, "encrypted_password", "confirmation_token", "confirmation_sent_at", "recovery_token", "recovery_sent_at", "email_change_token_current", "email_change_token_new", "email_change_sent_at", "phone_change_token", "phone_change_sent_at", "reauthentication_token", "reauthentication_sent_at"); err != nil {
+	if err := tx.UpdateOnly(u, "encrypted_password", "confirmation_sent_at", "recovery_sent_at", "email_change_sent_at", "phone_change_sent_at", "reauthentication_sent_at"); err != nil {
 		return err
 	}
 
@@ -421,11 +409,6 @@ func (u *User) Authenticate(ctx context.Context, tx *storage.Connection, passwor
 
 // ConfirmReauthentication resets the reauthentication token
 func (u *User) ConfirmReauthentication(tx *storage.Connection) error {
-	u.ReauthenticationToken = ""
-	if err := tx.UpdateOnly(u, "reauthentication_token"); err != nil {
-		return err
-	}
-
 	if err := ClearAllOneTimeTokensForUser(tx, u.ID); err != nil {
 		return err
 	}
@@ -435,11 +418,10 @@ func (u *User) ConfirmReauthentication(tx *storage.Connection) error {
 
 // Confirm resets the confimation token and sets the confirm timestamp
 func (u *User) Confirm(tx *storage.Connection) error {
-	u.ConfirmationToken = ""
 	now := time.Now()
 	u.EmailConfirmedAt = &now
 
-	if err := tx.UpdateOnly(u, "confirmation_token", "email_confirmed_at"); err != nil {
+	if err := tx.UpdateOnly(u, "email_confirmed_at"); err != nil {
 		return err
 	}
 
@@ -452,10 +434,9 @@ func (u *User) Confirm(tx *storage.Connection) error {
 
 // ConfirmPhone resets the confimation token and sets the confirm timestamp
 func (u *User) ConfirmPhone(tx *storage.Connection) error {
-	u.ConfirmationToken = ""
 	now := time.Now()
 	u.PhoneConfirmedAt = &now
-	if err := tx.UpdateOnly(u, "confirmation_token", "phone_confirmed_at"); err != nil {
+	if err := tx.UpdateOnly(u, "phone_confirmed_at"); err != nil {
 		return nil
 	}
 
@@ -473,16 +454,12 @@ func (u *User) ConfirmEmailChange(tx *storage.Connection, status int) error {
 
 	u.Email = storage.NullString(email)
 	u.EmailChange = ""
-	u.EmailChangeTokenCurrent = ""
-	u.EmailChangeTokenNew = ""
 	u.EmailChangeConfirmStatus = status
 
 	if err := tx.UpdateOnly(
 		u,
 		"email",
 		"email_change",
-		"email_change_token_current",
-		"email_change_token_new",
 		"email_change_confirm_status",
 	); err != nil {
 		return err
@@ -524,14 +501,12 @@ func (u *User) ConfirmPhoneChange(tx *storage.Connection) error {
 
 	u.Phone = storage.NullString(phone)
 	u.PhoneChange = ""
-	u.PhoneChangeToken = ""
 	u.PhoneConfirmedAt = &now
 
 	if err := tx.UpdateOnly(
 		u,
 		"phone",
 		"phone_change",
-		"phone_change_token",
 		"phone_confirmed_at",
 	); err != nil {
 		return err
@@ -564,11 +539,6 @@ func (u *User) ConfirmPhoneChange(tx *storage.Connection) error {
 
 // Recover resets the recovery token
 func (u *User) Recover(tx *storage.Connection) error {
-	u.RecoveryToken = ""
-	if err := tx.UpdateOnly(u, "recovery_token"); err != nil {
-		return err
-	}
-
 	return ClearAllOneTimeTokensForUser(tx, u.ID)
 }
 
@@ -817,11 +787,6 @@ func (u *User) SoftDeleteUser(tx *storage.Connection) error {
 	u.EmailChange = obfuscateEmail(u, u.EmailChange)
 	u.PhoneChange = obfuscatePhone(u, u.PhoneChange)
 	u.EncryptedPassword = nil
-	u.ConfirmationToken = ""
-	u.RecoveryToken = ""
-	u.EmailChangeTokenCurrent = ""
-	u.EmailChangeTokenNew = ""
-	u.PhoneChangeToken = ""
 
 	// set deleted_at time
 	now := time.Now()
@@ -834,11 +799,6 @@ func (u *User) SoftDeleteUser(tx *storage.Connection) error {
 		"encrypted_password",
 		"email_change",
 		"phone_change",
-		"confirmation_token",
-		"recovery_token",
-		"email_change_token_current",
-		"email_change_token_new",
-		"phone_change_token",
 		"deleted_at",
 	); err != nil {
 		return err
