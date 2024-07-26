@@ -283,11 +283,11 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 	}
 	latestValidChallenge, err := factor.FindLatestUnexpiredChallenge(a.db, config.MFA.ChallengeExpiryDuration)
-	if err != nil && !models.IsNotFoundError(err) {
-		return internalServerError("error finding latest unexpired challenge")
-	}
-
-	if latestValidChallenge != nil && !latestValidChallenge.SentAt.Add(config.MFA.Phone.MaxFrequency).Before(time.Now()) {
+	if err != nil {
+		if !models.IsNotFoundError(err) {
+			return internalServerError("error finding latest unexpired challenge")
+		}
+	} else if latestValidChallenge != nil && !latestValidChallenge.SentAt.Add(config.MFA.Phone.MaxFrequency).Before(time.Now()) {
 		return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(latestValidChallenge.SentAt, config.MFA.Phone.MaxFrequency))
 	}
 
