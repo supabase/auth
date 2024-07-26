@@ -148,7 +148,7 @@ func NewFactor(user *User, friendlyName string, factorType string, state FactorS
 	return factor
 }
 
-func NewSMSFactor(user *User, phone, friendlyName string, factorType string, state FactorState) *Factor {
+func NewPhoneFactor(user *User, phone, friendlyName string, factorType string, state FactorState) *Factor {
 	factor := NewFactor(user, friendlyName, factorType, state)
 	factor.Phone = storage.NullString(phone)
 	return factor

@@ -273,7 +273,7 @@ func (ts *MFATestSuite) TestChallengeSMSFactor() {
 	phone := "+1234567"
 	friendlyName := "testchallengesmsfactor"
 
-	f := models.NewSMSFactor(ts.TestUser, phone, friendlyName, models.Phone, models.FactorStateUnverified)
+	f := models.NewPhoneFactor(ts.TestUser, phone, friendlyName, models.Phone, models.FactorStateUnverified)
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error creating new SMS factor")
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 
@@ -375,7 +375,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 				otp, err := crypto.GenerateOtp(numDigits)
 				require.NoError(ts.T(), err)
 				phone := fmt.Sprintf("+%s", otp)
-				f = models.NewSMSFactor(ts.TestUser, phone, friendlyName, models.Phone, models.FactorStateUnverified)
+				f = models.NewPhoneFactor(ts.TestUser, phone, friendlyName, models.Phone, models.FactorStateUnverified)
 				require.NoError(ts.T(), ts.API.db.Create(f), "Error creating new SMS factor")
 			}
 
