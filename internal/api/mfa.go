@@ -282,6 +282,14 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 	if !sms_provider.IsValidMessageChannel(channel, config.Sms.Provider) {
 		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 	}
+	latestValidChallenge, err := factor.FindLatestUnexpiredChallenge(a.db, config.MFA.ChallengeExpiryDuration)
+	if err != nil && !models.IsNotFoundError(err) {
+		return internalServerError("error finding latest unexpired challenge")
+	}
+
+	if latestValidChallenge != nil && !latestValidChallenge.SentAt.Add(config.MFA.Phone.MaxFrequency).Before(time.Now()) {
+		return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(latestValidChallenge.SentAt, config.MFA.Phone.MaxFrequency))
+	}
 
 	otp, err := crypto.GenerateOtp(config.MFA.Phone.OtpLength)
 	if err != nil {
@@ -291,6 +299,7 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return internalServerError("error creating SMS Challenge")
 	}
+
 	message, err := generateSMSFromTemplate(config.MFA.Phone.SMSTemplate, otp)
 	if err != nil {
 		return internalServerError("error generating sms template").WithInternalError(err)
@@ -309,9 +318,6 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 			return internalServerError("error invoking hook")
 		}
 	} else {
-		if !challenge.SentAt.Add(config.MFA.Phone.MaxFrequency).Before(time.Now()) {
-			return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(challenge.SentAt, config.MFA.Phone.MaxFrequency))
-		}
 
 		// We omit messageID for now, can consider reinstating if there are requests.
 		_, err := smsProvider.SendMessage(string(factor.Phone), message, channel, otp)

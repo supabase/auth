@@ -873,11 +873,17 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.Password.MinLength < defaultMinPasswordLength {
 		config.Password.MinLength = defaultMinPasswordLength
 	}
+
 	if config.MFA.ChallengeExpiryDuration < defaultChallengeExpiryDuration {
 		config.MFA.ChallengeExpiryDuration = defaultChallengeExpiryDuration
 	}
+
 	if config.MFA.FactorExpiryDuration < defaultFactorExpiryDuration {
 		config.MFA.FactorExpiryDuration = defaultFactorExpiryDuration
+	}
+
+	if config.MFA.Phone.MaxFrequency == 0 {
+		config.MFA.Phone.MaxFrequency = 1 * time.Minute
 	}
 
 	if config.MFA.Phone.OtpLength < 6 || config.MFA.Phone.OtpLength > 10 {

@@ -287,3 +287,19 @@ func DeleteExpiredFactors(tx *storage.Connection, validityDuration time.Duration
 	}
 	return nil
 }
+
+func (f *Factor) FindLatestUnexpiredChallenge(tx *storage.Connection, expiryDuration float64) (*Challenge, error) {
+	now := time.Now()
+	var challenge Challenge
+
+	err := tx.Where("sent_at + interval '1 second' * ? > ?", expiryDuration, now).
+		Order("sent_at asc").
+		First(&challenge)
+
+	if err != nil && errors.Cause(err) == sql.ErrNoRows {
+		return nil, FactorNotFoundError{}
+	} else if err != nil {
+		return nil, err
+	}
+	return &challenge, nil
+}
