@@ -69,6 +69,13 @@ func TestJWTConfiguration(t *testing.T) {
 			require.NoError(t, globalConfig.ApplyDefaults())
 			require.NotEmpty(t, globalConfig.JWT.Keys)
 			require.Len(t, globalConfig.JWT.Keys, c.expectedLength)
+			for _, key := range globalConfig.JWT.Keys {
+				// public keys should contain these require claims
+				require.NotNil(t, key.PublicKey.Algorithm())
+				require.NotNil(t, key.PublicKey.KeyID())
+				require.NotNil(t, key.PublicKey.KeyOps())
+				require.Equal(t, "sig", key.PublicKey.KeyUsage())
+			}
 		})
 	}
 }

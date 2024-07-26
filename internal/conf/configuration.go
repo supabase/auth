@@ -731,6 +731,9 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 				return err
 			}
 		}
+		if err := privKey.Set(jwk.KeyUsageKey, "sig"); err != nil {
+			return err
+		}
 		if len(privKey.KeyOps()) == 0 {
 			if err := privKey.Set(jwk.KeyOpsKey, jwk.KeyOperationList{jwk.KeyOpSign, jwk.KeyOpVerify}); err != nil {
 				return err

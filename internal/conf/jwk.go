@@ -34,7 +34,12 @@ func (j *JwtKeysDecoder) Decode(value string) error {
 			return err
 		}
 
-		// ensures that all public keys only have 'verify' as the key_ops
+		// all public keys should have the the use claim set to 'sig
+		if err := pubJwk.Set(jwk.KeyUsageKey, "sig"); err != nil {
+			return err
+		}
+
+		// all public keys should only have 'verify' set as the key_ops
 		if err := pubJwk.Set(jwk.KeyOpsKey, jwk.KeyOperationList{jwk.KeyOpVerify}); err != nil {
 			return err
 		}
