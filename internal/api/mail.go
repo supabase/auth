@@ -589,7 +589,7 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			EmailData: emailData,
 		}
 		output := hooks.SendEmailOutput{}
-		return a.invokeHook(tx, r, &input, &output, a.config.Hook.SendEmail.URI)
+		return a.invokeHook(tx, r, &input, &output)
 	}
 
 	switch emailActionType {

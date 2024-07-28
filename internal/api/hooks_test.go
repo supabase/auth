@@ -262,7 +262,7 @@ func (ts *HooksTestSuite) TestInvokeHookIntegration() {
 			input:         &hooks.SendEmailInput{},
 			output:        &hooks.SendEmailOutput{},
 			uri:           "ftp://example.com/path",
-			expectedError: errors.New("unsupported protocol: ftp only postgres hooks and HTTPS functions are supported at the moment"),
+			expectedError: errors.New("unsupported protocol: \"ftp://example.com/path\" only postgres hooks and HTTPS functions are supported at the moment"),
 		},
 	}
 
@@ -274,7 +274,7 @@ func (ts *HooksTestSuite) TestInvokeHookIntegration() {
 		require.NoError(ts.T(), ts.Config.Hook.SendEmail.PopulateExtensibilityPoint())
 
 		ts.Run(tc.description, func() {
-			err = ts.API.invokeHook(tc.conn, tc.request, tc.input, tc.output, tc.uri)
+			err = ts.API.invokeHook(tc.conn, tc.request, tc.input, tc.output)
 			if tc.expectedError != nil {
 				require.EqualError(ts.T(), err, tc.expectedError.Error())
 			} else {

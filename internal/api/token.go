@@ -185,7 +185,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			Valid:  isValidPassword,
 		}
 		output := hooks.PasswordVerificationAttemptOutput{}
-		err := a.invokeHook(nil, r, &input, &output, a.config.Hook.PasswordVerificationAttempt.URI)
+		err := a.invokeHook(nil, r, &input, &output)
 		if err != nil {
 			return err
 		}
@@ -360,7 +360,7 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 
 		output := hooks.CustomAccessTokenOutput{}
 
-		err := a.invokeHook(tx, r, &input, &output, a.config.Hook.CustomAccessToken.URI)
+		err := a.invokeHook(tx, r, &input, &output)
 		if err != nil {
 			return "", 0, err
 		}
