@@ -267,6 +267,20 @@ func (f *Factor) IsVerified() bool {
 	return f.Status == FactorStateVerified.String()
 }
 
+func (f *Factor) FindChallengeByID(conn *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
+	var challenge Challenge
+	err := conn.Q().
+		Where("id = ?", challengeID).
+		Where("factor_id = ?", f.ID).
+		First(&challenge)
+	if err != nil && errors.Cause(err) == sql.ErrNoRows {
+		return nil, ChallengeNotFoundError{}
+	} else if err != nil {
+		return nil, err
+	}
+	return &challenge, nil
+}
+
 func DeleteFactorsByUserId(tx *storage.Connection, userId uuid.UUID) error {
 	if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Factor{}}).TableName()+" WHERE user_id = ?", userId).Exec(); err != nil {
 		return err

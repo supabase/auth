@@ -1,9 +1,7 @@
 package models
 
 import (
-	"database/sql"
 	"github.com/gofrs/uuid"
-	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 	"time"
@@ -23,17 +21,6 @@ type Challenge struct {
 func (Challenge) TableName() string {
 	tableName := "mfa_challenges"
 	return tableName
-}
-
-func FindChallengeByID(conn *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
-	var challenge Challenge
-	err := conn.Find(&challenge, challengeID)
-	if err != nil && errors.Cause(err) == sql.ErrNoRows {
-		return nil, ChallengeNotFoundError{}
-	} else if err != nil {
-		return nil, err
-	}
-	return &challenge, nil
 }
 
 // Update the verification timestamp

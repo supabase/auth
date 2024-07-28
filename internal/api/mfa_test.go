@@ -429,7 +429,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			}
 			if !v.validChallenge {
 				// Ensure invalid challenges are deleted
-				_, err := models.FindChallengeByID(ts.API.db, c.ID)
+				_, err := f.FindChallengeByID(ts.API.db, c.ID)
 				require.EqualError(ts.T(), err, models.ChallengeNotFoundError{}.Error())
 			}
 		})

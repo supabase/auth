@@ -391,7 +391,7 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 
 	}
 
-	challenge, err := models.FindChallengeByID(db, params.ChallengeID)
+	challenge, err := factor.FindChallengeByID(db, params.ChallengeID)
 	if err != nil && models.IsNotFoundError(err) {
 		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor with the provided challenge ID not found")
 	} else if err != nil {
@@ -513,6 +513,9 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
+	if params.Code == "" {
+		return badRequestError(ErrorCodeValidationFailed, "Code needs to be non-empty")
+	}
 
 	switch factor.FactorType {
 	case models.Phone:
@@ -534,7 +537,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
 
-	challenge, err := models.FindChallengeByID(db, params.ChallengeID)
+	challenge, err := factor.FindChallengeByID(db, params.ChallengeID)
 	if err != nil && models.IsNotFoundError(err) {
 		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor with the provided challenge ID not found")
 	} else if err != nil {
