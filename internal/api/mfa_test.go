@@ -86,6 +86,10 @@ func (ts *MFATestSuite) SetupTest() {
 	testDomain := strings.Split(ts.TestEmail, "@")[1]
 	ts.TestDomain = testDomain
 
+	// By default MFA Phone is disabled
+	ts.Config.MFA.Phone.EnrollEnabled = true
+	ts.Config.MFA.Phone.VerifyEnabled = true
+
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      ts.TestDomain,
 		AccountName: ts.TestEmail,
