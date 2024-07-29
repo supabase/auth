@@ -11,6 +11,6 @@ alter table {{ index .Options "Namespace" }}.mfa_factors add column if not exist
 alter table {{ index .Options "Namespace" }}.mfa_challenges add column if not exists sent_at timestamptz null;
 alter table {{ index .Options "Namespace" }}.mfa_challenges add column if not exists otp_code text null;
 
-create unique index unique_verified_phone_factor on {{ index .Options "Namespace" }}.mfa_factors (user_id, phone) where status = 'verified';
+create index if not exists idx_sent_at on {{ index .Options "Namespace" }}.mfa_challenges(sent_at);
 
-alter table {{ index .Options "Namespace" }}.mfa_factors add constraint check_phone_number_required_for_phone_factor check (factor_type != 'phone' or (phone is not null and phone != ''));
+create unique index unique_verified_phone_factor on {{ index .Options "Namespace" }}.mfa_factors (user_id, phone) where status = 'verified';

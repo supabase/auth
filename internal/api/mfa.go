@@ -513,19 +513,22 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
-	if params.Code == "" {
-		return badRequestError(ErrorCodeValidationFailed, "Code needs to be non-empty")
-	}
 
 	switch factor.FactorType {
 	case models.Phone:
 		if !config.MFA.Phone.VerifyEnabled {
 			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA verification is disabled for Phone")
 		}
+		if params.Code == "" {
+			return badRequestError(ErrorCodeValidationFailed, "Code needs to be non-empty")
+		}
 		return a.verifyPhoneFactor(w, r, params)
 	case models.TOTP:
 		if !config.MFA.TOTP.VerifyEnabled {
 			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA verification is disabled for TOTP")
+		}
+		if params.Code == "" {
+			return badRequestError(ErrorCodeValidationFailed, "Code needs to be non-empty")
 		}
 	default:
 		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be TOTP or Phone")

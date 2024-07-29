@@ -269,10 +269,7 @@ func (f *Factor) IsVerified() bool {
 
 func (f *Factor) FindChallengeByID(conn *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
 	var challenge Challenge
-	err := conn.Q().
-		Where("id = ?", challengeID).
-		Where("factor_id = ?", f.ID).
-		First(&challenge)
+	err := conn.Q().Where("id = ? and factor_id = ?", challengeID, f.ID).First(&challenge)
 	if err != nil && errors.Cause(err) == sql.ErrNoRows {
 		return nil, ChallengeNotFoundError{}
 	} else if err != nil {
@@ -305,8 +302,9 @@ func DeleteExpiredFactors(tx *storage.Connection, validityDuration time.Duration
 func (f *Factor) FindLatestUnexpiredChallenge(tx *storage.Connection, expiryDuration float64) (*Challenge, error) {
 	now := time.Now()
 	var challenge Challenge
+	expirationTime := now.Add(time.Duration(expiryDuration) * time.Second)
 
-	err := tx.Where("sent_at + interval '1 second' * ? > ?", expiryDuration, now).
+	err := tx.Where("sent_at > ?", expirationTime).
 		Order("sent_at desc").
 		First(&challenge)
 
