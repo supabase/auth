@@ -379,8 +379,9 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 	}
 
 	if _, ok := token.Header["kid"]; !ok {
-		kid := signingJwk.KeyID()
-		token.Header["kid"] = kid
+		if kid := signingJwk.KeyID(); kid != "" {
+			token.Header["kid"] = kid
+		}
 	}
 
 	// this serializes the aud claim to a string
