@@ -107,16 +107,18 @@ type JWTConfiguration struct {
 }
 
 type MFAFactorTypeConfiguration struct {
-	EnrollEnabled bool `split_words:"true" default:"true"`
-	VerifyEnabled bool `split_words:"true" default:"true"`
+	EnrollEnabled bool `json:"enroll_enabled" split_words:"true" default:"true"`
+	VerifyEnabled bool `json:"verify_enabled" split_words:"true" default:"true"`
 }
 
 type PhoneFactorTypeConfiguration struct {
-	MFAFactorTypeConfiguration
-	OtpLength    int                `json:"otp_length" split_words:"true"`
-	SMSTemplate  *template.Template `json:"-"`
-	MaxFrequency time.Duration      `json:"max_frequency" split_words:"true"`
-	Template     string             `json:"template"`
+	// Default to false in order to ensure Phone MFA is opt-in
+	EnrollEnabled bool               `json:"enroll_enabled" split_words:"true" default:"false"`
+	VerifyEnabled bool               `json:"verify_enabled" split_words:"true" default:"false"`
+	OtpLength     int                `json:"otp_length" split_words:"true"`
+	SMSTemplate   *template.Template `json:"-"`
+	MaxFrequency  time.Duration      `json:"max_frequency" split_words:"true"`
+	Template      string             `json:"template"`
 }
 
 // MFAConfiguration holds all the MFA related Configuration
