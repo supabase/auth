@@ -155,7 +155,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		},
 		{
 			desc:         "Phone: Enroll with friendly name",
-			friendlyName: "sms_factor",
+			friendlyName: "phone_factor",
 			factorType:   models.Phone,
 			phone:        "+12345677889",
 			expectedCode: http.StatusOK,

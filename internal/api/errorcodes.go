@@ -78,8 +78,8 @@ const (
 	ErrorCodeHookPayloadOverSizeLimit          ErrorCode = "hook_payload_over_size_limit"
 	ErrorCodeHookPayloadUnknownSize            ErrorCode = "hook_payload_unknown_size"
 	ErrorCodeRequestTimeout                    ErrorCode = "request_timeout"
-	ErrorCodeMFAPhoneEnrollDisabled            ErrorCode = "mfa_sms_enroll_not_enabled"
-	ErrorCodeMFAPhoneVerifyDisabled            ErrorCode = "mfa_sms_verify_not_enabled"
+	ErrorCodeMFAPhoneEnrollDisabled            ErrorCode = "mfa_phone_enroll_not_enabled"
+	ErrorCodeMFAPhoneVerifyDisabled            ErrorCode = "mfa_phone_verify_not_enabled"
 	ErrorCodeMFATOTPEnrollDisabled             ErrorCode = "mfa_totp_enroll_not_enabled"
 	ErrorCodeMFATOTPVerifyDisabled             ErrorCode = "mfa_totp_verify_not_enabled"
 )
