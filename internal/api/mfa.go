@@ -313,7 +313,7 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 			},
 		}
 		output := hooks.SendSMSOutput{}
-		err := a.invokeHook(a.db, r, &input, &output, a.config.Hook.SendSMS.URI)
+		err := a.invokeHook(a.db, r, &input, &output)
 		if err != nil {
 			return internalServerError("error invoking hook")
 		}
@@ -422,7 +422,7 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		}
 
 		output := hooks.MFAVerificationAttemptOutput{}
-		err := a.invokeHook(nil, r, &input, &output, a.config.Hook.MFAVerificationAttempt.URI)
+		err := a.invokeHook(nil, r, &input, &output)
 		if err != nil {
 			return err
 		}
