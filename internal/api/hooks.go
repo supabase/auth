@@ -10,7 +10,6 @@ import (
 	"mime"
 	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -188,13 +187,9 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 // transaction is opened. If calling invokeHook within a transaction, always
 // pass the current transaction, as pool-exhaustion deadlocks are very easy to
 // trigger.
-func (a *API) invokeHook(conn *storage.Connection, r *http.Request, input, output any, uri string) error {
+func (a *API) invokeHook(conn *storage.Connection, r *http.Request, input, output any) error {
 	var err error
 	var response []byte
-	u, err := url.Parse(uri)
-	if err != nil {
-		return err
-	}
 
 	switch input.(type) {
 	case *hooks.SendSMSInput:
@@ -202,7 +197,7 @@ func (a *API) invokeHook(conn *storage.Connection, r *http.Request, input, outpu
 		if !ok {
 			panic("output should be *hooks.SendSMSOutput")
 		}
-		if response, err = a.runHook(r, conn, a.config.Hook.SendSMS, input, output, u.Scheme); err != nil {
+		if response, err = a.runHook(r, conn, a.config.Hook.SendSMS, input, output); err != nil {
 			return err
 		}
 		if err := json.Unmarshal(response, hookOutput); err != nil {
@@ -226,7 +221,7 @@ func (a *API) invokeHook(conn *storage.Connection, r *http.Request, input, outpu
 		if !ok {
 			panic("output should be *hooks.SendEmailOutput")
 		}
-		if response, err = a.runHook(r, conn, a.config.Hook.SendEmail, input, output, u.Scheme); err != nil {
+		if response, err = a.runHook(r, conn, a.config.Hook.SendEmail, input, output); err != nil {
 			return err
 		}
 		if err := json.Unmarshal(response, hookOutput); err != nil {
@@ -252,7 +247,7 @@ func (a *API) invokeHook(conn *storage.Connection, r *http.Request, input, outpu
 		if !ok {
 			panic("output should be *hooks.MFAVerificationAttemptOutput")
 		}
-		if response, err = a.runHook(r, conn, a.config.Hook.MFAVerificationAttempt, input, output, u.Scheme); err != nil {
+		if response, err = a.runHook(r, conn, a.config.Hook.MFAVerificationAttempt, input, output); err != nil {
 			return err
 		}
 		if err := json.Unmarshal(response, hookOutput); err != nil {
@@ -279,7 +274,7 @@ func (a *API) invokeHook(conn *storage.Connection, r *http.Request, input, outpu
 			panic("output should be *hooks.PasswordVerificationAttemptOutput")
 		}
 
-		if response, err = a.runHook(r, conn, a.config.Hook.PasswordVerificationAttempt, input, output, u.Scheme); err != nil {
+		if response, err = a.runHook(r, conn, a.config.Hook.PasswordVerificationAttempt, input, output); err != nil {
 			return err
 		}
 		if err := json.Unmarshal(response, hookOutput); err != nil {
@@ -306,7 +301,7 @@ func (a *API) invokeHook(conn *storage.Connection, r *http.Request, input, outpu
 		if !ok {
 			panic("output should be *hooks.CustomAccessTokenOutput")
 		}
-		if response, err = a.runHook(r, conn, a.config.Hook.CustomAccessToken, input, output, u.Scheme); err != nil {
+		if response, err = a.runHook(r, conn, a.config.Hook.CustomAccessToken, input, output); err != nil {
 			return err
 		}
 		if err := json.Unmarshal(response, hookOutput); err != nil {
@@ -345,20 +340,43 @@ func (a *API) invokeHook(conn *storage.Connection, r *http.Request, input, outpu
 	return nil
 }
 
-func (a *API) runHook(r *http.Request, conn *storage.Connection, hookConfig conf.ExtensibilityPointConfiguration, input, output any, scheme string) ([]byte, error) {
+func (a *API) runHook(r *http.Request, conn *storage.Connection, hookConfig conf.ExtensibilityPointConfiguration, input, output any) ([]byte, error) {
 	ctx := r.Context()
+
+	logEntry := observability.GetLogEntry(r)
+	hookStart := time.Now()
+
 	var response []byte
 	var err error
-	switch strings.ToLower(scheme) {
-	case "http", "https":
+
+	switch {
+	case strings.HasPrefix(hookConfig.URI, "http:") || strings.HasPrefix(hookConfig.URI, "https:"):
 		response, err = a.runHTTPHook(r, hookConfig, input)
-	case "pg-functions":
+	case strings.HasPrefix(hookConfig.URI, "pg-functions:"):
 		response, err = a.runPostgresHook(ctx, conn, hookConfig, input, output)
 	default:
-		return nil, fmt.Errorf("unsupported protocol: %v only postgres hooks and HTTPS functions are supported at the moment", scheme)
+		return nil, fmt.Errorf("unsupported protocol: %q only postgres hooks and HTTPS functions are supported at the moment", hookConfig.URI)
 	}
+
+	duration := time.Since(hookStart)
+
 	if err != nil {
+		logEntry.Entry.WithFields(logrus.Fields{
+			"action":   "run_hook",
+			"hook":     hookConfig.URI,
+			"success":  false,
+			"duration": duration.Microseconds(),
+		}).WithError(err).Warn("Hook errored out")
+
 		return nil, internalServerError("Error running hook URI: %v", hookConfig.URI).WithInternalError(err)
 	}
+
+	logEntry.Entry.WithFields(logrus.Fields{
+		"action":   "run_hook",
+		"hook":     hookConfig.URI,
+		"success":  true,
+		"duration": duration.Microseconds(),
+	}).WithError(err).Info("Hook ran successfully")
+
 	return response, nil
 }
