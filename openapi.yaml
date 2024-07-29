@@ -693,11 +693,15 @@ paths:
                   type: string
                   enum:
                     - totp
+                    - phone
                 friendly_name:
                   type: string
                 issuer:
                   type: string
                   format: uri
+                phone:
+                  type: string
+                  format: phone
       responses:
         200:
           description: >
