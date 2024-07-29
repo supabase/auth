@@ -16,6 +16,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/pquerna/otp"
+	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
@@ -85,6 +86,10 @@ func (ts *MFATestSuite) SetupTest() {
 	testDomain := strings.Split(ts.TestEmail, "@")[1]
 	ts.TestDomain = testDomain
 
+	// By default MFA Phone is disabled
+	ts.Config.MFA.Phone.EnrollEnabled = true
+	ts.Config.MFA.Phone.VerifyEnabled = true
+
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      ts.TestDomain,
 		AccountName: ts.TestEmail,
@@ -113,6 +118,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 		friendlyName string
 		factorType   string
 		issuer       string
+		phone        string
 		expectedCode int
 	}{
 		{
@@ -120,6 +126,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			friendlyName: alternativeFriendlyName,
 			factorType:   models.TOTP,
 			issuer:       "",
+			phone:        "",
 			expectedCode: http.StatusOK,
 		},
 		{
@@ -127,6 +134,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			friendlyName: testFriendlyName,
 			factorType:   "invalid_factor",
 			issuer:       ts.TestDomain,
+			phone:        "",
 			expectedCode: http.StatusBadRequest,
 		},
 		{
@@ -134,6 +142,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			friendlyName: testFriendlyName,
 			factorType:   models.TOTP,
 			issuer:       ts.TestDomain,
+			phone:        "",
 			expectedCode: http.StatusOK,
 		},
 		{
@@ -141,12 +150,34 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			friendlyName: "",
 			factorType:   models.TOTP,
 			issuer:       ts.TestDomain,
+			phone:        "",
 			expectedCode: http.StatusOK,
+		},
+		{
+			desc:         "Phone: Enroll with friendly name",
+			friendlyName: "phone_factor",
+			factorType:   models.Phone,
+			phone:        "+12345677889",
+			expectedCode: http.StatusOK,
+		},
+		{
+			desc:         "Phone: Enroll with invalid phone number",
+			friendlyName: "phone_factor",
+			factorType:   models.Phone,
+			phone:        "+1",
+			expectedCode: http.StatusBadRequest,
+		},
+		{
+			desc:         "Phone: Enroll without phone number should return error",
+			friendlyName: "phone_factor_fail",
+			factorType:   models.Phone,
+			phone:        "",
+			expectedCode: http.StatusBadRequest,
 		},
 	}
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			w := performEnrollFlow(ts, token, c.friendlyName, c.factorType, c.issuer, c.expectedCode)
+			w := performEnrollFlow(ts, token, c.friendlyName, c.factorType, c.issuer, c.phone, c.expectedCode)
 
 			factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
 			ts.Require().NoError(err)
@@ -156,7 +187,7 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 				require.Equal(ts.T(), c.friendlyName, addedFactor.FriendlyName)
 			}
 
-			if w.Code == http.StatusOK {
+			if w.Code == http.StatusOK && c.factorType == models.TOTP {
 				enrollResp := EnrollFactorResponse{}
 				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
 				qrCode := enrollResp.TOTP.QRCode
@@ -168,12 +199,12 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 	}
 }
 
-func (ts *MFATestSuite) TestDuplicateEnrollsReturnExpectedMessage() {
+func (ts *MFATestSuite) TestDuplicateTOTPEnrollsReturnExpectedMessage() {
 	friendlyName := "mary"
 	issuer := "https://issuer.com"
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
-	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, http.StatusOK)
-	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, http.StatusUnprocessableEntity)
+	_ = performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, "", http.StatusOK)
+	response := performEnrollFlow(ts, token, friendlyName, models.TOTP, issuer, "", http.StatusUnprocessableEntity)
 
 	var errorResponse HTTPError
 	err := json.NewDecoder(response.Body).Decode(&errorResponse)
@@ -195,7 +226,7 @@ func (ts *MFATestSuite) TestMultipleEnrollsCleanupExpiredFactors() {
 
 	token := accessTokenResp.Token
 	for i := 0; i < numFactors; i++ {
-		_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", http.StatusOK)
+		_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", "", http.StatusOK)
 	}
 
 	// All Factors except last factor should be expired
@@ -206,7 +237,7 @@ func (ts *MFATestSuite) TestMultipleEnrollsCleanupExpiredFactors() {
 	_ = performChallengeFlow(ts, factors[len(factors)-1].ID, token)
 
 	// Enroll another Factor (Factor 3)
-	_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", http.StatusOK)
+	_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", "", http.StatusOK)
 	factors, err = FindFactorsByUser(ts.API.db, ts.TestUser)
 	require.NoError(ts.T(), err)
 	require.Equal(ts.T(), 3, len(factors))
@@ -219,29 +250,110 @@ func (ts *MFATestSuite) TestChallengeFactor() {
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
+func (ts *MFATestSuite) TestChallengeSMSFactor() {
+	// Challenge should still work with phone provider disabled
+	ts.Config.External.Phone.Enabled = false
+	ts.Config.Hook.SendSMS.Enabled = true
+	ts.Config.Hook.SendSMS.URI = "pg-functions://postgres/auth/send_sms_mfa_mock"
+
+	ts.Config.MFA.Phone.MaxFrequency = 0 * time.Second
+
+	require.NoError(ts.T(), ts.Config.Hook.SendSMS.PopulateExtensibilityPoint())
+	require.NoError(ts.T(), ts.API.db.RawQuery(`
+        create or replace function send_sms_mfa_mock(input jsonb)
+        returns json as $$
+        begin
+            return input;
+       end; $$ language plpgsql;`).Exec())
+	// We still need a mock provider for hooks to work right now for backward compatibility
+	// The WhatsApp channel is only valid when twilio or twilio verify is set.
+	ts.Config.Sms.Provider = "twilio"
+	ts.Config.Sms.Twilio = conf.TwilioProviderConfiguration{
+		AccountSid:        "test_account_sid",
+		AuthToken:         "test_auth_token",
+		MessageServiceSid: "test_message_service_id",
+	}
+
+	phone := "+1234567"
+	friendlyName := "testchallengesmsfactor"
+
+	f := models.NewPhoneFactor(ts.TestUser, phone, friendlyName, models.Phone, models.FactorStateUnverified)
+	require.NoError(ts.T(), ts.API.db.Create(f), "Error creating new SMS factor")
+	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
+
+	var cases = []struct {
+		desc         string
+		channel      string
+		expectedCode int
+	}{
+		{
+			desc:         "SMS Channel",
+			channel:      sms_provider.SMSProvider,
+			expectedCode: http.StatusOK,
+		},
+		{
+			desc:         "WhatsApp Channel",
+			channel:      sms_provider.WhatsappProvider,
+			expectedCode: http.StatusOK,
+		},
+	}
+
+	for _, tc := range cases {
+		ts.Run(tc.desc, func() {
+			w := performSMSChallengeFlow(ts, f.ID, token, tc.channel)
+			require.Equal(ts.T(), tc.expectedCode, w.Code, tc.desc)
+		})
+	}
+}
+
 func (ts *MFATestSuite) TestMFAVerifyFactor() {
 	cases := []struct {
 		desc             string
 		validChallenge   bool
 		validCode        bool
+		factorType       string
 		expectedHTTPCode int
 	}{
 		{
 			desc:             "Invalid: Valid code and expired challenge",
 			validChallenge:   false,
 			validCode:        true,
+			factorType:       models.TOTP,
 			expectedHTTPCode: http.StatusUnprocessableEntity,
 		},
 		{
-			desc:             "Invalid: Invalid code and valid challenge ",
+			desc:             "Invalid: Invalid code and valid challenge",
 			validChallenge:   true,
 			validCode:        false,
+			factorType:       models.TOTP,
 			expectedHTTPCode: http.StatusUnprocessableEntity,
 		},
 		{
 			desc:             "Valid /verify request",
 			validChallenge:   true,
 			validCode:        true,
+			factorType:       models.TOTP,
+			expectedHTTPCode: http.StatusOK,
+		},
+		{
+			desc:             "Invalid: Valid code and expired challenge (SMS)",
+			validChallenge:   false,
+			validCode:        true,
+			factorType:       models.Phone,
+			expectedHTTPCode: http.StatusUnprocessableEntity,
+		},
+		{
+			desc:             "Invalid: Invalid code and valid challenge (SMS)",
+			validChallenge:   true,
+			validCode:        false,
+			factorType:       models.Phone,
+			expectedHTTPCode: http.StatusUnprocessableEntity,
+		},
+		{
+			desc:             "Valid /verify request (SMS)",
+			validChallenge:   true,
+			validCode:        true,
+			factorType:       models.Phone,
 			expectedHTTPCode: http.StatusOK,
 		},
 	}
@@ -251,21 +363,52 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			var buffer bytes.Buffer
 			r, err := models.GrantAuthenticatedUser(ts.API.db, ts.TestUser, models.GrantParams{})
 			require.NoError(ts.T(), err)
-
-			sharedSecret := ts.TestOTPKey.Secret()
-			factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
-			f := factors[0]
-			f.Secret = sharedSecret
-			require.NoError(ts.T(), err)
-			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
-
 			token := ts.generateAAL1Token(ts.TestUser, r.SessionId)
+			var f *models.Factor
+			var sharedSecret string
+
+			if v.factorType == models.TOTP {
+				friendlyName := uuid.Must(uuid.NewV4()).String()
+				f = models.NewFactor(ts.TestUser, friendlyName, models.TOTP, models.FactorStateUnverified)
+				sharedSecret = ts.TestOTPKey.Secret()
+				f.Secret = sharedSecret
+				require.NoError(ts.T(), ts.API.db.Create(f), "Error updating new test factor")
+			} else if v.factorType == models.Phone {
+				friendlyName := uuid.Must(uuid.NewV4()).String()
+				numDigits := 10
+				otp, err := crypto.GenerateOtp(numDigits)
+				require.NoError(ts.T(), err)
+				phone := fmt.Sprintf("+%s", otp)
+				f = models.NewPhoneFactor(ts.TestUser, phone, friendlyName, models.Phone, models.FactorStateUnverified)
+				require.NoError(ts.T(), ts.API.db.Create(f), "Error creating new SMS factor")
+			}
+
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/factors/%s/verify", f.ID), &buffer)
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 
-			testIPAddress := utilities.GetIPAddress(req)
-			c := f.CreateChallenge(testIPAddress)
+			var c *models.Challenge
+			var code string
+			if v.factorType == models.TOTP {
+				c = f.CreateChallenge(utilities.GetIPAddress(req))
+				// Verify TOTP code
+				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC())
+				require.NoError(ts.T(), err)
+			} else if v.factorType == models.Phone {
+				code = "123456"
+				c, err = f.CreatePhoneChallenge(utilities.GetIPAddress(req), code, ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey)
+				require.NoError(ts.T(), err)
+			}
+
+			if !v.validCode && v.factorType == models.TOTP {
+				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC().Add(-1*time.Minute*time.Duration(1)))
+				require.NoError(ts.T(), err)
+
+			} else if !v.validCode && v.factorType == models.Phone {
+				invalidSuffix := "1"
+				code += invalidSuffix
+			}
+
 			require.NoError(ts.T(), ts.API.db.Create(c), "Error saving new test challenge")
 			if !v.validChallenge {
 				// Set challenge creation so that it has expired in present time.
@@ -275,13 +418,6 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 				require.NoError(ts.T(), err, "Error updating new test challenge")
 			}
 
-			// Verify TOTP code
-			code, err := totp.GenerateCode(sharedSecret, time.Now().UTC())
-			if !v.validCode {
-				// Use an inaccurate time, resulting in an invalid code(usually)
-				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC().Add(-1*time.Minute*time.Duration(1)))
-			}
-			require.NoError(ts.T(), err)
 			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 				"challenge_id": c.ID,
 				"code":         code,
@@ -297,7 +433,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			}
 			if !v.validChallenge {
 				// Ensure invalid challenges are deleted
-				_, err := models.FindChallengeByID(ts.API.db, c.ID)
+				_, err := f.FindChallengeByID(ts.API.db, c.ID)
 				require.EqualError(ts.T(), err, models.ChallengeNotFoundError{}.Error())
 			}
 		})
@@ -461,9 +597,9 @@ func performTestSignupAndVerify(ts *MFATestSuite, email, password string, requir
 
 }
 
-func performEnrollFlow(ts *MFATestSuite, token, friendlyName, factorType, issuer string, expectedCode int) *httptest.ResponseRecorder {
+func performEnrollFlow(ts *MFATestSuite, token, friendlyName, factorType, issuer string, phone string, expectedCode int) *httptest.ResponseRecorder {
 	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(EnrollFactorParams{FriendlyName: friendlyName, FactorType: factorType, Issuer: issuer}))
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(EnrollFactorParams{FriendlyName: friendlyName, FactorType: factorType, Issuer: issuer, Phone: phone}))
 	w := ServeAuthenticatedRequest(ts, http.MethodPost, "http://localhost/factors/", token, buffer)
 	require.Equal(ts.T(), expectedCode, w.Code)
 	return w
@@ -520,8 +656,23 @@ func performChallengeFlow(ts *MFATestSuite, factorID uuid.UUID, token string) *h
 
 }
 
+func performSMSChallengeFlow(ts *MFATestSuite, factorID uuid.UUID, token, channel string) *httptest.ResponseRecorder {
+	params := ChallengeFactorParams{
+		Channel: channel,
+	}
+	var buffer bytes.Buffer
+	if err := json.NewEncoder(&buffer).Encode(params); err != nil {
+		panic(err) // handle the error appropriately in real code
+	}
+
+	w := ServeAuthenticatedRequest(ts, http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), token, buffer)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	return w
+
+}
+
 func performEnrollAndVerify(ts *MFATestSuite, token string, requireStatusOK bool) *httptest.ResponseRecorder {
-	w := performEnrollFlow(ts, token, "", models.TOTP, ts.TestDomain, http.StatusOK)
+	w := performEnrollFlow(ts, token, "", models.TOTP, ts.TestDomain, "", http.StatusOK)
 	enrollResp := EnrollFactorResponse{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
 	factorID := enrollResp.ID

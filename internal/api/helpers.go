@@ -82,6 +82,7 @@ type RequestParams interface {
 		VerifyFactorParams |
 		VerifyParams |
 		adminUserUpdateFactorParams |
+		ChallengeFactorParams |
 		struct {
 			Email string `json:"email"`
 			Phone string `json:"phone"`

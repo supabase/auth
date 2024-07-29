@@ -21,6 +21,10 @@ func (AMRClaim) TableName() string {
 	return tableName
 }
 
+func (cl *AMRClaim) IsAAL2Claim() bool {
+	return *cl.AuthenticationMethod == TOTPSignIn.String() || *cl.AuthenticationMethod == MFAPhone.String()
+}
+
 func AddClaimToSession(tx *storage.Connection, sessionId uuid.UUID, authenticationMethod AuthenticationMethod) error {
 	id := uuid.Must(uuid.NewV4())
 

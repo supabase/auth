@@ -31,6 +31,7 @@ func (factorState FactorState) String() string {
 }
 
 const TOTP = "totp"
+const Phone = "phone"
 
 type AuthenticationMethod int
 
@@ -39,6 +40,7 @@ const (
 	PasswordGrant
 	OTP
 	TOTPSignIn
+	MFAPhone
 	SSOSAML
 	Recovery
 	Invite
@@ -75,6 +77,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "token_refresh"
 	case Anonymous:
 		return "anonymous"
+	case MFAPhone:
+		return "mfa/phone"
 	}
 	return ""
 }
@@ -106,21 +110,24 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return EmailChange, nil
 	case "token_refresh":
 		return TokenRefresh, nil
+	case "mfa/sms":
+		return MFAPhone, nil
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }
 
 type Factor struct {
-	ID           uuid.UUID   `json:"id" db:"id"`
-	User         User        `json:"-" belongs_to:"user"`
-	UserID       uuid.UUID   `json:"-" db:"user_id"`
-	CreatedAt    time.Time   `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time   `json:"updated_at" db:"updated_at"`
-	Status       string      `json:"status" db:"status"`
-	FriendlyName string      `json:"friendly_name,omitempty" db:"friendly_name"`
-	Secret       string      `json:"-" db:"secret"`
-	FactorType   string      `json:"factor_type" db:"factor_type"`
-	Challenge    []Challenge `json:"-" has_many:"challenges"`
+	ID           uuid.UUID          `json:"id" db:"id"`
+	User         User               `json:"-" belongs_to:"user"`
+	UserID       uuid.UUID          `json:"-" db:"user_id"`
+	CreatedAt    time.Time          `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at" db:"updated_at"`
+	Status       string             `json:"status" db:"status"`
+	FriendlyName string             `json:"friendly_name,omitempty" db:"friendly_name"`
+	Secret       string             `json:"-" db:"secret"`
+	FactorType   string             `json:"factor_type" db:"factor_type"`
+	Challenge    []Challenge        `json:"-" has_many:"challenges"`
+	Phone        storage.NullString `json:"phone" db:"phone"`
 }
 
 func (Factor) TableName() string {
@@ -138,6 +145,12 @@ func NewFactor(user *User, friendlyName string, factorType string, state FactorS
 		FriendlyName: friendlyName,
 		FactorType:   factorType,
 	}
+	return factor
+}
+
+func NewPhoneFactor(user *User, phone, friendlyName string, factorType string, state FactorState) *Factor {
+	factor := NewFactor(user, friendlyName, factorType, state)
+	factor.Phone = storage.NullString(phone)
 	return factor
 }
 
@@ -197,6 +210,16 @@ func (f *Factor) CreateChallenge(ipAddress string) *Challenge {
 	return challenge
 }
 
+func (f *Factor) CreatePhoneChallenge(ipAddress string, otpCode string, encrypt bool, encryptionKeyID, encryptionKey string) (*Challenge, error) {
+	phoneChallenge := f.CreateChallenge(ipAddress)
+	if err := phoneChallenge.SetOtpCode(otpCode, encrypt, encryptionKeyID, encryptionKey); err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	phoneChallenge.SentAt = &now
+	return phoneChallenge, nil
+}
+
 // UpdateFriendlyName changes the friendly name
 func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string) error {
 	f.FriendlyName = friendlyName
@@ -213,6 +236,14 @@ func (f *Factor) UpdateStatus(tx *storage.Connection, state FactorState) error {
 func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) error {
 	f.FactorType = factorType
 	return tx.UpdateOnly(f, "factor_type", "updated_at")
+}
+
+func (f *Factor) IsTOTPFactor() bool {
+	return f.FactorType == TOTP
+}
+
+func (f *Factor) IsPhoneFactor() bool {
+	return f.FactorType == Phone
 }
 
 func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {
@@ -236,6 +267,17 @@ func (f *Factor) IsVerified() bool {
 	return f.Status == FactorStateVerified.String()
 }
 
+func (f *Factor) FindChallengeByID(conn *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
+	var challenge Challenge
+	err := conn.Q().Where("id = ? and factor_id = ?", challengeID, f.ID).First(&challenge)
+	if err != nil && errors.Cause(err) == sql.ErrNoRows {
+		return nil, ChallengeNotFoundError{}
+	} else if err != nil {
+		return nil, err
+	}
+	return &challenge, nil
+}
+
 func DeleteFactorsByUserId(tx *storage.Connection, userId uuid.UUID) error {
 	if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Factor{}}).TableName()+" WHERE user_id = ?", userId).Exec(); err != nil {
 		return err
@@ -255,4 +297,21 @@ func DeleteExpiredFactors(tx *storage.Connection, validityDuration time.Duration
 		return err
 	}
 	return nil
+}
+
+func (f *Factor) FindLatestUnexpiredChallenge(tx *storage.Connection, expiryDuration float64) (*Challenge, error) {
+	now := time.Now()
+	var challenge Challenge
+	expirationTime := now.Add(time.Duration(expiryDuration) * time.Second)
+
+	err := tx.Where("sent_at > ?", expirationTime).
+		Order("sent_at desc").
+		First(&challenge)
+
+	if err != nil && errors.Cause(err) == sql.ErrNoRows {
+		return nil, ChallengeNotFoundError{}
+	} else if err != nil {
+		return nil, err
+	}
+	return &challenge, nil
 }

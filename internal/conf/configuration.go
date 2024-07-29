@@ -106,14 +106,31 @@ type JWTConfiguration struct {
 	ValidMethods     []string       `json:"-"`
 }
 
+type MFAFactorTypeConfiguration struct {
+	EnrollEnabled bool `json:"enroll_enabled" split_words:"true" default:"true"`
+	VerifyEnabled bool `json:"verify_enabled" split_words:"true" default:"true"`
+}
+
+type PhoneFactorTypeConfiguration struct {
+	// Default to false in order to ensure Phone MFA is opt-in
+	EnrollEnabled bool               `json:"enroll_enabled" split_words:"true" default:"false"`
+	VerifyEnabled bool               `json:"verify_enabled" split_words:"true" default:"false"`
+	OtpLength     int                `json:"otp_length" split_words:"true"`
+	SMSTemplate   *template.Template `json:"-"`
+	MaxFrequency  time.Duration      `json:"max_frequency" split_words:"true"`
+	Template      string             `json:"template"`
+}
+
 // MFAConfiguration holds all the MFA related Configuration
 type MFAConfiguration struct {
-	Enabled                     bool          `default:"false"`
-	ChallengeExpiryDuration     float64       `json:"challenge_expiry_duration" default:"300" split_words:"true"`
-	FactorExpiryDuration        time.Duration `json:"factor_expiry_duration" default:"300s" split_words:"true"`
-	RateLimitChallengeAndVerify float64       `split_words:"true" default:"15"`
-	MaxEnrolledFactors          float64       `split_words:"true" default:"10"`
-	MaxVerifiedFactors          int           `split_words:"true" default:"10"`
+	Enabled                     bool                         `default:"false"`
+	ChallengeExpiryDuration     float64                      `json:"challenge_expiry_duration" default:"300" split_words:"true"`
+	FactorExpiryDuration        time.Duration                `json:"factor_expiry_duration" default:"300s" split_words:"true"`
+	RateLimitChallengeAndVerify float64                      `split_words:"true" default:"15"`
+	MaxEnrolledFactors          float64                      `split_words:"true" default:"10"`
+	MaxVerifiedFactors          int                          `split_words:"true" default:"10"`
+	Phone                       PhoneFactorTypeConfiguration `split_words:"true"`
+	TOTP                        MFAFactorTypeConfiguration   `split_words:"true"`
 }
 
 type APIConfiguration struct {
@@ -694,6 +711,19 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		}
 		config.Sms.SMSTemplate = template
 	}
+
+	if config.MFA.Phone.EnrollEnabled || config.MFA.Phone.VerifyEnabled {
+		smsTemplate := config.MFA.Phone.Template
+		if smsTemplate == "" {
+			smsTemplate = "Your code is {{ .Code }}"
+		}
+		template, err := template.New("").Parse(smsTemplate)
+		if err != nil {
+			return nil, err
+		}
+		config.MFA.Phone.SMSTemplate = template
+	}
+
 	return config, nil
 }
 
@@ -845,12 +875,24 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.Password.MinLength < defaultMinPasswordLength {
 		config.Password.MinLength = defaultMinPasswordLength
 	}
+
 	if config.MFA.ChallengeExpiryDuration < defaultChallengeExpiryDuration {
 		config.MFA.ChallengeExpiryDuration = defaultChallengeExpiryDuration
 	}
+
 	if config.MFA.FactorExpiryDuration < defaultFactorExpiryDuration {
 		config.MFA.FactorExpiryDuration = defaultFactorExpiryDuration
 	}
+
+	if config.MFA.Phone.MaxFrequency == 0 {
+		config.MFA.Phone.MaxFrequency = 1 * time.Minute
+	}
+
+	if config.MFA.Phone.OtpLength < 6 || config.MFA.Phone.OtpLength > 10 {
+		// 6-digit otp by default
+		config.MFA.Phone.OtpLength = 6
+	}
+
 	if config.External.FlowStateExpiryDuration < defaultFlowStateExpiryDuration {
 		config.External.FlowStateExpiryDuration = defaultFlowStateExpiryDuration
 	}

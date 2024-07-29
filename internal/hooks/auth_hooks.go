@@ -34,7 +34,8 @@ type HookOutput interface {
 
 // TODO(joel): Move this to phone package
 type SMS struct {
-	OTP string `json:"otp,omitempty"`
+	OTP     string `json:"otp,omitempty"`
+	SMSType string `json:"sms_type,omitempty"`
 }
 
 // #nosec
@@ -111,9 +112,10 @@ type AccessTokenClaims struct {
 }
 
 type MFAVerificationAttemptInput struct {
-	UserID   uuid.UUID `json:"user_id"`
-	FactorID uuid.UUID `json:"factor_id"`
-	Valid    bool      `json:"valid"`
+	UserID     uuid.UUID `json:"user_id"`
+	FactorID   uuid.UUID `json:"factor_id"`
+	FactorType string    `json:"factor_type"`
+	Valid      bool      `json:"valid"`
 }
 
 type MFAVerificationAttemptOutput struct {
