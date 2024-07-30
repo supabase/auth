@@ -108,7 +108,7 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	if numVerifiedFactors > 0 && !session.IsAAL2() {
 		return forbiddenError(ErrorCodeInsufficientAAL, "AAL2 required to enroll a new factor")
 	}
-	factor := models.NewPhoneFactor(user, phone, params.FriendlyName, params.FactorType, models.FactorStateUnverified)
+	factor := models.NewPhoneFactor(user, phone, params.FriendlyName)
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(factor); terr != nil {
 			pgErr := utilities.NewPostgresError(terr)
@@ -222,7 +222,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	svgData.End()
 
-	factor = models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified)
+	factor = models.NewTOTPFactor(user, params.FriendlyName)
 	if err := factor.SetSecret(key.Secret(), config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
 		return err
 	}

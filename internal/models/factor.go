@@ -148,8 +148,12 @@ func NewFactor(user *User, friendlyName string, factorType string, state FactorS
 	return factor
 }
 
-func NewPhoneFactor(user *User, phone, friendlyName string, factorType string, state FactorState) *Factor {
-	factor := NewFactor(user, friendlyName, factorType, state)
+func NewTOTPFactor(user *User, friendlyName string) *Factor {
+	return NewFactor(user, friendlyName, TOTP, FactorStateUnverified)
+}
+
+func NewPhoneFactor(user *User, phone, friendlyName string) *Factor {
+	factor := NewFactor(user, friendlyName, Phone, FactorStateUnverified)
 	factor.Phone = storage.NullString(phone)
 	return factor
 }
