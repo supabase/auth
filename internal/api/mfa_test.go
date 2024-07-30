@@ -90,6 +90,10 @@ func (ts *MFATestSuite) SetupTest() {
 	ts.Config.MFA.Phone.EnrollEnabled = true
 	ts.Config.MFA.Phone.VerifyEnabled = true
 
+	// By default MFA WebAuthn is disabled
+	ts.Config.MFA.WebAuthn.EnrollEnabled = true
+	ts.Config.MFA.WebAuthn.VerifyEnabled = true
+
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      ts.TestDomain,
 		AccountName: ts.TestEmail,
@@ -193,6 +197,82 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 				qrCode := enrollResp.TOTP.QRCode
 				hasSVGStartAndEnd := strings.Contains(qrCode, "<svg") && strings.Contains(qrCode, "</svg>")
 				require.True(ts.T(), hasSVGStartAndEnd)
+				require.Equal(ts.T(), c.friendlyName, enrollResp.FriendlyName)
+			}
+		})
+	}
+}
+
+func (ts *MFATestSuite) TestEnrollWebAuthnFactor() {
+	testFriendlyName := "bob"
+	alternativeFriendlyName := "john"
+	validWebAuthnConfiguration := &WebAuthnParams{
+		RPDisplayName: "Authapp",
+		RPID:          "localhost",
+		RPOrigins:     []string{"http://localhost:3000"},
+	}
+
+	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
+
+	var cases = []struct {
+		desc         string
+		friendlyName string
+		factorType   string
+		issuer       string
+		webauthn     *WebAuthnParams
+		expectedCode int
+	}{
+		{
+			desc:         "WebAuthn: No WebAuthn field",
+			friendlyName: alternativeFriendlyName,
+			factorType:   models.WebAuthn,
+			webauthn:     nil,
+			expectedCode: http.StatusBadRequest,
+		},
+		{
+			desc:         "Invalid factor type",
+			friendlyName: testFriendlyName,
+			factorType:   "invalid_factor",
+			webauthn:     validWebAuthnConfiguration,
+			expectedCode: http.StatusBadRequest,
+		},
+		{
+			desc:         "WebAuthn: valid WebAuthn Configuration",
+			friendlyName: testFriendlyName,
+			factorType:   models.WebAuthn,
+			webauthn:     validWebAuthnConfiguration,
+			expectedCode: http.StatusOK,
+		},
+		{
+			desc:         "WebAuthn: invalid WebAuthn Configuration",
+			friendlyName: alternativeFriendlyName,
+			factorType:   models.WebAuthn,
+			webauthn:     nil,
+			expectedCode: http.StatusBadRequest,
+		},
+		{
+			desc:         "WebAuthn: Enrolling without friendly name",
+			friendlyName: "",
+			factorType:   models.WebAuthn,
+			webauthn:     validWebAuthnConfiguration,
+			expectedCode: http.StatusOK,
+		},
+	}
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			w := performEnrollWebAuthnFlow(ts, token, c.friendlyName, c.factorType, c.webauthn, c.expectedCode)
+
+			factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
+			ts.Require().NoError(err)
+			addedFactor := factors[len(factors)-1]
+			require.False(ts.T(), addedFactor.IsVerified())
+			if c.friendlyName != "" && c.expectedCode == http.StatusOK {
+				require.Equal(ts.T(), c.friendlyName, addedFactor.FriendlyName)
+			}
+
+			if w.Code == http.StatusOK {
+				enrollResp := EnrollWebAuthnFactorResponse{}
+				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
 				require.Equal(ts.T(), c.friendlyName, enrollResp.FriendlyName)
 			}
 		})
@@ -304,6 +384,19 @@ func (ts *MFATestSuite) TestChallengeSMSFactor() {
 			require.Equal(ts.T(), tc.expectedCode, w.Code, tc.desc)
 		})
 	}
+}
+
+func (ts *MFATestSuite) TestChallengeWebAuthnFactor() {
+	factor := models.NewWebAuthnFactor(ts.TestUser, "WebAuthnfactor")
+	validWebAuthnConfiguration := &WebAuthnParams{
+		RPDisplayName: "Authapp",
+		RPID:          "localhost",
+		RPOrigins:     []string{"http://localhost:3000"},
+	}
+	require.NoError(ts.T(), ts.API.db.Create(factor), "Error saving new test factor")
+	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
+	w := performChallengeWebAuthnFlow(ts, factor.ID, token, validWebAuthnConfiguration)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
 func (ts *MFATestSuite) TestMFAVerifyFactor() {
@@ -438,6 +531,36 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			}
 		})
 	}
+}
+
+func (ts *MFATestSuite) TestMFAVerifyWebAuthnFactor() {
+
+	// cases := []struct {
+	// 	desc             string
+	// 	validChallenge   bool
+	// 	validCode        bool
+	// 	expectedHTTPCode int
+	// }{
+	// 	{
+	// 		desc:             "Invalid: Valid code and expired challenge",
+	// 		validChallenge:   false,
+	// 		validCode:        true,
+	// 		expectedHTTPCode: http.StatusUnprocessableEntity,
+	// 	},
+	// 	{
+	// 		desc:             "Invalid: Invalid code and valid challenge ",
+	// 		validChallenge:   true,
+	// 		validCode:        false,
+	// 		expectedHTTPCode: http.StatusUnprocessableEntity,
+	// 	},
+	// 	{
+	// 		desc:             "Valid /verify request",
+	// 		validChallenge:   true,
+	// 		validCode:        true,
+	// 		expectedHTTPCode: http.StatusOK,
+	// 	},
+	// }
+
 }
 
 func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
@@ -605,6 +728,15 @@ func performEnrollFlow(ts *MFATestSuite, token, friendlyName, factorType, issuer
 	return w
 }
 
+func performEnrollWebAuthnFlow(ts *MFATestSuite, token, friendlyName, factorType string, webauthn *WebAuthnParams, expectedCode int) *httptest.ResponseRecorder {
+	var buffer bytes.Buffer
+	err := json.NewEncoder(&buffer).Encode(EnrollFactorParams{FriendlyName: friendlyName, FactorType: factorType, WebAuthn: webauthn})
+	require.NoError(ts.T(), err)
+	w := ServeAuthenticatedRequest(ts, http.MethodPost, "http://localhost/factors/", token, buffer)
+	require.Equal(ts.T(), expectedCode, w.Code)
+	return w
+}
+
 func ServeAuthenticatedRequest(ts *MFATestSuite, method, path, token string, buffer bytes.Buffer) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(method, path, &buffer)
@@ -653,7 +785,15 @@ func performChallengeFlow(ts *MFATestSuite, factorID uuid.UUID, token string) *h
 	w := ServeAuthenticatedRequest(ts, http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), token, buffer)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 	return w
+}
 
+func performChallengeWebAuthnFlow(ts *MFATestSuite, factorID uuid.UUID, token string, webauthn *WebAuthnParams) *httptest.ResponseRecorder {
+	var buffer bytes.Buffer
+	err := json.NewEncoder(&buffer).Encode(ChallengeFactorParams{WebAuthn: webauthn})
+	require.NoError(ts.T(), err)
+	w := ServeAuthenticatedRequest(ts, http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), token, buffer)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	return w
 }
 
 func performSMSChallengeFlow(ts *MFATestSuite, factorID uuid.UUID, token, channel string) *httptest.ResponseRecorder {
@@ -831,4 +971,104 @@ func FindFactorsByUser(tx *storage.Connection, user *models.User) ([]*models.Fac
 		return nil, errors.Wrap(err, "Database error when finding MFA factors associated to user")
 	}
 	return factors, nil
+}
+
+func (ts *MFATestSuite) TestInitializeWebAuthnConfig() {
+	tests := []struct {
+		name             string
+		config           *WebAuthnParams
+		expectedError    bool
+		expectedErrorMsg string
+	}{
+		{
+			name: "Valid configuration",
+			config: &WebAuthnParams{
+				RPDisplayName: "Example",
+				RPID:          "example.com",
+				RPOrigins:     []string{"https://example.com"},
+			},
+			expectedError: false,
+		},
+		{
+			name: "Missing RPDisplayName",
+			config: &WebAuthnParams{
+				RPID:      "example.com",
+				RPOrigins: []string{"https://example.com"},
+			},
+			expectedError:    true,
+			expectedErrorMsg: "WebAuthn Display name cannot be empty",
+		},
+		{
+			name: "Missing RPID",
+			config: &WebAuthnParams{
+				RPDisplayName: "Example",
+				RPOrigins:     []string{"https://example.com"},
+			},
+			expectedError:    true,
+			expectedErrorMsg: "WebAuthn RP ID cannot be empty",
+		},
+		{
+			name: "Missing RPOrigins",
+			config: &WebAuthnParams{
+				RPDisplayName: "Example",
+				RPID:          "example.com",
+			},
+			expectedError:    true,
+			expectedErrorMsg: "WebAuthn RP Origins cannot be empty",
+		},
+		{
+			name: "Invalid RPOrigins",
+			config: &WebAuthnParams{
+				RPDisplayName: "Example",
+				RPID:          "example.com",
+				RPOrigins:     []string{"invalid-url"},
+			},
+			expectedError:    true,
+			expectedErrorMsg: "Invalid RP origins: invalid-url",
+		},
+		{
+			name: "Invalid RPOrigins with HTTP",
+			config: &WebAuthnParams{
+				RPDisplayName: "Example",
+				RPID:          "example.com",
+				RPOrigins:     []string{"http://example.com"},
+			},
+			expectedError: false,
+		},
+		{
+			name: "Invalid URL Scheme",
+			config: &WebAuthnParams{
+				RPDisplayName: "Example",
+				RPID:          "example.com",
+				RPOrigins:     []string{"ftp://example.com"},
+			},
+			expectedError:    true,
+			expectedErrorMsg: "Invalid RP origins: ftp://example.com",
+		},
+		{
+			name: "Empty RPOrigins",
+			config: &WebAuthnParams{
+				RPDisplayName: "Example",
+				RPID:          "example.com",
+				RPOrigins:     []string{},
+			},
+			expectedError:    true,
+			expectedErrorMsg: "WebAuthn RP Origins cannot be empty",
+		},
+	}
+
+	for _, tt := range tests {
+		ts.T().Run(tt.name, func(t *testing.T) {
+			result, err := validateWebAuthnConfig(tt.config)
+			if tt.expectedError {
+				require.Error(ts.T(), err)
+				if err != nil {
+					require.Contains(ts.T(), err.Error(), tt.expectedErrorMsg)
+				}
+			} else {
+				require.NoError(ts.T(), err)
+				require.NotNil(ts.T(), result)
+			}
+		})
+	}
 }

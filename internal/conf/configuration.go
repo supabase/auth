@@ -5,6 +5,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/gobwas/glob"
+	"github.com/joho/godotenv"
+	"github.com/kelseyhightower/envconfig"
 	"net/url"
 	"os"
 	"regexp"
@@ -12,10 +15,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/gobwas/glob"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/joho/godotenv"
-	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
@@ -121,6 +121,12 @@ type PhoneFactorTypeConfiguration struct {
 	Template      string             `json:"template"`
 }
 
+type WebAuthnConfiguration struct {
+	// Default to false in order to ensure Phone MFA is opt-in
+	EnrollEnabled bool `json:"enroll_enabled" split_words:"true" default:"false"`
+	VerifyEnabled bool `json:"verify_enabled" split_words:"true" default:"false"`
+}
+
 // MFAConfiguration holds all the MFA related Configuration
 type MFAConfiguration struct {
 	Enabled                     bool                         `default:"false"`
@@ -131,6 +137,7 @@ type MFAConfiguration struct {
 	MaxVerifiedFactors          int                          `split_words:"true" default:"10"`
 	Phone                       PhoneFactorTypeConfiguration `split_words:"true"`
 	TOTP                        MFAFactorTypeConfiguration   `split_words:"true"`
+	WebAuthn                    WebAuthnConfiguration        `json:"web_authn" split_words:"true"`
 }
 
 type APIConfiguration struct {

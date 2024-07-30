@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
@@ -873,6 +874,36 @@ func (u *User) SoftDeleteUser(tx *storage.Connection) error {
 	}
 
 	return nil
+}
+
+func (user *User) WebAuthnID() []byte {
+	return []byte(user.ID.String())
+}
+
+func (user *User) WebAuthnName() string {
+	return string(user.Email)
+}
+
+func (user *User) WebAuthnDisplayName() string {
+	return string(user.Email)
+}
+
+func (user *User) WebAuthnIcon() string {
+	// This field is currently not populated
+	return ""
+}
+
+func (user *User) WebAuthnCredentials() []webauthn.Credential {
+	var credentials []webauthn.Credential
+
+	for _, factor := range user.Factors {
+		if factor.FactorType == WebAuthn {
+			credential := factor.Credential.Credential
+			credentials = append(credentials, credential)
+		}
+	}
+
+	return credentials
 }
 
 // SoftDeleteUserIdentities performs a soft deletion on all identities associated to a user
