@@ -1,8 +1,8 @@
 -- see: https://stackoverflow.com/questions/7624919/check-if-a-user-defined-type-already-exists-in-postgresql/48382296#48382296
 do $$ begin
-    create type factor_type as enum('totp', 'webauthn');
-    create type factor_status as enum('unverified', 'verified');
-    create type aal_level as enum('aal1', 'aal2', 'aal3');
+    create type {{ index .Options "Namespace" }}.factor_type as enum('totp', 'webauthn');
+    create type {{ index .Options "Namespace" }}.factor_status as enum('unverified', 'verified');
+    create type {{ index .Options "Namespace" }}.aal_level as enum('aal1', 'aal2', 'aal3');
 exception
     when duplicate_object then null;
 end $$;
