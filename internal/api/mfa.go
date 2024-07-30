@@ -352,10 +352,23 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 	user := getUser(ctx)
 	factor := getFactor(ctx)
+
 	ipAddress := utilities.GetIPAddress(r)
-	if factor.IsPhoneFactor() {
+	switch factor.FactorType {
+	case models.Phone:
+		if !config.MFA.Phone.VerifyEnabled {
+			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA verification is disabled for Phone")
+		}
 		return a.challengePhoneFactor(w, r)
+
+	case models.TOTP:
+		if !config.MFA.TOTP.VerifyEnabled {
+			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA verification is disabled for TOTP")
+		}
+	default:
+		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be TOTP or Phone")
 	}
+
 	challenge := factor.CreateChallenge(ipAddress)
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(challenge); terr != nil {
