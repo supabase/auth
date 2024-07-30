@@ -639,7 +639,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 		}
-		if shouldReEncrypt && config.Security.DBEncryption.Encrypt && factor.IsTOTPFactor() {
+		if shouldReEncrypt && config.Security.DBEncryption.Encrypt {
 			es, terr := crypto.NewEncryptedString(factor.ID.String(), []byte(secret), config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
 			if terr != nil {
 				return terr

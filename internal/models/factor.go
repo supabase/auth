@@ -242,14 +242,6 @@ func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) err
 	return tx.UpdateOnly(f, "factor_type", "updated_at")
 }
 
-func (f *Factor) IsTOTPFactor() bool {
-	return f.FactorType == TOTP
-}
-
-func (f *Factor) IsPhoneFactor() bool {
-	return f.FactorType == Phone
-}
-
 func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {
 	sessions, err := FindSessionsByFactorID(tx, f.ID)
 	if err != nil {
