@@ -181,7 +181,7 @@ paths:
 
   /verify:
     get:
-      summary: Authenticate by verifying the posession of a one-time token. Usually for use as clickable links.
+      summary: Authenticate by verifying the possession of a one-time token. Usually for use as clickable links.
       tags:
         - auth
       parameters:
@@ -214,7 +214,7 @@ paths:
         302:
           $ref: "#/components/responses/AccessRefreshTokenRedirectResponse"
     post:
-      summary: Authenticate by verifying the posession of a one-time token.
+      summary: Authenticate by verifying the possession of a one-time token.
       tags:
         - auth
       security:
