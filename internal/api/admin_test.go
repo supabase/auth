@@ -770,7 +770,7 @@ func (ts *AdminTestSuite) TestAdminUserDeleteFactor() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
 	f := models.NewTOTPFactor(u, "testSimpleName")
-	require.NoError(ts.T(), f.UpdateStatus(ts.API.db, model.FactorStatusVerified))
+	require.NoError(ts.T(), f.UpdateStatus(ts.API.db, models.FactorStatusVerified))
 	require.NoError(ts.T(), f.SetSecret("secretkey", ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey))
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 
