@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.157.1](https://github.com/supabase/auth/compare/v2.157.0...v2.157.1) (2024-07-31)
+
+
+### Bug Fixes
+
+* maintain backward compatibility for asymmetric JWTs ([#1695](https://github.com/supabase/auth/issues/1695)) ([cbb84b8](https://github.com/supabase/auth/commit/cbb84b85ef1129e73a4c5112f38d2ddfeb419bae))
+
 ## [2.157.0](https://github.com/supabase/auth/compare/v2.156.0...v2.157.0) (2024-07-26)
 
 
