@@ -717,6 +717,7 @@ paths:
                     type: string
                     enum:
                       - totp
+                      - phone
                   totp:
                     type: object
                     properties:
