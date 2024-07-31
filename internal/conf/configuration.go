@@ -713,11 +713,7 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 
 	if config.JWT.Keys == nil || len(config.JWT.Keys) == 0 {
 		// transform the secret into a JWK for consistency
-		bytes, err := base64.StdEncoding.DecodeString(config.JWT.Secret)
-		if err != nil {
-			bytes = []byte(config.JWT.Secret)
-		}
-		privKey, err := jwk.FromRaw(bytes)
+		privKey, err := jwk.FromRaw([]byte(config.JWT.Secret))
 		if err != nil {
 			return err
 		}
