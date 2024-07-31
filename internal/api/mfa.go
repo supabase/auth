@@ -3,11 +3,9 @@ package api
 import (
 	"bytes"
 	"crypto/subtle"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/aaronarduino/goqrsvg"
@@ -35,11 +33,10 @@ const (
 )
 
 type EnrollFactorParams struct {
-	FriendlyName string          `json:"friendly_name"`
-	FactorType   string          `json:"factor_type"`
-	Issuer       string          `json:"issuer"`
-	Phone        string          `json:"phone"`
-	WebAuthn     *WebAuthnParams `json:"web_authn,omitempty"`
+	FriendlyName string `json:"friendly_name"`
+	FactorType   string `json:"factor_type"`
+	Issuer       string `json:"issuer"`
+	Phone        string `json:"phone"`
 }
 
 type TOTPObject struct {
@@ -47,48 +44,40 @@ type TOTPObject struct {
 	Secret string `json:"secret,omitempty"`
 	URI    string `json:"uri,omitempty"`
 }
-type WebAuthnParams struct {
-	RPID              string                                   `json:"rp_id,omitempty"`
-	RPDisplayName     string                                   `json:"rp_display_name,omitempty"`
-	RPOrigins         []string                                 `json:"rp_origins,omitempty"`
-	AssertionResponse *wbnprotocol.CredentialAssertionResponse `json:"assertion_response,omitempty"`
-	CreationResponse  *wbnprotocol.CredentialCreationResponse  `json:"creation_response,omitempty"`
-}
 
 type EnrollFactorResponse struct {
-	ID           uuid.UUID  `json:"id"`
-	Type         string     `json:"type"`
-	FriendlyName string     `json:"friendly_name"`
-	TOTP         TOTPObject `json:"totp,omitempty"`
-	Phone        string     `json:"phone,omitempty"`
+	ID           uuid.UUID                       `json:"id"`
+	ChallengeID  *uuid.UUID                      `json:"challenge_id,omitempty"`
+	Type         string                          `json:"type"`
+	FriendlyName string                          `json:"friendly_name"`
+	TOTP         TOTPObject                      `json:"totp,omitempty"`
+	Phone        string                          `json:"phone,omitempty"`
+	WebAuthn     *wbnprotocol.CredentialCreation `json:"web_authn,omitempty"`
 }
 
 type ChallengeFactorParams struct {
-	Channel  string          `json:"channel"`
-	WebAuthn *WebAuthnParams `json:"web_authn,omitempty"`
+	Channel string `json:"channel,omitempty"`
 }
 
-type EnrollWebAuthnFactorResponse struct {
-	PublicKeyCredentialRequestOptions *wbnprotocol.CredentialCreation `json:"public_key_credential_request_options"`
-	FactorID                          uuid.UUID                       `json:"factor_id"`
-	ChallengeID                       uuid.UUID                       `json:"challenge_id"`
-	FriendlyName                      string                          `json:"friendly_name"`
+type WebAuthnVerifyParams struct {
+	// CreationResponse is the response received from the navigator.credentials.create() API.
+	CreationResponse *wbnprotocol.CredentialCreationResponse `json:"creation_response,omitempty"`
+
+	// GetResponse is the response received from the navigator.credentials.get() API, i.e. the `publicKey.response`.
+	GetResponse *wbnprotocol.CredentialAssertionResponse `json:"get_response,omitempty"`
 }
 
 type VerifyFactorParams struct {
-	ChallengeID uuid.UUID       `json:"challenge_id"`
-	Code        string          `json:"code"`
-	WebAuthn    *WebAuthnParams `json:"web_authn,omitempty"`
+	ChallengeID uuid.UUID             `json:"challenge_id,omitempty"`
+	Code        string                `json:"code,omitempty"`
+	WebAuthn    *WebAuthnVerifyParams `json:"web_authn,omitempty"`
 }
 
 type ChallengeFactorResponse struct {
 	ID        uuid.UUID `json:"id"`
 	ExpiresAt int64     `json:"expires_at"`
-}
 
-type WebAuthnLoginStartResponse struct {
-	PublicKeyCredentialRequestOptions *wbnprotocol.CredentialAssertion `json:"public_key_credential_request_options"`
-	ChallengeID                       uuid.UUID                        `json:"challenge_id"`
+	WebAuthn *wbnprotocol.CredentialAssertion `json:"web_authn,omitempty"`
 }
 
 type UnenrollFactorResponse struct {
@@ -175,43 +164,7 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	})
 }
 
-func validateWebAuthnConfig(config *WebAuthnParams) (*webauthn.WebAuthn, error) {
-	if config.RPDisplayName == "" {
-		return nil, badRequestError(ErrorCodeValidationFailed, "WebAuthn Display name cannot be empty")
-	}
-	if config.RPID == "" {
-		return nil, badRequestError(ErrorCodeValidationFailed, "WebAuthn RP ID cannot be empty")
-	}
-	if len(config.RPOrigins) == 0 {
-		return nil, badRequestError(ErrorCodeValidationFailed, "WebAuthn RP Origins cannot be empty")
-	}
-
-	var invalidOrigins []string
-
-	for _, origin := range config.RPOrigins {
-		parsedURL, err := url.Parse(origin)
-		if err != nil || (parsedURL.Scheme != "https" && parsedURL.Scheme != "http") || parsedURL.Host == "" {
-			invalidOrigins = append(invalidOrigins, origin)
-		}
-	}
-	if len(invalidOrigins) > 0 {
-		return nil, badRequestError(ErrorCodeValidationFailed, fmt.Sprintf("Invalid RP origins: %s", strings.Join(invalidOrigins, ", ")))
-	}
-	wconfig := &webauthn.Config{
-		RPDisplayName: config.RPDisplayName,
-		RPID:          config.RPID,
-		RPOrigins:     config.RPOrigins,
-	}
-	webAuthn, err := webauthn.New(wconfig)
-	if err != nil {
-		return nil, badRequestError(ErrorCodeValidationFailed, fmt.Sprintf("invalid WebAuthn configuration: %v", err))
-	}
-
-	return webAuthn, nil
-}
-
 func (a *API) enrollWebAuthnFactor(w http.ResponseWriter, r *http.Request, params *EnrollFactorParams) error {
-	// TODO: Check for factors with duplicate friendly names
 	ctx := r.Context()
 	user := getUser(ctx)
 	config := a.config
@@ -224,7 +177,7 @@ func (a *API) enrollWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 
 	for _, factor := range factors {
 		if factor.FriendlyName == params.FriendlyName {
-			return unprocessableEntityError(ErrorCodeMFAFactorNameConflict, fmt.Sprintf("A factor with the friendly name %q for this user likely already exists", factor.FriendlyName))
+			return unprocessableEntityError(ErrorCodeMFAFactorNameConflict, fmt.Sprintf("A factor with the friendly name %q for this user already exists", factor.FriendlyName))
 		}
 		if factor.IsVerified() {
 			numVerifiedFactors += 1
@@ -248,15 +201,13 @@ func (a *API) enrollWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 		return forbiddenError(ErrorCodeInsufficientAAL, "AAL2 required to enroll a new factor")
 	}
 
-	if params.WebAuthn == nil {
-		return badRequestError(ErrorCodeValidationFailed, "WebAuthn config required")
-	}
-
-	webAuthn, err := validateWebAuthnConfig(params.WebAuthn)
+	wan, err := webauthn.New(nil)
 	if err != nil {
+		// TODO!
 		return err
 	}
-	options, session, err := webAuthn.BeginRegistration(user)
+
+	navigatorCreateOptions, session, err := wan.BeginRegistration(user)
 	if err != nil {
 		return internalServerError("error generating WebAuthn registration data").WithInternalError(err)
 	}
@@ -279,73 +230,54 @@ func (a *API) enrollWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, &EnrollWebAuthnFactorResponse{
-		PublicKeyCredentialRequestOptions: options,
-		FactorID:                          factor.ID,
-		ChallengeID:                       challenge.ID,
-		FriendlyName:                      factor.FriendlyName,
+	return sendJSON(w, http.StatusOK, &EnrollFactorResponse{
+		ID:           factor.ID,
+		ChallengeID:  &challenge.ID,
+		FriendlyName: factor.FriendlyName,
+		WebAuthn:     navigatorCreateOptions,
 	})
-
 }
 
 func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, params *VerifyFactorParams) error {
-	// Ensure params.ChallengeID and params.VerifyID are present before calling this function
 	ctx := r.Context()
 	user := getUser(ctx)
 	config := a.config
 	factor := getFactor(ctx)
 	db := a.db.WithContext(ctx)
-	var webAuthn *webauthn.WebAuthn
-	var err error
-	switch {
-	case params.WebAuthn == nil:
-		return badRequestError(ErrorCodeValidationFailed, "WebAuthn config required")
-	case factor.IsVerified() && params.WebAuthn.AssertionResponse == nil:
-		return badRequestError(ErrorCodeValidationFailed, "WebAuthn Assertion Response required to login")
-	case factor.IsUnverified() && params.WebAuthn.CreationResponse == nil:
-		return badRequestError(ErrorCodeValidationFailed, "WebAuthn Creation Response required to login")
-	default:
-		webAuthn, err = validateWebAuthnConfig(params.WebAuthn)
-		if err != nil {
-			return err
-		}
-	}
 
-	challenge, err := factor.FindChallengeByID(a.db, params.ChallengeID)
+	challenge, err := factor.FindChallengeByID(db, params.ChallengeID)
 	if err != nil {
 		return err
 	}
-	webAuthnSession := challenge.SessionData.SessionData
+
+	wbn, err := webauthn.New(nil)
+	if err != nil {
+		return err
+	}
+
+	challengeSession := challenge.SessionData.SessionData
+
 	var credential *webauthn.Credential
 	if factor.IsUnverified() {
-		creationResponseJSON, err := json.Marshal(params.WebAuthn.CreationResponse)
+		navigatorCreateResponse, err := params.WebAuthn.CreationResponse.Parse()
 		if err != nil {
-			return badRequestError(ErrorCodeValidationFailed, "Failed to marshal CreationResponse to JSON")
-		}
-		creationResponseReader := bytes.NewReader(creationResponseJSON)
-		parsedResponse, err := wbnprotocol.ParseCredentialCreationResponseBody(creationResponseReader)
-		if err != nil {
-			return badRequestError(ErrorCodeValidationFailed, "Invalid credential creation response")
+			return badRequestError(ErrorCodeValidationFailed, "web_authn.creation_response is not valid").WithInternalError(err)
 		}
 
-		credential, err = webAuthn.CreateCredential(user, webAuthnSession, parsedResponse)
+		credential, err = wbn.CreateCredential(user, challengeSession, navigatorCreateResponse)
 		if err != nil {
+			// TODO!
 			return err
 		}
-
 	} else if factor.IsVerified() {
-		assertionResponseJSON, err := json.Marshal(params.WebAuthn.AssertionResponse)
+		navigatorGetResponse, err := params.WebAuthn.GetResponse.Parse()
 		if err != nil {
-			return badRequestError(ErrorCodeValidationFailed, "Failed to marshal AssertionResponse to JSON")
-		}
-		assertionResponseReader := bytes.NewReader(assertionResponseJSON)
-		parsedResponse, err := wbnprotocol.ParseCredentialRequestResponseBody(assertionResponseReader)
-		if err != nil {
-			return badRequestError(ErrorCodeValidationFailed, "Invalid credential request response")
+			return badRequestError(ErrorCodeValidationFailed, "web_authn.get_response is not valid").WithInternalError(err)
 		}
 
-		credential, err = webAuthn.ValidateLogin(user, webAuthnSession, parsedResponse)
+		credential, err = wbn.ValidateLogin(user, challengeSession, navigatorGetResponse)
 		if err != nil {
+			// TODO!
 			return internalServerError("error validating WebAuthn credentials")
 		}
 	}
@@ -615,6 +547,7 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 
 func (a *API) challengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	config := a.config
 	db := a.db.WithContext(ctx)
 	user := getUser(ctx)
 	factor := getFactor(ctx)
@@ -624,14 +557,13 @@ func (a *API) challengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 	}
 
 	ipAddress := utilities.GetIPAddress(r)
-	if params.WebAuthn == nil {
-		return badRequestError(ErrorCodeValidationFailed, "WebAuthn config required")
-	}
-	webAuthn, err := validateWebAuthnConfig(params.WebAuthn)
+
+	wbn, err := webauthn.New(nil)
 	if err != nil {
 		return err
 	}
-	options, session, err := webAuthn.BeginLogin(user)
+
+	navigatorGetOptions, session, err := wbn.BeginLogin(user)
 	if err != nil {
 		return err
 	}
@@ -655,11 +587,11 @@ func (a *API) challengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, &WebAuthnLoginStartResponse{
-		PublicKeyCredentialRequestOptions: options,
-		ChallengeID:                       challenge.ID,
+	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
+		ID:        challenge.ID,
+		ExpiresAt: challenge.GetExpiryTime(config.MFA.ChallengeExpiryDuration).Unix(),
+		WebAuthn:  navigatorGetOptions,
 	})
-
 }
 
 func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
@@ -671,16 +603,18 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
 	if factor.IsPhoneFactor() {
+		// TODO! Check if verify is enabled
 		return a.challengePhoneFactor(w, r)
 	}
-	var challenge *models.Challenge
 	if factor.IsWebAuthnFactor() {
+		// TODO! Check if verify is enabled
 		return a.challengeWebAuthnFactor(w, r)
 	}
-	challenge = factor.CreateChallenge(ipAddress)
+
+	totpChallenge := factor.CreateChallenge(ipAddress)
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := tx.Create(challenge); terr != nil {
+		if terr := tx.Create(totpChallenge); terr != nil {
 			return terr
 		}
 		if terr := models.NewAuditLogEntry(r, tx, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
@@ -695,8 +629,8 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
-		ID:        challenge.ID,
-		ExpiresAt: challenge.GetExpiryTime(config.MFA.ChallengeExpiryDuration).Unix(),
+		ID:        totpChallenge.ID,
+		ExpiresAt: totpChallenge.GetExpiryTime(config.MFA.ChallengeExpiryDuration).Unix(),
 	})
 }
 
