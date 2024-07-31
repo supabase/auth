@@ -108,7 +108,7 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	if numVerifiedFactors > 0 && !session.IsAAL2() {
 		return forbiddenError(ErrorCodeInsufficientAAL, "AAL2 required to enroll a new factor")
 	}
-	factor := models.NewPhoneFactor(user, phone, params.FriendlyName, params.FactorType, models.FactorStateUnverified)
+	factor := models.NewPhoneFactor(user, phone, params.FriendlyName)
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(factor); terr != nil {
 			pgErr := utilities.NewPostgresError(terr)
@@ -222,7 +222,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	}
 	svgData.End()
 
-	factor = models.NewFactor(user, params.FriendlyName, params.FactorType, models.FactorStateUnverified)
+	factor = models.NewTOTPFactor(user, params.FriendlyName)
 	if err := factor.SetSecret(key.Secret(), config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
 		return err
 	}
@@ -352,10 +352,23 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 
 	user := getUser(ctx)
 	factor := getFactor(ctx)
+
 	ipAddress := utilities.GetIPAddress(r)
-	if factor.IsPhoneFactor() {
+	switch factor.FactorType {
+	case models.Phone:
+		if !config.MFA.Phone.VerifyEnabled {
+			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA verification is disabled for Phone")
+		}
 		return a.challengePhoneFactor(w, r)
+
+	case models.TOTP:
+		if !config.MFA.TOTP.VerifyEnabled {
+			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA verification is disabled for TOTP")
+		}
+	default:
+		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be TOTP or Phone")
 	}
+
 	challenge := factor.CreateChallenge(ipAddress)
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(challenge); terr != nil {
@@ -626,7 +639,7 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 		}
-		if shouldReEncrypt && config.Security.DBEncryption.Encrypt && factor.IsTOTPFactor() {
+		if shouldReEncrypt && config.Security.DBEncryption.Encrypt {
 			es, terr := crypto.NewEncryptedString(factor.ID.String(), []byte(secret), config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
 			if terr != nil {
 				return terr

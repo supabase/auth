@@ -62,7 +62,7 @@ func (ts *MFATestSuite) SetupTest() {
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
 	// Create Factor
-	f := models.NewFactor(u, "test_factor", models.TOTP, models.FactorStateUnverified)
+	f := models.NewTOTPFactor(u, "test_factor")
 	require.NoError(ts.T(), f.SetSecret("secretkey", ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey))
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error saving new test factor")
 	// Create corresponding session
@@ -277,7 +277,7 @@ func (ts *MFATestSuite) TestChallengeSMSFactor() {
 	phone := "+1234567"
 	friendlyName := "testchallengesmsfactor"
 
-	f := models.NewPhoneFactor(ts.TestUser, phone, friendlyName, models.Phone, models.FactorStateUnverified)
+	f := models.NewPhoneFactor(ts.TestUser, phone, friendlyName)
 	require.NoError(ts.T(), ts.API.db.Create(f), "Error creating new SMS factor")
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 
@@ -369,7 +369,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 
 			if v.factorType == models.TOTP {
 				friendlyName := uuid.Must(uuid.NewV4()).String()
-				f = models.NewFactor(ts.TestUser, friendlyName, models.TOTP, models.FactorStateUnverified)
+				f = models.NewTOTPFactor(ts.TestUser, friendlyName)
 				sharedSecret = ts.TestOTPKey.Secret()
 				f.Secret = sharedSecret
 				require.NoError(ts.T(), ts.API.db.Create(f), "Error updating new test factor")
@@ -379,7 +379,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 				otp, err := crypto.GenerateOtp(numDigits)
 				require.NoError(ts.T(), err)
 				phone := fmt.Sprintf("+%s", otp)
-				f = models.NewPhoneFactor(ts.TestUser, phone, friendlyName, models.Phone, models.FactorStateUnverified)
+				f = models.NewPhoneFactor(ts.TestUser, phone, friendlyName)
 				require.NoError(ts.T(), ts.API.db.Create(f), "Error creating new SMS factor")
 			}
 

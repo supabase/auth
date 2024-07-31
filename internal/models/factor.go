@@ -148,8 +148,12 @@ func NewFactor(user *User, friendlyName string, factorType string, state FactorS
 	return factor
 }
 
-func NewPhoneFactor(user *User, phone, friendlyName string, factorType string, state FactorState) *Factor {
-	factor := NewFactor(user, friendlyName, factorType, state)
+func NewTOTPFactor(user *User, friendlyName string) *Factor {
+	return NewFactor(user, friendlyName, TOTP, FactorStateUnverified)
+}
+
+func NewPhoneFactor(user *User, phone, friendlyName string) *Factor {
+	factor := NewFactor(user, friendlyName, Phone, FactorStateUnverified)
 	factor.Phone = storage.NullString(phone)
 	return factor
 }
@@ -236,14 +240,6 @@ func (f *Factor) UpdateStatus(tx *storage.Connection, state FactorState) error {
 func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) error {
 	f.FactorType = factorType
 	return tx.UpdateOnly(f, "factor_type", "updated_at")
-}
-
-func (f *Factor) IsTOTPFactor() bool {
-	return f.FactorType == TOTP
-}
-
-func (f *Factor) IsPhoneFactor() bool {
-	return f.FactorType == Phone
 }
 
 func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {
