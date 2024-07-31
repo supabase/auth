@@ -263,6 +263,14 @@ func (f *Factor) IsVerified() bool {
 	return f.Status == FactorStateVerified.String()
 }
 
+func (f *Factor) IsUnverified() bool {
+	return f.Status == FactorStateUnverified.String()
+}
+
+func (f *Factor) IsPhoneFactor() bool {
+	return f.FactorType == Phone
+}
+
 func (f *Factor) FindChallengeByID(conn *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
 	var challenge Challenge
 	err := conn.Q().Where("id = ? and factor_id = ?", challengeID, f.ID).First(&challenge)

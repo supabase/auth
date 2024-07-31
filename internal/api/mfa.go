@@ -89,10 +89,27 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	if err := models.DeleteExpiredFactors(db, config.MFA.FactorExpiryDuration); err != nil {
 		return err
 	}
+	for _, factor := range user.Factors {
+		switch {
+		case factor.FriendlyName == params.FriendlyName:
+			return unprocessableEntityError(
+				ErrorCodeMFAFactorNameConflict,
+				fmt.Sprintf("A factor with the friendly name %q for this user already exists", factor.FriendlyName),
+			)
 
-	for _, factor := range factors {
-		if factor.IsVerified() {
-			numVerifiedFactors += 1
+		case factor.IsVerified() && factor.IsPhoneFactor():
+			return unprocessableEntityError(
+				ErrorCodeVerifiedPhoneFactorExists,
+				"A verified phone factor already exists, unenroll the existing factor to continue",
+			)
+
+		case factor.IsVerified():
+			numVerifiedFactors++
+
+		case factor.IsUnverified() && factor.IsPhoneFactor():
+			if err := db.Destroy(factor); err != nil {
+				return internalServerError("Database error deleting factor").WithInternalError(err)
+			}
 		}
 	}
 
@@ -110,12 +127,7 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	factor := models.NewPhoneFactor(user, phone, params.FriendlyName)
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(factor); terr != nil {
-			pgErr := utilities.NewPostgresError(terr)
-			if pgErr.IsUniqueConstraintViolated() {
-				return unprocessableEntityError(ErrorCodeMFAFactorNameConflict, fmt.Sprintf("A factor with the friendly name %q for this user likely already exists", factor.FriendlyName))
-			}
 			return terr
-
 		}
 		if terr := models.NewAuditLogEntry(r, tx, user, models.EnrollFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":   factor.ID,

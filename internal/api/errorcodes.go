@@ -81,4 +81,6 @@ const (
 	ErrorCodeMFAPhoneVerifyDisabled            ErrorCode = "mfa_phone_verify_not_enabled"
 	ErrorCodeMFATOTPEnrollDisabled             ErrorCode = "mfa_totp_enroll_not_enabled"
 	ErrorCodeMFATOTPVerifyDisabled             ErrorCode = "mfa_totp_verify_not_enabled"
+	// TOOD: Find a better name for this error code
+	ErrorCodeVerifiedPhoneFactorExists ErrorCode = "mfa_verified_phone_factor_exists"
 )
