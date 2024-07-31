@@ -726,6 +726,8 @@ paths:
                         type: string
                       uri:
                         type: string
+                  phone:
+                    type: string
         400:
           $ref: "#/components/responses/BadRequestResponse"
 
@@ -745,6 +747,18 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                channel:
+                  type: string
+                  enum:
+                    - sms
+                    - whatsapp
+
       responses:
         200:
           description: >
@@ -1963,6 +1977,11 @@ components:
           description: |-
             Usually one of:
             - totp
+            - phone
+        phone:
+          type: string
+          format: phone
+
 
     IdentitySchema:
       type: object
