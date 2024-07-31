@@ -159,7 +159,11 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return a.enrollPhoneFactor(w, r, params)
 	case models.TOTP:
-		if !config.MFA.TOTP.EnrollEnabled {
+		// Prior to the introduction of MFA.TOTP.EnrollEnabled,
+		// MFA.Enabled was used to configure whether TOTP was on. So
+		// both have to be set to false to regard the feature as
+		// disabled.
+		if !config.MFA.Enabled && !config.MFA.TOTP.EnrollEnabled {
 			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA enroll is disabled for TOTP")
 		}
 	default:
@@ -362,7 +366,11 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		return a.challengePhoneFactor(w, r)
 
 	case models.TOTP:
-		if !config.MFA.TOTP.VerifyEnabled {
+		// Prior to the introduction of MFA.TOTP.VerifyEnabled,
+		// MFA.Enabled was used to configure whether TOTP was on. So
+		// both have to be set to false to regard the feature as
+		// disabled.
+		if !config.MFA.Enabled && !config.MFA.TOTP.VerifyEnabled {
 			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA verification is disabled for TOTP")
 		}
 	default:
