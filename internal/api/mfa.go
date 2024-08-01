@@ -106,7 +106,7 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		case factor.IsVerified():
 			numVerifiedFactors++
 
-		case factor.IsUnverified() && factor.IsPhoneFactor() && factor.Phone == params.Phone:
+		case factor.IsUnverified() && factor.IsPhoneFactor() && factor.Phone.String() == params.Phone:
 			if err := db.Destroy(factor); err != nil {
 				return internalServerError("Database error deleting factor").WithInternalError(err)
 			}
