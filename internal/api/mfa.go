@@ -266,7 +266,7 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 		}
 		return a.enrollTOTPFactor(w, r, params)
 	default:
-		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be TOTP or Phone")
+		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be totp or phone")
 	}
 
 }
