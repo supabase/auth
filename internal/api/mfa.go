@@ -89,6 +89,8 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	if err := models.DeleteExpiredFactors(db, config.MFA.FactorExpiryDuration); err != nil {
 		return err
 	}
+	var factorsToDelete []models.Factor
+
 	for _, factor := range user.Factors {
 		switch {
 		case factor.FriendlyName == params.FriendlyName:
@@ -106,10 +108,14 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		case factor.IsVerified():
 			numVerifiedFactors++
 
-		case factor.IsUnverified() && factor.IsPhoneFactor() && factor.Phone.String() == params.Phone:
-			if err := db.Destroy(factor); err != nil {
-				return internalServerError("Database error deleting factor").WithInternalError(err)
-			}
+		case factor.IsUnverified() && factor.IsPhoneFactor() && factor.Phone.String() == phone:
+			factorsToDelete = append(factorsToDelete, factor)
+		}
+	}
+
+	for _, factorToDelete := range factorsToDelete {
+		if err := db.Destroy(&factorToDelete); err != nil {
+			return internalServerError("Database error deleting factor").WithInternalError(err)
 		}
 	}
 
@@ -124,6 +130,7 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	if numVerifiedFactors > 0 && !session.IsAAL2() {
 		return forbiddenError(ErrorCodeInsufficientAAL, "AAL2 required to enroll a new factor")
 	}
+
 	factor := models.NewPhoneFactor(user, phone, params.FriendlyName)
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(factor); terr != nil {

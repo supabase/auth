@@ -117,7 +117,8 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 }
 
 type Factor struct {
-	ID           uuid.UUID          `json:"id" db:"id"`
+	ID uuid.UUID `json:"id" db:"id"`
+	// TODO: Consider removing this nested user field. We don't use it.
 	User         User               `json:"-" belongs_to:"user"`
 	UserID       uuid.UUID          `json:"-" db:"user_id"`
 	CreatedAt    time.Time          `json:"created_at" db:"created_at"`
