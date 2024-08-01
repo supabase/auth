@@ -99,14 +99,14 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 
 		case factor.IsVerified() && factor.IsPhoneFactor():
 			return unprocessableEntityError(
-				ErrorCodeVerifiedPhoneFactorExists,
+				ErrorCodeVerifiedFactorExists,
 				"A verified phone factor already exists, unenroll the existing factor to continue",
 			)
 
 		case factor.IsVerified():
 			numVerifiedFactors++
 
-		case factor.IsUnverified() && factor.IsPhoneFactor():
+		case factor.IsUnverified() && factor.IsPhoneFactor() && factor.Phone == params.Phone:
 			if err := db.Destroy(factor); err != nil {
 				return internalServerError("Database error deleting factor").WithInternalError(err)
 			}
