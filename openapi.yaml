@@ -693,11 +693,15 @@ paths:
                   type: string
                   enum:
                     - totp
+                    - phone
                 friendly_name:
                   type: string
                 issuer:
                   type: string
                   format: uri
+                phone:
+                  type: string
+                  format: phone
       responses:
         200:
           description: >
@@ -713,6 +717,7 @@ paths:
                     type: string
                     enum:
                       - totp
+                      - phone
                   totp:
                     type: object
                     properties:
@@ -722,6 +727,9 @@ paths:
                         type: string
                       uri:
                         type: string
+                  phone:
+                    type: string
+                    format: phone
         400:
           $ref: "#/components/responses/BadRequestResponse"
 
@@ -741,6 +749,18 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                channel:
+                  type: string
+                  enum:
+                    - sms
+                    - whatsapp
+
       responses:
         200:
           description: >
@@ -1959,6 +1979,11 @@ components:
           description: |-
             Usually one of:
             - totp
+            - phone
+        phone:
+          type: string
+          format: phone
+
 
     IdentitySchema:
       type: object
