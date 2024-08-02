@@ -399,9 +399,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		if !config.MFA.Phone.VerifyEnabled {
 			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA verification is disabled for Phone")
 		}
-		if !factor.IsOwnedBy(user) {
-			return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
-		}
 		return a.challengePhoneFactor(w, r)
 
 	case models.TOTP:
@@ -411,9 +408,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		// disabled.
 		if !config.MFA.Enabled && !config.MFA.TOTP.VerifyEnabled {
 			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA verification is disabled for TOTP")
-		}
-		if !factor.IsOwnedBy(user) {
-			return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
 		}
 		return a.challengeTOTPFactor(w, r)
 	default:
@@ -572,10 +566,6 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	db := a.db.WithContext(ctx)
 	currentIP := utilities.GetIPAddress(r)
 
-	if !factor.IsOwnedBy(user) {
-		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
-	}
-
 	challenge, err := factor.FindChallengeByID(db, params.ChallengeID)
 	if err != nil && models.IsNotFoundError(err) {
 		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor with the provided challenge ID not found")
@@ -732,6 +722,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if factor.IsVerified() && !session.IsAAL2() {
 		return unprocessableEntityError(ErrorCodeInsufficientAAL, "AAL2 required to unenroll verified factor")
 	}
+	// TODO: move this into loadFactor
 	if !factor.IsOwnedBy(user) {
 		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
