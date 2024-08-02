@@ -394,14 +394,13 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	factor := getFactor(ctx)
 	user := getUser(ctx)
 
-	if !factor.IsOwnedBy(user) {
-		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
-	}
-
 	switch factor.FactorType {
 	case models.Phone:
 		if !config.MFA.Phone.VerifyEnabled {
 			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA verification is disabled for Phone")
+		}
+		if !factor.IsOwnedBy(user) {
+			return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
 		}
 		return a.challengePhoneFactor(w, r)
 
@@ -412,6 +411,9 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		// disabled.
 		if !config.MFA.Enabled && !config.MFA.TOTP.VerifyEnabled {
 			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA verification is disabled for TOTP")
+		}
+		if !factor.IsOwnedBy(user) {
+			return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
 		}
 		return a.challengeTOTPFactor(w, r)
 	default:
