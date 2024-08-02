@@ -75,6 +75,7 @@ const (
 	ErrorCodeAnonymousProviderDisabled         ErrorCode = "anonymous_provider_disabled"
 	ErrorCodeHookTimeout                       ErrorCode = "hook_timeout"
 	ErrorCodeHookTimeoutAfterRetry             ErrorCode = "hook_timeout_after_retry"
+	ErrorCodeHookPayloadOverSizeLimit          ErrorCode = "hook_payload_over_size_limit"
 	ErrorCodeRequestTimeout                    ErrorCode = "request_timeout"
 	ErrorCodeMFAPhoneEnrollDisabled            ErrorCode = "mfa_phone_enroll_not_enabled"
 	ErrorCodeMFAPhoneVerifyDisabled            ErrorCode = "mfa_phone_verify_not_enabled"

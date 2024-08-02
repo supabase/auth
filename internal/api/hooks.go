@@ -152,11 +152,16 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 			if rsp.Body == nil {
 				return nil, nil
 			}
-			// TODO: Check if there is excess data in the response body to be read
 			limitedReader := io.LimitedReader{R: rsp.Body, N: PayloadLimit}
 			body, err := io.ReadAll(&limitedReader)
 			if err != nil {
 				return nil, err
+			}
+			if limitedReader.N <= 0 {
+				// check if the response body still has excess bytes to be read
+				if n, _ := rsp.Body.Read(make([]byte, 1)); n > 0 {
+					return nil, unprocessableEntityError(ErrorCodeHookPayloadOverSizeLimit, fmt.Sprintf("Payload size exceeded size limit of %d bytes", PayloadLimit))
+				}
 			}
 			return body, nil
 		case http.StatusTooManyRequests, http.StatusServiceUnavailable:
