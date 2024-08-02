@@ -137,39 +137,12 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	})
 }
 
-func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
+func (a *API) enrollTOTPFactor(w http.ResponseWriter, r *http.Request, params *EnrollFactorParams) error {
 	ctx := r.Context()
 	user := getUser(ctx)
-	session := getSession(ctx)
-	config := a.config
 	db := a.db.WithContext(ctx)
-
-	if session == nil || user == nil {
-		return internalServerError("A valid session and a registered user are required to enroll a factor")
-	}
-	params := &EnrollFactorParams{}
-	if err := retrieveRequestParams(r, params); err != nil {
-		return err
-	}
-
-	switch params.FactorType {
-	case models.Phone:
-		if !config.MFA.Phone.EnrollEnabled {
-			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA enroll is disabled for Phone")
-		}
-		return a.enrollPhoneFactor(w, r, params)
-	case models.TOTP:
-		// Prior to the introduction of MFA.TOTP.EnrollEnabled,
-		// MFA.Enabled was used to configure whether TOTP was on. So
-		// both have to be set to false to regard the feature as
-		// disabled.
-		if !config.MFA.Enabled && !config.MFA.TOTP.EnrollEnabled {
-			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA enroll is disabled for TOTP")
-		}
-	default:
-		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be TOTP or Phone")
-	}
-
+	config := a.config
+	session := getSession(ctx)
 	issuer := ""
 	if params.Issuer == "" {
 		u, err := url.ParseRequestURI(config.SiteURL)
@@ -263,6 +236,41 @@ func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
+func (a *API) EnrollFactor(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := getUser(ctx)
+	session := getSession(ctx)
+	config := a.config
+
+	if session == nil || user == nil {
+		return internalServerError("A valid session and a registered user are required to enroll a factor")
+	}
+	params := &EnrollFactorParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
+	}
+
+	switch params.FactorType {
+	case models.Phone:
+		if !config.MFA.Phone.EnrollEnabled {
+			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA enroll is disabled for Phone")
+		}
+		return a.enrollPhoneFactor(w, r, params)
+	case models.TOTP:
+		// Prior to the introduction of MFA.TOTP.EnrollEnabled,
+		// MFA.Enabled was used to configure whether TOTP was on. So
+		// both have to be set to false to regard the feature as
+		// disabled.
+		if !config.MFA.Enabled && !config.MFA.TOTP.EnrollEnabled {
+			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA enroll is disabled for TOTP")
+		}
+		return a.enrollTOTPFactor(w, r, params)
+	default:
+		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be totp or phone")
+	}
+
+}
+
 func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
@@ -349,33 +357,14 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 	})
 }
 
-func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
+func (a *API) challengeTOTPFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
 	db := a.db.WithContext(ctx)
 
 	user := getUser(ctx)
 	factor := getFactor(ctx)
-
 	ipAddress := utilities.GetIPAddress(r)
-	switch factor.FactorType {
-	case models.Phone:
-		if !config.MFA.Phone.VerifyEnabled {
-			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA verification is disabled for Phone")
-		}
-		return a.challengePhoneFactor(w, r)
-
-	case models.TOTP:
-		// Prior to the introduction of MFA.TOTP.VerifyEnabled,
-		// MFA.Enabled was used to configure whether TOTP was on. So
-		// both have to be set to false to regard the feature as
-		// disabled.
-		if !config.MFA.Enabled && !config.MFA.TOTP.VerifyEnabled {
-			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA verification is disabled for TOTP")
-		}
-	default:
-		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be TOTP or Phone")
-	}
 
 	challenge := factor.CreateChallenge(ipAddress)
 	if err := db.Transaction(func(tx *storage.Connection) error {
@@ -399,165 +388,51 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *VerifyFactorParams) error {
+func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
-	user := getUser(ctx)
 	factor := getFactor(ctx)
-	db := a.db.WithContext(ctx)
-	currentIP := utilities.GetIPAddress(r)
-
-	if !factor.IsOwnedBy(user) {
-		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
-
-	}
-
-	challenge, err := factor.FindChallengeByID(db, params.ChallengeID)
-	if err != nil && models.IsNotFoundError(err) {
-		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor with the provided challenge ID not found")
-	} else if err != nil {
-		return internalServerError("Database error finding Challenge").WithInternalError(err)
-	}
-
-	if challenge.VerifiedAt != nil || challenge.IPAddress != currentIP {
-		return unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch")
-	}
-
-	if challenge.HasExpired(config.MFA.ChallengeExpiryDuration) {
-		if err := db.Destroy(challenge); err != nil {
-			return internalServerError("Database error deleting challenge").WithInternalError(err)
-		}
-		return unprocessableEntityError(ErrorCodeMFAChallengeExpired, "MFA challenge %v has expired, verify against another challenge or create a new challenge.", challenge.ID)
-	}
-	otpCode, shouldReEncrypt, err := challenge.GetOtpCode(config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
-	if err != nil {
-		return internalServerError("Database error verifying MFA TOTP secret").WithInternalError(err)
-	}
-	valid := subtle.ConstantTimeCompare([]byte(otpCode), []byte(params.Code)) == 1
-	if config.Hook.MFAVerificationAttempt.Enabled {
-		input := hooks.MFAVerificationAttemptInput{
-			UserID:     user.ID,
-			FactorID:   factor.ID,
-			FactorType: factor.FactorType,
-			Valid:      valid,
-		}
-
-		output := hooks.MFAVerificationAttemptOutput{}
-		err := a.invokeHook(nil, r, &input, &output)
-		if err != nil {
-			return err
-		}
-
-		if output.Decision == hooks.HookRejection {
-			if err := models.Logout(db, user.ID); err != nil {
-				return err
-			}
-
-			if output.Message == "" {
-				output.Message = hooks.DefaultMFAHookRejectionMessage
-			}
-
-			return forbiddenError(ErrorCodeMFAVerificationRejected, output.Message)
-		}
-	}
-	if !valid {
-		if shouldReEncrypt && config.Security.DBEncryption.Encrypt {
-			if err := challenge.SetOtpCode(otpCode, true, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
-				return err
-			}
-
-			if err := db.UpdateOnly(challenge, "otp_code"); err != nil {
-				return err
-			}
-		}
-		return unprocessableEntityError(ErrorCodeMFAVerificationFailed, "Invalid MFA Phone code entered")
-	}
-
-	var token *AccessTokenResponse
-
-	err = db.Transaction(func(tx *storage.Connection) error {
-		var terr error
-		if terr = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
-			"factor_id":    factor.ID,
-			"challenge_id": challenge.ID,
-			"factor_type":  factor.FactorType,
-		}); terr != nil {
-			return terr
-		}
-		if terr = challenge.Verify(tx); terr != nil {
-			return terr
-		}
-		if !factor.IsVerified() {
-			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
-				return terr
-			}
-		}
-		user, terr = models.FindUserByID(tx, user.ID)
-		if terr != nil {
-			return terr
-		}
-
-		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.MFAPhone, models.GrantParams{
-			FactorID: &factor.ID,
-		})
-		if terr != nil {
-			return terr
-		}
-		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-			return internalServerError("Failed to set JWT cookie. %s", terr)
-		}
-		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
-			return internalServerError("Failed to update sessions. %s", terr)
-		}
-		if terr = models.DeleteUnverifiedFactors(tx, user); terr != nil {
-			return internalServerError("Error removing unverified factors. %s", terr)
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
-
-	return sendJSON(w, http.StatusOK, token)
-}
-
-func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
-	var err error
-	ctx := r.Context()
 	user := getUser(ctx)
-	factor := getFactor(ctx)
-	config := a.config
-	db := a.db.WithContext(ctx)
-
-	params := &VerifyFactorParams{}
-	if err := retrieveRequestParams(r, params); err != nil {
-		return err
-	}
 
 	switch factor.FactorType {
 	case models.Phone:
 		if !config.MFA.Phone.VerifyEnabled {
 			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA verification is disabled for Phone")
 		}
-		if params.Code == "" {
-			return badRequestError(ErrorCodeValidationFailed, "Code needs to be non-empty")
+		if !factor.IsOwnedBy(user) {
+			return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
 		}
-		return a.verifyPhoneFactor(w, r, params)
+		return a.challengePhoneFactor(w, r)
+
 	case models.TOTP:
-		if !config.MFA.TOTP.VerifyEnabled {
+		// Prior to the introduction of MFA.TOTP.VerifyEnabled,
+		// MFA.Enabled was used to configure whether TOTP was on. So
+		// both have to be set to false to regard the feature as
+		// disabled.
+		if !config.MFA.Enabled && !config.MFA.TOTP.VerifyEnabled {
 			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA verification is disabled for TOTP")
 		}
-		if params.Code == "" {
-			return badRequestError(ErrorCodeValidationFailed, "Code needs to be non-empty")
+		if !factor.IsOwnedBy(user) {
+			return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
 		}
+		return a.challengeTOTPFactor(w, r)
 	default:
 		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be TOTP or Phone")
 	}
 
+}
+
+func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *VerifyFactorParams) error {
+	var err error
+	ctx := r.Context()
+	user := getUser(ctx)
+	factor := getFactor(ctx)
+	config := a.config
+	db := a.db.WithContext(ctx)
 	currentIP := utilities.GetIPAddress(r)
 
 	if !factor.IsOwnedBy(user) {
+		// TODO: Should be changed to notFoundError. Retained as internalServerError to preserve backward compatibility.
 		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
 
@@ -686,6 +561,159 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
 
 	return sendJSON(w, http.StatusOK, token)
+
+}
+
+func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *VerifyFactorParams) error {
+	ctx := r.Context()
+	config := a.config
+	user := getUser(ctx)
+	factor := getFactor(ctx)
+	db := a.db.WithContext(ctx)
+	currentIP := utilities.GetIPAddress(r)
+
+	if !factor.IsOwnedBy(user) {
+		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
+	}
+
+	challenge, err := factor.FindChallengeByID(db, params.ChallengeID)
+	if err != nil && models.IsNotFoundError(err) {
+		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor with the provided challenge ID not found")
+	} else if err != nil {
+		return internalServerError("Database error finding Challenge").WithInternalError(err)
+	}
+
+	if challenge.VerifiedAt != nil || challenge.IPAddress != currentIP {
+		return unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch")
+	}
+
+	if challenge.HasExpired(config.MFA.ChallengeExpiryDuration) {
+		if err := db.Destroy(challenge); err != nil {
+			return internalServerError("Database error deleting challenge").WithInternalError(err)
+		}
+		return unprocessableEntityError(ErrorCodeMFAChallengeExpired, "MFA challenge %v has expired, verify against another challenge or create a new challenge.", challenge.ID)
+	}
+	otpCode, shouldReEncrypt, err := challenge.GetOtpCode(config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
+	if err != nil {
+		return internalServerError("Database error verifying MFA TOTP secret").WithInternalError(err)
+	}
+	valid := subtle.ConstantTimeCompare([]byte(otpCode), []byte(params.Code)) == 1
+	if config.Hook.MFAVerificationAttempt.Enabled {
+		input := hooks.MFAVerificationAttemptInput{
+			UserID:     user.ID,
+			FactorID:   factor.ID,
+			FactorType: factor.FactorType,
+			Valid:      valid,
+		}
+
+		output := hooks.MFAVerificationAttemptOutput{}
+		err := a.invokeHook(nil, r, &input, &output)
+		if err != nil {
+			return err
+		}
+
+		if output.Decision == hooks.HookRejection {
+			if err := models.Logout(db, user.ID); err != nil {
+				return err
+			}
+
+			if output.Message == "" {
+				output.Message = hooks.DefaultMFAHookRejectionMessage
+			}
+
+			return forbiddenError(ErrorCodeMFAVerificationRejected, output.Message)
+		}
+	}
+	if !valid {
+		if shouldReEncrypt && config.Security.DBEncryption.Encrypt {
+			if err := challenge.SetOtpCode(otpCode, true, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey); err != nil {
+				return err
+			}
+
+			if err := db.UpdateOnly(challenge, "otp_code"); err != nil {
+				return err
+			}
+		}
+		return unprocessableEntityError(ErrorCodeMFAVerificationFailed, "Invalid MFA Phone code entered")
+	}
+
+	var token *AccessTokenResponse
+
+	err = db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		if terr = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
+			"factor_id":    factor.ID,
+			"challenge_id": challenge.ID,
+			"factor_type":  factor.FactorType,
+		}); terr != nil {
+			return terr
+		}
+		if terr = challenge.Verify(tx); terr != nil {
+			return terr
+		}
+		if !factor.IsVerified() {
+			if terr = factor.UpdateStatus(tx, models.FactorStateVerified); terr != nil {
+				return terr
+			}
+		}
+		user, terr = models.FindUserByID(tx, user.ID)
+		if terr != nil {
+			return terr
+		}
+
+		token, terr = a.updateMFASessionAndClaims(r, tx, user, models.MFAPhone, models.GrantParams{
+			FactorID: &factor.ID,
+		})
+		if terr != nil {
+			return terr
+		}
+		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
+			return internalServerError("Failed to set JWT cookie. %s", terr)
+		}
+		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
+			return internalServerError("Failed to update sessions. %s", terr)
+		}
+		if terr = models.DeleteUnverifiedFactors(tx, user); terr != nil {
+			return internalServerError("Error removing unverified factors. %s", terr)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
+
+	return sendJSON(w, http.StatusOK, token)
+}
+
+func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	factor := getFactor(ctx)
+	config := a.config
+
+	params := &VerifyFactorParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
+	}
+	if params.Code == "" {
+		return badRequestError(ErrorCodeValidationFailed, "Code needs to be non-empty")
+	}
+
+	switch factor.FactorType {
+	case models.Phone:
+		if !config.MFA.Phone.VerifyEnabled {
+			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA verification is disabled for Phone")
+		}
+
+		return a.verifyPhoneFactor(w, r, params)
+	case models.TOTP:
+		if !config.MFA.TOTP.VerifyEnabled {
+			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA verification is disabled for TOTP")
+		}
+		return a.verifyTOTPFactor(w, r, params)
+	default:
+		return badRequestError(ErrorCodeValidationFailed, "factor_type needs to be TOTP or Phone")
+	}
 
 }
 
