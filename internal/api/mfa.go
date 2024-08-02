@@ -430,7 +430,7 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
 
-	if challenge.IsVerificationIPValid(currentIP) {
+	if !challenge.IsVerificationIPValid(currentIP) {
 		return unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch")
 	}
 
@@ -566,7 +566,7 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
 
-	if challenge.IsVerificationIPValid(currentIP) {
+	if !challenge.IsVerificationIPValid(currentIP) {
 		return unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch")
 	}
 
