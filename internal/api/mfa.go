@@ -430,6 +430,7 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 	currentIP := utilities.GetIPAddress(r)
 
 	if !factor.IsOwnedBy(user) {
+		// TODO: Should be changed to notFoundError. Retained as internalServerError to preserve backward compatibility.
 		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
 
@@ -692,22 +693,20 @@ func (a *API) VerifyFactor(w http.ResponseWriter, r *http.Request) error {
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
+	if params.Code == "" {
+		return badRequestError(ErrorCodeValidationFailed, "Code needs to be non-empty")
+	}
 
 	switch factor.FactorType {
 	case models.Phone:
 		if !config.MFA.Phone.VerifyEnabled {
 			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA verification is disabled for Phone")
 		}
-		if params.Code == "" {
-			return badRequestError(ErrorCodeValidationFailed, "Code needs to be non-empty")
-		}
+
 		return a.verifyPhoneFactor(w, r, params)
 	case models.TOTP:
 		if !config.MFA.TOTP.VerifyEnabled {
 			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA verification is disabled for TOTP")
-		}
-		if params.Code == "" {
-			return badRequestError(ErrorCodeValidationFailed, "Code needs to be non-empty")
 		}
 		return a.verifyTOTPFactor(w, r, params)
 	default:
