@@ -392,7 +392,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
 	factor := getFactor(ctx)
-	user := getUser(ctx)
 
 	switch factor.FactorType {
 	case models.Phone:
@@ -722,7 +721,7 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 	if factor.IsVerified() && !session.IsAAL2() {
 		return unprocessableEntityError(ErrorCodeInsufficientAAL, "AAL2 required to unenroll verified factor")
 	}
-	// TODO: move this into loadFactor
+	// TODO: move this into loadFactor once we change all MFA related status codes.
 	if !factor.IsOwnedBy(user) {
 		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
