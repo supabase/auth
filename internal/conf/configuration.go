@@ -123,9 +123,6 @@ type PhoneFactorTypeConfiguration struct {
 
 // MFAConfiguration holds all the MFA related Configuration
 type MFAConfiguration struct {
-	// Enabled is deprecated, but still used to signal TOTP.EnrollEnabled and TOTP.VerifyEnabled.
-	Enabled bool `default:"false"`
-
 	ChallengeExpiryDuration     float64                      `json:"challenge_expiry_duration" default:"300" split_words:"true"`
 	FactorExpiryDuration        time.Duration                `json:"factor_expiry_duration" default:"300s" split_words:"true"`
 	RateLimitChallengeAndVerify float64                      `split_words:"true" default:"15"`
