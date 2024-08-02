@@ -111,6 +111,7 @@ func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			provider := &TestSmsProvider{}
+			sms_provider.MockProvider = provider
 
 			_, err = ts.API.sendPhoneConfirmation(req, ts.API.db, u, "123456789", c.otpType, sms_provider.SMSProvider)
 			require.Equal(ts.T(), c.expected, err)
@@ -144,12 +145,9 @@ func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 
 }
 
-// TODO(km): Figure out how to mock the SMS provider
-// now that it cannot be passed in as an argument to sendPhoneConfirmation
-//
-// func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
-// 	doTestSendPhoneConfirmation(ts, false)
-// }
+func (ts *PhoneTestSuite) TestSendPhoneConfirmation() {
+	doTestSendPhoneConfirmation(ts, false)
+}
 
 func (ts *PhoneTestSuite) TestSendPhoneConfirmationWithTestOTP() {
 	doTestSendPhoneConfirmation(ts, true)

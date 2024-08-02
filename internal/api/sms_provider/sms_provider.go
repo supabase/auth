@@ -9,6 +9,9 @@ import (
 	"github.com/supabase/auth/internal/conf"
 )
 
+// overrides the SmsProvider set to always return the mock provider
+var MockProvider SmsProvider = nil
+
 var defaultTimeout time.Duration = time.Second * 10
 
 const SMSProvider = "sms"
@@ -30,6 +33,10 @@ type SmsProvider interface {
 }
 
 func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
+	if MockProvider != nil {
+		return MockProvider, nil
+	}
+
 	switch name := config.Sms.Provider; name {
 	case "twilio":
 		return NewTwilioProvider(config.Sms.Twilio)
