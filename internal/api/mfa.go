@@ -284,18 +284,19 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 	if !sms_provider.IsValidMessageChannel(channel, config) {
 		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 	}
-	latestValidChallenge, err := factor.FindLatestUnexpiredChallenge(a.db, config.MFA.ChallengeExpiryDuration)
-	if err != nil {
-		if !models.IsNotFoundError(err) {
-			return internalServerError("error finding latest unexpired challenge")
-		}
-	} else if latestValidChallenge != nil && !latestValidChallenge.SentAt.Add(config.MFA.Phone.MaxFrequency).Before(time.Now()) {
-		return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(latestValidChallenge.SentAt, config.MFA.Phone.MaxFrequency))
+
+	if factor.FactorType == models.Phone && !factor.LastChallengedAt.Add(config.MFA.Phone.MaxFrequency).Before(time.Now()) {
+		return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(factor.LastChallengedAt, config.MFA.Phone.MaxFrequency))
 	}
 	otp, err := crypto.GenerateOtp(config.MFA.Phone.OtpLength)
 	if err != nil {
 		panic(err)
 	}
+	challenge, err := factor.CreatePhoneChallenge(db, ipAddress, otp, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
+	if err != nil {
+		return internalServerError("error creating SMS Challenge")
+	}
+
 	message, err := generateSMSFromTemplate(config.MFA.Phone.SMSTemplate, otp)
 	if err != nil {
 		return internalServerError("error generating sms template").WithInternalError(err)
@@ -356,7 +357,10 @@ func (a *API) challengeTOTPFactor(w http.ResponseWriter, r *http.Request) error 
 	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
 
-	challenge := factor.CreateChallenge(ipAddress)
+	challenge, err := factor.CreateChallenge(db, ipAddress)
+	if err != nil {
+		return err
+	}
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(challenge); terr != nil {
 			return terr

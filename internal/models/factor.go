@@ -117,17 +117,18 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 }
 
 type Factor struct {
-	ID           uuid.UUID          `json:"id" db:"id"`
-	User         User               `json:"-" belongs_to:"user"`
-	UserID       uuid.UUID          `json:"-" db:"user_id"`
-	CreatedAt    time.Time          `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time          `json:"updated_at" db:"updated_at"`
-	Status       string             `json:"status" db:"status"`
-	FriendlyName string             `json:"friendly_name,omitempty" db:"friendly_name"`
-	Secret       string             `json:"-" db:"secret"`
-	FactorType   string             `json:"factor_type" db:"factor_type"`
-	Challenge    []Challenge        `json:"-" has_many:"challenges"`
-	Phone        storage.NullString `json:"phone" db:"phone"`
+	ID               uuid.UUID          `json:"id" db:"id"`
+	User             User               `json:"-" belongs_to:"user"`
+	UserID           uuid.UUID          `json:"-" db:"user_id"`
+	CreatedAt        time.Time          `json:"created_at" db:"created_at"`
+	UpdatedAt        time.Time          `json:"updated_at" db:"updated_at"`
+	Status           string             `json:"status" db:"status"`
+	FriendlyName     string             `json:"friendly_name,omitempty" db:"friendly_name"`
+	Secret           string             `json:"-" db:"secret"`
+	FactorType       string             `json:"factor_type" db:"factor_type"`
+	Challenge        []Challenge        `json:"-" has_many:"challenges"`
+	Phone            storage.NullString `json:"phone" db:"phone"`
+	LastChallengedAt *time.Time         `json:"last_challenged_at" db:"last_challenged_at"`
 }
 
 func (Factor) TableName() string {
@@ -204,23 +205,30 @@ func DeleteUnverifiedFactors(tx *storage.Connection, user *User) error {
 	return nil
 }
 
-func (f *Factor) CreateChallenge(ipAddress string) *Challenge {
+func (f *Factor) CreateChallenge(tx *storage.Connection, ipAddress string) (*Challenge, error) {
 	id := uuid.Must(uuid.NewV4())
 	challenge := &Challenge{
 		ID:        id,
 		FactorID:  f.ID,
 		IPAddress: ipAddress,
 	}
-	return challenge
+	now := time.Now()
+	f.LastChallengedAt = &now
+	if err := tx.UpdateOnly(f, "last_challenged_at"); err != nil {
+		return nil, err
+	}
+
+	return challenge, nil
 }
 
-func (f *Factor) CreatePhoneChallenge(ipAddress string, otpCode string, encrypt bool, encryptionKeyID, encryptionKey string) (*Challenge, error) {
-	phoneChallenge := f.CreateChallenge(ipAddress)
+func (f *Factor) CreatePhoneChallenge(tx *storage.Connection, ipAddress string, otpCode string, encrypt bool, encryptionKeyID, encryptionKey string) (*Challenge, error) {
+	phoneChallenge, err := f.CreateChallenge(tx, ipAddress)
+	if err != nil {
+		return nil, err
+	}
 	if err := phoneChallenge.SetOtpCode(otpCode, encrypt, encryptionKeyID, encryptionKey); err != nil {
 		return nil, err
 	}
-	now := time.Now()
-	phoneChallenge.SentAt = &now
 	return phoneChallenge, nil
 }
 

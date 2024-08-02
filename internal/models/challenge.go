@@ -15,7 +15,6 @@ type Challenge struct {
 	IPAddress  string     `json:"ip_address" db:"ip_address"`
 	Factor     *Factor    `json:"factor,omitempty" belongs_to:"factor"`
 	OtpCode    string     `json:"otp_code,omitempty" db:"otp_code"`
-	SentAt     *time.Time `json:"sent_at,omitempty" db:"sent_at"`
 }
 
 func (Challenge) TableName() string {
