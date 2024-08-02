@@ -178,23 +178,26 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			w := performEnrollFlow(ts, token, c.friendlyName, c.factorType, c.issuer, c.phone, c.expectedCode)
+			enrollResp := EnrollFactorResponse{}
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
 
-			factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
-			ts.Require().NoError(err)
-			addedFactor := factors[len(factors)-1]
-			require.False(ts.T(), addedFactor.IsVerified())
-			if c.friendlyName != "" && c.expectedCode == http.StatusOK {
-				require.Equal(ts.T(), c.friendlyName, addedFactor.FriendlyName)
+			if c.expectedCode == http.StatusOK {
+				addedFactor, err := models.FindFactorByFactorID(ts.API.db, enrollResp.ID)
+				require.NoError(ts.T(), err)
+				require.False(ts.T(), addedFactor.IsVerified())
+
+				if c.friendlyName != "" {
+					require.Equal(ts.T(), c.friendlyName, addedFactor.FriendlyName)
+				}
+
+				if c.factorType == models.TOTP {
+					qrCode := enrollResp.TOTP.QRCode
+					hasSVGStartAndEnd := strings.Contains(qrCode, "<svg") && strings.Contains(qrCode, "</svg>")
+					require.True(ts.T(), hasSVGStartAndEnd)
+					require.Equal(ts.T(), c.friendlyName, enrollResp.FriendlyName)
+				}
 			}
 
-			if w.Code == http.StatusOK && c.factorType == models.TOTP {
-				enrollResp := EnrollFactorResponse{}
-				require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
-				qrCode := enrollResp.TOTP.QRCode
-				hasSVGStartAndEnd := strings.Contains(qrCode, "<svg") && strings.Contains(qrCode, "</svg>")
-				require.True(ts.T(), hasSVGStartAndEnd)
-				require.Equal(ts.T(), c.friendlyName, enrollResp.FriendlyName)
-			}
 		})
 	}
 }
@@ -224,23 +227,22 @@ func (ts *MFATestSuite) TestMultipleEnrollsCleanupExpiredFactors() {
 	accessTokenResp := &AccessTokenResponse{}
 	require.NoError(ts.T(), json.NewDecoder(resp.Body).Decode(&accessTokenResp))
 
+	var w *httptest.ResponseRecorder
 	token := accessTokenResp.Token
 	for i := 0; i < numFactors; i++ {
-		_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", "", http.StatusOK)
+		w = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", "", http.StatusOK)
 	}
 
-	// All Factors except last factor should be expired
-	factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
-	require.NoError(ts.T(), err)
+	enrollResp := EnrollFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
 
 	// Make a challenge so last, unverified factor isn't deleted on next enroll (Factor 2)
-	_ = performChallengeFlow(ts, factors[len(factors)-1].ID, token)
+	_ = performChallengeFlow(ts, enrollResp.ID, token)
 
 	// Enroll another Factor (Factor 3)
 	_ = performEnrollFlow(ts, token, "", models.TOTP, "https://issuer.com", "", http.StatusOK)
-	factors, err = FindFactorsByUser(ts.API.db, ts.TestUser)
-	require.NoError(ts.T(), err)
-	require.Equal(ts.T(), 3, len(factors))
+	require.NoError(ts.T(), ts.API.db.Eager("Factors").Find(ts.TestUser, ts.TestUser.ID))
+	require.Equal(ts.T(), 3, len(ts.TestUser.Factors))
 }
 
 func (ts *MFATestSuite) TestChallengeFactor() {
@@ -462,12 +464,8 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 			var buffer bytes.Buffer
 
 			// Create Session to test behaviour which downgrades other sessions
-			factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
-			require.NoError(ts.T(), err, "error finding factors")
-			f := factors[0]
-			f.Secret = ts.TestOTPKey.Secret()
+			f := ts.TestUser.Factors[0]
 			require.NoError(ts.T(), f.UpdateStatus(ts.API.db, models.FactorStateVerified))
-			require.NoError(ts.T(), ts.API.db.Update(f), "Error updating new test factor")
 			if v.isAAL2 {
 				ts.TestSession.UpdateAALAndAssociatedFactor(ts.API.db, models.AAL2, &f.ID)
 			}
@@ -819,16 +817,4 @@ func cleanupHook(ts *MFATestSuite, hookName string) {
 	cleanupHookSQL := fmt.Sprintf("drop function if exists %s", hookName)
 	err := ts.API.db.RawQuery(cleanupHookSQL).Exec()
 	require.NoError(ts.T(), err)
-}
-
-// FindFactorsByUser returns all factors belonging to a user ordered by timestamp. Don't use this outside of tests.
-func FindFactorsByUser(tx *storage.Connection, user *models.User) ([]*models.Factor, error) {
-	factors := []*models.Factor{}
-	if err := tx.Q().Where("user_id = ?", user.ID).Order("created_at asc").All(&factors); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return factors, nil
-		}
-		return nil, errors.Wrap(err, "Database error when finding MFA factors associated to user")
-	}
-	return factors, nil
 }
