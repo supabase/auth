@@ -300,7 +300,7 @@ func (f *Factor) FindLatestUnexpiredChallenge(tx *storage.Connection, expiryDura
 	var challenge Challenge
 	expirationTime := now.Add(time.Duration(expiryDuration) * time.Second)
 
-	err := tx.Where("sent_at > ?", expirationTime).
+	err := tx.Where("sent_at > ? and factor_id = ?", expirationTime, f.ID).
 		Order("sent_at desc").
 		First(&challenge)
 
