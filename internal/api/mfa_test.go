@@ -569,6 +569,30 @@ func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
 	require.True(ts.T(), session.IsAAL2())
 }
 
+func (ts *MFATestSuite) TestChallengeFactorNotOwnedByUser() {
+	var buffer bytes.Buffer
+	email := "nomfaenabled@test.com"
+	password := "testpassword"
+	signUpResp := signUp(ts, email, password)
+
+	friendlyName := "testfactor"
+	phoneNumber := "+1234567"
+
+	otherUsersPhoneFactor := models.NewPhoneFactor(ts.TestUser, phoneNumber, friendlyName)
+	require.NoError(ts.T(), ts.API.db.Create(otherUsersPhoneFactor), "Error creating factor")
+
+	w := ServeAuthenticatedRequest(ts, http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", otherUsersPhoneFactor.ID), signUpResp.Token, buffer)
+
+	expectedError := notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
+
+	var data HTTPError
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+	require.Equal(ts.T(), expectedError.Message, data.Message)
+	require.Equal(ts.T(), http.StatusNotFound, w.Code)
+
+}
+
 func signUp(ts *MFATestSuite, email, password string) (signUpResp AccessTokenResponse) {
 	ts.API.config.Mailer.Autoconfirm = true
 	var buffer bytes.Buffer

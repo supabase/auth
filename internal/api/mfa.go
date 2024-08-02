@@ -65,8 +65,7 @@ type UnenrollFactorResponse struct {
 }
 
 const (
-	InvalidFactorOwnerErrorMessage = "Factor does not belong to user"
-	QRCodeGenerationErrorMessage   = "Error generating QR Code"
+	QRCodeGenerationErrorMessage = "Error generating QR Code"
 )
 
 func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *EnrollFactorParams) error {
@@ -424,11 +423,6 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 	db := a.db.WithContext(ctx)
 	currentIP := utilities.GetIPAddress(r)
 
-	if !factor.IsOwnedBy(user) {
-		// TODO: Should be changed to notFoundError. Retained as internalServerError to preserve backward compatibility.
-		return internalServerError(InvalidFactorOwnerErrorMessage)
-	}
-
 	challenge, err := factor.FindChallengeByID(db, params.ChallengeID)
 	if err != nil && models.IsNotFoundError(err) {
 		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor with the provided challenge ID not found")
@@ -436,7 +430,7 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
 
-	if challenge.IsVerificationIPValid(ip) {
+	if challenge.IsVerificationIPValid(currentIP) {
 		return unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch")
 	}
 
@@ -572,7 +566,7 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
 
-	if challenge.IsVerificationIPValid(currentIp) {
+	if challenge.IsVerificationIPValid(currentIP) {
 		return unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch")
 	}
 
@@ -720,10 +714,6 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	if factor.IsVerified() && !session.IsAAL2() {
 		return unprocessableEntityError(ErrorCodeInsufficientAAL, "AAL2 required to unenroll verified factor")
-	}
-	// TODO: move this into loadFactor once we change all MFA related status codes.
-	if !factor.IsOwnedBy(user) {
-		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {

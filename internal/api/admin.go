@@ -72,6 +72,7 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
+	user := getUser(ctx)
 	factorID, err := uuid.FromString(chi.URLParam(r, "factor_id"))
 	if err != nil {
 		return nil, notFoundError(ErrorCodeValidationFailed, "factor_id must be an UUID")
@@ -79,14 +80,23 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 
 	observability.LogEntrySetField(r, "factor_id", factorID)
 
-	f, err := models.FindFactorByFactorID(db, factorID)
+	factor, err := models.FindFactorByFactorID(db, factorID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return nil, notFoundError(ErrorCodeMFAFactorNotFound, "Factor not found")
 		}
 		return nil, internalServerError("Database error loading factor").WithInternalError(err)
 	}
-	return withFactor(ctx, f), nil
+	if !factor.IsOwnedBy(user) {
+		// TODO: Remove this once we change all MFA Status codes
+		if factor.FactorType == models.TOTP {
+			InvalidFactorOwnerErrorMessage := "Factor does not belong to user"
+			return nil, internalServerError(InvalidFactorOwnerErrorMessage)
+		} else {
+			return nil, notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
+		}
+	}
+	return withFactor(ctx, factor), nil
 }
 
 func (a *API) getAdminParams(r *http.Request) (*AdminUserParams, error) {

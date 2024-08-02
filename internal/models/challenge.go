@@ -51,6 +51,9 @@ func (c *Challenge) SetOtpCode(otpCode string, encrypt bool, encryptionKeyID, en
 	return nil
 
 }
+func (c *Challenge) IsVerificationIPValid(ip string) bool {
+	return c.VerifiedAt == nil && c.IPAddress == ip
+}
 
 func (c *Challenge) GetOtpCode(decryptionKeys map[string]string, encrypt bool, encryptionKeyID string) (string, bool, error) {
 	if es := crypto.ParseEncryptedString(c.OtpCode); es != nil {
