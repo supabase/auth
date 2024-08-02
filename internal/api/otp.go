@@ -191,11 +191,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		}); err != nil {
 			return err
 		}
-		smsProvider, terr := sms_provider.GetSmsProvider(*config)
-		if terr != nil {
-			return internalServerError("Unable to get SMS provider").WithInternalError(err)
-		}
-		mID, serr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel)
+		mID, serr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, params.Channel)
 		if serr != nil {
 			return badRequestError(ErrorCodeSMSSendFailed, "Error sending sms OTP: %v", serr).WithInternalError(serr)
 		}

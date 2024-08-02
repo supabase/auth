@@ -43,7 +43,7 @@ func formatPhoneNumber(phone string) string {
 }
 
 // sendPhoneConfirmation sends an otp to the user's phone number
-func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, user *models.User, phone, otpType string, smsProvider sms_provider.SmsProvider, channel string) (string, error) {
+func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, user *models.User, phone, otpType string, channel string) (string, error) {
 	config := a.config
 
 	var token *string
@@ -89,12 +89,6 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		if err != nil {
 			return "", internalServerError("error generating otp").WithInternalError(err)
 		}
-
-		message, err := generateSMSFromTemplate(config.Sms.SMSTemplate, otp)
-		if err != nil {
-			return "", err
-		}
-
 		if config.Hook.SendSMS.Enabled {
 			input := hooks.SendSMSInput{
 				User: user,
@@ -108,7 +102,15 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 				return "", err
 			}
 		} else {
-			messageID, err = smsProvider.SendMessage(phone, message, channel, otp)
+			smsProvider, err := sms_provider.GetSmsProvider(*config)
+			if err != nil {
+				return "", internalServerError("Unable to get SMS provider").WithInternalError(err)
+			}
+			message, err := generateSMSFromTemplate(config.Sms.SMSTemplate, otp)
+			if err != nil {
+				return "", err
+			}
+			messageID, err := smsProvider.SendMessage(phone, message, channel, otp)
 			if err != nil {
 				return messageID, err
 			}

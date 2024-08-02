@@ -267,11 +267,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				smsProvider, terr := sms_provider.GetSmsProvider(*config)
-				if terr != nil {
-					return internalServerError("Unable to get SMS provider").WithInternalError(terr)
-				}
-				if _, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); terr != nil {
+				if _, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, params.Channel); terr != nil {
 					return unprocessableEntityError(ErrorCodeSMSSendFailed, "Error sending confirmation sms: %v", terr).WithInternalError(terr)
 				}
 			}

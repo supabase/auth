@@ -17,7 +17,6 @@ const InvalidNonceMessage = "Nonce has expired or is invalid"
 func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
-	config := a.config
 
 	user := getUser(ctx)
 	email, phone := user.GetEmail(), user.GetPhone()
@@ -44,11 +43,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		if email != "" {
 			return a.sendReauthenticationOtp(r, tx, user)
 		} else if phone != "" {
-			smsProvider, terr := sms_provider.GetSmsProvider(*config)
-			if terr != nil {
-				return internalServerError("Failed to get SMS provider").WithInternalError(terr)
-			}
-			mID, err := a.sendPhoneConfirmation(r, tx, user, phone, phoneReauthenticationOtp, smsProvider, sms_provider.SMSProvider)
+			mID, err := a.sendPhoneConfirmation(r, tx, user, phone, phoneReauthenticationOtp, sms_provider.SMSProvider)
 			if err != nil {
 				return err
 			}
