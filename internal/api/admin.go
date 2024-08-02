@@ -88,13 +88,7 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 		return nil, internalServerError("Database error loading factor").WithInternalError(err)
 	}
 	if !factor.IsOwnedBy(user) {
-		// TODO: Remove this once we change all MFA Status codes
-		if factor.FactorType == models.TOTP {
-			InvalidFactorOwnerErrorMessage := "Factor does not belong to user"
-			return nil, internalServerError(InvalidFactorOwnerErrorMessage)
-		} else {
-			return nil, notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
-		}
+		return nil, notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
 	}
 	return withFactor(ctx, factor), nil
 }
