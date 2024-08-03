@@ -12,8 +12,6 @@ import (
 
 	"github.com/gofrs/uuid"
 
-	"database/sql"
-
 	"github.com/pkg/errors"
 	"github.com/pquerna/otp"
 	"github.com/supabase/auth/internal/api/sms_provider"
