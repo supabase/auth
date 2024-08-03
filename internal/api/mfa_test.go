@@ -12,13 +12,11 @@ import (
 
 	"github.com/gofrs/uuid"
 
-	"github.com/pkg/errors"
 	"github.com/pquerna/otp"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
 
 	"github.com/pquerna/otp/totp"
@@ -487,7 +485,6 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 	var buffer bytes.Buffer
 	f := ts.TestUser.Factors[0]
-	f.Secret = ts.TestOTPKey.Secret()
 
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
