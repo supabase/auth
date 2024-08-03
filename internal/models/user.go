@@ -906,6 +906,18 @@ func (u *User) SoftDeleteUserIdentities(tx *storage.Connection) error {
 	return nil
 }
 
+func (u *User) FindOwnedFactorByID(tx *storage.Connection, factorID uuid.UUID) (*Factor, error) {
+	var factor Factor
+	err := tx.Where("user_id = ? AND id = ?", u.ID, factorID).First(&factor)
+	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, &FactorNotFoundError{}
+		}
+		return nil, err
+	}
+	return &factor, nil
+}
+
 func obfuscateValue(id uuid.UUID, value string) string {
 	hash := sha256.Sum256([]byte(id.String() + value))
 	return base64.RawURLEncoding.EncodeToString(hash[:])

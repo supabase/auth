@@ -69,6 +69,7 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 	return withUser(ctx, u), nil
 }
 
+// Use only after requireAuthentication, so that there is a valid user
 func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -80,15 +81,12 @@ func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Contex
 
 	observability.LogEntrySetField(r, "factor_id", factorID)
 
-	factor, err := models.FindFactorByFactorID(db, factorID)
+	factor, err := user.FindOwnedFactorByID(db, factorID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return nil, notFoundError(ErrorCodeMFAFactorNotFound, "Factor not found")
 		}
 		return nil, internalServerError("Database error loading factor").WithInternalError(err)
-	}
-	if !factor.IsOwnedBy(user) {
-		return nil, notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
 	}
 	return withFactor(ctx, factor), nil
 }

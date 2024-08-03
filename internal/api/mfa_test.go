@@ -583,12 +583,12 @@ func (ts *MFATestSuite) TestChallengeFactorNotOwnedByUser() {
 
 	w := ServeAuthenticatedRequest(ts, http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", otherUsersPhoneFactor.ID), signUpResp.Token, buffer)
 
-	expectedError := notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
+	expectedError := notFoundError(ErrorCodeMFAFactorNotFound, "Factor not found")
 
 	var data HTTPError
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
 
-	require.Equal(ts.T(), expectedError.Message, data.Message)
+	require.Equal(ts.T(), expectedError.ErrorCode, data.ErrorCode)
 	require.Equal(ts.T(), http.StatusNotFound, w.Code)
 
 }
