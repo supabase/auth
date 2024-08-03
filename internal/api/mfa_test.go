@@ -244,20 +244,17 @@ func (ts *MFATestSuite) TestDuplicateEnrollPhoneFactor() {
 			// Create corresponding session
 			// First factor is a TOTP factor
 			// Cleanup: Destroy all factors
-			for _, factor := range ts.TestUser.Factors {
-				err := ts.API.db.Destroy(&factor)
-				require.NoError(ts.T(), err)
-			}
+
+			err := ts.API.db.Destroy(ts.TestUser.Factors)
+			require.NoError(ts.T(), err)
 
 			_ = performEnrollFlow(ts, token, c.firstName, models.Phone, ts.TestDomain, c.phone, http.StatusOK)
-			factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
-			ts.Require().NoError(err)
 
 			// Second enrollment
 			_ = performEnrollFlow(ts, token, c.secondName, models.Phone, ts.TestDomain, c.altPhone, c.expectedCode)
 
 			// Verify the factors in the database
-			factors, err = FindFactorsByUser(ts.API.db, ts.TestUser)
+			factors, err := FindFactorsByUser(ts.API.db, ts.TestUser)
 			require.NoError(ts.T(), err)
 			require.Equal(ts.T(), len(factors), c.expectedNumberOfFactors)
 
