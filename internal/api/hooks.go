@@ -354,7 +354,7 @@ func (a *API) runHook(r *http.Request, conn *storage.Connection, hookConfig conf
 	case strings.HasPrefix(hookConfig.URI, "pg-functions:"):
 		response, err = a.runPostgresHook(ctx, conn, hookConfig, input, output)
 	default:
-		return nil, fmt.Errorf("unsupported protocol: %q only postgres hooks and HTTPS functions are supported at the moment", hookConfig.URI)
+		return nil, internalServerError("unsupported protocol: %q only postgres hooks and HTTPS functions are supported at the moment", hookConfig.URI)
 	}
 
 	duration := time.Since(hookStart)

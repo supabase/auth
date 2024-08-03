@@ -193,7 +193,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		}
 		mID, serr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, params.Channel)
 		if serr != nil {
-			return badRequestError(ErrorCodeSMSSendFailed, "Error sending sms OTP: %v", serr).WithInternalError(serr)
+			return serr
 		}
 		messageID = mID
 		return nil

@@ -268,7 +268,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 				if _, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, params.Channel); terr != nil {
-					return unprocessableEntityError(ErrorCodeSMSSendFailed, "Error sending confirmation sms: %v", terr).WithInternalError(terr)
+					return terr
 				}
 			}
 		}
