@@ -65,8 +65,7 @@ type UnenrollFactorResponse struct {
 }
 
 const (
-	InvalidFactorOwnerErrorMessage = "Factor does not belong to user"
-	QRCodeGenerationErrorMessage   = "Error generating QR Code"
+	QRCodeGenerationErrorMessage = "Error generating QR Code"
 )
 
 func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *EnrollFactorParams) error {
@@ -392,15 +391,11 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
 	factor := getFactor(ctx)
-	user := getUser(ctx)
 
 	switch factor.FactorType {
 	case models.Phone:
 		if !config.MFA.Phone.VerifyEnabled {
 			return unprocessableEntityError(ErrorCodeMFAPhoneEnrollDisabled, "MFA verification is disabled for Phone")
-		}
-		if !factor.IsOwnedBy(user) {
-			return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
 		}
 		return a.challengePhoneFactor(w, r)
 
@@ -411,9 +406,6 @@ func (a *API) ChallengeFactor(w http.ResponseWriter, r *http.Request) error {
 		// disabled.
 		if !config.MFA.Enabled && !config.MFA.TOTP.VerifyEnabled {
 			return unprocessableEntityError(ErrorCodeMFATOTPEnrollDisabled, "MFA verification is disabled for TOTP")
-		}
-		if !factor.IsOwnedBy(user) {
-			return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
 		}
 		return a.challengeTOTPFactor(w, r)
 	default:
@@ -430,11 +422,6 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 	config := a.config
 	db := a.db.WithContext(ctx)
 	currentIP := utilities.GetIPAddress(r)
-
-	if !factor.IsOwnedBy(user) {
-		// TODO: Should be changed to notFoundError. Retained as internalServerError to preserve backward compatibility.
-		return internalServerError(InvalidFactorOwnerErrorMessage)
-	}
 
 	challenge, err := factor.FindChallengeByID(db, params.ChallengeID)
 	if err != nil && models.IsNotFoundError(err) {
@@ -571,10 +558,6 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	factor := getFactor(ctx)
 	db := a.db.WithContext(ctx)
 	currentIP := utilities.GetIPAddress(r)
-
-	if !factor.IsOwnedBy(user) {
-		return notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor not found")
-	}
 
 	challenge, err := factor.FindChallengeByID(db, params.ChallengeID)
 	if err != nil && models.IsNotFoundError(err) {
@@ -731,9 +714,6 @@ func (a *API) UnenrollFactor(w http.ResponseWriter, r *http.Request) error {
 
 	if factor.IsVerified() && !session.IsAAL2() {
 		return unprocessableEntityError(ErrorCodeInsufficientAAL, "AAL2 required to unenroll verified factor")
-	}
-	if !factor.IsOwnedBy(user) {
-		return internalServerError(InvalidFactorOwnerErrorMessage)
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
