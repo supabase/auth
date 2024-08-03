@@ -113,10 +113,8 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		}
 	}
 
-	for _, factorToDelete := range factorsToDelete {
-		if err := db.Destroy(&factorToDelete); err != nil {
-			return internalServerError("Database error deleting factor").WithInternalError(err)
-		}
+	if err := db.Destroy(&factorsToDelete); err != nil {
+		return internalServerError("Database error deleting unverified phone factors").WithInternalError(err)
 	}
 
 	if factorCount >= int(config.MFA.MaxEnrolledFactors) {
