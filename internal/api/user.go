@@ -44,7 +44,7 @@ func (a *API) validateUserUpdateParams(ctx context.Context, p *UserUpdateParams)
 		if p.Channel == "" {
 			p.Channel = sms_provider.SMSProvider
 		}
-		if !sms_provider.IsValidMessageChannel(p.Channel, config.Sms.Provider) {
+		if !sms_provider.IsValidMessageChannel(p.Channel, config) {
 			return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 		}
 	}
