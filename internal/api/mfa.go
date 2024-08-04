@@ -301,10 +301,7 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return internalServerError("error generating sms template").WithInternalError(err)
 	}
-	challenge, err := factor.CreatePhoneChallenge(ipAddress, otp, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
-	if err != nil {
-		return internalServerError("error creating SMS Challenge")
-	}
+
 	if config.Hook.SendSMS.Enabled {
 		input := hooks.SendSMSInput{
 			User: user,
