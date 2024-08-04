@@ -302,8 +302,10 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 	}
 
-	if factor.FactorType == models.Phone && !factor.LastChallengedAt.Add(config.MFA.Phone.MaxFrequency).Before(time.Now()) {
-		return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(factor.LastChallengedAt, config.MFA.Phone.MaxFrequency))
+	if factor.IsPhoneFactor() && factor.LastChallengedAt != nil {
+		if !factor.LastChallengedAt.Add(config.MFA.Phone.MaxFrequency).Before(time.Now()) {
+			return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(factor.LastChallengedAt, config.MFA.Phone.MaxFrequency))
+		}
 	}
 	otp, err := crypto.GenerateOtp(config.MFA.Phone.OtpLength)
 	if err != nil {
@@ -343,9 +345,10 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 	if err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := tx.Create(challenge); terr != nil {
+		if terr := factor.WriteChallengeToDatabase(tx, challenge); terr != nil {
 			return terr
 		}
+
 		if terr := models.NewAuditLogEntry(r, tx, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":     factor.ID,
 			"factor_status": factor.Status,
@@ -371,12 +374,10 @@ func (a *API) challengeTOTPFactor(w http.ResponseWriter, r *http.Request) error 
 	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
 
-	challenge, err := factor.CreateChallenge(db, ipAddress)
-	if err != nil {
-		return err
-	}
+	challenge := factor.CreateChallenge(db, ipAddress)
+
 	if err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := tx.Create(challenge); terr != nil {
+		if terr := factor.WriteChallengeToDatabase(tx, challenge); terr != nil {
 			return terr
 		}
 		if terr := models.NewAuditLogEntry(r, tx, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{

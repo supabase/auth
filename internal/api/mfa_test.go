@@ -461,8 +461,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			var c *models.Challenge
 			var code string
 			if v.factorType == models.TOTP {
-				c, err = f.CreateChallenge(ts.API.db, utilities.GetIPAddress(req))
-				require.NoError(ts.T(), err)
+				c = f.CreateChallenge(ts.API.db, utilities.GetIPAddress(req))
 				// Verify TOTP code
 				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC())
 				require.NoError(ts.T(), err)
