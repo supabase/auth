@@ -197,8 +197,8 @@ func FindFactorByFactorID(conn *storage.Connection, factorID uuid.UUID) (*Factor
 	return &factor, nil
 }
 
-func DeleteUnverifiedFactors(tx *storage.Connection, user *User) error {
-	if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Factor{}}).TableName()+" WHERE user_id = ? and status = ?", user.ID, FactorStateUnverified.String()).Exec(); err != nil {
+func DeleteUnverifiedFactors(tx *storage.Connection, user *User, factorType string) error {
+	if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Factor{}}).TableName()+" WHERE user_id = ? and status = ? and factor_type = ?", user.ID, FactorStateUnverified.String(), factorType).Exec(); err != nil {
 		return err
 	}
 
