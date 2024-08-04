@@ -129,7 +129,6 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	if numVerifiedFactors > 0 && !session.IsAAL2() {
 		return forbiddenError(ErrorCodeInsufficientAAL, "AAL2 required to enroll a new factor")
 	}
-
 	factor := models.NewPhoneFactor(user, phone, params.FriendlyName)
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(factor); terr != nil {
@@ -150,7 +149,7 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		ID:           factor.ID,
 		Type:         models.Phone,
 		FriendlyName: factor.FriendlyName,
-		Phone:        string(factor.Phone),
+		Phone:        params.Phone,
 	})
 }
 

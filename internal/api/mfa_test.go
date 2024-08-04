@@ -210,7 +210,7 @@ func (ts *MFATestSuite) TestDuplicateEnrollPhoneFactor() {
 		earlierFactorName       string
 		laterFactorName         string
 		phone                   string
-		altPhone                string
+		secondPhone             string
 		expectedCode            int
 		expectedNumberOfFactors int
 	}{
@@ -219,7 +219,7 @@ func (ts *MFATestSuite) TestDuplicateEnrollPhoneFactor() {
 			earlierFactorName:       friendlyName,
 			laterFactorName:         altFriendlyName,
 			phone:                   testPhoneNumber,
-			altPhone:                testPhoneNumber,
+			secondPhone:             testPhoneNumber,
 			expectedNumberOfFactors: 1,
 		},
 
@@ -228,7 +228,7 @@ func (ts *MFATestSuite) TestDuplicateEnrollPhoneFactor() {
 			earlierFactorName:       friendlyName,
 			laterFactorName:         altFriendlyName,
 			phone:                   testPhoneNumber,
-			altPhone:                altPhoneNumber,
+			secondPhone:             altPhoneNumber,
 			expectedNumberOfFactors: 2,
 		},
 	}
@@ -239,7 +239,7 @@ func (ts *MFATestSuite) TestDuplicateEnrollPhoneFactor() {
 			require.NoError(ts.T(), ts.API.db.Destroy(ts.TestUser.Factors))
 			_ = performEnrollFlow(ts, token, c.earlierFactorName, models.Phone, ts.TestDomain, c.phone, http.StatusOK)
 
-			w := performEnrollFlow(ts, token, c.laterFactorName, models.Phone, ts.TestDomain, c.altPhone, http.StatusOK)
+			w := performEnrollFlow(ts, token, c.laterFactorName, models.Phone, ts.TestDomain, c.secondPhone, http.StatusOK)
 			enrollResp := EnrollFactorResponse{}
 			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
 
