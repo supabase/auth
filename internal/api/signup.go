@@ -41,7 +41,7 @@ func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
 	if p.Email != "" && p.Phone != "" {
 		return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided on signup.")
 	}
-	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, config.Sms.Provider) {
+	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, config) {
 		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 	}
 	// PKCE not needed as phone signups already return access token in body
@@ -267,12 +267,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				smsProvider, terr := sms_provider.GetSmsProvider(*config)
-				if terr != nil {
-					return internalServerError("Unable to get SMS provider").WithInternalError(terr)
-				}
-				if _, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); terr != nil {
-					return unprocessableEntityError(ErrorCodeSMSSendFailed, "Error sending confirmation sms: %v", terr).WithInternalError(terr)
+				if _, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, params.Channel); terr != nil {
+					return terr
 				}
 			}
 		}

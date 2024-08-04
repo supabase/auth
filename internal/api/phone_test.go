@@ -111,8 +111,9 @@ func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			provider := &TestSmsProvider{}
+			sms_provider.MockProvider = provider
 
-			_, err = ts.API.sendPhoneConfirmation(req, ts.API.db, u, "123456789", c.otpType, provider, sms_provider.SMSProvider)
+			_, err = ts.API.sendPhoneConfirmation(req, ts.API.db, u, "123456789", c.otpType, sms_provider.SMSProvider)
 			require.Equal(ts.T(), c.expected, err)
 			u, err = models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
@@ -306,13 +307,13 @@ func (ts *PhoneTestSuite) TestSendSMSHook() {
 			method:   http.MethodPost,
 			uri:      "pg-functions://postgres/auth/send_sms_signup",
 			hookFunctionSQL: `
-                create or replace function send_sms_signup(input jsonb)
-                returns json as $$
-                begin
-                  insert into job_queue(job_type, payload)
-                  values ('sms_signup', input);
-                    return input;
-                end; $$ language plpgsql;`,
+		            create or replace function send_sms_signup(input jsonb)
+		            returns json as $$
+		            begin
+		              insert into job_queue(job_type, payload)
+		              values ('sms_signup', input);
+		                return input;
+		            end; $$ language plpgsql;`,
 			header: "",
 			body: map[string]string{
 				"phone":    "1234567890",
@@ -327,13 +328,13 @@ func (ts *PhoneTestSuite) TestSendSMSHook() {
 			method:   http.MethodPost,
 			uri:      "pg-functions://postgres/auth/send_sms_otp",
 			hookFunctionSQL: `
-                create or replace function send_sms_otp(input jsonb)
-                returns json as $$
-                begin
-                  insert into job_queue(job_type, payload)
-                  values ('sms_signup', input);
-                    return input;
-                end; $$ language plpgsql;`,
+		            create or replace function send_sms_otp(input jsonb)
+		            returns json as $$
+		            begin
+		              insert into job_queue(job_type, payload)
+		              values ('sms_signup', input);
+		                return input;
+		            end; $$ language plpgsql;`,
 			header: "",
 			body: map[string]string{
 				"phone": "123456789",
@@ -348,13 +349,13 @@ func (ts *PhoneTestSuite) TestSendSMSHook() {
 			method:   http.MethodPut,
 			uri:      "pg-functions://postgres/auth/send_sms_phone_change",
 			hookFunctionSQL: `
-        create or replace function send_sms_phone_change(input jsonb)
-        returns json as $$
-        begin
-           insert into job_queue(job_type, payload)
-           values ('phone_change', input);
-           return input;
-        end; $$ language plpgsql;`,
+		    create or replace function send_sms_phone_change(input jsonb)
+		    returns json as $$
+		    begin
+		       insert into job_queue(job_type, payload)
+		       values ('phone_change', input);
+		       return input;
+		    end; $$ language plpgsql;`,
 			header: token,
 			body: map[string]string{
 				"phone": "111111111",
@@ -369,11 +370,11 @@ func (ts *PhoneTestSuite) TestSendSMSHook() {
 			method:   http.MethodGet,
 			uri:      "pg-functions://postgres/auth/reauthenticate",
 			hookFunctionSQL: `
-        create or replace function reauthenticate(input jsonb)
-        returns json as $$
-        begin
-            return input;
-       end; $$ language plpgsql;`,
+		    create or replace function reauthenticate(input jsonb)
+		    returns json as $$
+		    begin
+		        return input;
+		   end; $$ language plpgsql;`,
 			header:                 "",
 			body:                   nil,
 			expectToken:            true,
@@ -396,7 +397,7 @@ func (ts *PhoneTestSuite) TestSendSMSHook() {
 				"phone": "123456789",
 			},
 			expectToken:            false,
-			expectedCode:           http.StatusBadRequest,
+			expectedCode:           http.StatusInternalServerError,
 			hookFunctionIdentifier: "send_sms_otp_failure(input jsonb)",
 		},
 	}
@@ -409,13 +410,6 @@ func (ts *PhoneTestSuite) TestSendSMSHook() {
 			ts.Config.Hook.SendSMS.URI = c.uri
 			// Disable FrequencyLimit to allow back to back sending
 			ts.Config.Sms.MaxFrequency = 0 * time.Second
-			// We still need a mock provider for hooks to work right now for backward compatibility
-			ts.Config.Sms.Provider = "twilio"
-			ts.Config.Sms.Twilio = conf.TwilioProviderConfiguration{
-				AccountSid:        "test_account_sid",
-				AuthToken:         "test_auth_token",
-				MessageServiceSid: "test_message_service_id",
-			}
 			require.NoError(ts.T(), ts.Config.Hook.SendSMS.PopulateExtensibilityPoint())
 
 			require.NoError(t, ts.API.db.RawQuery(c.hookFunctionSQL).Exec())

@@ -282,15 +282,10 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 		return err
 	}
 	channel := params.Channel
-
 	if channel == "" {
 		channel = sms_provider.SMSProvider
 	}
-	smsProvider, err := sms_provider.GetSmsProvider(*config)
-	if err != nil {
-		return internalServerError("Failed to get SMS provider").WithInternalError(err)
-	}
-	if !sms_provider.IsValidMessageChannel(channel, config.Sms.Provider) {
+	if !sms_provider.IsValidMessageChannel(channel, config) {
 		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 	}
 	latestValidChallenge, err := factor.FindLatestUnexpiredChallenge(a.db, config.MFA.ChallengeExpiryDuration)
@@ -301,19 +296,17 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 	} else if latestValidChallenge != nil && !latestValidChallenge.SentAt.Add(config.MFA.Phone.MaxFrequency).Before(time.Now()) {
 		return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(latestValidChallenge.SentAt, config.MFA.Phone.MaxFrequency))
 	}
-
 	otp, err := crypto.GenerateOtp(config.MFA.Phone.OtpLength)
 	if err != nil {
 		panic(err)
 	}
-	challenge, err := factor.CreatePhoneChallenge(ipAddress, otp, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
-	if err != nil {
-		return internalServerError("error creating SMS Challenge")
-	}
-
 	message, err := generateSMSFromTemplate(config.MFA.Phone.SMSTemplate, otp)
 	if err != nil {
 		return internalServerError("error generating sms template").WithInternalError(err)
+	}
+	challenge, err := factor.CreatePhoneChallenge(ipAddress, otp, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
+	if err != nil {
+		return internalServerError("error creating SMS Challenge")
 	}
 	if config.Hook.SendSMS.Enabled {
 		input := hooks.SendSMSInput{
@@ -329,10 +322,12 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 			return internalServerError("error invoking hook")
 		}
 	} else {
-
-		// We omit messageID for now, can consider reinstating if there are requests.
-		_, err := smsProvider.SendMessage(string(factor.Phone), message, channel, otp)
+		smsProvider, err := sms_provider.GetSmsProvider(*config)
 		if err != nil {
+			return internalServerError("Failed to get SMS provider").WithInternalError(err)
+		}
+		// We omit messageID for now, can consider reinstating if there are requests.
+		if _, err = smsProvider.SendMessage(string(factor.Phone), message, channel, otp); err != nil {
 			return internalServerError("error sending message").WithInternalError(err)
 		}
 	}

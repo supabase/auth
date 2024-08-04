@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	"errors"
 	"net/http/httptest"
 
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

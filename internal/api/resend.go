@@ -127,11 +127,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
 			}
-			smsProvider, terr := sms_provider.GetSmsProvider(*config)
-			if terr != nil {
-				return terr
-			}
-			mID, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, sms_provider.SMSProvider)
+			mID, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, sms_provider.SMSProvider)
 			if terr != nil {
 				return terr
 			}
@@ -139,11 +135,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 		case mail.EmailChangeVerification:
 			return a.sendEmailChange(r, tx, user, user.EmailChange, models.ImplicitFlow)
 		case phoneChangeVerification:
-			smsProvider, terr := sms_provider.GetSmsProvider(*config)
-			if terr != nil {
-				return terr
-			}
-			mID, terr := a.sendPhoneConfirmation(r, tx, user, user.PhoneChange, phoneChangeVerification, smsProvider, sms_provider.SMSProvider)
+			mID, terr := a.sendPhoneConfirmation(r, tx, user, user.PhoneChange, phoneChangeVerification, sms_provider.SMSProvider)
 			if terr != nil {
 				return terr
 			}
