@@ -286,7 +286,7 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 	if channel == "" {
 		channel = sms_provider.SMSProvider
 	}
-	if !sms_provider.IsValidMessageChannel(channel, config.Sms.Provider) {
+	if !sms_provider.IsValidMessageChannel(channel, config) {
 		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 	}
 	latestValidChallenge, err := factor.FindLatestUnexpiredChallenge(a.db, config.MFA.ChallengeExpiryDuration)

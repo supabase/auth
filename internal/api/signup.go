@@ -41,7 +41,7 @@ func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
 	if p.Email != "" && p.Phone != "" {
 		return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided on signup.")
 	}
-	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, config.Sms.Provider) {
+	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, config) {
 		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 	}
 	// PKCE not needed as phone signups already return access token in body

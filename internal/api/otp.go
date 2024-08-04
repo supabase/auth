@@ -8,6 +8,7 @@ import (
 
 	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -45,17 +46,15 @@ func (p *OtpParams) Validate() error {
 	return nil
 }
 
-func (p *SmsParams) Validate(smsProvider string) error {
-	if p.Phone != "" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
-		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
-	}
-
+func (p *SmsParams) Validate(config *conf.GlobalConfiguration) error {
 	var err error
 	p.Phone, err = validatePhone(p.Phone)
 	if err != nil {
 		return err
 	}
-
+	if !sms_provider.IsValidMessageChannel(p.Channel, config) {
+		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
+	}
 	return nil
 }
 
@@ -119,7 +118,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		params.Channel = sms_provider.SMSProvider
 	}
 
-	if err := params.Validate(config.Sms.Provider); err != nil {
+	if err := params.Validate(config); err != nil {
 		return err
 	}
 
