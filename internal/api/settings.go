@@ -36,7 +36,6 @@ type Settings struct {
 	MailerAutoconfirm bool             `json:"mailer_autoconfirm"`
 	PhoneAutoconfirm  bool             `json:"phone_autoconfirm"`
 	SmsProvider       string           `json:"sms_provider"`
-	MFAEnabled        bool             `json:"mfa_enabled"`
 	SAMLEnabled       bool             `json:"saml_enabled"`
 }
 
@@ -75,7 +74,6 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 		MailerAutoconfirm: config.Mailer.Autoconfirm,
 		PhoneAutoconfirm:  config.Sms.Autoconfirm,
 		SmsProvider:       config.Sms.Provider,
-		MFAEnabled:        config.MFA.Enabled,
 		SAMLEnabled:       config.SAML.Enabled,
 	})
 }
