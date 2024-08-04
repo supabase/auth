@@ -265,6 +265,14 @@ func (ts *MFATestSuite) TestChallengeSMSFactor() {
         begin
             return input;
        end; $$ language plpgsql;`).Exec())
+	// We still need a mock provider for hooks to work right now for backward compatibility
+	// The WhatsApp channel is only valid when twilio or twilio verify is set.
+	ts.Config.Sms.Provider = "twilio"
+	ts.Config.Sms.Twilio = conf.TwilioProviderConfiguration{
+		AccountSid:        "test_account_sid",
+		AuthToken:         "test_auth_token",
+		MessageServiceSid: "test_message_service_id",
+	}
 
 	phone := "+1234567"
 	friendlyName := "testchallengesmsfactor"
@@ -483,6 +491,7 @@ func (ts *MFATestSuite) TestUnenrollVerifiedFactor() {
 func (ts *MFATestSuite) TestUnenrollUnverifiedFactor() {
 	var buffer bytes.Buffer
 	f := ts.TestUser.Factors[0]
+	f.Secret = ts.TestOTPKey.Secret()
 
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
