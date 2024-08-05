@@ -303,26 +303,26 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 	if !sms_provider.IsValidMessageChannel(channel, config) {
 		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 	}
-	latestValidChallenge, err := factor.FindLatestUnexpiredChallenge(a.db, config.MFA.ChallengeExpiryDuration)
-	if err != nil {
-		if !models.IsNotFoundError(err) {
-			return internalServerError("error finding latest unexpired challenge")
+
+	if factor.IsPhoneFactor() && factor.LastChallengedAt != nil {
+		if !factor.LastChallengedAt.Add(config.MFA.Phone.MaxFrequency).Before(time.Now()) {
+			return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(factor.LastChallengedAt, config.MFA.Phone.MaxFrequency))
 		}
-	} else if latestValidChallenge != nil && !latestValidChallenge.SentAt.Add(config.MFA.Phone.MaxFrequency).Before(time.Now()) {
-		return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(latestValidChallenge.SentAt, config.MFA.Phone.MaxFrequency))
 	}
 	otp, err := crypto.GenerateOtp(config.MFA.Phone.OtpLength)
 	if err != nil {
 		panic(err)
 	}
-	message, err := generateSMSFromTemplate(config.MFA.Phone.SMSTemplate, otp)
-	if err != nil {
-		return internalServerError("error generating sms template").WithInternalError(err)
-	}
 	challenge, err := factor.CreatePhoneChallenge(ipAddress, otp, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
 	if err != nil {
 		return internalServerError("error creating SMS Challenge")
 	}
+
+	message, err := generateSMSFromTemplate(config.MFA.Phone.SMSTemplate, otp)
+	if err != nil {
+		return internalServerError("error generating sms template").WithInternalError(err)
+	}
+
 	if config.Hook.SendSMS.Enabled {
 		input := hooks.SendSMSInput{
 			User: user,
@@ -347,9 +347,10 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 	if err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := tx.Create(challenge); terr != nil {
+		if terr := factor.WriteChallengeToDatabase(tx, challenge); terr != nil {
 			return terr
 		}
+
 		if terr := models.NewAuditLogEntry(r, tx, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":     factor.ID,
 			"factor_status": factor.Status,
@@ -376,8 +377,9 @@ func (a *API) challengeTOTPFactor(w http.ResponseWriter, r *http.Request) error 
 	ipAddress := utilities.GetIPAddress(r)
 
 	challenge := factor.CreateChallenge(ipAddress)
+
 	if err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := tx.Create(challenge); terr != nil {
+		if terr := factor.WriteChallengeToDatabase(tx, challenge); terr != nil {
 			return terr
 		}
 		if terr := models.NewAuditLogEntry(r, tx, user, models.CreateChallengeAction, r.RemoteAddr, map[string]interface{}{
