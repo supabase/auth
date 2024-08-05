@@ -461,13 +461,13 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			var c *models.Challenge
 			var code string
 			if v.factorType == models.TOTP {
-				c = f.CreateChallenge(ts.API.db, utilities.GetIPAddress(req))
+				c = f.CreateChallenge(utilities.GetIPAddress(req))
 				// Verify TOTP code
 				code, err = totp.GenerateCode(sharedSecret, time.Now().UTC())
 				require.NoError(ts.T(), err)
 			} else if v.factorType == models.Phone {
 				code = "123456"
-				c, err = f.CreatePhoneChallenge(ts.API.db, utilities.GetIPAddress(req), code, ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey)
+				c, err = f.CreatePhoneChallenge(utilities.GetIPAddress(req), code, ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID, ts.Config.Security.DBEncryption.EncryptionKey)
 				require.NoError(ts.T(), err)
 			}
 

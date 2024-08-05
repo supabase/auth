@@ -311,7 +311,7 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		panic(err)
 	}
-	challenge, err := factor.CreatePhoneChallenge(db, ipAddress, otp, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
+	challenge, err := factor.CreatePhoneChallenge(ipAddress, otp, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
 	if err != nil {
 		return internalServerError("error creating SMS Challenge")
 	}
@@ -374,7 +374,7 @@ func (a *API) challengeTOTPFactor(w http.ResponseWriter, r *http.Request) error 
 	factor := getFactor(ctx)
 	ipAddress := utilities.GetIPAddress(r)
 
-	challenge := factor.CreateChallenge(db, ipAddress)
+	challenge := factor.CreateChallenge(ipAddress)
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		if terr := factor.WriteChallengeToDatabase(tx, challenge); terr != nil {

@@ -206,7 +206,7 @@ func DeleteUnverifiedFactors(tx *storage.Connection, user *User, factorType stri
 	return nil
 }
 
-func (f *Factor) CreateChallenge(tx *storage.Connection, ipAddress string) *Challenge {
+func (f *Factor) CreateChallenge(ipAddress string) *Challenge {
 	id := uuid.Must(uuid.NewV4())
 	challenge := &Challenge{
 		ID:        id,
@@ -231,8 +231,8 @@ func (f *Factor) WriteChallengeToDatabase(tx *storage.Connection, challenge *Cha
 	return nil
 }
 
-func (f *Factor) CreatePhoneChallenge(tx *storage.Connection, ipAddress string, otpCode string, encrypt bool, encryptionKeyID, encryptionKey string) (*Challenge, error) {
-	phoneChallenge := f.CreateChallenge(tx, ipAddress)
+func (f *Factor) CreatePhoneChallenge(ipAddress string, otpCode string, encrypt bool, encryptionKeyID, encryptionKey string) (*Challenge, error) {
+	phoneChallenge := f.CreateChallenge(ipAddress)
 	if err := phoneChallenge.SetOtpCode(otpCode, encrypt, encryptionKeyID, encryptionKey); err != nil {
 		return nil, err
 	}
