@@ -99,14 +99,16 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 			)
 
 		case factor.IsPhoneFactor():
-			if factor.IsVerified() {
-				return unprocessableEntityError(
-					ErrorCodeVerifiedFactorExists,
-					"A verified phone factor already exists, unenroll the existing factor to continue",
-				)
-			}
-			if factor.IsUnverified() && factor.Phone.String() == phone {
-				factorsToDelete = append(factorsToDelete, factor)
+			if factor.Phone.String() == phone {
+				if factor.IsVerified() {
+					return unprocessableEntityError(
+						ErrorCodeVerifiedFactorExists,
+						"A verified phone factor already exists, unenroll the existing factor to continue",
+					)
+				} else if factor.IsUnverified() {
+					factorsToDelete = append(factorsToDelete, factor)
+				}
+
 			}
 
 		case factor.IsVerified():
