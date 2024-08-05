@@ -89,11 +89,35 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	if err := models.DeleteExpiredFactors(db, config.MFA.FactorExpiryDuration); err != nil {
 		return err
 	}
+	var factorsToDelete []models.Factor
+	for _, factor := range user.Factors {
+		switch {
+		case factor.FriendlyName == params.FriendlyName:
+			return unprocessableEntityError(
+				ErrorCodeMFAFactorNameConflict,
+				fmt.Sprintf("A factor with the friendly name %q for this user already exists", factor.FriendlyName),
+			)
 
-	for _, factor := range factors {
-		if factor.IsVerified() {
-			numVerifiedFactors += 1
+		case factor.IsPhoneFactor():
+			if factor.Phone.String() == phone {
+				if factor.IsVerified() {
+					return unprocessableEntityError(
+						ErrorCodeVerifiedFactorExists,
+						"A verified phone factor already exists, unenroll the existing factor to continue",
+					)
+				} else if factor.IsUnverified() {
+					factorsToDelete = append(factorsToDelete, factor)
+				}
+
+			}
+
+		case factor.IsVerified():
+			numVerifiedFactors++
 		}
+	}
+
+	if err := db.Destroy(&factorsToDelete); err != nil {
+		return internalServerError("Database error deleting unverified phone factors").WithInternalError(err)
 	}
 
 	if factorCount >= int(config.MFA.MaxEnrolledFactors) {
@@ -110,12 +134,7 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	factor := models.NewPhoneFactor(user, phone, params.FriendlyName)
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := tx.Create(factor); terr != nil {
-			pgErr := utilities.NewPostgresError(terr)
-			if pgErr.IsUniqueConstraintViolated() {
-				return unprocessableEntityError(ErrorCodeMFAFactorNameConflict, fmt.Sprintf("A factor with the friendly name %q for this user likely already exists", factor.FriendlyName))
-			}
 			return terr
-
 		}
 		if terr := models.NewAuditLogEntry(r, tx, user, models.EnrollFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":   factor.ID,
@@ -132,7 +151,7 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		ID:           factor.ID,
 		Type:         models.Phone,
 		FriendlyName: factor.FriendlyName,
-		Phone:        string(factor.Phone),
+		Phone:        params.Phone,
 	})
 }
 
@@ -323,7 +342,7 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 			return internalServerError("Failed to get SMS provider").WithInternalError(err)
 		}
 		// We omit messageID for now, can consider reinstating if there are requests.
-		if _, err = smsProvider.SendMessage(string(factor.Phone), message, channel, otp); err != nil {
+		if _, err = smsProvider.SendMessage(factor.Phone.String(), message, channel, otp); err != nil {
 			return internalServerError("error sending message").WithInternalError(err)
 		}
 	}
@@ -417,6 +436,7 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 		return internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
 
+	// Ambiguous so as not to leak whether there is a verified challenge
 	if challenge.VerifiedAt != nil || challenge.IPAddress != currentIP {
 		return unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch")
 	}
@@ -485,6 +505,7 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 		if terr = models.NewAuditLogEntry(r, tx, user, models.VerifyFactorAction, r.RemoteAddr, map[string]interface{}{
 			"factor_id":    factor.ID,
 			"challenge_id": challenge.ID,
+			"factor_type":  factor.FactorType,
 		}); terr != nil {
 			return terr
 		}
@@ -524,7 +545,7 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
 			return internalServerError("Failed to update sessions. %s", terr)
 		}
-		if terr = models.DeleteUnverifiedFactors(tx, user); terr != nil {
+		if terr = models.DeleteUnverifiedFactors(tx, user, factor.FactorType); terr != nil {
 			return internalServerError("Error removing unverified factors. %s", terr)
 		}
 		return nil
@@ -643,7 +664,7 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
 			return internalServerError("Failed to update sessions. %s", terr)
 		}
-		if terr = models.DeleteUnverifiedFactors(tx, user); terr != nil {
+		if terr = models.DeleteUnverifiedFactors(tx, user, factor.FactorType); terr != nil {
 			return internalServerError("Error removing unverified factors. %s", terr)
 		}
 		return nil

@@ -198,6 +198,87 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 	}
 }
 
+func (ts *MFATestSuite) TestDuplicateEnrollPhoneFactor() {
+	testPhoneNumber := "+12345677889"
+	altPhoneNumber := "+987412444444"
+	friendlyName := "phone_factor"
+	altFriendlyName := "alt_phone_factor"
+	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
+
+	var cases = []struct {
+		desc                    string
+		earlierFactorName       string
+		laterFactorName         string
+		phone                   string
+		secondPhone             string
+		expectedCode            int
+		expectedNumberOfFactors int
+	}{
+		{
+			desc:                    "Phone: Only the latest factor should persist when enrolling two unverified phone factors with the same number",
+			earlierFactorName:       friendlyName,
+			laterFactorName:         altFriendlyName,
+			phone:                   testPhoneNumber,
+			secondPhone:             testPhoneNumber,
+			expectedNumberOfFactors: 1,
+		},
+
+		{
+			desc:                    "Phone: Both factors should persist when enrolling two different unverified numbers",
+			earlierFactorName:       friendlyName,
+			laterFactorName:         altFriendlyName,
+			phone:                   testPhoneNumber,
+			secondPhone:             altPhoneNumber,
+			expectedNumberOfFactors: 2,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			// Delete all test factors to start from clean slate
+			require.NoError(ts.T(), ts.API.db.Destroy(ts.TestUser.Factors))
+			_ = performEnrollFlow(ts, token, c.earlierFactorName, models.Phone, ts.TestDomain, c.phone, http.StatusOK)
+
+			w := performEnrollFlow(ts, token, c.laterFactorName, models.Phone, ts.TestDomain, c.secondPhone, http.StatusOK)
+			enrollResp := EnrollFactorResponse{}
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
+
+			laterFactor, err := models.FindFactorByFactorID(ts.API.db, enrollResp.ID)
+			require.NoError(ts.T(), err)
+			require.False(ts.T(), laterFactor.IsVerified())
+
+			require.NoError(ts.T(), ts.API.db.Eager("Factors").Find(ts.TestUser, ts.TestUser.ID))
+			require.Equal(ts.T(), len(ts.TestUser.Factors), c.expectedNumberOfFactors)
+
+		})
+	}
+}
+
+func (ts *MFATestSuite) TestDuplicateEnrollPhoneFactorWithVerified() {
+	testPhoneNumber := "+12345677889"
+	friendlyName := "phone_factor"
+	altFriendlyName := "alt_phone_factor"
+	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
+
+	ts.Run("Phone: Enrolling a factor with the same number as an existing verified phone factor should result in an error", func() {
+		require.NoError(ts.T(), ts.API.db.Destroy(ts.TestUser.Factors))
+
+		// Setup verified factor
+		w := performEnrollFlow(ts, token, friendlyName, models.Phone, ts.TestDomain, testPhoneNumber, http.StatusOK)
+		enrollResp := EnrollFactorResponse{}
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&enrollResp))
+		firstFactor, err := models.FindFactorByFactorID(ts.API.db, enrollResp.ID)
+		require.NoError(ts.T(), err)
+		require.NoError(ts.T(), firstFactor.UpdateStatus(ts.API.db, models.FactorStateVerified))
+
+		expectedStatusCode := http.StatusUnprocessableEntity
+		_ = performEnrollFlow(ts, token, altFriendlyName, models.Phone, ts.TestDomain, testPhoneNumber, expectedStatusCode)
+
+		require.NoError(ts.T(), ts.API.db.Eager("Factors").Find(ts.TestUser, ts.TestUser.ID))
+		require.Equal(ts.T(), len(ts.TestUser.Factors), 1)
+	})
+}
+
 func (ts *MFATestSuite) TestDuplicateTOTPEnrollsReturnExpectedMessage() {
 	friendlyName := "mary"
 	issuer := "https://issuer.com"

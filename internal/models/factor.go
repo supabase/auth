@@ -117,7 +117,8 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 }
 
 type Factor struct {
-	ID           uuid.UUID          `json:"id" db:"id"`
+	ID uuid.UUID `json:"id" db:"id"`
+	// TODO: Consider removing this nested user field. We don't use it.
 	User         User               `json:"-" belongs_to:"user"`
 	UserID       uuid.UUID          `json:"-" db:"user_id"`
 	CreatedAt    time.Time          `json:"created_at" db:"created_at"`
@@ -196,8 +197,8 @@ func FindFactorByFactorID(conn *storage.Connection, factorID uuid.UUID) (*Factor
 	return &factor, nil
 }
 
-func DeleteUnverifiedFactors(tx *storage.Connection, user *User) error {
-	if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Factor{}}).TableName()+" WHERE user_id = ? and status = ?", user.ID, FactorStateUnverified.String()).Exec(); err != nil {
+func DeleteUnverifiedFactors(tx *storage.Connection, user *User, factorType string) error {
+	if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Factor{}}).TableName()+" WHERE user_id = ? and status = ? and factor_type = ?", user.ID, FactorStateUnverified.String(), factorType).Exec(); err != nil {
 		return err
 	}
 
@@ -261,6 +262,14 @@ func (f *Factor) IsOwnedBy(user *User) bool {
 
 func (f *Factor) IsVerified() bool {
 	return f.Status == FactorStateVerified.String()
+}
+
+func (f *Factor) IsUnverified() bool {
+	return f.Status == FactorStateUnverified.String()
+}
+
+func (f *Factor) IsPhoneFactor() bool {
+	return f.FactorType == Phone
 }
 
 func (f *Factor) FindChallengeByID(conn *storage.Connection, challengeID uuid.UUID) (*Challenge, error) {
