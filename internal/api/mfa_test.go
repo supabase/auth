@@ -260,7 +260,7 @@ func (ts *MFATestSuite) TestDuplicateEnrollPhoneFactorWithVerified() {
 	altFriendlyName := "alt_phone_factor"
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 
-	ts.Run("Phone: Enrolling a factor with a verified phone factor present should fail", func() {
+	ts.Run("Phone: Enrolling a factor with the same number as an existing verified phone factor should result in an error", func() {
 		require.NoError(ts.T(), ts.API.db.Destroy(ts.TestUser.Factors))
 
 		// Setup verified factor
