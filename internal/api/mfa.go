@@ -57,6 +57,7 @@ type VerifyFactorParams struct {
 
 type ChallengeFactorResponse struct {
 	ID        uuid.UUID `json:"id"`
+	Type      string    `json:"type"`
 	ExpiresAt int64     `json:"expires_at"`
 }
 
@@ -343,6 +344,7 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 	}
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
+		Type:      factor.FactorType,
 		ExpiresAt: challenge.GetExpiryTime(config.MFA.ChallengeExpiryDuration).Unix(),
 	})
 }
@@ -374,6 +376,7 @@ func (a *API) challengeTOTPFactor(w http.ResponseWriter, r *http.Request) error 
 
 	return sendJSON(w, http.StatusOK, &ChallengeFactorResponse{
 		ID:        challenge.ID,
+		Type:      factor.FactorType,
 		ExpiresAt: challenge.GetExpiryTime(config.MFA.ChallengeExpiryDuration).Unix(),
 	})
 }

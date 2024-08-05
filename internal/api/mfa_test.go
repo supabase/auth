@@ -241,11 +241,17 @@ func (ts *MFATestSuite) TestMultipleEnrollsCleanupExpiredFactors() {
 	require.Equal(ts.T(), 3, len(ts.TestUser.Factors))
 }
 
-func (ts *MFATestSuite) TestChallengeFactor() {
+func (ts *MFATestSuite) TestChallengeTOTPFactor() {
+	// Test Factor is a TOTP Factor
 	f := ts.TestUser.Factors[0]
 	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
 	w := performChallengeFlow(ts, f.ID, token)
+	challengeResp := ChallengeFactorResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&challengeResp))
+
 	require.Equal(ts.T(), http.StatusOK, w.Code)
+	require.Equal(ts.T(), challengeResp.Type, models.TOTP)
+
 }
 
 func (ts *MFATestSuite) TestChallengeSMSFactor() {
@@ -291,6 +297,9 @@ func (ts *MFATestSuite) TestChallengeSMSFactor() {
 	for _, tc := range cases {
 		ts.Run(tc.desc, func() {
 			w := performSMSChallengeFlow(ts, f.ID, token, tc.channel)
+			challengeResp := ChallengeFactorResponse{}
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&challengeResp))
+			require.Equal(ts.T(), challengeResp.Type, models.Phone)
 			require.Equal(ts.T(), tc.expectedCode, w.Code, tc.desc)
 		})
 	}
