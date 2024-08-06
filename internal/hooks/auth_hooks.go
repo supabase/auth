@@ -153,7 +153,6 @@ type SendSMSInput struct {
 }
 
 type SendSMSOutput struct {
-	Success   bool          `json:"success"`
 	HookError AuthHookError `json:"error,omitempty"`
 }
 
@@ -163,7 +162,6 @@ type SendEmailInput struct {
 }
 
 type SendEmailOutput struct {
-	Success   bool          `json:"success"`
 	HookError AuthHookError `json:"error,omitempty"`
 }
 
