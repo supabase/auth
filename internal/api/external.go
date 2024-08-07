@@ -365,7 +365,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return nil, forbiddenError(ErrorCodeUserBanned, "User is banned")
 	}
 
-	if !user.IsConfirmed() {
+	if !user.IsConfirmed(config.Mailer.Autoconfirm) {
 		// The user may have other unconfirmed email + password
 		// combination, phone or oauth identities. These identities
 		// need to be removed when a new oauth identity is being added

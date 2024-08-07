@@ -569,7 +569,7 @@ func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
 
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
-	assert.True(ts.T(), u.IsConfirmed())
+	assert.True(ts.T(), u.IsConfirmed(false))
 
 	f, err := url.ParseQuery(rURL.RawQuery)
 	require.NoError(ts.T(), err)

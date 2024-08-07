@@ -93,11 +93,6 @@ func adminCreateUser(config *conf.GlobalConfiguration, args []string) {
 			}
 		}
 
-		if config.Mailer.Autoconfirm || autoconfirm {
-			if terr = user.Confirm(tx); terr != nil {
-				return terr
-			}
-		}
 		return nil
 	})
 	if err != nil {

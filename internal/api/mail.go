@@ -134,7 +134,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			}
 		case mail.InviteVerification:
 			if user != nil {
-				if user.IsConfirmed() {
+				if user.IsConfirmed( /* autoconfirm: */ false) {
 					return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
 				}
 			} else {
@@ -187,7 +187,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			}
 		case mail.SignupVerification:
 			if user != nil {
-				if user.IsConfirmed() {
+				if user.IsConfirmed( /* autoconfirm: */ false) {
 					return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
 				}
 				if err := user.UpdateUserMetaData(tx, params.Data); err != nil {

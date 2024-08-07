@@ -93,7 +93,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 
 	switch params.Type {
 	case mail.SignupVerification:
-		if user.IsConfirmed() {
+		if user.IsConfirmed( /* autoconfirm: */ false) {
 			// if the user's email is confirmed already, we don't need to send a confirmation email again
 			return sendJSON(w, http.StatusOK, map[string]string{})
 		}

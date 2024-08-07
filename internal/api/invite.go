@@ -19,6 +19,8 @@ type InviteParams struct {
 func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
+	config := a.config
+
 	adminUser := getAdminUser(ctx)
 	params := &InviteParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
@@ -39,7 +41,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if user != nil {
-			if user.IsConfirmed() {
+			if user.IsConfirmed(config.Mailer.Autoconfirm) {
 				return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
 			}
 		} else {
