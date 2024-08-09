@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.158.2](https://github.com/supabase/auth/compare/v2.158.1...v2.158.2) (2024-08-09)
+
+
+### Bug Fixes
+
+* change phone constraint to per user ([#1713](https://github.com/supabase/auth/issues/1713)) ([b9bc769](https://github.com/supabase/auth/commit/b9bc769b93b6e700925fcbc1ebf8bf9678034205))
+* remove TOTP field for phone enroll response ([#1717](https://github.com/supabase/auth/issues/1717)) ([4b04327](https://github.com/supabase/auth/commit/4b043275dd2d94600a8138d4ebf4638754ed926b))
+
 ## [2.158.1](https://github.com/supabase/auth/compare/v2.158.0...v2.158.1) (2024-08-05)
 
 
