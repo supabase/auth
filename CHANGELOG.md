@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.154.0](https://github.com/nickmitchko/auth/compare/v2.153.1...v2.154.0) (2024-06-04)
+
+
+### Features
+
+* make the email client explicity set the format to be HTML ([#1149](https://github.com/nickmitchko/auth/issues/1149)) ([53e223a](https://github.com/nickmitchko/auth/commit/53e223abdf29f4abcad13f99baf00daedcb00c3f))
+
+
+### Bug Fixes
+
+* improve token OIDC logging ([#1606](https://github.com/nickmitchko/auth/issues/1606)) ([5262683](https://github.com/nickmitchko/auth/commit/526268311844467664e89c8329e5aaee817dbbaf))
+
 ## [2.153.1](https://github.com/nickmitchko/auth/compare/v2.153.0...v2.153.1) (2024-05-30)
 
 
