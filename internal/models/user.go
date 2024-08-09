@@ -179,8 +179,8 @@ func (u *User) BeforeSave(tx *pop.Connection) error {
 
 // IsConfirmed checks if a user has already been
 // registered and confirmed.
-func (u *User) IsConfirmed() bool {
-	return u.EmailConfirmedAt != nil
+func (u *User) IsConfirmed(autoconfirm bool) bool {
+	return autoconfirm || u.EmailConfirmedAt != nil
 }
 
 // HasBeenInvited checks if user has been invited
@@ -492,7 +492,7 @@ func (u *User) ConfirmEmailChange(tx *storage.Connection, status int) error {
 		return err
 	}
 
-	if !u.IsConfirmed() {
+	if !u.IsConfirmed( /* autoconfirm: */ false) {
 		if err := u.Confirm(tx); err != nil {
 			return err
 		}

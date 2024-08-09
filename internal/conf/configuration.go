@@ -347,6 +347,7 @@ func (c *SMTPConfiguration) Validate() error {
 }
 
 type MailerConfiguration struct {
+	// Autoconfirm actually means allow unverified email sign-ups.
 	Autoconfirm                 bool `json:"autoconfirm"`
 	AllowUnverifiedEmailSignIns bool `json:"allow_unverified_email_sign_ins" split_words:"true" default:"false"`
 

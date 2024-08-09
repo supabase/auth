@@ -75,7 +75,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if user != nil {
-		isNewUser = !user.IsConfirmed()
+		isNewUser = !user.IsConfirmed(config.Mailer.Autoconfirm)
 	}
 	if isNewUser {
 		// User either doesn't exist or hasn't completed the signup process.

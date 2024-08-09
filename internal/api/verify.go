@@ -346,12 +346,14 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 }
 
 func (a *API) recoverVerify(r *http.Request, conn *storage.Connection, user *models.User) (*models.User, error) {
+	config := a.config
+
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = user.Recover(tx); terr != nil {
 			return terr
 		}
-		if !user.IsConfirmed() {
+		if !user.IsConfirmed(config.Mailer.Autoconfirm) {
 			if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
 				return terr
 			}
