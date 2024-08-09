@@ -39,11 +39,11 @@ type TOTPObject struct {
 }
 
 type EnrollFactorResponse struct {
-	ID           uuid.UUID  `json:"id"`
-	Type         string     `json:"type"`
-	FriendlyName string     `json:"friendly_name"`
-	TOTP         TOTPObject `json:"totp,omitempty"`
-	Phone        string     `json:"phone,omitempty"`
+	ID           uuid.UUID   `json:"id"`
+	Type         string      `json:"type"`
+	FriendlyName string      `json:"friendly_name"`
+	TOTP         *TOTPObject `json:"totp,omitempty"`
+	Phone        string      `json:"phone,omitempty"`
 }
 
 type ChallengeFactorParams struct {
@@ -246,7 +246,7 @@ func (a *API) enrollTOTPFactor(w http.ResponseWriter, r *http.Request, params *E
 		ID:           factor.ID,
 		Type:         models.TOTP,
 		FriendlyName: factor.FriendlyName,
-		TOTP: TOTPObject{
+		TOTP: &TOTPObject{
 			// See: https://css-tricks.com/probably-dont-base64-svg/
 			QRCode: buf.String(),
 			Secret: key.Secret(),
