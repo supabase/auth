@@ -362,6 +362,7 @@ type VercelMarketplaceIDTokenClaims struct {
 	UserRole       string `json:"user_role"`
 	UserAvatarUrl  string `json:"user_avatar_url"`
 	UserName       string `json:"user_name"`
+	UserEmail      string `json:"user_email"`
 }
 
 func parseVercelMarketplaceIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
@@ -373,20 +374,18 @@ func parseVercelMarketplaceIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserPro
 
 	var data UserProvidedData
 
-	// TODO(kamil): They are still evolving so I shoved everything inside `CustomClaims` for now
+	data.Emails = append(data.Emails, Email{
+		Email:    claims.UserEmail,
+		Verified: true,
+		Primary:  true,
+	})
+
 	data.Metadata = &Claims{
 		Issuer:       token.Issuer,
 		Subject:      token.Subject,
 		ProviderId:   token.Subject,
 		CustomClaims: make(map[string]any),
 	}
-
-	//. TODO(kamil): This is faked as claims do not have user_email yet
-	data.Emails = append(data.Emails, Email{
-		Email:    fmt.Sprintf("%s@customer.vercel.com", claims.UserId),
-		Verified: true,
-		Primary:  true,
-	})
 
 	if claims.InstallationId != "" {
 		data.Metadata.CustomClaims["installation_id"] = claims.InstallationId
