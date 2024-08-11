@@ -66,6 +66,7 @@ func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
 			Port:      globalConfig.SMTP.Port,
 			User:      globalConfig.SMTP.User,
 			Pass:      globalConfig.SMTP.Pass,
+			Insecure:  globalConfig.SMTP.Insecure,
 			LocalName: u.Hostname(),
 			From:      from,
 			BaseURL:   globalConfig.SiteURL,

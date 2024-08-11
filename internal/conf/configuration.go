@@ -337,6 +337,7 @@ type SMTPConfiguration struct {
 	Host         string        `json:"host"`
 	Port         int           `json:"port,omitempty" default:"587"`
 	User         string        `json:"user"`
+	Insecure     bool          `json:"insecure,omitempty" default:"false"`
 	Pass         string        `json:"pass,omitempty"`
 	AdminEmail   string        `json:"admin_email" split_words:"true"`
 	SenderName   string        `json:"sender_name" split_words:"true"`

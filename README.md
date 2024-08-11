@@ -508,6 +508,7 @@ GOTRUE_SMTP_HOST=smtp.mandrillapp.com
 GOTRUE_SMTP_PORT=587
 GOTRUE_SMTP_USER=smtp-delivery@example.com
 GOTRUE_SMTP_PASS=correcthorsebatterystaple
+GOTRUE_SMTP_INSECURE=false
 GOTRUE_SMTP_ADMIN_EMAIL=support@example.com
 GOTRUE_MAILER_SUBJECTS_CONFIRMATION="Please confirm"
 ```
@@ -531,6 +532,10 @@ If the mail server requires authentication, the username to use.
 `SMTP_PASS` - `string`
 
 If the mail server requires authentication, the password to use.
+
+`SMTP_INSECURE` - `bool`
+
+If the mail server requires TLS, but does not provide a valid certificate, you can set this to `true` to skip certificate verification. Defaults to `false`.
 
 `SMTP_MAX_FREQUENCY` - `number`
 
