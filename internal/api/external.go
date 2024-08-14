@@ -138,7 +138,7 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return err
 	}
-	a.redirectErrors(a.internalExternalProviderCallback, w, r, u)
+	redirectErrors(a.internalExternalProviderCallback, w, r, u)
 	return nil
 }
 
@@ -573,7 +573,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	}
 }
 
-func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {
+func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {
 	ctx := r.Context()
 	log := observability.GetLogEntry(r).Entry
 	errorID := utilities.GetRequestID(ctx)
