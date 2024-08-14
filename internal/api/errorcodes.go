@@ -82,5 +82,6 @@ const (
 	ErrorCodeMFATOTPEnrollDisabled             ErrorCode = "mfa_totp_enroll_not_enabled"
 	ErrorCodeMFATOTPVerifyDisabled             ErrorCode = "mfa_totp_verify_not_enabled"
 	ErrorCodeVerifiedFactorExists              ErrorCode = "mfa_verified_factor_exists"
-	ErrorCodeInvalidLoginCredentials           ErrorCode = "invalid_login_credentials"
+	//#nosec G101 -- Not a secret value.
+	ErrorCodeInvalidLoginCredentials ErrorCode = "invalid_login_credentials"
 )
