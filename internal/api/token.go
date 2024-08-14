@@ -146,7 +146,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	}
 
 	if user.IsBanned() {
-		return forbiddenError(ErrorCodeUserBanned, "User is banned")
+		return badRequestError(ErrorCodeUserBanned, "User is banned")
 	}
 
 	isValidPassword, shouldReEncrypt, err := user.Authenticate(ctx, db, params.Password, config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
