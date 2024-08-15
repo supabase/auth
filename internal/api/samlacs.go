@@ -43,8 +43,8 @@ func IsSAMLMetadataStale(idpMetadata *saml.EntityDescriptor, samlProvider models
 	return hasValidityExpired || hasCacheDurationExceeded || needsForceUpdate
 }
 
-// SAMLACS implements the main Assertion Consumer Service endpoint behavior.
-func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
+// SamlAcs implements the main Assertion Consumer Service endpoint behavior.
+func (a *API) SamlAcs(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
 	db := a.db.WithContext(ctx)
@@ -61,7 +61,6 @@ func (a *API) SAMLACS(w http.ResponseWriter, r *http.Request) error {
 	var requestIds []string
 
 	var flowState *models.FlowState
-	flowState = nil
 	if relayStateUUID != uuid.Nil {
 		// relay state is a valid UUID, therefore this is likely a SP initiated flow
 

@@ -274,7 +274,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 					tollbooth.NewLimiter(api.config.SAML.RateLimitAssertion/(60*5), &limiter.ExpirableOptions{
 						DefaultExpirationTTL: time.Hour,
 					}).SetBurst(30),
-				)).Post("/acs", api.SAMLACS)
+				)).Post("/acs", api.SamlAcs)
 			})
 		})
 
