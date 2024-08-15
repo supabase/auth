@@ -732,7 +732,7 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.JWT.AdminGroupName = "admin"
 	}
 
-	if config.JWT.AdminRoles == nil || len(config.JWT.AdminRoles) == 0 {
+	if len(config.JWT.AdminRoles) == 0 {
 		config.JWT.AdminRoles = []string{"service_role", "supabase_admin"}
 	}
 
@@ -740,7 +740,7 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.JWT.Exp = 3600
 	}
 
-	if config.JWT.Keys == nil || len(config.JWT.Keys) == 0 {
+	if len(config.JWT.Keys) == 0 {
 		// transform the secret into a JWK for consistency
 		privKey, err := jwk.FromRaw([]byte(config.JWT.Secret))
 		if err != nil {
