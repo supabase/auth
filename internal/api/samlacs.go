@@ -43,8 +43,22 @@ func IsSAMLMetadataStale(idpMetadata *saml.EntityDescriptor, samlProvider models
 	return hasValidityExpired || hasCacheDurationExceeded || needsForceUpdate
 }
 
-// SamlAcs implements the main Assertion Consumer Service endpoint behavior.
 func (a *API) SamlAcs(w http.ResponseWriter, r *http.Request) error {
+	if err := a.handleSamlAcs(w, r); err != nil {
+		u, uerr := url.Parse(a.config.SiteURL)
+		if uerr != nil {
+			return internalServerError("site url is improperly formattted").WithInternalError(err)
+		}
+
+		q := getErrorQueryString(err, utilities.GetRequestID(r.Context()), observability.GetLogEntry(r).Entry, u.Query())
+		u.RawQuery = q.Encode()
+		http.Redirect(w, r, u.String(), http.StatusSeeOther)
+	}
+	return nil
+}
+
+// handleSamlAcs implements the main Assertion Consumer Service endpoint behavior.
+func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
 	db := a.db.WithContext(ctx)
