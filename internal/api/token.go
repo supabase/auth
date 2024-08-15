@@ -131,7 +131,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		params.Phone = formatPhoneNumber(params.Phone)
 		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
 	} else {
-		return badRequestError(ErrorCodeInvalidCredentials, "missing email or phone")
+		return badRequestError(ErrorCodeValidationFailed, "missing email or phone")
 	}
 
 	if err != nil {
@@ -185,8 +185,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			Valid:  isValidPassword,
 		}
 		output := hooks.PasswordVerificationAttemptOutput{}
-		err := a.invokeHook(nil, r, &input, &output)
-		if err != nil {
+		if err := a.invokeHook(nil, r, &input, &output); err != nil {
 			return err
 		}
 
@@ -199,7 +198,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 					return err
 				}
 			}
-			return badRequestError(ErrorCodeInvalidCredentials, InvalidLoginMessage)
+			return badRequestError(ErrorCodeInvalidCredentials, output.Message)
 		}
 	}
 	if !isValidPassword {
@@ -207,9 +206,9 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	}
 
 	if params.Email != "" && !user.IsConfirmed() {
-		return badRequestError(ErrorCodeInvalidCredentials, "Email not confirmed")
+		return badRequestError(ErrorCodeEmailNotConfirmed, "Email not confirmed")
 	} else if params.Phone != "" && !user.IsPhoneConfirmed() {
-		return badRequestError(ErrorCodeInvalidCredentials, "Phone not confirmed")
+		return badRequestError(ErrorCodePhoneNotConfirmed, "Phone not confirmed")
 	}
 
 	var token *AccessTokenResponse
