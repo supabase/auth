@@ -91,7 +91,7 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	case "pkce":
 		return a.PKCE(ctx, w, r)
 	default:
-		return badRequestError(ErrorCodeInvalidLoginCredentials, "unsupported_grant_type")
+		return badRequestError(ErrorCodeInvalidCredentials, "unsupported_grant_type")
 	}
 }
 
@@ -131,18 +131,18 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		params.Phone = formatPhoneNumber(params.Phone)
 		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
 	} else {
-		return badRequestError(ErrorCodeInvalidLoginCredentials, "missing email or phone")
+		return badRequestError(ErrorCodeInvalidCredentials, "missing email or phone")
 	}
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return badRequestError(ErrorCodeInvalidLoginCredentials, InvalidLoginMessage)
+			return badRequestError(ErrorCodeInvalidCredentials, InvalidLoginMessage)
 		}
 		return internalServerError("Database error querying schema").WithInternalError(err)
 	}
 
 	if !user.HasPassword() {
-		return badRequestError(ErrorCodeInvalidLoginCredentials, InvalidLoginMessage)
+		return badRequestError(ErrorCodeInvalidCredentials, InvalidLoginMessage)
 	}
 
 	if user.IsBanned() {
@@ -199,17 +199,17 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 					return err
 				}
 			}
-			return badRequestError(ErrorCodeInvalidLoginCredentials, InvalidLoginMessage)
+			return badRequestError(ErrorCodeInvalidCredentials, InvalidLoginMessage)
 		}
 	}
 	if !isValidPassword {
-		return badRequestError(ErrorCodeInvalidLoginCredentials, InvalidLoginMessage)
+		return badRequestError(ErrorCodeInvalidCredentials, InvalidLoginMessage)
 	}
 
 	if params.Email != "" && !user.IsConfirmed() {
-		return badRequestError(ErrorCodeInvalidLoginCredentials, "Email not confirmed")
+		return badRequestError(ErrorCodeInvalidCredentials, "Email not confirmed")
 	} else if params.Phone != "" && !user.IsPhoneConfirmed() {
-		return badRequestError(ErrorCodeInvalidLoginCredentials, "Phone not confirmed")
+		return badRequestError(ErrorCodeInvalidCredentials, "Phone not confirmed")
 	}
 
 	var token *AccessTokenResponse
