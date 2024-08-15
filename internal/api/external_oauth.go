@@ -45,7 +45,7 @@ func (a *API) loadFlowState(w http.ResponseWriter, r *http.Request) (context.Con
 		q := getErrorQueryString(err, utilities.GetRequestID(ctx), observability.GetLogEntry(r).Entry, u.Query())
 		u.RawQuery = q.Encode()
 
-		http.Redirect(w, r, u.String(), http.StatusFound)
+		http.Redirect(w, r, u.String(), http.StatusSeeOther)
 	}
 	return ctx, err
 }
