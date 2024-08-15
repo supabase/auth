@@ -103,7 +103,7 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 			if factor.Phone.String() == phone {
 				if factor.IsVerified() {
 					return unprocessableEntityError(
-						ErrorCodeVerifiedFactorExists,
+						ErrorCodeMFAVerifiedFactorExists,
 						"A verified phone factor already exists, unenroll the existing factor to continue",
 					)
 				} else if factor.IsUnverified() {

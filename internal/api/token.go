@@ -91,7 +91,7 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	case "pkce":
 		return a.PKCE(ctx, w, r)
 	default:
-		return oauthError("unsupported_grant_type", "")
+		return badRequestError(ErrorCodeInvalidCredentials, "unsupported_grant_type")
 	}
 }
 
@@ -131,22 +131,22 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		params.Phone = formatPhoneNumber(params.Phone)
 		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
 	} else {
-		return oauthError("invalid_grant", InvalidLoginMessage)
+		return badRequestError(ErrorCodeValidationFailed, "missing email or phone")
 	}
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return oauthError("invalid_grant", InvalidLoginMessage)
+			return badRequestError(ErrorCodeInvalidCredentials, InvalidLoginMessage)
 		}
 		return internalServerError("Database error querying schema").WithInternalError(err)
 	}
 
 	if !user.HasPassword() {
-		return oauthError("invalid_grant", InvalidLoginMessage)
+		return badRequestError(ErrorCodeInvalidCredentials, InvalidLoginMessage)
 	}
 
 	if user.IsBanned() {
-		return oauthError("invalid_grant", InvalidLoginMessage)
+		return badRequestError(ErrorCodeUserBanned, "User is banned")
 	}
 
 	isValidPassword, shouldReEncrypt, err := user.Authenticate(ctx, db, params.Password, config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
@@ -185,8 +185,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			Valid:  isValidPassword,
 		}
 		output := hooks.PasswordVerificationAttemptOutput{}
-		err := a.invokeHook(nil, r, &input, &output)
-		if err != nil {
+		if err := a.invokeHook(nil, r, &input, &output); err != nil {
 			return err
 		}
 
@@ -199,17 +198,17 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 					return err
 				}
 			}
-			return oauthError("invalid_grant", InvalidLoginMessage)
+			return badRequestError(ErrorCodeInvalidCredentials, output.Message)
 		}
 	}
 	if !isValidPassword {
-		return oauthError("invalid_grant", InvalidLoginMessage)
+		return badRequestError(ErrorCodeInvalidCredentials, InvalidLoginMessage)
 	}
 
 	if params.Email != "" && !user.IsConfirmed() {
-		return oauthError("invalid_grant", "Email not confirmed")
+		return badRequestError(ErrorCodeEmailNotConfirmed, "Email not confirmed")
 	} else if params.Phone != "" && !user.IsPhoneConfirmed() {
-		return oauthError("invalid_grant", "Phone not confirmed")
+		return badRequestError(ErrorCodePhoneNotConfirmed, "Phone not confirmed")
 	}
 
 	var token *AccessTokenResponse
@@ -292,7 +291,8 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		}
 		token, terr = a.issueRefreshToken(r, tx, user, authMethod, grantParams)
 		if terr != nil {
-			return oauthError("server_error", terr.Error())
+			// error type is already handled in issueRefreshToken
+			return terr
 		}
 		token.ProviderAccessToken = flowState.ProviderAccessToken
 		// Because not all providers give out a refresh token
