@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // OAuthProviderData contains the userData and token returned by the oauth provider
@@ -23,17 +24,6 @@ type OAuthProviderData struct {
 // loadFlowState parses the `state` query parameter as a JWS payload,
 // extracting the provider requested
 func (a *API) loadFlowState(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	var state string
-	if r.Method == http.MethodPost {
-		state = r.FormValue("state")
-	} else {
-		state = r.URL.Query().Get("state")
-	}
-
-	if state == "" {
-		return nil, badRequestError(ErrorCodeBadOAuthCallback, "OAuth state parameter missing")
-	}
-
 	ctx := r.Context()
 	oauthToken := r.URL.Query().Get("oauth_token")
 	if oauthToken != "" {
@@ -43,7 +33,21 @@ func (a *API) loadFlowState(w http.ResponseWriter, r *http.Request) (context.Con
 	if oauthVerifier != "" {
 		ctx = withOAuthVerifier(ctx, oauthVerifier)
 	}
-	return a.loadExternalState(ctx, state)
+
+	var err error
+	ctx, err = a.loadExternalState(ctx, r)
+	if err != nil {
+		u, uerr := url.ParseRequestURI(a.config.SiteURL)
+		if uerr != nil {
+			return ctx, internalServerError("site url is improperly formatted").WithInternalError(uerr)
+		}
+
+		q := getErrorQueryString(err, utilities.GetRequestID(ctx), observability.GetLogEntry(r).Entry, u.Query())
+		u.RawQuery = q.Encode()
+
+		http.Redirect(w, r, u.String(), http.StatusSeeOther)
+	}
+	return ctx, err
 }
 
 func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType string) (*OAuthProviderData, error) {

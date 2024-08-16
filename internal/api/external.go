@@ -138,7 +138,7 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return err
 	}
-	a.redirectErrors(a.internalExternalProviderCallback, w, r, u)
+	redirectErrors(a.internalExternalProviderCallback, w, r, u)
 	return nil
 }
 
@@ -478,7 +478,17 @@ func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *p
 	return user, nil
 }
 
-func (a *API) loadExternalState(ctx context.Context, state string) (context.Context, error) {
+func (a *API) loadExternalState(ctx context.Context, r *http.Request) (context.Context, error) {
+	var state string
+	switch r.Method {
+	case http.MethodPost:
+		state = r.FormValue("state")
+	default:
+		state = r.URL.Query().Get("state")
+	}
+	if state == "" {
+		return ctx, badRequestError(ErrorCodeBadOAuthCallback, "OAuth state parameter missing")
+	}
 	config := a.config
 	claims := ExternalProviderClaims{}
 	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
@@ -486,10 +496,10 @@ func (a *API) loadExternalState(ctx context.Context, state string) (context.Cont
 		return []byte(config.JWT.Secret), nil
 	})
 	if err != nil {
-		return nil, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state").WithInternalError(err)
+		return ctx, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state").WithInternalError(err)
 	}
 	if claims.Provider == "" {
-		return nil, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state (missing provider)")
+		return ctx, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state (missing provider)")
 	}
 	if claims.InviteToken != "" {
 		ctx = withInviteToken(ctx, claims.InviteToken)
@@ -573,7 +583,7 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	}
 }
 
-func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {
+func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {
 	ctx := r.Context()
 	log := observability.GetLogEntry(r).Entry
 	errorID := utilities.GetRequestID(ctx)
