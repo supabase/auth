@@ -387,6 +387,9 @@ func parseVercelMarketplaceIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserPro
 		CustomClaims: make(map[string]any),
 	}
 
+	// TODO(kamil): Those should be 99% gone, as user can be a member of multiple Vercel-based
+	// Supbase organizations, which mean that they will have multiple `account_id`, `user_id` and `installation_id`,
+	// all different for every org they belong to. We should store this data in a membership metadata instead.
 	if claims.InstallationId != "" {
 		data.Metadata.CustomClaims["installation_id"] = claims.InstallationId
 	}
