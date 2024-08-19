@@ -37,6 +37,7 @@ func TestSettings_DefaultProviders(t *testing.T) {
 	require.True(t, p.Slack)
 	require.True(t, p.SlackOIDC)
 	require.True(t, p.Google)
+	require.True(t, p.Instagram)
 	require.True(t, p.Kakao)
 	require.True(t, p.Keycloak)
 	require.True(t, p.Linkedin)

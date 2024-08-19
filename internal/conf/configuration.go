@@ -315,6 +315,7 @@ type ProviderConfiguration struct {
 	Github                  OAuthProviderConfiguration     `json:"github"`
 	Gitlab                  OAuthProviderConfiguration     `json:"gitlab"`
 	Google                  OAuthProviderConfiguration     `json:"google"`
+	Instagram               OAuthProviderConfiguration     `json:"instagram"`
 	Kakao                   OAuthProviderConfiguration     `json:"kakao"`
 	Notion                  OAuthProviderConfiguration     `json:"notion"`
 	Keycloak                OAuthProviderConfiguration     `json:"keycloak"`
