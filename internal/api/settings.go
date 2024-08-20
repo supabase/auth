@@ -19,6 +19,7 @@ type ProviderSettings struct {
 	Linkedin       bool `json:"linkedin"`
 	LinkedinOIDC   bool `json:"linkedin_oidc"`
 	Notion         bool `json:"notion"`
+	Pinterest      bool `json:"pinterest"`
 	Spotify        bool `json:"spotify"`
 	Slack          bool `json:"slack"`
 	SlackOIDC      bool `json:"slack_oidc"`
@@ -61,6 +62,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Linkedin:       config.External.Linkedin.Enabled,
 			LinkedinOIDC:   config.External.LinkedinOIDC.Enabled,
 			Notion:         config.External.Notion.Enabled,
+			Pinterest:      config.External.Pinterest.Enabled,
 			Spotify:        config.External.Spotify.Enabled,
 			Slack:          config.External.Slack.Enabled,
 			SlackOIDC:      config.External.SlackOIDC.Enabled,

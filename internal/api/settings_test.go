@@ -33,6 +33,7 @@ func TestSettings_DefaultProviders(t *testing.T) {
 	require.True(t, p.Discord)
 	require.True(t, p.Facebook)
 	require.True(t, p.Notion)
+	require.True(t, p.Pinterest)
 	require.True(t, p.Spotify)
 	require.True(t, p.Slack)
 	require.True(t, p.SlackOIDC)
