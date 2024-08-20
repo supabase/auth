@@ -349,7 +349,6 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		IsAnonymous:                   user.IsAnonymous,
 	}
 
-	var token *jwt.Token
 	var gotrueClaims jwt.Claims = claims
 	if config.Hook.CustomAccessToken.Enabled {
 		input := hooks.CustomAccessTokenInput{
@@ -367,30 +366,7 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		gotrueClaims = jwt.MapClaims(output.Claims)
 	}
 
-	signingJwk, err := conf.GetSigningJwk(&config.JWT)
-	if err != nil {
-		return "", 0, err
-	}
-
-	signingMethod := conf.GetSigningAlg(signingJwk)
-	token = jwt.NewWithClaims(signingMethod, gotrueClaims)
-	if token.Header == nil {
-		token.Header = make(map[string]interface{})
-	}
-
-	if _, ok := token.Header["kid"]; !ok {
-		if kid := signingJwk.KeyID(); kid != "" {
-			token.Header["kid"] = kid
-		}
-	}
-
-	// this serializes the aud claim to a string
-	jwt.MarshalSingleStringAsArray = false
-	signingKey, err := conf.GetSigningKey(signingJwk)
-	if err != nil {
-		return "", 0, err
-	}
-	signed, err := token.SignedString(signingKey)
+	signed, err := signJwt(&config.JWT, gotrueClaims)
 	if err != nil {
 		return "", 0, err
 	}
