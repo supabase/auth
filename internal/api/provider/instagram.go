@@ -3,29 +3,32 @@ package provider
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"io/ioutil"
+	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
 
-// Instagram
-type instagramProvider struct {
-	*oauth2.Config
-}
+const (
+	defaultInstagramApiBase = "https://graph.instagram.com"
+)
 
 type instagramUser struct {
 	ID       string `json:"id"`
 	Username string `json:"username"`
+	Email    string `json:"email,omitempty"`
+	Picture  string `json:"profile_picture,omitempty"`
 }
 
-// NewInstagramProvider creates an Instagram account provider.
-func NewInstagramProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error) {
+func NewInstagramProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthProvider, error) {
 	if err := ext.ValidateOAuth(); err != nil {
 		return nil, err
 	}
+
+	authHost := chooseHost(ext.URL, defaultInstagramApiBase)
 
 	return &instagramProvider{
 		Config: &oauth2.Config{
@@ -36,9 +39,15 @@ func NewInstagramProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, e
 				TokenURL: "https://api.instagram.com/oauth/access_token",
 			},
 			RedirectURL: ext.RedirectURI,
-			Scopes:      []string{"user_profile"},
+			Scopes:      []string{"user_profile", "user_media"},
 		},
+		APIPath: authHost,
 	}, nil
+}
+
+type instagramProvider struct {
+	*oauth2.Config
+	APIPath string
 }
 
 func (g instagramProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
@@ -46,31 +55,52 @@ func (g instagramProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 }
 
 func (g instagramProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	client := g.Client(ctx, tok)
-	resp, err := client.Get("https://graph.instagram.com/me?fields=id,username")
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
 	var u instagramUser
-	if err := json.Unmarshal(body, &u); err != nil {
+
+	req, err := http.NewRequest("GET", g.APIPath+"/me?fields=id,username,email,profile_picture&access_token="+tok.AccessToken, nil)
+	if err != nil {
 		return nil, err
 	}
 
-	data := &UserProvidedData{
-		Metadata: &Claims{
-			Issuer:     "https://instagram.com",
-			Subject:    u.ID,
-			Name:       u.Username,
-			ProviderId: u.ID,
-		},
+	client := &http.Client{Timeout: defaultTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer utilities.SafeClose(resp.Body)
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("a %v error occurred while retrieving user from Instagram", resp.StatusCode)
 	}
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(body, &u)
+	if err != nil {
+		return nil, err
+	}
+
+	data := &UserProvidedData{}
+	if u.Email != "" {
+		data.Emails = []Email{{
+			Email:    u.Email,
+			Verified: true,
+			Primary:  true,
+		}}
+	}
+
+	data.Metadata = &Claims{
+		Issuer:  g.APIPath,
+		Subject: u.ID,
+		Name:    u.Username,
+		Picture: u.Picture,
+
+		// To be deprecated
+		AvatarURL:  u.Picture,
+		FullName:   u.Username,
+		ProviderId: u.ID,
+	}
 	return data, nil
 }
