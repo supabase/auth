@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
-	"log"
 	"reflect"
 	"strings"
 	"time"
@@ -168,12 +167,8 @@ type OIDCProvider struct {
 	UserInfoURL string `db:"userinfo_url" json:"userinfo_url"`
 
 	RedirectURI string `db:"redirect_uri" json:"redirect_uri"`
-	// MetadataXML string  `db:"metadata_xml" json:"metadata_xml,omitempty"`
-	// MetadataURL *string `db:"metadata_url" json:"metadata_url,omitempty"`
 
 	AttributeMapping UserDataMapping `db:"attribute_mapping" json:"attribute_mapping,omitempty"`
-
-	// NameIDFormat *string `db:"name_id_format" json:"name_id_format,omitempty"`
 
 	CreatedAt time.Time `db:"created_at" json:"-"`
 	UpdatedAt time.Time `db:"updated_at" json:"-"`
@@ -192,40 +187,27 @@ func (p SAMLProvider) EntityDescriptor() (*saml.EntityDescriptor, error) {
 }
 
 func (p OIDCProvider) GenericProviderConfig() (conf.GenericOAuthProviderConfiguration, error) {
-	log.Println("11")
 
-	// Initialize OAuthProviderConfiguration with proper fields
 	oauthConfig := &conf.OAuthProviderConfiguration{
-		ClientID:       []string{p.ClientId}, // assuming p.ClientId is correct
-		Secret:         p.Secret,             //"ZIttFqNAGsEWG4ZGYshk3dbYNe0m496E", // assuming p.Secret exists
-		RedirectURI:    "",                   // assuming p.RedirectURI exists
-		URL:            p.Issuer,             // assuming p.URL exists
-		ApiURL:         p.UserInfoURL,        // assuming p.ApiURL exists
-		Enabled:        true,                 // assuming p.Enabled exists
-		SkipNonceCheck: true,                 // assuming p.SkipNonceCheck exists
+		ClientID:       []string{p.ClientId},
+		Secret:         p.Secret,
+		RedirectURI:    "",
+		URL:            p.Issuer,
+		ApiURL:         p.UserInfoURL,
+		Enabled:        true,
+		SkipNonceCheck: true,
 	}
 
-	// Initialize GenericOAuthProviderConfiguration with oauthConfig
 	providerConfig := conf.GenericOAuthProviderConfiguration{
 		OAuthProviderConfiguration: oauthConfig,
-		AuthURL:                    p.AuthURL,  // assuming p.AuthURL exists
-		TokenURL:                   p.TokenURL, // assuming p.TokenURL exists
+		AuthURL:                    p.AuthURL,
+		TokenURL:                   p.TokenURL,
 		Issuer:                     p.Issuer,
 		UserInfoURL:                p.UserInfoURL,
-		UserDataMapping:            p.AttributeMapping.Keys, /*[string]string{
-			"Subject":       "sub",
-			"Email":         "email",
-			"EmailVerified": "email_verified",
-		}*/ // assuming p.UserDataMapping exists
+		UserDataMapping:            p.AttributeMapping.Keys,
 	}
 
 	return providerConfig, nil
-
-	// // Pass the providerConfig to NewGenericProvider
-	// provider, err := provider.NewGenericProvider(providerConfig, "oidc")
-
-	// log.Println("12")
-	// return provider, err
 }
 
 type SSODomain struct {
@@ -407,13 +389,12 @@ func FindSAMLRelayStateByID(tx *storage.Connection, id uuid.UUID) (*SAMLRelaySta
 
 func FindOIDCFlowStateByID(tx *storage.Connection, stateId string) (*OIDCFlowState, error) {
 	var state OIDCFlowState
-	log.Println(stateId)
+
 	if err := tx.Eager().Q().Where("state = ?", stateId).First(&state); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
-			log.Println(err)
 			return nil, SAMLRelayStateNotFoundError{}
 		}
-		log.Println(err)
+
 		return nil, errors.Wrap(err, "error loading OIDC Flow State")
 	}
 
