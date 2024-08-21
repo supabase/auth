@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -62,7 +63,7 @@ func (g vercelMarketplaceProvider) GetOAuthToken(code string) (*oauth2.Token, er
 func (g vercelMarketplaceProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	idToken := tok.Extra("id_token")
 	if tok.AccessToken == "" || idToken == nil {
-		return &UserProvidedData{}, nil
+		return nil, errors.New("vercel_marketplace: no OIDC ID token present in response")
 	}
 
 	_, data, err := ParseIDToken(ctx, g.oidc, &oidc.Config{
