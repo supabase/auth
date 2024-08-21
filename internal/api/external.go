@@ -15,6 +15,7 @@ import (
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -106,8 +107,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		claims.LinkingTargetID = linkingTargetUser.ID.String()
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(config.JWT.Secret))
+	tokenString, err := signJwt(&config.JWT, claims)
 	if err != nil {
 		return "", internalServerError("Error creating state").WithInternalError(err)
 	}
@@ -491,9 +491,20 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request) (context.C
 	}
 	config := a.config
 	claims := ExternalProviderClaims{}
-	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
+	p := jwt.NewParser(jwt.WithValidMethods(config.JWT.ValidMethods))
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(config.JWT.Secret), nil
+		if kid, ok := token.Header["kid"]; ok {
+			if kidStr, ok := kid.(string); ok {
+				return conf.FindPublicKeyByKid(kidStr, &config.JWT)
+			}
+		}
+		if alg, ok := token.Header["alg"]; ok {
+			if alg == jwt.SigningMethodHS256.Name {
+				// preserve backward compatibility for cases where the kid is not set
+				return []byte(config.JWT.Secret), nil
+			}
+		}
+		return nil, fmt.Errorf("missing kid")
 	})
 	if err != nil {
 		return ctx, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state").WithInternalError(err)
