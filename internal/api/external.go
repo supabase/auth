@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -250,6 +251,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		// This means that the callback is using PKCE
 		// Set the flowState.AuthCode to the query param here
 		rurl, err = a.prepPKCERedirectURL(rurl, flowState.AuthCode)
+		log.Println("rurl", rurl)
 		if err != nil {
 			return err
 		}
@@ -568,6 +570,9 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewWorkOSProvider(config.External.WorkOS)
 	case "zoom":
 		return provider.NewZoomProvider(config.External.Zoom)
+	case "sso/oidc":
+		config := getGenericProviderConfig(ctx)
+		return provider.NewGenericProvider(*config, scopes)
 	default:
 		return nil, fmt.Errorf("Provider %s could not be found", name)
 	}

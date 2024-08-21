@@ -65,6 +65,7 @@ func getBodyBytes(req *http.Request) ([]byte, error) {
 type RequestParams interface {
 	AdminUserParams |
 		CreateSSOProviderParams |
+		CreateOIDCSSOProviderParams |
 		EnrollFactorParams |
 		GenerateLinkParams |
 		IdTokenGrantParams |

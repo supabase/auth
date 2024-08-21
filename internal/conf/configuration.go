@@ -65,6 +65,16 @@ type OAuthProviderConfiguration struct {
 	SkipNonceCheck bool     `json:"skip_nonce_check" split_words:"true"`
 }
 
+// GenericOAuthProviderConfiguration holds all config related to generic OAuth providers.
+type GenericOAuthProviderConfiguration struct {
+	*OAuthProviderConfiguration
+	AuthURL         string            `json:"auth_url" envconfig:"AUTH_URL"`
+	TokenURL        string            `json:"token_url" envconfig:"TOKEN_URL"`
+	Issuer          string            `json:"issuer"`
+	UserInfoURL     string            `json:"userinfo_url"  split_words:"true"`
+	UserDataMapping map[string]string `json:"mapping" split_words:"true"`
+}
+
 type AnonymousProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"false"`
 }

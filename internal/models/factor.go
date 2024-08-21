@@ -49,6 +49,7 @@ const (
 	EmailChange
 	TokenRefresh
 	Anonymous
+	SSOOIDC
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -67,6 +68,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "invite"
 	case SSOSAML:
 		return "sso/saml"
+	case SSOOIDC:
+		return "sso/oidc"
 	case MagicLink:
 		return "magiclink"
 	case EmailSignup:
@@ -102,6 +105,8 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return Invite, nil
 	case "sso/saml":
 		return SSOSAML, nil
+	case "sso/oidc":
+		return SSOOIDC, nil
 	case "magiclink":
 		return MagicLink, nil
 	case "email/signup":
