@@ -282,7 +282,7 @@ paths:
           required: true
           schema:
             type: string
-            pattern: "[^a-zA-Z0-9]+"
+            pattern: "^[a-zA-Z0-9]+$"
         - name: scopes
           in: query
           required: true
