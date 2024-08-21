@@ -356,13 +356,9 @@ func parseKakaoIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 type VercelMarketplaceIDTokenClaims struct {
 	jwt.RegisteredClaims
 
-	InstallationId string `json:"installation_id"`
-	AccountId      string `json:"account_id"`
-	UserId         string `json:"user_id"`
-	UserRole       string `json:"user_role"`
-	UserAvatarUrl  string `json:"user_avatar_url"`
-	UserName       string `json:"user_name"`
-	UserEmail      string `json:"user_email"`
+	UserEmail     string `json:"user_email"`
+	UserName      string `json:"user_name"`
+	UserAvatarUrl string `json:"user_avatar_url"`
 }
 
 func parseVercelMarketplaceIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
@@ -381,32 +377,11 @@ func parseVercelMarketplaceIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserPro
 	})
 
 	data.Metadata = &Claims{
-		Issuer:       token.Issuer,
-		Subject:      token.Subject,
-		ProviderId:   token.Subject,
-		CustomClaims: make(map[string]any),
-	}
-
-	// TODO(kamil): Those should be 99% gone, as user can be a member of multiple Vercel-based
-	// Supbase organizations, which mean that they will have multiple `account_id`, `user_id` and `installation_id`,
-	// all different for every org they belong to. We should store this data in a membership metadata instead.
-	if claims.InstallationId != "" {
-		data.Metadata.CustomClaims["installation_id"] = claims.InstallationId
-	}
-	if claims.AccountId != "" {
-		data.Metadata.CustomClaims["account_id"] = claims.AccountId
-	}
-	if claims.UserId != "" {
-		data.Metadata.CustomClaims["user_id"] = claims.UserId
-	}
-	if claims.UserRole != "" {
-		data.Metadata.CustomClaims["user_role"] = claims.UserRole
-	}
-	if claims.UserAvatarUrl != "" {
-		data.Metadata.CustomClaims["user_avatar_url"] = claims.UserAvatarUrl
-	}
-	if claims.UserName != "" {
-		data.Metadata.CustomClaims["user_name"] = claims.UserName
+		Issuer:     token.Issuer,
+		Subject:    token.Subject,
+		ProviderId: token.Subject,
+		Name:       claims.UserName,
+		Picture:    claims.UserAvatarUrl,
 	}
 
 	return token, &data, nil
