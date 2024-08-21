@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -251,7 +250,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		// This means that the callback is using PKCE
 		// Set the flowState.AuthCode to the query param here
 		rurl, err = a.prepPKCERedirectURL(rurl, flowState.AuthCode)
-		log.Println("rurl", rurl)
 		if err != nil {
 			return err
 		}
