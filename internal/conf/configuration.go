@@ -273,6 +273,7 @@ type GlobalConfiguration struct {
 		Duration int    `json:"duration"`
 	} `json:"cookies"`
 	SAML SAMLConfiguration `json:"saml"`
+	OIDC OIDCConfiguration `json:"oidc"`
 	CORS CORSConfiguration `json:"cors"`
 }
 
