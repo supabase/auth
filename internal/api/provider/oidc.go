@@ -61,6 +61,8 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 		token, data, err = parseLinkedinIDToken(token)
 	case IssuerKakao:
 		token, data, err = parseKakaoIDToken(token)
+	case IssuerVercelMarketplace:
+		token, data, err = parseVercelMarketplaceIDToken(token)
 	default:
 		if IsAzureIssuer(token.Issuer) {
 			token, data, err = parseAzureIDToken(token)
@@ -346,6 +348,40 @@ func parseKakaoIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 		PreferredUsername: claims.Nickname,
 		ProviderId:        token.Subject,
 		Picture:           claims.Picture,
+	}
+
+	return token, &data, nil
+}
+
+type VercelMarketplaceIDTokenClaims struct {
+	jwt.RegisteredClaims
+
+	UserEmail     string `json:"user_email"`
+	UserName      string `json:"user_name"`
+	UserAvatarUrl string `json:"user_avatar_url"`
+}
+
+func parseVercelMarketplaceIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
+	var claims VercelMarketplaceIDTokenClaims
+
+	if err := token.Claims(&claims); err != nil {
+		return nil, nil, err
+	}
+
+	var data UserProvidedData
+
+	data.Emails = append(data.Emails, Email{
+		Email:    claims.UserEmail,
+		Verified: true,
+		Primary:  true,
+	})
+
+	data.Metadata = &Claims{
+		Issuer:     token.Issuer,
+		Subject:    token.Subject,
+		ProviderId: token.Subject,
+		Name:       claims.UserName,
+		Picture:    claims.UserAvatarUrl,
 	}
 
 	return token, &data, nil
