@@ -102,11 +102,10 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if user.IsAnonymous {
-		updatingForbiddenFields := false
-		updatingForbiddenFields = updatingForbiddenFields || (params.Password != nil && *params.Password != "")
-		if updatingForbiddenFields {
-			// CHECK
-			return unprocessableEntityError(ErrorCodeUnknown, "Updating password of an anonymous user is not possible")
+		if params.Password != nil && *params.Password != "" {
+			if params.Email == "" && params.Phone == "" {
+				return unprocessableEntityError(ErrorCodeValidationFailed, "Updating password of an anonymous user without an email or phone is not allowed")
+			}
 		}
 	}
 
