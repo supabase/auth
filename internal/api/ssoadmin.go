@@ -223,7 +223,7 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 
 	provider := &models.SSOProvider{
 		// TODO handle Name, Description, Attribute Mapping
-		SAMLProvider: models.SAMLProvider{
+		SAMLProvider: &models.SAMLProvider{
 			EntityID:    metadata.EntityID,
 			MetadataXML: string(rawMetadata),
 		},
@@ -390,7 +390,7 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 			}
 
 			if updateAttributeMapping || updateSAMLProvider {
-				if terr := tx.Eager().Update(&provider.SAMLProvider); terr != nil {
+				if terr := tx.Eager().Update(provider.SAMLProvider); terr != nil {
 					return terr
 				}
 			}

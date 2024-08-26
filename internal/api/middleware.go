@@ -223,10 +223,26 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 	return withExternalHost(ctx, u), nil
 }
 
-func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+func (a *API) requireSSOSAMLEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.SAML.Enabled {
 		return nil, notFoundError(ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled")
+	}
+	return ctx, nil
+}
+
+func (a *API) requireSSOOIDCEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !a.config.OIDC.Enabled {
+		return nil, notFoundError(ErrorCodeSAMLProviderDisabled, "OIDC is disabled")
+	}
+	return ctx, nil
+}
+
+func (a *API) requireSSOEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !(a.config.OIDC.Enabled || a.config.SAML.Enabled) {
+		return nil, notFoundError(ErrorCodeSAMLProviderDisabled, "Either SAML or OIDC for SSO need to be enabled")
 	}
 	return ctx, nil
 }

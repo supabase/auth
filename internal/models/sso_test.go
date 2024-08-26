@@ -43,7 +43,7 @@ func (ts *SSOTestSuite) TestConstraints() {
 	examples := []exampleSpec{
 		{
 			Provider: &SSOProvider{
-				SAMLProvider: SAMLProvider{
+				SAMLProvider: &SAMLProvider{
 					EntityID:    "",
 					MetadataXML: "<example />",
 				},
@@ -51,7 +51,7 @@ func (ts *SSOTestSuite) TestConstraints() {
 		},
 		{
 			Provider: &SSOProvider{
-				SAMLProvider: SAMLProvider{
+				SAMLProvider: &SAMLProvider{
 					EntityID:    "https://example.com/saml/metadata",
 					MetadataXML: "",
 				},
@@ -59,7 +59,7 @@ func (ts *SSOTestSuite) TestConstraints() {
 		},
 		{
 			Provider: &SSOProvider{
-				SAMLProvider: SAMLProvider{
+				SAMLProvider: &SAMLProvider{
 					EntityID:    "https://example.com/saml/metadata",
 					MetadataXML: "<example />",
 				},
@@ -79,7 +79,7 @@ func (ts *SSOTestSuite) TestConstraints() {
 
 func (ts *SSOTestSuite) TestDomainUniqueness() {
 	require.NoError(ts.T(), ts.db.Eager().Create(&SSOProvider{
-		SAMLProvider: SAMLProvider{
+		SAMLProvider: &SAMLProvider{
 			EntityID:    "https://example.com/saml/metadata1",
 			MetadataXML: "<example />",
 		},
@@ -91,7 +91,7 @@ func (ts *SSOTestSuite) TestDomainUniqueness() {
 	}))
 
 	require.Error(ts.T(), ts.db.Eager().Create(&SSOProvider{
-		SAMLProvider: SAMLProvider{
+		SAMLProvider: &SAMLProvider{
 			EntityID:    "https://example.com/saml/metadata2",
 			MetadataXML: "<example />",
 		},
@@ -105,7 +105,7 @@ func (ts *SSOTestSuite) TestDomainUniqueness() {
 
 func (ts *SSOTestSuite) TestEntityIDUniqueness() {
 	require.NoError(ts.T(), ts.db.Eager().Create(&SSOProvider{
-		SAMLProvider: SAMLProvider{
+		SAMLProvider: &SAMLProvider{
 			EntityID:    "https://example.com/saml/metadata",
 			MetadataXML: "<example />",
 		},
@@ -117,7 +117,7 @@ func (ts *SSOTestSuite) TestEntityIDUniqueness() {
 	}))
 
 	require.Error(ts.T(), ts.db.Eager().Create(&SSOProvider{
-		SAMLProvider: SAMLProvider{
+		SAMLProvider: &SAMLProvider{
 			EntityID:    "https://example.com/saml/metadata",
 			MetadataXML: "<example />",
 		},
@@ -131,7 +131,7 @@ func (ts *SSOTestSuite) TestEntityIDUniqueness() {
 
 func (ts *SSOTestSuite) TestFindSSOProviderForEmailAddress() {
 	provider := &SSOProvider{
-		SAMLProvider: SAMLProvider{
+		SAMLProvider: &SAMLProvider{
 			EntityID:    "https://example.com/saml/metadata",
 			MetadataXML: "<example />",
 		},
@@ -182,7 +182,7 @@ func (ts *SSOTestSuite) TestFindSSOProviderForEmailAddress() {
 
 func (ts *SSOTestSuite) TestFindSAMLProviderByEntityID() {
 	provider := &SSOProvider{
-		SAMLProvider: SAMLProvider{
+		SAMLProvider: &SAMLProvider{
 			EntityID:    "https://example.com/saml/metadata",
 			MetadataXML: "<example />",
 		},

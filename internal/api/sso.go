@@ -2,11 +2,10 @@ package api
 
 import (
 	"net/http"
+	"net/url"
 
-	"github.com/crewjam/saml"
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 type SingleSignOnParams struct {
@@ -57,16 +56,6 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
 		return err
 	}
-	flowType := getFlowFromChallenge(params.CodeChallenge)
-	var flowStateID *uuid.UUID
-	flowStateID = nil
-	if isPKCEFlow(flowType) {
-		flowState, err := generateFlowState(db, models.SSOSAML.String(), models.SSOSAML, codeChallengeMethod, codeChallenge, nil)
-		if err != nil {
-			return err
-		}
-		flowStateID = &flowState.ID
-	}
 
 	var ssoProvider *models.SSOProvider
 
@@ -86,48 +75,37 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	entityDescriptor, err := ssoProvider.SAMLProvider.EntityDescriptor()
-	if err != nil {
-		return internalServerError("Error parsing SAML Metadata for SAML provider").WithInternalError(err)
+	var authMethod models.AuthenticationMethod
+	var providerType string
+	// providerType, authMethod := "", models.AuthenticationMethod
+	if ssoProvider.OIDCProvider == nil || ssoProvider.OIDCProvider.ClientId == "" {
+		providerType, authMethod = models.SSOSAML.String(), models.SSOSAML
+	} else {
+		providerType, authMethod = models.SSOOIDC.String(), models.SSOOIDC
 	}
 
-	serviceProvider := a.getSAMLServiceProvider(entityDescriptor, false /* <- idpInitiated */)
-
-	authnRequest, err := serviceProvider.MakeAuthenticationRequest(
-		serviceProvider.GetSSOBindingLocation(saml.HTTPRedirectBinding),
-		saml.HTTPRedirectBinding,
-		saml.HTTPPostBinding,
-	)
-	if err != nil {
-		return internalServerError("Error creating SAML Authentication Request").WithInternalError(err)
-	}
-
-	// Some IdPs do not support the use of the `persistent` NameID format,
-	// and require a different format to be sent to work.
-	if ssoProvider.SAMLProvider.NameIDFormat != nil {
-		authnRequest.NameIDPolicy.Format = ssoProvider.SAMLProvider.NameIDFormat
-	}
-
-	relayState := models.SAMLRelayState{
-		SSOProviderID: ssoProvider.ID,
-		RequestID:     authnRequest.ID,
-		RedirectTo:    params.RedirectTo,
-		FlowStateID:   flowStateID,
-	}
-
-	if err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := tx.Create(&relayState); terr != nil {
-			return internalServerError("Error creating SAML relay state from sign up").WithInternalError(err)
+	flowType := getFlowFromChallenge(params.CodeChallenge)
+	var flowStateID *uuid.UUID
+	flowStateID = nil
+	if isPKCEFlow(flowType) {
+		flowState, err := generateFlowState(db, providerType, authMethod, codeChallengeMethod, codeChallenge, nil)
+		if err != nil {
+			return err
 		}
-
-		return nil
-	}); err != nil {
-		return err
+		flowStateID = &flowState.ID
 	}
 
-	ssoRedirectURL, err := authnRequest.Redirect(relayState.ID.String(), serviceProvider)
-	if err != nil {
-		return internalServerError("Error creating SAML authentication request redirect URL").WithInternalError(err)
+	var ssoRedirectURL *url.URL
+	if authMethod == models.SSOSAML {
+		ssoRedirectURL, err = GenerateRedirectWithSAML(a, db, ssoProvider, flowStateID, params)
+		if err != nil {
+			return internalServerError("Error creating SAML authentication request redirect URL").WithInternalError(err)
+		}
+	} else if authMethod == models.SSOOIDC {
+		ssoRedirectURL, err = GenerateRedirectWithOIDC(a, db, ssoProvider, flowStateID, params)
+		if err != nil {
+			return internalServerError("Error creating OIDC authentication request redirect URL").WithInternalError(err)
+		}
 	}
 
 	skipHTTPRedirect := false

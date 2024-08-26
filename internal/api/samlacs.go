@@ -170,7 +170,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 
 			logentry.Warn("SAML Metadata for identity provider will expire soon! Update its metadata_xml!")
 		}
-	} else if *ssoProvider.SAMLProvider.MetadataURL != "" && IsSAMLMetadataStale(idpMetadata, ssoProvider.SAMLProvider) {
+	} else if *ssoProvider.SAMLProvider.MetadataURL != "" && IsSAMLMetadataStale(idpMetadata, *ssoProvider.SAMLProvider) {
 		rawMetadata, err := fetchSAMLMetadata(ctx, *ssoProvider.SAMLProvider.MetadataURL)
 		if err != nil {
 			// Fail silently but raise warning and continue with existing metadata

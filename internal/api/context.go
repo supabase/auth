@@ -5,6 +5,7 @@ import (
 	"net/url"
 
 	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -15,22 +16,23 @@ func (c contextKey) String() string {
 }
 
 const (
-	tokenKey                = contextKey("jwt")
-	inviteTokenKey          = contextKey("invite_token")
-	signatureKey            = contextKey("signature")
-	externalProviderTypeKey = contextKey("external_provider_type")
-	userKey                 = contextKey("user")
-	targetUserKey           = contextKey("target_user")
-	factorKey               = contextKey("factor")
-	sessionKey              = contextKey("session")
-	externalReferrerKey     = contextKey("external_referrer")
-	functionHooksKey        = contextKey("function_hooks")
-	adminUserKey            = contextKey("admin_user")
-	oauthTokenKey           = contextKey("oauth_token") // for OAuth1.0, also known as request token
-	oauthVerifierKey        = contextKey("oauth_verifier")
-	ssoProviderKey          = contextKey("sso_provider")
-	externalHostKey         = contextKey("external_host")
-	flowStateKey            = contextKey("flow_state_id")
+	tokenKey                 = contextKey("jwt")
+	inviteTokenKey           = contextKey("invite_token")
+	signatureKey             = contextKey("signature")
+	externalProviderTypeKey  = contextKey("external_provider_type")
+	userKey                  = contextKey("user")
+	targetUserKey            = contextKey("target_user")
+	factorKey                = contextKey("factor")
+	sessionKey               = contextKey("session")
+	externalReferrerKey      = contextKey("external_referrer")
+	functionHooksKey         = contextKey("function_hooks")
+	adminUserKey             = contextKey("admin_user")
+	oauthTokenKey            = contextKey("oauth_token") // for OAuth1.0, also known as request token
+	oauthVerifierKey         = contextKey("oauth_verifier")
+	ssoProviderKey           = contextKey("sso_provider")
+	externalHostKey          = contextKey("external_host")
+	flowStateKey             = contextKey("flow_state_id")
+	genericProviderConfigKey = contextKey("generic_provider_config")
 )
 
 // withToken adds the JWT token to the context.
@@ -240,4 +242,17 @@ func getExternalHost(ctx context.Context) *url.URL {
 		return nil
 	}
 	return obj.(*url.URL)
+}
+
+func withGenericProviderConfig(ctx context.Context, token *conf.GenericOAuthProviderConfiguration) context.Context {
+	return context.WithValue(ctx, genericProviderConfigKey, token)
+}
+
+func getGenericProviderConfig(ctx context.Context) *conf.GenericOAuthProviderConfiguration {
+	obj := ctx.Value(genericProviderConfigKey)
+	if obj == nil {
+		return nil
+	}
+
+	return obj.(*conf.GenericOAuthProviderConfiguration)
 }

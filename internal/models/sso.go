@@ -12,14 +12,16 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/storage"
 )
 
 type SSOProvider struct {
 	ID uuid.UUID `db:"id" json:"id"`
 
-	SAMLProvider SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
-	SSODomains   []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
+	SAMLProvider *SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
+	OIDCProvider *OIDCProvider `has_one:"oidc_providers" fk_id:"sso_provider_id" json:"oidc,omitempty"`
+	SSODomains   []SSODomain   `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
 
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
@@ -127,12 +129,85 @@ type SAMLProvider struct {
 	UpdatedAt time.Time `db:"updated_at" json:"-"`
 }
 
+type UserDataMapping struct {
+	Keys map[string]string `json:"keys,omitempty"`
+}
+
+func (m *UserDataMapping) Scan(src interface{}) error {
+	b, ok := src.([]byte)
+	if !ok {
+		return errors.New("scan source was not []byte")
+	}
+	err := json.Unmarshal(b, m)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (m UserDataMapping) Value() (driver.Value, error) {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return nil, err
+	}
+	return string(b), nil
+}
+
+type OIDCProvider struct {
+	ID uuid.UUID `db:"id" json:"-"`
+
+	SSOProvider   *SSOProvider `belongs_to:"sso_providers" json:"-"`
+	SSOProviderID uuid.UUID    `db:"sso_provider_id" json:"-"`
+
+	Issuer      string `db:"issuer" json:"issuer"`
+	ClientId    string `db:"client_id" json:"client_id"`
+	Secret      string `db:"secret" json:"secret"`
+	AuthURL     string `db:"auth_url" json:"auth_url"`
+	TokenURL    string `db:"token_url" json:"token_url"`
+	UserInfoURL string `db:"userinfo_url" json:"userinfo_url"`
+
+	RedirectURI string `db:"redirect_uri" json:"redirect_uri"`
+
+	AttributeMapping UserDataMapping `db:"attribute_mapping" json:"attribute_mapping,omitempty"`
+
+	CreatedAt time.Time `db:"created_at" json:"-"`
+	UpdatedAt time.Time `db:"updated_at" json:"-"`
+}
+
 func (p SAMLProvider) TableName() string {
 	return "saml_providers"
 }
 
+func (p OIDCProvider) TableName() string {
+	return "oidc_providers"
+}
+
 func (p SAMLProvider) EntityDescriptor() (*saml.EntityDescriptor, error) {
 	return samlsp.ParseMetadata([]byte(p.MetadataXML))
+}
+
+func (p OIDCProvider) GenericProviderConfig() (conf.GenericOAuthProviderConfiguration, error) {
+
+	oauthConfig := &conf.OAuthProviderConfiguration{
+		ClientID:       []string{p.ClientId},
+		Secret:         p.Secret,
+		RedirectURI:    "",
+		URL:            p.Issuer,
+		ApiURL:         p.UserInfoURL,
+		Enabled:        true,
+		SkipNonceCheck: true,
+	}
+
+	providerConfig := conf.GenericOAuthProviderConfiguration{
+		OAuthProviderConfiguration: oauthConfig,
+		AuthURL:                    p.AuthURL,
+		TokenURL:                   p.TokenURL,
+		Issuer:                     p.Issuer,
+		UserInfoURL:                p.UserInfoURL,
+		UserDataMapping:            p.AttributeMapping.Keys,
+	}
+
+	return providerConfig, nil
 }
 
 type SSODomain struct {
@@ -167,13 +242,50 @@ type SAMLRelayState struct {
 	FlowState   *FlowState `db:"-" json:"flow_state,omitempty" belongs_to:"flow_state"`
 }
 
+type OIDCFlowState struct {
+	ID uuid.UUID `db:"id"`
+
+	SSOProviderID uuid.UUID `db:"sso_provider_id"`
+
+	State string `db:"state"`
+
+	RedirectTo string `db:"redirect_to"`
+
+	CreatedAt   time.Time  `db:"created_at" json:"-"`
+	UpdatedAt   time.Time  `db:"updated_at" json:"-"`
+	FlowStateID *uuid.UUID `db:"flow_state_id" json:"flow_state_id,omitempty"`
+	FlowState   *FlowState `db:"-" json:"flow_state,omitempty" belongs_to:"flow_state"`
+}
+
 func (s SAMLRelayState) TableName() string {
 	return "saml_relay_states"
+}
+
+func (s OIDCFlowState) TableName() string {
+	return "oidc_relay_states"
 }
 
 func FindSAMLProviderByEntityID(tx *storage.Connection, entityId string) (*SSOProvider, error) {
 	var samlProvider SAMLProvider
 	if err := tx.Q().Where("entity_id = ?", entityId).First(&samlProvider); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SSOProviderNotFoundError{}
+		}
+
+		return nil, errors.Wrap(err, "error finding SAML SSO provider by EntityID")
+	}
+
+	var ssoProvider SSOProvider
+	if err := tx.Eager().Q().Where("id = ?", samlProvider.SSOProviderID).First(&ssoProvider); err != nil {
+		return nil, errors.Wrap(err, "error finding SAML SSO provider by ID (via EntityID)")
+	}
+
+	return &ssoProvider, nil
+}
+
+func FindOIDCProviderByEntityID(tx *storage.Connection, clientId string, authUrl string) (*SSOProvider, error) {
+	var samlProvider OIDCProvider
+	if err := tx.Q().Where("client_id = ?", clientId).Where("auth_url = ?", clientId).First(&samlProvider); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, SSOProviderNotFoundError{}
 		}
@@ -247,6 +359,20 @@ func FindAllSAMLProviders(tx *storage.Connection) ([]SSOProvider, error) {
 	return providers, nil
 }
 
+func FindAllOIDCProviders(tx *storage.Connection) ([]SSOProvider, error) {
+	var providers []SSOProvider
+
+	if err := tx.Eager().All(&providers); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, nil
+		}
+
+		return nil, errors.Wrap(err, "error loading all OIDC SSO providers")
+	}
+
+	return providers, nil
+}
+
 func FindSAMLRelayStateByID(tx *storage.Connection, id uuid.UUID) (*SAMLRelayState, error) {
 	var state SAMLRelayState
 
@@ -256,6 +382,20 @@ func FindSAMLRelayStateByID(tx *storage.Connection, id uuid.UUID) (*SAMLRelaySta
 		}
 
 		return nil, errors.Wrap(err, "error loading SAML Relay State")
+	}
+
+	return &state, nil
+}
+
+func FindOIDCFlowStateByID(tx *storage.Connection, stateId string) (*OIDCFlowState, error) {
+	var state OIDCFlowState
+
+	if err := tx.Eager().Q().Where("state = ?", stateId).First(&state); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SAMLRelayStateNotFoundError{}
+		}
+
+		return nil, errors.Wrap(err, "error loading OIDC Flow State")
 	}
 
 	return &state, nil

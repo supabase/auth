@@ -258,7 +258,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		})
 
 		r.Route("/sso", func(r *router) {
-			r.Use(api.requireSAMLEnabled)
+			r.Use(api.requireSSOEnabled)
 			r.With(api.limitHandler(
 				// Allow requests at the specified rate per 5 minutes.
 				tollbooth.NewLimiter(api.config.RateLimitSso/(60*5), &limiter.ExpirableOptions{
@@ -267,6 +267,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			)).With(api.verifyCaptcha).Post("/", api.SingleSignOn)
 
 			r.Route("/saml", func(r *router) {
+				r.Use(api.requireSSOSAMLEnabled)
 				r.Get("/metadata", api.SAMLMetadata)
 
 				r.With(api.limitHandler(
@@ -276,6 +277,18 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 					}).SetBurst(30),
 				)).Post("/acs", api.SamlAcs)
 			})
+
+			r.Route("/oidc", func(r *router) {
+				r.Use(api.requireSSOOIDCEnabled)
+				r.Route("/callback", func(r *router) {
+					r.Use(api.isValidExternalHost)
+					r.Use(api.loadSSOOIDCFlowState)
+
+					r.Get("/", api.ExternalProviderCallback)
+					r.Post("/", api.ExternalProviderCallback)
+				})
+			})
+
 		})
 
 		r.Route("/admin", func(r *router) {
@@ -319,6 +332,19 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 						r.Get("/", api.adminSSOProvidersGet)
 						r.Put("/", api.adminSSOProvidersUpdate)
 						r.Delete("/", api.adminSSOProvidersDelete)
+					})
+
+					r.Route("/oidc", func(r *router) {
+						r.Get("/", api.adminOIDCSSOProvidersList)
+						r.Post("/", api.adminOIDCSSOProvidersCreate)
+
+						r.Route("/{idp_id}", func(r *router) {
+							r.Use(api.loadOIDCSSOProvider)
+
+							r.Get("/", api.adminOIDCSSOProvidersGet)
+							// r.Put("/", api.adminOIDCSSOProvidersUpdate)
+							r.Delete("/", api.adminOIDCSSOProvidersDelete)
+						})
 					})
 				})
 			})

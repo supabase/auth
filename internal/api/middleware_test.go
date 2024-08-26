@@ -287,7 +287,7 @@ func (ts *MiddlewareTestSuite) TestRequireSAMLEnabled() {
 			req := httptest.NewRequest("GET", "http://localhost", nil)
 			w := httptest.NewRecorder()
 
-			_, err := ts.API.requireSAMLEnabled(w, req)
+			_, err := ts.API.requireSSOSAMLEnabled(w, req)
 			require.Equal(ts.T(), c.expectedErr, err)
 		})
 	}
