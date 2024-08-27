@@ -182,6 +182,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 						time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
 
 					if a.Now().After(reuseUntil) {
+						// not OK to reuse this token
 						if config.Security.RefreshTokenRotationEnabled {
 							// Revoke all tokens in token family
 							if err := models.RevokeTokenFamily(tx, token); err != nil {
