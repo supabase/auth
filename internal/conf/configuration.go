@@ -552,9 +552,10 @@ func (h *HTTPHookSecrets) Decode(value string) error {
 }
 
 type ExtensibilityPointConfiguration struct {
-	URI      string `json:"uri"`
-	Enabled  bool   `json:"enabled"`
-	HookName string `json:"hook_name"`
+	URI     string `json:"uri"`
+	Enabled bool   `json:"enabled"`
+	// For internal use together with Postgres Hook. Not publicly exposed.
+	HookName string `json:"-"`
 	// We use | as a separator for keys and : as a separator for keys within a keypair. For instance: v1,whsec_test|v1a,whpk_myother:v1a,whsk_testkey|v1,whsec_secret3
 	HTTPHookSecrets HTTPHookSecrets `json:"secrets" envconfig:"secrets"`
 }
