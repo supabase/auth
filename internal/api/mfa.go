@@ -544,9 +544,6 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 		if terr != nil {
 			return terr
 		}
-		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-			return internalServerError("Failed to set JWT cookie. %s", terr)
-		}
 		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
 			return internalServerError("Failed to update sessions. %s", terr)
 		}
@@ -662,9 +659,6 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		})
 		if terr != nil {
 			return terr
-		}
-		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-			return internalServerError("Failed to set JWT cookie. %s", terr)
 		}
 		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
 			return internalServerError("Failed to update sessions. %s", terr)
