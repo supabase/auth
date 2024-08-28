@@ -1,6 +1,9 @@
 package utilities
 
-import "context"
+import (
+	"context"
+	"sync"
+)
 
 type contextKey string
 
@@ -25,4 +28,24 @@ func GetRequestID(ctx context.Context) string {
 	}
 
 	return obj.(string)
+}
+
+// WaitForCleanup waits until all long-running goroutines shut
+// down cleanly or until the provided context signals done.
+func WaitForCleanup(ctx context.Context, wg *sync.WaitGroup) {
+	cleanupDone := make(chan struct{})
+
+	go func() {
+		defer close(cleanupDone)
+
+		wg.Wait()
+	}()
+
+	select {
+	case <-ctx.Done():
+		return
+
+	case <-cleanupDone:
+		return
+	}
 }
