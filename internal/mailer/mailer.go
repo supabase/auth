@@ -15,7 +15,6 @@ import (
 
 // Mailer defines the interface a mailer must implement.
 type Mailer interface {
-	Send(user *models.User, subject, body string, data map[string]interface{}) error
 	InviteMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
 	ConfirmationMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
 	RecoveryMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error

@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -383,10 +382,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			emailConfirmationSent := false
 			if decision.CandidateEmail.Email != "" {
 				if terr = a.sendConfirmation(r, tx, user, models.ImplicitFlow); terr != nil {
-					if errors.Is(terr, MaxFrequencyLimitError) {
-						return nil, tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "For security purposes, you can only request this once every minute")
-					}
-					return nil, internalServerError("Error sending confirmation mail").WithInternalError(terr)
+					return nil, terr
 				}
 				emailConfirmationSent = true
 			}

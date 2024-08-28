@@ -244,10 +244,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					}
 				}
 				if terr = a.sendConfirmation(r, tx, user, flowType); terr != nil {
-					if errors.Is(terr, MaxFrequencyLimitError) {
-						return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(user.ConfirmationSentAt, config.SMTP.MaxFrequency))
-					}
-					return internalServerError("Error sending confirmation mail").WithInternalError(terr)
+					return terr
 				}
 			}
 		} else if params.Provider == "phone" && !user.IsPhoneConfirmed() {

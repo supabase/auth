@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -141,10 +140,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return a.sendMagicLink(r, tx, user, flowType)
 	})
 	if err != nil {
-		if errors.Is(err, MaxFrequencyLimitError) {
-			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(user.RecoverySentAt, config.SMTP.MaxFrequency))
-		}
-		return internalServerError("Error sending magic link").WithInternalError(err)
+		return err
 	}
 
 	return sendJSON(w, http.StatusOK, make(map[string]string))

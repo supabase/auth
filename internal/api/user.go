@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -226,10 +225,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 				}
 				if terr = a.sendEmailChange(r, tx, user, params.Email, flowType); terr != nil {
-					if errors.Is(terr, MaxFrequencyLimitError) {
-						return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(user.EmailChangeSentAt, config.SMTP.MaxFrequency))
-					}
-					return internalServerError("Error sending change email").WithInternalError(terr)
+					return terr
 				}
 			}
 		}
