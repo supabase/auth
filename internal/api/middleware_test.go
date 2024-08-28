@@ -187,7 +187,7 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 
 func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
 	// Set up rate limit config for this test
-	ts.Config.RateLimitEmailSent = 5
+	ts.Config.RateLimitEmailSent = conf.Rate{Events: 5}
 	ts.Config.RateLimitSmsSent = 5
 	ts.Config.External.Phone.Enabled = true
 
@@ -444,7 +444,7 @@ func (ts *MiddlewareTestSuite) TestLimitHandlerWithSharedLimiter() {
 		{
 			desc: "Exceed ip-based rate limit before shared limiter",
 			sharedLimiterConfig: &conf.GlobalConfiguration{
-				RateLimitEmailSent: 10,
+				RateLimitEmailSent: conf.Rate{Events: 10},
 				RateLimitSmsSent:   10,
 			},
 			ipBasedLimiterConfig: 1,
@@ -456,7 +456,7 @@ func (ts *MiddlewareTestSuite) TestLimitHandlerWithSharedLimiter() {
 		{
 			desc: "Exceed email shared limiter",
 			sharedLimiterConfig: &conf.GlobalConfiguration{
-				RateLimitEmailSent: 1,
+				RateLimitEmailSent: conf.Rate{Events: 1},
 				RateLimitSmsSent:   1,
 			},
 			ipBasedLimiterConfig: 10,
@@ -468,7 +468,7 @@ func (ts *MiddlewareTestSuite) TestLimitHandlerWithSharedLimiter() {
 		{
 			desc: "Exceed sms shared limiter",
 			sharedLimiterConfig: &conf.GlobalConfiguration{
-				RateLimitEmailSent: 1,
+				RateLimitEmailSent: conf.Rate{Events: 1},
 				RateLimitSmsSent:   1,
 			},
 			ipBasedLimiterConfig: 10,
@@ -487,7 +487,7 @@ func (ts *MiddlewareTestSuite) TestLimitHandlerWithSharedLimiter() {
 			sharedLimiter := ts.API.limitEmailOrPhoneSentHandler()
 
 			// get the minimum amount to reach the threshold just before the rate limit is exceeded
-			threshold := min(c.sharedLimiterConfig.RateLimitEmailSent, c.sharedLimiterConfig.RateLimitSmsSent, c.ipBasedLimiterConfig)
+			threshold := min(c.sharedLimiterConfig.RateLimitEmailSent.Events, c.sharedLimiterConfig.RateLimitSmsSent, c.ipBasedLimiterConfig)
 			for i := 0; i < int(threshold); i++ {
 				var buffer bytes.Buffer
 				require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
