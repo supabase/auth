@@ -23,7 +23,6 @@ import (
 )
 
 var (
-	MaxFrequencyLimitError error = errors.New("frequency limit reached")
 	EmailRateLimitExceeded error = errors.New("email rate limit exceeded")
 )
 
@@ -306,7 +305,7 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 	otpLength := config.Mailer.OtpLength
 
 	if err := validateSentWithinFrequencyLimit(u.ConfirmationSentAt, maxFrequency); err != nil {
-		return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(u.ConfirmationSentAt, config.SMTP.MaxFrequency))
+		return err
 	}
 	oldToken := u.ConfirmationToken
 	otp, err := crypto.GenerateOtp(otpLength)
@@ -375,7 +374,7 @@ func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *m
 	otpLength := config.Mailer.OtpLength
 
 	if err := validateSentWithinFrequencyLimit(u.RecoverySentAt, config.SMTP.MaxFrequency); err != nil {
-		return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(u.RecoverySentAt, config.SMTP.MaxFrequency))
+		return err
 	}
 
 	oldToken := u.RecoveryToken
@@ -413,7 +412,7 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 	otpLength := config.Mailer.OtpLength
 
 	if err := validateSentWithinFrequencyLimit(u.ReauthenticationSentAt, maxFrequency); err != nil {
-		return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(u.ReauthenticationSentAt, config.SMTP.MaxFrequency))
+		return err
 	}
 
 	oldToken := u.ReauthenticationToken
@@ -451,7 +450,7 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 	// since Magic Link is just a recovery with a different template and behaviour
 	// around new users we will reuse the recovery db timer to prevent potential abuse
 	if err := validateSentWithinFrequencyLimit(u.RecoverySentAt, config.SMTP.MaxFrequency); err != nil {
-		return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(u.RecoverySentAt, config.SMTP.MaxFrequency))
+		return err
 	}
 
 	oldToken := u.RecoveryToken
@@ -489,7 +488,7 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 	otpLength := config.Mailer.OtpLength
 
 	if err := validateSentWithinFrequencyLimit(u.EmailChangeSentAt, config.SMTP.MaxFrequency); err != nil {
-		return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(u.EmailChangeSentAt, config.SMTP.MaxFrequency))
+		return err
 	}
 
 	otpNew, err := crypto.GenerateOtp(otpLength)
@@ -564,7 +563,7 @@ func validateEmail(email string) (string, error) {
 
 func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration) error {
 	if sentAt != nil && sentAt.Add(frequency).After(time.Now()) {
-		return MaxFrequencyLimitError
+		return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(sentAt, frequency))
 	}
 	return nil
 }
