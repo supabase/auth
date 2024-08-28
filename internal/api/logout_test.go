@@ -71,13 +71,5 @@ func (ts *LogoutTestSuite) TestLogoutSuccess() {
 
 		ts.API.handler.ServeHTTP(w, req)
 		require.Equal(ts.T(), http.StatusNoContent, w.Code)
-
-		accessTokenKey := fmt.Sprintf("%v-access-token", ts.Config.Cookie.Key)
-		refreshTokenKey := fmt.Sprintf("%v-refresh-token", ts.Config.Cookie.Key)
-		for _, c := range w.Result().Cookies() {
-			if c.Name == accessTokenKey || c.Name == refreshTokenKey {
-				require.Equal(ts.T(), "", c.Value)
-			}
-		}
 	}
 }

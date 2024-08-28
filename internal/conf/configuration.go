@@ -257,13 +257,8 @@ type GlobalConfiguration struct {
 	Security        SecurityConfiguration    `json:"security"`
 	Sessions        SessionsConfiguration    `json:"sessions"`
 	MFA             MFAConfiguration         `json:"MFA"`
-	Cookie          struct {
-		Key      string `json:"key"`
-		Domain   string `json:"domain"`
-		Duration int    `json:"duration"`
-	} `json:"cookies"`
-	SAML SAMLConfiguration `json:"saml"`
-	CORS CORSConfiguration `json:"cors"`
+	SAML            SAMLConfiguration        `json:"saml"`
+	CORS            CORSConfiguration        `json:"cors"`
 }
 
 type CORSConfiguration struct {
@@ -842,18 +837,6 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 
 	if len(config.Sms.Template) == 0 {
 		config.Sms.Template = ""
-	}
-
-	if config.Cookie.Key == "" {
-		config.Cookie.Key = "sb"
-	}
-
-	if config.Cookie.Domain == "" {
-		config.Cookie.Domain = ""
-	}
-
-	if config.Cookie.Duration == 0 {
-		config.Cookie.Duration = 86400
 	}
 
 	if config.URIAllowList == nil {
