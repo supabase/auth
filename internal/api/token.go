@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -14,7 +13,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/xeipuuv/gojsonschema"
 
-	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
@@ -224,9 +222,6 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 			return terr
 		}
 
-		if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-			return internalServerError("Failed to set JWT cookie. %s", terr)
-		}
 		return nil
 	})
 	if err != nil {
@@ -484,59 +479,6 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		RefreshToken: refreshToken.Token,
 		User:         user,
 	}, nil
-}
-
-// setCookieTokens sets the access_token & refresh_token in the cookies
-func (a *API) setCookieTokens(config *conf.GlobalConfiguration, token *AccessTokenResponse, session bool, w http.ResponseWriter) error {
-	// don't need to catch error here since we always set the cookie name
-	_ = a.setCookieToken(config, "access-token", token.Token, session, w)
-	_ = a.setCookieToken(config, "refresh-token", token.RefreshToken, session, w)
-	return nil
-}
-
-func (a *API) setCookieToken(config *conf.GlobalConfiguration, name string, tokenString string, session bool, w http.ResponseWriter) error {
-	if name == "" {
-		return errors.New("failed to set cookie, invalid name")
-	}
-	cookieName := config.Cookie.Key + "-" + name
-	exp := time.Second * time.Duration(config.Cookie.Duration)
-	cookie := &http.Cookie{
-		Name:     cookieName,
-		Value:    tokenString,
-		Secure:   true,
-		HttpOnly: true,
-		Path:     "/",
-		Domain:   config.Cookie.Domain,
-	}
-	if !session {
-		cookie.Expires = time.Now().Add(exp)
-		cookie.MaxAge = config.Cookie.Duration
-	}
-
-	http.SetCookie(w, cookie)
-	return nil
-}
-
-func (a *API) clearCookieTokens(config *conf.GlobalConfiguration, w http.ResponseWriter) {
-	a.clearCookieToken(config, "access-token", w)
-	a.clearCookieToken(config, "refresh-token", w)
-}
-
-func (a *API) clearCookieToken(config *conf.GlobalConfiguration, name string, w http.ResponseWriter) {
-	cookieName := config.Cookie.Key
-	if name != "" {
-		cookieName += "-" + name
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     cookieName,
-		Value:    "",
-		Expires:  time.Now().Add(-1 * time.Hour * 10),
-		MaxAge:   -1,
-		Secure:   true,
-		HttpOnly: true,
-		Path:     "/",
-		Domain:   config.Cookie.Domain,
-	})
 }
 
 func validateTokenClaims(outputClaims map[string]interface{}) error {

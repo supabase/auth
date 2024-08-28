@@ -20,8 +20,6 @@ const (
 func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
-	config := a.config
-
 	scope := LogoutGlobal
 
 	if r.URL.Query() != nil {
@@ -64,7 +62,6 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Error logging out user").WithInternalError(err)
 	}
 
-	a.clearCookieTokens(config, w)
 	w.WriteHeader(http.StatusNoContent)
 
 	return nil

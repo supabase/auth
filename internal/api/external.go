@@ -164,7 +164,6 @@ func (a *API) handleOAuthCallback(r *http.Request) (*OAuthProviderData, error) {
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
-	config := a.config
 
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
@@ -264,9 +263,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 		rurl = token.AsRedirectURL(rurl, q)
 
-		if err := a.setCookieTokens(config, token, false, w); err != nil {
-			return internalServerError("Failed to set JWT cookie. %s", err)
-		}
 	}
 
 	http.Redirect(w, r, rurl, http.StatusFound)

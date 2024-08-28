@@ -307,10 +307,6 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	if err := a.setCookieTokens(config, token, false, w); err != nil {
-		return internalServerError("Failed to set JWT cookie").WithInternalError(err)
-	}
-
 	if !utilities.IsRedirectURLValid(config, redirectTo) {
 		redirectTo = config.SiteURL
 	}

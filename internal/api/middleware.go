@@ -143,7 +143,6 @@ func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) 
 
 	ctx, err := a.parseJWTClaims(t, req)
 	if err != nil {
-		a.clearCookieTokens(a.config, w)
 		return nil, err
 	}
 

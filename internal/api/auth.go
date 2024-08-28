@@ -16,21 +16,17 @@ import (
 // requireAuthentication checks incoming requests for tokens presented using the Authorization header
 func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	token, err := a.extractBearerToken(r)
-	config := a.config
 	if err != nil {
-		a.clearCookieTokens(config, w)
 		return nil, err
 	}
 
 	ctx, err := a.parseJWTClaims(token, r)
 	if err != nil {
-		a.clearCookieTokens(config, w)
 		return ctx, err
 	}
 
 	ctx, err = a.maybeLoadUserOrSession(ctx)
 	if err != nil {
-		a.clearCookieTokens(config, w)
 		return ctx, err
 	}
 	return ctx, err

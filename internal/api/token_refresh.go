@@ -182,9 +182,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 						time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
 
 					if a.Now().After(reuseUntil) {
-						a.clearCookieTokens(config, w)
 						// not OK to reuse this token
-
 						if config.Security.RefreshTokenRotationEnabled {
 							// Revoke all tokens in token family
 							if err := models.RevokeTokenFamily(tx, token); err != nil {
@@ -247,9 +245,6 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				ExpiresAt:    expiresAt,
 				RefreshToken: issuedToken.Token,
 				User:         user,
-			}
-			if terr = a.setCookieTokens(config, newTokenResponse, false, w); terr != nil {
-				return internalServerError("Failed to set JWT cookie. %s", terr)
 			}
 
 			return nil
