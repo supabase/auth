@@ -221,15 +221,12 @@ func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
-			for i := 0; i < 5; i++ {
-				_, err := limiter(w, req)
-				require.NoError(ts.T(), err)
-			}
+			ctx, err := limiter(w, req)
+			require.NoError(ts.T(), err)
 
-			// should exceed rate limit on 5th try
-			_, err := limiter(w, req)
-			require.Error(ts.T(), err)
-			require.Equal(ts.T(), c.expectedErrorMsg, err.Error())
+			// check that shared limiter is set in the request context
+			sharedLimiter := getLimiter(ctx)
+			require.NotNil(ts.T(), sharedLimiter)
 		})
 	}
 }
@@ -406,6 +403,34 @@ func (ts *MiddlewareTestSuite) TestLimitHandlerWithSharedLimiter() {
 	}
 
 	okHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		limiter := getLimiter(r.Context())
+		if limiter != nil {
+			var requestBody struct {
+				Email string `json:"email"`
+				Phone string `json:"phone"`
+			}
+			err := retrieveRequestParams(r, &requestBody)
+			require.NoError(ts.T(), err)
+
+			if requestBody.Email != "" {
+				if err := tollbooth.LimitByKeys(limiter.EmailLimiter, []string{"email_functions"}); err != nil {
+					sendJSON(w, http.StatusTooManyRequests, HTTPError{
+						HTTPStatus: http.StatusTooManyRequests,
+						ErrorCode:  ErrorCodeOverEmailSendRateLimit,
+						Message:    "Email rate limit exceeded",
+					})
+				}
+			}
+			if requestBody.Phone != "" {
+				if err := tollbooth.LimitByKeys(limiter.EmailLimiter, []string{"phone_functions"}); err != nil {
+					sendJSON(w, http.StatusTooManyRequests, HTTPError{
+						HTTPStatus: http.StatusTooManyRequests,
+						ErrorCode:  ErrorCodeOverSMSSendRateLimit,
+						Message:    "SMS rate limit exceeded",
+					})
+				}
+			}
+		}
 		w.WriteHeader(http.StatusOK)
 	})
 
