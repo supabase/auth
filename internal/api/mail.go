@@ -577,17 +577,15 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	externalURL := getExternalHost(ctx)
 
 	// apply rate limiting before the email is sent out
-	limiter := getLimiter(ctx)
-	if limiter == nil {
-		return errors.New("email limiter not found in context")
-	}
-	if err := tollbooth.LimitByKeys(limiter.EmailLimiter, []string{"email_functions"}); err != nil {
-		emailRateLimitCounter.Add(
-			ctx,
-			1,
-			metric.WithAttributeSet(attribute.NewSet(attribute.String("path", r.URL.Path))),
-		)
-		return EmailRateLimitExceeded
+	if limiter := getLimiter(ctx); limiter != nil {
+		if err := tollbooth.LimitByKeys(limiter.EmailLimiter, []string{"email_functions"}); err != nil {
+			emailRateLimitCounter.Add(
+				ctx,
+				1,
+				metric.WithAttributeSet(attribute.NewSet(attribute.String("path", r.URL.Path))),
+			)
+			return EmailRateLimitExceeded
+		}
 	}
 
 	if config.Hook.SendEmail.Enabled {

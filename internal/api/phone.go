@@ -90,11 +90,10 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 	if otp == "" {
 		// apply rate limiting before the sms is sent out
 		limiter := getLimiter(ctx)
-		if limiter == nil {
-			return "", internalServerError("phone limiter not found in context")
-		}
-		if err := tollbooth.LimitByKeys(limiter.PhoneLimiter, []string{"phone_functions"}); err != nil {
-			return "", tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
+		if limiter != nil {
+			if err := tollbooth.LimitByKeys(limiter.PhoneLimiter, []string{"phone_functions"}); err != nil {
+				return "", tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
+			}
 		}
 		otp, err = crypto.GenerateOtp(config.Sms.OtpLength)
 		if err != nil {
