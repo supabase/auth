@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/supabase/auth/internal/api/sms_provider"
@@ -53,14 +52,6 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	})
 	if err != nil {
-		if errors.Is(err, MaxFrequencyLimitError) {
-			reason := ErrorCodeOverEmailSendRateLimit
-			if phone != "" {
-				reason = ErrorCodeOverSMSSendRateLimit
-			}
-
-			return tooManyRequestsError(reason, "For security purposes, you can only request this once every 60 seconds")
-		}
 		return err
 	}
 
