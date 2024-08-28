@@ -15,8 +15,6 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/security"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
@@ -99,35 +97,11 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 
 		if shouldRateLimitEmail || shouldRateLimitPhone {
 			if req.Method == "PUT" || req.Method == "POST" {
-				var requestBody struct {
-					Email string `json:"email"`
-					Phone string `json:"phone"`
-				}
-
-				if err := retrieveRequestParams(req, &requestBody); err != nil {
-					return c, err
-				}
-
-				if shouldRateLimitEmail {
-					if requestBody.Email != "" {
-						if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
-							emailRateLimitCounter.Add(
-								req.Context(),
-								1,
-								metric.WithAttributeSet(attribute.NewSet(attribute.String("path", req.URL.Path))),
-							)
-							return c, tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "Email rate limit exceeded")
-						}
-					}
-				}
-
-				if shouldRateLimitPhone {
-					if requestBody.Phone != "" {
-						if err := tollbooth.LimitByKeys(phoneLimiter, []string{"phone_functions"}); err != nil {
-							return c, tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
-						}
-					}
-				}
+				// store rate limiter in request context
+				c = withLimiter(c, &SharedLimiter{
+					EmailLimiter: emailLimiter,
+					PhoneLimiter: phoneLimiter,
+				})
 			}
 		}
 

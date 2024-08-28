@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 
+	"github.com/didip/tollbooth/v5/limiter"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/models"
 )
@@ -31,6 +32,7 @@ const (
 	ssoProviderKey          = contextKey("sso_provider")
 	externalHostKey         = contextKey("external_host")
 	flowStateKey            = contextKey("flow_state_id")
+	sharedLimiterKey        = contextKey("shared_limiter")
 )
 
 // withToken adds the JWT token to the context.
@@ -240,4 +242,21 @@ func getExternalHost(ctx context.Context) *url.URL {
 		return nil
 	}
 	return obj.(*url.URL)
+}
+
+type SharedLimiter struct {
+	EmailLimiter *limiter.Limiter
+	PhoneLimiter *limiter.Limiter
+}
+
+func withLimiter(ctx context.Context, limiter *SharedLimiter) context.Context {
+	return context.WithValue(ctx, sharedLimiterKey, limiter)
+}
+
+func getLimiter(ctx context.Context) *SharedLimiter {
+	obj := ctx.Value(sharedLimiterKey)
+	if obj == nil {
+		return nil
+	}
+	return obj.(*SharedLimiter)
 }

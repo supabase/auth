@@ -8,6 +8,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/didip/tollbooth/v5"
 	"github.com/supabase/auth/internal/hooks"
 
 	"github.com/pkg/errors"
@@ -44,6 +45,7 @@ func formatPhoneNumber(phone string) string {
 
 // sendPhoneConfirmation sends an otp to the user's phone number
 func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, user *models.User, phone, otpType string, channel string) (string, error) {
+	ctx := r.Context()
 	config := a.config
 
 	var token *string
@@ -84,7 +86,16 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		messageID = "test-otp"
 	}
 
-	if otp == "" { // not using test OTPs
+	// not using test OTPs
+	if otp == "" {
+		// apply rate limiting before the sms is sent out
+		limiter := getLimiter(ctx)
+		if limiter == nil {
+			return "", internalServerError("phone limiter not found in context")
+		}
+		if err := tollbooth.LimitByKeys(limiter.PhoneLimiter, []string{"phone_functions"}); err != nil {
+			return "", tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
+		}
 		otp, err = crypto.GenerateOtp(config.Sms.OtpLength)
 		if err != nil {
 			return "", internalServerError("error generating otp").WithInternalError(err)
