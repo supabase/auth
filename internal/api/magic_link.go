@@ -46,6 +46,10 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return unprocessableEntityError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 	}
 
+	if !config.External.Email.MagicLinkEnabled {
+		return unprocessableEntityError(ErrorCodeEmailProviderDisabled, "Login with magic link is disabled")
+	}
+
 	params := &MagicLinkParams{}
 	jsonDecoder := json.NewDecoder(r.Body)
 	err := jsonDecoder.Decode(params)
