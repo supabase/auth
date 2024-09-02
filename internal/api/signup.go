@@ -141,7 +141,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if !config.External.Email.Enabled {
 			return badRequestError(ErrorCodeEmailProviderDisabled, "Email signups are disabled")
 		}
-		params.Email, err = validateEmail(params.Email)
+		params.Email, err = a.validateEmail(params.Email)
 		if err != nil {
 			return err
 		}

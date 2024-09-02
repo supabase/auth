@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/supabase/auth/internal/api/sms_provider"
-	"github.com/supabase/auth/internal/conf"
 	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -17,7 +16,9 @@ type ResendConfirmationParams struct {
 	Phone string `json:"phone"`
 }
 
-func (p *ResendConfirmationParams) Validate(config *conf.GlobalConfiguration) error {
+func (p *ResendConfirmationParams) Validate(a *API) error {
+	config := a.config
+
 	switch p.Type {
 	case mail.SignupVerification, mail.EmailChangeVerification, smsVerification, phoneChangeVerification:
 		break
@@ -40,7 +41,7 @@ func (p *ResendConfirmationParams) Validate(config *conf.GlobalConfiguration) er
 		if !config.External.Email.Enabled {
 			return badRequestError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 		}
-		p.Email, err = validateEmail(p.Email)
+		p.Email, err = a.validateEmail(p.Email)
 		if err != nil {
 			return err
 		}
@@ -63,13 +64,12 @@ func (p *ResendConfirmationParams) Validate(config *conf.GlobalConfiguration) er
 func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
-	config := a.config
 	params := &ResendConfirmationParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
-	if err := params.Validate(config); err != nil {
+	if err := params.Validate(a); err != nil {
 		return err
 	}
 

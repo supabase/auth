@@ -83,5 +83,6 @@ const (
 	ErrorCodeMFATOTPVerifyDisabled             ErrorCode = "mfa_totp_verify_not_enabled"
 	ErrorCodeMFAVerifiedFactorExists           ErrorCode = "mfa_verified_factor_exists"
 	//#nosec G101 -- Not a secret value.
-	ErrorCodeInvalidCredentials ErrorCode = "invalid_credentials"
+	ErrorCodeInvalidCredentials        ErrorCode = "invalid_credentials"
+	ErrorCodeEmailAddressNotAuthorized ErrorCode = "email_address_not_authorized"
 )
