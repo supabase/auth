@@ -45,7 +45,7 @@ type VerifyParams struct {
 	RedirectTo string `json:"redirect_to"`
 }
 
-func (p *VerifyParams) Validate(r *http.Request) error {
+func (p *VerifyParams) Validate(r *http.Request, a *API) error {
 	var err error
 	if p.Type == "" {
 		return badRequestError(ErrorCodeValidationFailed, "Verify requires a verification type")
@@ -69,7 +69,7 @@ func (p *VerifyParams) Validate(r *http.Request) error {
 				}
 				p.TokenHash = crypto.GenerateTokenHash(p.Phone, p.Token)
 			} else if isEmailOtpVerification(p) {
-				p.Email, err = validateEmail(p.Email)
+				p.Email, err = a.validateEmail(p.Email)
 				if err != nil {
 					return unprocessableEntityError(ErrorCodeValidationFailed, "Invalid email format").WithInternalError(err)
 				}
@@ -96,7 +96,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		params.Token = r.FormValue("token")
 		params.Type = r.FormValue("type")
 		params.RedirectTo = utilities.GetReferrer(r, a.config)
-		if err := params.Validate(r); err != nil {
+		if err := params.Validate(r, a); err != nil {
 			return err
 		}
 		return a.verifyGet(w, r, params)
@@ -104,7 +104,7 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		if err := retrieveRequestParams(r, params); err != nil {
 			return err
 		}
-		if err := params.Validate(r); err != nil {
+		if err := params.Validate(r, a); err != nil {
 			return err
 		}
 		return a.verifyPost(w, r, params)

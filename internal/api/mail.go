@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 
 var (
 	EmailRateLimitExceeded error = errors.New("email rate limit exceeded")
+	AddressNotAuthorized   error = errors.New("Destination email address not authorized")
 )
 
 type GenerateLinkParams struct {
@@ -56,7 +58,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var err error
-	params.Email, err = validateEmail(params.Email)
+	params.Email, err = a.validateEmail(params.Email)
 	if err != nil {
 		return err
 	}
@@ -230,7 +232,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if !config.Mailer.SecureEmailChangeEnabled && params.Type == "email_change_current" {
 				return badRequestError(ErrorCodeValidationFailed, "Enable secure email change to generate link for current email")
 			}
-			params.NewEmail, terr = validateEmail(params.NewEmail)
+			params.NewEmail, terr = a.validateEmail(params.NewEmail)
 			if terr != nil {
 				return terr
 			}
@@ -548,7 +550,9 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 	return nil
 }
 
-func validateEmail(email string) (string, error) {
+var emailLabelPattern = regexp.MustCompile("[+][^@]+@")
+
+func (a *API) validateEmail(email string) (string, error) {
 	if email == "" {
 		return "", badRequestError(ErrorCodeValidationFailed, "An email address is required")
 	}
@@ -558,7 +562,23 @@ func validateEmail(email string) (string, error) {
 	if err := checkmail.ValidateFormat(email); err != nil {
 		return "", badRequestError(ErrorCodeValidationFailed, "Unable to validate email address: "+err.Error())
 	}
-	return strings.ToLower(email), nil
+
+	email = strings.ToLower(email)
+
+	if len(a.config.External.Email.AuthorizedAddresses) > 0 {
+		// allow labelled emails when authorization rules are in place
+		normalized := emailLabelPattern.ReplaceAllString(email, "@")
+
+		for _, authorizedAddress := range a.config.External.Email.AuthorizedAddresses {
+			if normalized == authorizedAddress {
+				return email, nil
+			}
+		}
+
+		return "", badRequestError(ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", email)
+	}
+
+	return email, nil
 }
 
 func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration) error {

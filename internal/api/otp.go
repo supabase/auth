@@ -216,7 +216,7 @@ func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) (bool, error)
 		aud := a.requestAud(ctx, r)
 		var err error
 		if params.Email != "" {
-			params.Email, err = validateEmail(params.Email)
+			params.Email, err = a.validateEmail(params.Email)
 			if err != nil {
 				return false, err
 			}

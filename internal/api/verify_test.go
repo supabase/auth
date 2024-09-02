@@ -1248,7 +1248,7 @@ func (ts *VerifyTestSuite) TestVerifyValidateParams() {
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			req := httptest.NewRequest(c.method, "http://localhost", nil)
-			err := c.params.Validate(req)
+			err := c.params.Validate(req, ts.API)
 			require.Equal(ts.T(), c.expected, err)
 		})
 	}

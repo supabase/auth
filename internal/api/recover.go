@@ -14,12 +14,12 @@ type RecoverParams struct {
 	CodeChallengeMethod string `json:"code_challenge_method"`
 }
 
-func (p *RecoverParams) Validate() error {
+func (p *RecoverParams) Validate(a *API) error {
 	if p.Email == "" {
 		return badRequestError(ErrorCodeValidationFailed, "Password recovery requires an email")
 	}
 	var err error
-	if p.Email, err = validateEmail(p.Email); err != nil {
+	if p.Email, err = a.validateEmail(p.Email); err != nil {
 		return err
 	}
 	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
@@ -38,7 +38,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	flowType := getFlowFromChallenge(params.CodeChallenge)
-	if err := params.Validate(); err != nil {
+	if err := params.Validate(a); err != nil {
 		return err
 	}
 

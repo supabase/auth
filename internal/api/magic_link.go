@@ -21,12 +21,12 @@ type MagicLinkParams struct {
 	CodeChallenge       string                 `json:"code_challenge"`
 }
 
-func (p *MagicLinkParams) Validate() error {
+func (p *MagicLinkParams) Validate(a *API) error {
 	if p.Email == "" {
 		return unprocessableEntityError(ErrorCodeValidationFailed, "Password recovery requires an email")
 	}
 	var err error
-	p.Email, err = validateEmail(p.Email)
+	p.Email, err = a.validateEmail(p.Email)
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		return badRequestError(ErrorCodeBadJSON, "Could not read verification params: %v", err).WithInternalError(err)
 	}
 
-	if err := params.Validate(); err != nil {
+	if err := params.Validate(a); err != nil {
 		return err
 	}
 

@@ -30,7 +30,7 @@ func (a *API) validateUserUpdateParams(ctx context.Context, p *UserUpdateParams)
 
 	var err error
 	if p.Email != "" {
-		p.Email, err = validateEmail(p.Email)
+		p.Email, err = a.validateEmail(p.Email)
 		if err != nil {
 			return err
 		}

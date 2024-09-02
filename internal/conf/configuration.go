@@ -72,6 +72,8 @@ type AnonymousProviderConfiguration struct {
 type EmailProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"true"`
 
+	AuthorizedAddresses []string `json:"authorized_addresses" split_words:"true"`
+
 	MagicLinkEnabled bool `json:"magic_link_enabled" default:"true" split_words:"true"`
 }
 
