@@ -71,6 +71,8 @@ type AnonymousProviderConfiguration struct {
 
 type EmailProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"true"`
+
+	MagicLinkEnabled bool `json:"magic_link_enabled" default:"true" split_words:"true"`
 }
 
 // DBConfiguration holds all the database related configuration.
