@@ -80,16 +80,14 @@ func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	// don't advertize the encryption keys as it makes it much difficult to debug
-	// requests / responses, and does not increase security since assertions are
-	// not "private" and not necessary to be hidden from the browser
 	for i := range metadata.SPSSODescriptors {
 		spd := &metadata.SPSSODescriptors[i]
 
 		var keyDescriptors []saml.KeyDescriptor
 
 		for _, kd := range spd.KeyDescriptors {
-			if kd.Use == "signing" {
+			// only advertize key as usable for encryption if allowed
+			if kd.Use == "signing" || (a.config.SAML.AllowEncryptedAssertions && kd.Use == "encryption") {
 				keyDescriptors = append(keyDescriptors, kd)
 			}
 		}
