@@ -588,6 +588,11 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	}
 
 	if config.Hook.SendEmail.Enabled {
+		// When secure email change is disabled, we place the token for the new email on emailData.Token
+		if emailActionType == mail.EmailChangeVerification && !config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
+			otp = otpNew
+		}
+
 		emailData := mail.EmailData{
 			Token:           otp,
 			EmailActionType: emailActionType,
