@@ -91,9 +91,6 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	session := getSession(ctx)
 	// Change to check for verified
 	// Allow for metadata update
-	if len(user.Factors) != 0 && session.AAL != models.AAL2 {
-		return unauthorizedError("need aal2")
-	}
 
 	if err := a.validateUserUpdateParams(ctx, params); err != nil {
 		return err
@@ -102,6 +99,19 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	if params.AppData != nil && !isAdmin(user, config) {
 		if !isAdmin(user, config) {
 			return forbiddenError(ErrorCodeNotAdmin, "Updating app_metadata requires admin privileges")
+		}
+	}
+
+	numVerifiedFactors := 0
+	for _, factor := range user.Factors {
+		if factor.IsVerified() {
+			numVerifiedFactors++
+		}
+	}
+
+	if numVerifiedFactors > 0 && !session.IsAAL2() {
+		if (params.Password != nil && *params.Password != "") || params.Email != "" && user.GetEmail() != params.Email {
+			return httpError(http.StatusUnauthorized, ErrorCodeInsufficientAAL, "AAL2 session is required to update email or password when MFA is enabled.")
 		}
 	}
 
