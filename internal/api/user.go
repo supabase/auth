@@ -89,6 +89,11 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 	user := getUser(ctx)
 	session := getSession(ctx)
+	// Change to check for verified
+	// Allow for metadata update
+	if len(user.Factors) != 0 && session.AAL != models.AAL2 {
+		return unauthorizedError("need aal2")
+	}
 
 	if err := a.validateUserUpdateParams(ctx, params); err != nil {
 		return err
