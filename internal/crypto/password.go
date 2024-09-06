@@ -141,7 +141,7 @@ func compareHashAndPasswordArgon2(ctx context.Context, hash, password string) er
 		attribute.Int64("t", int64(input.time)),
 		attribute.Int("p", int(input.threads)),
 		attribute.Int("len", len(input.rawHash)),
-	}
+	} // #nosec G115
 
 	var match bool
 	var derivedKey []byte
@@ -157,10 +157,10 @@ func compareHashAndPasswordArgon2(ctx context.Context, hash, password string) er
 
 	switch input.alg {
 	case "argon2i":
-		derivedKey = argon2.Key([]byte(password), input.salt, uint32(input.time), uint32(input.memory)*1024, uint8(input.threads), uint32(len(input.rawHash)))
+		derivedKey = argon2.Key([]byte(password), input.salt, uint32(input.time), uint32(input.memory)*1024, uint8(input.threads), uint32(len(input.rawHash))) // #nosec G115
 
 	case "argon2id":
-		derivedKey = argon2.IDKey([]byte(password), input.salt, uint32(input.time), uint32(input.memory)*1024, uint8(input.threads), uint32(len(input.rawHash)))
+		derivedKey = argon2.IDKey([]byte(password), input.salt, uint32(input.time), uint32(input.memory)*1024, uint8(input.threads), uint32(len(input.rawHash))) // #nosec G115
 	}
 
 	match = subtle.ConstantTimeCompare(derivedKey, input.rawHash) == 0

@@ -3,10 +3,11 @@ package models
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
+
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
-	"sync/atomic"
 
 	"go.opentelemetry.io/otel/attribute"
 
@@ -111,7 +112,7 @@ func (c *Cleanup) Clean(db *storage.Connection) (int, error) {
 	defer span.SetAttributes(attribute.Int64("gotrue.cleanup.affected_rows", int64(affectedRows)))
 
 	if err := db.WithContext(ctx).Transaction(func(tx *storage.Connection) error {
-		nextIndex := atomic.AddUint32(&c.cleanupNext, 1) % uint32(len(c.cleanupStatements))
+		nextIndex := atomic.AddUint32(&c.cleanupNext, 1) % uint32(len(c.cleanupStatements)) // #nosec G115
 		statement := c.cleanupStatements[nextIndex]
 
 		count, terr := tx.RawQuery(statement).ExecWithCount()
