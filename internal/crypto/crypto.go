@@ -112,7 +112,7 @@ func (es *EncryptedString) Decrypt(id string, decryptionKeys map[string]string) 
 		return nil, err
 	}
 
-	decrypted, err := cipher.Open(nil, es.Nonce, es.Data, nil)
+	decrypted, err := cipher.Open(nil, es.Nonce, es.Data, nil) // #nosec G407
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func NewEncryptedString(id string, data []byte, keyID string, keyBase64URL strin
 		panic(err)
 	}
 
-	es.Data = cipher.Seal(nil, es.Nonce, data, nil)
+	es.Data = cipher.Seal(nil, es.Nonce, data, nil) // #nosec G407
 
 	return &es, nil
 }

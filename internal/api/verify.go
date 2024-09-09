@@ -718,7 +718,7 @@ func isOtpValid(actual, expected string, sentAt *time.Time, otpExp uint) bool {
 }
 
 func isOtpExpired(sentAt *time.Time, otpExp uint) bool {
-	return time.Now().After(sentAt.Add(time.Second * time.Duration(otpExp)))
+	return time.Now().After(sentAt.Add(time.Second * time.Duration(otpExp))) // #nosec G115
 }
 
 // isPhoneOtpVerification checks if the verification came from a phone otp
