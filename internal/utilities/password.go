@@ -14,7 +14,6 @@ func parseGroups(requiredChars []string) []string {
 }
 
 func GeneratePassword(requiredChars []string, length int) string {
-	rand.Seed(time.Now().UnixNano())
 
 	groups := parseGroups(requiredChars)
 	passwordBuilder := strings.Builder{}
