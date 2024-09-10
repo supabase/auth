@@ -37,6 +37,9 @@ type API struct {
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
+
+	emailRateLimiter *SimpleRateLimiter
+	smsRateLimiter   *SimpleRateLimiter
 }
 
 func (a *API) Now() time.Time {
@@ -69,6 +72,11 @@ func (a *API) deprecationNotices() {
 // NewAPIWithVersion creates a new REST API using the specified version
 func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
 	api := &API{config: globalConfig, db: db, version: version}
+
+	now := time.Now()
+
+	api.emailRateLimiter = NewSimpleRateLimiter(now, globalConfig.RateLimitEmailSent.DefaultOverTime(time.Hour))
+	api.smsRateLimiter = NewSimpleRateLimiter(now, globalConfig.RateLimitSmsSent.DefaultOverTime(time.Hour))
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
@@ -133,9 +141,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Get("/authorize", api.ExternalProviderRedirect)
 
-		sharedLimiter := api.limitEmailOrPhoneSentHandler()
-		r.With(sharedLimiter).With(api.requireAdminCredentials).Post("/invite", api.Invite)
-		r.With(sharedLimiter).With(api.verifyCaptcha).Route("/signup", func(r *router) {
+		r.With(api.requireAdminCredentials).Post("/invite", api.Invite)
+		r.With(api.verifyCaptcha).Route("/signup", func(r *router) {
 			// rate limit per hour
 			limitAnonymousSignIns := tollbooth.NewLimiter(api.config.RateLimitAnonymousUsers/(60*60), &limiter.ExpirableOptions{
 				DefaultExpirationTTL: time.Hour,
@@ -164,10 +171,6 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				if _, err := api.limitHandler(limitSignups)(w, r); err != nil {
 					return err
 				}
-				// apply shared rate limiting on email / phone
-				if _, err := sharedLimiter(w, r); err != nil {
-					return err
-				}
 				return api.Signup(w, r)
 			})
 		})
@@ -176,28 +179,28 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
 				DefaultExpirationTTL: time.Hour,
 			}).SetBurst(30),
-		)).With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
+		)).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
 
 		r.With(api.limitHandler(
 			// Allow requests at the specified rate per 5 minutes
 			tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
 				DefaultExpirationTTL: time.Hour,
 			}).SetBurst(30),
-		)).With(sharedLimiter).With(api.verifyCaptcha).Post("/resend", api.Resend)
+		)).With(api.verifyCaptcha).Post("/resend", api.Resend)
 
 		r.With(api.limitHandler(
 			// Allow requests at the specified rate per 5 minutes
 			tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
 				DefaultExpirationTTL: time.Hour,
 			}).SetBurst(30),
-		)).With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
+		)).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
 
 		r.With(api.limitHandler(
 			// Allow requests at the specified rate per 5 minutes
 			tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
 				DefaultExpirationTTL: time.Hour,
 			}).SetBurst(30),
-		)).With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
+		)).With(api.verifyCaptcha).Post("/otp", api.Otp)
 
 		r.With(api.limitHandler(
 			// Allow requests at the specified rate per 5 minutes.
@@ -229,7 +232,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
 					DefaultExpirationTTL: time.Hour,
 				}).SetBurst(30),
-			)).With(sharedLimiter).Put("/", api.UserUpdate)
+			)).Put("/", api.UserUpdate)
 
 			r.Route("/identities", func(r *router) {
 				r.Use(api.requireManualLinkingEnabled)

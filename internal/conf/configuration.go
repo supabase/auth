@@ -242,7 +242,7 @@ type GlobalConfiguration struct {
 	SMTP                    SMTPConfiguration
 	RateLimitHeader         string  `split_words:"true"`
 	RateLimitEmailSent      Rate    `split_words:"true" default:"30"`
-	RateLimitSmsSent        float64 `split_words:"true" default:"30"`
+	RateLimitSmsSent        Rate    `split_words:"true" default:"30"`
 	RateLimitVerify         float64 `split_words:"true" default:"30"`
 	RateLimitTokenRefresh   float64 `split_words:"true" default:"150"`
 	RateLimitSso            float64 `split_words:"true" default:"30"`

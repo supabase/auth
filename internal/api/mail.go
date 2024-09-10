@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/didip/tollbooth/v5"
 	"github.com/supabase/auth/internal/hooks"
 	mail "github.com/supabase/auth/internal/mailer"
 	"go.opentelemetry.io/otel/attribute"
@@ -595,16 +594,13 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	referrerURL := utilities.GetReferrer(r, config)
 	externalURL := getExternalHost(ctx)
 
-	// apply rate limiting before the email is sent out
-	if limiter := getLimiter(ctx); limiter != nil {
-		if err := tollbooth.LimitByKeys(limiter.EmailLimiter, []string{"email_functions"}); err != nil {
-			emailRateLimitCounter.Add(
-				ctx,
-				1,
-				metric.WithAttributeSet(attribute.NewSet(attribute.String("path", r.URL.Path))),
-			)
-			return EmailRateLimitExceeded
-		}
+	if ok := a.emailRateLimiter.Increment(1); !ok {
+		emailRateLimitCounter.Add(
+			ctx,
+			1,
+			metric.WithAttributeSet(attribute.NewSet(attribute.String("path", r.URL.Path))),
+		)
+		return EmailRateLimitExceeded
 	}
 
 	if config.Hook.SendEmail.Enabled {

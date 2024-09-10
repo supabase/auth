@@ -15,11 +15,14 @@ func TestRateDecode(t *testing.T) {
 	require.Equal(t, r, Rate{Events: 123.0, OverTime: 0})
 
 	r = Rate{}
-	require.NoError(t, r.Decode("123.0/24h"))
+	require.NoError(t, r.Decode("123/24h"))
 	require.Equal(t, r, Rate{Events: 123.0, OverTime: 24 * time.Hour})
 
 	r = Rate{}
 	require.Error(t, r.Decode("not a number"))
+
+	r = Rate{}
+	require.Error(t, r.Decode("123.0/24h")) // events are integers only
 
 	r = Rate{}
 	require.Error(t, r.Decode("123/456/789"))
