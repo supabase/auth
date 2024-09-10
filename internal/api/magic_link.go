@@ -83,7 +83,11 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	if isNewUser {
 		// User either doesn't exist or hasn't completed the signup process.
 		// Sign them up with temporary password.
-		password := utilities.GeneratePassword(config.Password.RequiredCharacters, 33)
+		password, err := utilities.GeneratePassword(config.Password.RequiredCharacters, 33)
+		if err != nil {
+			// password generation must succeed
+			panic(err)
+		}
 
 		signUpParams := &SignupParams{
 			Email:               params.Email,

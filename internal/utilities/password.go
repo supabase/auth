@@ -1,7 +1,8 @@
 package utilities
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"math/big"
 	"strings"
 )
 
@@ -12,29 +13,53 @@ func parseGroups(requiredChars []string) []string {
 	return groups
 }
 
-func GeneratePassword(requiredChars []string, length int) string {
-
+func GeneratePassword(requiredChars []string, length int) (string, error) {
 	groups := parseGroups(requiredChars)
 	passwordBuilder := strings.Builder{}
+	passwordBuilder.Grow(length)
 
+	// Add required characters
 	for _, group := range groups {
 		if len(group) > 0 {
-			passwordBuilder.WriteString(string(group[rand.Intn(len(group))]))
+			randomIndex, err := secureRandomInt(len(group))
+			if err != nil {
+				return "", err
+			}
+			passwordBuilder.WriteByte(group[randomIndex])
 		}
 	}
 
 	// Define a default character set for random generation (if needed)
 	allChars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
+	// Fill the rest of the password
 	for passwordBuilder.Len() < length {
-		passwordBuilder.WriteString(string(allChars[rand.Intn(len(allChars))]))
+		randomIndex, err := secureRandomInt(len(allChars))
+		if err != nil {
+			return "", err
+		}
+		passwordBuilder.WriteByte(allChars[randomIndex])
 	}
 
-	password := passwordBuilder.String()
-	passwordBytes := []byte(password)
-	rand.Shuffle(len(passwordBytes), func(i, j int) {
-		passwordBytes[i], passwordBytes[j] = passwordBytes[j], passwordBytes[i]
-	})
+	// Convert to byte slice for shuffling
+	passwordBytes := []byte(passwordBuilder.String())
 
-	return string(passwordBytes)
+	// Secure shuffling
+	for i := len(passwordBytes) - 1; i > 0; i-- {
+		j, err := secureRandomInt(i + 1)
+		if err != nil {
+			return "", err
+		}
+		passwordBytes[i], passwordBytes[j] = passwordBytes[j], passwordBytes[i]
+	}
+
+	return string(passwordBytes), nil
+}
+
+func secureRandomInt(max int) (int, error) {
+	randomInt, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
+	if err != nil {
+		return 0, err
+	}
+	return int(randomInt.Int64()), nil
 }
