@@ -3,7 +3,6 @@ package utilities
 import (
 	"math/rand"
 	"strings"
-	"time"
 )
 
 // parseGroups processes the required character groups from a slice of strings.
