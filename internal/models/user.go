@@ -773,14 +773,13 @@ func (u *User) IsBanned() bool {
 }
 
 func (u *User) HasMFAEnabled() bool {
-	numVerifiedFactors := 0
 	for _, factor := range u.Factors {
 		if factor.IsVerified() {
-			numVerifiedFactors++
+			return true
 		}
 	}
 
-	return numVerifiedFactors > 0
+	return false
 }
 
 func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
