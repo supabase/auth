@@ -115,14 +115,18 @@ type MFAFactorTypeConfiguration struct {
 	VerifyEnabled bool `json:"verify_enabled" split_words:"true" default:"false"`
 }
 
+type TOTPFactorTypeConfiguration struct {
+	EnrollEnabled bool `json:"enroll_enabled" split_words:"true" default:"true"`
+	VerifyEnabled bool `json:"verify_enabled" split_words:"true" default:"true"`
+}
+
 type PhoneFactorTypeConfiguration struct {
 	// Default to false in order to ensure Phone MFA is opt-in
-	EnrollEnabled bool               `json:"enroll_enabled" split_words:"true" default:"false"`
-	VerifyEnabled bool               `json:"verify_enabled" split_words:"true" default:"false"`
-	OtpLength     int                `json:"otp_length" split_words:"true"`
-	SMSTemplate   *template.Template `json:"-"`
-	MaxFrequency  time.Duration      `json:"max_frequency" split_words:"true"`
-	Template      string             `json:"template"`
+	MFAFactorTypeConfiguration
+	OtpLength    int                `json:"otp_length" split_words:"true"`
+	SMSTemplate  *template.Template `json:"-"`
+	MaxFrequency time.Duration      `json:"max_frequency" split_words:"true"`
+	Template     string             `json:"template"`
 }
 
 // MFAConfiguration holds all the MFA related Configuration
@@ -133,7 +137,7 @@ type MFAConfiguration struct {
 	MaxEnrolledFactors          float64                      `split_words:"true" default:"10"`
 	MaxVerifiedFactors          int                          `split_words:"true" default:"10"`
 	Phone                       PhoneFactorTypeConfiguration `split_words:"true"`
-	TOTP                        MFAFactorTypeConfiguration   `split_words:"true" default:"{\"enroll_enabled\":true,\"verify_enabled\":true}"`
+	TOTP                        TOTPFactorTypeConfiguration  `split_words:"true"`
 	WebAuthn                    MFAFactorTypeConfiguration   `split_words:"true"`
 }
 
