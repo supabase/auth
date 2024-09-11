@@ -773,7 +773,8 @@ func (u *User) IsBanned() bool {
 }
 
 func (u *User) HasMFAEnabled() bool {
-	for _, factor := range user.Factors {
+	numVerifiedFactors := 0
+	for _, factor := range u.Factors {
 		if factor.IsVerified() {
 			numVerifiedFactors++
 		}
