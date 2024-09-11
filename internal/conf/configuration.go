@@ -111,8 +111,8 @@ type JWTConfiguration struct {
 }
 
 type MFAFactorTypeConfiguration struct {
-	EnrollEnabled bool `json:"enroll_enabled" split_words:"true" default:"true"`
-	VerifyEnabled bool `json:"verify_enabled" split_words:"true" default:"true"`
+	EnrollEnabled bool `json:"enroll_enabled" split_words:"true" default:"false"`
+	VerifyEnabled bool `json:"verify_enabled" split_words:"true" default:"false"`
 }
 
 type PhoneFactorTypeConfiguration struct {
@@ -133,7 +133,8 @@ type MFAConfiguration struct {
 	MaxEnrolledFactors          float64                      `split_words:"true" default:"10"`
 	MaxVerifiedFactors          int                          `split_words:"true" default:"10"`
 	Phone                       PhoneFactorTypeConfiguration `split_words:"true"`
-	TOTP                        MFAFactorTypeConfiguration   `split_words:"true"`
+	TOTP                        MFAFactorTypeConfiguration   `split_words:"true" default:"{\"enroll_enabled\":true,\"verify_enabled\":true}"`
+	WebAuthn                    MFAFactorTypeConfiguration   `split_words:"true"`
 }
 
 type APIConfiguration struct {
