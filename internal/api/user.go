@@ -89,8 +89,6 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 	user := getUser(ctx)
 	session := getSession(ctx)
-	// Change to check for verified
-	// Allow for metadata update
 
 	if err := a.validateUserUpdateParams(ctx, params); err != nil {
 		return err
@@ -102,14 +100,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	numVerifiedFactors := 0
-	for _, factor := range user.Factors {
-		if factor.IsVerified() {
-			numVerifiedFactors++
-		}
-	}
-
-	if numVerifiedFactors > 0 && !session.IsAAL2() {
+	if user.HasMFAEnabled() && !session.IsAAL2() {
 		if (params.Password != nil && *params.Password != "") || params.Email != "" && user.GetEmail() != params.Email {
 			return httpError(http.StatusUnauthorized, ErrorCodeInsufficientAAL, "AAL2 session is required to update email or password when MFA is enabled.")
 		}
