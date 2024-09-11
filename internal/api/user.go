@@ -101,7 +101,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if user.HasMFAEnabled() && !session.IsAAL2() {
-		if (params.Password != nil && *params.Password != "") || params.Email != "" && user.GetEmail() != params.Email {
+		if (params.Password != nil && *params.Password != "") || (params.Email != "" && user.GetEmail() != params.Email) || (params.Phone != "" && user.GetPhone() != params.Phone) {
 			return httpError(http.StatusUnauthorized, ErrorCodeInsufficientAAL, "AAL2 session is required to update email or password when MFA is enabled.")
 		}
 	}
