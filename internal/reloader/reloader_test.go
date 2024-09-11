@@ -142,7 +142,7 @@ func helpTestDir(t testing.TB) (dir string, cleanup func()) {
 }
 
 func helpCopyEnvFile(t testing.TB, dir, name, src string) string {
-	data, err := os.ReadFile(src)
+	data, err := os.ReadFile(src) // #nosec G304
 	if err != nil {
 		log.Fatal(err)
 	}
