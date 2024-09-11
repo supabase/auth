@@ -1,6 +1,11 @@
 package models
 
 import (
+	"database/sql/driver"
+	"fmt"
+
+	"encoding/json"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
@@ -8,13 +13,44 @@ import (
 )
 
 type Challenge struct {
-	ID         uuid.UUID  `json:"challenge_id" db:"id"`
-	FactorID   uuid.UUID  `json:"factor_id" db:"factor_id"`
-	CreatedAt  time.Time  `json:"created_at" db:"created_at"`
-	VerifiedAt *time.Time `json:"verified_at,omitempty" db:"verified_at"`
-	IPAddress  string     `json:"ip_address" db:"ip_address"`
-	Factor     *Factor    `json:"factor,omitempty" belongs_to:"factor"`
-	OtpCode    string     `json:"otp_code,omitempty" db:"otp_code"`
+	ID                  uuid.UUID            `json:"challenge_id" db:"id"`
+	FactorID            uuid.UUID            `json:"factor_id" db:"factor_id"`
+	CreatedAt           time.Time            `json:"created_at" db:"created_at"`
+	VerifiedAt          *time.Time           `json:"verified_at,omitempty" db:"verified_at"`
+	IPAddress           string               `json:"ip_address" db:"ip_address"`
+	Factor              *Factor              `json:"factor,omitempty" belongs_to:"factor"`
+	OtpCode             string               `json:"otp_code,omitempty" db:"otp_code"`
+	WebAuthnSessionData *WebAuthnSessionData `json:"web_authn_session_data,omitempty" db:"web_authn_session_data"`
+}
+
+type WebAuthnSessionData struct {
+	*webauthn.SessionData
+}
+
+func (s *WebAuthnSessionData) Value() (driver.Value, error) {
+	return json.Marshal(s)
+}
+
+func (s *WebAuthnSessionData) Scan(value interface{}) error {
+	bytes, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("expected byte array but got %T", value)
+	}
+
+	return json.Unmarshal(bytes, s)
+}
+
+func (ws *WebAuthnSessionData) ToChallenge(factorID uuid.UUID, ipAddress string) *Challenge {
+	id := uuid.Must(uuid.NewV4())
+	return &Challenge{
+		ID:        id,
+		FactorID:  factorID,
+		IPAddress: ipAddress,
+		WebAuthnSessionData: &WebAuthnSessionData{
+			ws.SessionData,
+		},
+	}
+
 }
 
 func (Challenge) TableName() string {

@@ -86,6 +86,9 @@ func (ts *MFATestSuite) SetupTest() {
 	ts.Config.MFA.Phone.EnrollEnabled = true
 	ts.Config.MFA.Phone.VerifyEnabled = true
 
+	ts.Config.MFA.WebAuthn.EnrollEnabled = true
+	ts.Config.MFA.WebAuthn.VerifyEnabled = true
+
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      ts.TestDomain,
 		AccountName: ts.TestEmail,
@@ -169,6 +172,12 @@ func (ts *MFATestSuite) TestEnrollFactor() {
 			factorType:   models.Phone,
 			phone:        "",
 			expectedCode: http.StatusBadRequest,
+		},
+		{
+			desc:         "WebAuthn: Enroll with friendly name",
+			friendlyName: "webauthn_factor",
+			factorType:   models.WebAuthn,
+			expectedCode: http.StatusOK,
 		},
 	}
 	for _, c := range cases {
@@ -702,6 +711,27 @@ func (ts *MFATestSuite) TestMFAFollowedByPasswordSignIn() {
 	session, err := models.FindSessionByUserID(ts.API.db, accessTokenResp.User.ID)
 	require.NoError(ts.T(), err)
 	require.True(ts.T(), session.IsAAL2())
+}
+
+func (ts *MFATestSuite) TestChallengeWebAuthnFactor() {
+	factor := models.NewWebAuthnFactor(ts.TestUser, "WebAuthnfactor")
+	validWebAuthnConfiguration := &WebAuthnParams{
+		RPID:      "localhost",
+		RPOrigins: "http://localhost:3000",
+	}
+	require.NoError(ts.T(), ts.API.db.Create(factor), "Error saving new test factor")
+	token := ts.generateAAL1Token(ts.TestUser, &ts.TestSession.ID)
+	w := performChallengeWebAuthnFlow(ts, factor.ID, token, validWebAuthnConfiguration)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
+func performChallengeWebAuthnFlow(ts *MFATestSuite, factorID uuid.UUID, token string, webauthn *WebAuthnParams) *httptest.ResponseRecorder {
+	var buffer bytes.Buffer
+	err := json.NewEncoder(&buffer).Encode(ChallengeFactorParams{WebAuthn: webauthn})
+	require.NoError(ts.T(), err)
+	w := ServeAuthenticatedRequest(ts, http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", factorID), token, buffer)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	return w
 }
 
 func (ts *MFATestSuite) TestChallengeFactorNotOwnedByUser() {
