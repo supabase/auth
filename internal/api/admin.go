@@ -39,7 +39,7 @@ type adminUserDeleteParams struct {
 
 type adminUserUpdateFactorParams struct {
 	FriendlyName string `json:"friendly_name"`
-	FactorType   string `json:"factor_type"`
+	Phone        string `json:"phone"`
 }
 
 type AdminListUsersResponse struct {
@@ -618,11 +618,13 @@ func (a *API) adminUserUpdateFactor(w http.ResponseWriter, r *http.Request) erro
 				return terr
 			}
 		}
-		if params.FactorType != "" {
-			if params.FactorType != models.TOTP {
-				return badRequestError(ErrorCodeValidationFailed, "Factor Type not valid")
+
+		if params.Phone != "" && factor.IsPhoneFactor() {
+			phone, err := validatePhone(params.Phone)
+			if err != nil {
+				return badRequestError(ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
 			}
-			if terr := factor.UpdateFactorType(tx, params.FactorType); terr != nil {
+			if terr := factor.UpdatePhone(tx, phone); terr != nil {
 				return terr
 			}
 		}
