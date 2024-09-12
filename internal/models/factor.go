@@ -32,7 +32,6 @@ func (factorState FactorState) String() string {
 
 const TOTP = "totp"
 const Phone = "phone"
-const WebAuthn = "webauthn"
 
 type AuthenticationMethod int
 
