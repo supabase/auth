@@ -246,7 +246,7 @@ func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string)
 }
 
 func (f *Factor) UpdatePhone(tx *storage.Connection, phone string) error {
-	f.Phone = phone
+	f.Phone = storage.NullString(phone)
 	return tx.UpdateOnly(f, "phone", "updated_at")
 }
 
