@@ -32,6 +32,7 @@ func (factorState FactorState) String() string {
 
 const TOTP = "totp"
 const Phone = "phone"
+const WebAuthn = "webauthn"
 
 type AuthenticationMethod int
 
@@ -245,16 +246,15 @@ func (f *Factor) UpdateFriendlyName(tx *storage.Connection, friendlyName string)
 	return tx.UpdateOnly(f, "friendly_name", "updated_at")
 }
 
+func (f *Factor) UpdatePhone(tx *storage.Connection, phone string) error {
+	f.Phone = phone
+	return tx.UpdateOnly(f, "phone", "updated_at")
+}
+
 // UpdateStatus modifies the factor status
 func (f *Factor) UpdateStatus(tx *storage.Connection, state FactorState) error {
 	f.Status = state.String()
 	return tx.UpdateOnly(f, "status", "updated_at")
-}
-
-// UpdateFactorType modifies the factor type
-func (f *Factor) UpdateFactorType(tx *storage.Connection, factorType string) error {
-	f.FactorType = factorType
-	return tx.UpdateOnly(f, "factor_type", "updated_at")
 }
 
 func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {
