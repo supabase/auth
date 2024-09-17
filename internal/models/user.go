@@ -772,6 +772,16 @@ func (u *User) IsBanned() bool {
 	return time.Now().Before(*u.BannedUntil)
 }
 
+func (u *User) HasMFAEnabled() bool {
+	for _, factor := range u.Factors {
+		if factor.IsVerified() {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (u *User) UpdateBannedUntil(tx *storage.Connection) error {
 	return tx.UpdateOnly(u, "banned_until")
 }

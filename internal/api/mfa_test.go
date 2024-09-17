@@ -295,6 +295,68 @@ func (ts *MFATestSuite) TestDuplicateTOTPEnrollsReturnExpectedMessage() {
 	require.Contains(ts.T(), errorResponse.Message, expectedErrorMessage)
 }
 
+func (ts *MFATestSuite) AAL2RequiredToUpdatePasswordAfterEnrollment() {
+	resp := performTestSignupAndVerify(ts, ts.TestEmail, ts.TestPassword, true /* <- requireStatusOK */)
+	accessTokenResp := &AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(resp.Body).Decode(&accessTokenResp))
+
+	var w *httptest.ResponseRecorder
+	var buffer bytes.Buffer
+	token := accessTokenResp.Token
+	// Update Password to new password
+	newPassword := "newpass"
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"password": newPassword,
+	}))
+
+	req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// Logout
+	reqURL := "http://localhost/logout"
+	req = httptest.NewRequest(http.MethodPost, reqURL, nil)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	w = httptest.NewRecorder()
+
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusNoContent, w.Code)
+
+	// Get AAL1 token
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"email":    ts.TestEmail,
+		"password": newPassword,
+	}))
+
+	req = httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=password", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+	session1 := AccessTokenResponse{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&session1))
+
+	// Update Password again, this should fail
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"password": ts.TestPassword,
+	}))
+
+	req = httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", session1.Token))
+
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusUnauthorized, w.Code)
+
+}
+
 func (ts *MFATestSuite) TestMultipleEnrollsCleanupExpiredFactors() {
 	// All factors are deleted when a subsequent enroll is made
 	ts.API.config.MFA.FactorExpiryDuration = 0 * time.Second
