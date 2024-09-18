@@ -26,7 +26,7 @@ var rootCmd = cobra.Command{
 func RootCommand() *cobra.Command {
 	rootCmd.AddCommand(&serveCmd, &migrateCmd, &versionCmd, adminCmd())
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "base configuration file to load")
-	rootCmd.PersistentFlags().StringVarP(&watchDir, "watch-dir", "w", "", "directory containing a sorted list of config files to watch for changes")
+	rootCmd.PersistentFlags().StringVarP(&watchDir, "config-dir", "d", "", "directory containing a sorted list of config files to watch for changes")
 	return &rootCmd
 }
 
