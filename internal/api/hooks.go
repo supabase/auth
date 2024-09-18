@@ -144,14 +144,14 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 			// Header.Get is case insensitive
 			contentType := rsp.Header.Get("Content-Type")
 			if contentType == "" {
-				return nil, internalServerError("Invalid Content-Type: Missing Content-Type header")
+				return nil, badRequestError(ErrorCodeHookPayloadInvalidContentType, "Invalid Content-Type: Missing Content-Type header")
 			}
 			mediaType, _, err := mime.ParseMediaType(contentType)
 			if err != nil {
-				return nil, internalServerError(fmt.Sprintf("Invalid Content-Type header: %s", err.Error()))
+				return nil, badRequestError(ErrorCodeHookPayloadInvalidContentType, fmt.Sprintf("Invalid Content-Type header: %s", err.Error()))
 			}
 			if mediaType != "application/json" {
-				return nil, internalServerError("Invalid JSON response. Received content-type: " + contentType)
+				return nil, badRequestError(ErrorCodeHookPayloadInvalidContentType, "Invalid JSON response. Received content-type: "+contentType)
 			}
 			if rsp.Body == nil {
 				return nil, nil

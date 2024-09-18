@@ -76,6 +76,7 @@ const (
 	ErrorCodeHookTimeout                       ErrorCode = "hook_timeout"
 	ErrorCodeHookTimeoutAfterRetry             ErrorCode = "hook_timeout_after_retry"
 	ErrorCodeHookPayloadOverSizeLimit          ErrorCode = "hook_payload_over_size_limit"
+	ErrorCodeHookPayloadInvalidContentType     ErrorCode = "hook_payload_invalid_content_type"
 	ErrorCodeHookPayloadUnknownSize            ErrorCode = "hook_payload_unknown_size"
 	ErrorCodeRequestTimeout                    ErrorCode = "request_timeout"
 )
