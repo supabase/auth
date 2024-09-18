@@ -77,7 +77,6 @@ const (
 	ErrorCodeHookTimeoutAfterRetry             ErrorCode = "hook_timeout_after_retry"
 	ErrorCodeHookPayloadOverSizeLimit          ErrorCode = "hook_payload_over_size_limit"
 	ErrorCodeHookPayloadInvalidContentType     ErrorCode = "hook_payload_invalid_content_type"
-	ErrorCodeHookPayloadUnknownSize            ErrorCode = "hook_payload_unknown_size"
 	ErrorCodeRequestTimeout                    ErrorCode = "request_timeout"
 	ErrorCodeMFAPhoneEnrollDisabled            ErrorCode = "mfa_phone_enroll_not_enabled"
 	ErrorCodeMFAPhoneVerifyDisabled            ErrorCode = "mfa_phone_verify_not_enabled"
