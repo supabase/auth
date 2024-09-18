@@ -4,7 +4,8 @@ import (
 	"context"
 	"net/url"
 
-	jwt "github.com/golang-jwt/jwt"
+	"github.com/didip/tollbooth/v5/limiter"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -16,7 +17,6 @@ func (c contextKey) String() string {
 
 const (
 	tokenKey                = contextKey("jwt")
-	requestIDKey            = contextKey("request_id")
 	inviteTokenKey          = contextKey("invite_token")
 	signatureKey            = contextKey("signature")
 	externalProviderTypeKey = contextKey("external_provider_type")
@@ -32,6 +32,7 @@ const (
 	ssoProviderKey          = contextKey("sso_provider")
 	externalHostKey         = contextKey("external_host")
 	flowStateKey            = contextKey("flow_state_id")
+	sharedLimiterKey        = contextKey("shared_limiter")
 )
 
 // withToken adds the JWT token to the context.
@@ -55,21 +56,6 @@ func getClaims(ctx context.Context) *AccessTokenClaims {
 		return nil
 	}
 	return token.Claims.(*AccessTokenClaims)
-}
-
-// withRequestID adds the provided request ID to the context.
-func withRequestID(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, requestIDKey, id)
-}
-
-// getRequestID reads the request ID from the context.
-func getRequestID(ctx context.Context) string {
-	obj := ctx.Value(requestIDKey)
-	if obj == nil {
-		return ""
-	}
-
-	return obj.(string)
 }
 
 // withUser adds the user to the context.
@@ -256,4 +242,21 @@ func getExternalHost(ctx context.Context) *url.URL {
 		return nil
 	}
 	return obj.(*url.URL)
+}
+
+type SharedLimiter struct {
+	EmailLimiter *limiter.Limiter
+	PhoneLimiter *limiter.Limiter
+}
+
+func withLimiter(ctx context.Context, limiter *SharedLimiter) context.Context {
+	return context.WithValue(ctx, sharedLimiterKey, limiter)
+}
+
+func getLimiter(ctx context.Context) *SharedLimiter {
+	obj := ctx.Value(sharedLimiterKey)
+	if obj == nil {
+		return nil
+	}
+	return obj.(*SharedLimiter)
 }

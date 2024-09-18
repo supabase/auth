@@ -44,9 +44,6 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 		if terr != nil {
 			return terr
 		}
-		if terr := a.setCookieTokens(config, token, false, w); terr != nil {
-			return terr
-		}
 		return nil
 	})
 	if err != nil {

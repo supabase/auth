@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -12,9 +11,10 @@ import (
 
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
-	jwt "github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -71,7 +71,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	}
 
 	redirectURL := utilities.GetReferrer(r, config)
-	log := observability.GetLogEntry(r)
+	log := observability.GetLogEntry(r).Entry
 	log.WithField("provider", providerType).Info("Redirecting to external provider")
 	if err := validatePKCEParams(codeChallengeMethod, codeChallenge); err != nil {
 		return "", err
@@ -89,8 +89,8 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 
 	claims := ExternalProviderClaims{
 		AuthMicroserviceClaims: AuthMicroserviceClaims{
-			StandardClaims: jwt.StandardClaims{
-				ExpiresAt: time.Now().Add(5 * time.Minute).Unix(),
+			RegisteredClaims: jwt.RegisteredClaims{
+				ExpiresAt: jwt.NewNumericDate(time.Now().Add(5 * time.Minute)),
 			},
 			SiteURL:    config.SiteURL,
 			InstanceID: uuid.Nil.String(),
@@ -106,8 +106,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		claims.LinkingTargetID = linkingTargetUser.ID.String()
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(config.JWT.Secret))
+	tokenString, err := signJwt(&config.JWT, claims)
 	if err != nil {
 		return "", internalServerError("Error creating state").WithInternalError(err)
 	}
@@ -138,7 +137,7 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return err
 	}
-	a.redirectErrors(a.internalExternalProviderCallback, w, r, u)
+	redirectErrors(a.internalExternalProviderCallback, w, r, u)
 	return nil
 }
 
@@ -164,7 +163,6 @@ func (a *API) handleOAuthCallback(r *http.Request) (*OAuthProviderData, error) {
 func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
-	config := a.config
 
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
@@ -264,9 +262,6 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 		rurl = token.AsRedirectURL(rurl, q)
 
-		if err := a.setCookieTokens(config, token, false, w); err != nil {
-			return internalServerError("Failed to set JWT cookie. %s", err)
-		}
 	}
 
 	http.Redirect(w, r, rurl, http.StatusFound)
@@ -338,7 +333,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
 			return nil, terr
 		}
-
+		user.Identities = append(user.Identities, *identity)
 	case models.AccountExists:
 		user = decision.User
 		identity = decision.Identities[0]
@@ -387,10 +382,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			emailConfirmationSent := false
 			if decision.CandidateEmail.Email != "" {
 				if terr = a.sendConfirmation(r, tx, user, models.ImplicitFlow); terr != nil {
-					if errors.Is(terr, MaxFrequencyLimitError) {
-						return nil, tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "For security purposes, you can only request this once every minute")
-					}
-					return nil, internalServerError("Error sending confirmation mail").WithInternalError(terr)
+					return nil, terr
 				}
 				emailConfirmationSent = true
 			}
@@ -478,18 +470,39 @@ func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *p
 	return user, nil
 }
 
-func (a *API) loadExternalState(ctx context.Context, state string) (context.Context, error) {
+func (a *API) loadExternalState(ctx context.Context, r *http.Request) (context.Context, error) {
+	var state string
+	switch r.Method {
+	case http.MethodPost:
+		state = r.FormValue("state")
+	default:
+		state = r.URL.Query().Get("state")
+	}
+	if state == "" {
+		return ctx, badRequestError(ErrorCodeBadOAuthCallback, "OAuth state parameter missing")
+	}
 	config := a.config
 	claims := ExternalProviderClaims{}
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+	p := jwt.NewParser(jwt.WithValidMethods(config.JWT.ValidMethods))
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(config.JWT.Secret), nil
+		if kid, ok := token.Header["kid"]; ok {
+			if kidStr, ok := kid.(string); ok {
+				return conf.FindPublicKeyByKid(kidStr, &config.JWT)
+			}
+		}
+		if alg, ok := token.Header["alg"]; ok {
+			if alg == jwt.SigningMethodHS256.Name {
+				// preserve backward compatibility for cases where the kid is not set
+				return []byte(config.JWT.Secret), nil
+			}
+		}
+		return nil, fmt.Errorf("missing kid")
 	})
 	if err != nil {
-		return nil, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state").WithInternalError(err)
+		return ctx, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state").WithInternalError(err)
 	}
 	if claims.Provider == "" {
-		return nil, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state (missing provider)")
+		return ctx, badRequestError(ErrorCodeBadOAuthState, "OAuth callback with invalid state (missing provider)")
 	}
 	if claims.InviteToken != "" {
 		ctx = withInviteToken(ctx, claims.InviteToken)
@@ -558,10 +571,14 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewSpotifyProvider(config.External.Spotify, scopes)
 	case "slack":
 		return provider.NewSlackProvider(config.External.Slack, scopes)
+	case "slack_oidc":
+		return provider.NewSlackOIDCProvider(config.External.SlackOIDC, scopes)
 	case "twitch":
 		return provider.NewTwitchProvider(config.External.Twitch, scopes)
 	case "twitter":
 		return provider.NewTwitterProvider(config.External.Twitter, scopes)
+	case "vercel_marketplace":
+		return provider.NewVercelMarketplaceProvider(config.External.VercelMarketplace, scopes)
 	case "workos":
 		return provider.NewWorkOSProvider(config.External.WorkOS)
 	case "zoom":
@@ -571,10 +588,10 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	}
 }
 
-func (a *API) redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {
+func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {
 	ctx := r.Context()
-	log := observability.GetLogEntry(r)
-	errorID := getRequestID(ctx)
+	log := observability.GetLogEntry(r).Entry
+	errorID := utilities.GetRequestID(ctx)
 	err := handler(w, r)
 	if err != nil {
 		q := getErrorQueryString(err, errorID, log, u.Query())

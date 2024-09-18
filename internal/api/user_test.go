@@ -82,44 +82,70 @@ func (ts *UserTestSuite) TestUserGet() {
 func (ts *UserTestSuite) TestUserUpdateEmail() {
 	cases := []struct {
 		desc                       string
-		userData                   map[string]string
+		userData                   map[string]interface{}
 		isSecureEmailChangeEnabled bool
+		isMailerAutoconfirmEnabled bool
 		expectedCode               int
 	}{
 		{
 			desc: "User doesn't have an existing email",
-			userData: map[string]string{
+			userData: map[string]interface{}{
 				"email": "",
 				"phone": "",
 			},
 			isSecureEmailChangeEnabled: false,
+			isMailerAutoconfirmEnabled: false,
 			expectedCode:               http.StatusOK,
 		},
 		{
 			desc: "User doesn't have an existing email and double email confirmation required",
-			userData: map[string]string{
+			userData: map[string]interface{}{
 				"email": "",
 				"phone": "234567890",
 			},
 			isSecureEmailChangeEnabled: true,
+			isMailerAutoconfirmEnabled: false,
 			expectedCode:               http.StatusOK,
 		},
 		{
 			desc: "User has an existing email",
-			userData: map[string]string{
+			userData: map[string]interface{}{
 				"email": "foo@example.com",
 				"phone": "",
 			},
 			isSecureEmailChangeEnabled: false,
+			isMailerAutoconfirmEnabled: false,
 			expectedCode:               http.StatusOK,
 		},
 		{
 			desc: "User has an existing email and double email confirmation required",
-			userData: map[string]string{
+			userData: map[string]interface{}{
 				"email": "bar@example.com",
 				"phone": "",
 			},
 			isSecureEmailChangeEnabled: true,
+			isMailerAutoconfirmEnabled: false,
+			expectedCode:               http.StatusOK,
+		},
+		{
+			desc: "Update email with mailer autoconfirm enabled",
+			userData: map[string]interface{}{
+				"email": "bar@example.com",
+				"phone": "",
+			},
+			isSecureEmailChangeEnabled: true,
+			isMailerAutoconfirmEnabled: true,
+			expectedCode:               http.StatusOK,
+		},
+		{
+			desc: "Update email with mailer autoconfirm enabled and anonymous user",
+			userData: map[string]interface{}{
+				"email":        "bar@example.com",
+				"phone":        "",
+				"is_anonymous": true,
+			},
+			isSecureEmailChangeEnabled: true,
+			isMailerAutoconfirmEnabled: true,
 			expectedCode:               http.StatusOK,
 		},
 	}
@@ -128,8 +154,11 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 		ts.Run(c.desc, func() {
 			u, err := models.NewUser("", "", "", ts.Config.JWT.Aud, nil)
 			require.NoError(ts.T(), err, "Error creating test user model")
-			require.NoError(ts.T(), u.SetEmail(ts.API.db, c.userData["email"]), "Error setting user email")
-			require.NoError(ts.T(), u.SetPhone(ts.API.db, c.userData["phone"]), "Error setting user phone")
+			require.NoError(ts.T(), u.SetEmail(ts.API.db, c.userData["email"].(string)), "Error setting user email")
+			require.NoError(ts.T(), u.SetPhone(ts.API.db, c.userData["phone"].(string)), "Error setting user phone")
+			if isAnonymous, ok := c.userData["is_anonymous"]; ok {
+				u.IsAnonymous = isAnonymous.(bool)
+			}
 			require.NoError(ts.T(), ts.API.db.Create(u), "Error saving test user")
 
 			token := ts.generateAccessTokenAndSession(u)
@@ -146,8 +175,21 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 
 			w := httptest.NewRecorder()
 			ts.Config.Mailer.SecureEmailChangeEnabled = c.isSecureEmailChangeEnabled
+			ts.Config.Mailer.Autoconfirm = c.isMailerAutoconfirmEnabled
 			ts.API.handler.ServeHTTP(w, req)
 			require.Equal(ts.T(), c.expectedCode, w.Code)
+
+			var data models.User
+			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+			if c.isMailerAutoconfirmEnabled && u.IsAnonymous {
+				require.Empty(ts.T(), data.EmailChange)
+				require.Equal(ts.T(), "new@example.com", data.GetEmail())
+				require.Len(ts.T(), data.Identities, 1)
+			} else {
+				require.Equal(ts.T(), "new@example.com", data.EmailChange)
+				require.Len(ts.T(), data.Identities, 0)
+			}
 
 			// remove user after each case
 			require.NoError(ts.T(), ts.API.db.Destroy(u))
@@ -310,7 +352,10 @@ func (ts *UserTestSuite) TestUserUpdatePassword() {
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
-			require.Equal(ts.T(), c.expected.isAuthenticated, u.Authenticate(context.Background(), c.newPassword))
+			isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, c.newPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
+			require.NoError(ts.T(), err)
+
+			require.Equal(ts.T(), c.expected.isAuthenticated, isAuthenticated)
 		})
 	}
 }
@@ -369,7 +414,10 @@ func (ts *UserTestSuite) TestUserUpdatePasswordNoReauthenticationRequired() {
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 
-			require.Equal(ts.T(), c.expected.isAuthenticated, u.Authenticate(context.Background(), c.newPassword))
+			isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, c.newPassword, ts.API.config.Security.DBEncryption.DecryptionKeys, ts.API.config.Security.DBEncryption.Encrypt, ts.API.config.Security.DBEncryption.EncryptionKeyID)
+			require.NoError(ts.T(), err)
+
+			require.Equal(ts.T(), c.expected.isAuthenticated, isAuthenticated)
 		})
 	}
 }
@@ -424,7 +472,10 @@ func (ts *UserTestSuite) TestUserUpdatePasswordReauthentication() {
 	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
 
-	require.True(ts.T(), u.Authenticate(context.Background(), "newpass"))
+	isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, "newpass", ts.Config.Security.DBEncryption.DecryptionKeys, ts.Config.Security.DBEncryption.Encrypt, ts.Config.Security.DBEncryption.EncryptionKeyID)
+	require.NoError(ts.T(), err)
+
+	require.True(ts.T(), isAuthenticated)
 	require.Empty(ts.T(), u.ReauthenticationToken)
 	require.Nil(ts.T(), u.ReauthenticationSentAt)
 }

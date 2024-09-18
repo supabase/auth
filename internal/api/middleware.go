@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,23 +9,22 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/security"
-	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
-	jwt "github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v5"
 )
 
 type FunctionHooks map[string][]string
 
 type AuthMicroserviceClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 	SiteURL       string        `json:"site_url"`
 	InstanceID    string        `json:"id"`
 	FunctionHooks FunctionHooks `json:"function_hooks"`
@@ -62,7 +62,7 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 			key := req.Header.Get(limitHeader)
 
 			if key == "" {
-				log := observability.GetLogEntry(req)
+				log := observability.GetLogEntry(req).Entry
 				log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
 				return c, nil
 			} else {
@@ -97,35 +97,11 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 
 		if shouldRateLimitEmail || shouldRateLimitPhone {
 			if req.Method == "PUT" || req.Method == "POST" {
-				var requestBody struct {
-					Email string `json:"email"`
-					Phone string `json:"phone"`
-				}
-
-				if err := retrieveRequestParams(req, &requestBody); err != nil {
-					return c, err
-				}
-
-				if shouldRateLimitEmail {
-					if requestBody.Email != "" {
-						if err := tollbooth.LimitByKeys(emailLimiter, []string{"email_functions"}); err != nil {
-							emailRateLimitCounter.Add(
-								req.Context(),
-								1,
-								attribute.String("path", req.URL.Path),
-							)
-							return c, tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, "Email rate limit exceeded")
-						}
-					}
-				}
-
-				if shouldRateLimitPhone {
-					if requestBody.Phone != "" {
-						if err := tollbooth.LimitByKeys(phoneLimiter, []string{"phone_functions"}); err != nil {
-							return c, tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
-						}
-					}
-				}
+				// store rate limiter in request context
+				c = withLimiter(c, &SharedLimiter{
+					EmailLimiter: emailLimiter,
+					PhoneLimiter: phoneLimiter,
+				})
 			}
 		}
 
@@ -141,11 +117,10 @@ func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) 
 
 	ctx, err := a.parseJWTClaims(t, req)
 	if err != nil {
-		a.clearCookieTokens(a.config, w)
 		return nil, err
 	}
 
-	return a.requireAdmin(ctx, req)
+	return a.requireAdmin(ctx)
 }
 
 func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (context.Context, error) {
@@ -212,7 +187,7 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 	}
 	if u, err = url.ParseRequestURI(baseUrl); err != nil {
 		// fallback to the default hostname
-		log := observability.GetLogEntry(req)
+		log := observability.GetLogEntry(req).Entry
 		log.WithField("request_url", baseUrl).Warn(err)
 		if u, err = url.ParseRequestURI(config.API.ExternalURL); err != nil {
 			return ctx, err
@@ -251,7 +226,7 @@ func (a *API) databaseCleanup(cleanup *models.Cleanup) func(http.Handler) http.H
 			}
 
 			db := a.db.WithContext(r.Context())
-			log := observability.GetLogEntry(r)
+			log := observability.GetLogEntry(r).Entry
 
 			affectedRows, err := cleanup.Clean(db)
 			if err != nil {
@@ -263,95 +238,127 @@ func (a *API) databaseCleanup(cleanup *models.Cleanup) func(http.Handler) http.H
 	}
 }
 
-// timeoutResponseWriter is a http.ResponseWriter that prevents subsequent
-// writes after the context contained in it has exceeded the deadline. If a
-// partial write occurs before the deadline is exceeded, but the writing is not
-// complete it will allow further writes.
+// timeoutResponseWriter is a http.ResponseWriter that queues up a response
+// body to be sent if the serving completes before the context has exceeded its
+// deadline.
 type timeoutResponseWriter struct {
-	ctx   context.Context
-	w     http.ResponseWriter
-	wrote int32
-	mu    sync.Mutex
+	sync.Mutex
+
+	header      http.Header
+	wroteHeader bool
+	snapHeader  http.Header // snapshot of the header at the time WriteHeader was called
+	statusCode  int
+	buf         bytes.Buffer
 }
 
 func (t *timeoutResponseWriter) Header() http.Header {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.w.Header()
+	t.Lock()
+	defer t.Unlock()
+
+	return t.header
 }
 
 func (t *timeoutResponseWriter) Write(bytes []byte) (int, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.ctx.Err() == context.DeadlineExceeded {
-		if atomic.LoadInt32(&t.wrote) == 0 {
-			return 0, context.DeadlineExceeded
-		}
+	t.Lock()
+	defer t.Unlock()
 
-		// writing started before the deadline exceeded, but the
-		// deadline came in the middle, so letting the writes go
-		// through
+	if !t.wroteHeader {
+		t.writeHeaderLocked(http.StatusOK)
 	}
 
-	t.wrote = 1
-
-	return t.w.Write(bytes)
+	return t.buf.Write(bytes)
 }
 
 func (t *timeoutResponseWriter) WriteHeader(statusCode int) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.ctx.Err() == context.DeadlineExceeded {
-		if atomic.LoadInt32(&t.wrote) == 0 {
-			return
-		}
+	t.Lock()
+	defer t.Unlock()
 
-		// writing started before the deadline exceeded, but the
-		// deadline came in the middle, so letting the writes go
-		// through
-	}
-
-	t.wrote = 1
-
-	t.w.WriteHeader(statusCode)
+	t.writeHeaderLocked(statusCode)
 }
 
-func (a *API) timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
+func (t *timeoutResponseWriter) writeHeaderLocked(statusCode int) {
+	if t.wroteHeader {
+		// ignore multiple calls to WriteHeader
+		// once WriteHeader has been called once, a snapshot of the header map is taken
+		// and saved in snapHeader to be used in finallyWrite
+		return
+	}
+
+	t.statusCode = statusCode
+	t.wroteHeader = true
+	t.snapHeader = t.header.Clone()
+}
+
+func (t *timeoutResponseWriter) finallyWrite(w http.ResponseWriter) {
+	t.Lock()
+	defer t.Unlock()
+
+	dst := w.Header()
+	for k, vv := range t.snapHeader {
+		dst[k] = vv
+	}
+
+	if !t.wroteHeader {
+		t.statusCode = http.StatusOK
+	}
+
+	w.WriteHeader(t.statusCode)
+	if _, err := w.Write(t.buf.Bytes()); err != nil {
+		logrus.WithError(err).Warn("Write failed")
+	}
+}
+
+func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), timeout)
 			defer cancel()
 
 			timeoutWriter := &timeoutResponseWriter{
-				w:   w,
-				ctx: ctx,
+				header: make(http.Header),
 			}
 
+			panicChan := make(chan any, 1)
+			serverDone := make(chan struct{})
 			go func() {
-				<-ctx.Done()
+				defer func() {
+					if p := recover(); p != nil {
+						panicChan <- p
+					}
+				}()
 
+				next.ServeHTTP(timeoutWriter, r.WithContext(ctx))
+				close(serverDone)
+			}()
+
+			select {
+			case p := <-panicChan:
+				panic(p)
+
+			case <-serverDone:
+				timeoutWriter.finallyWrite(w)
+
+			case <-ctx.Done():
 				err := ctx.Err()
 
 				if err == context.DeadlineExceeded {
-					timeoutWriter.mu.Lock()
-					defer timeoutWriter.mu.Unlock()
-					if timeoutWriter.wrote == 0 {
-						// writer wasn't written to, so we're sending the error payload
-
-						httpError := &HTTPError{
-							HTTPStatus: http.StatusGatewayTimeout,
-							ErrorCode:  ErrorCodeRequestTimeout,
-							Message:    "Processing this request timed out, please retry after a moment.",
-						}
-
-						httpError = httpError.WithInternalError(err)
-
-						HandleResponseError(httpError, w, r)
+					httpError := &HTTPError{
+						HTTPStatus: http.StatusGatewayTimeout,
+						ErrorCode:  ErrorCodeRequestTimeout,
+						Message:    "Processing this request timed out, please retry after a moment.",
 					}
-				}
-			}()
 
-			next.ServeHTTP(timeoutWriter, r.WithContext(ctx))
+					httpError = httpError.WithInternalError(err)
+
+					HandleResponseError(httpError, w, r)
+				} else {
+					// unrecognized context error, so we should wait for the server to finish
+					// and write out the response
+					<-serverDone
+
+					timeoutWriter.finallyWrite(w)
+				}
+			}
 		})
 	}
 }

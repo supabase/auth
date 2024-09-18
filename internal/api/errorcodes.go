@@ -79,4 +79,12 @@ const (
 	ErrorCodeHookPayloadInvalidContentType     ErrorCode = "hook_payload_invalid_content_type"
 	ErrorCodeHookPayloadUnknownSize            ErrorCode = "hook_payload_unknown_size"
 	ErrorCodeRequestTimeout                    ErrorCode = "request_timeout"
+	ErrorCodeMFAPhoneEnrollDisabled            ErrorCode = "mfa_phone_enroll_not_enabled"
+	ErrorCodeMFAPhoneVerifyDisabled            ErrorCode = "mfa_phone_verify_not_enabled"
+	ErrorCodeMFATOTPEnrollDisabled             ErrorCode = "mfa_totp_enroll_not_enabled"
+	ErrorCodeMFATOTPVerifyDisabled             ErrorCode = "mfa_totp_verify_not_enabled"
+	ErrorCodeMFAVerifiedFactorExists           ErrorCode = "mfa_verified_factor_exists"
+	//#nosec G101 -- Not a secret value.
+	ErrorCodeInvalidCredentials        ErrorCode = "invalid_credentials"
+	ErrorCodeEmailAddressNotAuthorized ErrorCode = "email_address_not_authorized"
 )

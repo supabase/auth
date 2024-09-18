@@ -48,6 +48,7 @@ func TruncateAll(conn *storage.Connection) error {
 			(&pop.Model{Value: SAMLProvider{}}).TableName(),
 			(&pop.Model{Value: SAMLRelayState{}}).TableName(),
 			(&pop.Model{Value: FlowState{}}).TableName(),
+			(&pop.Model{Value: OneTimeToken{}}).TableName(),
 		}
 
 		for _, tableName := range tables {

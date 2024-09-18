@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/supabase/auth/internal/api/sms_provider"
@@ -17,7 +16,6 @@ const InvalidNonceMessage = "Nonce has expired or is invalid"
 func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
-	config := a.config
 
 	user := getUser(ctx)
 	email, phone := user.GetEmail(), user.GetPhone()
@@ -44,11 +42,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		if email != "" {
 			return a.sendReauthenticationOtp(r, tx, user)
 		} else if phone != "" {
-			smsProvider, terr := sms_provider.GetSmsProvider(*config)
-			if terr != nil {
-				return internalServerError("Failed to get SMS provider").WithInternalError(terr)
-			}
-			mID, err := a.sendPhoneConfirmation(ctx, r, tx, user, phone, phoneReauthenticationOtp, smsProvider, sms_provider.SMSProvider)
+			mID, err := a.sendPhoneConfirmation(r, tx, user, phone, phoneReauthenticationOtp, sms_provider.SMSProvider)
 			if err != nil {
 				return err
 			}
@@ -58,14 +52,6 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	})
 	if err != nil {
-		if errors.Is(err, MaxFrequencyLimitError) {
-			reason := ErrorCodeOverEmailSendRateLimit
-			if phone != "" {
-				reason = ErrorCodeOverSMSSendRateLimit
-			}
-
-			return tooManyRequestsError(reason, "For security purposes, you can only request this once every 60 seconds")
-		}
 		return err
 	}
 

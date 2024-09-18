@@ -181,7 +181,7 @@ paths:
 
   /verify:
     get:
-      summary: Authenticate by verifying the posession of a one-time token. Usually for use as clickable links.
+      summary: Authenticate by verifying the possession of a one-time token. Usually for use as clickable links.
       tags:
         - auth
       parameters:
@@ -214,7 +214,7 @@ paths:
         302:
           $ref: "#/components/responses/AccessRefreshTokenRedirectResponse"
     post:
-      summary: Authenticate by verifying the posession of a one-time token.
+      summary: Authenticate by verifying the possession of a one-time token.
       tags:
         - auth
       security:
@@ -282,7 +282,7 @@ paths:
           required: true
           schema:
             type: string
-            pattern: "[^a-zA-Z0-9]+"
+            pattern: "^[a-zA-Z0-9]+$"
         - name: scopes
           in: query
           required: true
@@ -693,11 +693,15 @@ paths:
                   type: string
                   enum:
                     - totp
+                    - phone
                 friendly_name:
                   type: string
                 issuer:
                   type: string
                   format: uri
+                phone:
+                  type: string
+                  format: phone
       responses:
         200:
           description: >
@@ -713,6 +717,7 @@ paths:
                     type: string
                     enum:
                       - totp
+                      - phone
                   totp:
                     type: object
                     properties:
@@ -722,6 +727,9 @@ paths:
                         type: string
                       uri:
                         type: string
+                  phone:
+                    type: string
+                    format: phone
         400:
           $ref: "#/components/responses/BadRequestResponse"
 
@@ -741,6 +749,18 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                channel:
+                  type: string
+                  enum:
+                    - sms
+                    - whatsapp
+
       responses:
         200:
           description: >
@@ -1840,7 +1860,7 @@ components:
         identities:
           type: array
           items:
-            type: object
+            $ref: "#/components/schemas/IdentitySchema"
         banned_until:
           type: string
           format: date-time
@@ -1853,6 +1873,8 @@ components:
         deleted_at:
           type: string
           format: date-time
+        is_anonymous:
+          type: boolean
 
     SAMLAttributeMappingSchema:
       type: object
@@ -1957,6 +1979,40 @@ components:
           description: |-
             Usually one of:
             - totp
+            - phone
+        phone:
+          type: string
+          format: phone
+
+
+    IdentitySchema:
+      type: object
+      properties:
+        identity_id:
+          type: string
+          format: uuid
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        identity_data:
+          type: object
+        provider:
+          type: string
+        last_sign_in_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        email:
+          type: string
+          format: email
 
   responses:
     OAuthCallbackRedirectResponse:

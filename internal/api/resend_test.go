@@ -128,6 +128,8 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	u.EmailChangeSentAt = &now
 	u.EmailChangeTokenNew = "123456"
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew))
 
 	phoneUser, err := models.NewUser("1234567890", "", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
@@ -135,6 +137,7 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	phoneUser.EmailChangeSentAt = &now
 	phoneUser.EmailChangeTokenNew = "123456"
 	require.NoError(ts.T(), ts.API.db.Create(phoneUser), "Error saving new test user")
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.EmailChange, phoneUser.EmailChangeTokenNew, models.EmailChangeTokenNew))
 
 	emailUser, err := models.NewUser("", "bar@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
@@ -142,6 +145,7 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	phoneUser.PhoneChangeSentAt = &now
 	phoneUser.PhoneChangeToken = "123456"
 	require.NoError(ts.T(), ts.API.db.Create(emailUser), "Error saving new test user")
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.PhoneChange, phoneUser.PhoneChangeToken, models.PhoneChangeToken))
 
 	cases := []struct {
 		desc   string

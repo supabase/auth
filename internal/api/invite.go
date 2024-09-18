@@ -26,7 +26,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var err error
-	params.Email, err = validateEmail(params.Email)
+	params.Email, err = a.validateEmail(params.Email)
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if err := a.sendInvite(r, tx, user); err != nil {
-			return internalServerError("Error inviting user").WithInternalError(err)
+			return err
 		}
 		return nil
 	})

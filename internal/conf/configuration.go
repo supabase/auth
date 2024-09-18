@@ -2,6 +2,7 @@ package conf
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -12,8 +13,10 @@ import (
 	"time"
 
 	"github.com/gobwas/glob"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
 const defaultMinPasswordLength int = 6
@@ -68,6 +71,10 @@ type AnonymousProviderConfiguration struct {
 
 type EmailProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"true"`
+
+	AuthorizedAddresses []string `json:"authorized_addresses" split_words:"true"`
+
+	MagicLinkEnabled bool `json:"magic_link_enabled" default:"true" split_words:"true"`
 }
 
 // DBConfiguration holds all the database related configuration.
@@ -91,24 +98,47 @@ func (c *DBConfiguration) Validate() error {
 
 // JWTConfiguration holds all the JWT related configuration.
 type JWTConfiguration struct {
-	Secret           string   `json:"secret" required:"true"`
-	Exp              int      `json:"exp"`
-	Aud              string   `json:"aud"`
-	AdminGroupName   string   `json:"admin_group_name" split_words:"true"`
-	AdminRoles       []string `json:"admin_roles" split_words:"true"`
-	DefaultGroupName string   `json:"default_group_name" split_words:"true"`
-	Issuer           string   `json:"issuer"`
-	KeyID            string   `json:"key_id" split_words:"true"`
+	Secret           string         `json:"secret" required:"true"`
+	Exp              int            `json:"exp"`
+	Aud              string         `json:"aud"`
+	AdminGroupName   string         `json:"admin_group_name" split_words:"true"`
+	AdminRoles       []string       `json:"admin_roles" split_words:"true"`
+	DefaultGroupName string         `json:"default_group_name" split_words:"true"`
+	Issuer           string         `json:"issuer"`
+	KeyID            string         `json:"key_id" split_words:"true"`
+	Keys             JwtKeysDecoder `json:"keys"`
+	ValidMethods     []string       `json:"-"`
+}
+
+type MFAFactorTypeConfiguration struct {
+	EnrollEnabled bool `json:"enroll_enabled" split_words:"true" default:"false"`
+	VerifyEnabled bool `json:"verify_enabled" split_words:"true" default:"false"`
+}
+
+type TOTPFactorTypeConfiguration struct {
+	EnrollEnabled bool `json:"enroll_enabled" split_words:"true" default:"true"`
+	VerifyEnabled bool `json:"verify_enabled" split_words:"true" default:"true"`
+}
+
+type PhoneFactorTypeConfiguration struct {
+	// Default to false in order to ensure Phone MFA is opt-in
+	MFAFactorTypeConfiguration
+	OtpLength    int                `json:"otp_length" split_words:"true"`
+	SMSTemplate  *template.Template `json:"-"`
+	MaxFrequency time.Duration      `json:"max_frequency" split_words:"true"`
+	Template     string             `json:"template"`
 }
 
 // MFAConfiguration holds all the MFA related Configuration
 type MFAConfiguration struct {
-	Enabled                     bool          `default:"false"`
-	ChallengeExpiryDuration     float64       `json:"challenge_expiry_duration" default:"300" split_words:"true"`
-	FactorExpiryDuration        time.Duration `json:"factor_expiry_duration" default:"300s" split_words:"true"`
-	RateLimitChallengeAndVerify float64       `split_words:"true" default:"15"`
-	MaxEnrolledFactors          float64       `split_words:"true" default:"10"`
-	MaxVerifiedFactors          int           `split_words:"true" default:"10"`
+	ChallengeExpiryDuration     float64                      `json:"challenge_expiry_duration" default:"300" split_words:"true"`
+	FactorExpiryDuration        time.Duration                `json:"factor_expiry_duration" default:"300s" split_words:"true"`
+	RateLimitChallengeAndVerify float64                      `split_words:"true" default:"15"`
+	MaxEnrolledFactors          float64                      `split_words:"true" default:"10"`
+	MaxVerifiedFactors          int                          `split_words:"true" default:"10"`
+	Phone                       PhoneFactorTypeConfiguration `split_words:"true"`
+	TOTP                        TOTPFactorTypeConfiguration  `split_words:"true"`
+	WebAuthn                    MFAFactorTypeConfiguration   `split_words:"true"`
 }
 
 type APIConfiguration struct {
@@ -222,6 +252,7 @@ type GlobalConfiguration struct {
 	RateLimitTokenRefresh   float64 `split_words:"true" default:"150"`
 	RateLimitSso            float64 `split_words:"true" default:"30"`
 	RateLimitAnonymousUsers float64 `split_words:"true" default:"30"`
+	RateLimitOtp            float64 `split_words:"true" default:"30"`
 
 	SiteURL         string   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList    []string `json:"uri_allow_list" split_words:"true"`
@@ -235,13 +266,8 @@ type GlobalConfiguration struct {
 	Security        SecurityConfiguration    `json:"security"`
 	Sessions        SessionsConfiguration    `json:"sessions"`
 	MFA             MFAConfiguration         `json:"MFA"`
-	Cookie          struct {
-		Key      string `json:"key"`
-		Domain   string `json:"domain"`
-		Duration int    `json:"duration"`
-	} `json:"cookies"`
-	SAML SAMLConfiguration `json:"saml"`
-	CORS CORSConfiguration `json:"cors"`
+	SAML            SAMLConfiguration        `json:"saml"`
+	CORS            CORSConfiguration        `json:"cors"`
 }
 
 type CORSConfiguration struct {
@@ -297,8 +323,10 @@ type ProviderConfiguration struct {
 	LinkedinOIDC            OAuthProviderConfiguration     `json:"linkedin_oidc" envconfig:"LINKEDIN_OIDC"`
 	Spotify                 OAuthProviderConfiguration     `json:"spotify"`
 	Slack                   OAuthProviderConfiguration     `json:"slack"`
+	SlackOIDC               OAuthProviderConfiguration     `json:"slack_oidc" envconfig:"SLACK_OIDC"`
 	Twitter                 OAuthProviderConfiguration     `json:"twitter"`
 	Twitch                  OAuthProviderConfiguration     `json:"twitch"`
+	VercelMarketplace       OAuthProviderConfiguration     `json:"vercel_marketplace" split_words:"true"`
 	WorkOS                  OAuthProviderConfiguration     `json:"workos"`
 	Email                   EmailProviderConfiguration     `json:"email"`
 	Phone                   PhoneProviderConfiguration     `json:"phone"`
@@ -421,16 +449,74 @@ func (c *CaptchaConfiguration) Validate() error {
 	return nil
 }
 
+// DatabaseEncryptionConfiguration configures Auth to encrypt certain columns.
+// Once Encrypt is set to true, data will start getting encrypted with the
+// provided encryption key. Setting it to false just stops encryption from
+// going on further, but DecryptionKeys would have to contain the same key so
+// the encrypted data remains accessible.
+type DatabaseEncryptionConfiguration struct {
+	Encrypt bool `json:"encrypt"`
+
+	EncryptionKeyID string `json:"encryption_key_id" split_words:"true"`
+	EncryptionKey   string `json:"-" split_words:"true"`
+
+	DecryptionKeys map[string]string `json:"-" split_words:"true"`
+}
+
+func (c *DatabaseEncryptionConfiguration) Validate() error {
+	if c.Encrypt {
+		if c.EncryptionKeyID == "" {
+			return errors.New("conf: encryption key ID must be specified")
+		}
+
+		decodedKey, err := base64.RawURLEncoding.DecodeString(c.EncryptionKey)
+		if err != nil {
+			return err
+		}
+
+		if len(decodedKey) != 256/8 {
+			return errors.New("conf: encryption key is not 256 bits")
+		}
+
+		if c.DecryptionKeys == nil || c.DecryptionKeys[c.EncryptionKeyID] == "" {
+			return errors.New("conf: encryption key must also be present in decryption keys")
+		}
+	}
+
+	for id, key := range c.DecryptionKeys {
+		decodedKey, err := base64.RawURLEncoding.DecodeString(key)
+		if err != nil {
+			return err
+		}
+
+		if len(decodedKey) != 256/8 {
+			return fmt.Errorf("conf: decryption key with ID %q must be 256 bits", id)
+		}
+	}
+
+	return nil
+}
+
 type SecurityConfiguration struct {
 	Captcha                               CaptchaConfiguration `json:"captcha"`
 	RefreshTokenRotationEnabled           bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
 	RefreshTokenReuseInterval             int                  `json:"refresh_token_reuse_interval" split_words:"true"`
 	UpdatePasswordRequireReauthentication bool                 `json:"update_password_require_reauthentication" split_words:"true"`
 	ManualLinkingEnabled                  bool                 `json:"manual_linking_enabled" split_words:"true" default:"false"`
+
+	DBEncryption DatabaseEncryptionConfiguration `json:"database_encryption" split_words:"true"`
 }
 
 func (c *SecurityConfiguration) Validate() error {
-	return c.Captcha.Validate()
+	if err := c.Captcha.Validate(); err != nil {
+		return err
+	}
+
+	if err := c.DBEncryption.Validate(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func loadEnvironment(filename string) error {
@@ -470,9 +556,10 @@ func (h *HTTPHookSecrets) Decode(value string) error {
 }
 
 type ExtensibilityPointConfiguration struct {
-	URI      string `json:"uri"`
-	Enabled  bool   `json:"enabled"`
-	HookName string `json:"hook_name"`
+	URI     string `json:"uri"`
+	Enabled bool   `json:"enabled"`
+	// For internal use together with Postgres Hook. Not publicly exposed.
+	HookName string `json:"-"`
 	// We use | as a separator for keys and : as a separator for keys within a keypair. For instance: v1,whsec_test|v1a,whpk_myother:v1a,whsk_testkey|v1,whsec_secret3
 	HTTPHookSecrets HTTPHookSecrets `json:"secrets" envconfig:"secrets"`
 }
@@ -629,6 +716,19 @@ func LoadGlobal(filename string) (*GlobalConfiguration, error) {
 		}
 		config.Sms.SMSTemplate = template
 	}
+
+	if config.MFA.Phone.EnrollEnabled || config.MFA.Phone.VerifyEnabled {
+		smsTemplate := config.MFA.Phone.Template
+		if smsTemplate == "" {
+			smsTemplate = "Your code is {{ .Code }}"
+		}
+		template, err := template.New("").Parse(smsTemplate)
+		if err != nil {
+			return nil, err
+		}
+		config.MFA.Phone.SMSTemplate = template
+	}
+
 	return config, nil
 }
 
@@ -638,12 +738,56 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.JWT.AdminGroupName = "admin"
 	}
 
-	if config.JWT.AdminRoles == nil || len(config.JWT.AdminRoles) == 0 {
+	if len(config.JWT.AdminRoles) == 0 {
 		config.JWT.AdminRoles = []string{"service_role", "supabase_admin"}
 	}
 
 	if config.JWT.Exp == 0 {
 		config.JWT.Exp = 3600
+	}
+
+	if len(config.JWT.Keys) == 0 {
+		// transform the secret into a JWK for consistency
+		privKey, err := jwk.FromRaw([]byte(config.JWT.Secret))
+		if err != nil {
+			return err
+		}
+		if config.JWT.KeyID != "" {
+			if err := privKey.Set(jwk.KeyIDKey, config.JWT.KeyID); err != nil {
+				return err
+			}
+		}
+		if privKey.Algorithm().String() == "" {
+			if err := privKey.Set(jwk.AlgorithmKey, jwt.SigningMethodHS256.Name); err != nil {
+				return err
+			}
+		}
+		if err := privKey.Set(jwk.KeyUsageKey, "sig"); err != nil {
+			return err
+		}
+		if len(privKey.KeyOps()) == 0 {
+			if err := privKey.Set(jwk.KeyOpsKey, jwk.KeyOperationList{jwk.KeyOpSign, jwk.KeyOpVerify}); err != nil {
+				return err
+			}
+		}
+		pubKey, err := privKey.PublicKey()
+		if err != nil {
+			return err
+		}
+		config.JWT.Keys = make(JwtKeysDecoder)
+		config.JWT.Keys[config.JWT.KeyID] = JwkInfo{
+			PublicKey:  pubKey,
+			PrivateKey: privKey,
+		}
+	}
+
+	if config.JWT.ValidMethods == nil {
+		config.JWT.ValidMethods = []string{}
+		for _, key := range config.JWT.Keys {
+			alg := GetSigningAlg(key.PublicKey)
+			config.JWT.ValidMethods = append(config.JWT.ValidMethods, alg.Alg())
+		}
+
 	}
 
 	if config.Mailer.Autoconfirm && config.Mailer.AllowUnverifiedEmailSignIns {
@@ -705,18 +849,6 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.Sms.Template = ""
 	}
 
-	if config.Cookie.Key == "" {
-		config.Cookie.Key = "sb"
-	}
-
-	if config.Cookie.Domain == "" {
-		config.Cookie.Domain = ""
-	}
-
-	if config.Cookie.Duration == 0 {
-		config.Cookie.Duration = 86400
-	}
-
 	if config.URIAllowList == nil {
 		config.URIAllowList = []string{}
 	}
@@ -732,12 +864,24 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.Password.MinLength < defaultMinPasswordLength {
 		config.Password.MinLength = defaultMinPasswordLength
 	}
+
 	if config.MFA.ChallengeExpiryDuration < defaultChallengeExpiryDuration {
 		config.MFA.ChallengeExpiryDuration = defaultChallengeExpiryDuration
 	}
+
 	if config.MFA.FactorExpiryDuration < defaultFactorExpiryDuration {
 		config.MFA.FactorExpiryDuration = defaultFactorExpiryDuration
 	}
+
+	if config.MFA.Phone.MaxFrequency == 0 {
+		config.MFA.Phone.MaxFrequency = 1 * time.Minute
+	}
+
+	if config.MFA.Phone.OtpLength < 6 || config.MFA.Phone.OtpLength > 10 {
+		// 6-digit otp by default
+		config.MFA.Phone.OtpLength = 6
+	}
+
 	if config.External.FlowStateExpiryDuration < defaultFlowStateExpiryDuration {
 		config.External.FlowStateExpiryDuration = defaultFlowStateExpiryDuration
 	}
@@ -763,6 +907,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Security,
 		&c.Sessions,
 		&c.Hook,
+		&c.JWT.Keys,
 	}
 
 	for _, validatable := range validatables {

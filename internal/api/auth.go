@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
+	"strings"
 
 	"github.com/gofrs/uuid"
-	jwt "github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -15,21 +16,17 @@ import (
 // requireAuthentication checks incoming requests for tokens presented using the Authorization header
 func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	token, err := a.extractBearerToken(r)
-	config := a.config
 	if err != nil {
-		a.clearCookieTokens(config, w)
 		return nil, err
 	}
 
 	ctx, err := a.parseJWTClaims(token, r)
 	if err != nil {
-		a.clearCookieTokens(config, w)
 		return ctx, err
 	}
 
 	ctx, err = a.maybeLoadUserOrSession(ctx)
 	if err != nil {
-		a.clearCookieTokens(config, w)
 		return ctx, err
 	}
 	return ctx, err
@@ -44,11 +41,10 @@ func (a *API) requireNotAnonymous(w http.ResponseWriter, r *http.Request) (conte
 	return ctx, nil
 }
 
-func (a *API) requireAdmin(ctx context.Context, r *http.Request) (context.Context, error) {
+func (a *API) requireAdmin(ctx context.Context) (context.Context, error) {
 	// Find the administrative user
 	claims := getClaims(ctx)
 	if claims == nil {
-		fmt.Printf("[%s] %s %s %d %s\n", time.Now().Format("2006-01-02 15:04:05"), r.Method, r.RequestURI, http.StatusForbidden, "Invalid token")
 		return nil, forbiddenError(ErrorCodeBadJWT, "Invalid token")
 	}
 
@@ -59,8 +55,7 @@ func (a *API) requireAdmin(ctx context.Context, r *http.Request) (context.Contex
 		return withAdminUser(ctx, &models.User{Role: claims.Role, Email: storage.NullString(claims.Role)}), nil
 	}
 
-	fmt.Printf("[%s] %s %s %d %s\n", time.Now().Format("2006-01-02 15:04:05"), r.Method, r.RequestURI, http.StatusForbidden, "this token needs role 'supabase_admin' or 'service_role'")
-	return nil, forbiddenError(ErrorCodeNotAdmin, "User not allowed")
+	return nil, forbiddenError(ErrorCodeNotAdmin, "User not allowed").WithInternalMessage(fmt.Sprintf("this token needs to have one of the following roles: %v", strings.Join(adminRoles, ", ")))
 }
 
 func (a *API) extractBearerToken(r *http.Request) (string, error) {
@@ -77,9 +72,20 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request) (context.Context, e
 	ctx := r.Context()
 	config := a.config
 
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+	p := jwt.NewParser(jwt.WithValidMethods(config.JWT.ValidMethods))
 	token, err := p.ParseWithClaims(bearer, &AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(config.JWT.Secret), nil
+		if kid, ok := token.Header["kid"]; ok {
+			if kidStr, ok := kid.(string); ok {
+				return conf.FindPublicKeyByKid(kidStr, &config.JWT)
+			}
+		}
+		if alg, ok := token.Header["alg"]; ok {
+			if alg == jwt.SigningMethodHS256.Name {
+				// preserve backward compatibility for cases where the kid is not set
+				return []byte(config.JWT.Secret), nil
+			}
+		}
+		return nil, fmt.Errorf("missing kid")
 	})
 	if err != nil {
 		return nil, forbiddenError(ErrorCodeBadJWT, "invalid JWT: unable to parse or verify signature, %v", err).WithInternalError(err)
@@ -125,7 +131,7 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 		session, err = models.FindSessionByID(db, sessionId, false)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return ctx, forbiddenError(ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist")
+				return ctx, forbiddenError(ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist").WithInternalError(err).WithInternalMessage(fmt.Sprintf("session id (%s) doesn't exist", sessionId))
 			}
 			return ctx, err
 		}

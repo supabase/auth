@@ -37,7 +37,8 @@ func (ts *FactorTestSuite) SetupTest() {
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.db.Create(user))
 
-	factor := NewFactor(user, "asimplename", TOTP, FactorStateUnverified, "topsecret")
+	factor := NewTOTPFactor(user, "asimplename")
+	require.NoError(ts.T(), factor.SetSecret("topsecret", false, "", ""))
 	require.NoError(ts.T(), ts.db.Create(factor))
 	ts.TestFactor = factor
 }

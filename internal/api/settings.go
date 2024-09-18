@@ -21,6 +21,7 @@ type ProviderSettings struct {
 	Notion         bool `json:"notion"`
 	Spotify        bool `json:"spotify"`
 	Slack          bool `json:"slack"`
+	SlackOIDC      bool `json:"slack_oidc"`
 	WorkOS         bool `json:"workos"`
 	Twitch         bool `json:"twitch"`
 	Twitter        bool `json:"twitter"`
@@ -35,7 +36,6 @@ type Settings struct {
 	MailerAutoconfirm bool             `json:"mailer_autoconfirm"`
 	PhoneAutoconfirm  bool             `json:"phone_autoconfirm"`
 	SmsProvider       string           `json:"sms_provider"`
-	MFAEnabled        bool             `json:"mfa_enabled"`
 	SAMLEnabled       bool             `json:"saml_enabled"`
 }
 
@@ -62,6 +62,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Notion:         config.External.Notion.Enabled,
 			Spotify:        config.External.Spotify.Enabled,
 			Slack:          config.External.Slack.Enabled,
+			SlackOIDC:      config.External.SlackOIDC.Enabled,
 			Twitch:         config.External.Twitch.Enabled,
 			Twitter:        config.External.Twitter.Enabled,
 			WorkOS:         config.External.WorkOS.Enabled,
@@ -73,7 +74,6 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 		MailerAutoconfirm: config.Mailer.Autoconfirm,
 		PhoneAutoconfirm:  config.Sms.Autoconfirm,
 		SmsProvider:       config.Sms.Provider,
-		MFAEnabled:        config.MFA.Enabled,
 		SAMLEnabled:       config.SAML.Enabled,
 	})
 }

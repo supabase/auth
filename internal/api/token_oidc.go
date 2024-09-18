@@ -24,8 +24,8 @@ type IdTokenGrantParams struct {
 	Issuer      string `json:"issuer"`
 }
 
-func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, *conf.OAuthProviderConfiguration, string, []string, error) {
-	log := observability.GetLogEntry(r)
+func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, bool, string, []string, error) {
+	log := observability.GetLogEntry(r).Entry
 
 	var cfg *conf.OAuthProviderConfiguration
 	var issuer string
@@ -54,7 +54,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		if issuer == "" || !provider.IsAzureIssuer(issuer) {
 			detectedIssuer, err := provider.DetectAzureIDTokenIssuer(ctx, p.IdToken)
 			if err != nil {
-				return nil, nil, "", nil, badRequestError(ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
+				return nil, false, "", nil, badRequestError(ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
 			}
 			issuer = detectedIssuer
 		}
@@ -80,6 +80,12 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		issuer = provider.IssuerKakao
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Kakao.ClientID...)
 
+	case p.Provider == "vercel_marketplace" || p.Issuer == provider.IssuerVercelMarketplace:
+		cfg = &config.External.VercelMarketplace
+		providerType = "vercel_marketplace"
+		issuer = provider.IssuerVercelMarketplace
+		acceptableClientIDs = append(acceptableClientIDs, config.External.VercelMarketplace.ClientID...)
+
 	default:
 		log.WithField("issuer", p.Issuer).WithField("client_id", p.ClientID).Warn("Use of POST /token with arbitrary issuer and client_id is deprecated for security reasons. Please switch to using the API with provider only!")
 
@@ -95,25 +101,30 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		}
 
 		if !allowed {
-			return nil, nil, "", nil, badRequestError(ErrorCodeValidationFailed, fmt.Sprintf("Custom OIDC provider %q not allowed", p.Provider))
+			return nil, false, "", nil, badRequestError(ErrorCodeValidationFailed, fmt.Sprintf("Custom OIDC provider %q not allowed", p.Provider))
+		}
+
+		cfg = &conf.OAuthProviderConfiguration{
+			Enabled:        true,
+			SkipNonceCheck: false,
 		}
 	}
 
-	if cfg != nil && !cfg.Enabled {
-		return nil, nil, "", nil, badRequestError(ErrorCodeProviderDisabled, fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
+	if !cfg.Enabled {
+		return nil, false, "", nil, badRequestError(ErrorCodeProviderDisabled, fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
 	}
 
 	oidcProvider, err := oidc.NewProvider(ctx, issuer)
 	if err != nil {
-		return nil, nil, "", nil, err
+		return nil, false, "", nil, err
 	}
 
-	return oidcProvider, cfg, providerType, acceptableClientIDs, nil
+	return oidcProvider, cfg.SkipNonceCheck, providerType, acceptableClientIDs, nil
 }
 
 // IdTokenGrant implements the id_token grant type flow
 func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	log := observability.GetLogEntry(r)
+	log := observability.GetLogEntry(r).Entry
 
 	db := a.db.WithContext(ctx)
 	config := a.config
@@ -131,7 +142,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return oauthError("invalid request", "provider or client_id and issuer required")
 	}
 
-	oidcProvider, oauthConfig, providerType, acceptableClientIDs, err := params.getProvider(ctx, config, r)
+	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, err := params.getProvider(ctx, config, r)
 	if err != nil {
 		return err
 	}
@@ -179,10 +190,10 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	if !correctAudience {
-		return oauthError("invalid request", "Unacceptable audience in id_token")
+		return oauthError("invalid request", fmt.Sprintf("Unacceptable audience in id_token: %v", idToken.Audience))
 	}
 
-	if !oauthConfig.SkipNonceCheck {
+	if !skipNonceCheck {
 		tokenHasNonce := idToken.Nonce != ""
 		paramsHasNonce := params.Nonce != ""
 

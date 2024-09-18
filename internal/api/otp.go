@@ -8,6 +8,7 @@ import (
 
 	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -45,17 +46,15 @@ func (p *OtpParams) Validate() error {
 	return nil
 }
 
-func (p *SmsParams) Validate(smsProvider string) error {
-	if p.Phone != "" && !sms_provider.IsValidMessageChannel(p.Channel, smsProvider) {
-		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
-	}
-
+func (p *SmsParams) Validate(config *conf.GlobalConfiguration) error {
 	var err error
 	p.Phone, err = validatePhone(p.Phone)
 	if err != nil {
 		return err
 	}
-
+	if !sms_provider.IsValidMessageChannel(p.Channel, config) {
+		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
+	}
 	return nil
 }
 
@@ -119,7 +118,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		params.Channel = sms_provider.SMSProvider
 	}
 
-	if err := params.Validate(config.Sms.Provider); err != nil {
+	if err := params.Validate(config); err != nil {
 		return err
 	}
 
@@ -191,13 +190,9 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		}); err != nil {
 			return err
 		}
-		smsProvider, terr := sms_provider.GetSmsProvider(*config)
-		if terr != nil {
-			return internalServerError("Unable to get SMS provider").WithInternalError(err)
-		}
-		mID, serr := a.sendPhoneConfirmation(ctx, r, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel)
+		mID, serr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, params.Channel)
 		if serr != nil {
-			return badRequestError(ErrorCodeSMSSendFailed, "Error sending sms OTP: %v", serr).WithInternalError(serr)
+			return serr
 		}
 		messageID = mID
 		return nil
@@ -221,7 +216,7 @@ func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) (bool, error)
 		aud := a.requestAud(ctx, r)
 		var err error
 		if params.Email != "" {
-			params.Email, err = validateEmail(params.Email)
+			params.Email, err = a.validateEmail(params.Email)
 			if err != nil {
 				return false, err
 			}

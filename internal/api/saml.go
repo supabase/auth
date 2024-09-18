@@ -14,10 +14,24 @@ import (
 // getSAMLServiceProvider generates a new service provider object with the
 // (optionally) provided descriptor (metadata) for the identity provider.
 func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor, idpInitiated bool) *saml.ServiceProvider {
-	externalURL, err := url.ParseRequestURI(a.config.API.ExternalURL)
-	if err != nil {
-		// this should not fail as a.config should have been validated using #Validate()
-		panic(err)
+	var externalURL *url.URL
+
+	if a.config.SAML.ExternalURL != "" {
+		url, err := url.ParseRequestURI(a.config.SAML.ExternalURL)
+		if err != nil {
+			// this should not fail as a.config should have been validated using #Validate()
+			panic(err)
+		}
+
+		externalURL = url
+	} else {
+		url, err := url.ParseRequestURI(a.config.API.ExternalURL)
+		if err != nil {
+			// this should not fail as a.config should have been validated using #Validate()
+			panic(err)
+		}
+
+		externalURL = url
 	}
 
 	if !strings.HasSuffix(externalURL.Path, "/") {
@@ -66,16 +80,14 @@ func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	// don't advertize the encryption keys as it makes it much difficult to debug
-	// requests / responses, and does not increase security since assertions are
-	// not "private" and not necessary to be hidden from the browser
 	for i := range metadata.SPSSODescriptors {
 		spd := &metadata.SPSSODescriptors[i]
 
 		var keyDescriptors []saml.KeyDescriptor
 
 		for _, kd := range spd.KeyDescriptors {
-			if kd.Use == "signing" {
+			// only advertize key as usable for encryption if allowed
+			if kd.Use == "signing" || (a.config.SAML.AllowEncryptedAssertions && kd.Use == "encryption") {
 				keyDescriptors = append(keyDescriptors, kd)
 			}
 		}

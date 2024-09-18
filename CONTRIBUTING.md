@@ -59,11 +59,11 @@ Therefore, to contribute to Auth you will need to install these tools.
 
 ### Install Tools
 
-- Install [Go](https://go.dev) 1.21
+- Install [Go](https://go.dev) 1.22
 
 ```terminal
 # Via Homebrew on OSX
-brew install go@1.21
+brew install go@1.22
 
 # Set the GOPATH environment variable in the ~/.zshrc file
 export GOPATH="$HOME/go"
@@ -253,6 +253,7 @@ To see the current settings, make a request to `http://localhost:9999/settings` 
     "facebook": false,
     "spotify": false,
     "slack": false,
+    "slack_oidc": false,
     "twitch": true,
     "twitter": false,
     "email": true,

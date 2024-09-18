@@ -56,6 +56,10 @@ func (ts *ExternalTestSuite) createUser(providerId string, email string, name st
 	ts.Require().NoError(err, "Error making new user")
 	ts.Require().NoError(ts.API.db.Create(u), "Error creating user")
 
+	if confirmationToken != "" {
+		ts.Require().NoError(models.CreateOneTimeToken(ts.API.db, u.ID, email, u.ConfirmationToken, models.ConfirmationToken), "Error creating one-time confirmation/invite token")
+	}
+
 	i, err := models.NewIdentity(u, "email", map[string]interface{}{
 		"sub":   u.ID.String(),
 		"email": email,
@@ -231,7 +235,7 @@ func (ts *ExternalTestSuite) TestRedirectErrorsShouldPreserveParams() {
 		parsedURL, err := url.Parse(c.RedirectURL)
 		require.Equal(ts.T(), err, nil)
 
-		ts.API.redirectErrors(ts.API.internalExternalProviderCallback, w, req, parsedURL)
+		redirectErrors(ts.API.internalExternalProviderCallback, w, req, parsedURL)
 
 		parsedParams, err := url.ParseQuery(parsedURL.RawQuery)
 		require.Equal(ts.T(), err, nil)

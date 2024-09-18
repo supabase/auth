@@ -92,8 +92,11 @@ func TestGetReferrer(t *tst.T) {
 	config := conf.GlobalConfiguration{
 		SiteURL:      "https://example.com",
 		URIAllowList: []string{"http://localhost:8000/*"},
+		JWT: conf.JWTConfiguration{
+			Secret: "testsecret",
+		},
 	}
-	config.ApplyDefaults()
+	require.NoError(t, config.ApplyDefaults())
 	cases := []struct {
 		desc        string
 		redirectURL string

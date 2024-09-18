@@ -17,11 +17,14 @@ import (
 type SAMLConfiguration struct {
 	Enabled                  bool          `json:"enabled"`
 	PrivateKey               string        `json:"-" split_words:"true"`
+	AllowEncryptedAssertions bool          `json:"allow_encrypted_assertions" split_words:"true"`
 	RelayStateValidityPeriod time.Duration `json:"relay_state_validity_period" split_words:"true"`
 
 	RSAPrivateKey *rsa.PrivateKey   `json:"-"`
 	RSAPublicKey  *rsa.PublicKey    `json:"-"`
 	Certificate   *x509.Certificate `json:"-"`
+
+	ExternalURL string `json:"external_url,omitempty" split_words:"true"`
 
 	RateLimitAssertion float64 `default:"15" split_words:"true"`
 }
@@ -53,6 +56,13 @@ func (c *SAMLConfiguration) Validate() error {
 
 		if c.RelayStateValidityPeriod < 0 {
 			return errors.New("SAML RelayState validity period should be a positive duration")
+		}
+
+		if c.ExternalURL != "" {
+			_, err := url.ParseRequestURI(c.ExternalURL)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -100,6 +110,10 @@ func (c *SAMLConfiguration) PopulateFields(externalURL string) error {
 		Subject: pkix.Name{
 			CommonName: "SAML 2.0 Certificate for " + host,
 		},
+	}
+
+	if c.AllowEncryptedAssertions {
+		certTemplate.KeyUsage = certTemplate.KeyUsage | x509.KeyUsageDataEncipherment
 	}
 
 	certDer, err := x509.CreateCertificate(nil, certTemplate, certTemplate, c.RSAPublicKey, c.RSAPrivateKey)

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type ParseIDTokenOptions struct {
@@ -61,6 +61,8 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 		token, data, err = parseLinkedinIDToken(token)
 	case IssuerKakao:
 		token, data, err = parseKakaoIDToken(token)
+	case IssuerVercelMarketplace:
+		token, data, err = parseVercelMarketplaceIDToken(token)
 	default:
 		if IsAzureIssuer(token.Issuer) {
 			token, data, err = parseAzureIDToken(token)
@@ -120,7 +122,7 @@ func parseGoogleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, 
 }
 
 type AppleIDTokenClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 
 	Email string `json:"email"`
 
@@ -165,7 +167,7 @@ func parseAppleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 }
 
 type LinkedinIDTokenClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 
 	Email         string `json:"email"`
 	EmailVerified string `json:"email_verified"`
@@ -210,7 +212,7 @@ func parseLinkedinIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData
 }
 
 type AzureIDTokenClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 
 	Email                              string `json:"email"`
 	Name                               string `json:"name"`
@@ -315,7 +317,7 @@ func parseAzureIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 }
 
 type KakaoIDTokenClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 
 	Email    string `json:"email"`
 	Nickname string `json:"nickname"`
@@ -346,6 +348,40 @@ func parseKakaoIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 		PreferredUsername: claims.Nickname,
 		ProviderId:        token.Subject,
 		Picture:           claims.Picture,
+	}
+
+	return token, &data, nil
+}
+
+type VercelMarketplaceIDTokenClaims struct {
+	jwt.RegisteredClaims
+
+	UserEmail     string `json:"user_email"`
+	UserName      string `json:"user_name"`
+	UserAvatarUrl string `json:"user_avatar_url"`
+}
+
+func parseVercelMarketplaceIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
+	var claims VercelMarketplaceIDTokenClaims
+
+	if err := token.Claims(&claims); err != nil {
+		return nil, nil, err
+	}
+
+	var data UserProvidedData
+
+	data.Emails = append(data.Emails, Email{
+		Email:    claims.UserEmail,
+		Verified: true,
+		Primary:  true,
+	})
+
+	data.Metadata = &Claims{
+		Issuer:     token.Issuer,
+		Subject:    token.Subject,
+		ProviderId: token.Subject,
+		Name:       claims.UserName,
+		Picture:    claims.UserAvatarUrl,
 	}
 
 	return token, &data, nil

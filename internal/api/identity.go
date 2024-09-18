@@ -5,9 +5,8 @@ import (
 	"net/http"
 
 	"github.com/fatih/structs"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
-	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -27,7 +26,8 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	if aud != claims.Audience {
+	audienceFromClaims, _ := claims.GetAudience()
+	if len(audienceFromClaims) == 0 || aud != audienceFromClaims[0] {
 		return forbiddenError(ErrorCodeUnexpectedAudience, "Token audience doesn't match request audience")
 	}
 
@@ -132,9 +132,7 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 		}
 		if !userData.Metadata.EmailVerified {
 			if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
-				if errors.Is(terr, MaxFrequencyLimitError) {
-					return nil, tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "For security purposes, you can only request this once every minute")
-				}
+				return nil, terr
 			}
 			return nil, storage.NewCommitWithError(unprocessableEntityError(ErrorCodeEmailNotConfirmed, "Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType))
 		}

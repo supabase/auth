@@ -10,7 +10,7 @@ import (
 
 	"github.com/crewjam/saml"
 	"github.com/crewjam/saml/samlsp"
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
@@ -349,10 +349,13 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	updateAttributeMapping := !provider.SAMLProvider.AttributeMapping.Equal(&params.AttributeMapping)
-	if updateAttributeMapping {
-		modified = true
-		provider.SAMLProvider.AttributeMapping = params.AttributeMapping
+	updateAttributeMapping := false
+	if params.AttributeMapping.Keys != nil {
+		updateAttributeMapping = !provider.SAMLProvider.AttributeMapping.Equal(&params.AttributeMapping)
+		if updateAttributeMapping {
+			modified = true
+			provider.SAMLProvider.AttributeMapping = params.AttributeMapping
+		}
 	}
 
 	nameIDFormat := ""

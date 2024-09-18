@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -42,7 +41,7 @@ func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
 	if p.Email != "" && p.Phone != "" {
 		return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided on signup.")
 	}
-	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, config.Sms.Provider) {
+	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, config) {
 		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
 	}
 	// PKCE not needed as phone signups already return access token in body
@@ -142,7 +141,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if !config.External.Email.Enabled {
 			return badRequestError(ErrorCodeEmailProviderDisabled, "Email signups are disabled")
 		}
-		params.Email, err = validateEmail(params.Email)
+		params.Email, err = a.validateEmail(params.Email)
 		if err != nil {
 			return err
 		}
@@ -245,12 +244,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					}
 				}
 				if terr = a.sendConfirmation(r, tx, user, flowType); terr != nil {
-					if errors.Is(terr, MaxFrequencyLimitError) {
-						now := time.Now()
-						left := user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency).Sub(now) / time.Second
-						return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, fmt.Sprintf("For security purposes, you can only request this after %d seconds.", left))
-					}
-					return internalServerError("Error sending confirmation mail").WithInternalError(terr)
+					return terr
 				}
 			}
 		} else if params.Provider == "phone" && !user.IsPhoneConfirmed() {
@@ -270,12 +264,8 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				}); terr != nil {
 					return terr
 				}
-				smsProvider, terr := sms_provider.GetSmsProvider(*config)
-				if terr != nil {
-					return internalServerError("Unable to get SMS provider").WithInternalError(terr)
-				}
-				if _, terr := a.sendPhoneConfirmation(ctx, r, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, params.Channel); terr != nil {
-					return unprocessableEntityError(ErrorCodeSMSSendFailed, "Error sending confirmation sms: %v", terr).WithInternalError(terr)
+				if _, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, params.Channel); terr != nil {
+					return terr
 				}
 			}
 		}
@@ -284,14 +274,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
-		reason := ErrorCodeOverEmailSendRateLimit
-		if params.Provider == "phone" {
-			reason = ErrorCodeOverSMSSendRateLimit
-		}
-
-		if errors.Is(err, MaxFrequencyLimitError) {
-			return tooManyRequestsError(reason, "For security purposes, you can only request this once every minute")
-		} else if errors.Is(err, UserExistsError) {
+		if errors.Is(err, UserExistsError) {
 			err = db.Transaction(func(tx *storage.Connection) error {
 				if terr := models.NewAuditLogEntry(r, tx, user, models.UserRepeatedSignUpAction, "", map[string]interface{}{
 					"provider": params.Provider,
@@ -330,10 +313,6 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
-
-			if terr = a.setCookieTokens(config, token, false, w); terr != nil {
-				return internalServerError("Failed to set JWT cookie. %s", terr)
-			}
 			return nil
 		})
 		if err != nil {
@@ -357,9 +336,9 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 
 	u.ID = uuid.Must(uuid.NewV4())
 
-	u.Role = ""
+	u.Role, u.EmailChange = "", ""
 	u.CreatedAt, u.UpdatedAt, u.ConfirmationSentAt = now, now, &now
-	u.LastSignInAt, u.ConfirmedAt, u.EmailConfirmedAt, u.PhoneConfirmedAt = nil, nil, nil, nil
+	u.LastSignInAt, u.ConfirmedAt, u.EmailChangeSentAt, u.EmailConfirmedAt, u.PhoneConfirmedAt = nil, nil, nil, nil, nil
 	u.Identities = make([]models.Identity, 0)
 	u.UserMetaData = params.Data
 	u.Aud = params.Aud

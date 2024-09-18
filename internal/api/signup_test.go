@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	mail "github.com/supabase/auth/internal/mailer"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
+
+	mail "github.com/supabase/auth/internal/mailer"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -127,6 +128,7 @@ func (ts *SignupTestSuite) TestVerifySignup() {
 	user.ConfirmationSentAt = &now
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Create(user))
+	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, user.ID, user.GetEmail(), user.ConfirmationToken, models.ConfirmationToken))
 
 	// Find test user
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)

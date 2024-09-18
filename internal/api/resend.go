@@ -1,12 +1,9 @@
 package api
 
 import (
-	"errors"
 	"net/http"
-	"time"
 
 	"github.com/supabase/auth/internal/api/sms_provider"
-	"github.com/supabase/auth/internal/conf"
 	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -19,7 +16,9 @@ type ResendConfirmationParams struct {
 	Phone string `json:"phone"`
 }
 
-func (p *ResendConfirmationParams) Validate(config *conf.GlobalConfiguration) error {
+func (p *ResendConfirmationParams) Validate(a *API) error {
+	config := a.config
+
 	switch p.Type {
 	case mail.SignupVerification, mail.EmailChangeVerification, smsVerification, phoneChangeVerification:
 		break
@@ -42,7 +41,7 @@ func (p *ResendConfirmationParams) Validate(config *conf.GlobalConfiguration) er
 		if !config.External.Email.Enabled {
 			return badRequestError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 		}
-		p.Email, err = validateEmail(p.Email)
+		p.Email, err = a.validateEmail(p.Email)
 		if err != nil {
 			return err
 		}
@@ -65,13 +64,12 @@ func (p *ResendConfirmationParams) Validate(config *conf.GlobalConfiguration) er
 func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
-	config := a.config
 	params := &ResendConfirmationParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
 
-	if err := params.Validate(config); err != nil {
+	if err := params.Validate(a); err != nil {
 		return err
 	}
 
@@ -127,11 +125,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
 			}
-			smsProvider, terr := sms_provider.GetSmsProvider(*config)
-			if terr != nil {
-				return terr
-			}
-			mID, terr := a.sendPhoneConfirmation(ctx, r, tx, user, params.Phone, phoneConfirmationOtp, smsProvider, sms_provider.SMSProvider)
+			mID, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, sms_provider.SMSProvider)
 			if terr != nil {
 				return terr
 			}
@@ -139,11 +133,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 		case mail.EmailChangeVerification:
 			return a.sendEmailChange(r, tx, user, user.EmailChange, models.ImplicitFlow)
 		case phoneChangeVerification:
-			smsProvider, terr := sms_provider.GetSmsProvider(*config)
-			if terr != nil {
-				return terr
-			}
-			mID, terr := a.sendPhoneConfirmation(ctx, r, tx, user, user.PhoneChange, phoneChangeVerification, smsProvider, sms_provider.SMSProvider)
+			mID, terr := a.sendPhoneConfirmation(r, tx, user, user.PhoneChange, phoneChangeVerification, sms_provider.SMSProvider)
 			if terr != nil {
 				return terr
 			}
@@ -152,16 +142,7 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	})
 	if err != nil {
-		if errors.Is(err, MaxFrequencyLimitError) {
-			reason := ErrorCodeOverEmailSendRateLimit
-			if params.Type == smsVerification || params.Type == phoneChangeVerification {
-				reason = ErrorCodeOverSMSSendRateLimit
-			}
-
-			until := time.Until(user.ConfirmationSentAt.Add(config.SMTP.MaxFrequency)) / time.Second
-			return tooManyRequestsError(reason, "For security purposes, you can only request this once every %d seconds.", until)
-		}
-		return internalServerError("Unable to process request").WithInternalError(err)
+		return err
 	}
 
 	ret := map[string]any{}

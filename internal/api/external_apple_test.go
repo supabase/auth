@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 
-	jwt "github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v5"
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalApple() {
@@ -22,7 +22,7 @@ func (ts *ExternalTestSuite) TestSignupExternalApple() {
 	ts.Equal("email name", q.Get("scope"))
 
 	claims := ExternalProviderClaims{}
-	p := jwt.Parser{ValidMethods: []string{jwt.SigningMethodHS256.Name}}
+	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
 	_, err = p.ParseWithClaims(q.Get("state"), &claims, func(token *jwt.Token) (interface{}, error) {
 		return []byte(ts.Config.JWT.Secret), nil
 	})

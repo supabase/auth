@@ -1,14 +1,12 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"regexp"
 	"time"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
-	"github.com/go-chi/chi"
 	"github.com/rs/cors"
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
@@ -51,7 +49,7 @@ func (a *API) Now() time.Time {
 
 // NewAPI instantiates a new REST API
 func NewAPI(globalConfig *conf.GlobalConfiguration, db *storage.Connection) *API {
-	return NewAPIWithVersion(context.Background(), globalConfig, db, defaultVersion)
+	return NewAPIWithVersion(globalConfig, db, defaultVersion)
 }
 
 func (a *API) deprecationNotices() {
@@ -69,7 +67,7 @@ func (a *API) deprecationNotices() {
 }
 
 // NewAPIWithVersion creates a new REST API using the specified version
-func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
+func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
 	api := &API{config: globalConfig, db: db, version: version}
 
 	if api.config.Password.HIBP.Enabled {
@@ -98,20 +96,19 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	logger := observability.NewStructuredLogger(logrus.StandardLogger(), globalConfig)
 
 	r := newRouter()
+	r.UseBypass(observability.AddRequestID(globalConfig))
+	r.UseBypass(logger)
+	r.UseBypass(xffmw.Handler)
+	r.UseBypass(recoverer)
 
 	if globalConfig.API.MaxRequestDuration > 0 {
-		r.UseBypass(api.timeoutMiddleware(globalConfig.API.MaxRequestDuration))
+		r.UseBypass(timeoutMiddleware(globalConfig.API.MaxRequestDuration))
 	}
-
-	r.Use(addRequestID(globalConfig))
 
 	// request tracing should be added only when tracing or metrics is enabled
 	if globalConfig.Tracing.Enabled || globalConfig.Metrics.Enabled {
 		r.UseBypass(observability.RequestTracing())
 	}
-
-	r.UseBypass(xffmw.Handler)
-	r.Use(recoverer)
 
 	if globalConfig.DB.CleanupEnabled {
 		cleanup := models.NewCleanup(globalConfig)
@@ -119,9 +116,9 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	}
 
 	r.Get("/health", api.HealthCheck)
+	r.Get("/.well-known/jwks.json", api.Jwks)
 
 	r.Route("/callback", func(r *router) {
-		r.UseBypass(logger)
 		r.Use(api.isValidExternalHost)
 		r.Use(api.loadFlowState)
 
@@ -130,7 +127,6 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 	})
 
 	r.Route("/", func(r *router) {
-		r.UseBypass(logger)
 		r.Use(api.isValidExternalHost)
 
 		r.Get("/settings", api.Settings)
@@ -141,9 +137,14 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 		r.With(sharedLimiter).With(api.requireAdminCredentials).Post("/invite", api.Invite)
 		r.With(sharedLimiter).With(api.verifyCaptcha).Route("/signup", func(r *router) {
 			// rate limit per hour
-			limiter := tollbooth.NewLimiter(api.config.RateLimitAnonymousUsers/(60*60), &limiter.ExpirableOptions{
+			limitAnonymousSignIns := tollbooth.NewLimiter(api.config.RateLimitAnonymousUsers/(60*60), &limiter.ExpirableOptions{
 				DefaultExpirationTTL: time.Hour,
 			}).SetBurst(int(api.config.RateLimitAnonymousUsers)).SetMethods([]string{"POST"})
+
+			limitSignups := tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(30)
+
 			r.Post("/", func(w http.ResponseWriter, r *http.Request) error {
 				params := &SignupParams{}
 				if err := retrieveRequestParams(r, params); err != nil {
@@ -153,19 +154,50 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 					if !api.config.External.AnonymousUsers.Enabled {
 						return unprocessableEntityError(ErrorCodeAnonymousProviderDisabled, "Anonymous sign-ins are disabled")
 					}
-					if _, err := api.limitHandler(limiter)(w, r); err != nil {
+					if _, err := api.limitHandler(limitAnonymousSignIns)(w, r); err != nil {
 						return err
 					}
 					return api.SignupAnonymously(w, r)
 				}
+
+				// apply ip-based rate limiting on otps
+				if _, err := api.limitHandler(limitSignups)(w, r); err != nil {
+					return err
+				}
+				// apply shared rate limiting on email / phone
+				if _, err := sharedLimiter(w, r); err != nil {
+					return err
+				}
 				return api.Signup(w, r)
 			})
 		})
-		r.With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
-		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/resend", api.Resend)
-		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
+		r.With(api.limitHandler(
+			// Allow requests at the specified rate per 5 minutes
+			tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(30),
+		)).With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
 
-		r.With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
+		r.With(api.limitHandler(
+			// Allow requests at the specified rate per 5 minutes
+			tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(30),
+		)).With(sharedLimiter).With(api.verifyCaptcha).Post("/resend", api.Resend)
+
+		r.With(api.limitHandler(
+			// Allow requests at the specified rate per 5 minutes
+			tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(30),
+		)).With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
+
+		r.With(api.limitHandler(
+			// Allow requests at the specified rate per 5 minutes
+			tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
+				DefaultExpirationTTL: time.Hour,
+			}).SetBurst(30),
+		)).With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
 
 		r.With(api.limitHandler(
 			// Allow requests at the specified rate per 5 minutes.
@@ -192,7 +224,12 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 		r.With(api.requireAuthentication).Route("/user", func(r *router) {
 			r.Get("/", api.UserGet)
-			r.With(sharedLimiter).Put("/", api.UserUpdate)
+			r.With(api.limitHandler(
+				// Allow requests at the specified rate per 5 minutes
+				tollbooth.NewLimiter(api.config.RateLimitOtp/(60*5), &limiter.ExpirableOptions{
+					DefaultExpirationTTL: time.Hour,
+				}).SetBurst(30),
+			)).With(sharedLimiter).Put("/", api.UserUpdate)
 
 			r.Route("/identities", func(r *router) {
 				r.Use(api.requireManualLinkingEnabled)
@@ -237,7 +274,7 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 					tollbooth.NewLimiter(api.config.SAML.RateLimitAssertion/(60*5), &limiter.ExpirableOptions{
 						DefaultExpirationTTL: time.Hour,
 					}).SetBurst(30),
-				)).Post("/acs", api.SAMLACS)
+				)).Post("/acs", api.SamlAcs)
 			})
 		})
 
@@ -291,12 +328,12 @@ func NewAPIWithVersion(ctx context.Context, globalConfig *conf.GlobalConfigurati
 
 	corsHandler := cors.New(cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete},
-		AllowedHeaders:   globalConfig.CORS.AllAllowedHeaders([]string{"Accept", "Authorization", "Content-Type", "X-Client-IP", "X-Client-Info", audHeaderName, useCookieHeader}),
-		ExposedHeaders:   []string{"X-Total-Count", "Link"},
+		AllowedHeaders:   globalConfig.CORS.AllAllowedHeaders([]string{"Accept", "Authorization", "Content-Type", "X-Client-IP", "X-Client-Info", audHeaderName, useCookieHeader, APIVersionHeaderName}),
+		ExposedHeaders:   []string{"X-Total-Count", "Link", APIVersionHeaderName},
 		AllowCredentials: true,
 	})
 
-	api.handler = corsHandler.Handler(chi.ServerBaseContext(ctx, r))
+	api.handler = corsHandler.Handler(r)
 	return api
 }
 

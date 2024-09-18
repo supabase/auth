@@ -2,7 +2,7 @@ package hooks
 
 import (
 	"github.com/gofrs/uuid"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 )
@@ -34,7 +34,8 @@ type HookOutput interface {
 
 // TODO(joel): Move this to phone package
 type SMS struct {
-	OTP string `json:"otp,omitempty"`
+	OTP     string `json:"otp,omitempty"`
+	SMSType string `json:"sms_type,omitempty"`
 }
 
 // #nosec
@@ -43,7 +44,7 @@ const MinimumViableTokenSchema = `{
   "type": "object",
   "properties": {
     "aud": {
-      "type": "string"
+      "type": ["string", "array"]
     },
     "exp": {
       "type": "integer"
@@ -93,12 +94,12 @@ const MinimumViableTokenSchema = `{
       "type": "string"
     }
   },
-  "required": ["aud", "exp", "iat", "sub", "email", "phone", "role", "aal", "session_id"]
+  "required": ["aud", "exp", "iat", "sub", "email", "phone", "role", "aal", "session_id", "is_anonymous"]
 }`
 
 // AccessTokenClaims is a struct thats used for JWT claims
 type AccessTokenClaims struct {
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 	Email                         string                 `json:"email"`
 	Phone                         string                 `json:"phone"`
 	AppMetaData                   map[string]interface{} `json:"app_metadata"`
@@ -111,9 +112,10 @@ type AccessTokenClaims struct {
 }
 
 type MFAVerificationAttemptInput struct {
-	UserID   uuid.UUID `json:"user_id"`
-	FactorID uuid.UUID `json:"factor_id"`
-	Valid    bool      `json:"valid"`
+	UserID     uuid.UUID `json:"user_id"`
+	FactorID   uuid.UUID `json:"factor_id"`
+	FactorType string    `json:"factor_type"`
+	Valid      bool      `json:"valid"`
 }
 
 type MFAVerificationAttemptOutput struct {
@@ -151,7 +153,6 @@ type SendSMSInput struct {
 }
 
 type SendSMSOutput struct {
-	Success   bool          `json:"success"`
 	HookError AuthHookError `json:"error,omitempty"`
 }
 
@@ -161,7 +162,6 @@ type SendEmailInput struct {
 }
 
 type SendEmailOutput struct {
-	Success   bool          `json:"success"`
 	HookError AuthHookError `json:"error,omitempty"`
 }
 

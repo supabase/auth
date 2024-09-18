@@ -178,21 +178,8 @@ func FindOneTimeToken(tx *storage.Connection, tokenHash string, tokenTypes ...On
 // FindUserByConfirmationToken finds users with the matching confirmation token.
 func FindUserByConfirmationOrRecoveryToken(tx *storage.Connection, token string) (*User, error) {
 	ott, err := FindOneTimeToken(tx, token, ConfirmationToken, RecoveryToken)
-	if err != nil && !IsNotFoundError(err) {
+	if err != nil {
 		return nil, err
-	}
-
-	if ott == nil {
-		user, err := findUser(tx, "(confirmation_token = ? or recovery_token = ?) and is_sso_user = false", token, token)
-		if err != nil {
-			if IsNotFoundError(err) {
-				return nil, ConfirmationOrRecoveryTokenNotFoundError{}
-			} else {
-				return nil, err
-			}
-		}
-
-		return user, nil
 	}
 
 	return FindUserByID(tx, ott.UserID)
@@ -201,21 +188,8 @@ func FindUserByConfirmationOrRecoveryToken(tx *storage.Connection, token string)
 // FindUserByConfirmationToken finds users with the matching confirmation token.
 func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, error) {
 	ott, err := FindOneTimeToken(tx, token, ConfirmationToken)
-	if err != nil && !IsNotFoundError(err) {
+	if err != nil {
 		return nil, err
-	}
-
-	if ott == nil {
-		user, err := findUser(tx, "confirmation_token = ? and is_sso_user = false", token)
-		if err != nil {
-			if IsNotFoundError(err) {
-				return nil, ConfirmationTokenNotFoundError{}
-			} else {
-				return nil, err
-			}
-		}
-
-		return user, nil
 	}
 
 	return FindUserByID(tx, ott.UserID)
@@ -224,12 +198,8 @@ func FindUserByConfirmationToken(tx *storage.Connection, token string) (*User, e
 // FindUserByRecoveryToken finds a user with the matching recovery token.
 func FindUserByRecoveryToken(tx *storage.Connection, token string) (*User, error) {
 	ott, err := FindOneTimeToken(tx, token, RecoveryToken)
-	if err != nil && !IsNotFoundError(err) {
+	if err != nil {
 		return nil, err
-	}
-
-	if ott == nil {
-		return findUser(tx, "recovery_token = ? and is_sso_user = false", token)
 	}
 
 	return FindUserByID(tx, ott.UserID)
@@ -238,12 +208,8 @@ func FindUserByRecoveryToken(tx *storage.Connection, token string) (*User, error
 // FindUserByEmailChangeToken finds a user with the matching email change token.
 func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, error) {
 	ott, err := FindOneTimeToken(tx, token, EmailChangeTokenCurrent, EmailChangeTokenNew)
-	if err != nil && !IsNotFoundError(err) {
+	if err != nil {
 		return nil, err
-	}
-
-	if ott == nil {
-		return findUser(tx, "is_sso_user = false and (email_change_token_current = ? or email_change_token_new = ?)", token, token)
 	}
 
 	return FindUserByID(tx, ott.UserID)
@@ -252,23 +218,18 @@ func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, er
 // FindUserByEmailChangeCurrentAndAudience finds a user with the matching email change and audience.
 func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
 	ott, err := FindOneTimeToken(tx, token, EmailChangeTokenCurrent)
-	if err != nil && !IsNotFoundError(err) {
+	if err != nil {
 		return nil, err
 	}
 
 	if ott == nil {
 		ott, err = FindOneTimeToken(tx, "pkce_"+token, EmailChangeTokenCurrent)
-		if err != nil && !IsNotFoundError(err) {
+		if err != nil {
 			return nil, err
 		}
 	}
-
 	if ott == nil {
-		return findUser(
-			tx,
-			"instance_id = ? and LOWER(email) = ? and aud = ? and is_sso_user = false and (email_change_token_current = 'pkce_' || ? or email_change_token_current = ?)",
-			uuid.Nil, strings.ToLower(email), aud, token, token,
-		)
+		return nil, err
 	}
 
 	user, err := FindUserByID(tx, ott.UserID)
@@ -296,13 +257,8 @@ func FindUserByEmailChangeNewAndAudience(tx *storage.Connection, email, token, a
 			return nil, err
 		}
 	}
-
 	if ott == nil {
-		return findUser(
-			tx,
-			"instance_id = ? and LOWER(email_change) = ? and aud = ? and is_sso_user = false and (email_change_token_new = 'pkce_' || ? or email_change_token_new = ?)",
-			uuid.Nil, strings.ToLower(email), aud, token, token,
-		)
+		return nil, err
 	}
 
 	user, err := FindUserByID(tx, ott.UserID)

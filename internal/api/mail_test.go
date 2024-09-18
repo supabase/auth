@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/gobwas/glob"
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
@@ -46,6 +46,41 @@ func (ts *MailTestSuite) SetupTest() {
 	u, err := models.NewUser("12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating new user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new user")
+}
+
+func (ts *MailTestSuite) TestValidateEmailAuthorizedAddresses() {
+	ts.Config.External.Email.AuthorizedAddresses = []string{"someone-a@example.com", "someone-b@example.com"}
+	defer func() {
+		ts.Config.External.Email.AuthorizedAddresses = nil
+	}()
+
+	positiveExamples := []string{
+		"someone-a@example.com",
+		"someone-b@example.com",
+		"someone-a+test-1@example.com",
+		"someone-b+test-2@example.com",
+		"someone-A@example.com",
+		"someone-B@example.com",
+		"someone-a@Example.com",
+		"someone-b@Example.com",
+	}
+
+	negativeExamples := []string{
+		"someone@example.com",
+		"s.omeone@example.com",
+		"someone-a+@example.com",
+		"someone+a@example.com",
+	}
+
+	for _, example := range positiveExamples {
+		_, err := ts.API.validateEmail(example)
+		require.NoError(ts.T(), err)
+	}
+
+	for _, example := range negativeExamples {
+		_, err := ts.API.validateEmail(example)
+		require.Error(ts.T(), err)
+	}
 }
 
 func (ts *MailTestSuite) TestGenerateLink() {
