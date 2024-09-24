@@ -51,6 +51,15 @@ func GenerateTokenHash(emailOrPhone, otp string) string {
 	return fmt.Sprintf("%x", sha256.Sum224([]byte(emailOrPhone+otp)))
 }
 
+// Generated a random secure integer from [0, max[
+func secureRandomInt(max int) (int, error) {
+	randomInt, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
+	if err != nil {
+		return 0, errors.WithMessage(err, "Error generating random integer")
+	}
+	return int(randomInt.Int64()), nil
+}
+
 func GenerateSignatures(secrets []string, msgID uuid.UUID, currentTime time.Time, inputPayload []byte) ([]string, error) {
 	SymmetricSignaturePrefix := "v1,"
 	// TODO(joel): Handle asymmetric case once library has been upgraded

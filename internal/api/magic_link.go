@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 // MagicLinkParams holds the parameters for a magic link request
@@ -83,7 +83,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	if isNewUser {
 		// User either doesn't exist or hasn't completed the signup process.
 		// Sign them up with temporary password.
-		password, err := utilities.GeneratePassword(config.Password.RequiredCharacters, 33)
+		password, err := crypto.GeneratePassword(config.Password.RequiredCharacters, 33)
 		if err != nil {
 			// password generation must succeed
 			panic(err)
