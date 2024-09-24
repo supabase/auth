@@ -357,3 +357,9 @@ func (a *API) Mailer() mailer.Mailer {
 	config := a.config
 	return mailer.NewMailer(config)
 }
+
+// ServeHTTP implements the http.Handler interface by passing the request along
+// to its underlying Handler.
+func (a *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	a.handler.ServeHTTP(w, r)
+}
