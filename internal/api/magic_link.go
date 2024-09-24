@@ -85,8 +85,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 		// Sign them up with temporary password.
 		password, err := crypto.GeneratePassword(config.Password.RequiredCharacters, 33)
 		if err != nil {
-			// password generation must succeed
-			panic(err)
+			return internalServerError("error creating user").WithInternalError(err)
 		}
 
 		signUpParams := &SignupParams{
