@@ -6,20 +6,12 @@ import (
 	"strings"
 )
 
-// parseGroups processes the required character groups from a slice of strings.
-func parseGroups(requiredChars []string) []string {
-	var groups []string
-	groups = append(groups, requiredChars...)
-	return groups
-}
-
 func GeneratePassword(requiredChars []string, length int) (string, error) {
-	groups := parseGroups(requiredChars)
 	passwordBuilder := strings.Builder{}
 	passwordBuilder.Grow(length)
 
 	// Add required characters
-	for _, group := range groups {
+	for _, group := range requiredChars {
 		if len(group) > 0 {
 			randomIndex, err := secureRandomInt(len(group))
 			if err != nil {
@@ -30,7 +22,7 @@ func GeneratePassword(requiredChars []string, length int) (string, error) {
 	}
 
 	// Define a default character set for random generation (if needed)
-	allChars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	const allChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 	// Fill the rest of the password
 	for passwordBuilder.Len() < length {
