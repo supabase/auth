@@ -226,6 +226,8 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			output.Message = e.Message
 			output.Payload.Reasons = e.Reasons
 
+			w.Header().Set("x-sb-error-code", output.ErrorCode)
+
 			if jsonErr := sendJSON(w, output.HTTPStatus, output); jsonErr != nil && jsonErr != context.DeadlineExceeded {
 				log.WithError(jsonErr).Warn("Failed to send JSON on ResponseWriter")
 			}
@@ -241,6 +243,10 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			log.WithError(e.Cause()).Warn(e.Error())
 		default:
 			log.WithError(e.Cause()).Info(e.Error())
+		}
+
+		if e.ErrorCode != "" {
+			w.Header().Set("x-sb-error-code", e.ErrorCode)
 		}
 
 		if apiVersion.Compare(APIVersion20240101) >= 0 {

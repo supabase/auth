@@ -69,10 +69,17 @@ type logEntry struct {
 }
 
 func (e *logEntry) Write(status, bytes int, header http.Header, elapsed time.Duration, extra interface{}) {
-	entry := e.Entry.WithFields(logrus.Fields{
+	fields := logrus.Fields{
 		"status":   status,
 		"duration": elapsed.Nanoseconds(),
-	})
+	}
+
+	errorCode := header.Get("x-sb-error-code")
+	if errorCode != "" {
+		fields["error_code"] = errorCode
+	}
+
+	entry := e.Entry.WithFields(fields)
 	entry.Info("request completed")
 	e.Entry = entry
 }
