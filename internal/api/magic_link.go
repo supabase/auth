@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/sethvargo/go-password/password"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -83,7 +83,7 @@ func (a *API) MagicLink(w http.ResponseWriter, r *http.Request) error {
 	if isNewUser {
 		// User either doesn't exist or hasn't completed the signup process.
 		// Sign them up with temporary password.
-		password, err := password.Generate(64, 10, 1, false, true)
+		password, err := crypto.GeneratePassword(config.Password.RequiredCharacters, 33)
 		if err != nil {
 			return internalServerError("error creating user").WithInternalError(err)
 		}
