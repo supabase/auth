@@ -17,6 +17,7 @@ import (
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
 	"github.com/supabase/hibp"
+	"golang.org/x/time/rate"
 )
 
 const (
@@ -38,8 +39,8 @@ type API struct {
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
 
-	emailRateLimiter *SimpleRateLimiter
-	smsRateLimiter   *SimpleRateLimiter
+	emailRateLimiter *rate.Limiter
+	smsRateLimiter   *rate.Limiter
 }
 
 func (a *API) Now() time.Time {
@@ -72,11 +73,8 @@ func (a *API) deprecationNotices() {
 // NewAPIWithVersion creates a new REST API using the specified version
 func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string) *API {
 	api := &API{config: globalConfig, db: db, version: version}
-
-	now := time.Now()
-
-	api.emailRateLimiter = NewSimpleRateLimiter(now, globalConfig.RateLimitEmailSent.DefaultOverTime(time.Hour))
-	api.smsRateLimiter = NewSimpleRateLimiter(now, globalConfig.RateLimitSmsSent.DefaultOverTime(time.Hour))
+	api.emailRateLimiter = newRateLimiter(globalConfig.RateLimitEmailSent)
+	api.smsRateLimiter = newRateLimiter(globalConfig.RateLimitSmsSent)
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{

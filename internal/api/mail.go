@@ -594,7 +594,7 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	referrerURL := utilities.GetReferrer(r, config)
 	externalURL := getExternalHost(ctx)
 
-	if ok := a.emailRateLimiter.Increment(1); !ok {
+	if ok := a.emailRateLimiter.Allow(); !ok {
 		emailRateLimitCounter.Add(
 			ctx,
 			1,

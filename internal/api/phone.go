@@ -86,7 +86,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 
 	// not using test OTPs
 	if otp == "" {
-		if ok := a.smsRateLimiter.Increment(1); !ok {
+		if ok := a.smsRateLimiter.Allow(); !ok {
 			return "", tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
 		}
 
