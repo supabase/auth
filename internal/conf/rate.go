@@ -20,18 +20,6 @@ func (r *Rate) EventsPerSecond() float64 {
 	return r.Events / r.OverTime.Seconds()
 }
 
-// DefaultOverTime sets the OverTime field to overTime if it is 0.
-func (r *Rate) DefaultOverTime(overTime time.Duration) Rate {
-	if r.OverTime == 0 {
-		return Rate{
-			Events:   r.Events,
-			OverTime: time.Hour,
-		}
-	}
-
-	return *r
-}
-
 // Decode is used by envconfig to parse the env-config string to a Rate value.
 func (r *Rate) Decode(value string) error {
 	if f, err := strconv.ParseFloat(value, 64); err == nil {
