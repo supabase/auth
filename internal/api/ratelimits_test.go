@@ -105,6 +105,7 @@ func TestNewRateLimiter(t *testing.T) {
 	type event struct {
 		ok bool
 		at time.Time
+		r  int
 	}
 	cases := []struct {
 		cfg  conf.Rate
@@ -115,22 +116,24 @@ func TestNewRateLimiter(t *testing.T) {
 			cfg: conf.Rate{Events: 100, OverTime: time.Hour * 24},
 			now: now,
 			evts: []event{
-				{true, now},
-				{false, now.Add(time.Minute)},
-				{false, now.Add(time.Minute)},
-				{false, now.Add(time.Minute * 14)},
-				{true, now.Add(time.Minute * 15)},
-				{false, now.Add(time.Minute * 16)},
-				{false, now.Add(time.Minute * 17)},
-				{true, now.Add(time.Minute * 30)},
+				{true, now, 0},
+				{true, now.Add(time.Minute), 98},
+				{false, now.Add(time.Minute), 0},
+				{false, now.Add(time.Minute * 14), 0},
+				{true, now.Add(time.Minute * 15), 0},
+				{false, now.Add(time.Minute * 16), 0},
+				{false, now.Add(time.Minute * 17), 0},
+				{true, now.Add(time.Minute * 30), 0},
 			},
 		},
 	}
 	for _, tc := range cases {
 		rl := newRateLimiter(tc.cfg)
 		for _, evt := range tc.evts {
-			if exp, got := evt.ok, rl.AllowN(evt.at, 1); exp != got {
-				t.Fatalf("exp AllowN(%v, 1) to be %v; got %v", evt.at, exp, got)
+			for i := 0; i <= evt.r; i++ {
+				if exp, got := evt.ok, rl.AllowN(evt.at, 1); exp != got {
+					t.Fatalf("exp AllowN(%v, 1) to be %v; got %v", evt.at, exp, got)
+				}
 			}
 		}
 	}
