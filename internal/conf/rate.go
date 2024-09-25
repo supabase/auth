@@ -24,7 +24,7 @@ func (r *Rate) EventsPerSecond() float64 {
 func (r *Rate) Decode(value string) error {
 	if f, err := strconv.ParseFloat(value, 64); err == nil {
 		r.Events = f
-		// r.OverTime remains 0 in this case
+		r.OverTime = time.Second
 		return nil
 	}
 	parts := strings.Split(value, "/")

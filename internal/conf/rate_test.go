@@ -8,25 +8,46 @@ import (
 )
 
 func TestRateDecode(t *testing.T) {
-	r := Rate{}
+	cases := []struct {
+		str string
+		eps float64
+		exp Rate
+		err string
+	}{
+		{str: "100", eps: 100, exp: Rate{Events: 100, OverTime: time.Second}},
+		{str: "100.0", eps: 100, exp: Rate{Events: 100, OverTime: time.Second}},
+		{str: "3600/1h", eps: 1, exp: Rate{Events: 3600, OverTime: time.Hour}},
+		{str: "100/24h",
+			eps: 0.0011574074074074073,
+			exp: Rate{Events: 100, OverTime: time.Hour * 24}},
 
-	r = Rate{}
-	require.NoError(t, r.Decode("123.0"))
-	require.Equal(t, r, Rate{Events: 123.0, OverTime: 0})
-
-	r = Rate{}
-	require.NoError(t, r.Decode("123/24h"))
-	require.Equal(t, r, Rate{Events: 123.0, OverTime: 24 * time.Hour})
-
-	r = Rate{}
-	require.Error(t, r.Decode("not a number"))
-
-	r = Rate{}
-	require.Error(t, r.Decode("123.0/24h")) // events are integers only
-
-	r = Rate{}
-	require.Error(t, r.Decode("123/456/789"))
-
-	r = Rate{}
-	require.Error(t, r.Decode("123/text"))
+		{str: "", eps: 1, exp: Rate{},
+			err: `rate: value does not match`},
+		{str: "1h", eps: 1, exp: Rate{},
+			err: `rate: value does not match`},
+		{str: "/", eps: 1, exp: Rate{},
+			err: `rate: events part of rate value`},
+		{str: "/1h", eps: 1, exp: Rate{},
+			err: `rate: events part of rate value`},
+		{str: "3600.0/1h", eps: 1, exp: Rate{},
+			err: `rate: events part of rate value "3600.0/1h" failed to parse`},
+		{str: "100/", eps: 1, exp: Rate{},
+			err: `rate: over-time part of rate value`},
+		{str: "100/1", eps: 1, exp: Rate{},
+			err: `rate: over-time part of rate value`},
+	}
+	for idx, tc := range cases {
+		var r Rate
+		err := r.Decode(tc.str)
+		require.Equal(t, tc.exp, r) // verify don't mutate r on errr
+		t.Logf("tc #%v - duration str %v", idx, tc.str)
+		if tc.err != "" {
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.err)
+			continue
+		}
+		require.NoError(t, err)
+		require.Equal(t, tc.exp, r)
+		require.Equal(t, tc.eps, r.EventsPerSecond())
+	}
 }
