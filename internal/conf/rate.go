@@ -7,24 +7,26 @@ import (
 	"time"
 )
 
+const defaultOverTime = time.Hour
+
 type Rate struct {
 	Events   float64       `json:"events,omitempty"`
 	OverTime time.Duration `json:"over_time,omitempty"`
 }
 
 func (r *Rate) EventsPerSecond() float64 {
-	if int64(r.OverTime) == 0 {
-		return r.Events
+	d := r.OverTime
+	if d == 0 {
+		d = defaultOverTime
 	}
-
-	return r.Events / r.OverTime.Seconds()
+	return r.Events / d.Seconds()
 }
 
 // Decode is used by envconfig to parse the env-config string to a Rate value.
 func (r *Rate) Decode(value string) error {
 	if f, err := strconv.ParseFloat(value, 64); err == nil {
 		r.Events = f
-		r.OverTime = time.Second
+		r.OverTime = defaultOverTime
 		return nil
 	}
 	parts := strings.Split(value, "/")

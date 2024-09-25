@@ -14,8 +14,8 @@ func TestRateDecode(t *testing.T) {
 		exp Rate
 		err string
 	}{
-		{str: "100", eps: 100, exp: Rate{Events: 100, OverTime: time.Second}},
-		{str: "100.0", eps: 100, exp: Rate{Events: 100, OverTime: time.Second}},
+		{str: "1800", eps: 0.5, exp: Rate{Events: 1800, OverTime: time.Hour}},
+		{str: "1800.0", eps: 0.5, exp: Rate{Events: 1800, OverTime: time.Hour}},
 		{str: "3600/1h", eps: 1, exp: Rate{Events: 3600, OverTime: time.Hour}},
 		{str: "100/24h",
 			eps: 0.0011574074074074073,
