@@ -14,7 +14,10 @@ import (
 func newRateLimiter(r conf.Rate) *rate.Limiter {
 	// The rate limiter deals in events per second.
 	eps := r.EventsPerSecond()
-	const burst = 1
+	burst := int(r.Events)
+	if burst <= 0 {
+		burst = 1
+	}
 
 	// NewLimiter will have an initial token bucket of size `burst`. It will
 	// be refilled at a rate of `eps` indefinitely. Note that the expression

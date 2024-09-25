@@ -19,14 +19,25 @@ func Example_newRateLimiter() {
 		cfg := conf.Rate{Events: 100, OverTime: time.Hour * 24}
 		rl := newRateLimiter(cfg)
 		cur := now
-		for i := 0; i < 61; i++ {
-			fmt.Printf("%-5v @ %v\n", rl.AllowN(cur, 1), cur)
-			cur = cur.Add(time.Minute)
+		for limited, i := 0, 0; i < 160; i++ {
+			allowed := rl.AllowN(cur, 1)
+			if allowed {
+				limited++
+			}
+
+			switch {
+			case i == 100:
+				fmt.Printf("true  @ %v for last %v events...\n", cur, limited)
+			case i > 100:
+				fmt.Printf("%-5v @ %v\n", allowed, cur)
+				cur = cur.Add(time.Minute)
+			}
 		}
 	}
 
 	// Output:
-	// true  @ 2024-09-24 10:00:00 +0000 UTC
+	// true  @ 2024-09-24 10:00:00 +0000 UTC for last 100 events...
+	// false @ 2024-09-24 10:00:00 +0000 UTC
 	// false @ 2024-09-24 10:01:00 +0000 UTC
 	// false @ 2024-09-24 10:02:00 +0000 UTC
 	// false @ 2024-09-24 10:03:00 +0000 UTC
@@ -55,8 +66,8 @@ func Example_newRateLimiter() {
 	// false @ 2024-09-24 10:26:00 +0000 UTC
 	// false @ 2024-09-24 10:27:00 +0000 UTC
 	// false @ 2024-09-24 10:28:00 +0000 UTC
-	// false @ 2024-09-24 10:29:00 +0000 UTC
-	// true  @ 2024-09-24 10:30:00 +0000 UTC
+	// true  @ 2024-09-24 10:29:00 +0000 UTC
+	// false @ 2024-09-24 10:30:00 +0000 UTC
 	// false @ 2024-09-24 10:31:00 +0000 UTC
 	// false @ 2024-09-24 10:32:00 +0000 UTC
 	// false @ 2024-09-24 10:33:00 +0000 UTC
@@ -70,8 +81,8 @@ func Example_newRateLimiter() {
 	// false @ 2024-09-24 10:41:00 +0000 UTC
 	// false @ 2024-09-24 10:42:00 +0000 UTC
 	// false @ 2024-09-24 10:43:00 +0000 UTC
-	// false @ 2024-09-24 10:44:00 +0000 UTC
-	// true  @ 2024-09-24 10:45:00 +0000 UTC
+	// true  @ 2024-09-24 10:44:00 +0000 UTC
+	// false @ 2024-09-24 10:45:00 +0000 UTC
 	// false @ 2024-09-24 10:46:00 +0000 UTC
 	// false @ 2024-09-24 10:47:00 +0000 UTC
 	// false @ 2024-09-24 10:48:00 +0000 UTC
@@ -84,9 +95,7 @@ func Example_newRateLimiter() {
 	// false @ 2024-09-24 10:55:00 +0000 UTC
 	// false @ 2024-09-24 10:56:00 +0000 UTC
 	// false @ 2024-09-24 10:57:00 +0000 UTC
-	// false @ 2024-09-24 10:58:00 +0000 UTC
-	// false @ 2024-09-24 10:59:00 +0000 UTC
-	// true  @ 2024-09-24 11:00:00 +0000 UTC
+	// true  @ 2024-09-24 10:58:00 +0000 UTC
 
 }
 
