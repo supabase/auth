@@ -45,7 +45,10 @@ func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *storage.Con
 		cb(nil, conn)
 	}
 
-	return NewAPIWithVersion(config, conn, apiTestVersion), config, nil
+	a := NewAPIWithVersion(config, conn, apiTestVersion)
+	a.smsRateLimiter = newUnlimitedLimiter()
+	a.emailRateLimiter = newUnlimitedLimiter()
+	return a, config, nil
 }
 
 func TestEmailEnabledByDefault(t *testing.T) {
