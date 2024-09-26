@@ -84,3 +84,38 @@ func TestGeneratePassword(t *testing.T) {
 		passwords[p] = true
 	}
 }
+
+type scryptTestCase struct {
+	name       string
+	hash       string
+	password   string
+	shouldPass bool
+}
+
+func TestScrypt(t *testing.T) {
+	testCases := []scryptTestCase{
+		{
+			name:       "Firebase Scrypt: appropriate hash",
+			hash:       "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			password:   "mytestpassword",
+			shouldPass: true,
+		},
+		{
+			name:       "Firebase Scrypt: incorrect hash",
+			hash:       "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$ZGlmZmVyZW50aGFzaA==",
+			password:   "mytestpassword",
+			shouldPass: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := CompareHashAndPassword(context.Background(), tc.hash, tc.password)
+			if tc.shouldPass {
+				assert.NoError(t, err, "Expected test case to pass, but it failed")
+			} else {
+				assert.Error(t, err, "Expected test case to fail, but it passed")
+			}
+		})
+	}
+}

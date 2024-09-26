@@ -78,6 +78,11 @@ func NewUserWithPasswordHash(phone, email, passwordHash, aud string, userData ma
 		if err != nil {
 			return nil, err
 		}
+	} else if strings.HasPrefix(passwordHash, crypto.FirebaseScryptPrefix) {
+		_, err := crypto.ParseFirebaseScryptHash(passwordHash)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		// verify that the hash is a bcrypt hash
 		_, err := bcrypt.Cost([]byte(passwordHash))
@@ -400,7 +405,7 @@ func (u *User) Authenticate(ctx context.Context, tx *storage.Connection, passwor
 
 	compareErr := crypto.CompareHashAndPassword(ctx, hash, password)
 
-	if !strings.HasPrefix(hash, crypto.Argon2Prefix) {
+	if !strings.HasPrefix(hash, crypto.Argon2Prefix) && !strings.HasPrefix(hash, crypto.FirebaseScryptPrefix) {
 		// check if cost exceeds default cost or is too low
 		cost, err := bcrypt.Cost([]byte(hash))
 		if err != nil {

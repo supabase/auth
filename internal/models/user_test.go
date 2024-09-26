@@ -385,6 +385,10 @@ func (ts *UserTestSuite) TestNewUserWithPasswordHashSuccess() {
 			desc: "Valid argon2id hash",
 			hash: "$argon2id$v=19$m=32,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
 		},
+		{
+			desc: "Valid Firebase scrypt hash",
+			hash: "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$ZGlmZmVyZW50aGFzaA==",
+		},
 	}
 
 	for _, c := range cases {
@@ -408,6 +412,10 @@ func (ts *UserTestSuite) TestNewUserWithPasswordHashFailure() {
 		{
 			desc: "Invalid bcrypt hash",
 			hash: "plaintest_password",
+		},
+		{
+			desc: "Invalid scrypt hash",
+			hash: "$fbscrypt$invalid",
 		},
 	}
 
