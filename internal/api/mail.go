@@ -2,8 +2,6 @@ package api
 
 import (
 	"net/http"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/didip/tollbooth/v5"
@@ -550,8 +548,6 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 	return nil
 }
 
-var emailLabelPattern = regexp.MustCompile("[+][^@]+@")
-
 func (a *API) validateEmail(email string) (string, error) {
 	if email == "" {
 		return "", badRequestError(ErrorCodeValidationFailed, "An email address is required")
@@ -561,21 +557,6 @@ func (a *API) validateEmail(email string) (string, error) {
 	}
 	if err := checkmail.ValidateFormat(email); err != nil {
 		return "", badRequestError(ErrorCodeValidationFailed, "Unable to validate email address: "+err.Error())
-	}
-
-	email = strings.ToLower(email)
-
-	if len(a.config.External.Email.AuthorizedAddresses) > 0 {
-		// allow labelled emails when authorization rules are in place
-		normalized := emailLabelPattern.ReplaceAllString(email, "@")
-
-		for _, authorizedAddress := range a.config.External.Email.AuthorizedAddresses {
-			if normalized == authorizedAddress {
-				return email, nil
-			}
-		}
-
-		return "", badRequestError(ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", email)
 	}
 
 	return email, nil
