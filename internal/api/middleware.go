@@ -186,7 +186,8 @@ func (a *API) isValidAuthorizedEmail(w http.ResponseWriter, req *http.Request) (
 	}
 
 	if err := retrieveRequestParams(req, &body); err != nil {
-		return ctx, err
+		// let downstream handlers handle the error
+		return ctx, nil
 	}
 	if body.Email == "" {
 		return ctx, nil
