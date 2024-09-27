@@ -128,6 +128,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 	r.Route("/", func(r *router) {
 		r.Use(api.isValidExternalHost)
+		r.Use(api.isValidAuthorizedEmail)
 
 		r.Get("/settings", api.Settings)
 

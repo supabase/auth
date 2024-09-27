@@ -86,6 +86,9 @@ type RequestParams interface {
 		struct {
 			Email string `json:"email"`
 			Phone string `json:"phone"`
+		} |
+		struct {
+			Email string `json:"email"`
 		}
 }
 
