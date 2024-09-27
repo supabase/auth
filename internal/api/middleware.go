@@ -177,7 +177,7 @@ func (a *API) isValidAuthorizedEmail(w http.ResponseWriter, req *http.Request) (
 	ctx := req.Context()
 
 	// skip checking for authorized email addresses if it's an admin request
-	if strings.HasPrefix(req.URL.Path, "/admin") || req.Method == http.MethodGet {
+	if strings.HasPrefix(req.URL.Path, "/admin") || req.Method == http.MethodGet || req.Method == http.MethodDelete {
 		return ctx, nil
 	}
 
