@@ -515,3 +515,52 @@ func (ts *MiddlewareTestSuite) TestLimitHandlerWithSharedLimiter() {
 		})
 	}
 }
+
+func (ts *MiddlewareTestSuite) TestIsValidAuthorizedEmail() {
+	ts.API.config.External.Email.AuthorizedAddresses = []string{"valid@example.com"}
+
+	cases := []struct {
+		desc    string
+		reqPath string
+		body    map[string]interface{}
+	}{
+		{
+			desc:    "bypass check for admin endpoints",
+			reqPath: "/admin",
+			body: map[string]interface{}{
+				"email": "test@example.com",
+			},
+		},
+		{
+			desc:    "bypass check if no email in request body",
+			reqPath: "/signup",
+			body:    map[string]interface{}{},
+		},
+		{
+			desc:    "email not in authorized list",
+			reqPath: "/signup",
+			body: map[string]interface{}{
+				"email": "invalid@example.com",
+			},
+		},
+		{
+			desc:    "email in authorized list",
+			reqPath: "/signup",
+			body: map[string]interface{}{
+				"email": "valid@example.com",
+			},
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+			req := httptest.NewRequest(http.MethodPost, "http://localhost"+c.reqPath, &buffer)
+			w := httptest.NewRecorder()
+			if _, err := ts.API.isValidAuthorizedEmail(w, req); err != nil {
+				require.Equal(ts.T(), err.(*HTTPError).ErrorCode, ErrorCodeEmailAddressNotAuthorized)
+			}
+		})
+	}
+}
