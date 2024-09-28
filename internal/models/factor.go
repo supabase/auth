@@ -269,10 +269,6 @@ func (f *Factor) DowngradeSessionsToAAL1(tx *storage.Connection) error {
 	return updateFactorAssociatedSessions(tx, f.UserID, f.ID, AAL1.String())
 }
 
-func (f *Factor) IsOwnedBy(user *User) bool {
-	return f.UserID == user.ID
-}
-
 func (f *Factor) IsVerified() bool {
 	return f.Status == FactorStateVerified.String()
 }
