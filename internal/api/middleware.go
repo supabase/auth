@@ -181,6 +181,11 @@ func (a *API) isValidAuthorizedEmail(w http.ResponseWriter, req *http.Request) (
 		return ctx, nil
 	}
 
+	// skip checking for authorized email addresses if it's a POST request to /generate_link
+	if req.URL.Path == "/generate_link" && req.Method == http.MethodPost {
+		return ctx, nil
+	}
+
 	var body struct {
 		Email string `json:"email"`
 	}

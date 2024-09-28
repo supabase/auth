@@ -532,6 +532,13 @@ func (ts *MiddlewareTestSuite) TestIsValidAuthorizedEmail() {
 			},
 		},
 		{
+			desc:    "bypass check for generate_link endpoint",
+			reqPath: "/generate_link",
+			body: map[string]interface{}{
+				"email": "test@example.com",
+			},
+		},
+		{
 			desc:    "bypass check if no email in request body",
 			reqPath: "/signup",
 			body:    map[string]interface{}{},
