@@ -71,6 +71,9 @@ const (
 )
 
 func validateFactors(db *storage.Connection, user *models.User, newFactorName string, config *conf.GlobalConfiguration, session *models.Session) error {
+	if err := models.DeleteExpiredFactors(db, config.MFA.FactorExpiryDuration); err != nil {
+		return err
+	}
 	if err := db.Load(user, "Factors"); err != nil {
 		return err
 	}
@@ -106,7 +109,6 @@ func validateFactors(db *storage.Connection, user *models.User, newFactorName st
 
 func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *EnrollFactorParams) error {
 	ctx := r.Context()
-	config := a.config
 	user := getUser(ctx)
 	session := getSession(ctx)
 	db := a.db.WithContext(ctx)
@@ -117,9 +119,6 @@ func (a *API) enrollPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	phone, err := validatePhone(params.Phone)
 	if err != nil {
 		return badRequestError(ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
-	}
-	if err := models.DeleteExpiredFactors(db, config.MFA.FactorExpiryDuration); err != nil {
-		return err
 	}
 
 	var factorsToDelete []models.Factor
@@ -183,10 +182,6 @@ func (a *API) enrollTOTPFactor(w http.ResponseWriter, r *http.Request, params *E
 		issuer = u.Host
 	} else {
 		issuer = params.Issuer
-	}
-
-	if err := models.DeleteExpiredFactors(db, config.MFA.FactorExpiryDuration); err != nil {
-		return err
 	}
 
 	if err := validateFactors(db, user, params.FriendlyName, config, session); err != nil {
