@@ -17,7 +17,6 @@ import (
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
 	"github.com/supabase/hibp"
-	"golang.org/x/time/rate"
 )
 
 const (
@@ -39,8 +38,8 @@ type API struct {
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
 
-	emailRateLimiter *rate.Limiter
-	smsRateLimiter   *rate.Limiter
+	emailRateLimiter *RateLimiter
+	smsRateLimiter   *RateLimiter
 }
 
 func (a *API) Now() time.Time {
