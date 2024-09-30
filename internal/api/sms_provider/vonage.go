@@ -99,3 +99,7 @@ func (t *VonageProvider) SendSms(phone string, message string) (string, error) {
 
 	return resp.Messages[0].MessageID, nil
 }
+
+func (t *VonageProvider) VerifyOTP(phone, code string) error {
+	return fmt.Errorf("VerifyOTP is not supported for Vonage")
+}

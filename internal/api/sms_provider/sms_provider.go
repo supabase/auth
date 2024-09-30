@@ -30,6 +30,7 @@ func init() {
 
 type SmsProvider interface {
 	SendMessage(phone, message, channel, otp string) (string, error)
+	VerifyOTP(phone, token string) error
 }
 
 func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {

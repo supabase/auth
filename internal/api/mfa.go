@@ -589,10 +589,9 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	var valid bool
 	var otpCode string
 	var shouldReEncrypt bool
-	var err error
 	if config.Sms.IsTwilioVerifyProvider() {
 		smsProvider, _ := sms_provider.GetSmsProvider(*config)
-		if err := smsProvider.(*sms_provider.TwilioVerifyProvider).VerifyOTP(factor.Phone.String(), nonce); err != nil {
+		if err := smsProvider.VerifyOTP(factor.Phone.String(), params.Code); err != nil {
 			return forbiddenError(ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
 		}
 		valid = true

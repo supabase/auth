@@ -136,3 +136,6 @@ func (t *TwilioProvider) SendSms(phone, message, channel, otp string) (string, e
 
 	return resp.MessageSID, nil
 }
+func (t *TwilioProvider) VerifyOTP(phone, code string) error {
+	return fmt.Errorf("VerifyOTP is not supported for Twilio")
+}
