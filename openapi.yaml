@@ -953,7 +953,8 @@ paths:
         The metadata XML can be downloaded or used for the SAML 2.0 Metadata URL discovery mechanism. This URL is the SAML 2.0 EntityID of the Service Provider implemented by this server.
       tags:
         - saml
-      security: []
+      security:
+        - ApiKeyAuth: []
       parameters:
         - name: download
           in: query
@@ -1055,7 +1056,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorSchema"
 
-  /generate_link:
+  /admin/generate_link:
     post:
       summary: Generate a link to send in an email message.
       tags:
