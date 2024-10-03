@@ -532,6 +532,20 @@ func (ts *MiddlewareTestSuite) TestIsValidAuthorizedEmail() {
 			},
 		},
 		{
+			desc:    "bypass check for token endpoint",
+			reqPath: "/token",
+			body: map[string]interface{}{
+				"email": "valid@example.com",
+			},
+		},
+		{
+			desc:    "bypass check for verify endpoint",
+			reqPath: "/token",
+			body: map[string]interface{}{
+				"email": "valid@example.com",
+			},
+		},
+		{
 			desc:    "bypass check if no email in request body",
 			reqPath: "/signup",
 			body:    map[string]interface{}{},

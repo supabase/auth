@@ -173,11 +173,14 @@ func isIgnoreCaptchaRoute(req *http.Request) bool {
 
 var emailLabelPattern = regexp.MustCompile("[+][^@]+@")
 
+// we don't need to enforce the check on these endpoints since they don't send emails
+var containsNonEmailSendingPath = regexp.MustCompile(`^/(admin|token|verify)`)
+
 func (a *API) isValidAuthorizedEmail(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 
 	// skip checking for authorized email addresses if it's an admin request
-	if strings.HasPrefix(req.URL.Path, "/admin") || req.Method == http.MethodGet || req.Method == http.MethodDelete {
+	if containsNonEmailSendingPath.MatchString(req.URL.Path) || req.Method == http.MethodGet || req.Method == http.MethodDelete {
 		return ctx, nil
 	}
 
