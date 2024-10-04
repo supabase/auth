@@ -180,7 +180,7 @@ func getExcludedColumns(model interface{}, includeColumns ...string) ([]string, 
 		cols.Remove(f)
 	}
 
-	xcols := make([]string, len(cols.Cols))
+	xcols := make([]string, 0, len(cols.Cols))
 	for n := range cols.Cols {
 		// gobuffalo updates the updated_at column automatically
 		if n == "updated_at" {
