@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -894,6 +895,19 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 				"type":  mail.EmailOTPVerification,
 				"token": "123456",
 				"email": u.GetEmail(),
+			},
+			expected: expected{
+				code:      http.StatusOK,
+				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+			},
+		},
+		{
+			desc:     "Valid Email OTP (email casing shouldn't matter)",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":  mail.EmailOTPVerification,
+				"token": "123456",
+				"email": strings.ToUpper(u.GetEmail()),
 			},
 			expected: expected{
 				code:      http.StatusOK,
