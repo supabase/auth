@@ -48,6 +48,49 @@ func (ts *MailTestSuite) SetupTest() {
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new user")
 }
 
+func (ts *MailTestSuite) TestValidateEmail() {
+	cases := []struct {
+		desc          string
+		email         string
+		expectedEmail string
+		expectedError error
+	}{
+		{
+			desc:          "valid email",
+			email:         "test@example.com",
+			expectedEmail: "test@example.com",
+			expectedError: nil,
+		},
+		{
+			desc:          "email should be normalized",
+			email:         "TEST@EXAMPLE.COM",
+			expectedEmail: "test@example.com",
+			expectedError: nil,
+		},
+		{
+			desc:          "empty email should return error",
+			email:         "",
+			expectedEmail: "",
+			expectedError: badRequestError(ErrorCodeValidationFailed, "An email address is required"),
+		},
+		{
+			desc: "email length exceeds 255 characters",
+			// email has 256 characters
+			email:         "testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest@example.com",
+			expectedEmail: "",
+			expectedError: badRequestError(ErrorCodeValidationFailed, "An email address is too long"),
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			email, err := ts.API.validateEmail(c.email)
+			require.Equal(ts.T(), c.expectedError, err)
+			require.Equal(ts.T(), c.expectedEmail, email)
+		})
+	}
+}
+
 func (ts *MailTestSuite) TestGenerateLink() {
 	// create admin jwt
 	claims := &AccessTokenClaims{
