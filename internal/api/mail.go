@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/didip/tollbooth/v5"
@@ -559,7 +560,7 @@ func (a *API) validateEmail(email string) (string, error) {
 		return "", badRequestError(ErrorCodeValidationFailed, "Unable to validate email address: "+err.Error())
 	}
 
-	return email, nil
+	return strings.ToLower(email), nil
 }
 
 func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration) error {
