@@ -77,19 +77,7 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	}
 }
 
-func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
-	// limit per hour
-	emailFreq := a.config.RateLimitEmailSent / (60 * 60)
-	smsFreq := a.config.RateLimitSmsSent / (60 * 60)
-
-	emailLimiter := tollbooth.NewLimiter(emailFreq, &limiter.ExpirableOptions{
-		DefaultExpirationTTL: time.Hour,
-	}).SetBurst(int(a.config.RateLimitEmailSent)).SetMethods([]string{"PUT", "POST"})
-
-	phoneLimiter := tollbooth.NewLimiter(smsFreq, &limiter.ExpirableOptions{
-		DefaultExpirationTTL: time.Hour,
-	}).SetBurst(int(a.config.RateLimitSmsSent)).SetMethods([]string{"PUT", "POST"})
-
+func (a *API) limitEmailOrPhoneSentHandler(limiterOptions *LimiterOptions) middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		c := req.Context()
 		config := a.config
@@ -100,8 +88,8 @@ func (a *API) limitEmailOrPhoneSentHandler() middlewareHandler {
 			if req.Method == "PUT" || req.Method == "POST" {
 				// store rate limiter in request context
 				c = withLimiter(c, &SharedLimiter{
-					EmailLimiter: emailLimiter,
-					PhoneLimiter: phoneLimiter,
+					EmailLimiter: limiterOptions.Email,
+					PhoneLimiter: limiterOptions.Phone,
 				})
 			}
 		}
