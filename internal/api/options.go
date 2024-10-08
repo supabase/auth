@@ -12,10 +12,6 @@ type Option interface {
 	apply(*API)
 }
 
-type optionFunc func(*API)
-
-func (fn optionFunc) apply(a *API) { fn(a) }
-
 type LimiterOptions struct {
 	Email            *limiter.Limiter
 	Phone            *limiter.Limiter
