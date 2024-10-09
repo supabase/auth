@@ -572,11 +572,25 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		}
 		return unprocessableEntityError(ErrorCodeMFAChallengeExpired, "MFA challenge %v has expired, verify against another challenge or create a new challenge.", challenge.ID)
 	}
-	otpCode, shouldReEncrypt, err := challenge.GetOtpCode(config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
-	if err != nil {
-		return internalServerError("Database error verifying MFA TOTP secret").WithInternalError(err)
+	var valid bool
+	var otpCode string
+	var shouldReEncrypt bool
+	if config.Sms.IsTwilioVerifyProvider() {
+		smsProvider, err := sms_provider.GetSmsProvider(*config)
+		if err != nil {
+			return internalServerError("Failed to get SMS provider").WithInternalError(err)
+		}
+		if err := smsProvider.VerifyOTP(factor.Phone.String(), params.Code); err != nil {
+			return forbiddenError(ErrorCodeOTPExpired, "Token has expired or is invalid").WithInternalError(err)
+		}
+		valid = true
+	} else {
+		otpCode, shouldReEncrypt, err = challenge.GetOtpCode(config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
+		if err != nil {
+			return internalServerError("Database error verifying MFA TOTP secret").WithInternalError(err)
+		}
+		valid = subtle.ConstantTimeCompare([]byte(otpCode), []byte(params.Code)) == 1
 	}
-	valid := subtle.ConstantTimeCompare([]byte(otpCode), []byte(params.Code)) == 1
 	if config.Hook.MFAVerificationAttempt.Enabled {
 		input := hooks.MFAVerificationAttemptInput{
 			UserID:     user.ID,

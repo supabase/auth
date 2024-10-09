@@ -35,6 +35,9 @@ func (t *TestSmsProvider) SendMessage(phone, message, channel, otp string) (stri
 	t.SentMessages += 1
 	return "", nil
 }
+func (t *TestSmsProvider) VerifyOTP(phone, otp string) error {
+	return nil
+}
 
 func TestPhone(t *testing.T) {
 	api, config, err := setupAPIForTest()

@@ -102,3 +102,6 @@ func (t *TextlocalProvider) SendSms(phone string, message string) (string, error
 
 	return messageID, nil
 }
+func (t *TextlocalProvider) VerifyOTP(phone, code string) error {
+	return fmt.Errorf("VerifyOTP is not supported for Textlocal")
+}
