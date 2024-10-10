@@ -540,7 +540,7 @@ func (ts *MiddlewareTestSuite) TestIsValidAuthorizedEmail() {
 		},
 		{
 			desc:    "bypass check for verify endpoint",
-			reqPath: "/token",
+			reqPath: "/verify",
 			body: map[string]interface{}{
 				"email": "valid@example.com",
 			},
