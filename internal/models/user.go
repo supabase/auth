@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
@@ -931,6 +932,31 @@ func (u *User) FindOwnedFactorByID(tx *storage.Connection, factorID uuid.UUID) (
 		return nil, err
 	}
 	return &factor, nil
+}
+
+func (user *User) WebAuthnID() []byte {
+	return []byte(user.ID.String())
+}
+
+func (user *User) WebAuthnName() string {
+	return user.Email.String()
+}
+
+func (user *User) WebAuthnDisplayName() string {
+	return user.Email.String()
+}
+
+func (user *User) WebAuthnCredentials() []webauthn.Credential {
+	var credentials []webauthn.Credential
+
+	for _, factor := range user.Factors {
+		if factor.IsVerified() && factor.FactorType == WebAuthn {
+			credential := factor.WebAuthnCredential.Credential
+			credentials = append(credentials, credential)
+		}
+	}
+
+	return credentials
 }
 
 func obfuscateValue(id uuid.UUID, value string) string {
