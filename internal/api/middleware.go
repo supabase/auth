@@ -77,27 +77,6 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	}
 }
 
-func (a *API) limitEmailOrPhoneSentHandler(limiterOptions *LimiterOptions) middlewareHandler {
-	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
-		c := req.Context()
-		config := a.config
-		shouldRateLimitEmail := config.External.Email.Enabled && !config.Mailer.Autoconfirm
-		shouldRateLimitPhone := config.External.Phone.Enabled && !config.Sms.Autoconfirm
-
-		if shouldRateLimitEmail || shouldRateLimitPhone {
-			if req.Method == "PUT" || req.Method == "POST" {
-				// store rate limiter in request context
-				c = withLimiter(c, &SharedLimiter{
-					EmailLimiter: limiterOptions.Email,
-					PhoneLimiter: limiterOptions.Phone,
-				})
-			}
-		}
-
-		return c, nil
-	}
-}
-
 func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	t, err := a.extractBearerToken(req)
 	if err != nil || t == "" {

@@ -185,6 +185,8 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 	}
 }
 
+/*
+
 func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
 	// Set up rate limit config for this test
 	ts.Config.RateLimitEmailSent = 5
@@ -230,6 +232,8 @@ func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
 		})
 	}
 }
+
+*/
 
 func (ts *MiddlewareTestSuite) TestIsValidExternalHost() {
 	cases := []struct {
@@ -388,6 +392,8 @@ func (ts *MiddlewareTestSuite) TestLimitHandler() {
 	require.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
 }
 
+/*
+
 func (ts *MiddlewareTestSuite) TestLimitHandlerWithSharedLimiter() {
 	// setup config for shared limiter and ip-based limiter to work
 	ts.Config.RateLimitHeader = "X-Rate-Limit"
@@ -515,6 +521,8 @@ func (ts *MiddlewareTestSuite) TestLimitHandlerWithSharedLimiter() {
 		})
 	}
 }
+
+*/
 
 func (ts *MiddlewareTestSuite) TestIsValidAuthorizedEmail() {
 	ts.API.config.External.Email.AuthorizedAddresses = []string{"valid@example.com"}
