@@ -228,7 +228,7 @@ func (f *Factor) SaveWebAuthnCredential(tx *storage.Connection, credential *weba
 	if len(credential.Authenticator.AAGUID) > 0 {
 		aaguidUUID, err := uuid.FromBytes(credential.Authenticator.AAGUID)
 		if err != nil {
-			return fmt.Errorf("failed to convert AAGUID to UUID: %w", err)
+			return fmt.Errorf("WebAuthn authenticator AAGUID is not UUID: %w", err)
 		}
 		f.WebAuthnAAGUID = &aaguidUUID
 	} else {

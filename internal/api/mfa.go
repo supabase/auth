@@ -65,9 +65,9 @@ type VerifyFactorParams struct {
 type ChallengeFactorResponse struct {
 	ID                        uuid.UUID                        `json:"id"`
 	Type                      string                           `json:"type"`
-	ExpiresAt                 int64                            `json:"expires_at"`
-	CredentialRequestOptions  *wbnprotocol.CredentialAssertion `json:"credential_request_options"`
-	CredentialCreationOptions *wbnprotocol.CredentialCreation  `json:"credential_creation_options"`
+	ExpiresAt                 int64                            `json:"expires_at,omitempty"`
+	CredentialRequestOptions  *wbnprotocol.CredentialAssertion `json:"credential_request_options,omitempty"`
+	CredentialCreationOptions *wbnprotocol.CredentialCreation  `json:"credential_creation_options,omitempty"`
 }
 
 type UnenrollFactorResponse struct {
@@ -511,7 +511,7 @@ func (a *API) challengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 	if factor.IsUnverified() {
 		options, session, err := webAuthn.BeginRegistration(user)
 		if err != nil {
-			return internalServerError("error generating WebAuthn registration data").WithInternalError(err)
+			return internalServerError("Failed to generate WebAuthn registration data").WithInternalError(err)
 		}
 		ws = &models.WebAuthnSessionData{
 			SessionData: session,
@@ -541,16 +541,10 @@ func (a *API) challengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 
 	}
 
-	err = db.Transaction(func(tx *storage.Connection) error {
-		if terr := factor.WriteChallengeToDatabase(tx, challenge); terr != nil {
-			return terr
-		}
-		return nil
-
-	})
-	if err != nil {
-		return err
+	if err := factor.WriteChallengeToDatabase(db, challenge); terr != nil {
+		return terr
 	}
+	return nil
 	response.ExpiresAt = challenge.GetExpiryTime(config.MFA.ChallengeExpiryDuration).Unix()
 
 	return sendJSON(w, http.StatusOK, response)
@@ -570,7 +564,7 @@ func (a *API) validateChallenge(r *http.Request, db *storage.Connection, factor 
 	}
 
 	if challenge.VerifiedAt != nil || challenge.IPAddress != currentIP {
-		return nil, unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch")
+		return nil, unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch. Try enrollment again.")
 	}
 
 	if challenge.HasExpired(config.MFA.ChallengeExpiryDuration) {
