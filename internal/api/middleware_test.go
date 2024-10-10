@@ -212,7 +212,7 @@ func (ts *MiddlewareTestSuite) TestLimitEmailOrPhoneSentHandler() {
 		},
 	}
 
-	limiter := ts.API.limitEmailOrPhoneSentHandler()
+	limiter := ts.API.limitEmailOrPhoneSentHandler(NewLimiterOptions(ts.Config))
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			var buffer bytes.Buffer
@@ -484,7 +484,7 @@ func (ts *MiddlewareTestSuite) TestLimitHandlerWithSharedLimiter() {
 			ts.Config.RateLimitEmailSent = c.sharedLimiterConfig.RateLimitEmailSent
 			ts.Config.RateLimitSmsSent = c.sharedLimiterConfig.RateLimitSmsSent
 			lmt := ts.API.limitHandler(ipBasedLimiter(c.ipBasedLimiterConfig))
-			sharedLimiter := ts.API.limitEmailOrPhoneSentHandler()
+			sharedLimiter := ts.API.limitEmailOrPhoneSentHandler(NewLimiterOptions(ts.Config))
 
 			// get the minimum amount to reach the threshold just before the rate limit is exceeded
 			threshold := min(c.sharedLimiterConfig.RateLimitEmailSent, c.sharedLimiterConfig.RateLimitSmsSent, c.ipBasedLimiterConfig)

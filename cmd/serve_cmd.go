@@ -48,7 +48,10 @@ func serve(ctx context.Context) {
 	addr := net.JoinHostPort(config.API.Host, config.API.Port)
 	logrus.Infof("GoTrue API started on: %s", addr)
 
-	a := api.NewAPIWithVersion(config, db, utilities.Version)
+	opts := []api.Option{
+		api.NewLimiterOptions(config),
+	}
+	a := api.NewAPIWithVersion(config, db, utilities.Version, opts...)
 	ah := reloader.NewAtomicHandler(a)
 
 	baseCtx, baseCancel := context.WithCancel(context.Background())
@@ -74,7 +77,8 @@ func serve(ctx context.Context) {
 
 			fn := func(latestCfg *conf.GlobalConfiguration) {
 				log.Info("reloading api with new configuration")
-				latestAPI := api.NewAPIWithVersion(latestCfg, db, utilities.Version)
+				latestAPI := api.NewAPIWithVersion(
+					latestCfg, db, utilities.Version, opts...)
 				ah.Store(latestAPI)
 			}
 
