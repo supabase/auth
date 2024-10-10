@@ -499,7 +499,7 @@ func (a *API) challengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 	if params.WebAuthn == nil {
-		return badRequestError(ErrorCodeValidationFailed, "WebAuthn config required")
+		return badRequestError(ErrorCodeValidationFailed, "web_authn config required")
 	}
 	webAuthn, err := params.WebAuthn.ToConfig()
 	if err != nil {
@@ -558,7 +558,7 @@ func (a *API) validateChallenge(r *http.Request, db *storage.Connection, factor 
 	challenge, err := factor.FindChallengeByID(db, challengeID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, notFoundError(ErrorCodeMFAFactorNotFound, "MFA factor with the provided challenge ID not found")
+			return nil, unprocessableEntityError(ErrorCodeMFAFactorNotFound, "MFA factor with the provided challenge ID not found")
 		}
 		return nil, internalServerError("Database error finding Challenge").WithInternalError(err)
 	}
@@ -890,7 +890,7 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 	if factor.IsUnverified() {
 		parsedResponse, err := wbnprotocol.ParseCredentialCreationResponseBody(bytes.NewReader(params.WebAuthn.CreationResponse))
 		if err != nil {
-			return badRequestError(ErrorCodeValidationFailed, "Invalid credential creation response")
+			return badRequestError(ErrorCodeValidationFailed, "Invalid credential_creation_response")
 		}
 		credential, err = webAuthn.CreateCredential(user, webAuthnSession, parsedResponse)
 		if err != nil {
@@ -900,11 +900,11 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 	} else if factor.IsVerified() {
 		parsedResponse, err := wbnprotocol.ParseCredentialRequestResponseBody(bytes.NewReader(params.WebAuthn.AssertionResponse))
 		if err != nil {
-			return badRequestError(ErrorCodeValidationFailed, "Invalid credential request response")
+			return badRequestError(ErrorCodeValidationFailed, "Invalid credential_request_response")
 		}
 		credential, err = webAuthn.ValidateLogin(user, webAuthnSession, parsedResponse)
 		if err != nil {
-			return internalServerError("error validating WebAuthn credentials")
+			return internalServerError("Failed to validate WebAuthn MFA response").WithInternalError(err)
 		}
 	}
 	var token *AccessTokenResponse
@@ -937,10 +937,10 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 			return terr
 		}
 		if terr = models.InvalidateSessionsWithAALLessThan(tx, user.ID, models.AAL2.String()); terr != nil {
-			return internalServerError("Failed to update sessions. %s", terr)
+			return internalServerError("Failed to update session").WithInternalError(terr)
 		}
 		if terr = models.DeleteUnverifiedFactors(tx, user, models.WebAuthn); terr != nil {
-			return internalServerError("Error removing unverified factors. %s", terr)
+			return internalServerError("Failed to remove unverified MFA WebAuthn factors").WithInternalError(terr)
 		}
 		return nil
 	})
