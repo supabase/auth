@@ -148,16 +148,32 @@ type WebAuthnCredential struct {
 }
 
 func (wc *WebAuthnCredential) Value() (driver.Value, error) {
+	if wc == nil {
+		return nil, nil
+	}
 	return json.Marshal(wc)
 }
 
 func (wc *WebAuthnCredential) Scan(value interface{}) error {
-	bytes, ok := value.([]byte)
-	if !ok {
-		return fmt.Errorf("expected byte array but got %T", value)
+	if value == nil {
+		wc.Credential = webauthn.Credential{}
+		return nil
 	}
-
-	return json.Unmarshal(bytes, wc)
+	// Handle byte and string as a precaution, in postgres driver, json/jsonb should be returned as []byte
+	var data []byte
+	switch v := value.(type) {
+	case []byte:
+		data = v
+	case string:
+		data = []byte(v)
+	default:
+		return fmt.Errorf("unsupported type for web_authn_credential: %T", value)
+	}
+	if len(data) == 0 {
+		wc.Credential = webauthn.Credential{}
+		return nil
+	}
+	return json.Unmarshal(data, &wc.Credential)
 }
 
 func (Factor) TableName() string {

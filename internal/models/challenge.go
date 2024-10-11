@@ -27,17 +27,39 @@ type WebAuthnSessionData struct {
 	*webauthn.SessionData
 }
 
-func (s *WebAuthnSessionData) Value() (driver.Value, error) {
-	return json.Marshal(s)
-}
-
 func (s *WebAuthnSessionData) Scan(value interface{}) error {
-	bytes, ok := value.([]byte)
-	if !ok {
-		return fmt.Errorf("expected byte array but got %T", value)
+	if value == nil {
+		s.SessionData = nil
+		return nil
 	}
 
-	return json.Unmarshal(bytes, s)
+	// Handle byte and string as a precaution, in postgres driver, json/jsonb should be returned as []byte
+	var data []byte
+	switch v := value.(type) {
+	case []byte:
+		data = v
+	case string:
+		data = []byte(v)
+	default:
+		panic(fmt.Sprintf("unsupported type for web_authn_session_data: %T", value))
+	}
+
+	if len(data) == 0 {
+		s.SessionData = nil
+		return nil
+	}
+	if s.SessionData == nil {
+		s.SessionData = &webauthn.SessionData{}
+	}
+	return json.Unmarshal(data, s.SessionData)
+
+}
+
+func (s *WebAuthnSessionData) Value() (driver.Value, error) {
+	if s == nil || s.SessionData == nil {
+		return nil, nil
+	}
+	return json.Marshal(s.SessionData)
 }
 
 func (ws *WebAuthnSessionData) ToChallenge(factorID uuid.UUID, ipAddress string) *Challenge {

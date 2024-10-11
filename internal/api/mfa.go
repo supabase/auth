@@ -541,10 +541,9 @@ func (a *API) challengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 
 	}
 
-	if err := factor.WriteChallengeToDatabase(db, challenge); terr != nil {
-		return terr
+	if err := factor.WriteChallengeToDatabase(db, challenge); err != nil {
+		return err
 	}
-	return nil
 	response.ExpiresAt = challenge.GetExpiryTime(config.MFA.ChallengeExpiryDuration).Unix()
 
 	return sendJSON(w, http.StatusOK, response)
