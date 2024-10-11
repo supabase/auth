@@ -2176,6 +2176,96 @@ components:
           type: object
           description: Client extension results
 
+    CredentialRequestOptions:
+      type: object
+      description: Options for requesting an assertion
+      properties:
+        challenge:
+          type: string
+          format: byte
+          description: A challenge to be signed by the authenticator
+        timeout:
+          type: integer
+          description: Time (in milliseconds) that the caller is willing to wait for the call to complete
+        rpId:
+          type: string
+          description: Relying Party ID
+        allowCredentials:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicKeyCredentialDescriptor'
+        userVerification:
+          type: string
+          enum: [required, preferred, discouraged]
+          description: User verification requirement
+
+    CredentialCreationOptions:
+      type: object
+      description: Options for creating a new credential
+      properties:
+        rp:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+        user:
+          $ref: '#/components/schemas/UserSchema'
+
+        challenge:
+          type: string
+          format: byte
+          description: A challenge to be signed by the authenticator
+        pubKeyCredParams:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [public-key]
+              alg:
+                type: integer
+        timeout:
+          type: integer
+          description: Time (in milliseconds) that the caller is willing to wait for the call to complete
+        excludeCredentials:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicKeyCredentialDescriptor'
+        authenticatorSelection:
+          type: object
+          properties:
+            authenticatorAttachment:
+              type: string
+              enum: [platform, cross-platform]
+            requireResidentKey:
+              type: boolean
+            userVerification:
+              type: string
+              enum: [required, preferred, discouraged]
+        attestation:
+          type: string
+          enum: [none, indirect, direct]
+          description: Preferred attestation conveyance
+
+    PublicKeyCredentialDescriptor:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [public-key]
+        id:
+          type: string
+          format: byte
+          description: Credential ID
+        transports:
+          type: array
+          items:
+            type: string
+            enum: [usb, nfc, ble, internal]
+
   responses:
     OAuthCallbackRedirectResponse:
       description: >
