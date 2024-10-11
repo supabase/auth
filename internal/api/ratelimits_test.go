@@ -2,20 +2,11 @@ package api
 
 import (
 	"fmt"
-	"math"
 	"testing"
 	"time"
 
 	"github.com/supabase/auth/internal/conf"
 )
-
-func newUnlimitedLimiter() *RateLimiter {
-	cfg := conf.Rate{
-		Events:   float64(math.MaxInt32),
-		OverTime: time.Second,
-	}
-	return newRateLimiter(cfg)
-}
 
 func Example_newRateLimiter() {
 	now, _ := time.Parse(time.RFC3339, "2024-09-24T10:00:00.00Z")
