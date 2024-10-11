@@ -140,7 +140,7 @@ type Factor struct {
 	Phone              storage.NullString  `json:"phone" db:"phone"`
 	LastChallengedAt   *time.Time          `json:"last_challenged_at" db:"last_challenged_at"`
 	WebAuthnCredential *WebAuthnCredential `json:"-" db:"web_authn_credential"`
-	WebAuthnAAGUID     *uuid.UUID          `json:"web_authn_aaguid,omitempty" db:"aaguid"`
+	WebAuthnAAGUID     *uuid.UUID          `json:"web_authn_aaguid,omitempty" db:"web_authn_aaguid"`
 }
 
 type WebAuthnCredential struct {
