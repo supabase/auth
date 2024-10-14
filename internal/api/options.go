@@ -13,8 +13,9 @@ type Option interface {
 }
 
 type LimiterOptions struct {
-	Email            *limiter.Limiter
-	Phone            *limiter.Limiter
+	Email *RateLimiter
+	Phone *RateLimiter
+
 	Signups          *limiter.Limiter
 	AnonymousSignIns *limiter.Limiter
 	Recover          *limiter.Limiter
@@ -35,16 +36,8 @@ func (lo *LimiterOptions) apply(a *API) { a.limiterOpts = lo }
 func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 	o := &LimiterOptions{}
 
-	o.Email = tollbooth.NewLimiter(gc.RateLimitEmailSent/(60*60),
-		&limiter.ExpirableOptions{
-			DefaultExpirationTTL: time.Hour,
-		}).SetBurst(int(gc.RateLimitEmailSent)).SetMethods([]string{"PUT", "POST"})
-
-	o.Phone = tollbooth.NewLimiter(gc.RateLimitSmsSent/(60*60),
-		&limiter.ExpirableOptions{
-			DefaultExpirationTTL: time.Hour,
-		}).SetBurst(int(gc.RateLimitSmsSent)).SetMethods([]string{"PUT", "POST"})
-
+	o.Email = newRateLimiter(gc.RateLimitEmailSent)
+	o.Phone = newRateLimiter(gc.RateLimitSmsSent)
 	o.AnonymousSignIns = tollbooth.NewLimiter(gc.RateLimitAnonymousUsers/(60*60),
 		&limiter.ExpirableOptions{
 			DefaultExpirationTTL: time.Hour,

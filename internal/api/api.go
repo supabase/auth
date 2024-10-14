@@ -140,9 +140,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Get("/authorize", api.ExternalProviderRedirect)
 
-		sharedLimiter := api.limitEmailOrPhoneSentHandler(api.limiterOpts)
-		r.With(sharedLimiter).With(api.requireAdminCredentials).Post("/invite", api.Invite)
-		r.With(sharedLimiter).With(api.verifyCaptcha).Route("/signup", func(r *router) {
+		r.With(api.requireAdminCredentials).Post("/invite", api.Invite)
+		r.With(api.verifyCaptcha).Route("/signup", func(r *router) {
 			// rate limit per hour
 			limitAnonymousSignIns := api.limiterOpts.AnonymousSignIns
 			limitSignups := api.limiterOpts.Signups
@@ -165,24 +164,20 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				if _, err := api.limitHandler(limitSignups)(w, r); err != nil {
 					return err
 				}
-				// apply shared rate limiting on email / phone
-				if _, err := sharedLimiter(w, r); err != nil {
-					return err
-				}
 				return api.Signup(w, r)
 			})
 		})
 		r.With(api.limitHandler(api.limiterOpts.Recover)).
-			With(sharedLimiter).With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
+			With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
 
 		r.With(api.limitHandler(api.limiterOpts.Resend)).
-			With(sharedLimiter).With(api.verifyCaptcha).Post("/resend", api.Resend)
+			With(api.verifyCaptcha).Post("/resend", api.Resend)
 
 		r.With(api.limitHandler(api.limiterOpts.MagicLink)).
-			With(sharedLimiter).With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
+			With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
 
 		r.With(api.limitHandler(api.limiterOpts.Otp)).
-			With(sharedLimiter).With(api.verifyCaptcha).Post("/otp", api.Otp)
+			With(api.verifyCaptcha).Post("/otp", api.Otp)
 
 		r.With(api.limitHandler(api.limiterOpts.Token)).
 			With(api.verifyCaptcha).Post("/token", api.Token)
@@ -200,8 +195,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.With(api.requireAuthentication).Route("/user", func(r *router) {
 			r.Get("/", api.UserGet)
-			r.With(api.limitHandler(api.limiterOpts.User)).
-				With(sharedLimiter).Put("/", api.UserUpdate)
+			r.With(api.limitHandler(api.limiterOpts.User)).Put("/", api.UserUpdate)
 
 			r.Route("/identities", func(r *router) {
 				r.Use(api.requireManualLinkingEnabled)
