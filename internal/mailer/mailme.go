@@ -60,15 +60,17 @@ func (m *MailmeMailer) Mail(to, subjectTemplate, templateURL, defaultTemplate st
 	if err != nil {
 		return err
 	}
+
 	body, err := m.MailBody(templateURL, defaultTemplate, templateData)
 	if err != nil {
 		return err
 	}
 
+	subjectStr := subject.String()
 	mail := gomail.NewMessage()
 	mail.SetHeader("From", m.From)
 	mail.SetHeader("To", to)
-	mail.SetHeader("Subject", subject.String())
+	mail.SetHeader("Subject", subjectStr)
 
 	for k, v := range headers {
 		if v != nil {
@@ -82,8 +84,45 @@ func (m *MailmeMailer) Mail(to, subjectTemplate, templateURL, defaultTemplate st
 	if m.LocalName != "" {
 		dial.LocalName = m.LocalName
 	}
-	return dial.DialAndSend(mail)
 
+	defer func() {
+		projectRef, ok := getProjectRefFromHeaders(headers)
+		if !ok {
+			return
+		}
+
+		fields := logrus.Fields{
+			"event":         "mail.send",
+			"project_ref":   projectRef,
+			"mail_from":     m.From,
+			"mail_to":       to,
+			"mail_subject":  subject,
+			"mail_template": subjectTemplate,
+		}
+		m.Logger.WithFields(fields).Info("mail.send")
+	}()
+	if err := dial.DialAndSend(mail); err != nil {
+		return err
+	}
+	return nil
+}
+
+const (
+	mailSupabaseProjectRefHeader = `x-supabase-project-ref`
+)
+
+func getProjectRefFromHeaders(headers map[string][]string) (string, bool) {
+	for key, val := range headers {
+		if len(val) == 0 || val[0] == "" {
+			continue
+		}
+
+		hdr := strings.ToLower(key)
+		if hdr == mailSupabaseProjectRefHeader {
+			return val[0], true
+		}
+	}
+	return "", false
 }
 
 type MailTemplate struct {

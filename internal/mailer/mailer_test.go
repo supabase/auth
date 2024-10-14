@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/supabase/auth/internal/conf"
 )
 
 var urlRegexp = regexp.MustCompile(`^https?://[^/]+`)
@@ -83,5 +85,63 @@ func TestRelativeURL(t *testing.T) {
 	for _, c := range cases {
 		res := enforceRelativeURL(c.URL)
 		assert.Equal(t, c.Expected, res, c.URL)
+	}
+}
+
+func TestGetProjectRefFromHeaders(t *testing.T) {
+	cases := []struct {
+		from string
+		exp  string
+		ok   bool
+	}{
+		{
+			from: `{"x-supabase-project-ref": ["abcjrhohrqmvcpjpsyzc"]}`,
+			exp:  "abcjrhohrqmvcpjpsyzc",
+			ok:   true,
+		},
+		{
+			from: `{"X-Supabase-Project-Ref": ["abcjrhohrqmvcpjpsyzc"]}`,
+			exp:  "abcjrhohrqmvcpjpsyzc",
+			ok:   true,
+		},
+		{
+			from: `{"X-Other-Headers": ["somevalue"]}`,
+			exp:  "",
+			ok:   false,
+		},
+		{
+			from: `{"x-supabase-project-ref": [""]}`,
+			exp:  "",
+			ok:   false,
+		},
+		{
+			from: ``,
+			exp:  "",
+			ok:   false,
+		},
+		{
+			from: `{"x-supabase-project-ref": null}`,
+			exp:  "",
+			ok:   false,
+		},
+	}
+	for _, tc := range cases {
+		mailer := TemplateMailer{
+			Config: &conf.GlobalConfiguration{
+				SMTP: conf.SMTPConfiguration{
+					Headers: tc.from,
+				},
+			},
+		}
+		require.NoError(t, mailer.Config.SMTP.Validate())
+
+		hdrs := mailer.Headers(tc.from)
+		ref, ok := getProjectRefFromHeaders(hdrs)
+		if exp, got := tc.ok, ok; exp != got {
+			t.Fatalf("exp %v; got %v", exp, got)
+		}
+		if exp, got := tc.exp, ref; exp != got {
+			t.Fatalf("exp %v; got %v", exp, got)
+		}
 	}
 }
