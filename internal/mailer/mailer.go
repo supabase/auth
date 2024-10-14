@@ -9,7 +9,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/mailme"
 	"gopkg.in/gomail.v2"
 )
 
@@ -60,7 +59,7 @@ func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
 		logrus.Infof("Noop mail client being used for %v", globalConfig.SiteURL)
 		mailClient = &noopMailClient{}
 	} else {
-		mailClient = &mailme.Mailer{
+		mailClient = &MailmeMailer{
 			Host:      globalConfig.SMTP.Host,
 			Port:      globalConfig.SMTP.Port,
 			User:      globalConfig.SMTP.User,
