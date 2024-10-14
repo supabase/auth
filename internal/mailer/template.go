@@ -12,7 +12,7 @@ import (
 )
 
 type MailClient interface {
-	Mail(string, string, string, string, map[string]interface{}) error
+	Mail(string, string, string, string, map[string]interface{}, map[string][]string) error
 }
 
 // TemplateMailer will send mail and use templates from the site for easy mail styling
@@ -87,6 +87,41 @@ func (m TemplateMailer) ValidateEmail(email string) error {
 	return checkmail.ValidateFormat(email)
 }
 
+func (m *TemplateMailer) Headers(messageType string) map[string][]string {
+	originalHeaders := m.Config.SMTP.NormalizedHeaders()
+
+	if originalHeaders == nil {
+		return nil
+	}
+
+	headers := make(map[string][]string, len(originalHeaders))
+
+	for header, values := range originalHeaders {
+		replacedValues := make([]string, 0, len(values))
+
+		if header == "" {
+			continue
+		}
+
+		for _, value := range values {
+			if value == "" {
+				continue
+			}
+
+			// TODO: in the future, use a templating engine to add more contextual data available to headers
+			if strings.Contains(value, "$messageType") {
+				replacedValues = append(replacedValues, strings.ReplaceAll(value, "$messageType", messageType))
+			} else {
+				replacedValues = append(replacedValues, value)
+			}
+		}
+
+		headers[header] = replacedValues
+	}
+
+	return headers
+}
+
 // InviteMail sends a invite mail to a new user
 func (m *TemplateMailer) InviteMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
 	path, err := getPath(m.Config.Mailer.URLPaths.Invite, &EmailParams{
@@ -115,6 +150,7 @@ func (m *TemplateMailer) InviteMail(r *http.Request, user *models.User, otp, ref
 		m.Config.Mailer.Templates.Invite,
 		defaultInviteMail,
 		data,
+		m.Headers("invite"),
 	)
 }
 
@@ -145,6 +181,7 @@ func (m *TemplateMailer) ConfirmationMail(r *http.Request, user *models.User, ot
 		m.Config.Mailer.Templates.Confirmation,
 		defaultConfirmationMail,
 		data,
+		m.Headers("confirm"),
 	)
 }
 
@@ -163,6 +200,7 @@ func (m *TemplateMailer) ReauthenticateMail(r *http.Request, user *models.User, 
 		m.Config.Mailer.Templates.Reauthentication,
 		defaultReauthenticateMail,
 		data,
+		m.Headers("reauthenticate"),
 	)
 }
 
@@ -227,6 +265,7 @@ func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, otp
 				template,
 				defaultEmailChangeMail,
 				data,
+				m.Headers("email_change"),
 			)
 		}(email.Address, email.Otp, email.TokenHash, email.Template)
 	}
@@ -267,6 +306,7 @@ func (m *TemplateMailer) RecoveryMail(r *http.Request, user *models.User, otp, r
 		m.Config.Mailer.Templates.Recovery,
 		defaultRecoveryMail,
 		data,
+		m.Headers("recovery"),
 	)
 }
 
@@ -297,6 +337,7 @@ func (m *TemplateMailer) MagicLinkMail(r *http.Request, user *models.User, otp, 
 		m.Config.Mailer.Templates.MagicLink,
 		defaultMagicLinkMail,
 		data,
+		m.Headers("magiclink"),
 	)
 }
 
@@ -308,6 +349,7 @@ func (m TemplateMailer) Send(user *models.User, subject, body string, data map[s
 		"",
 		body,
 		data,
+		m.Headers("other"),
 	)
 }
 
