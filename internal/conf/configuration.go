@@ -3,6 +3,7 @@ package conf
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -348,16 +349,39 @@ type SMTPConfiguration struct {
 	Pass         string        `json:"pass,omitempty"`
 	AdminEmail   string        `json:"admin_email" split_words:"true"`
 	SenderName   string        `json:"sender_name" split_words:"true"`
+	Headers      string        `json:"headers"`
+
+	fromAddress       string              `json:"-"`
+	normalizedHeaders map[string][]string `json:"-"`
 }
 
 func (c *SMTPConfiguration) Validate() error {
+	headers := make(map[string][]string)
+
+	if c.Headers != "" {
+		err := json.Unmarshal([]byte(c.Headers), &headers)
+		if err != nil {
+			return fmt.Errorf("conf: SMTP headers not a map[string][]string format: %w", err)
+		}
+	}
+
+	if len(headers) > 0 {
+		c.normalizedHeaders = headers
+	}
+
+	mail := gomail.NewMessage()
+
+	c.fromAddress = mail.FormatAddress(c.AdminEmail, c.SenderName)
+
 	return nil
 }
 
 func (c *SMTPConfiguration) FromAddress() string {
-	mail := gomail.NewMessage()
+	return c.fromAddress
+}
 
-	return mail.FormatAddress(c.AdminEmail, c.SenderName)
+func (c *SMTPConfiguration) NormalizedHeaders() map[string][]string {
+	return c.normalizedHeaders
 }
 
 type MailerConfiguration struct {

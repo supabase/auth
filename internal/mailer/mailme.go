@@ -38,7 +38,7 @@ type MailmeMailer struct {
 
 // Mail sends a templated mail. It will try to load the template from a URL, and
 // otherwise fall back to the default
-func (m *MailmeMailer) Mail(to, subjectTemplate, templateURL, defaultTemplate string, templateData map[string]interface{}) error {
+func (m *MailmeMailer) Mail(to, subjectTemplate, templateURL, defaultTemplate string, templateData map[string]interface{}, headers map[string][]string) error {
 	if m.FuncMap == nil {
 		m.FuncMap = map[string]interface{}{}
 	}
@@ -69,6 +69,13 @@ func (m *MailmeMailer) Mail(to, subjectTemplate, templateURL, defaultTemplate st
 	mail.SetHeader("From", m.From)
 	mail.SetHeader("To", to)
 	mail.SetHeader("Subject", subject.String())
+
+	for k, v := range headers {
+		if v != nil {
+			mail.SetHeader(k, v...)
+		}
+	}
+
 	mail.SetBody("text/html", body)
 
 	dial := gomail.NewDialer(m.Host, m.Port, m.User, m.Pass)
