@@ -5,11 +5,9 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
-	"gopkg.in/gomail.v2"
 )
 
 // Mailer defines the interface a mailer must implement.
@@ -42,16 +40,7 @@ type EmailData struct {
 
 // NewMailer returns a new gotrue mailer
 func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
-	mail := gomail.NewMessage()
-
-	mail.SetHeaders(map[string][]string{
-		// Make the emails explicitly set to be HTML formatted (to cover older email clients)
-		"Content-Type": {"text/html; charset=utf-8"},
-		// so that messages are not grouped under each other
-		"Message-ID": {fmt.Sprintf("<%s@gotrue-mailer>", uuid.Must(uuid.NewV4()).String())},
-	})
-
-	from := mail.FormatAddress(globalConfig.SMTP.AdminEmail, globalConfig.SMTP.SenderName)
+	from := globalConfig.SMTP.FromAddress()
 	u, _ := url.ParseRequestURI(globalConfig.API.ExternalURL)
 
 	var mailClient MailClient

@@ -18,6 +18,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"gopkg.in/gomail.v2"
 )
 
 const defaultMinPasswordLength int = 6
@@ -351,6 +352,12 @@ type SMTPConfiguration struct {
 
 func (c *SMTPConfiguration) Validate() error {
 	return nil
+}
+
+func (c *SMTPConfiguration) FromAddress() string {
+	mail := gomail.NewMessage()
+
+	return mail.FormatAddress(c.AdminEmail, c.SenderName)
 }
 
 type MailerConfiguration struct {
