@@ -49,14 +49,15 @@ func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
 		mailClient = &noopMailClient{}
 	} else {
 		mailClient = &MailmeMailer{
-			Host:      globalConfig.SMTP.Host,
-			Port:      globalConfig.SMTP.Port,
-			User:      globalConfig.SMTP.User,
-			Pass:      globalConfig.SMTP.Pass,
-			LocalName: u.Hostname(),
-			From:      from,
-			BaseURL:   globalConfig.SiteURL,
-			Logger:    logrus.StandardLogger(),
+			Host:        globalConfig.SMTP.Host,
+			Port:        globalConfig.SMTP.Port,
+			User:        globalConfig.SMTP.User,
+			Pass:        globalConfig.SMTP.Pass,
+			LocalName:   u.Hostname(),
+			From:        from,
+			BaseURL:     globalConfig.SiteURL,
+			Logger:      logrus.StandardLogger(),
+			MailLogging: globalConfig.SMTP.LoggingEnabled,
 		}
 	}
 

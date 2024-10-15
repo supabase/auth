@@ -342,14 +342,15 @@ type ProviderConfiguration struct {
 }
 
 type SMTPConfiguration struct {
-	MaxFrequency time.Duration `json:"max_frequency" split_words:"true"`
-	Host         string        `json:"host"`
-	Port         int           `json:"port,omitempty" default:"587"`
-	User         string        `json:"user"`
-	Pass         string        `json:"pass,omitempty"`
-	AdminEmail   string        `json:"admin_email" split_words:"true"`
-	SenderName   string        `json:"sender_name" split_words:"true"`
-	Headers      string        `json:"headers"`
+	MaxFrequency   time.Duration `json:"max_frequency" split_words:"true"`
+	Host           string        `json:"host"`
+	Port           int           `json:"port,omitempty" default:"587"`
+	User           string        `json:"user"`
+	Pass           string        `json:"pass,omitempty"`
+	AdminEmail     string        `json:"admin_email" split_words:"true"`
+	SenderName     string        `json:"sender_name" split_words:"true"`
+	Headers        string        `json:"headers"`
+	LoggingEnabled bool          `json:"logging_enabled" split_words:"true" default:"false"`
 
 	fromAddress       string              `json:"-"`
 	normalizedHeaders map[string][]string `json:"-"`

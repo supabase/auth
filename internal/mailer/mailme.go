@@ -24,21 +24,22 @@ const TemplateExpiration = 10 * time.Second
 
 // MailmeMailer lets MailMe send templated mails
 type MailmeMailer struct {
-	From      string
-	Host      string
-	Port      int
-	User      string
-	Pass      string
-	BaseURL   string
-	LocalName string
-	FuncMap   template.FuncMap
-	cache     *TemplateCache
-	Logger    logrus.FieldLogger
+	From        string
+	Host        string
+	Port        int
+	User        string
+	Pass        string
+	BaseURL     string
+	LocalName   string
+	FuncMap     template.FuncMap
+	cache       *TemplateCache
+	Logger      logrus.FieldLogger
+	MailLogging bool
 }
 
 // Mail sends a templated mail. It will try to load the template from a URL, and
 // otherwise fall back to the default
-func (m *MailmeMailer) Mail(to, subjectTemplate, templateURL, defaultTemplate string, templateData map[string]interface{}, headers map[string][]string) error {
+func (m *MailmeMailer) Mail(to, subjectTemplate, templateURL, defaultTemplate string, templateData map[string]interface{}, headers map[string][]string, typ string) error {
 	if m.FuncMap == nil {
 		m.FuncMap = map[string]interface{}{}
 	}
@@ -66,11 +67,10 @@ func (m *MailmeMailer) Mail(to, subjectTemplate, templateURL, defaultTemplate st
 		return err
 	}
 
-	subjectStr := subject.String()
 	mail := gomail.NewMessage()
 	mail.SetHeader("From", m.From)
 	mail.SetHeader("To", to)
-	mail.SetHeader("Subject", subjectStr)
+	mail.SetHeader("Subject", subject.String())
 
 	for k, v := range headers {
 		if v != nil {
@@ -85,44 +85,21 @@ func (m *MailmeMailer) Mail(to, subjectTemplate, templateURL, defaultTemplate st
 		dial.LocalName = m.LocalName
 	}
 
-	defer func() {
-		projectRef, ok := getProjectRefFromHeaders(headers)
-		if !ok {
-			return
-		}
-
-		fields := logrus.Fields{
-			"event":         "mail.send",
-			"project_ref":   projectRef,
-			"mail_from":     m.From,
-			"mail_to":       to,
-			"mail_subject":  subject,
-			"mail_template": subjectTemplate,
-		}
-		m.Logger.WithFields(fields).Info("mail.send")
-	}()
+	if m.MailLogging {
+		defer func() {
+			fields := logrus.Fields{
+				"event":     "mail.send",
+				"mail_type": typ,
+				"mail_from": m.From,
+				"mail_to":   to,
+			}
+			m.Logger.WithFields(fields).Info("mail.send")
+		}()
+	}
 	if err := dial.DialAndSend(mail); err != nil {
 		return err
 	}
 	return nil
-}
-
-const (
-	mailSupabaseProjectRefHeader = `x-supabase-project-ref`
-)
-
-func getProjectRefFromHeaders(headers map[string][]string) (string, bool) {
-	for key, val := range headers {
-		if len(val) == 0 || val[0] == "" {
-			continue
-		}
-
-		hdr := strings.ToLower(key)
-		if hdr == mailSupabaseProjectRefHeader {
-			return val[0], true
-		}
-	}
-	return "", false
 }
 
 type MailTemplate struct {
