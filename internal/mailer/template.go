@@ -12,7 +12,7 @@ import (
 )
 
 type MailClient interface {
-	Mail(string, string, string, string, map[string]interface{}, map[string][]string) error
+	Mail(string, string, string, string, map[string]interface{}, map[string][]string, string) error
 }
 
 // TemplateMailer will send mail and use templates from the site for easy mail styling
@@ -151,6 +151,7 @@ func (m *TemplateMailer) InviteMail(r *http.Request, user *models.User, otp, ref
 		defaultInviteMail,
 		data,
 		m.Headers("invite"),
+		"invite",
 	)
 }
 
@@ -182,6 +183,7 @@ func (m *TemplateMailer) ConfirmationMail(r *http.Request, user *models.User, ot
 		defaultConfirmationMail,
 		data,
 		m.Headers("confirm"),
+		"confirm",
 	)
 }
 
@@ -201,6 +203,7 @@ func (m *TemplateMailer) ReauthenticateMail(r *http.Request, user *models.User, 
 		defaultReauthenticateMail,
 		data,
 		m.Headers("reauthenticate"),
+		"reauthenticate",
 	)
 }
 
@@ -266,6 +269,7 @@ func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, otp
 				defaultEmailChangeMail,
 				data,
 				m.Headers("email_change"),
+				"email_change",
 			)
 		}(email.Address, email.Otp, email.TokenHash, email.Template)
 	}
@@ -307,6 +311,7 @@ func (m *TemplateMailer) RecoveryMail(r *http.Request, user *models.User, otp, r
 		defaultRecoveryMail,
 		data,
 		m.Headers("recovery"),
+		"recovery",
 	)
 }
 
@@ -338,6 +343,7 @@ func (m *TemplateMailer) MagicLinkMail(r *http.Request, user *models.User, otp, 
 		defaultMagicLinkMail,
 		data,
 		m.Headers("magiclink"),
+		"magiclink",
 	)
 }
 
@@ -350,6 +356,7 @@ func (m TemplateMailer) Send(user *models.User, subject, body string, data map[s
 		body,
 		data,
 		m.Headers("other"),
+		"other",
 	)
 }
 
