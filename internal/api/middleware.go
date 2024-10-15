@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -136,46 +135,6 @@ func isIgnoreCaptchaRoute(req *http.Request) bool {
 		return true
 	}
 	return false
-}
-
-var emailLabelPattern = regexp.MustCompile("[+][^@]+@")
-
-// we don't need to enforce the check on these endpoints since they don't send emails
-var containsNonEmailSendingPath = regexp.MustCompile(`^/(admin|token|verify)`)
-
-func (a *API) isValidAuthorizedEmail(w http.ResponseWriter, req *http.Request) (context.Context, error) {
-	ctx := req.Context()
-
-	// skip checking for authorized email addresses if it's an admin request
-	if containsNonEmailSendingPath.MatchString(req.URL.Path) || req.Method == http.MethodGet || req.Method == http.MethodDelete {
-		return ctx, nil
-	}
-
-	var body struct {
-		Email string `json:"email"`
-	}
-
-	if err := retrieveRequestParams(req, &body); err != nil {
-		// let downstream handlers handle the error
-		return ctx, nil
-	}
-	if body.Email == "" {
-		return ctx, nil
-	}
-	email := strings.ToLower(body.Email)
-	if len(a.config.External.Email.AuthorizedAddresses) > 0 {
-		// allow labelled emails when authorization rules are in place
-		normalized := emailLabelPattern.ReplaceAllString(email, "@")
-
-		for _, authorizedAddress := range a.config.External.Email.AuthorizedAddresses {
-			if normalized == authorizedAddress {
-				return ctx, nil
-			}
-		}
-
-		return ctx, badRequestError(ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", email)
-	}
-	return ctx, nil
 }
 
 func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (context.Context, error) {

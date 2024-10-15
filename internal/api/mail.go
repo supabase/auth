@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -23,7 +24,6 @@ import (
 
 var (
 	EmailRateLimitExceeded error = errors.New("email rate limit exceeded")
-	AddressNotAuthorized   error = errors.New("Destination email address not authorized")
 )
 
 type GenerateLinkParams struct {
@@ -320,6 +320,8 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 		u.ConfirmationToken = oldToken
 		if errors.Is(err, EmailRateLimitExceeded) {
 			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
 		}
 		return internalServerError("Error sending confirmation email").WithInternalError(err)
 	}
@@ -351,6 +353,8 @@ func (a *API) sendInvite(r *http.Request, tx *storage.Connection, u *models.User
 		u.ConfirmationToken = oldToken
 		if errors.Is(err, EmailRateLimitExceeded) {
 			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
 		}
 		return internalServerError("Error sending invite email").WithInternalError(err)
 	}
@@ -390,6 +394,8 @@ func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *m
 		u.RecoveryToken = oldToken
 		if errors.Is(err, EmailRateLimitExceeded) {
 			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
 		}
 		return internalServerError("Error sending recovery email").WithInternalError(err)
 	}
@@ -428,6 +434,8 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 		u.ReauthenticationToken = oldToken
 		if errors.Is(err, EmailRateLimitExceeded) {
 			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
 		}
 		return internalServerError("Error sending reauthentication email").WithInternalError(err)
 	}
@@ -467,6 +475,8 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 		u.RecoveryToken = oldToken
 		if errors.Is(err, EmailRateLimitExceeded) {
 			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
 		}
 		return internalServerError("Error sending magic link email").WithInternalError(err)
 	}
@@ -517,6 +527,8 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 	if err := a.sendEmail(r, tx, u, mail.EmailChangeVerification, otpCurrent, otpNew, u.EmailChangeTokenNew); err != nil {
 		if errors.Is(err, EmailRateLimitExceeded) {
 			return tooManyRequestsError(ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
 		}
 		return internalServerError("Error sending email change email").WithInternalError(err)
 	}
@@ -569,12 +581,51 @@ func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration
 	return nil
 }
 
+var emailLabelPattern = regexp.MustCompile("[+][^@]+@")
+
+func (a *API) checkEmailAddressAuthorization(email string) bool {
+	if len(a.config.External.Email.AuthorizedAddresses) > 0 {
+		// allow labelled emails when authorization rules are in place
+		normalized := emailLabelPattern.ReplaceAllString(email, "@")
+
+		for _, authorizedAddress := range a.config.External.Email.AuthorizedAddresses {
+			if strings.EqualFold(normalized, authorizedAddress) {
+				return true
+			}
+		}
+
+		return false
+	}
+
+	return true
+}
+
 func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, emailActionType, otp, otpNew, tokenHashWithPrefix string) error {
 	mailer := a.Mailer()
 	ctx := r.Context()
 	config := a.config
 	referrerURL := utilities.GetReferrer(r, config)
 	externalURL := getExternalHost(ctx)
+
+	if emailActionType != mail.EmailChangeVerification {
+		if u.GetEmail() != "" && !a.checkEmailAddressAuthorization(u.GetEmail()) {
+			return badRequestError(ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", u.GetEmail())
+		}
+	} else {
+		// first check that the user can update their address to the
+		// new one in u.EmailChange
+		if u.EmailChange != "" && !a.checkEmailAddressAuthorization(u.EmailChange) {
+			return badRequestError(ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", u.EmailChange)
+		}
+
+		// if secure email change is enabled, check that the user
+		// account (which could have been created before the authorized
+		// address authorization restriction was enabled) can even
+		// receive the confirmation message to the existing address
+		if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" && !a.checkEmailAddressAuthorization(u.GetEmail()) {
+			return badRequestError(ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", u.GetEmail())
+		}
+	}
 
 	// apply rate limiting before the email is sent out
 	if ok := a.limiterOpts.Email.Allow(); !ok {
