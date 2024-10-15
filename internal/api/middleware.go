@@ -173,7 +173,7 @@ func (a *API) isValidAuthorizedEmail(w http.ResponseWriter, req *http.Request) (
 			}
 		}
 
-		return ctx, badRequestError(ErrorCodeEmailAddressNotAuthorized, "Email address %q is not a member of this organizations team.", email)
+		return ctx, badRequestError(ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", email)
 	}
 	return ctx, nil
 }
