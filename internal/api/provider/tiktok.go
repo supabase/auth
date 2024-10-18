@@ -41,7 +41,7 @@ func NewTikTokProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 		return nil, err
 	}
 
-	apiPath := chooseHost(ext.URL, defaultTikTokIssuerURL)
+	apiPath := chooseHost(ext.URL, "www.tiktok.com")
 
 	oauthScopes := []string{
 		"user.info.basic",
@@ -57,13 +57,29 @@ func NewTikTokProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
-				AuthURL:  apiPath + "/v2/oauth/authorize/",
+				AuthURL:  apiPath + "/v2/auth/authorize/",
 				TokenURL: apiPath + "/v2/oauth/token/",
 			},
 			Scopes:      oauthScopes,
 			RedirectURL: ext.RedirectURI,
 		},
 	}, nil
+}
+
+func (t tiktokProvider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption) string {
+	opts := make([]oauth2.AuthCodeOption, 0, len(args)+2)
+	opts = append(opts, oauth2.SetAuthURLParam("client_key", t.Config.ClientID))
+	opts = append(opts, oauth2.SetAuthURLParam("scope", strings.Join(t.Config.Scopes, ",")))
+	opts = append(opts, args...)
+
+	authURL := t.Config.AuthCodeURL(state, opts...)
+	if authURL != "" {
+		if u, err := url.Parse(authURL); err != nil {
+			u.RawQuery = strings.ReplaceAll(u.RawQuery, "+", ",")
+			authURL = u.String()
+		}
+	}
+	return authURL
 }
 
 func (t tiktokProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
