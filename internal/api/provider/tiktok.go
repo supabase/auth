@@ -3,11 +3,14 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
 
@@ -20,19 +23,34 @@ type tiktokProvider struct {
 	Client *http.Client
 }
 
+type tiktokUserResponse struct {
+	Data  tiktokUserData  `json:"data"`
+	Error tiktokErrorData `json:"error"`
+}
+type tiktokUserData struct {
+	User tiktokUser `json:"user"`
+}
+
+type tiktokErrorData struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	LogID   string `json:"log_id"`
+}
+
 type tiktokUser struct {
 	ID              string `json:"open_id"`
 	UnionID         string `json:"union_id"`
 	DisplayName     string `json:"display_name"`
 	AvatarUrl       string `json:"avatar_url"`
 	AvatarUrlLarge  string `json:"avatar_large_url"`
+	BioDescription  string `json:"bio_description"`
 	ProfileDeepLink string `json:"profile_deep_link"`
 	Username        string `json:"username"`
-	IsVerified      string `json:"is_verified"`
-	FollowerCount   string `json:"follower_count"`
-	FollowingCount  string `json:"following_count"`
-	LikesCount      string `json:"likes_count"`
-	VideoCount      string `json:"video_count"`
+	IsVerified      bool   `json:"is_verified"`
+	FollowerCount   int64  `json:"follower_count"`
+	FollowingCount  int64  `json:"following_count"`
+	LikesCount      int64  `json:"likes_count"`
+	VideoCount      int64  `json:"video_count"`
 }
 
 // NewTikTokProvider creates a TikTok account provider.
@@ -41,7 +59,8 @@ func NewTikTokProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 		return nil, err
 	}
 
-	apiPath := chooseHost(ext.URL, "www.tiktok.com")
+	authorizePath := chooseHost(ext.URL, "www.tiktok.com")
+	tokenPath := chooseHost(ext.URL, "open.tiktokapis.com")
 
 	oauthScopes := []string{
 		"user.info.basic",
@@ -57,8 +76,8 @@ func NewTikTokProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 			ClientID:     ext.ClientID[0],
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
-				AuthURL:  apiPath + "/v2/auth/authorize/",
-				TokenURL: apiPath + "/v2/oauth/token/",
+				AuthURL:  authorizePath + "/v2/auth/authorize/",
+				TokenURL: tokenPath + "/v2/oauth/token/",
 			},
 			Scopes:      oauthScopes,
 			RedirectURL: ext.RedirectURI,
@@ -83,11 +102,13 @@ func (t tiktokProvider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption)
 }
 
 func (t tiktokProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return t.Exchange(context.Background(), code)
+	opts := make([]oauth2.AuthCodeOption, 0, 1)
+	opts = append(opts, oauth2.SetAuthURLParam("client_key", t.Config.ClientID))
+	return t.Exchange(context.Background(), code, opts...)
 }
 
 func (t tiktokProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	var u tiktokUser
+	var u tiktokUserResponse
 
 	fields := []string{
 		"open_id",
@@ -95,48 +116,75 @@ func (t tiktokProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 		"display_name",
 		"avatar_url",
 		"avatar_large_url",
-		"profile_deep_link",
-		"username",
-		"is_verified",
-		"follower_count",
-		"following_count",
-		"likes_count",
-		"video_count",
+	}
+	if slices.Contains(t.Scopes, "user.info.profile") {
+		fields = append(fields, []string{
+			"bio_description",
+			"profile_deep_link",
+			"username",
+			"is_verified",
+		}...)
+	}
+	if slices.Contains(t.Scopes, "user.info.stats") {
+		fields = append(fields, []string{
+			"follower_count",
+			"following_count",
+			"likes_count",
+			"video_count",
+		}...)
 	}
 	params := url.Values{}
 	params.Add("fields", strings.Join(fields, ","))
-	resp, err := t.Config.Client(ctx, tok).Get("https://open.tiktokapis.com/v2/user/info/")
+
+	req, err := http.NewRequest("GET", "https://open.tiktokapis.com/v2/user/info/?"+params.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
+	client := &http.Client{Timeout: defaultTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer utilities.SafeClose(resp.Body)
 
 	if err := json.NewDecoder(resp.Body).Decode(&u); err != nil {
 		return nil, err
 	}
+	if u.Error.Code != "ok" {
+		return nil, errors.New(u.Error.Message)
+	}
 
 	return &UserProvidedData{
+		Emails: []Email{
+			{
+				Email:    u.Data.User.Username,
+				Verified: false,
+				Primary:  false,
+			},
+		},
 		Metadata: &Claims{
 			Issuer:            defaultTikTokIssuerURL,
-			Subject:           u.ID,
-			Name:              u.DisplayName,
-			Picture:           u.AvatarUrl,
-			PreferredUsername: u.Username,
-			UserNameKey:       u.Username,
-			Profile:           u.ProfileDeepLink,
+			Subject:           u.Data.User.ID,
+			Name:              u.Data.User.DisplayName,
+			Picture:           u.Data.User.AvatarUrl,
+			PreferredUsername: u.Data.User.Username,
+			UserNameKey:       u.Data.User.Username,
+			Profile:           u.Data.User.ProfileDeepLink,
 			CustomClaims: map[string]interface{}{
-				"is_verified":     u.IsVerified,
-				"union_id":        u.UnionID,
-				"follower_count":  u.FollowerCount,
-				"following_count": u.FollowingCount,
-				"likes_count":     u.LikesCount,
-				"video_count":     u.VideoCount,
+				"scopes":          strings.Join(t.Scopes, ","),
+				"is_verified":     u.Data.User.IsVerified,
+				"union_id":        u.Data.User.UnionID,
+				"follower_count":  u.Data.User.FollowerCount,
+				"following_count": u.Data.User.FollowingCount,
+				"likes_count":     u.Data.User.LikesCount,
+				"video_count":     u.Data.User.VideoCount,
 			},
 
 			// To be deprecated
-			AvatarURL:  u.AvatarUrl,
-			FullName:   u.DisplayName,
-			ProviderId: u.ID,
+			AvatarURL:  u.Data.User.AvatarUrl,
+			FullName:   u.Data.User.DisplayName,
+			ProviderId: u.Data.User.ID,
 		},
 	}, nil
 }
