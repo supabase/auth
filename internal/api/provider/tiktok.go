@@ -158,7 +158,7 @@ func (t tiktokProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	return &UserProvidedData{
 		Emails: []Email{
 			{
-				Email:    u.Data.User.Username,
+				Email:    "",
 				Verified: false,
 				Primary:  false,
 			},
@@ -172,6 +172,7 @@ func (t tiktokProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 			UserNameKey:       u.Data.User.Username,
 			Profile:           u.Data.User.ProfileDeepLink,
 			CustomClaims: map[string]interface{}{
+				"access_token":    tok,
 				"scopes":          strings.Join(t.Scopes, ","),
 				"is_verified":     u.Data.User.IsVerified,
 				"union_id":        u.Data.User.UnionID,
