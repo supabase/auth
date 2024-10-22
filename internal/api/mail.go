@@ -627,14 +627,17 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		}
 	}
 
-	// apply rate limiting before the email is sent out
-	if ok := a.limiterOpts.Email.Allow(); !ok {
-		emailRateLimitCounter.Add(
-			ctx,
-			1,
-			metric.WithAttributeSet(attribute.NewSet(attribute.String("path", r.URL.Path))),
-		)
-		return EmailRateLimitExceeded
+	// TODO(km): Deprecate this behaviour - rate limits should still be applied to autoconfirm
+	if !config.Mailer.Autoconfirm {
+		// apply rate limiting before the email is sent out
+		if ok := a.limiterOpts.Email.Allow(); !ok {
+			emailRateLimitCounter.Add(
+				ctx,
+				1,
+				metric.WithAttributeSet(attribute.NewSet(attribute.String("path", r.URL.Path))),
+			)
+			return EmailRateLimitExceeded
+		}
 	}
 
 	if config.Hook.SendEmail.Enabled {
