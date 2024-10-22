@@ -90,6 +90,12 @@ jobs:
           mv auth-arm64 auth
           tar -czvf auth-v$RELEASE_VERSION-arm64.tar.gz auth gotrue migrations/
 
+      - name: configure aws credentials for uploading release artifacts
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.PROD_AWS_ROLE }}
+          aws-region: us-east-1
+
       - name: Upload release artifacts
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         run: |
@@ -126,6 +132,8 @@ jobs:
                   -f "sha=$GITHUB_SHA"
                 fi
               fi
+
+              aws s3api put-object --bucket ${{ secrets.PROD_ARTIFACTS_BUCKET }} --key auth-v$RELEASE_VERSION-arm64.tar.gz --body ./auth-v$RELEASE_VERSION-arm64.tar.gz
           fi
 
           GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz
