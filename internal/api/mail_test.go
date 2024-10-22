@@ -206,6 +206,11 @@ func (ts *MailTestSuite) TestGenerateLink() {
 	customDomainUrl, err := url.ParseRequestURI("https://example.gotrue.com")
 	require.NoError(ts.T(), err)
 
+	originalHosts := ts.API.config.Mailer.ExternalHosts
+	ts.API.config.Mailer.ExternalHosts = []string{
+		"example.gotrue.com",
+	}
+
 	for _, c := range cases {
 		ts.Run(c.Desc, func() {
 			var buffer bytes.Buffer
@@ -239,6 +244,8 @@ func (ts *MailTestSuite) TestGenerateLink() {
 			require.Equal(ts.T(), req.Host, u.Host)
 		})
 	}
+
+	ts.API.config.Mailer.ExternalHosts = originalHosts
 }
 
 func (ts *MailTestSuite) setURIAllowListMap(uris ...string) {

@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 	"time"
 
@@ -187,25 +186,128 @@ func (ts *MiddlewareTestSuite) TestVerifyCaptchaInvalid() {
 
 func (ts *MiddlewareTestSuite) TestIsValidExternalHost() {
 	cases := []struct {
-		desc        string
-		requestURL  string
+		desc          string
+		externalHosts []string
+
+		requestURL string
+		headers    http.Header
+
 		expectedURL string
 	}{
 		{
-			desc:        "Valid custom external url",
-			requestURL:  "https://example.custom.com",
-			expectedURL: "https://example.custom.com",
+			desc:        "no defined external hosts, no headers, no absolute request URL",
+			requestURL:  "/some-path",
+			expectedURL: ts.API.config.API.ExternalURL,
+		},
+
+		{
+			desc: "no defined external hosts, unauthorized X-Forwarded-Host without any external hosts",
+			headers: http.Header{
+				"X-Forwarded-Host": []string{
+					"external-host.com",
+				},
+			},
+			requestURL:  "/some-path",
+			expectedURL: ts.API.config.API.ExternalURL,
+		},
+
+		{
+			desc:          "defined external hosts, unauthorized X-Forwarded-Host",
+			externalHosts: []string{"authorized-host.com"},
+			headers: http.Header{
+				"X-Forwarded-Proto": []string{"https"},
+				"X-Forwarded-Host": []string{
+					"external-host.com",
+				},
+			},
+			requestURL:  "/some-path",
+			expectedURL: ts.API.config.API.ExternalURL,
+		},
+
+		{
+			desc:        "no defined external hosts, unauthorized Host",
+			requestURL:  "https://external-host.com/some-path",
+			expectedURL: ts.API.config.API.ExternalURL,
+		},
+
+		{
+			desc:          "defined external hosts, unauthorized Host",
+			externalHosts: []string{"authorized-host.com"},
+			requestURL:    "https://external-host.com/some-path",
+			expectedURL:   ts.API.config.API.ExternalURL,
+		},
+
+		{
+			desc:          "defined external hosts, authorized X-Forwarded-Host",
+			externalHosts: []string{"authorized-host.com"},
+			headers: http.Header{
+				"X-Forwarded-Proto": []string{"http"}, // this should be ignored and default to HTTPS
+				"X-Forwarded-Host": []string{
+					"authorized-host.com",
+				},
+			},
+			requestURL:  "https://X-Forwarded-Host-takes-precedence.com/some-path",
+			expectedURL: "https://authorized-host.com",
+		},
+
+		{
+			desc:          "defined external hosts, authorized Host",
+			externalHosts: []string{"authorized-host.com"},
+			requestURL:    "https://authorized-host.com/some-path",
+			expectedURL:   "https://authorized-host.com",
+		},
+
+		{
+			desc:          "defined external hosts, authorized X-Forwarded-Host",
+			externalHosts: []string{"authorized-host.com"},
+			headers: http.Header{
+				"X-Forwarded-Proto": []string{"http"}, // this should be ignored and default to HTTPS
+				"X-Forwarded-Host": []string{
+					"authorized-host.com",
+				},
+			},
+			requestURL:  "https://X-Forwarded-Host-takes-precedence.com/some-path",
+			expectedURL: "https://authorized-host.com",
+		},
+
+		{
+			desc:          "defined external hosts, authorized localhost in X-Forwarded-Host with HTTP",
+			externalHosts: []string{"localhost"},
+			headers: http.Header{
+				"X-Forwarded-Proto": []string{"http"},
+				"X-Forwarded-Host": []string{
+					"localhost",
+				},
+			},
+			requestURL:  "/some-path",
+			expectedURL: "http://localhost",
+		},
+
+		{
+			desc:          "defined external hosts, authorized localhost in Host with HTTP",
+			externalHosts: []string{"localhost"},
+			requestURL:    "http://localhost:3000/some-path",
+			expectedURL:   "http://localhost",
 		},
 	}
 
-	_, err := url.ParseRequestURI("https://example.custom.com")
-	require.NoError(ts.T(), err)
+	require.NotEmpty(ts.T(), ts.API.config.API.ExternalURL)
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			req := httptest.NewRequest(http.MethodPost, c.requestURL, nil)
+			if c.headers != nil {
+				req.Header = c.headers
+			}
+
+			originalHosts := ts.API.config.Mailer.ExternalHosts
+			ts.API.config.Mailer.ExternalHosts = c.externalHosts
+
 			w := httptest.NewRecorder()
 			ctx, err := ts.API.isValidExternalHost(w, req)
+
+			ts.API.config.Mailer.ExternalHosts = originalHosts
+
 			require.NoError(ts.T(), err)
 
 			externalURL := getExternalHost(ctx)
