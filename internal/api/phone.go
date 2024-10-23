@@ -86,9 +86,12 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 
 	// not using test OTPs
 	if otp == "" {
-		// apply rate limiting before the sms is sent out
-		if ok := a.limiterOpts.Phone.Allow(); !ok {
-			return "", tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
+		// TODO(km): Deprecate this behaviour - rate limits should still be applied to autoconfirm
+		if !config.Sms.Autoconfirm {
+			// apply rate limiting before the sms is sent out
+			if ok := a.limiterOpts.Phone.Allow(); !ok {
+				return "", tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
+			}
 		}
 		otp, err = crypto.GenerateOtp(config.Sms.OtpLength)
 		if err != nil {

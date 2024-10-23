@@ -398,6 +398,8 @@ type MailerConfiguration struct {
 
 	OtpExp    uint `json:"otp_exp" split_words:"true"`
 	OtpLength int  `json:"otp_length" split_words:"true"`
+
+	ExternalHosts []string `json:"external_hosts" split_words:"true"`
 }
 
 type PhoneProviderConfiguration struct {
