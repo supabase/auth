@@ -118,6 +118,10 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 
 	verificationResult, err := security.VerifyRequest(req, strings.TrimSpace(config.Security.Captcha.Secret), config.Security.Captcha.Provider)
 	if err != nil {
+		if strings.Contains(err.Error(), "request body was not JSON") {
+			return nil, badRequestError(ErrorCodeValidationFailed, "Request body for CAPTCHA verification was not a valid JSON object")
+		}
+
 		return nil, internalServerError("captcha verification process failed").WithInternalError(err)
 	}
 
