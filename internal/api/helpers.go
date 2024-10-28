@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/utilities"
 )
 
@@ -57,11 +58,6 @@ func isStringInSlice(checkValue string, list []string) bool {
 	return false
 }
 
-// getBodyBytes returns a byte array of the request's Body.
-func getBodyBytes(req *http.Request) ([]byte, error) {
-	return utilities.GetBodyBytes(req)
-}
-
 type RequestParams interface {
 	AdminUserParams |
 		CreateSSOProviderParams |
@@ -82,6 +78,8 @@ type RequestParams interface {
 		VerifyFactorParams |
 		VerifyParams |
 		adminUserUpdateFactorParams |
+		adminUserDeleteParams |
+		security.GotrueRequest |
 		ChallengeFactorParams |
 		struct {
 			Email string `json:"email"`
@@ -94,7 +92,7 @@ type RequestParams interface {
 
 // retrieveRequestParams is a generic method that unmarshals the request body into the params struct provided
 func retrieveRequestParams[A RequestParams](r *http.Request, params *A) error {
-	body, err := getBodyBytes(r)
+	body, err := utilities.GetBodyBytes(r)
 	if err != nil {
 		return internalServerError("Could not read body into byte slice").WithInternalError(err)
 	}

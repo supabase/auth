@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"fmt"
+
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/utilities"
 )
@@ -45,25 +46,13 @@ func init() {
 	Client = &http.Client{Timeout: defaultTimeout}
 }
 
-func VerifyRequest(r *http.Request, secretKey, captchaProvider string) (VerificationResponse, error) {
-	bodyBytes, err := utilities.GetBodyBytes(r)
-	if err != nil {
-		return VerificationResponse{}, err
-	}
-
-	var requestBody GotrueRequest
-
-	if err := json.Unmarshal(bodyBytes, &requestBody); err != nil {
-		return VerificationResponse{}, errors.Wrap(err, "request body was not JSON")
-	}
-
+func VerifyRequest(requestBody *GotrueRequest, clientIP, secretKey, captchaProvider string) (VerificationResponse, error) {
 	captchaResponse := strings.TrimSpace(requestBody.Security.Token)
 
 	if captchaResponse == "" {
 		return VerificationResponse{}, errors.New("no captcha response (captcha_token) found in request")
 	}
 
-	clientIP := utilities.GetIPAddress(r)
 	captchaURL, err := GetCaptchaURL(captchaProvider)
 	if err != nil {
 		return VerificationResponse{}, err
