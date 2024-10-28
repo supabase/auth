@@ -179,7 +179,7 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 		case http.StatusUnauthorized:
 			return nil, internalServerError("Hook requires authorization token")
 		default:
-			return nil, internalServerError("Error executing Hook")
+			return nil, internalServerError("Unexpected status code returned from hook: %d", rsp.StatusCode)
 		}
 	}
 	return nil, nil
