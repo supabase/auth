@@ -759,6 +759,26 @@ func IsDuplicatedPhone(tx *storage.Connection, phone, aud string) (bool, error) 
 	return true, nil
 }
 
+// TODO: Simplify this, check if it is safe to do this in admin create user too
+// HasPhoneIdentity checks if the phone number already exists in the identities table
+func HasPhoneIdentity(tx *storage.Connection, phone, aud string) (bool, error) {
+	user, err := FindUserByPhoneAndAudience(tx, phone, aud)
+	if err != nil {
+		if IsNotFoundError(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	_, err = FindIdentityByIdAndProvider(tx, user.ID.String(), "phone")
+	if err != nil {
+		if IsNotFoundError(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 // Ban a user for a given duration.
 func (u *User) Ban(tx *storage.Connection, duration time.Duration) error {
 	if duration == time.Duration(0) {
