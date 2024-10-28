@@ -14,6 +14,7 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -513,11 +514,10 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 
 	// ShouldSoftDelete defaults to false
 	params := &adminUserDeleteParams{}
-	if err := retrieveRequestParams(r, params); err != nil {
-		if err.(*HTTPError).ErrorCode == ErrorCodeBadJSON {
-			// request body is empty so the default behavior should be to hard delete the user
-			params.ShouldSoftDelete = false
-		} else {
+	if body, _ := utilities.GetBodyBytes(r); len(body) != 0 {
+		// we only want to parse the body if it's not empty
+		// retrieveRequestParams will handle any errors with stream
+		if err := retrieveRequestParams(r, params); err != nil {
 			return err
 		}
 	}
