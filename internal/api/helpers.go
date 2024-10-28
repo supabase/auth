@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/utilities"
 )
 
@@ -78,6 +79,7 @@ type RequestParams interface {
 		VerifyParams |
 		adminUserUpdateFactorParams |
 		adminUserDeleteParams |
+		security.GotrueRequest |
 		ChallengeFactorParams |
 		struct {
 			Email string `json:"email"`
