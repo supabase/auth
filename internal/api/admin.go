@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -512,21 +511,18 @@ func (a *API) adminUserDelete(w http.ResponseWriter, r *http.Request) error {
 	user := getUser(ctx)
 	adminUser := getAdminUser(ctx)
 
-	var err error
+	// ShouldSoftDelete defaults to false
 	params := &adminUserDeleteParams{}
-	body, err := getBodyBytes(r)
-	if err != nil {
-		return internalServerError("Could not read body").WithInternalError(err)
-	}
-	if len(body) > 0 {
-		if err := json.Unmarshal(body, params); err != nil {
-			return badRequestError(ErrorCodeBadJSON, "Could not read params: %v", err)
+	if err := retrieveRequestParams(r, params); err != nil {
+		if err.(*HTTPError).ErrorCode == ErrorCodeBadJSON {
+			// request body is empty so the default behavior should be to hard delete the user
+			params.ShouldSoftDelete = false
+		} else {
+			return err
 		}
-	} else {
-		params.ShouldSoftDelete = false
 	}
 
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err := a.db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserDeletedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
 			"user_email": user.Email,
