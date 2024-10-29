@@ -205,6 +205,12 @@ func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Create(existingUser))
 
+	idPhone, err := models.NewIdentity(existingUser, "phone", map[string]interface{}{
+		"sub": "+29382983298",
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(idPhone))
+
 	cases := []struct {
 		desc         string
 		userData     map[string]string
