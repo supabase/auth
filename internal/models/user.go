@@ -667,6 +667,24 @@ func FindUserWithRefreshToken(tx *storage.Connection, token string, forUpdate bo
 		}
 	}
 
+	if session == nil {
+		// the refresh token doesn't have a session so we just create one for it
+		// this is to accomodate refresh tokens that were created prior to the creation of the sessions table
+		session, err = NewSession(user.ID, nil)
+		if err != nil {
+			return nil, nil, nil, errors.Wrap(err, "error instantiating new session for refresh token")
+		}
+		if err := tx.Create(session); err != nil {
+			return nil, nil, nil, errors.Wrap(err, "error creating new session for refresh token")
+		}
+
+		// backfill the existing token with the session id
+		refreshToken.SessionId = &session.ID
+		if err := tx.UpdateOnly(refreshToken, "session_id"); err != nil {
+			return nil, nil, nil, errors.Wrap(err, "error updating refresh token with session id")
+		}
+	}
+
 	return user, refreshToken, session, nil
 }
 
