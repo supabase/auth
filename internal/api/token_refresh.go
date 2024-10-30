@@ -56,19 +56,25 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return badRequestError(ErrorCodeUserBanned, "Invalid Refresh Token: User Banned")
 		}
 
-		if session != nil {
-			result := session.CheckValidity(retryStart, &token.UpdatedAt, config.Sessions.Timebox, config.Sessions.InactivityTimeout)
-
-			switch result {
-			case models.SessionValid:
-				// do nothing
-
-			case models.SessionTimedOut:
-				return badRequestError(ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Inactivity)")
-
-			default:
-				return badRequestError(ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired")
+		if session == nil {
+			// a refresh token won't have a session if it's created prior to the sessions table introduced
+			if err := db.Destroy(token); err != nil {
+				return internalServerError("Error deleting refresh token with missing session").WithInternalError(err)
 			}
+			return badRequestError(ErrorCodeSessionNotFound, "Invalid Refresh Token: No Valid Session Found")
+		}
+
+		result := session.CheckValidity(retryStart, &token.UpdatedAt, config.Sessions.Timebox, config.Sessions.InactivityTimeout)
+
+		switch result {
+		case models.SessionValid:
+			// do nothing
+
+		case models.SessionTimedOut:
+			return badRequestError(ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Inactivity)")
+
+		default:
+			return badRequestError(ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired")
 		}
 
 		// Basic checks above passed, now we need to serialize access
