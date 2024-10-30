@@ -269,7 +269,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 	if err := flowState.VerifyPKCE(params.CodeVerifier); err != nil {
-		return badRequestError(ErrorBadCodeVerifier, err.Error())
+		return badRequestError(ErrorCodeBadCodeVerifier, err.Error())
 	}
 
 	var token *AccessTokenResponse
