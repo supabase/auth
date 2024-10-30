@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 
+	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/models"
 )
@@ -31,6 +32,8 @@ const (
 	ssoProviderKey          = contextKey("sso_provider")
 	externalHostKey         = contextKey("external_host")
 	flowStateKey            = contextKey("flow_state_id")
+	organizationID          = contextKey("organization_id")
+	projectID               = contextKey("project_id")
 )
 
 // withToken adds the JWT token to the context.
@@ -140,6 +143,29 @@ func getFlowStateID(ctx context.Context) string {
 		return ""
 	}
 	return obj.(string)
+}
+
+func withOrganizationID(ctx context.Context, id uuid.UUID) context.Context {
+	return context.WithValue(ctx, organizationID, id)
+}
+
+func getOrganizationID(ctx context.Context) uuid.UUID {
+	obj := ctx.Value(organizationID)
+	if obj == nil {
+		return uuid.Nil
+	}
+	return obj.(uuid.UUID)
+}
+func withProjectID(ctx context.Context, id uuid.UUID) context.Context {
+	return context.WithValue(ctx, projectID, id)
+}
+
+func getProjectID(ctx context.Context) uuid.UUID {
+	obj := ctx.Value(projectID)
+	if obj == nil {
+		return uuid.Nil
+	}
+	return obj.(uuid.UUID)
 }
 
 func getInviteToken(ctx context.Context) string {

@@ -33,9 +33,10 @@ func TestFactor(t *testing.T) {
 
 func (ts *FactorTestSuite) SetupTest() {
 	TruncateAll(ts.db)
-	user, err := NewUser("", "agenericemail@gmail.com", "secret", "test", nil)
+	id := uuid.Must(uuid.NewV4())
+	user, err := NewUser("", "agenericemail@gmail.com", "secret", "test", nil, id, uuid.Nil)
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(user))
+	require.NoError(ts.T(), ts.db.Create(user, "project_id"))
 
 	factor := NewTOTPFactor(user, "asimplename")
 	require.NoError(ts.T(), factor.SetSecret("topsecret", false, "", ""))

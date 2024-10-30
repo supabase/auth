@@ -2,12 +2,13 @@
 create table if not exists {{ index .Options "Namespace" }}.sessions (
     id uuid not null,
     user_id uuid not null,
-    created_at timestamptz null,
-    updated_at timestamptz null,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     constraint sessions_pkey primary key (id),
     constraint sessions_user_id_fkey foreign key (user_id) references {{ index .Options "Namespace" }}.users(id) on delete cascade
 );
 comment on table {{ index .Options "Namespace" }}.sessions is 'Auth: Stores session data associated to a user.';
+create trigger trigger_update_timestamp before update on {{ index .Options "Namespace" }}.sessions for each row execute function update_updated_at_column();
 
 alter table {{ index .Options "Namespace" }}.refresh_tokens
 add column if not exists session_id uuid null;

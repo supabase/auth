@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
@@ -16,12 +17,31 @@ import (
 
 // IdTokenGrantParams are the parameters the IdTokenGrant method accepts
 type IdTokenGrantParams struct {
-	IdToken     string `json:"id_token"`
-	AccessToken string `json:"access_token"`
-	Nonce       string `json:"nonce"`
-	Provider    string `json:"provider"`
-	ClientID    string `json:"client_id"`
-	Issuer      string `json:"issuer"`
+	IdToken        string    `json:"id_token"`
+	AccessToken    string    `json:"access_token"`
+	Nonce          string    `json:"nonce"`
+	Provider       string    `json:"provider"`
+	ClientID       string    `json:"client_id"`
+	Issuer         string    `json:"issuer"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+	ProjectID      uuid.UUID `json:"project_id"`
+}
+
+func (p *IdTokenGrantParams) Validate(a *API) error {
+
+	if p.IdToken == "" {
+		return oauthError("invalid request", "id_token required")
+	}
+
+	if p.Provider == "" && (p.ClientID == "" || p.Issuer == "") {
+		return oauthError("invalid request", "provider or client_id and issuer required")
+	}
+
+	if p.ProjectID == uuid.Nil && p.OrganizationID == uuid.Nil {
+		return oauthError("invalid request", "Organization ID is required or Project ID required for Admin login")
+	}
+
+	return nil
 }
 
 func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, bool, string, []string, error) {
@@ -134,12 +154,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return err
 	}
 
-	if params.IdToken == "" {
-		return oauthError("invalid request", "id_token required")
-	}
-
-	if params.Provider == "" && (params.ClientID == "" || params.Issuer == "") {
-		return oauthError("invalid request", "provider or client_id and issuer required")
+	if err := params.Validate(a); err != nil {
+		return err
 	}
 
 	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, err := params.getProvider(ctx, config, r)
@@ -227,7 +243,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		var user *models.User
 		var terr error
 
-		user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType)
+		user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, params.OrganizationID, params.ProjectID)
 		if terr != nil {
 			return terr
 		}

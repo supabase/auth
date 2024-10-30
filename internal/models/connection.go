@@ -35,6 +35,7 @@ type SortField struct {
 func TruncateAll(conn *storage.Connection) error {
 	return conn.Transaction(func(tx *storage.Connection) error {
 		tables := []string{
+			"organizations",
 			(&pop.Model{Value: User{}}).TableName(),
 			(&pop.Model{Value: Identity{}}).TableName(),
 			(&pop.Model{Value: RefreshToken{}}).TableName(),
@@ -49,10 +50,11 @@ func TruncateAll(conn *storage.Connection) error {
 			(&pop.Model{Value: SAMLRelayState{}}).TableName(),
 			(&pop.Model{Value: FlowState{}}).TableName(),
 			(&pop.Model{Value: OneTimeToken{}}).TableName(),
+			"projects",
 		}
 
 		for _, tableName := range tables {
-			if err := tx.RawQuery("DELETE FROM " + tableName + " CASCADE").Exec(); err != nil {
+			if err := tx.RawQuery("TRUNCATE auth." + tableName + " CASCADE").Exec(); err != nil {
 				return err
 			}
 		}

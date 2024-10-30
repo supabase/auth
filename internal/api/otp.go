@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/gofrs/uuid"
 	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
@@ -22,6 +23,8 @@ type OtpParams struct {
 	Channel             string                 `json:"channel"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 	CodeChallenge       string                 `json:"code_challenge"`
+	OrganizationID      uuid.UUID              `json:"organization_id"`
+	ProjectID           uuid.UUID              `json:"project_id"`
 }
 
 // SmsParams contains the request body params for sms otp
@@ -31,6 +34,8 @@ type SmsParams struct {
 	Data                map[string]interface{} `json:"data"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 	CodeChallenge       string                 `json:"code_challenge"`
+	OrganizationID      uuid.UUID              `json:"organization_id"`
+	ProjectID           uuid.UUID              `json:"project_id"`
 }
 
 func (p *OtpParams) Validate() error {
@@ -43,6 +48,9 @@ func (p *OtpParams) Validate() error {
 	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
 		return err
 	}
+	if p.OrganizationID == uuid.Nil && p.ProjectID == uuid.Nil {
+		return badRequestError(ErrorCodeValidationFailed, "Organization ID or Project ID must be set")
+	}
 	return nil
 }
 
@@ -54,6 +62,9 @@ func (p *SmsParams) Validate(config *conf.GlobalConfiguration) error {
 	}
 	if !sms_provider.IsValidMessageChannel(p.Channel, config) {
 		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
+	}
+	if p.OrganizationID == uuid.Nil && p.ProjectID == uuid.Nil {
+		return badRequestError(ErrorCodeValidationFailed, "Organization ID or Project ID must be set")
 	}
 	return nil
 }
@@ -124,7 +135,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 
 	var isNewUser bool
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByPhoneAndAudience(db, params.Phone, aud)
+	user, err := models.FindUserByPhoneAndAudience(db, params.Phone, aud, params.OrganizationID, uuid.Nil)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			isNewUser = true
@@ -220,13 +231,13 @@ func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) (bool, error)
 			if err != nil {
 				return false, err
 			}
-			_, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
+			_, err = models.FindUserByEmailAndAudience(db, params.Email, aud, params.OrganizationID, params.ProjectID)
 		} else if params.Phone != "" {
 			params.Phone, err = validatePhone(params.Phone)
 			if err != nil {
 				return false, err
 			}
-			_, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
+			_, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud, params.OrganizationID, params.ProjectID)
 		}
 
 		if err != nil && models.IsNotFoundError(err) {

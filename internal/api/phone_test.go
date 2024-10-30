@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -56,9 +57,10 @@ func (ts *PhoneTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
 	// Create user
-	u, err := models.NewUser("123456789", "", "password", ts.Config.JWT.Aud, nil)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	u, err := models.NewUser("123456789", "", "password", ts.Config.JWT.Aud, nil, id, uuid.Nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+	require.NoError(ts.T(), ts.API.db.Create(u, "project_id", "organization_role"), "Error saving new test user")
 }
 
 func (ts *PhoneTestSuite) TestValidateE164Format() {
@@ -72,7 +74,8 @@ func (ts *PhoneTestSuite) TestFormatPhoneNumber() {
 }
 
 func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
-	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud, id, uuid.Nil)
 	require.NoError(ts.T(), err)
 	req, err := http.NewRequest("POST", "http://localhost:9998/otp", nil)
 	require.NoError(ts.T(), err)
@@ -118,7 +121,7 @@ func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 
 			_, err = ts.API.sendPhoneConfirmation(req, ts.API.db, u, "123456789", c.otpType, sms_provider.SMSProvider)
 			require.Equal(ts.T(), c.expected, err)
-			u, err = models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
+			u, err = models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud, id, uuid.Nil)
 			require.NoError(ts.T(), err)
 
 			if c.expected == nil {
@@ -157,7 +160,8 @@ func (ts *PhoneTestSuite) TestSendPhoneConfirmationWithTestOTP() {
 }
 
 func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
-	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud, id, uuid.Nil)
 	require.NoError(ts.T(), err)
 	now := time.Now()
 	u.PhoneConfirmedAt = &now
@@ -267,7 +271,8 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 	}
 }
 func (ts *PhoneTestSuite) TestSendSMSHook() {
-	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	u, err := models.FindUserByPhoneAndAudience(ts.API.db, "123456789", ts.Config.JWT.Aud, id, uuid.Nil)
 	require.NoError(ts.T(), err)
 	now := time.Now()
 	u.PhoneConfirmedAt = &now

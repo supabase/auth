@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/models"
@@ -117,7 +118,8 @@ func (ts *ExternalTestSuite) TestSignupExternalFigma_PKCE() {
 			require.NotEmpty(ts.T(), authCode)
 
 			// Check for valid provider access token, mock does not return refresh token
-			user, err := models.FindUserByEmailAndAudience(ts.API.db, "figma@example.com", ts.Config.JWT.Aud)
+			id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+			user, err := models.FindUserByEmailAndAudience(ts.API.db, "figma@example.com", ts.Config.JWT.Aud, id, uuid.Nil)
 			require.NoError(ts.T(), err)
 			require.NotEmpty(ts.T(), user)
 			flowState, err := models.FindFlowStateByAuthCode(ts.API.db, authCode)
@@ -253,7 +255,8 @@ func (ts *ExternalTestSuite) TestSignupExternalFigmaErrorWhenUserBanned() {
 	u := performAuthorization(ts, "figma", code, "")
 	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "figma@example.com", "Figma Test", "figma-test-id", "http://example.com/avatar")
 
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, "figma@example.com", ts.Config.JWT.Aud)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, "figma@example.com", ts.Config.JWT.Aud, id, uuid.Nil)
 	require.NoError(ts.T(), err)
 	t := time.Now().Add(24 * time.Hour)
 	user.BannedUntil = &t

@@ -84,12 +84,12 @@ func getFlowFromChallenge(codeChallenge string) models.FlowType {
 }
 
 // Should only be used with Auth Code of PKCE Flows
-func generateFlowState(tx *storage.Connection, providerType string, authenticationMethod models.AuthenticationMethod, codeChallengeMethodParam string, codeChallenge string, userID *uuid.UUID) (*models.FlowState, error) {
+func generateFlowState(tx *storage.Connection, providerType string, authenticationMethod models.AuthenticationMethod, codeChallengeMethodParam string, codeChallenge string, userID *uuid.UUID, organization_id uuid.UUID, project_id uuid.UUID) (*models.FlowState, error) {
 	codeChallengeMethod, err := models.ParseCodeChallengeMethod(codeChallengeMethodParam)
 	if err != nil {
 		return nil, err
 	}
-	flowState := models.NewFlowState(providerType, codeChallenge, codeChallengeMethod, authenticationMethod, userID)
+	flowState := models.NewFlowState(providerType, codeChallenge, codeChallengeMethod, authenticationMethod, userID, organization_id, project_id)
 	if err := tx.Create(flowState); err != nil {
 		return nil, err
 	}

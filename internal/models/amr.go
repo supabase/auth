@@ -26,7 +26,7 @@ func (cl *AMRClaim) IsAAL2Claim() bool {
 }
 
 func AddClaimToSession(tx *storage.Connection, sessionId uuid.UUID, authenticationMethod AuthenticationMethod) error {
-	id := uuid.Must(uuid.NewV4())
+	id := uuid.Must(uuid.NewV4()).String()
 
 	currentTime := time.Now()
 	return tx.RawQuery("INSERT INTO "+(&pop.Model{Value: AMRClaim{}}).TableName()+

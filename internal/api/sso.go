@@ -16,6 +16,8 @@ type SingleSignOnParams struct {
 	SkipHTTPRedirect    *bool     `json:"skip_http_redirect"`
 	CodeChallenge       string    `json:"code_challenge"`
 	CodeChallengeMethod string    `json:"code_challenge_method"`
+	OrganizationID      uuid.UUID `json:"organization_id"`
+	ProjectID           uuid.UUID `json:"project_id"`
 }
 
 type SingleSignOnResponse struct {
@@ -30,6 +32,9 @@ func (p *SingleSignOnParams) validate() (bool, error) {
 		return hasProviderID, badRequestError(ErrorCodeValidationFailed, "Only one of provider_id or domain supported")
 	} else if !hasProviderID && !hasDomain {
 		return hasProviderID, badRequestError(ErrorCodeValidationFailed, "A provider_id or domain needs to be provided")
+	}
+	if p.OrganizationID == uuid.Nil && p.ProjectID == uuid.Nil {
+		return hasProviderID, badRequestError(ErrorCodeValidationFailed, "Organization ID or Project ID must be set")
 	}
 
 	return hasProviderID, nil
@@ -61,7 +66,10 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	var flowStateID *uuid.UUID
 	flowStateID = nil
 	if isPKCEFlow(flowType) {
-		flowState, err := generateFlowState(db, models.SSOSAML.String(), models.SSOSAML, codeChallengeMethod, codeChallenge, nil)
+
+		organization_id := params.OrganizationID
+		project_id := params.ProjectID
+		flowState, err := generateFlowState(db, models.SSOSAML.String(), models.SSOSAML, codeChallengeMethod, codeChallenge, nil, organization_id, project_id)
 		if err != nil {
 			return err
 		}

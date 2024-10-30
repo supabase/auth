@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
@@ -11,9 +12,11 @@ import (
 
 // ResendConfirmationParams holds the parameters for a resend request
 type ResendConfirmationParams struct {
-	Type  string `json:"type"`
-	Email string `json:"email"`
-	Phone string `json:"phone"`
+	Type           string    `json:"type"`
+	Email          string    `json:"email"`
+	Phone          string    `json:"phone"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+	ProjectID      uuid.UUID `json:"project_id"`
 }
 
 func (p *ResendConfirmationParams) Validate(a *API) error {
@@ -32,6 +35,9 @@ func (p *ResendConfirmationParams) Validate(a *API) error {
 	}
 	if p.Phone == "" && p.Type == smsVerification {
 		return badRequestError(ErrorCodeValidationFailed, "Type provided requires a phone number")
+	}
+	if p.OrganizationID == uuid.Nil && p.ProjectID == uuid.Nil {
+		return badRequestError(ErrorCodeValidationFailed, "Organization ID or Project ID is required")
 	}
 
 	var err error
@@ -76,10 +82,14 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	var user *models.User
 	var err error
 	aud := a.requestAud(ctx, r)
+	if params.OrganizationID == uuid.Nil && params.ProjectID == uuid.Nil {
+		return badRequestError(ErrorCodeValidationFailed, "Organization ID or Project ID is required")
+	}
+
 	if params.Email != "" {
-		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
+		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud, params.OrganizationID, uuid.Nil)
 	} else if params.Phone != "" {
-		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
+		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud, params.OrganizationID, uuid.Nil)
 	}
 
 	if err != nil {

@@ -65,6 +65,12 @@ func (e *OAuthError) Cause() error {
 	return e
 }
 
+type OrganizationNotFoundError struct{}
+
+func (e OrganizationNotFoundError) Error() string {
+	return "Organization not found"
+}
+
 func oauthError(err string, description string) *OAuthError {
 	return &OAuthError{Err: err, Description: description}
 }

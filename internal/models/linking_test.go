@@ -1,8 +1,10 @@
 package models
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/api/provider"
@@ -20,6 +22,28 @@ type AccountLinkingTestSuite struct {
 
 func (ts *AccountLinkingTestSuite) SetupTest() {
 	TruncateAll(ts.db)
+
+	project_id := uuid.Must(uuid.NewV4())
+	// Create a project
+	if err := ts.db.RawQuery(fmt.Sprintf("INSERT INTO auth.projects (id, name) VALUES ('%s', 'test_project')", project_id)).Exec(); err != nil {
+		panic(err)
+	}
+
+	// Create the admin of the organization
+	user, err := NewUser("", "admin@example.com", "test", "", nil, uuid.Nil, project_id)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.db.Create(user, "organization_id", "organization_role"), "Error creating user")
+
+	// Create the organization
+	organization_id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	if err := ts.db.RawQuery(fmt.Sprintf("INSERT INTO auth.organizations (id, name, project_id, admin_id) VALUES ('%s', 'test_organization', '%s', '%s')", organization_id, project_id, user.ID)).Exec(); err != nil {
+		panic(err)
+	}
+
+	// Set the user as the admin of the organization
+	if err := ts.db.RawQuery(fmt.Sprintf("UPDATE auth.users SET organization_id = '%s', organization_role='admin' WHERE id = '%s'", organization_id, user.ID)).Exec(); err != nil {
+		panic(err)
+	}
 }
 
 func TestAccountLinking(t *testing.T) {
@@ -45,32 +69,35 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionNoAccounts() {
 		Verified: true,
 		Primary:  true,
 	}
-	decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{testEmail}, ts.config.JWT.Aud, "provider", "abcdefgh")
+	organization_id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{testEmail}, ts.config.JWT.Aud, "provider", "abcdefgh", organization_id, uuid.Nil)
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, CreateAccount)
 
 	// when there are no accounts in the system -- SSO provider
-	decision, err = DetermineAccountLinking(ts.db, ts.config, []provider.Email{testEmail}, ts.config.JWT.Aud, "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387", "abcdefgh")
+	decision, err = DetermineAccountLinking(ts.db, ts.config, []provider.Email{testEmail}, ts.config.JWT.Aud, "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387", "abcdefgh", organization_id, uuid.Nil)
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, CreateAccount)
 }
 
 func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionWithAccounts() {
-	userA, err := NewUser("", "test@example.com", "", "authenticated", nil)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	userA, err := NewUser("", "test@example.com", "", "authenticated", nil, id, uuid.Nil)
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), ts.db.Create(userA, "project_id", "organization_role"))
+	organization_id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
 	identityA, err := NewIdentity(userA, "provider", map[string]interface{}{
 		"sub":   userA.ID.String(),
 		"email": "test@example.com",
 	})
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(identityA))
+	require.NoError(ts.T(), ts.db.Create(identityA, "project_id"))
 
-	userB, err := NewUser("", "test@samltest.id", "", "authenticated", nil)
+	userB, err := NewUser("", "test@samltest.id", "", "authenticated", nil, id, uuid.Nil)
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(userB))
+	require.NoError(ts.T(), ts.db.Create(userB, "project_id", "organization_role"))
 
 	ssoProvider := "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387"
 	identityB, err := NewIdentity(userB, ssoProvider, map[string]interface{}{
@@ -78,7 +105,7 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionWithAccounts() {
 		"email": "test@samltest.id",
 	})
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(identityB))
+	require.NoError(ts.T(), ts.db.Create(identityB, "project_id"))
 
 	// when the email doesn't exist in the system -- conventional provider
 	decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{
@@ -87,7 +114,7 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionWithAccounts() {
 			Verified: true,
 			Primary:  true,
 		},
-	}, ts.config.JWT.Aud, "provider", "abcdefgh")
+	}, ts.config.JWT.Aud, "provider", "abcdefgh", organization_id, uuid.Nil)
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, CreateAccount)
@@ -100,7 +127,7 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionWithAccounts() {
 			Verified: true,
 			Primary:  true,
 		},
-	}, ts.config.JWT.Aud, ssoProvider, "abcdefgh")
+	}, ts.config.JWT.Aud, ssoProvider, "abcdefgh", organization_id, uuid.Nil)
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, CreateAccount)
@@ -108,15 +135,16 @@ func (ts *AccountLinkingTestSuite) TestCreateAccountDecisionWithAccounts() {
 }
 
 func (ts *AccountLinkingTestSuite) TestAccountExists() {
-	userA, err := NewUser("", "test@example.com", "", "authenticated", nil)
+	organization_id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	userA, err := NewUser("", "test@example.com", "", "authenticated", nil, organization_id, uuid.Nil)
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), ts.db.Create(userA, "project_id", "organization_role"))
 	identityA, err := NewIdentity(userA, "provider", map[string]interface{}{
 		"sub":   userA.ID.String(),
 		"email": "test@example.com",
 	})
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(identityA))
+	require.NoError(ts.T(), ts.db.Create(identityA, "project_id"))
 
 	decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{
 		{
@@ -124,7 +152,7 @@ func (ts *AccountLinkingTestSuite) TestAccountExists() {
 			Verified: true,
 			Primary:  true,
 		},
-	}, ts.config.JWT.Aud, "provider", userA.ID.String())
+	}, ts.config.JWT.Aud, "provider", userA.ID.String(), organization_id, uuid.Nil)
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, AccountExists)
@@ -132,26 +160,27 @@ func (ts *AccountLinkingTestSuite) TestAccountExists() {
 }
 
 func (ts *AccountLinkingTestSuite) TestLinkingScenarios() {
-	userA, err := NewUser("", "test@example.com", "", "authenticated", nil)
+	organization_id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	userA, err := NewUser("", "test@example.com", "", "authenticated", nil, organization_id, uuid.Nil)
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), ts.db.Create(userA, "project_id", "organization_role"))
 	identityA, err := NewIdentity(userA, "provider", map[string]interface{}{
 		"sub":   userA.ID.String(),
 		"email": "test@example.com",
 	})
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(identityA))
+	require.NoError(ts.T(), ts.db.Create(identityA, "project_id"))
 
-	userB, err := NewUser("", "test@samltest.id", "", "authenticated", nil)
+	userB, err := NewUser("", "test@samltest.id", "", "authenticated", nil, organization_id, uuid.Nil)
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(userB))
+	require.NoError(ts.T(), ts.db.Create(userB, "project_id", "organization_role"))
 
 	identityB, err := NewIdentity(userB, "sso:f06f9e3d-ff92-4c47-a179-7acf1fda6387", map[string]interface{}{
 		"sub":   userB.ID.String(),
 		"email": "test@samltest.id",
 	})
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(identityB))
+	require.NoError(ts.T(), ts.db.Create(identityB, "project_id"))
 
 	cases := []struct {
 		desc     string
@@ -265,7 +294,7 @@ func (ts *AccountLinkingTestSuite) TestLinkingScenarios() {
 
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
-			decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{c.email}, ts.config.JWT.Aud, c.provider, c.sub)
+			decision, err := DetermineAccountLinking(ts.db, ts.config, []provider.Email{c.email}, ts.config.JWT.Aud, c.provider, c.sub, organization_id, uuid.Nil)
 			require.NoError(ts.T(), err)
 			require.Equal(ts.T(), c.decision.Decision, decision.Decision)
 			require.Equal(ts.T(), c.decision.LinkingDomain, decision.LinkingDomain)
@@ -278,25 +307,26 @@ func (ts *AccountLinkingTestSuite) TestLinkingScenarios() {
 }
 
 func (ts *AccountLinkingTestSuite) TestMultipleAccounts() {
-	userA, err := NewUser("", "test@example.com", "", "authenticated", nil)
+	organization_id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	userA, err := NewUser("", "test@example.com", "", "authenticated", nil, organization_id, uuid.Nil)
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(userA))
+	require.NoError(ts.T(), ts.db.Create(userA, "project_id", "organization_role"))
 	identityA, err := NewIdentity(userA, "provider", map[string]interface{}{
 		"sub":   userA.ID.String(),
 		"email": "test@example.com",
 	})
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(identityA))
+	require.NoError(ts.T(), ts.db.Create(identityA, "project_id"))
 
-	userB, err := NewUser("", "test-b@example.com", "", "authenticated", nil)
+	userB, err := NewUser("", "test-b@example.com", "", "authenticated", nil, organization_id, uuid.Nil)
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(userB))
+	require.NoError(ts.T(), ts.db.Create(userB, "project_id", "organization_role"))
 	identityB, err := NewIdentity(userB, "provider", map[string]interface{}{
 		"sub":   userB.ID.String(),
 		"email": "test@example.com", // intentionally same as userA
 	})
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.db.Create(identityB))
+	require.NoError(ts.T(), ts.db.Create(identityB, "project_id"))
 
 	// decision is multiple accounts because there are two distinct
 	// identities in the same "default" linking domain with the same email
@@ -307,7 +337,7 @@ func (ts *AccountLinkingTestSuite) TestMultipleAccounts() {
 			Verified: true,
 			Primary:  true,
 		},
-	}, ts.config.JWT.Aud, "provider", "abcdefgh")
+	}, ts.config.JWT.Aud, "provider", "abcdefgh", organization_id, uuid.Nil)
 	require.NoError(ts.T(), err)
 
 	require.Equal(ts.T(), decision.Decision, MultipleAccounts)

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
@@ -40,7 +41,8 @@ func (ts *ExternalTestSuite) SetupTest() {
 
 func (ts *ExternalTestSuite) createUser(providerId string, email string, name string, avatar string, confirmationToken string) (*models.User, error) {
 	// Cleanup existing user, if they already exist
-	if u, _ := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud); u != nil {
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	if u, _ := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud, id, uuid.Nil); u != nil {
 		require.NoError(ts.T(), ts.API.db.Destroy(u), "Error deleting user")
 	}
 
@@ -48,13 +50,13 @@ func (ts *ExternalTestSuite) createUser(providerId string, email string, name st
 	if avatar != "" {
 		userData["avatar_url"] = avatar
 	}
-	u, err := models.NewUser("", email, "test", ts.Config.JWT.Aud, userData)
+	u, err := models.NewUser("", email, "test", ts.Config.JWT.Aud, userData, id, uuid.Nil)
 
 	if confirmationToken != "" {
 		u.ConfirmationToken = confirmationToken
 	}
 	ts.Require().NoError(err, "Error making new user")
-	ts.Require().NoError(ts.API.db.Create(u), "Error creating user")
+	ts.Require().NoError(ts.API.db.Create(u, "project_id", "organization_role"), "Error creating user")
 
 	if confirmationToken != "" {
 		ts.Require().NoError(models.CreateOneTimeToken(ts.API.db, u.ID, email, u.ConfirmationToken, models.ConfirmationToken), "Error creating one-time confirmation/invite token")
@@ -169,7 +171,8 @@ func assertAuthorizationSuccess(ts *ExternalTestSuite, u *url.URL, tokenCount in
 	}
 
 	// ensure user has been created with metadata
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud, id, uuid.Nil)
 	ts.Require().NoError(err)
 	ts.Equal(providerId, user.UserMetaData["provider_id"])
 	ts.Equal(name, user.UserMetaData["full_name"])
@@ -195,7 +198,8 @@ func assertAuthorizationFailure(ts *ExternalTestSuite, u *url.URL, errorDescript
 	ts.Empty(v.Get("token_type"))
 
 	// ensure user is nil
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud, id, uuid.Nil)
 	ts.Require().Error(err, "User not found")
 	ts.Require().Nil(user)
 }

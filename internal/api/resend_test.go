@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
@@ -111,7 +112,8 @@ func (ts *ResendTestSuite) TestResendValidation() {
 
 func (ts *ResendTestSuite) TestResendSuccess() {
 	// Create user
-	u, err := models.NewUser("123456789", "foo@example.com", "password", ts.Config.JWT.Aud, nil)
+	id := uuid.Must(uuid.NewV4())
+	u, err := models.NewUser("123456789", "foo@example.com", "password", ts.Config.JWT.Aud, nil, id, uuid.Nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 
 	// Avoid max freq limit error
@@ -127,11 +129,11 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	u.EmailChange = "bar@example.com"
 	u.EmailChangeSentAt = &now
 	u.EmailChangeTokenNew = "123456"
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+	require.NoError(ts.T(), ts.API.db.Create(u, "project_id", "organization_role"), "Error saving new test user")
 	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.GetEmail(), u.ConfirmationToken, models.ConfirmationToken))
 	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew))
 
-	phoneUser, err := models.NewUser("1234567890", "", "password", ts.Config.JWT.Aud, nil)
+	phoneUser, err := models.NewUser("1234567890", "", "password", ts.Config.JWT.Aud, nil, id, uuid.Nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	phoneUser.EmailChange = "bar@example.com"
 	phoneUser.EmailChangeSentAt = &now
@@ -139,7 +141,7 @@ func (ts *ResendTestSuite) TestResendSuccess() {
 	require.NoError(ts.T(), ts.API.db.Create(phoneUser), "Error saving new test user")
 	require.NoError(ts.T(), models.CreateOneTimeToken(ts.API.db, phoneUser.ID, phoneUser.EmailChange, phoneUser.EmailChangeTokenNew, models.EmailChangeTokenNew))
 
-	emailUser, err := models.NewUser("", "bar@example.com", "password", ts.Config.JWT.Aud, nil)
+	emailUser, err := models.NewUser("", "bar@example.com", "password", ts.Config.JWT.Aud, nil, id, uuid.Nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	phoneUser.PhoneChange = "1234567890"
 	phoneUser.PhoneChangeSentAt = &now

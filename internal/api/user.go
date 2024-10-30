@@ -23,6 +23,8 @@ type UserUpdateParams struct {
 	Channel             string                 `json:"channel"`
 	CodeChallenge       string                 `json:"code_challenge"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
+	OrganizationID      uuid.UUID              `json:"organization_id"`
+	ProjectID           uuid.UUID              `json:"project_id"`
 }
 
 func (a *API) validateUserUpdateParams(ctx context.Context, p *UserUpdateParams) error {
@@ -52,6 +54,10 @@ func (a *API) validateUserUpdateParams(ctx context.Context, p *UserUpdateParams)
 		if err := a.checkPasswordStrength(ctx, *p.Password); err != nil {
 			return err
 		}
+	}
+
+	if p.OrganizationID == uuid.Nil {
+		return badRequestError(ErrorCodeValidationFailed, "Organization ID is required")
 	}
 
 	return nil
@@ -128,7 +134,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Email != "" && user.GetEmail() != params.Email {
-		if duplicateUser, err := models.IsDuplicatedEmail(db, params.Email, aud, user); err != nil {
+		if duplicateUser, err := models.IsDuplicatedEmail(db, params.Email, aud, user, params.OrganizationID, uuid.Nil); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
 		} else if duplicateUser != nil {
 			return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
@@ -136,7 +142,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Phone != "" && user.GetPhone() != params.Phone {
-		if exists, err := models.IsDuplicatedPhone(db, params.Phone, aud); err != nil {
+		if exists, err := models.IsDuplicatedPhone(db, params.Phone, aud, params.OrganizationID, uuid.Nil); err != nil {
 			return internalServerError("Database error checking phone").WithInternalError(err)
 		} else if exists {
 			return unprocessableEntityError(ErrorCodePhoneExists, DuplicatePhoneMsg)
@@ -224,7 +230,9 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			} else {
 				flowType := getFlowFromChallenge(params.CodeChallenge)
 				if isPKCEFlow(flowType) {
-					_, terr := generateFlowState(tx, models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
+					organization_id := params.OrganizationID
+					project_id := params.ProjectID
+					_, terr := generateFlowState(tx, models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID, organization_id, project_id)
 					if terr != nil {
 						return terr
 					}

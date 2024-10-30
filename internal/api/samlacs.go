@@ -284,8 +284,11 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		var terr error
 		var user *models.User
 
+		organization_id := getOrganizationID(ctx)
+		project_id := getProjectID(ctx)
+
 		// accounts potentially created via SAML can contain non-unique email addresses in the auth.users table
-		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, "sso:"+ssoProvider.ID.String()); terr != nil {
+		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, "sso:"+ssoProvider.ID.String(), organization_id, project_id); terr != nil {
 			return terr
 		}
 		if flowState != nil {

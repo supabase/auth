@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -22,6 +23,11 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
+
+	if params.OrganizationID == uuid.Nil {
+		return badRequestError(ErrorCodeValidationFailed, "Organization ID is required")
+	}
+
 	params.Aud = aud
 	params.Provider = "anonymous"
 
@@ -36,7 +42,11 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		newUser, terr = a.signupNewUser(tx, newUser)
+		var excludeColumns []string
+		excludeColumns = append(excludeColumns, "organization_role")
+		excludeColumns = append(excludeColumns, "project_id")
+
+		newUser, terr = a.signupNewUser(tx, newUser, excludeColumns...)
 		if terr != nil {
 			return terr
 		}

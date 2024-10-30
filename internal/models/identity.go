@@ -17,14 +17,16 @@ type Identity struct {
 	ID uuid.UUID `json:"identity_id" db:"id"`
 	// returned as id in JSON for backward compatibility with the interface exposed by the client library
 	// see https://github.com/supabase/gotrue-js/blob/c9296bbc27a2f036af55c1f33fca5930704bd021/src/lib/types.ts#L230-L240
-	ProviderID   string             `json:"id" db:"provider_id"`
-	UserID       uuid.UUID          `json:"user_id" db:"user_id"`
-	IdentityData JSONMap            `json:"identity_data,omitempty" db:"identity_data"`
-	Provider     string             `json:"provider" db:"provider"`
-	LastSignInAt *time.Time         `json:"last_sign_in_at,omitempty" db:"last_sign_in_at"`
-	CreatedAt    time.Time          `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time          `json:"updated_at" db:"updated_at"`
-	Email        storage.NullString `json:"email,omitempty" db:"email" rw:"r"`
+	ProviderID     string             `json:"id" db:"provider_id"`
+	UserID         uuid.UUID          `json:"user_id" db:"user_id"`
+	IdentityData   JSONMap            `json:"identity_data,omitempty" db:"identity_data"`
+	Provider       string             `json:"provider" db:"provider"`
+	LastSignInAt   *time.Time         `json:"last_sign_in_at,omitempty" db:"last_sign_in_at"`
+	CreatedAt      time.Time          `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at" db:"updated_at"`
+	Email          storage.NullString `json:"email,omitempty" db:"email" rw:"r"`
+	OrganizationID uuid.NullUUID      `json:"organization_id" db:"organization_id"`
+	ProjectID      uuid.NullUUID      `json:"project_id" db:"project_id"`
 }
 
 func (Identity) TableName() string {
@@ -46,11 +48,13 @@ func NewIdentity(user *User, provider string, identityData map[string]interface{
 	now := time.Now()
 
 	identity := &Identity{
-		ProviderID:   providerId.(string),
-		UserID:       user.ID,
-		IdentityData: identityData,
-		Provider:     provider,
-		LastSignInAt: &now,
+		ProviderID:     providerId.(string),
+		UserID:         user.ID,
+		IdentityData:   identityData,
+		Provider:       provider,
+		LastSignInAt:   &now,
+		OrganizationID: user.OrganizationID,
+		ProjectID:      user.ProjectID,
 	}
 	if email, ok := identityData["email"]; ok {
 		identity.Email = storage.NullString(email.(string))
@@ -75,9 +79,26 @@ func (i *Identity) IsForSSOProvider() bool {
 }
 
 // FindIdentityById searches for an identity with the matching id and provider given.
-func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider string) (*Identity, error) {
+func FindIdentityByIdAndProvider(tx *storage.Connection, providerId, provider string, organization_id uuid.UUID, project_id uuid.UUID) (*Identity, error) {
 	identity := &Identity{}
-	if err := tx.Q().Where("provider_id = ? AND provider = ?", providerId, provider).First(identity); err != nil {
+	var query string
+	var args []interface{}
+	query = "provider_id = ? AND provider = ?"
+	args = append(args, providerId, provider)
+	if organization_id == uuid.Nil && project_id == uuid.Nil {
+		return nil, errors.New("organization_id or project_id must be provided")
+	}
+
+	if organization_id != uuid.Nil {
+		query += " AND organization_id = ?"
+		args = append(args, organization_id)
+	}
+	if project_id != uuid.Nil {
+		query += " AND project_id = ?"
+		args = append(args, project_id)
+	}
+
+	if err := tx.Q().Where(query, args...).First(identity); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, IdentityNotFoundError{}
 		}

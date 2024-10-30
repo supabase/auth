@@ -36,10 +36,33 @@ func TestIdentity(t *testing.T) {
 func (ts *IdentityTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
+	project_id := uuid.Must(uuid.NewV4())
+	// Create a project
+	if err := ts.API.db.RawQuery(fmt.Sprintf("INSERT INTO auth.projects (id, name) VALUES ('%s', 'test_project')", project_id)).Exec(); err != nil {
+		panic(err)
+	}
+
+	// Create the admin of the organization
+	user, err := models.NewUser("", "admin@example.com", "test", ts.Config.JWT.Aud, nil, uuid.Nil, project_id)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(user, "organization_id", "organization_role"), "Error creating user")
+
+	// Create the organization
+	organization_id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	if err := ts.API.db.RawQuery(fmt.Sprintf("INSERT INTO auth.organizations (id, name, project_id, admin_id) VALUES ('%s', 'test_organization', '%s', '%s')", organization_id, project_id, user.ID)).Exec(); err != nil {
+		panic(err)
+	}
+
+	// Set the user as the admin of the organization
+	if err := ts.API.db.RawQuery(fmt.Sprintf("UPDATE auth.users SET organization_id = '%s', organization_role='admin' WHERE id = '%s'", organization_id, user.ID)).Exec(); err != nil {
+		panic(err)
+	}
+
 	// Create user
-	u, err := models.NewUser("", "one@example.com", "password", ts.Config.JWT.Aud, nil)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	u, err := models.NewUser("", "one@example.com", "password", ts.Config.JWT.Aud, nil, id, uuid.Nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+	require.NoError(ts.T(), ts.API.db.Create(u, "project_id", "organization_role"), "Error saving new test user")
 	require.NoError(ts.T(), u.Confirm(ts.API.db))
 
 	// Create identity
@@ -48,12 +71,12 @@ func (ts *IdentityTestSuite) SetupTest() {
 		"email": u.GetEmail(),
 	})
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.API.db.Create(i))
+	require.NoError(ts.T(), ts.API.db.Create(i, "project_id"))
 
 	// Create user with 2 identities
-	u, err = models.NewUser("123456789", "two@example.com", "password", ts.Config.JWT.Aud, nil)
+	u, err = models.NewUser("123456789", "two@example.com", "password", ts.Config.JWT.Aud, nil, id, uuid.Nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+	require.NoError(ts.T(), ts.API.db.Create(u, "project_id", "organization_role"), "Error saving new test user")
 	require.NoError(ts.T(), u.Confirm(ts.API.db))
 	require.NoError(ts.T(), u.ConfirmPhone(ts.API.db))
 
@@ -62,18 +85,19 @@ func (ts *IdentityTestSuite) SetupTest() {
 		"email": u.GetEmail(),
 	})
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.API.db.Create(i))
+	require.NoError(ts.T(), ts.API.db.Create(i, "project_id"))
 
 	i2, err := models.NewIdentity(u, "phone", map[string]interface{}{
 		"sub":   u.ID.String(),
 		"phone": u.GetPhone(),
 	})
 	require.NoError(ts.T(), err)
-	require.NoError(ts.T(), ts.API.db.Create(i2))
+	require.NoError(ts.T(), ts.API.db.Create(i2, "project_id"))
 }
 
 func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, "one@example.com", ts.Config.JWT.Aud)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "one@example.com", ts.Config.JWT.Aud, id, uuid.Nil)
 	require.NoError(ts.T(), err)
 	ctx := withTargetUser(context.Background(), u)
 
@@ -107,10 +131,11 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 
 func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
 	ts.Config.Security.ManualLinkingEnabled = true
-	userWithOneIdentity, err := models.FindUserByEmailAndAudience(ts.API.db, "one@example.com", ts.Config.JWT.Aud)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	userWithOneIdentity, err := models.FindUserByEmailAndAudience(ts.API.db, "one@example.com", ts.Config.JWT.Aud, id, uuid.Nil)
 	require.NoError(ts.T(), err)
 
-	userWithTwoIdentities, err := models.FindUserByEmailAndAudience(ts.API.db, "two@example.com", ts.Config.JWT.Aud)
+	userWithTwoIdentities, err := models.FindUserByEmailAndAudience(ts.API.db, "two@example.com", ts.Config.JWT.Aud, id, uuid.Nil)
 	require.NoError(ts.T(), err)
 	cases := []struct {
 		desc          string
@@ -177,10 +202,11 @@ func (ts *IdentityTestSuite) TestUnlinkIdentity() {
 		ts.Run(c.desc, func() {
 			// teardown and reset the state of the db to prevent running into errors
 			ts.SetupTest()
-			u, err := models.FindUserByEmailAndAudience(ts.API.db, "two@example.com", ts.Config.JWT.Aud)
+			id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+			u, err := models.FindUserByEmailAndAudience(ts.API.db, "two@example.com", ts.Config.JWT.Aud, id, uuid.Nil)
 			require.NoError(ts.T(), err)
 
-			identity, err := models.FindIdentityByIdAndProvider(ts.API.db, u.ID.String(), c.provider)
+			identity, err := models.FindIdentityByIdAndProvider(ts.API.db, u.ID.String(), c.provider, id, uuid.Nil)
 			require.NoError(ts.T(), err)
 
 			token := ts.generateAccessTokenAndSession(u)

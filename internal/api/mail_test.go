@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gobwas/glob"
+	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -43,9 +44,10 @@ func (ts *MailTestSuite) SetupTest() {
 	ts.Config.Mailer.SecureEmailChangeEnabled = true
 
 	// Create User
-	u, err := models.NewUser("12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	u, err := models.NewUser("12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil, id, uuid.Nil)
 	require.NoError(ts.T(), err, "Error creating new user model")
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new user")
+	require.NoError(ts.T(), ts.API.db.Create(u, "project_id", "organization_role"), "Error saving new user")
 }
 
 func (ts *MailTestSuite) TestValidateEmail() {

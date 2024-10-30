@@ -26,6 +26,8 @@ type SignupParams struct {
 	Channel             string                 `json:"channel"`
 	CodeChallengeMethod string                 `json:"code_challenge_method"`
 	CodeChallenge       string                 `json:"code_challenge"`
+	OrganizationID      uuid.UUID              `json:"organization_id"`
+	ProjectID           uuid.UUID              `json:"project_id"`
 }
 
 func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
@@ -33,6 +35,10 @@ func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
 
 	if p.Password == "" {
 		return badRequestError(ErrorCodeValidationFailed, "Signup requires a valid password")
+	}
+
+	if p.OrganizationID == uuid.Nil && p.ProjectID == uuid.Nil {
+		return badRequestError(ErrorCodeValidationFailed, "Organization ID or Project ID is required")
 	}
 
 	if err := a.checkPasswordStrength(ctx, p.Password); err != nil {
@@ -74,15 +80,15 @@ func (p *SignupParams) ConfigureDefaults() {
 func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err error) {
 	switch params.Provider {
 	case "email":
-		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
+		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data, params.OrganizationID, params.ProjectID)
 	case "phone":
-		user, err = models.NewUser(params.Phone, "", params.Password, params.Aud, params.Data)
+		user, err = models.NewUser(params.Phone, "", params.Password, params.Aud, params.Data, params.OrganizationID, params.ProjectID)
 	case "anonymous":
-		user, err = models.NewUser("", "", "", params.Aud, params.Data)
+		user, err = models.NewUser("", "", "", params.Aud, params.Data, params.OrganizationID, params.ProjectID)
 		user.IsAnonymous = true
 	default:
 		// handles external provider case
-		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data)
+		user, err = models.NewUser("", params.Email, params.Password, params.Aud, params.Data, params.OrganizationID, params.ProjectID)
 	}
 	if err != nil {
 		err = internalServerError("Database error creating user").WithInternalError(err)
@@ -94,6 +100,7 @@ func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err 
 	}
 
 	user.Identities = make([]models.Identity, 0)
+	user.ProjectID = uuid.NullUUID{UUID: params.ProjectID, Valid: params.ProjectID != uuid.Nil}
 
 	if params.Provider != "anonymous" {
 		// TODO: Deprecate "provider" field
@@ -105,7 +112,7 @@ func (params *SignupParams) ToUserModel(isSSOUser bool) (user *models.User, err 
 	return user, nil
 }
 
-// Signup is the endpoint for registering a new user
+// Signup is the endpoint for registering a new Admin user
 func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	config := a.config
@@ -120,11 +127,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	params.ConfigureDefaults()
-
 	if err := a.validateSignupParams(ctx, params); err != nil {
 		return err
 	}
+
+	params.ConfigureDefaults()
 
 	var err error
 	flowType := getFlowFromChallenge(params.CodeChallenge)
@@ -145,7 +152,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud, nil)
+		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud, nil, params.OrganizationID, params.ProjectID)
 	case "phone":
 		if !config.External.Phone.Enabled {
 			return badRequestError(ErrorCodePhoneProviderDisabled, "Phone signups are disabled")
@@ -154,7 +161,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, params.Aud)
+		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, params.Aud, params.OrganizationID, params.ProjectID)
 	default:
 		msg := ""
 		if config.External.Email.Enabled && config.External.Phone.Enabled {
@@ -186,18 +193,27 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
+		var excludeColumns []string
+		excludeColumns = append(excludeColumns, "organization_role")
+		if signupUser.OrganizationID.UUID == uuid.Nil {
+			excludeColumns = append(excludeColumns, "organization_id")
+		}
+		if signupUser.ProjectID.UUID == uuid.Nil {
+			excludeColumns = append(excludeColumns, "project_id")
+		}
+
 		if user != nil {
 			if (params.Provider == "email" && user.IsConfirmed()) || (params.Provider == "phone" && user.IsPhoneConfirmed()) {
 				return UserExistsError
 			}
 			// do not update the user because we can't be sure of their claimed identity
 		} else {
-			user, terr = a.signupNewUser(tx, signupUser)
+			user, terr = a.signupNewUser(tx, signupUser, excludeColumns...)
 			if terr != nil {
 				return terr
 			}
 		}
-		identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), params.Provider)
+		identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), params.Provider, user.OrganizationID.UUID, user.ProjectID.UUID)
 		if terr != nil {
 			if !models.IsNotFoundError(terr) {
 				return terr
@@ -211,7 +227,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					identityData[k] = v
 				}
 			}
-			identity, terr = a.createNewIdentity(tx, user, params.Provider, identityData)
+			identity, terr = a.createNewIdentity(tx, user, params.Provider, identityData, excludeColumns...)
 			if terr != nil {
 				return terr
 			}
@@ -238,7 +254,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 				if isPKCEFlow(flowType) {
-					_, terr := generateFlowState(tx, params.Provider, models.EmailSignup, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
+					organization_id := params.OrganizationID
+					project_id := params.ProjectID
+					_, terr := generateFlowState(tx, params.Provider, models.EmailSignup, params.CodeChallengeMethod, params.CodeChallenge, &user.ID, organization_id, project_id)
 					if terr != nil {
 						return terr
 					}
@@ -342,6 +360,8 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 	u.Identities = make([]models.Identity, 0)
 	u.UserMetaData = params.Data
 	u.Aud = params.Aud
+	u.OrganizationID = uuid.NullUUID{}
+	u.ProjectID = uuid.NullUUID{}
 
 	// sanitize app_metadata
 	u.AppMetaData = map[string]interface{}{
@@ -362,12 +382,12 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 	return u, nil
 }
 
-func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*models.User, error) {
+func (a *API) signupNewUser(conn *storage.Connection, user *models.User, excludeColumns ...string) (*models.User, error) {
 	config := a.config
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = tx.Create(user); terr != nil {
+		if terr = tx.Create(user, excludeColumns...); terr != nil {
 			return internalServerError("Database error saving new user").WithInternalError(terr)
 		}
 		if terr = user.SetRole(tx, config.JWT.DefaultGroupName); terr != nil {

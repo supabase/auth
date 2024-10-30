@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fatih/structs"
+	"github.com/gofrs/uuid"
 	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
@@ -37,12 +38,14 @@ const singleConfirmationAccepted = "Confirmation link accepted. Please proceed t
 
 // VerifyParams are the parameters the Verify endpoint accepts
 type VerifyParams struct {
-	Type       string `json:"type"`
-	Token      string `json:"token"`
-	TokenHash  string `json:"token_hash"`
-	Email      string `json:"email"`
-	Phone      string `json:"phone"`
-	RedirectTo string `json:"redirect_to"`
+	Type           string    `json:"type"`
+	Token          string    `json:"token"`
+	TokenHash      string    `json:"token_hash"`
+	Email          string    `json:"email"`
+	Phone          string    `json:"phone"`
+	RedirectTo     string    `json:"redirect_to"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+	ProjectID      uuid.UUID `json:"project_id"`
 }
 
 func (p *VerifyParams) Validate(r *http.Request, a *API) error {
@@ -106,6 +109,10 @@ func (a *API) Verify(w http.ResponseWriter, r *http.Request) error {
 		}
 		if err := params.Validate(r, a); err != nil {
 			return err
+		}
+
+		if params.OrganizationID == uuid.Nil && params.ProjectID == uuid.Nil {
+			return badRequestError(ErrorCodeValidationFailed, "Organization ID or Project ID is required")
 		}
 		return a.verifyPost(w, r, params)
 	default:
@@ -379,7 +386,7 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 				return terr
 			}
-			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone"); terr != nil {
+			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone", user.OrganizationID.UUID, user.OrganizationID.UUID); terr != nil {
 				if !models.IsNotFoundError(terr) {
 					return terr
 				}
@@ -527,7 +534,7 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 			return terr
 		}
 
-		if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email"); terr != nil {
+		if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email", user.OrganizationID.UUID, user.OrganizationID.UUID); terr != nil {
 			if !models.IsNotFoundError(terr) {
 				return terr
 			}
@@ -634,15 +641,15 @@ func (a *API) verifyUserAndToken(conn *storage.Connection, params *VerifyParams,
 
 	switch params.Type {
 	case phoneChangeVerification:
-		user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud)
+		user, err = models.FindUserByPhoneChangeAndAudience(conn, params.Phone, aud, params.OrganizationID, params.ProjectID)
 	case smsVerification:
-		user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud)
+		user, err = models.FindUserByPhoneAndAudience(conn, params.Phone, aud, params.OrganizationID, params.ProjectID)
 	case mail.EmailChangeVerification:
 		// Since the email change could be trigger via the implicit or PKCE flow,
 		// the query used has to also check if the token saved in the db contains the pkce_ prefix
 		user, err = models.FindUserForEmailChange(conn, params.Email, tokenHash, aud, config.Mailer.SecureEmailChangeEnabled)
 	default:
-		user, err = models.FindUserByEmailAndAudience(conn, params.Email, aud)
+		user, err = models.FindUserByEmailAndAudience(conn, params.Email, aud, params.OrganizationID, params.ProjectID)
 	}
 
 	if err != nil {

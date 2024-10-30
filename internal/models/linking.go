@@ -3,6 +3,7 @@ package models
 import (
 	"strings"
 
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/storage"
@@ -50,9 +51,10 @@ type AccountLinkingResult struct {
 // - It's not possible to decide due to data inconsistency (MultipleAccounts) and the caller should decide
 //
 // Errors signal failure in processing only, like database access errors.
-func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfiguration, emails []provider.Email, aud, providerName, sub string) (AccountLinkingResult, error) {
+func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfiguration, emails []provider.Email, aud, providerName, sub string, organization_id uuid.UUID, project_id uuid.UUID) (AccountLinkingResult, error) {
 	var verifiedEmails []string
 	var candidateEmail provider.Email
+
 	for _, email := range emails {
 		if email.Verified || config.Mailer.Autoconfirm {
 			verifiedEmails = append(verifiedEmails, strings.ToLower(email.Email))
@@ -63,7 +65,7 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 		}
 	}
 
-	if identity, terr := FindIdentityByIdAndProvider(tx, sub, providerName); terr == nil {
+	if identity, terr := FindIdentityByIdAndProvider(tx, sub, providerName, organization_id, project_id); terr == nil {
 		// account exists
 
 		var user *User
@@ -92,7 +94,7 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 	candidateLinkingDomain := GetAccountLinkingDomain(providerName)
 	if len(verifiedEmails) == 0 {
 		// if there are no verified emails, we always decide to create a new account
-		user, terr := IsDuplicatedEmail(tx, candidateEmail.Email, aud, nil)
+		user, terr := IsDuplicatedEmail(tx, candidateEmail.Email, aud, nil, organization_id, project_id)
 		if terr != nil {
 			return AccountLinkingResult{}, terr
 		}
@@ -109,14 +111,27 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 	var similarIdentities []*Identity
 	var similarUsers []*User
 	// look for similar identities and users based on email
-	if terr := tx.Q().Eager().Where("email = any (?)", verifiedEmails).All(&similarIdentities); terr != nil {
+	var query string
+	var args []interface{}
+	query = "email = any (?)"
+	args = append(args, verifiedEmails)
+	if organization_id != uuid.Nil {
+		query += " AND organization_id = ?"
+		args = append(args, organization_id)
+	}
+	if project_id != uuid.Nil {
+		query += " AND project_id = ?"
+		args = append(args, project_id)
+	}
+	if terr := tx.Q().Eager().Where(query, args...).All(&similarIdentities); terr != nil {
 		return AccountLinkingResult{}, terr
 	}
 
 	if !strings.HasPrefix(providerName, "sso:") {
 		// there can be multiple user accounts with the same email when is_sso_user is true
 		// so we just do not consider those similar user accounts
-		if terr := tx.Q().Eager().Where("email = any (?) and is_sso_user = false", verifiedEmails).All(&similarUsers); terr != nil {
+		query += " AND is_sso_user = false"
+		if terr := tx.Q().Eager().Where(query, args...).All(&similarUsers); terr != nil {
 			return AccountLinkingResult{}, terr
 		}
 	}

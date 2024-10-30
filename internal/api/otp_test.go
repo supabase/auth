@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -277,8 +278,8 @@ func (ts *OtpTestSuite) TestSubsequentOtp() {
 	ts.API.handler.ServeHTTP(w, req)
 
 	require.Equal(ts.T(), http.StatusOK, w.Code)
-
-	newUser, err := models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	newUser, err := models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud, id, uuid.Nil)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), newUser.ConfirmationToken)
 	require.NotEmpty(ts.T(), newUser.ConfirmationSentAt)
@@ -301,7 +302,7 @@ func (ts *OtpTestSuite) TestSubsequentOtp() {
 
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud)
+	user, err := models.FindUserByEmailAndAudience(ts.API.db, userEmail, ts.Config.JWT.Aud, id, uuid.Nil)
 	require.NoError(ts.T(), err)
 	require.NotEmpty(ts.T(), user.ConfirmationToken)
 	require.NotEmpty(ts.T(), user.ConfirmationSentAt)

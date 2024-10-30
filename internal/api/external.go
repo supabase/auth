@@ -61,6 +61,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 
 	inviteToken := query.Get("invite_token")
 	if inviteToken != "" {
+		query.Del("invite_token")
 		_, userErr := models.FindUserByConfirmationToken(db, inviteToken)
 		if userErr != nil {
 			if models.IsNotFoundError(userErr) {
@@ -80,7 +81,21 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 
 	flowStateID := ""
 	if isPKCEFlow(flowType) {
-		flowState, err := generateFlowState(a.db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil)
+		organization := query.Get("organization_id")
+		organization_id, err := uuid.FromString(organization)
+		if err == nil {
+			query.Del("organization_id")
+		}
+		project := query.Get("project_id")
+		project_id, err2 := uuid.FromString(project)
+		if err2 == nil {
+			query.Del("project_id")
+		}
+		if err != nil && err2 != nil {
+			return "", badRequestError(ErrorCodeValidationFailed, "Invalid organization_id or project_id")
+		}
+
+		flowState, err := generateFlowState(a.db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil, organization_id, project_id)
 		if err != nil {
 			return "", err
 		}
@@ -200,23 +215,25 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		} else if err != nil {
 			return internalServerError("Failed to find flow state").WithInternalError(err)
 		}
-
 	}
+
+	organization_id := flowState.OrganizationID.UUID
+	project_id := flowState.ProjectID.UUID
 
 	var user *models.User
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if targetUser := getTargetUser(ctx); targetUser != nil {
+		if targetUser := getTargetUser(ctx); targetUser != nil { // Currently unused
 			if user, terr = a.linkIdentityToUser(r, ctx, tx, userData, providerType); terr != nil {
 				return terr
 			}
-		} else if inviteToken := getInviteToken(ctx); inviteToken != "" {
+		} else if inviteToken := getInviteToken(ctx); inviteToken != "" { // Currently unused
 			if user, terr = a.processInvite(r, tx, userData, inviteToken, providerType); terr != nil {
 				return terr
 			}
 		} else {
-			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
+			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, organization_id, project_id); terr != nil {
 				return terr
 			}
 		}
@@ -268,7 +285,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
-func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
+func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string, organization_id uuid.UUID, project_id uuid.UUID) (*models.User, error) {
 	ctx := r.Context()
 	aud := a.requestAud(ctx, r)
 	config := a.config
@@ -280,7 +297,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		identityData = structs.Map(userData.Metadata)
 	}
 
-	decision, terr := models.DetermineAccountLinking(tx, config, userData.Emails, aud, providerType, userData.Metadata.Subject)
+	decision, terr := models.DetermineAccountLinking(tx, config, userData.Emails, aud, providerType, userData.Metadata.Subject, organization_id, project_id)
 	if terr != nil {
 		return nil, terr
 	}
@@ -307,10 +324,12 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		}
 
 		params := &SignupParams{
-			Provider: providerType,
-			Email:    decision.CandidateEmail.Email,
-			Aud:      aud,
-			Data:     identityData,
+			Provider:       providerType,
+			Email:          decision.CandidateEmail.Email,
+			Aud:            aud,
+			Data:           identityData,
+			OrganizationID: organization_id,
+			ProjectID:      project_id,
 		}
 
 		isSSOUser := false
@@ -322,15 +341,24 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		// computationally hard so it can be used within a database
 		// transaction
 		user, terr = params.ToUserModel(isSSOUser)
+		var excludeColumns []string
+		excludeColumns = append(excludeColumns, "organization_role")
+		if user.OrganizationID.UUID == uuid.Nil {
+			excludeColumns = append(excludeColumns, "organization_id")
+		}
+		if user.ProjectID.UUID == uuid.Nil {
+			excludeColumns = append(excludeColumns, "project_id")
+		}
+
 		if terr != nil {
 			return nil, terr
 		}
 
-		if user, terr = a.signupNewUser(tx, user); terr != nil {
+		if user, terr = a.signupNewUser(tx, user, excludeColumns...); terr != nil {
 			return nil, terr
 		}
 
-		if identity, terr = a.createNewIdentity(tx, user, providerType, identityData); terr != nil {
+		if identity, terr = a.createNewIdentity(tx, user, providerType, identityData, excludeColumns...); terr != nil {
 			return nil, terr
 		}
 		user.Identities = append(user.Identities, *identity)
@@ -671,13 +699,13 @@ func (a *API) getExternalRedirectURL(r *http.Request) string {
 	return config.SiteURL
 }
 
-func (a *API) createNewIdentity(tx *storage.Connection, user *models.User, providerType string, identityData map[string]interface{}) (*models.Identity, error) {
+func (a *API) createNewIdentity(tx *storage.Connection, user *models.User, providerType string, identityData map[string]interface{}, excludeColumns ...string) (*models.Identity, error) {
 	identity, err := models.NewIdentity(user, providerType, identityData)
 	if err != nil {
 		return nil, err
 	}
 
-	if terr := tx.Create(identity); terr != nil {
+	if terr := tx.Create(identity, excludeColumns...); terr != nil {
 		return nil, internalServerError("Error creating identity").WithInternalError(terr)
 	}
 

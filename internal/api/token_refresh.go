@@ -19,6 +19,13 @@ type RefreshTokenGrantParams struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+func (p *RefreshTokenGrantParams) Validate(a *API) error {
+	if p.RefreshToken == "" {
+		return oauthError("invalid_request", "refresh_token required")
+	}
+	return nil
+}
+
 // RefreshTokenGrant implements the refresh_token grant type flow
 func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
@@ -29,8 +36,8 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return err
 	}
 
-	if params.RefreshToken == "" {
-		return oauthError("invalid_request", "refresh_token required")
+	if err := params.Validate(a); err != nil {
+		return err
 	}
 
 	// A 5 second retry loop is used to make sure that refresh token

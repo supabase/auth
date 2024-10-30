@@ -37,8 +37,8 @@ func adminCmd() *cobra.Command {
 var adminCreateUserCmd = cobra.Command{
 	Use: "createuser",
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 2 {
-			logrus.Fatal("Not enough arguments to createuser command. Expected at least email and password values")
+		if len(args) < 3 {
+			logrus.Fatal("Not enough arguments to createuser command. Expected at least email, password and organization_id values")
 			return
 		}
 
@@ -49,8 +49,8 @@ var adminCreateUserCmd = cobra.Command{
 var adminDeleteUserCmd = cobra.Command{
 	Use: "deleteuser",
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 1 {
-			logrus.Fatal("Not enough arguments to deleteuser command. Expected at least ID or email")
+		if len(args) < 2 {
+			logrus.Fatal("Not enough arguments to deleteuser command. Expected at least ID or email and organization_id values")
 			return
 		}
 
@@ -66,20 +66,22 @@ func adminCreateUser(config *conf.GlobalConfiguration, args []string) {
 	defer db.Close()
 
 	aud := getAudience(config)
-	if user, err := models.IsDuplicatedEmail(db, args[0], aud, nil); user != nil {
+	id := uuid.Must(uuid.FromString(args[2]))
+
+	if user, err := models.IsDuplicatedEmail(db, args[0], aud, nil, id, uuid.Nil); user != nil {
 		logrus.Fatalf("Error creating new user: user already exists")
 	} else if err != nil {
 		logrus.Fatalf("Error checking user email: %+v", err)
 	}
 
-	user, err := models.NewUser("", args[0], args[1], aud, nil)
+	user, err := models.NewUser("", args[0], args[1], aud, nil, id, uuid.Nil)
 	if err != nil {
 		logrus.Fatalf("Error creating new user: %+v", err)
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = tx.Create(user); terr != nil {
+		if terr = tx.Create(user, "project_id", "organization_role"); terr != nil {
 			return terr
 		}
 
@@ -114,7 +116,8 @@ func adminDeleteUser(config *conf.GlobalConfiguration, args []string) {
 	}
 	defer db.Close()
 
-	user, err := models.FindUserByEmailAndAudience(db, args[0], getAudience(config))
+	id := uuid.Must(uuid.FromString(args[2]))
+	user, err := models.FindUserByEmailAndAudience(db, args[0], getAudience(config), id, uuid.Nil)
 	if err != nil {
 		userID := uuid.Must(uuid.FromString(args[0]))
 		user, err = models.FindUserByID(db, userID)

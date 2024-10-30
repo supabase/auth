@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -49,12 +50,13 @@ func (ts *TokenTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
 
 	// Create user & refresh token
-	u, err := models.NewUser("", "test@example.com", "password", ts.Config.JWT.Aud, nil)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	u, err := models.NewUser("", "test@example.com", "password", ts.Config.JWT.Aud, nil, id, uuid.Nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	t := time.Now()
 	u.EmailConfirmedAt = &t
 	u.BannedUntil = nil
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+	require.NoError(ts.T(), ts.API.db.Create(u, "project_id", "organization_role"), "Error saving new test user")
 
 	ts.User = u
 	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
@@ -306,7 +308,7 @@ func (ts *TokenTestSuite) TestTokenPKCEGrantFailure() {
 	invalidVerifier := codeVerifier + "123"
 	codeChallenge := sha256.Sum256([]byte(codeVerifier))
 	challenge := base64.RawURLEncoding.EncodeToString(codeChallenge[:])
-	flowState := models.NewFlowState("github", challenge, models.SHA256, models.OAuth, nil)
+	flowState := models.NewFlowState("github", challenge, models.SHA256, models.OAuth, nil, ts.User.OrganizationID.UUID, ts.User.ProjectID.UUID)
 	flowState.AuthCode = authCode
 	require.NoError(ts.T(), ts.API.db.Create(flowState))
 	cases := []struct {
@@ -472,13 +474,14 @@ func (ts *TokenTestSuite) TestRefreshTokenReuseRevocation() {
 }
 
 func (ts *TokenTestSuite) createBannedUser() *models.User {
-	u, err := models.NewUser("", "banned@example.com", "password", ts.Config.JWT.Aud, nil)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	u, err := models.NewUser("", "banned@example.com", "password", ts.Config.JWT.Aud, nil, id, uuid.Nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	t := time.Now()
 	u.EmailConfirmedAt = &t
 	t = t.Add(24 * time.Hour)
 	u.BannedUntil = &t
-	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test banned user")
+	require.NoError(ts.T(), ts.API.db.Create(u, "project_id", "organization_role"), "Error saving new test banned user")
 
 	ts.RefreshToken, err = models.GrantAuthenticatedUser(ts.API.db, u, models.GrantParams{})
 	require.NoError(ts.T(), err, "Error creating refresh token")
@@ -554,7 +557,8 @@ func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
 	ts.API.handler.ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusOK, w.Code)
 
-	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud, id, uuid.Nil)
 	require.NoError(ts.T(), err)
 
 	// Verify OTP
@@ -567,7 +571,7 @@ func (ts *TokenTestSuite) TestMagicLinkPKCESignIn() {
 	assert.Equal(ts.T(), http.StatusSeeOther, w.Code)
 	rURL, _ := w.Result().Location()
 
-	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
+	u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud, id, uuid.Nil)
 	require.NoError(ts.T(), err)
 	assert.True(ts.T(), u.IsConfirmed())
 
@@ -763,7 +767,8 @@ end; $$ language plpgsql;`,
 
 func (ts *TokenTestSuite) TestAllowSelectAuthenticationMethods() {
 
-	companyUser, err := models.NewUser("12345678", "test@company.com", "password", ts.Config.JWT.Aud, nil)
+	id := uuid.Must(uuid.FromString("123e4567-e89b-12d3-a456-426655440000"))
+	companyUser, err := models.NewUser("12345678", "test@company.com", "password", ts.Config.JWT.Aud, nil, id, uuid.Nil)
 	t := time.Now()
 	companyUser.EmailConfirmedAt = &t
 	require.NoError(ts.T(), err, "Error creating test user model")

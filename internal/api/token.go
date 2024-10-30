@@ -32,6 +32,8 @@ type AccessTokenClaims struct {
 	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
 	IsAnonymous                   bool                   `json:"is_anonymous"`
+	OrganizationID                uuid.UUID              `json:"organization_id"`
+	ProjectID                     uuid.UUID              `json:"project_id"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -61,15 +63,60 @@ func (r *AccessTokenResponse) AsRedirectURL(redirectURL string, extraParams url.
 
 // PasswordGrantParams are the parameters the ResourceOwnerPasswordGrant method accepts
 type PasswordGrantParams struct {
-	Email    string `json:"email"`
-	Phone    string `json:"phone"`
-	Password string `json:"password"`
+	Email          string    `json:"email"`
+	Phone          string    `json:"phone"`
+	Password       string    `json:"password"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+	ProjectID      uuid.UUID `json:"project_id"`
+}
+
+func (p *PasswordGrantParams) Validate(a *API) error {
+	config := a.config
+
+	var err error
+	if p.Email != "" && p.Phone != "" {
+		return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided.")
+	} else if p.Email != "" {
+		if !config.External.Email.Enabled {
+			return badRequestError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
+		}
+		p.Email, err = a.validateEmail(p.Email)
+		if err != nil {
+			return err
+		}
+	} else if p.Phone != "" {
+		if !config.External.Phone.Enabled {
+			return badRequestError(ErrorCodePhoneProviderDisabled, "Phone logins are disabled")
+		}
+		p.Phone, err = validatePhone(p.Phone)
+		if err != nil {
+			return err
+		}
+	} else {
+		// both email and phone are empty
+		return badRequestError(ErrorCodeValidationFailed, "Missing email address or phone number")
+	}
+	if p.Password == "" {
+		return badRequestError(ErrorCodeValidationFailed, "Missing password")
+	}
+
+	if p.ProjectID == uuid.Nil && p.OrganizationID == uuid.Nil {
+		return badRequestError(ErrorCodeValidationFailed, "Organization ID is required for login or at least Project ID is required for Admin Login")
+	}
+	return nil
 }
 
 // PKCEGrantParams are the parameters the PKCEGrant method accepts
 type PKCEGrantParams struct {
 	AuthCode     string `json:"auth_code"`
 	CodeVerifier string `json:"code_verifier"`
+}
+
+func (p *PKCEGrantParams) Validate(a *API) error {
+	if p.AuthCode == "" || p.CodeVerifier == "" {
+		return badRequestError(ErrorCodeValidationFailed, "invalid request: both auth code and code verifier should be non-empty")
+	}
+	return nil
 }
 
 const useCookieHeader = "x-use-cookie"
@@ -96,18 +143,18 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 // ResourceOwnerPasswordGrant implements the password grant type flow
 func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
-
 	params := &PasswordGrantParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
+		return err
+	}
+
+	if err := params.Validate(a); err != nil {
 		return err
 	}
 
 	aud := a.requestAud(ctx, r)
 	config := a.config
 
-	if params.Email != "" && params.Phone != "" {
-		return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided on login.")
-	}
 	var user *models.User
 	var grantParams models.GrantParams
 	var provider string
@@ -115,19 +162,20 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 
 	grantParams.FillGrantParams(r)
 
+	//
 	if params.Email != "" {
 		provider = "email"
 		if !config.External.Email.Enabled {
 			return unprocessableEntityError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 		}
-		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
+		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud, params.OrganizationID, params.ProjectID)
 	} else if params.Phone != "" {
 		provider = "phone"
 		if !config.External.Phone.Enabled {
 			return unprocessableEntityError(ErrorCodePhoneProviderDisabled, "Phone logins are disabled")
 		}
 		params.Phone = formatPhoneNumber(params.Phone)
-		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
+		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud, params.OrganizationID, params.ProjectID)
 	} else {
 		return badRequestError(ErrorCodeValidationFailed, "missing email or phone")
 	}
@@ -249,8 +297,8 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 
-	if params.AuthCode == "" || params.CodeVerifier == "" {
-		return badRequestError(ErrorCodeValidationFailed, "invalid request: both auth code and code verifier should be non-empty")
+	if err := params.Validate(a); err != nil {
+		return err
 	}
 
 	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
@@ -342,6 +390,8 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		AuthenticatorAssuranceLevel:   aal.String(),
 		AuthenticationMethodReference: amr,
 		IsAnonymous:                   user.IsAnonymous,
+		OrganizationID:                user.OrganizationID.UUID,
+		OrganizationRole:              user.OrganizationRole,
 	}
 
 	var gotrueClaims jwt.Claims = claims

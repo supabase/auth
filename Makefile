@@ -61,11 +61,12 @@ generate: dev-deps
 	go generate ./...
 
 dev: ## Run the development containers
+	docker-compose -f $(DEV_DOCKER_COMPOSE) down --volumes
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up
 
 down: ## Shutdown the development containers
 	# Start postgres first and apply migrations
-	docker-compose -f $(DEV_DOCKER_COMPOSE) down
+	docker-compose -f $(DEV_DOCKER_COMPOSE) down --volumes
 
 docker-test: ## Run the tests using the development containers
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres

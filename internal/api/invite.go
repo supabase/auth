@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/fatih/structs"
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -11,8 +12,9 @@ import (
 
 // InviteParams are the parameters the Signup endpoint accepts
 type InviteParams struct {
-	Email string                 `json:"email"`
-	Data  map[string]interface{} `json:"data"`
+	Email          string                 `json:"email"`
+	Data           map[string]interface{} `json:"data"`
+	OrganizationID uuid.UUID              `json:"organization_id"`
 }
 
 // Invite is the endpoint for inviting a new user
@@ -32,7 +34,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
+	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud, params.OrganizationID, uuid.Nil)
 	if err != nil && !models.IsNotFoundError(err) {
 		return internalServerError("Database error finding user").WithInternalError(err)
 	}

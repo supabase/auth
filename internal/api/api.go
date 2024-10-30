@@ -10,7 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/mailer"
-	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
@@ -76,6 +75,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	if api.limiterOpts == nil {
 		api.limiterOpts = NewLimiterOptions(globalConfig)
 	}
+
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
 			// all HIBP API requests should finish quickly to avoid
@@ -116,18 +116,12 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		r.UseBypass(observability.RequestTracing())
 	}
 
-	if globalConfig.DB.CleanupEnabled {
-		cleanup := models.NewCleanup(globalConfig)
-		r.UseBypass(api.databaseCleanup(cleanup))
-	}
-
 	r.Get("/health", api.HealthCheck)
 	r.Get("/.well-known/jwks.json", api.Jwks)
 
 	r.Route("/callback", func(r *router) {
 		r.Use(api.isValidExternalHost)
 		r.Use(api.loadFlowState)
-
 		r.Get("/", api.ExternalProviderCallback)
 		r.Post("/", api.ExternalProviderCallback)
 	})
@@ -137,9 +131,11 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Get("/settings", api.Settings)
 
-		r.Get("/authorize", api.ExternalProviderRedirect)
+		r.Route("/authorize", func(r *router) {
+			r.Get("/", api.ExternalProviderRedirect)
+		})
 
-		r.With(api.requireAdminCredentials).Post("/invite", api.Invite)
+		// r.With(api.requireAdminCredentials).Post("/invite", api.Invite)
 		r.With(api.verifyCaptcha).Route("/signup", func(r *router) {
 			// rate limit per hour
 			limitAnonymousSignIns := api.limiterOpts.AnonymousSignIns
@@ -166,25 +162,39 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				return api.Signup(w, r)
 			})
 		})
+
 		r.With(api.limitHandler(api.limiterOpts.Recover)).
-			With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
+			With(api.verifyCaptcha).With(api.requireEmailProvider).Route("/recover", func(r *router) {
+
+			r.Post("/", func(w http.ResponseWriter, r *http.Request) error {
+
+				params := &RecoverParams{}
+				if err := retrieveRequestParams(r, params); err != nil {
+					return err
+				}
+				if err := params.Validate(api); err != nil {
+					return err
+				}
+				return api.Recover(w, r)
+			})
+		})
 
 		r.With(api.limitHandler(api.limiterOpts.Resend)).
 			With(api.verifyCaptcha).Post("/resend", api.Resend)
 
-		r.With(api.limitHandler(api.limiterOpts.MagicLink)).
+		/*r.With(api.limitHandler(api.limiterOpts.MagicLink)).
 			With(api.verifyCaptcha).Post("/magiclink", api.MagicLink)
 
 		r.With(api.limitHandler(api.limiterOpts.Otp)).
-			With(api.verifyCaptcha).Post("/otp", api.Otp)
+			With(api.verifyCaptcha).Post("/otp", api.Otp) */
 
 		r.With(api.limitHandler(api.limiterOpts.Token)).
 			With(api.verifyCaptcha).Post("/token", api.Token)
 
-		r.With(api.limitHandler(api.limiterOpts.Verify)).Route("/verify", func(r *router) {
+		/*r.With(api.limitHandler(api.limiterOpts.Verify)).Route("/verify", func(r *router) {
 			r.Get("/", api.Verify)
 			r.Post("/", api.Verify)
-		})
+		})*/
 
 		r.With(api.requireAuthentication).Post("/logout", api.Logout)
 
@@ -202,7 +212,6 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				r.Delete("/{identity_id}", api.DeleteIdentity)
 			})
 		})
-
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
 			r.Use(api.requireNotAnonymous)
 			r.Post("/", api.EnrollFactor)
@@ -218,62 +227,70 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			})
 		})
 
-		r.Route("/sso", func(r *router) {
-			r.Use(api.requireSAMLEnabled)
-			r.With(api.limitHandler(api.limiterOpts.SSO)).
-				With(api.verifyCaptcha).Post("/", api.SingleSignOn)
+		/*
+			r.Route("/sso", func(r *router) {
+				r.Use(api.requireSAMLEnabled)
+				r.With(api.limitHandler(api.limiterOpts.SSO)).
+					With(api.verifyCaptcha).Post("/", api.SingleSignOn)
 
-			r.Route("/saml", func(r *router) {
-				r.Get("/metadata", api.SAMLMetadata)
+				r.Route("/saml", func(r *router) {
+					r.Get("/metadata", api.SAMLMetadata)
 
-				r.With(api.limitHandler(api.limiterOpts.SAMLAssertion)).
-					Post("/acs", api.SamlAcs)
-			})
-		})
+					r.With(api.limitHandler(api.limiterOpts.SAMLAssertion)).
+						Route("/acs", func(r *router) {
+							r.Post("/", api.SamlAcs)
+						})
 
-		r.Route("/admin", func(r *router) {
-			r.Use(api.requireAdminCredentials)
+				})
+			})*/
 
-			r.Route("/audit", func(r *router) {
-				r.Get("/", api.adminAuditLog)
-			})
+		r.Route("/", func(r *router) {
+			r.Route("/admin", func(r *router) {
+				r.Use(api.requireAdminCredentials)
+				r.Route("/audit", func(r *router) {
+					r.Get("/", api.adminAuditLog)
+				})
 
-			r.Route("/users", func(r *router) {
-				r.Get("/", api.adminUsers)
-				r.Post("/", api.adminUserCreate)
+				r.Route("/users", func(r *router) {
+					r.Get("/", api.adminUsers)
+					r.Post("/", api.adminUserCreate)
 
-				r.Route("/{user_id}", func(r *router) {
-					r.Use(api.loadUser)
-					r.Route("/factors", func(r *router) {
-						r.Get("/", api.adminUserGetFactors)
-						r.Route("/{factor_id}", func(r *router) {
-							r.Use(api.loadFactor)
-							r.Delete("/", api.adminUserDeleteFactor)
-							r.Put("/", api.adminUserUpdateFactor)
+					r.Route("/{user_id}", func(r *router) {
+						r.Use(api.loadUser)
+						r.Route("/factors", func(r *router) {
+							r.Get("/", api.adminUserGetFactors)
+							r.Route("/{factor_id}", func(r *router) {
+								r.Use(api.loadFactor)
+								r.Delete("/", api.adminUserDeleteFactor)
+								r.Put("/", api.adminUserUpdateFactor)
+							})
+						})
+
+						r.Get("/", api.adminUserGet)
+						r.Put("/", api.adminUserUpdate)
+						r.Delete("/", api.adminUserDelete)
+					})
+				})
+				/*
+					r.Post("/generate_link", api.adminGenerateLink)
+
+				*/
+
+				/*r.Route("/sso", func(r *router) {
+					r.Route("/providers", func(r *router) {
+						r.Get("/", api.adminSSOProvidersList)
+						r.Post("/", api.adminSSOProvidersCreate)
+
+						r.Route("/{idp_id}", func(r *router) {
+							r.Use(api.loadSSOProvider)
+
+							r.Get("/", api.adminSSOProvidersGet)
+							r.Put("/", api.adminSSOProvidersUpdate)
+							r.Delete("/", api.adminSSOProvidersDelete)
 						})
 					})
+				}) */
 
-					r.Get("/", api.adminUserGet)
-					r.Put("/", api.adminUserUpdate)
-					r.Delete("/", api.adminUserDelete)
-				})
-			})
-
-			r.Post("/generate_link", api.adminGenerateLink)
-
-			r.Route("/sso", func(r *router) {
-				r.Route("/providers", func(r *router) {
-					r.Get("/", api.adminSSOProvidersList)
-					r.Post("/", api.adminSSOProvidersCreate)
-
-					r.Route("/{idp_id}", func(r *router) {
-						r.Use(api.loadSSOProvider)
-
-						r.Get("/", api.adminSSOProvidersGet)
-						r.Put("/", api.adminSSOProvidersUpdate)
-						r.Delete("/", api.adminSSOProvidersDelete)
-					})
-				})
 			})
 
 		})

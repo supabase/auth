@@ -19,18 +19,20 @@ const InvalidCodeChallengeError = "code challenge does not match previously save
 const InvalidCodeMethodError = "code challenge method not supported"
 
 type FlowState struct {
-	ID                   uuid.UUID  `json:"id" db:"id"`
-	UserID               *uuid.UUID `json:"user_id,omitempty" db:"user_id"`
-	AuthCode             string     `json:"auth_code" db:"auth_code"`
-	AuthenticationMethod string     `json:"authentication_method" db:"authentication_method"`
-	CodeChallenge        string     `json:"code_challenge" db:"code_challenge"`
-	CodeChallengeMethod  string     `json:"code_challenge_method" db:"code_challenge_method"`
-	ProviderType         string     `json:"provider_type" db:"provider_type"`
-	ProviderAccessToken  string     `json:"provider_access_token" db:"provider_access_token"`
-	ProviderRefreshToken string     `json:"provider_refresh_token" db:"provider_refresh_token"`
-	AuthCodeIssuedAt     *time.Time `json:"auth_code_issued_at" db:"auth_code_issued_at"`
-	CreatedAt            time.Time  `json:"created_at" db:"created_at"`
-	UpdatedAt            time.Time  `json:"updated_at" db:"updated_at"`
+	ID                   uuid.UUID     `json:"id" db:"id"`
+	UserID               *uuid.UUID    `json:"user_id,omitempty" db:"user_id"`
+	AuthCode             string        `json:"auth_code" db:"auth_code"`
+	AuthenticationMethod string        `json:"authentication_method" db:"authentication_method"`
+	CodeChallenge        string        `json:"code_challenge" db:"code_challenge"`
+	CodeChallengeMethod  string        `json:"code_challenge_method" db:"code_challenge_method"`
+	ProviderType         string        `json:"provider_type" db:"provider_type"`
+	ProviderAccessToken  string        `json:"provider_access_token" db:"provider_access_token"`
+	ProviderRefreshToken string        `json:"provider_refresh_token" db:"provider_refresh_token"`
+	AuthCodeIssuedAt     *time.Time    `json:"auth_code_issued_at" db:"auth_code_issued_at"`
+	CreatedAt            time.Time     `json:"created_at" db:"created_at"`
+	UpdatedAt            time.Time     `json:"updated_at" db:"updated_at"`
+	OrganizationID       uuid.NullUUID `json:"organization_id" db:"organization_id"`
+	ProjectID            uuid.NullUUID `json:"project_id" db:"project_id"`
 }
 
 type CodeChallengeMethod int
@@ -82,7 +84,7 @@ func (FlowState) TableName() string {
 	return tableName
 }
 
-func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID) *FlowState {
+func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID, organization_id uuid.UUID, project_id uuid.UUID) *FlowState {
 	id := uuid.Must(uuid.NewV4())
 	authCode := uuid.Must(uuid.NewV4())
 	flowState := &FlowState{
@@ -93,6 +95,8 @@ func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeCh
 		AuthCode:             authCode.String(),
 		AuthenticationMethod: authenticationMethod.String(),
 		UserID:               userID,
+		OrganizationID:       uuid.NullUUID{UUID: organization_id, Valid: organization_id != uuid.Nil},
+		ProjectID:            uuid.NullUUID{UUID: project_id, Valid: project_id != uuid.Nil},
 	}
 	return flowState
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
@@ -46,6 +47,22 @@ func (a *API) requestAud(ctx context.Context, r *http.Request) string {
 
 	// Finally, return the default if none of the above methods are successful
 	return config.JWT.Aud
+}
+
+func (a *API) requestOrganizationID(ctx context.Context, r *http.Request) uuid.UUID {
+	claims := getClaims(ctx)
+	if claims != nil {
+		return claims.OrganizationID
+	}
+	return uuid.Nil
+}
+
+func (a *API) requestProjectID(ctx context.Context, r *http.Request) uuid.UUID {
+	claims := getClaims(ctx)
+	if claims != nil {
+		return claims.ProjectID
+	}
+	return uuid.Nil
 }
 
 func isStringInSlice(checkValue string, list []string) bool {

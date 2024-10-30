@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/hooks"
 	mail "github.com/supabase/auth/internal/mailer"
 	"go.opentelemetry.io/otel/attribute"
@@ -66,7 +67,8 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	aud := a.requestAud(ctx, r)
-	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
+	organization_id := a.requestOrganizationID(ctx, r)
+	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud, organization_id, uuid.Nil)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			switch params.Type {
@@ -234,7 +236,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
-			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud, user); terr != nil {
+			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud, user, organization_id, uuid.Nil); terr != nil {
 				return internalServerError("Database error checking email").WithInternalError(terr)
 			} else if duplicateUser != nil {
 				return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)

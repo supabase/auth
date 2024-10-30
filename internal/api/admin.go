@@ -69,6 +69,38 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 	return withUser(ctx, u), nil
 }
 
+func (a *API) loadOrganizationId(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	ctx := r.Context()
+	organization_id := chi.URLParam(r, "organization_id")
+	if organization_id == "" {
+		return nil, notFoundError(ErrorCodeValidationFailed, "organization_id must be provided")
+	}
+	organizationID, err := uuid.FromString(organization_id)
+	if err != nil {
+		return nil, notFoundError(ErrorCodeValidationFailed, "organization_id must be an UUID")
+	}
+
+	observability.LogEntrySetField(r, "organization_id", organizationID)
+
+	return withOrganizationID(ctx, organizationID), nil
+}
+
+func (a *API) loadProjectId(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	ctx := r.Context()
+	project_id := chi.URLParam(r, "project_id")
+	if project_id == "" {
+		return nil, notFoundError(ErrorCodeValidationFailed, "project_id must be provided")
+	}
+	projectID, err := uuid.FromString(project_id)
+	if err != nil {
+		return nil, notFoundError(ErrorCodeValidationFailed, "project_id must be an UUID")
+	}
+
+	observability.LogEntrySetField(r, "project_id", projectID)
+
+	return withProjectID(ctx, projectID), nil
+}
+
 // Use only after requireAuthentication, so that there is a valid user
 func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
@@ -105,6 +137,7 @@ func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	aud := a.requestAud(ctx, r)
+	organization_id := a.requestOrganizationID(ctx, r)
 
 	pageParams, err := paginate(r)
 	if err != nil {
@@ -118,7 +151,7 @@ func (a *API) adminUsers(w http.ResponseWriter, r *http.Request) error {
 
 	filter := r.URL.Query().Get("filter")
 
-	users, err := models.FindUsersInAudience(db, aud, pageParams, sortParams, filter)
+	users, err := models.FindUsersInAudience(db, aud, pageParams, sortParams, filter, organization_id, uuid.Nil)
 	if err != nil {
 		return internalServerError("Database error finding users").WithInternalError(err)
 	}
@@ -214,7 +247,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		var identities []models.Identity
 		if params.Email != "" {
-			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email"); terr != nil && !models.IsNotFoundError(terr) {
+			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email", user.OrganizationID.UUID, user.ProjectID.UUID); terr != nil && !models.IsNotFoundError(terr) {
 				return terr
 			} else if identity == nil {
 				// if the user doesn't have an existing email
@@ -250,7 +283,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if params.Phone != "" {
-			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone"); terr != nil && !models.IsNotFoundError(terr) {
+			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone", user.OrganizationID.UUID, user.ProjectID.UUID); terr != nil && !models.IsNotFoundError(terr) {
 				return terr
 			} else if identity == nil {
 				// if the user doesn't have an existing phone
@@ -327,6 +360,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 
 	adminUser := getAdminUser(ctx)
+	organization_id := a.requestOrganizationID(ctx, r)
 	params, err := a.getAdminParams(r)
 	if err != nil {
 		return err
@@ -347,7 +381,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if user, err := models.IsDuplicatedEmail(db, params.Email, aud, nil); err != nil {
+		if user, err := models.IsDuplicatedEmail(db, params.Email, aud, nil, organization_id, uuid.Nil); err != nil {
 			return internalServerError("Database error checking email").WithInternalError(err)
 		} else if user != nil {
 			return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
@@ -360,7 +394,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if exists, err := models.IsDuplicatedPhone(db, params.Phone, aud); err != nil {
+		if exists, err := models.IsDuplicatedPhone(db, params.Phone, aud, organization_id, uuid.Nil); err != nil {
 			return internalServerError("Database error checking phone").WithInternalError(err)
 		} else if exists {
 			return unprocessableEntityError(ErrorCodePhoneExists, "Phone number already registered by another user")
@@ -382,9 +416,9 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 
 	var user *models.User
 	if params.PasswordHash != "" {
-		user, err = models.NewUserWithPasswordHash(params.Phone, params.Email, params.PasswordHash, aud, params.UserMetaData)
+		user, err = models.NewUserWithPasswordHash(params.Phone, params.Email, params.PasswordHash, aud, params.UserMetaData, organization_id, uuid.Nil)
 	} else {
-		user, err = models.NewUser(params.Phone, params.Email, *params.Password, aud, params.UserMetaData)
+		user, err = models.NewUser(params.Phone, params.Email, *params.Password, aud, params.UserMetaData, organization_id, uuid.Nil)
 	}
 
 	if err != nil {
@@ -425,7 +459,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
-		if terr := tx.Create(user); terr != nil {
+		if terr := tx.Create(user, "project_id", "organization_role"); terr != nil {
 			return terr
 		}
 
@@ -434,7 +468,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			identity, terr := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
 				Subject: user.ID.String(),
 				Email:   user.GetEmail(),
-			}))
+			}), "project_id")
 
 			if terr != nil {
 				return terr
@@ -446,7 +480,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			identity, terr := a.createNewIdentity(tx, user, "phone", structs.Map(provider.Claims{
 				Subject: user.ID.String(),
 				Phone:   user.GetPhone(),
-			}))
+			}), "project_id")
 
 			if terr != nil {
 				return terr

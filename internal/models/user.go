@@ -71,9 +71,13 @@ type User struct {
 	IsAnonymous bool       `json:"is_anonymous" db:"is_anonymous"`
 
 	DONTUSEINSTANCEID uuid.UUID `json:"-" db:"instance_id"`
+
+	OrganizationID   uuid.NullUUID `json:"organization_id" db:"organization_id"`
+	ProjectID        uuid.NullUUID `json:"project_id" db:"project_id"`
+	OrganizationRole string        `json:"organization_role" db:"organization_role"`
 }
 
-func NewUserWithPasswordHash(phone, email, passwordHash, aud string, userData map[string]interface{}) (*User, error) {
+func NewUserWithPasswordHash(phone, email, passwordHash string, aud string, userData map[string]interface{}, organization_id uuid.UUID, project_id uuid.UUID) (*User, error) {
 	if strings.HasPrefix(passwordHash, crypto.Argon2Prefix) {
 		_, err := crypto.ParseArgon2Hash(passwordHash)
 		if err != nil {
@@ -91,7 +95,13 @@ func NewUserWithPasswordHash(phone, email, passwordHash, aud string, userData ma
 			return nil, err
 		}
 	}
+
+	if organization_id == uuid.Nil && project_id == uuid.Nil && passwordHash != "" && (email != "" || phone != "") {
+		return nil, errors.New("organization_id or project_id must be provided")
+	}
+
 	id := uuid.Must(uuid.NewV4())
+
 	user := &User{
 		ID:                id,
 		Aud:               aud,
@@ -99,12 +109,14 @@ func NewUserWithPasswordHash(phone, email, passwordHash, aud string, userData ma
 		Phone:             storage.NullString(phone),
 		UserMetaData:      userData,
 		EncryptedPassword: &passwordHash,
+		OrganizationID:    uuid.NullUUID{UUID: organization_id, Valid: true},
+		ProjectID:         uuid.NullUUID{UUID: project_id, Valid: true},
 	}
 	return user, nil
 }
 
 // NewUser initializes a new user from an email, password and user data.
-func NewUser(phone, email, password, aud string, userData map[string]interface{}) (*User, error) {
+func NewUser(phone, email, password string, aud string, userData map[string]interface{}, organization_id uuid.UUID, project_id uuid.UUID) (*User, error) {
 	passwordHash := ""
 
 	if password != "" {
@@ -120,6 +132,10 @@ func NewUser(phone, email, password, aud string, userData map[string]interface{}
 		userData = make(map[string]interface{})
 	}
 
+	if organization_id == uuid.Nil && project_id == uuid.Nil && password != "" && (email != "" || phone != "") {
+		return nil, errors.New("organization_id or project_id must be provided")
+	}
+
 	id := uuid.Must(uuid.NewV4())
 	user := &User{
 		ID:                id,
@@ -128,6 +144,8 @@ func NewUser(phone, email, password, aud string, userData map[string]interface{}
 		Phone:             storage.NullString(phone),
 		UserMetaData:      userData,
 		EncryptedPassword: &passwordHash,
+		OrganizationID:    uuid.NullUUID{UUID: organization_id, Valid: true},
+		ProjectID:         uuid.NullUUID{UUID: project_id, Valid: true},
 	}
 	return user, nil
 }
@@ -287,7 +305,7 @@ func (u *User) UpdateUserEmailFromIdentities(tx *storage.Connection) error {
 
 	var primaryIdentity *Identity
 	for _, i := range identities {
-		if _, terr := FindUserByEmailAndAudience(tx, i.GetEmail(), u.Aud); terr != nil {
+		if _, terr := FindUserByEmailAndAudience(tx, i.GetEmail(), u.Aud, u.OrganizationID.UUID, uuid.Nil); terr != nil {
 			if IsNotFoundError(terr) {
 				// the identity's email is not used by another user
 				// so we can set it as the primary identity
@@ -504,7 +522,7 @@ func (u *User) ConfirmEmailChange(tx *storage.Connection, status int) error {
 		}
 	}
 
-	identity, err := FindIdentityByIdAndProvider(tx, u.ID.String(), "email")
+	identity, err := FindIdentityByIdAndProvider(tx, u.ID.String(), "email", u.OrganizationID.UUID, u.ProjectID.UUID)
 	if err != nil {
 		if IsNotFoundError(err) {
 			// no email identity, not an error
@@ -547,7 +565,7 @@ func (u *User) ConfirmPhoneChange(tx *storage.Connection) error {
 		return err
 	}
 
-	identity, err := FindIdentityByIdAndProvider(tx, u.ID.String(), "phone")
+	identity, err := FindIdentityByIdAndProvider(tx, u.ID.String(), "phone", u.OrganizationID.UUID, u.ProjectID.UUID)
 	if err != nil {
 		if IsNotFoundError(err) {
 			// no phone identity, not an error
@@ -597,13 +615,52 @@ func findUser(tx *storage.Connection, query string, args ...interface{}) (*User,
 }
 
 // FindUserByEmailAndAudience finds a user with the matching email and audience.
-func FindUserByEmailAndAudience(tx *storage.Connection, email, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and LOWER(email) = ? and aud = ? and is_sso_user = false", uuid.Nil, strings.ToLower(email), aud)
+func FindUserByEmailAndAudience(tx *storage.Connection, email string, aud string, organization_id uuid.UUID, project_id uuid.UUID) (*User, error) {
+	var query string
+	var args []interface{}
+	args = append(args, uuid.Nil, strings.ToLower(email), aud, false)
+	query = "instance_id = ? and LOWER(email) = ? and aud = ? and is_sso_user = ?"
+
+	if organization_id == uuid.Nil && project_id == uuid.Nil {
+		return nil, errors.New("organization_id or project_id must be provided")
+	}
+
+	if organization_id != uuid.Nil {
+		args = append(args, organization_id)
+		query += " and organization_id = ?"
+	}
+
+	if project_id != uuid.Nil {
+		args = append(args, project_id)
+		query += " and project_id = ?"
+	}
+
+	return findUser(tx, query, args...)
 }
 
 // FindUserByPhoneAndAudience finds a user with the matching email and audience.
-func FindUserByPhoneAndAudience(tx *storage.Connection, phone, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and phone = ? and aud = ? and is_sso_user = false", uuid.Nil, phone, aud)
+func FindUserByPhoneAndAudience(tx *storage.Connection, phone string, aud string, organization_id uuid.UUID, project_id uuid.UUID) (*User, error) {
+
+	var query string
+	var args []interface{}
+	args = append(args, uuid.Nil, phone, aud, false)
+	query = "instance_id = ? and phone = ? and aud = ? and is_sso_user = ?"
+
+	if organization_id == uuid.Nil && project_id == uuid.Nil {
+		return nil, errors.New("organization_id or project_id must be provided")
+	}
+
+	if organization_id != uuid.Nil {
+		args = append(args, organization_id)
+		query += " and organization_id = ?"
+	}
+
+	if project_id != uuid.Nil {
+		args = append(args, project_id)
+		query += " and project_id = ?"
+	}
+
+	return findUser(tx, query, args...)
 }
 
 // FindUserByID finds a user matching the provided ID.
@@ -671,9 +728,22 @@ func FindUserWithRefreshToken(tx *storage.Connection, token string, forUpdate bo
 }
 
 // FindUsersInAudience finds users with the matching audience.
-func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Pagination, sortParams *SortParams, filter string) ([]*User, error) {
+func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Pagination, sortParams *SortParams, filter string, organization_id uuid.UUID, project_id uuid.UUID) ([]*User, error) {
 	users := []*User{}
-	q := tx.Q().Where("instance_id = ? and aud = ?", uuid.Nil, aud)
+	var query string
+	var args []interface{}
+	args = append(args, uuid.Nil, aud)
+	query = "instance_id = ? and aud = ?"
+
+	if organization_id == uuid.Nil && project_id == uuid.Nil {
+		return nil, errors.New("organization_id or project_id must be provided")
+	}
+
+	if organization_id != uuid.Nil {
+		args = append(args, organization_id)
+		query += " and organization_id = ?"
+	}
+	q := tx.Q().Where(query, args...)
 
 	if filter != "" {
 		lf := "%" + filter + "%"
@@ -698,12 +768,31 @@ func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Paginat
 	return users, err
 }
 
-// IsDuplicatedEmail returns whether a user exists with a matching email and audience.
+// IsDuplicatedEmail returns whether a user exists with a matching email and audience in the admin project.
 // If a currentUser is provided, we will need to filter out any identities that belong to the current user.
-func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *User) (*User, error) {
+func IsDuplicatedEmail(tx *storage.Connection, email string, aud string, currentUser *User, organization_id uuid.UUID, project_id uuid.UUID) (*User, error) {
 	var identities []Identity
 
-	if err := tx.Eager().Q().Where("email = ?", strings.ToLower(email)).All(&identities); err != nil {
+	var args []interface{}
+	var query string
+	args = append(args, strings.ToLower(email))
+	query = "email = ?"
+
+	if organization_id == uuid.Nil && project_id == uuid.Nil {
+		return nil, errors.New("organization_id or project_id must be provided")
+	}
+
+	if organization_id != uuid.Nil {
+		args = append(args, organization_id)
+		query += " and organization_id = ?"
+	}
+
+	if project_id != uuid.Nil {
+		args = append(args, project_id)
+		query += " and project_id = ?"
+	}
+
+	if err := tx.Eager().Q().Where(query, args...).All(&identities); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -739,7 +828,7 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *U
 
 	// out of an abundance of caution, if nothing was found via the
 	// identities table we also do a final check on the users table
-	user, err := FindUserByEmailAndAudience(tx, email, aud)
+	user, err := FindUserByEmailAndAudience(tx, email, aud, organization_id, project_id)
 	if err != nil && !IsNotFoundError(err) {
 		return nil, errors.Wrap(err, "unable to find user email address for duplicates")
 	}
@@ -748,8 +837,12 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *U
 }
 
 // IsDuplicatedPhone checks if the phone number already exists in the users table
-func IsDuplicatedPhone(tx *storage.Connection, phone, aud string) (bool, error) {
-	_, err := FindUserByPhoneAndAudience(tx, phone, aud)
+func IsDuplicatedPhone(tx *storage.Connection, phone string, aud string, organization_id uuid.UUID, project_id uuid.UUID) (bool, error) {
+
+	if organization_id == uuid.Nil && project_id == uuid.Nil {
+		return false, errors.New("organization_id or project_id must be provided")
+	}
+	_, err := FindUserByPhoneAndAudience(tx, phone, aud, organization_id, uuid.Nil)
 	if err != nil {
 		if IsNotFoundError(err) {
 			return false, nil
@@ -978,6 +1071,25 @@ func obfuscateIdentityProviderId(identity *Identity) string {
 }
 
 // FindUserByPhoneChangeAndAudience finds a user with the matching phone change and audience.
-func FindUserByPhoneChangeAndAudience(tx *storage.Connection, phone, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ? and is_sso_user = false", uuid.Nil, phone, aud)
+func FindUserByPhoneChangeAndAudience(tx *storage.Connection, phone, aud string, organization_id uuid.UUID, project_id uuid.UUID) (*User, error) {
+
+	var query string
+	var args []interface{}
+	args = append(args, uuid.Nil, phone, aud)
+	query = "instance_id = ? and phone_change = ? and aud = ?"
+
+	if organization_id == uuid.Nil && project_id == uuid.Nil {
+		return nil, errors.New("organization_id or project_id must be provided")
+	}
+
+	if organization_id != uuid.Nil {
+		args = append(args, organization_id)
+		query += " and organization_id = ?"
+	}
+
+	if project_id != uuid.Nil {
+		args = append(args, project_id)
+		query += " and project_id = ?"
+	}
+	return findUser(tx, query, args...)
 }
