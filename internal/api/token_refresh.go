@@ -47,13 +47,13 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		user, token, session, err := models.FindUserWithRefreshToken(db, params.RefreshToken, false)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return oauthError("invalid_grant", "Invalid Refresh Token: Refresh Token Not Found")
+				return badRequestError(ErrorCodeRefreshTokenNotFound, "Invalid Refresh Token: Refresh Token Not Found")
 			}
 			return internalServerError(err.Error())
 		}
 
 		if user.IsBanned() {
-			return oauthError("invalid_grant", "Invalid Refresh Token: User Banned")
+			return badRequestError(ErrorCodeUserBanned, "Invalid Refresh Token: User Banned")
 		}
 
 		if session == nil {
@@ -71,10 +71,10 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			// do nothing
 
 		case models.SessionTimedOut:
-			return oauthError("invalid_grant", "Invalid Refresh Token: Session Expired (Inactivity)")
+			return badRequestError(ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Inactivity)")
 
 		default:
-			return oauthError("invalid_grant", "Invalid Refresh Token: Session Expired")
+			return badRequestError(ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired")
 		}
 
 		// Basic checks above passed, now we need to serialize access
@@ -153,7 +153,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 					if s.LastRefreshedAt(nil).After(session.LastRefreshedAt(&token.UpdatedAt)) {
 						// session is not the most
 						// recently active one
-						return oauthError("invalid_grant", "Invalid Refresh Token: Session Expired (Revoked by Newer Login)")
+						return badRequestError(ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Revoked by Newer Login)")
 					}
 				}
 
@@ -196,7 +196,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 							}
 						}
 
-						return storage.NewCommitWithError(oauthError("invalid_grant", "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID))
+						return storage.NewCommitWithError(badRequestError(ErrorCodeRefreshTokenAlreadyUsed, "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID))
 					}
 				}
 			}
