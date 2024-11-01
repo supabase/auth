@@ -676,7 +676,7 @@ func (ts *MFATestSuite) TestSessionsMaintainAALOnRefresh() {
 
 	ctx, err := ts.API.parseJWTClaims(data.Token, req)
 	require.NoError(ts.T(), err)
-	ctx, err = ts.API.maybeLoadUserOrSession(ctx)
+	ctx, err = ts.API.maybeLoadUserOrSession(ctx, false)
 	require.NoError(ts.T(), err)
 	require.True(ts.T(), getSession(ctx).IsAAL2())
 }
