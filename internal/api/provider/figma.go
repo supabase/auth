@@ -39,7 +39,7 @@ func NewFigmaProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 
 	// Figma only provides the "file_read" scope.
 	oauthScopes := []string{
-		"file_read",
+		"files:read",
 	}
 
 	if scopes != "" {
