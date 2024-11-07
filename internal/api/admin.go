@@ -69,38 +69,6 @@ func (a *API) loadUser(w http.ResponseWriter, r *http.Request) (context.Context,
 	return withUser(ctx, u), nil
 }
 
-func (a *API) loadOrganizationId(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	ctx := r.Context()
-	organization_id := chi.URLParam(r, "organization_id")
-	if organization_id == "" {
-		return nil, notFoundError(ErrorCodeValidationFailed, "organization_id must be provided")
-	}
-	organizationID, err := uuid.FromString(organization_id)
-	if err != nil {
-		return nil, notFoundError(ErrorCodeValidationFailed, "organization_id must be an UUID")
-	}
-
-	observability.LogEntrySetField(r, "organization_id", organizationID)
-
-	return withOrganizationID(ctx, organizationID), nil
-}
-
-func (a *API) loadProjectId(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	ctx := r.Context()
-	project_id := chi.URLParam(r, "project_id")
-	if project_id == "" {
-		return nil, notFoundError(ErrorCodeValidationFailed, "project_id must be provided")
-	}
-	projectID, err := uuid.FromString(project_id)
-	if err != nil {
-		return nil, notFoundError(ErrorCodeValidationFailed, "project_id must be an UUID")
-	}
-
-	observability.LogEntrySetField(r, "project_id", projectID)
-
-	return withProjectID(ctx, projectID), nil
-}
-
 // Use only after requireAuthentication, so that there is a valid user
 func (a *API) loadFactor(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
