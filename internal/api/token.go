@@ -370,6 +370,14 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		return "", 0, terr
 	}
 
+	organization_id := user.OrganizationID.UUID
+	organization_role := user.OrganizationRole
+
+	tier_model, terr := findTierModelByOrganizationIDAndOrganizationRole(tx, organization_id, organization_role)
+	if terr != nil {
+		return "", 0, terr
+	}
+
 	issuedAt := time.Now().UTC()
 	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
 
@@ -390,8 +398,9 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		AuthenticatorAssuranceLevel:   aal.String(),
 		AuthenticationMethodReference: amr,
 		IsAnonymous:                   user.IsAnonymous,
-		OrganizationID:                user.OrganizationID.UUID,
-		OrganizationRole:              user.OrganizationRole,
+		OrganizationID:                organization_id,
+		OrganizationRole:              organization_role,
+		TierModel:                     tier_model,
 	}
 
 	var gotrueClaims jwt.Claims = claims

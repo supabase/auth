@@ -44,6 +44,13 @@ func (e UserNotFoundError) Error() string {
 	return "User not found"
 }
 
+// OrganizationNotFoundError represents when an organization is not found.
+type OrganizationNotFoundError struct{}
+
+func (e OrganizationNotFoundError) Error() string {
+	return "Organization not found"
+}
+
 // IdentityNotFoundError represents when an identity is not found.
 type IdentityNotFoundError struct{}
 

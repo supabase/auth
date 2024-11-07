@@ -111,6 +111,7 @@ type AccessTokenClaims struct {
 	IsAnonymous                   bool                   `json:"is_anonymous"`
 	OrganizationID                uuid.UUID              `json:"organization_id"`
 	OrganizationRole              string                 `json:"organization_role"`
+	TierModel                     string                 `json:"tier_model"`
 }
 
 type MFAVerificationAttemptInput struct {

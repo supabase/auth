@@ -1,4 +1,4 @@
-package api
+package models
 
 import (
 	"database/sql"
@@ -32,7 +32,7 @@ func findOrganization(tx *storage.Connection, query string, args ...interface{})
 	return obj, nil
 }
 
-func findTierModelByOrganizationIDAndOrganizationRole(tx *storage.Connection, organization_id uuid.UUID, organization_role string) (string, error) {
+func findTierModelByOrganizationIDAndUser(tx *storage.Connection, organization_id uuid.UUID, organization_role string) (string, error) {
 
 	var tier_model string
 	var query string
