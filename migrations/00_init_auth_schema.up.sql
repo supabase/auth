@@ -18,28 +18,6 @@ CREATE TYPE {{ index .Options "Namespace" }}."organization_roles" AS ENUM (
 CREATE TYPE {{ index .Options "Namespace" }}."role_permissions" AS ENUM (
 );
 
--- auth.api_key_permissions definition
-
-CREATE TYPE {{ index .Options "Namespace" }}."api_key_permissions" AS ENUM (
-  'all',
-  'nothing',
-  'write',
-  'read'
-);
-
--- tier_models definition
-
-DO $$ 
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'tier_models') THEN
-        CREATE TYPE "tier_models" AS ENUM (
-            'low',
-            'medium',
-            'high'
-        );
-    END IF;
-END $$;
-
 -- auth.projects definition
 
 CREATE TABLE IF NOT EXISTS {{ index .Options "Namespace" }}.projects (
@@ -228,7 +206,7 @@ comment on table {{ index .Options "Namespace" }}.smtp_configs_organizations is 
 -- auth.smtp_configs_project definition
 
 CREATE TABLE IF NOT EXISTS {{ index .Options "Namespace" }}.smtp_configs_project (
-	id serial UNIQUE NOT NULL,
+	id bigserial UNIQUE NOT NULL,
 	project_id uuid UNIQUE NOT NULL,
 	domain varchar(255) NULL,
 	created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -239,24 +217,6 @@ CREATE TABLE IF NOT EXISTS {{ index .Options "Namespace" }}.smtp_configs_project
 );
 CREATE TRIGGER trigger_update_timestamp BEFORE UPDATE ON {{ index .Options "Namespace" }}.smtp_configs_project FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 comment on table {{ index .Options "Namespace" }}.smtp_configs_project is 'Auth: Stores SMTP configurations for projects.';
-
--- auth.api_keys definition
-
-CREATE TABLE IF NOT EXISTS {{ index .Options "Namespace" }}.api_keys (
-	id serial UNIQUE NOT NULL,
-	organization_id uuid NOT NULL,
-	permissions {{ index .Options "Namespace" }}.api_key_permissions DEFAULT 'nothing',
-	tier_model tier_models NULL,
-	"key" varchar(255) UNIQUE NOT NULL,
-	created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-	updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-	CONSTRAINT api_keys_user_id_fkey FOREIGN KEY (organization_id) REFERENCES {{ index .Options "Namespace" }}.organizations(id) on delete cascade,
-	CONSTRAINT api_keys_pkey PRIMARY KEY (id)
-);
-CREATE INDEX IF NOT EXISTS api_keys_user_id_idx ON {{ index .Options "Namespace" }}.api_keys USING btree (organization_id);
-comment on table {{ index .Options "Namespace" }}.api_keys is 'Auth: Stores API keys for users.';
-CREATE TRIGGER trigger_update_timestamp BEFORE UPDATE ON {{ index .Options "Namespace" }}.api_keys FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
 -- organization_roles_permissions definition
 
 CREATE TABLE IF NOT EXISTS {{ index .Options "Namespace" }}.organization_roles_permissions (
