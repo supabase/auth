@@ -9,15 +9,15 @@ import (
 
 	"fmt"
 
+	"auth/internal/hooks"
+	"auth/internal/metering"
+	"auth/internal/models"
+	"auth/internal/observability"
+	"auth/internal/storage"
+
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/xeipuuv/gojsonschema"
-
-	"github.com/supabase/auth/internal/hooks"
-	"github.com/supabase/auth/internal/metering"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/storage"
 )
 
 // AccessTokenClaims is a struct thats used for JWT claims
@@ -373,7 +373,7 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 	organization_id := user.OrganizationID.UUID
 	organization_role := user.OrganizationRole
 
-	tier_model, terr := findTierModelByOrganizationIDAndOrganizationRole(tx, organization_id, organization_role)
+	tier_model, terr := models.FindTierModelByOrganizationIDAndOrganizationRole(tx, organization_id, organization_role)
 	if terr != nil {
 		return "", 0, terr
 	}
