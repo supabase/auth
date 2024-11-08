@@ -373,7 +373,7 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 	organization_id := user.OrganizationID.UUID
 	organization_role := user.OrganizationRole
 
-	tier_model, terr := models.FindTierModelByOrganizationIDAndOrganizationRole(tx, organization_id, organization_role)
+	tier_model, tier_time, terr := models.FindTiersByOrganizationIDAndOrganizationRole(tx, organization_id, organization_role)
 	if terr != nil {
 		return "", 0, terr
 	}
@@ -401,6 +401,7 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		OrganizationID:                organization_id,
 		OrganizationRole:              organization_role,
 		TierModel:                     tier_model,
+		TierTime:                      tier_time,
 	}
 
 	var gotrueClaims jwt.Claims = claims

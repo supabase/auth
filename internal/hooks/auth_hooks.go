@@ -3,6 +3,7 @@ package hooks
 import (
 	"auth/internal/mailer"
 	"auth/internal/models"
+
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -112,6 +113,7 @@ type AccessTokenClaims struct {
 	OrganizationID                uuid.UUID              `json:"organization_id"`
 	OrganizationRole              string                 `json:"organization_role"`
 	TierModel                     string                 `json:"tier_model"`
+	TierTime                      string                 `json:"tier_time"`
 }
 
 type MFAVerificationAttemptInput struct {

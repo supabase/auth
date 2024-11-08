@@ -17,6 +17,8 @@ type Organization struct {
 	Name            string    `json:"name" db:"name"`
 	AdminTierModel  string    `json:"admin_tier_model" db:"admin_tier_model"`
 	ClientTierModel string    `json:"client_tier_model" db:"client_tier_model"`
+	AdminTierTime   string    `json:"admin_tier_time" db:"admin_tier_time"`
+	ClientTierTime  string    `json:"client_tier_time" db:"client_tier_time"`
 	CreatedAt       time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at" db:"updated_at"`
 }
@@ -33,9 +35,10 @@ func findOrganization(tx *storage.Connection, query string, args ...interface{})
 	return obj, nil
 }
 
-func FindTierModelByOrganizationIDAndOrganizationRole(tx *storage.Connection, organization_id uuid.UUID, organization_role string) (string, error) {
+func FindTiersByOrganizationIDAndOrganizationRole(tx *storage.Connection, organization_id uuid.UUID, organization_role string) (string, string, error) {
 
 	var tier_model string
+	var tier_time string
 	var query string
 	var args []interface{}
 
@@ -45,14 +48,16 @@ func FindTierModelByOrganizationIDAndOrganizationRole(tx *storage.Connection, or
 		organization, err := findOrganization(tx, query, args...)
 
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 
 		if organization_role == "admin" {
 			tier_model = organization.AdminTierModel
+			tier_time = organization.AdminTierTime
 		} else {
 			tier_model = organization.ClientTierModel
+			tier_time = organization.ClientTierTime
 		}
 	}
-	return tier_model, nil
+	return tier_model, tier_time, nil
 }
