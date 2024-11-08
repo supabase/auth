@@ -114,6 +114,7 @@ type AccessTokenClaims struct {
 	OrganizationRole              string                 `json:"organization_role"`
 	TierModel                     string                 `json:"tier_model"`
 	TierTime                      string                 `json:"tier_time"`
+	TierUsage                     string                 `json:"tier_usage"`
 }
 
 type MFAVerificationAttemptInput struct {
