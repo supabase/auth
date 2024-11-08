@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/supabase/auth/internal/utilities"
+	"auth/internal/utilities"
 )
 
 var (

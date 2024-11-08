@@ -3,11 +3,12 @@ package api
 import (
 	"testing"
 
+	"auth/internal/conf"
+	"auth/internal/crypto"
+	"auth/internal/storage"
+	"auth/internal/storage/test"
+
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/crypto"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/storage/test"
 )
 
 const (

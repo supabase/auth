@@ -3,9 +3,9 @@ package api
 import (
 	"time"
 
+	"auth/internal/conf"
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
-	"github.com/supabase/auth/internal/conf"
 )
 
 type Option interface {

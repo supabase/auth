@@ -3,10 +3,10 @@ package api
 import (
 	"net/http"
 
+	"auth/internal/metering"
+	"auth/internal/models"
+	"auth/internal/storage"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/metering"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {

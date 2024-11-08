@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"auth/internal/crypto"
+	"auth/internal/storage"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/auth/internal/crypto"
-	"github.com/supabase/auth/internal/storage"
 )
 
 type FactorState int

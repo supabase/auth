@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"auth/internal/storage"
 	"github.com/crewjam/saml"
 	"github.com/crewjam/saml/samlsp"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/auth/internal/storage"
 )
 
 type SSOProvider struct {

@@ -3,10 +3,10 @@ package api
 import (
 	"net/http"
 
+	"auth/internal/models"
+	"auth/internal/storage"
 	"github.com/crewjam/saml"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 type SingleSignOnParams struct {

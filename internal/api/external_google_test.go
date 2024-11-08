@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 
+	"auth/internal/api/provider"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/api/provider"
 )
 
 const (

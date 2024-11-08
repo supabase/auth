@@ -7,10 +7,10 @@ import (
 	"net/url"
 	"testing"
 
+	"auth/internal/conf"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/auth/internal/conf"
 	"gopkg.in/h2non/gock.v1"
 )
 

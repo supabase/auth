@@ -5,14 +5,15 @@ import (
 	"regexp"
 	"time"
 
+	"auth/internal/conf"
+	"auth/internal/mailer"
+	"auth/internal/observability"
+	"auth/internal/storage"
+	"auth/internal/utilities"
+
 	"github.com/rs/cors"
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/mailer"
-	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 	"github.com/supabase/hibp"
 )
 

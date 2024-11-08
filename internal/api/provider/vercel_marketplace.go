@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
+	"auth/internal/conf"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/oauth2"
 )
 

@@ -2,7 +2,7 @@
 package docs
 
 import (
-	"github.com/supabase/auth/internal/api"
+	"auth/internal/api"
 )
 
 // swagger:route POST /signup signup signup

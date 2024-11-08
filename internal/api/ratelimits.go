@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/supabase/auth/internal/conf"
+	"auth/internal/conf"
 )
 
 // RateLimiter will limit the number of calls to Allow per interval.

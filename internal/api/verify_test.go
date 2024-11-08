@@ -12,15 +12,15 @@ import (
 	"testing"
 	"time"
 
+	mail "auth/internal/mailer"
 	"github.com/gofrs/uuid"
-	mail "github.com/supabase/auth/internal/mailer"
 
+	"auth/internal/conf"
+	"auth/internal/crypto"
+	"auth/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/crypto"
-	"github.com/supabase/auth/internal/models"
 )
 
 type VerifyTestSuite struct {

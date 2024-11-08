@@ -8,9 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"auth/internal/conf"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
 )
 
 func TestJwks(t *testing.T) {

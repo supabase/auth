@@ -3,10 +3,10 @@ package models
 import (
 	"strings"
 
+	"auth/internal/api/provider"
+	"auth/internal/conf"
+	"auth/internal/storage"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/api/provider"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/storage"
 )
 
 // GetAccountLinkingDomain returns a string that describes the account linking

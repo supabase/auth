@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"auth/internal/conf"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
 )
 
 func TestPasswordStrengthChecks(t *testing.T) {

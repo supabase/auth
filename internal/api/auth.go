@@ -6,11 +6,12 @@ import (
 	"net/http"
 	"strings"
 
+	"auth/internal/conf"
+	"auth/internal/models"
+	"auth/internal/storage"
+
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 // requireAuthentication checks incoming requests for tokens presented using the Authorization header

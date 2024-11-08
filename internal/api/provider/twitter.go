@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"strings"
 
+	"auth/internal/conf"
+	"auth/internal/utilities"
 	"github.com/mrjones/oauth"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
 

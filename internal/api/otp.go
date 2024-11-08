@@ -6,12 +6,12 @@ import (
 	"io"
 	"net/http"
 
+	"auth/internal/api/sms_provider"
+	"auth/internal/conf"
+	"auth/internal/models"
+	"auth/internal/storage"
 	"github.com/gofrs/uuid"
 	"github.com/sethvargo/go-password/password"
-	"github.com/supabase/auth/internal/api/sms_provider"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 // OtpParams contains the request body params for the otp endpoint

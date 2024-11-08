@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"testing"
 
+	"auth/internal/conf"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
 )
 
 func TestIsValidCodeChallenge(t *testing.T) {

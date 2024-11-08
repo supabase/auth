@@ -8,10 +8,11 @@ import (
 	"net/http"
 	"strings"
 
+	"auth/internal/crypto"
+	"auth/internal/models"
+	"auth/internal/storage"
+
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/crypto"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 // MagicLinkParams holds the parameters for a magic link request

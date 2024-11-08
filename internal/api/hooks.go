@@ -13,16 +13,16 @@ import (
 	"strings"
 	"time"
 
+	"auth/internal/observability"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/observability"
 
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/crypto"
+	"auth/internal/conf"
+	"auth/internal/crypto"
 
+	"auth/internal/hooks"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/auth/internal/hooks"
 
-	"github.com/supabase/auth/internal/storage"
+	"auth/internal/storage"
 )
 
 const (

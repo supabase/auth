@@ -3,9 +3,9 @@ package api
 import (
 	"regexp"
 
+	"auth/internal/models"
+	"auth/internal/storage"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 const (

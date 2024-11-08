@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/supabase/auth/internal/conf"
+	"auth/internal/conf"
 )
 
 func Example_newRateLimiter() {

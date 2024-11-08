@@ -3,11 +3,12 @@ package api
 import (
 	"net/http"
 
+	"auth/internal/api/provider"
+	"auth/internal/models"
+	"auth/internal/storage"
+
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/api/provider"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 // InviteParams are the parameters the Signup endpoint accepts

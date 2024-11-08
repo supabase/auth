@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"auth/internal/conf"
+	mail "auth/internal/mailer"
+	"auth/internal/models"
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/auth/internal/conf"
-	mail "github.com/supabase/auth/internal/mailer"
-	"github.com/supabase/auth/internal/models"
 )
 
 type ResendTestSuite struct {

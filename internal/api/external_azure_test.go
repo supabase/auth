@@ -14,9 +14,9 @@ import (
 	"net/url"
 	"time"
 
+	"auth/internal/api/provider"
 	"github.com/coreos/go-oidc/v3/oidc"
 	jwt "github.com/golang-jwt/jwt/v5"
-	"github.com/supabase/auth/internal/api/provider"
 )
 
 const (

@@ -9,16 +9,16 @@ import (
 	"strings"
 	"time"
 
+	"auth/internal/api/provider"
+	"auth/internal/conf"
+	"auth/internal/models"
+	"auth/internal/observability"
+	"auth/internal/storage"
+	"auth/internal/utilities"
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/auth/internal/api/provider"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
 

@@ -6,9 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"auth/internal/conf"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/auth/internal/conf"
 )
 
 type TokenOIDCTestSuite struct {

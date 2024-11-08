@@ -7,14 +7,15 @@ import (
 	"sync"
 	"time"
 
+	"auth/internal/api"
+	"auth/internal/conf"
+	"auth/internal/reloader"
+	"auth/internal/storage"
+	"auth/internal/utilities"
+
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/supabase/auth/internal/api"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/reloader"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 var serveCmd = cobra.Command{

@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"auth/internal/conf"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
 )
 
 const apiTestConfig = "../../hack/test.env"

@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/supabase/auth/internal/metering"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
+	"auth/internal/metering"
+	"auth/internal/models"
+	"auth/internal/storage"
+	"auth/internal/utilities"
 )
 
 const retryLoopDuration = 5.0

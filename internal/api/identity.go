@@ -4,12 +4,13 @@ import (
 	"context"
 	"net/http"
 
+	"auth/internal/api/provider"
+	"auth/internal/models"
+	"auth/internal/storage"
+
 	"github.com/fatih/structs"
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/api/provider"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
 )
 
 func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {

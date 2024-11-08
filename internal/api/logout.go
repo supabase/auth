@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
+	"auth/internal/models"
+	"auth/internal/storage"
 )
 
 type LogoutBehavior string

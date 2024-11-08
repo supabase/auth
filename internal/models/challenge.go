@@ -7,10 +7,10 @@ import (
 	"encoding/json"
 	"time"
 
+	"auth/internal/crypto"
+	"auth/internal/storage"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/crypto"
-	"github.com/supabase/auth/internal/storage"
 )
 
 type Challenge struct {

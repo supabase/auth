@@ -8,14 +8,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"auth/internal/conf"
+	mail "auth/internal/mailer"
+	"auth/internal/models"
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/auth/internal/conf"
-	mail "github.com/supabase/auth/internal/mailer"
-	"github.com/supabase/auth/internal/models"
 )
 
 type AnonymousTestSuite struct {

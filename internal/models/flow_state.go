@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"auth/internal/storage"
 	"github.com/pkg/errors"
-	"github.com/supabase/auth/internal/storage"
 
 	"github.com/gofrs/uuid"
 )

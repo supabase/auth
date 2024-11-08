@@ -7,9 +7,10 @@ import (
 	"syscall"
 	"time"
 
+	"auth/cmd"
+	"auth/internal/observability"
+
 	"github.com/sirupsen/logrus"
-	"github.com/supabase/auth/cmd"
-	"github.com/supabase/auth/internal/observability"
 )
 
 func init() {

@@ -6,11 +6,11 @@ import (
 	"net/url"
 	"testing"
 
+	"auth/internal/conf"
+	"auth/internal/models"
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/models"
 )
 
 type ExternalTestSuite struct {

@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"net/http"
 
+	"auth/internal/api/provider"
+	"auth/internal/conf"
+	"auth/internal/models"
+	"auth/internal/observability"
+	"auth/internal/storage"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/api/provider"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/storage"
 )
 
 // IdTokenGrantParams are the parameters the IdTokenGrant method accepts

@@ -7,13 +7,13 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"auth/internal/conf"
+	"auth/internal/models"
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/models"
 )
 
 type AuditTestSuite struct {
