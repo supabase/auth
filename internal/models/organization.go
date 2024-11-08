@@ -4,9 +4,10 @@ import (
 	"database/sql"
 	"time"
 
+	"auth/internal/storage"
+
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/auth/internal/storage"
 )
 
 type Organization struct {
@@ -32,7 +33,7 @@ func findOrganization(tx *storage.Connection, query string, args ...interface{})
 	return obj, nil
 }
 
-func findTierModelByOrganizationIDAndUser(tx *storage.Connection, organization_id uuid.UUID, organization_role string) (string, error) {
+func FindTierModelByOrganizationIDAndOrganizationRole(tx *storage.Connection, organization_id uuid.UUID, organization_role string) (string, error) {
 
 	var tier_model string
 	var query string
