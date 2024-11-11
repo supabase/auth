@@ -83,6 +83,32 @@ func TestNewRateLimiter(t *testing.T) {
 				{true, now.Add(time.Hour * 25), 0},
 			},
 		},
+		{
+			cfg: conf.Rate{Events: 0, OverTime: time.Hour},
+			now: now,
+			evts: []event{
+				{false, now.Add(-time.Hour), 0},
+				{false, now, 0},
+				{false, now.Add(time.Minute), 0},
+				{false, now.Add(time.Hour), 0},
+				{false, now.Add(time.Hour), 12},
+				{false, now.Add(time.Hour * 24), 0},
+				{false, now.Add(time.Hour * 24 * 2), 0},
+			},
+		},
+		{
+			cfg: conf.Rate{Events: 0, OverTime: time.Hour * 24},
+			now: now,
+			evts: []event{
+				{false, now.Add(-time.Hour), 0},
+				{false, now, 0},
+				{false, now.Add(time.Minute), 0},
+				{false, now.Add(time.Hour), 0},
+				{false, now.Add(time.Hour), 12},
+				{false, now.Add(time.Hour * 24), 0},
+				{false, now.Add(time.Hour * 24 * 2), 0},
+			},
+		},
 	}
 	for _, tc := range cases {
 		rl := newRateLimiter(tc.cfg)
