@@ -27,6 +27,7 @@ type ProviderSettings struct {
 	Twitter        bool `json:"twitter"`
 	Email          bool `json:"email"`
 	Phone          bool `json:"phone"`
+	Zitadel        bool `json:"zitadel"`
 	Zoom           bool `json:"zoom"`
 }
 
@@ -68,6 +69,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			WorkOS:         config.External.WorkOS.Enabled,
 			Email:          config.External.Email.Enabled,
 			Phone:          config.External.Phone.Enabled,
+			Zitadel:        config.External.Zitadel.Enabled,
 			Zoom:           config.External.Zoom.Enabled,
 		},
 		DisableSignup:     config.DisableSignup,
