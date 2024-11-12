@@ -41,7 +41,7 @@ func (ts *ExternalTestSuite) TestSignupExternalZidadel() {
 func ZidadelTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *int, code string, user string) *httptest.Server {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/protocol/openid-connect/token":
+		case "/oauth/v2/token":
 			*tokenCount++
 			ts.Equal(code, r.FormValue("code"))
 			ts.Equal("authorization_code", r.FormValue("grant_type"))
@@ -49,7 +49,7 @@ func ZidadelTestSignupSetup(ts *ExternalTestSuite, tokenCount *int, userCount *i
 
 			w.Header().Add("Content-Type", "application/json")
 			fmt.Fprint(w, `{"access_token":"zidadel_token","expires_in":100000}`)
-		case "/protocol/openid-connect/userinfo":
+		case "/oidc/v1/userinfo":
 			*userCount++
 			w.Header().Add("Content-Type", "application/json")
 			fmt.Fprint(w, user)
