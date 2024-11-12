@@ -37,9 +37,8 @@ func NewFigmaProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	authHost := chooseHost(ext.URL, defaultFigmaAuthBase)
 	apiHost := chooseHost(ext.URL, defaultFigmaAPIBase)
 
-	// Figma only provides the "file_read" scope.
 	oauthScopes := []string{
-		"file_read",
+		"files:read",
 	}
 
 	if scopes != "" {
