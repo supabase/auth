@@ -195,8 +195,8 @@ func (ts *UserTestSuite) TestUserUpdateEmail() {
 			require.NoError(ts.T(), ts.API.db.Destroy(u))
 		})
 	}
-
 }
+
 func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 	u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 	require.NoError(ts.T(), err)
@@ -267,6 +267,54 @@ func (ts *UserTestSuite) TestUserUpdatePhoneAutoconfirmEnabled() {
 		})
 	}
 
+}
+
+func (ts *UserTestSuite) TestUserAllowPhoneUpdateIfPhoneNotConfirmed() {
+	// Sign up first user with Phone A
+	existingUser, err := models.NewUser("333333333", "", "", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.API.db.Create(existingUser))
+
+	var buffer bytes.Buffer
+	// Sign up second user with phone B
+	phoneB := "1234567890"
+
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"phone":    phoneB,
+		"password": "testpassword",
+	}))
+
+	ts.Config.External.Phone.Enabled = true
+	ts.Config.Sms.Autoconfirm = true
+	req := httptest.NewRequest(http.MethodPost, "/signup", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	// Try to update Phone A user's phone number to Phone B
+	buffer.Reset()
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+		"phone": phoneB,
+	}))
+
+	data := AccessTokenResponse{}
+
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+
+	// Make update request
+	req = httptest.NewRequest(http.MethodPut, "/user", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", data.Token))
+	w = httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	// Should succeed since the original phone number isn't confirmed
+	require.Equal(ts.T(), http.StatusOK, w.Code)
+
+	updatedUser := &models.User{}
+	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(updatedUser))
+	require.Equal(ts.T(), phoneB, updatedUser.GetPhone())
 }
 
 func (ts *UserTestSuite) TestUserUpdatePassword() {

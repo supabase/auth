@@ -759,21 +759,20 @@ func IsDuplicatedPhone(tx *storage.Connection, phone, aud string) (bool, error) 
 	return true, nil
 }
 
-// TODO: Simplify this, check if it is safe to do this in admin create user too
 // HasPhoneIdentity checks if the phone number already exists in the identities table
 func HasPhoneIdentity(tx *storage.Connection, phone, aud string) (bool, error) {
-	query := `SELECT 1 FROM users
-        JOIN identities ON users.id = identities.user_id
-        WHERE users.phone = ? AND users.aud = ? AND identities.provider = ?
-        LIMIT 1`
+	usersTable := (&pop.Model{Value: User{}}).TableName()
 
-	var exists bool
-	q := tx.RawQuery(query, phone, aud, "phone")
-	exists, err := q.Exists(&exists)
+	exists, err := tx.Q().
+		Join(usersTable, fmt.Sprintf("%s.id = identities.user_id", usersTable)).
+		Where("users.phone = ? AND users.aud = ? AND identities.provider = ?",
+			phone, aud, "phone").
+		Limit(1).
+		Exists(Identity{})
+
 	if err != nil {
 		return false, err
 	}
-
 	return exists, nil
 }
 
