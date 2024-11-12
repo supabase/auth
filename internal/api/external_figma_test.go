@@ -27,7 +27,7 @@ func (ts *ExternalTestSuite) TestSignupExternalFigma() {
 	ts.Equal(ts.Config.External.Figma.RedirectURI, q.Get("redirect_uri"))
 	ts.Equal(ts.Config.External.Figma.ClientID, []string{q.Get("client_id")})
 	ts.Equal("code", q.Get("response_type"))
-	ts.Equal("file_read", q.Get("scope"))
+	ts.Equal("files:read", q.Get("scope"))
 
 	claims := ExternalProviderClaims{}
 	p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
