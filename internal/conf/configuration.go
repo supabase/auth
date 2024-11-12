@@ -637,6 +637,9 @@ func (e *ExtensibilityPointConfiguration) ValidateExtensibilityPoint(allowedHTTP
 		return validatePostgresPath(u)
 	case "http":
 		hostname := u.Hostname()
+		if len(allowedHTTPHostNames) == 0 {
+			allowedHTTPHostNames = []string{"localhost", "127.0.0.1", "::1", "host.docker.internal"}
+		}
 		if isStringInSlice(hostname, allowedHTTPHostNames) {
 			return validateHTTPHookSecrets(e.HTTPHookSecrets)
 		}
