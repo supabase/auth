@@ -3,6 +3,7 @@ package conf
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,6 +33,27 @@ func TestGlobal(t *testing.T) {
 	require.NotNil(t, gc)
 	assert.Equal(t, "X-Request-ID", gc.API.RequestIDHeader)
 	assert.Equal(t, "pg-functions://postgres/auth/count_failed_attempts", gc.Hook.MFAVerificationAttempt.URI)
+
+}
+
+func TestRateLimits(t *testing.T) {
+	{
+		os.Setenv("GOTRUE_RATE_LIMIT_EMAIL_SENT", "0/1h")
+
+		gc, err := LoadGlobal("")
+		require.NoError(t, err)
+		assert.Equal(t, float64(0), gc.RateLimitEmailSent.Events)
+		assert.Equal(t, time.Hour, gc.RateLimitEmailSent.OverTime)
+	}
+
+	{
+		os.Setenv("GOTRUE_RATE_LIMIT_EMAIL_SENT", "10/1h")
+
+		gc, err := LoadGlobal("")
+		require.NoError(t, err)
+		assert.Equal(t, float64(10), gc.RateLimitEmailSent.Events)
+		assert.Equal(t, time.Hour, gc.RateLimitEmailSent.OverTime)
+	}
 }
 
 func TestPasswordRequiredCharactersDecode(t *testing.T) {
