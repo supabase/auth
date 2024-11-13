@@ -627,6 +627,16 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		}
 	}
 
+	// if the number of events is set to zero, we immediately apply rate limits.
+	if config.RateLimitEmailSent.Events == 0 {
+		emailRateLimitCounter.Add(
+			ctx,
+			1,
+			metric.WithAttributeSet(attribute.NewSet(attribute.String("path", r.URL.Path))),
+		)
+		return EmailRateLimitExceeded
+	}
+
 	// TODO(km): Deprecate this behaviour - rate limits should still be applied to autoconfirm
 	if !config.Mailer.Autoconfirm {
 		// apply rate limiting before the email is sent out
