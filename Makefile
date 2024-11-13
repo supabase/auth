@@ -61,7 +61,6 @@ generate: dev-deps
 	go generate ./...
 
 dev: ## Run the development containers
-	docker-compose -f $(DEV_DOCKER_COMPOSE) down --volumes
 	docker-compose -f $(DEV_DOCKER_COMPOSE) up
 
 down: ## Shutdown the development containers
