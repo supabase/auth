@@ -340,6 +340,8 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		Role:                          user.Role,
 		SessionId:                     sid,
 		AuthenticatorAssuranceLevel:   aal.String(),
+		// MFA is enabled if a developer has one at least one verified factor
+		HasVerifiedFactor:             user.HasMFAEnabled(),
 		AuthenticationMethodReference: amr,
 		IsAnonymous:                   user.IsAnonymous,
 	}
