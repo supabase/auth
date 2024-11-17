@@ -22,8 +22,9 @@ CREATE TYPE {{ index .Options "Namespace" }}."role_permissions" AS ENUM (
 
 CREATE TABLE IF NOT EXISTS {{ index .Options "Namespace" }}.projects (
 	id uuid UNIQUE NOT NULL,
-	name varchar(255) NOT NULL,
+	name varchar(255) NOT NULL UNIQUE,
 	description text NULL,
+	rate_limits jsonb NOT NULL,
 	created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 	updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
 	CONSTRAINT projects_pkey PRIMARY KEY (id)
