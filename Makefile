@@ -61,26 +61,26 @@ generate: dev-deps
 	go generate ./...
 
 dev: ## Run the development containers
-	docker-compose -f $(DEV_DOCKER_COMPOSE) up
+	docker compose -f $(DEV_DOCKER_COMPOSE) up
 
 down: ## Shutdown the development containers
 	# Start postgres first and apply migrations
-	docker-compose -f $(DEV_DOCKER_COMPOSE) down --volumes
+	docker compose -f $(DEV_DOCKER_COMPOSE) down --volumes
 
 docker-test: ## Run the tests using the development containers
-	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
-	docker-compose -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make migrate_test"
-	docker-compose -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make test"
-	docker-compose -f $(DEV_DOCKER_COMPOSE) down -v
+	docker compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
+	docker compose -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make migrate_test"
+	docker compose -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make test"
+	docker compose -f $(DEV_DOCKER_COMPOSE) down -v
 
 docker-build: ## Force a full rebuild of the development containers
-	docker-compose -f $(DEV_DOCKER_COMPOSE) build --no-cache
-	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
-	docker-compose -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make migrate_dev"
-	docker-compose -f $(DEV_DOCKER_COMPOSE) down
+	docker compose -f $(DEV_DOCKER_COMPOSE) build --no-cache
+	docker compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
+	docker compose -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make migrate_dev"
+	docker compose -f $(DEV_DOCKER_COMPOSE) down
 
 docker-clean: ## Remove the development containers and volumes
-	docker-compose -f $(DEV_DOCKER_COMPOSE) rm -fsv
+	docker compose -f $(DEV_DOCKER_COMPOSE) rm -fsv
 
 format:
 	gofmt -s -w .
