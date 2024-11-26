@@ -20,6 +20,8 @@ var invalidHostMap = map[string]bool{
 	"test":        true,
 	"example":     true,
 	"invalid":     true,
+	"local":       true,
+	"localhost":   true,
 	"example.com": true,
 	"example.net": true,
 	"example.org": true,
@@ -69,18 +71,29 @@ func validateEmail(ctx context.Context, email string) error {
 	if invalidHostMap[host] {
 		return ErrInvalidEmailAddress
 	}
-	return validateHostMX(ctx, host)
+
+	_, err = validateEmailResolver.LookupMX(ctx, host)
+	if !isHostNotFound(err) {
+		return nil
+	}
+
+	_, err = validateEmailResolver.LookupHost(ctx, host)
+	if !isHostNotFound(err) {
+		return nil
+	}
+
+	// No addrs or mx records were found
+	return ErrInvalidEmailAddress
 }
 
-func validateHostMX(ctx context.Context, host string) error {
-	_, err := validateEmailResolver.LookupMX(ctx, host)
+func isHostNotFound(err error) bool {
 	if err == nil {
 		// We had no err, so we treat it as valid. We don't check the mx records
 		// because RFC 5321 specifies that if an empty list of MX's are returned
 		// the host should be treated as the MX[1].
 		//
 		// [1] https://www.rfc-editor.org/rfc/rfc5321.html#section-5.1
-		return nil
+		return false
 	}
 
 	// No names present, we will try to get a positive assertion that the
@@ -89,7 +102,7 @@ func validateHostMX(ctx context.Context, host string) error {
 	if !errors.As(err, &dnsError) {
 		// We will be unable to determine with absolute certainy the email was
 		// invalid so we will err on the side of caution and return nil.
-		return nil
+		return false
 	}
 
 	// The type of err is dnsError, inspect it to see if we can be certain
@@ -101,7 +114,7 @@ func validateHostMX(ctx context.Context, host string) error {
 	// host to ensure I'm following the section above. I think that if the
 	// mx record list is empty Go will set IsNotFound here.
 	if !dnsError.IsTemporary && !dnsError.IsTimeout && dnsError.IsNotFound {
-		return ErrInvalidEmailAddress
+		return true
 	}
-	return nil
+	return false
 }
