@@ -239,6 +239,9 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 		return nil
 	}); err != nil {
+		if err.ErrorCode == ErrorCodeUserBanned {
+			return forbiddenError(ErrorCodeUserBanned, "User is banned")
+		}
 		switch err.(type) {
 		case *storage.CommitWithError:
 			return err
