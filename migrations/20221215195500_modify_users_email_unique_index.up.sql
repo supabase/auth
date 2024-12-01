@@ -17,7 +17,3 @@ exception
 when SQLSTATE '2BP01' then
   raise notice 'Unable to drop users_email_key constraint due to dependent objects, please resolve this manually or SSO may not work';
 end $$;
-
-create unique index if not exists users_email_partial_key on {{ index .Options "Namespace" }}.users (email, organization_id, project_id) where (is_sso_user = false);
-
-comment on index {{ index .Options "Namespace" }}.users_email_partial_key is 'Auth: A partial unique index that applies only when is_sso_user is false';

@@ -13,7 +13,6 @@ comment on table {{ index .Options "Namespace" }}.sso_providers is 'Auth: Manage
 comment on column {{ index .Options "Namespace" }}.sso_providers.resource_id is 'Auth: Uniquely identifies a SSO provider according to a user-chosen resource ID (case insensitive), useful in infrastructure as code.';
 
 create unique index if not exists sso_providers_resource_id_idx on {{ index .Options "Namespace" }}.sso_providers (lower(resource_id));
-CREATE TRIGGER trigger_update_timestamp BEFORE UPDATE ON {{ index .Options "Namespace" }}.sso_providers FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 create table if not exists {{ index .Options "Namespace" }}.sso_domains (
 	id uuid not null,
@@ -30,7 +29,6 @@ create index if not exists sso_domains_sso_provider_id_idx on {{ index .Options 
 create unique index if not exists sso_domains_domain_idx on {{ index .Options "Namespace" }}.sso_domains (lower(domain));
 
 comment on table {{ index .Options "Namespace" }}.sso_domains is 'Auth: Manages SSO email address domain mapping to an SSO Identity Provider.';
-CREATE TRIGGER trigger_update_timestamp BEFORE UPDATE ON {{ index .Options "Namespace" }}.sso_domains FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 create table if not exists {{ index .Options "Namespace" }}.saml_providers (
 	id uuid not null,
@@ -51,7 +49,6 @@ create table if not exists {{ index .Options "Namespace" }}.saml_providers (
 create index if not exists saml_providers_sso_provider_id_idx on {{ index .Options "Namespace" }}.saml_providers (sso_provider_id);
 
 comment on table {{ index .Options "Namespace" }}.saml_providers is 'Auth: Manages SAML Identity Provider connections.';
-CREATE TRIGGER trigger_update_timestamp BEFORE UPDATE ON {{ index .Options "Namespace" }}.saml_providers FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 create table if not exists {{ index .Options "Namespace" }}.saml_relay_states (
 	id uuid not null,
@@ -71,7 +68,6 @@ create index if not exists saml_relay_states_sso_provider_id_idx on {{ index .Op
 create index if not exists saml_relay_states_for_email_idx on {{ index .Options "Namespace" }}.saml_relay_states (for_email);
 
 comment on table {{ index .Options "Namespace" }}.saml_relay_states is 'Auth: Contains SAML Relay State information for each Service Provider initiated login.';
-CREATE TRIGGER trigger_update_timestamp BEFORE UPDATE ON {{ index .Options "Namespace" }}.saml_relay_states FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 create table if not exists {{ index .Options "Namespace" }}.sso_sessions (
 	id uuid not null,
@@ -91,4 +87,3 @@ create index if not exists sso_sessions_session_id_idx on {{ index .Options "Nam
 create index if not exists sso_sessions_sso_provider_id_idx on {{ index .Options "Namespace" }}.sso_sessions (sso_provider_id);
 
 comment on table {{ index .Options "Namespace" }}.sso_sessions is 'Auth: A session initiated by an SSO Identity Provider';
-CREATE TRIGGER trigger_update_timestamp BEFORE UPDATE ON {{ index .Options "Namespace" }}.sso_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

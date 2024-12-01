@@ -23,7 +23,6 @@ create table if not exists {{ index .Options "Namespace" }}.mfa_factors(
 comment on table {{ index .Options "Namespace" }}.mfa_factors is 'auth: stores metadata about factors';
 
 create unique index if not exists mfa_factors_user_friendly_name_unique on {{ index .Options "Namespace" }}.mfa_factors (friendly_name, user_id) where trim(friendly_name) <> '';
-CREATE TRIGGER trigger_update_timestamp BEFORE UPDATE ON {{ index .Options "Namespace" }}.mfa_factors FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- auth.mfa_challenges definition
 create table if not exists {{ index .Options "Namespace" }}.mfa_challenges(
@@ -36,7 +35,6 @@ create table if not exists {{ index .Options "Namespace" }}.mfa_challenges(
        constraint mfa_challenges_auth_factor_id_fkey foreign key (factor_id) references {{ index .Options "Namespace" }}.mfa_factors(id) on delete cascade
 );
 comment on table {{ index .Options "Namespace" }}.mfa_challenges is 'auth: stores metadata about challenge requests made';
-CREATE TRIGGER trigger_update_timestamp BEFORE UPDATE ON {{ index .Options "Namespace" }}.mfa_challenges FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 
 -- add factor_id and amr claims to session
@@ -49,4 +47,3 @@ create table if not exists {{ index .Options "Namespace" }}.mfa_amr_claims(
     constraint mfa_amr_claims_session_id_fkey foreign key(session_id) references {{ index .Options "Namespace" }}.sessions(id) on delete cascade
 );
 comment on table {{ index .Options "Namespace" }}.mfa_amr_claims is 'auth: stores authenticator method reference claims for multi factor authentication';
-CREATE TRIGGER trigger_update_timestamp BEFORE UPDATE ON {{ index .Options "Namespace" }}.mfa_amr_claims FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
