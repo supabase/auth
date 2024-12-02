@@ -28,12 +28,16 @@ func TestValidateEmail(t *testing.T) {
 		{email: "io", err: "invalid email format"},
 		{email: "supabase.io", err: "invalid email format"},
 		{email: "@supabase.io", err: "invalid email format"},
+		{email: "test@.supabase.io", err: "invalid email format"},
 
 		// invalid: valid mx records, but invalid and often typed
 		// (invalidEmailMap)
 		{email: "test@test.com", err: "invalid email address"},
 		{email: "test@gmail.com", err: "invalid email address"},
 		{email: "test@email.com", err: "invalid email address"},
+
+		// very common typo
+		{email: "test@gamil.com", err: "invalid email address"},
 
 		// invalid: valid mx records, but invalid and often typed
 		// (invalidHostMap)
@@ -44,11 +48,13 @@ func TestValidateEmail(t *testing.T) {
 		// invalid: no mx records
 		{email: "a@test", err: "invalid email address"},
 		{email: "test@local", err: "invalid email address"},
+		{email: "test@test.local", err: "invalid email address"},
 		{email: "test@example", err: "invalid email address"},
 		{email: "test@invalid", err: "invalid email address"},
 
 		// valid but not actually valid and typed a lot
 		{email: "a@invalid", err: "invalid email address"},
+		{email: "a@a.invalid", err: "invalid email address"},
 		{email: "test@invalid", err: "invalid email address"},
 
 		// various invalid emails
@@ -58,7 +64,8 @@ func TestValidateEmail(t *testing.T) {
 
 		// this low timeout should simulate a dns timeout, which should
 		// not be treated as an invalid email.
-		{email: "test@test.localhost", timeout: time.Millisecond},
+		{email: "validemail@probablyaaaaaaaanotarealdomain.com",
+			timeout: time.Millisecond},
 
 		// likewise for a valid email
 		{email: "support@supabase.io", timeout: time.Millisecond},
@@ -79,7 +86,7 @@ func TestValidateEmail(t *testing.T) {
 				t.Fatal("timeout was not respected")
 			}
 
-			t.Logf("tc #%v - email %v", idx, tc.email)
+			t.Logf("tc #%v - email %q", idx, tc.email)
 			if tc.err != "" {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.err)
