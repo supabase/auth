@@ -439,10 +439,10 @@ func (a *API) prepErrorRedirectURL(err *HTTPError, r *http.Request, rurl string,
 		hq.Set("error", str)
 		q.Set("error", str)
 	}
-	hq.Set("error_code", strconv.Itoa(err.HTTPStatus))
+	hq.Set("error_code", err.ErrorCode)
 	hq.Set("error_description", err.Message)
 
-	q.Set("error_code", strconv.Itoa(err.HTTPStatus))
+	q.Set("error_code", err.ErrorCode)
 	q.Set("error_description", err.Message)
 	if flowType == models.PKCEFlow {
 		// Additionally, may override existing error query param if set to PKCE.
