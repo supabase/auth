@@ -305,7 +305,7 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 
 	f, err := url.ParseQuery(rurl.Fragment)
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), "403", f.Get("error_code"))
+	assert.Equal(ts.T(), ErrorCodeOTPExpired, f.Get("error_code"))
 	assert.Equal(ts.T(), "Email link is invalid or has expired", f.Get("error_description"))
 	assert.Equal(ts.T(), "access_denied", f.Get("error"))
 }
@@ -824,7 +824,7 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 
 			f, err := url.ParseQuery(rurl.Fragment)
 			require.NoError(ts.T(), err)
-			assert.Equal(ts.T(), "403", f.Get("error_code"))
+			assert.Equal(ts.T(), ErrorCodeUserBanned, f.Get("error_code"))
 		})
 	}
 }
@@ -1145,7 +1145,7 @@ func (ts *VerifyTestSuite) TestPrepRedirectURL() {
 
 func (ts *VerifyTestSuite) TestPrepErrorRedirectURL() {
 	const DefaultError = "Invalid redirect URL"
-	redirectError := fmt.Sprintf("error=invalid_request&error_code=400&error_description=%s", url.QueryEscape(DefaultError))
+	redirectError := fmt.Sprintf("error=invalid_request&error_code=validation_failed&error_description=%s", url.QueryEscape(DefaultError))
 
 	cases := []struct {
 		desc     string
