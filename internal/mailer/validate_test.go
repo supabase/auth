@@ -24,6 +24,9 @@ func TestEmalValidatorService(t *testing.T) {
 	testHdrsVal := new(atomic.Value)
 	testHdrsVal.Store(map[string]string{"apikey": "test"})
 
+	// testHeaders := map[string][]string{"apikey": []string{"test"}}
+	testHeaders := `{"apikey": ["test"]}`
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("apikey")
 		if key == "" {
@@ -40,10 +43,14 @@ func TestEmalValidatorService(t *testing.T) {
 	{
 		testResVal.Store(`{"valid": true}`)
 		cfg := conf.MailerConfiguration{
-			EmailValidationExtended:   true,
-			EmailValidationServiceURL: ts.URL,
-			EmailValidationServiceKey: "test",
+			EmailValidationExtended:       true,
+			EmailValidationServiceURL:     ts.URL,
+			EmailValidationServiceHeaders: testHeaders,
 		}
+		if err := cfg.Validate(); err != nil {
+			t.Fatal(err)
+		}
+
 		ev := newEmailValidator(cfg)
 		err := ev.Validate(ctx, "chris.stockton@supabase.io")
 		if err != nil {
@@ -58,10 +65,14 @@ func TestEmalValidatorService(t *testing.T) {
 		testResVal.Store(`{"valid": true}`)
 
 		cfg := conf.MailerConfiguration{
-			EmailValidationExtended:   false,
-			EmailValidationServiceURL: ts.URL,
-			EmailValidationServiceKey: "test",
+			EmailValidationExtended:       false,
+			EmailValidationServiceURL:     ts.URL,
+			EmailValidationServiceHeaders: testHeaders,
 		}
+		if err := cfg.Validate(); err != nil {
+			t.Fatal(err)
+		}
+
 		ev := newEmailValidator(cfg)
 		err := ev.Validate(ctx, "test@gmail.com")
 		if err != nil {
@@ -76,10 +87,14 @@ func TestEmalValidatorService(t *testing.T) {
 		testResVal.Store(`{"valid": false}`)
 
 		cfg := conf.MailerConfiguration{
-			EmailValidationExtended:   false,
-			EmailValidationServiceURL: "",
-			EmailValidationServiceKey: "",
+			EmailValidationExtended:       false,
+			EmailValidationServiceURL:     "",
+			EmailValidationServiceHeaders: "",
 		}
+		if err := cfg.Validate(); err != nil {
+			t.Fatal(err)
+		}
+
 		ev := newEmailValidator(cfg)
 		err := ev.Validate(ctx, "test@gmail.com")
 		if err != nil {
@@ -93,10 +108,14 @@ func TestEmalValidatorService(t *testing.T) {
 	{
 		testResVal.Store(`{"valid": true}`)
 		cfg := conf.MailerConfiguration{
-			EmailValidationExtended:   true,
-			EmailValidationServiceURL: "",
-			EmailValidationServiceKey: "",
+			EmailValidationExtended:       true,
+			EmailValidationServiceURL:     "",
+			EmailValidationServiceHeaders: "",
 		}
+		if err := cfg.Validate(); err != nil {
+			t.Fatal(err)
+		}
+
 		ev := newEmailValidator(cfg)
 		err := ev.Validate(ctx, "test@gmail.com")
 		if err == nil {
@@ -110,10 +129,14 @@ func TestEmalValidatorService(t *testing.T) {
 	{
 		testResVal.Store(`{"valid": true}`)
 		cfg := conf.MailerConfiguration{
-			EmailValidationExtended:   true,
-			EmailValidationServiceURL: ts.URL,
-			EmailValidationServiceKey: "test",
+			EmailValidationExtended:       true,
+			EmailValidationServiceURL:     ts.URL,
+			EmailValidationServiceHeaders: testHeaders,
 		}
+		if err := cfg.Validate(); err != nil {
+			t.Fatal(err)
+		}
+
 		ev := newEmailValidator(cfg)
 		err := ev.Validate(ctx, "test@gmail.com")
 		if err == nil {
@@ -127,10 +150,14 @@ func TestEmalValidatorService(t *testing.T) {
 	{
 		testResVal.Store(`{"valid": false}`)
 		cfg := conf.MailerConfiguration{
-			EmailValidationExtended:   true,
-			EmailValidationServiceURL: ts.URL,
-			EmailValidationServiceKey: "test",
+			EmailValidationExtended:       true,
+			EmailValidationServiceURL:     ts.URL,
+			EmailValidationServiceHeaders: testHeaders,
 		}
+		if err := cfg.Validate(); err != nil {
+			t.Fatal(err)
+		}
+
 		ev := newEmailValidator(cfg)
 		err := ev.Validate(ctx, "chris.stockton@supabase.io")
 		if err == nil {
@@ -145,10 +172,14 @@ func TestEmalValidatorService(t *testing.T) {
 		testResVal.Store(`{"valid": false}`)
 
 		cfg := conf.MailerConfiguration{
-			EmailValidationExtended:   false,
-			EmailValidationServiceURL: ts.URL,
-			EmailValidationServiceKey: "test",
+			EmailValidationExtended:       false,
+			EmailValidationServiceURL:     ts.URL,
+			EmailValidationServiceHeaders: testHeaders,
 		}
+		if err := cfg.Validate(); err != nil {
+			t.Fatal(err)
+		}
+
 		ev := newEmailValidator(cfg)
 		err := ev.Validate(ctx, "test@gmail.com")
 		if err == nil {
@@ -221,9 +252,9 @@ func TestValidateEmailExtended(t *testing.T) {
 	}
 
 	cfg := conf.MailerConfiguration{
-		EmailValidationExtended:   true,
-		EmailValidationServiceURL: "",
-		EmailValidationServiceKey: "",
+		EmailValidationExtended:       true,
+		EmailValidationServiceURL:     "",
+		EmailValidationServiceHeaders: "",
 	}
 	ev := newEmailValidator(cfg)
 

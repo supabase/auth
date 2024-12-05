@@ -62,7 +62,7 @@ var invalidHostMap = map[string]bool{
 }
 
 const (
-	validateEmailTimeout = 2 * time.Second
+	validateEmailTimeout = 3 * time.Second
 )
 
 var (
@@ -77,23 +77,21 @@ var (
 )
 
 type EmailValidator struct {
-	extended   bool
-	serviceURL string
-	serviceKey string
+	extended       bool
+	serviceURL     string
+	serviceHeaders map[string][]string
 }
 
 func newEmailValidator(mc conf.MailerConfiguration) *EmailValidator {
 	return &EmailValidator{
-		extended:   mc.EmailValidationExtended,
-		serviceURL: mc.EmailValidationServiceURL,
-		serviceKey: mc.EmailValidationServiceKey,
+		extended:       mc.EmailValidationExtended,
+		serviceURL:     mc.EmailValidationServiceURL,
+		serviceHeaders: mc.GetEmailValidationServiceHeaders(),
 	}
 }
 
-func (ev *EmailValidator) isExtendedDisabled() bool { return !ev.extended }
-func (ev *EmailValidator) isServiceDisabled() bool {
-	return ev.serviceURL == "" || ev.serviceKey == ""
-}
+func (ev *EmailValidator) isExtendedEnabled() bool { return ev.extended }
+func (ev *EmailValidator) isServiceEnabled() bool  { return ev.serviceURL != "" }
 
 // Validate performs validation on the given email.
 //
@@ -104,7 +102,7 @@ func (ev *EmailValidator) isServiceDisabled() bool {
 // When serviceURL AND serviceKey are non-empty strings it uses the remote
 // service to determine if the email is valid.
 func (ev *EmailValidator) Validate(ctx context.Context, email string) error {
-	if ev.isExtendedDisabled() && ev.isServiceDisabled() {
+	if !ev.isExtendedEnabled() && !ev.isServiceEnabled() {
 		return nil
 	}
 
@@ -121,7 +119,7 @@ func (ev *EmailValidator) Validate(ctx context.Context, email string) error {
 
 	// Validate the static rules first to prevent round trips on bad emails
 	// and to parse the host ahead of time.
-	if !ev.isExtendedDisabled() {
+	if ev.isExtendedEnabled() {
 
 		// First validate static checks such as format, known invalid hosts
 		// and any other network free checks. Running this check before we
@@ -136,9 +134,9 @@ func (ev *EmailValidator) Validate(ctx context.Context, email string) error {
 		g.Go(func() error { return ev.validateHost(ctx, host) })
 	}
 
-	// If the service check is not disabled we start a goroutine to run
+	// If the service check is enabled we start a goroutine to run
 	// that check as well.
-	if !ev.isServiceDisabled() {
+	if ev.isServiceEnabled() {
 		g.Go(func() error { return ev.validateService(ctx, email) })
 	}
 	return g.Wait()
@@ -147,7 +145,7 @@ func (ev *EmailValidator) Validate(ctx context.Context, email string) error {
 // validateStatic will validate the format and do the static checks before
 // returning the host portion of the email.
 func (ev *EmailValidator) validateStatic(email string) (string, error) {
-	if !ev.extended {
+	if !ev.isExtendedEnabled() {
 		return "", nil
 	}
 
@@ -185,7 +183,7 @@ func (ev *EmailValidator) validateStatic(email string) (string, error) {
 }
 
 func (ev *EmailValidator) validateService(ctx context.Context, email string) error {
-	if ev.isServiceDisabled() {
+	if !ev.isServiceEnabled() {
 		return nil
 	}
 
@@ -204,7 +202,11 @@ func (ev *EmailValidator) validateService(ctx context.Context, email string) err
 		return nil
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("apikey", ev.serviceKey)
+	for name, vals := range ev.serviceHeaders {
+		for _, val := range vals {
+			req.Header.Set(name, val)
+		}
+	}
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -215,6 +217,11 @@ func (ev *EmailValidator) validateService(ctx context.Context, email string) err
 	resObject := struct {
 		Valid *bool `json:"valid"`
 	}{}
+
+	if res.StatusCode != http.StatusOK {
+		return nil
+	}
+
 	dec := json.NewDecoder(io.LimitReader(res.Body, 1<<5))
 	if err := dec.Decode(&resObject); err != nil {
 		return nil

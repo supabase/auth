@@ -253,7 +253,10 @@ func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, otp
 		})
 	}
 
-	errors := make(chan error)
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	errors := make(chan error, len(emails))
 	for _, email := range emails {
 		path, err := getPath(
 			m.Config.Mailer.URLPaths.EmailChange,
@@ -279,7 +282,7 @@ func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, otp
 				"RedirectTo":      referrerURL,
 			}
 			errors <- m.Mailer.Mail(
-				r.Context(),
+				ctx,
 				address,
 				withDefault(m.Config.Mailer.Subjects.EmailChange, "Confirm Email Change"),
 				template,
