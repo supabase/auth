@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/supabase/auth/internal/hooks"
-	"github.com/supabase/auth/internal/mailer"
 	mail "github.com/supabase/auth/internal/mailer"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -695,9 +694,9 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	}
 
 	switch {
-	case errors.Is(err, mailer.ErrInvalidEmailAddress),
-		errors.Is(err, mailer.ErrInvalidEmailFormat),
-		errors.Is(err, mailer.ErrInvalidEmailDNS):
+	case errors.Is(err, mail.ErrInvalidEmailAddress),
+		errors.Is(err, mail.ErrInvalidEmailFormat),
+		errors.Is(err, mail.ErrInvalidEmailDNS):
 		return badRequestError(
 			ErrorCodeEmailAddressInvalid,
 			"Email address %q is invalid",
