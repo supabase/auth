@@ -2,6 +2,7 @@ package mailer
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"html/template"
 	"io"
@@ -24,22 +25,29 @@ const TemplateExpiration = 10 * time.Second
 
 // MailmeMailer lets MailMe send templated mails
 type MailmeMailer struct {
-	From        string
-	Host        string
-	Port        int
-	User        string
-	Pass        string
-	BaseURL     string
-	LocalName   string
-	FuncMap     template.FuncMap
-	cache       *TemplateCache
-	Logger      logrus.FieldLogger
-	MailLogging bool
+	From           string
+	Host           string
+	Port           int
+	User           string
+	Pass           string
+	BaseURL        string
+	LocalName      string
+	FuncMap        template.FuncMap
+	cache          *TemplateCache
+	Logger         logrus.FieldLogger
+	MailLogging    bool
+	EmailValidator *EmailValidator
 }
 
 // Mail sends a templated mail. It will try to load the template from a URL, and
 // otherwise fall back to the default
-func (m *MailmeMailer) Mail(to, subjectTemplate, templateURL, defaultTemplate string, templateData map[string]interface{}, headers map[string][]string, typ string) error {
+func (m *MailmeMailer) Mail(
+	ctx context.Context,
+	to, subjectTemplate, templateURL, defaultTemplate string,
+	templateData map[string]interface{},
+	headers map[string][]string,
+	typ string,
+) error {
 	if m.FuncMap == nil {
 		m.FuncMap = map[string]interface{}{}
 	}
@@ -48,6 +56,12 @@ func (m *MailmeMailer) Mail(to, subjectTemplate, templateURL, defaultTemplate st
 			templates: map[string]*MailTemplate{},
 			funcMap:   m.FuncMap,
 			logger:    m.Logger,
+		}
+	}
+
+	if m.EmailValidator != nil {
+		if err := m.EmailValidator.Validate(ctx, to); err != nil {
+			return err
 		}
 	}
 

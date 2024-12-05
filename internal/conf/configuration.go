@@ -399,6 +399,11 @@ type MailerConfiguration struct {
 	OtpLength int  `json:"otp_length" split_words:"true"`
 
 	ExternalHosts []string `json:"external_hosts" split_words:"true"`
+
+	// EXPERIMENTAL: May be removed in a future release.
+	EmailValidationExtended   bool   `json:"email_validation_extended" split_words:"true" default:"false"`
+	EmailValidationServiceURL string `json:"email_validation_service_url" split_words:"true"`
+	EmailValidationServiceKey string `json:"email_validation_service_key" split_words:"true"`
 }
 
 type PhoneProviderConfiguration struct {

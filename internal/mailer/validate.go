@@ -1,19 +1,28 @@
 package mailer
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net"
+	"net/http"
 	"net/mail"
 	"strings"
 	"time"
+
+	"github.com/supabase/auth/internal/conf"
+	"golang.org/x/sync/errgroup"
 )
 
 var invalidEmailMap = map[string]bool{
 
 	// People type these often enough to be special cased.
-	"test@gmail.com": true,
-	"test@email.com": true,
+	"test@gmail.com":    true,
+	"example@gmail.com": true,
+	"someone@gmail.com": true,
+	"test@email.com":    true,
 }
 
 var invalidHostSuffixes = []string{
@@ -53,7 +62,7 @@ var invalidHostMap = map[string]bool{
 }
 
 const (
-	validateEmailTimeout = 500 * time.Millisecond
+	validateEmailTimeout = 2 * time.Second
 )
 
 var (
@@ -62,59 +71,165 @@ var (
 )
 
 var (
-	ErrInvalidEmailFormat  = errors.New("invalid email format")
-	ErrInvalidEmailAddress = errors.New("invalid email address")
+	ErrInvalidEmailAddress = errors.New("invalid_email_address")
+	ErrInvalidEmailFormat  = errors.New("invalid_email_format")
+	ErrInvalidEmailDNS     = errors.New("invalid_email_dns")
 )
 
-// ValidateEmail returns a nil error in all cases but the following:
+type EmailValidator struct {
+	extended   bool
+	serviceURL string
+	serviceKey string
+}
+
+func newEmailValidator(mc conf.MailerConfiguration) *EmailValidator {
+	return &EmailValidator{
+		extended:   mc.EmailValidationExtended,
+		serviceURL: mc.EmailValidationServiceURL,
+		serviceKey: mc.EmailValidationServiceKey,
+	}
+}
+
+func (ev *EmailValidator) isExtendedDisabled() bool { return !ev.extended }
+func (ev *EmailValidator) isServiceDisabled() bool {
+	return ev.serviceURL == "" || ev.serviceKey == ""
+}
+
+// Validate performs validation on the given email.
+//
+// When extended is true, returns a nil error in all cases but the following:
 // - `email` cannot be parsed by mail.ParseAddress
 // - `email` has a domain with no DNS configured
-func ValidateEmail(ctx context.Context, email string) error {
+//
+// When serviceURL AND serviceKey are non-empty strings it uses the remote
+// service to determine if the email is valid.
+func (ev *EmailValidator) Validate(ctx context.Context, email string) error {
+	if ev.isExtendedDisabled() && ev.isServiceDisabled() {
+		return nil
+	}
+
+	// One of the two validation methods are enabled, set a timeout.
 	ctx, cancel := context.WithTimeout(ctx, validateEmailTimeout)
 	defer cancel()
 
-	return validateEmail(ctx, email)
+	// Easier control flow here to always use errgroup, it has very little
+	// overhad in comparison to the network calls it makes. The reason
+	// we run both checks concurrently is to tighten the timeout without
+	// potentially missing a call to the validation service due to a
+	// dns timeout or something more nefarious like a honeypot dns entry.
+	g := new(errgroup.Group)
+
+	// Validate the static rules first to prevent round trips on bad emails
+	// and to parse the host ahead of time.
+	if !ev.isExtendedDisabled() {
+
+		// First validate static checks such as format, known invalid hosts
+		// and any other network free checks. Running this check before we
+		// call the service will help reduce the number of calls with known
+		// invalid emails.
+		host, err := ev.validateStatic(email)
+		if err != nil {
+			return err
+		}
+
+		// Start the goroutine to validate the host.
+		g.Go(func() error { return ev.validateHost(ctx, host) })
+	}
+
+	// If the service check is not disabled we start a goroutine to run
+	// that check as well.
+	if !ev.isServiceDisabled() {
+		g.Go(func() error { return ev.validateService(ctx, email) })
+	}
+	return g.Wait()
 }
 
-func validateEmail(ctx context.Context, email string) error {
+// validateStatic will validate the format and do the static checks before
+// returning the host portion of the email.
+func (ev *EmailValidator) validateStatic(email string) (string, error) {
+	if !ev.extended {
+		return "", nil
+	}
+
 	ea, err := mail.ParseAddress(email)
 	if err != nil {
-		return ErrInvalidEmailFormat
+		return "", ErrInvalidEmailFormat
 	}
 
 	i := strings.LastIndex(ea.Address, "@")
 	if i == -1 {
-		return ErrInvalidEmailFormat
+		return "", ErrInvalidEmailFormat
 	}
 
 	// few static lookups that are typed constantly and known to be invalid.
 	if invalidEmailMap[email] {
-		return ErrInvalidEmailAddress
+		return "", ErrInvalidEmailAddress
 	}
 
 	host := email[i+1:]
 	if invalidHostMap[host] {
-		return ErrInvalidEmailAddress
+		return "", ErrInvalidEmailDNS
 	}
 
 	for i := range invalidHostSuffixes {
 		if strings.HasSuffix(host, invalidHostSuffixes[i]) {
-			return ErrInvalidEmailAddress
+			return "", ErrInvalidEmailDNS
 		}
 	}
 
 	name := email[:i]
-	if err := validateProviders(name, host); err != nil {
-		return err
+	if err := ev.validateProviders(name, host); err != nil {
+		return "", err
 	}
-
-	if err := validateHost(ctx, host); err != nil {
-		return err
-	}
-	return nil
+	return host, nil
 }
 
-func validateProviders(name, host string) error {
+func (ev *EmailValidator) validateService(ctx context.Context, email string) error {
+	if ev.isServiceDisabled() {
+		return nil
+	}
+
+	reqObject := struct {
+		EmailAddress string `json:"email"`
+	}{email}
+
+	reqData, err := json.Marshal(&reqObject)
+	if err != nil {
+		return nil
+	}
+
+	rdr := bytes.NewReader(reqData)
+	req, err := http.NewRequestWithContext(ctx, "GET", ev.serviceURL, rdr)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("apikey", ev.serviceKey)
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer res.Body.Close()
+
+	resObject := struct {
+		Valid *bool `json:"valid"`
+	}{}
+	dec := json.NewDecoder(io.LimitReader(res.Body, 1<<5))
+	if err := dec.Decode(&resObject); err != nil {
+		return nil
+	}
+
+	// If the object did not contain a valid key we consider the check as
+	// failed. We _must_ get a valid JSON response with a "valid" field.
+	if resObject.Valid == nil || *resObject.Valid {
+		return nil
+	}
+
+	return ErrInvalidEmailAddress
+}
+
+func (ev *EmailValidator) validateProviders(name, host string) error {
 	switch host {
 	case "gmail.com":
 		// Based on a sample of internal data, this reduces the number of
@@ -129,7 +244,7 @@ func validateProviders(name, host string) error {
 	return nil
 }
 
-func validateHost(ctx context.Context, host string) error {
+func (ev *EmailValidator) validateHost(ctx context.Context, host string) error {
 	_, err := validateEmailResolver.LookupMX(ctx, host)
 	if !isHostNotFound(err) {
 		return nil
@@ -141,7 +256,7 @@ func validateHost(ctx context.Context, host string) error {
 	}
 
 	// No addrs or mx records were found
-	return ErrInvalidEmailAddress
+	return ErrInvalidEmailDNS
 }
 
 func isHostNotFound(err error) bool {
