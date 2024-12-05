@@ -25,6 +25,7 @@ func TestGlobal(t *testing.T) {
 	os.Setenv("GOTRUE_HOOK_MFA_VERIFICATION_ATTEMPT_URI", "pg-functions://postgres/auth/count_failed_attempts")
 	os.Setenv("GOTRUE_HOOK_SEND_SMS_SECRETS", "v1,whsec_aWxpa2VzdXBhYmFzZXZlcnltdWNoYW5kaWhvcGV5b3Vkb3Rvbw==")
 	os.Setenv("GOTRUE_SMTP_HEADERS", `{"X-PM-Metadata-project-ref":["project_ref"],"X-SES-Message-Tags":["ses:feedback-id-a=project_ref,ses:feedback-id-b=$messageType"]}`)
+	os.Setenv("GOTRUE_MAILER_EMAIL_VALIDATION_SERVICE_HEADERS", `{"apikey":["test"]}`)
 	os.Setenv("GOTRUE_SMTP_LOGGING_ENABLED", "true")
 	gc, err := LoadGlobal("")
 	require.NoError(t, err)
@@ -33,6 +34,12 @@ func TestGlobal(t *testing.T) {
 	require.NotNil(t, gc)
 	assert.Equal(t, "X-Request-ID", gc.API.RequestIDHeader)
 	assert.Equal(t, "pg-functions://postgres/auth/count_failed_attempts", gc.Hook.MFAVerificationAttempt.URI)
+
+	{
+		hdrs := gc.Mailer.GetEmailValidationServiceHeaders()
+		assert.Equal(t, 1, len(hdrs["apikey"]))
+		assert.Equal(t, "test", hdrs["apikey"][0])
+	}
 
 }
 
