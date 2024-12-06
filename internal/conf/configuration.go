@@ -403,7 +403,7 @@ type MailerConfiguration struct {
 	// EXPERIMENTAL: May be removed in a future release.
 	EmailValidationExtended       bool   `json:"email_validation_extended" split_words:"true" default:"false"`
 	EmailValidationServiceURL     string `json:"email_validation_service_url" split_words:"true"`
-	EmailValidationServiceHeaders string `json:"email_validation_service_key" split_words:"true"`
+	EmailValidationServiceHeaders string `json:"email_validation_service_headers" split_words:"true"`
 
 	serviceHeaders map[string][]string `json:"-"`
 }
@@ -414,7 +414,7 @@ func (c *MailerConfiguration) Validate() error {
 	if c.EmailValidationServiceHeaders != "" {
 		err := json.Unmarshal([]byte(c.EmailValidationServiceHeaders), &headers)
 		if err != nil {
-			return fmt.Errorf("conf: SMTP headers not a map[string][]string format: %w", err)
+			return fmt.Errorf("conf: mailer validation headers not a map[string][]string format: %w", err)
 		}
 	}
 
