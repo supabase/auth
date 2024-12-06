@@ -1,19 +1,22 @@
 -- see: https://stackoverflow.com/questions/7624919/check-if-a-user-defined-type-already-exists-in-postgresql/48382296#48382296
-do $$ begin
-    create type factor_type as enum('totp', 'webauthn');
-    create type factor_status as enum('unverified', 'verified');
-    create type aal_level as enum('aal1', 'aal2', 'aal3');
+do $$
+begin
+    create type {{ index .Options "Namespace" }}.factor_type as enum('totp', 'webauthn');
+    create type {{ index .Options "Namespace" }}.factor_status as enum('unverified', 'verified');
+    create type {{ index .Options "Namespace" }}.aal_level as enum('aal1', 'aal2', 'aal3');
 exception
-    when duplicate_object then null;
-end $$;
+    when duplicate_object then raise notice '%, skipping', sqlerrm using errcode = sqlstate;
+    when others then null;
+end
+$$;
 
 -- auth.mfa_factors definition
 create table if not exists {{ index .Options "Namespace" }}.mfa_factors(
        id uuid not null,
        user_id uuid not null,
        friendly_name text null,
-       factor_type factor_type not null,
-       status factor_status not null,
+       factor_type {{ index .Options "Namespace" }}.factor_type not null,
+       status {{ index .Options "Namespace" }}.factor_status not null,
        created_at timestamptz not null,
        updated_at timestamptz not null,
        secret text null,
