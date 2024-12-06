@@ -197,7 +197,7 @@ func (ev *EmailValidator) validateService(ctx context.Context, email string) err
 	}
 
 	rdr := bytes.NewReader(reqData)
-	req, err := http.NewRequestWithContext(ctx, "GET", ev.serviceURL, rdr)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ev.serviceURL, rdr)
 	if err != nil {
 		return nil
 	}
@@ -218,7 +218,8 @@ func (ev *EmailValidator) validateService(ctx context.Context, email string) err
 		Valid *bool `json:"valid"`
 	}{}
 
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode/100 != 2 {
+		// we ignore the error here just in case the service is down
 		return nil
 	}
 
