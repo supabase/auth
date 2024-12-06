@@ -759,6 +759,23 @@ func IsDuplicatedPhone(tx *storage.Connection, phone, aud string) (bool, error) 
 	return true, nil
 }
 
+// HasPhoneIdentity checks if the phone number already exists in the identities table
+func HasPhoneIdentity(tx *storage.Connection, phone, aud string) (bool, error) {
+	usersTable := (&pop.Model{Value: User{}}).TableName()
+
+	exists, err := tx.Q().
+		Join(usersTable, fmt.Sprintf("%s.id = identities.user_id", usersTable)).
+		Where("users.phone = ? AND users.aud = ? AND identities.provider = ?",
+			phone, aud, "phone").
+		Limit(1).
+		Exists(Identity{})
+
+	if err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 // Ban a user for a given duration.
 func (u *User) Ban(tx *storage.Connection, duration time.Duration) error {
 	if duration == time.Duration(0) {
