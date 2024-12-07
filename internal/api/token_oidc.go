@@ -242,6 +242,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		switch err.(type) {
 		case *storage.CommitWithError:
 			return err
+		case *HTTPError:
+			return err
 		default:
 			return oauthError("server_error", "Internal Server Error").WithInternalError(err)
 		}
