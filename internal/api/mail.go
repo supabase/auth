@@ -662,7 +662,7 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			SiteURL:         externalURL.String(),
 			TokenHash:       tokenHashWithPrefix,
 		}
-		if emailActionType == mail.EmailChangeVerification && config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
+		if emailActionType == mail.EmailChangeVerification && config.Mailer.SecureEmailChangeEnabled {
 			emailData.TokenNew = otpNew
 			emailData.TokenHashNew = u.EmailChangeTokenCurrent
 		}
