@@ -448,6 +448,7 @@ type SmsProviderConfiguration struct {
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
+	Prelude      PreludeProviderConfiguration      `json:"prelude"`
 }
 
 func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {
@@ -486,6 +487,17 @@ type VonageProviderConfiguration struct {
 	ApiKey    string `json:"api_key" split_words:"true"`
 	ApiSecret string `json:"api_secret" split_words:"true"`
 	From      string `json:"from" split_words:"true"`
+}
+
+type PreludeProviderConfiguration struct {
+	AuthToken string `json:"auth_token"`
+}
+
+func (c *PreludeProviderConfiguration) Validate() error {
+	if c.AuthToken == "" {
+		return fmt.Errorf("missing Prelude auth token")
+	}
+	return nil
 }
 
 type CaptchaConfiguration struct {
@@ -1141,4 +1153,8 @@ func (t *VonageProviderConfiguration) Validate() error {
 
 func (t *SmsProviderConfiguration) IsTwilioVerifyProvider() bool {
 	return t.Provider == "twilio_verify"
+}
+
+func (t *SmsProviderConfiguration) IsPreludeProvider() bool {
+	return t.Provider == "prelude"
 }

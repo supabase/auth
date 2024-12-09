@@ -232,7 +232,7 @@ func (ts *PhoneTestSuite) TestMissingSmsProviderConfig() {
 		},
 	}
 
-	smsProviders := []string{"twilio", "messagebird", "textlocal", "vonage"}
+	smsProviders := []string{"twilio", "messagebird", "textlocal", "vonage", "prelude"}
 	ts.Config.External.Phone.Enabled = true
 	ts.Config.Sms.Twilio.AccountSid = ""
 	ts.Config.Sms.Messagebird.AccessKey = ""
