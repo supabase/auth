@@ -31,6 +31,7 @@ func NewKeycloakProvider(ext conf.OAuthProviderConfiguration, scopes string) (OA
 	oauthScopes := []string{
 		"profile",
 		"email",
+		"openid",
 	}
 
 	if scopes != "" {
