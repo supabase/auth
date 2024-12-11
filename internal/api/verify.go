@@ -328,6 +328,19 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 		if terr = user.Confirm(tx); terr != nil {
 			return internalServerError("Error confirming user").WithInternalError(terr)
 		}
+
+		// on signupVerify, the user will always only have an email identity
+		// so we can safely assume that the first identity is the email identity
+		//
+		// we still check for the length of the identities slice to be safe.
+		if len(user.Identities) != 0 {
+			emailIdentity := user.Identities[0]
+			if terr = emailIdentity.UpdateIdentityData(tx, map[string]interface{}{
+				"email_verified": true,
+			}); terr != nil {
+				return internalServerError("Error updating email identity").WithInternalError(terr)
+			}
+		}
 		return nil
 	})
 	if err != nil {
