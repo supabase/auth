@@ -334,7 +334,13 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 		//
 		// we still check for the length of the identities slice to be safe.
 		if len(user.Identities) != 0 {
+			if len(user.Identities) > 1 {
+				return internalServerError("User has more than one identity on signup")
+			}
 			emailIdentity := user.Identities[0]
+			if emailIdentity.Email != user.Email {
+				return internalServerError("User email identity does not match user email")
+			}
 			if terr = emailIdentity.UpdateIdentityData(tx, map[string]interface{}{
 				"email_verified": true,
 			}); terr != nil {

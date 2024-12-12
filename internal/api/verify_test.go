@@ -52,6 +52,7 @@ func (ts *VerifyTestSuite) SetupTest() {
 	// Create identity
 	i, err := models.NewIdentity(u, "email", map[string]interface{}{
 		"sub":            u.ID.String(),
+		"email":          "test@example.com",
 		"email_verified": false,
 	})
 	require.NoError(ts.T(), err, "Error creating test identity model")
@@ -886,6 +887,18 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			},
 		},
 		{
+			desc:     "Valid Signup Token Hash",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":       mail.SignupVerification,
+				"token_hash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+			},
+			expected: expected{
+				code:      http.StatusOK,
+				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+			},
+		},
+		{
 			desc:     "Valid Recovery OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
@@ -948,18 +961,6 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			expected: expected{
 				code:      http.StatusOK,
 				tokenHash: crypto.GenerateTokenHash(u.PhoneChange, "123456"),
-			},
-		},
-		{
-			desc:     "Valid Signup Token Hash",
-			sentTime: time.Now(),
-			body: map[string]interface{}{
-				"type":       mail.SignupVerification,
-				"token_hash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
-			},
-			expected: expected{
-				code:      http.StatusOK,
-				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 			},
 		},
 		{
