@@ -14,16 +14,12 @@ import (
 	"auth/internal/models"
 	"auth/internal/observability"
 	"auth/internal/security"
-
-	"github.com/sirupsen/logrus"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/security"
-	"github.com/supabase/auth/internal/utilities"
+	"auth/internal/utilities"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
 	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/sirupsen/logrus"
 )
 
 type FunctionHooks map[string][]string

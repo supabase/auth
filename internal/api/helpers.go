@@ -8,14 +8,11 @@ import (
 
 	"auth/internal/conf"
 	"auth/internal/models"
+	"auth/internal/security"
 	"auth/internal/utilities"
 
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
-	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/security"
-	"github.com/supabase/auth/internal/utilities"
 )
 
 func sendJSON(w http.ResponseWriter, status int, obj interface{}) error {

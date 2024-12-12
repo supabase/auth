@@ -9,17 +9,13 @@ import (
 	"auth/internal/models"
 	"auth/internal/observability"
 	"auth/internal/storage"
+	"auth/internal/utilities"
 
 	"github.com/fatih/structs"
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/sethvargo/go-password/password"
-	"github.com/supabase/auth/internal/api/provider"
-	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/observability"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/crypto/bcrypt"
 )
 

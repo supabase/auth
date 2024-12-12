@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"auth/internal/conf"
+
 	"github.com/stretchr/testify/require"
-	"github.com/supabase/auth/internal/conf"
 )
 
 func TestEmalValidatorService(t *testing.T) {
