@@ -271,7 +271,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 
 			ctx, err := ts.API.parseJWTClaims(userJwt, req)
 			require.NoError(ts.T(), err)
-			ctx, err = ts.API.maybeLoadUserOrSession(ctx)
+			ctx, err = ts.API.maybeLoadUserOrSession(ctx, false)
 			if c.ExpectedError != nil {
 				require.Equal(ts.T(), c.ExpectedError.Error(), err.Error())
 			} else {
