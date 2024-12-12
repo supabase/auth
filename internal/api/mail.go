@@ -603,7 +603,6 @@ func (a *API) checkEmailAddressAuthorization(email string) bool {
 }
 
 func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, emailActionType, otp, otpNew, tokenHashWithPrefix string) error {
-	mailer := a.Mailer()
 	ctx := r.Context()
 	config := a.config
 	referrerURL := utilities.GetReferrer(r, config)
@@ -627,6 +626,16 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" && !a.checkEmailAddressAuthorization(u.GetEmail()) {
 			return badRequestError(ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", u.GetEmail())
 		}
+	}
+
+	// if the number of events is set to zero, we immediately apply rate limits.
+	if config.RateLimitEmailSent.Events == 0 {
+		emailRateLimitCounter.Add(
+			ctx,
+			1,
+			metric.WithAttributeSet(attribute.NewSet(attribute.String("path", r.URL.Path))),
+		)
+		return EmailRateLimitExceeded
 	}
 
 	// TODO(km): Deprecate this behaviour - rate limits should still be applied to autoconfirm
@@ -667,20 +676,34 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		return a.invokeHook(tx, r, &input, &output)
 	}
 
+	mr := a.Mailer()
+	var err error
 	switch emailActionType {
 	case mail.SignupVerification:
-		return mailer.ConfirmationMail(r, u, otp, referrerURL, externalURL)
+		err = mr.ConfirmationMail(r, u, otp, referrerURL, externalURL)
 	case mail.MagicLinkVerification:
-		return mailer.MagicLinkMail(r, u, otp, referrerURL, externalURL)
+		err = mr.MagicLinkMail(r, u, otp, referrerURL, externalURL)
 	case mail.ReauthenticationVerification:
-		return mailer.ReauthenticateMail(r, u, otp)
+		err = mr.ReauthenticateMail(r, u, otp)
 	case mail.RecoveryVerification:
-		return mailer.RecoveryMail(r, u, otp, referrerURL, externalURL)
+		err = mr.RecoveryMail(r, u, otp, referrerURL, externalURL)
 	case mail.InviteVerification:
-		return mailer.InviteMail(r, u, otp, referrerURL, externalURL)
+		err = mr.InviteMail(r, u, otp, referrerURL, externalURL)
 	case mail.EmailChangeVerification:
-		return mailer.EmailChangeMail(r, u, otpNew, otp, referrerURL, externalURL)
+		err = mr.EmailChangeMail(r, u, otpNew, otp, referrerURL, externalURL)
 	default:
-		return errors.New("invalid email action type")
+		err = errors.New("invalid email action type")
+	}
+
+	switch {
+	case errors.Is(err, mail.ErrInvalidEmailAddress),
+		errors.Is(err, mail.ErrInvalidEmailFormat),
+		errors.Is(err, mail.ErrInvalidEmailDNS):
+		return badRequestError(
+			ErrorCodeEmailAddressInvalid,
+			"Email address %q is invalid",
+			u.GetEmail())
+	default:
+		return err
 	}
 }

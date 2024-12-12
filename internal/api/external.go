@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -663,7 +662,7 @@ func getErrorQueryString(err error, errorID string, log logrus.FieldLogger, q ur
 			log.WithError(e.Cause()).Info(e.Error())
 		}
 		q.Set("error_description", e.Message)
-		q.Set("error_code", strconv.Itoa(e.HTTPStatus))
+		q.Set("error_code", e.ErrorCode)
 	case *OAuthError:
 		q.Set("error", e.Err)
 		q.Set("error_description", e.Description)

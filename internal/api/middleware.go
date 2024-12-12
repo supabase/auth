@@ -16,6 +16,10 @@ import (
 	"auth/internal/security"
 
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/security"
+	"github.com/supabase/auth/internal/utilities"
 
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
@@ -117,7 +121,12 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 		return ctx, nil
 	}
 
-	verificationResult, err := security.VerifyRequest(req, strings.TrimSpace(config.Security.Captcha.Secret), config.Security.Captcha.Provider)
+	body := &security.GotrueRequest{}
+	if err := retrieveRequestParams(req, body); err != nil {
+		return nil, err
+	}
+
+	verificationResult, err := security.VerifyRequest(body, utilities.GetIPAddress(req), strings.TrimSpace(config.Security.Captcha.Secret), config.Security.Captcha.Provider)
 	if err != nil {
 		return nil, internalServerError("captcha verification process failed").WithInternalError(err)
 	}

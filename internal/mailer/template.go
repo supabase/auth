@@ -1,6 +1,7 @@
 package mailer
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -8,11 +9,29 @@ import (
 
 	"auth/internal/conf"
 	"auth/internal/models"
-	"github.com/badoux/checkmail"
 )
 
+type MailRequest struct {
+	To              string
+	SubjectTemplate string
+	TemplateURL     string
+	DefaultTemplate string
+	TemplateData    map[string]interface{}
+	Headers         map[string][]string
+	Type            string
+}
+
 type MailClient interface {
-	Mail(string, string, string, string, map[string]interface{}, map[string][]string, string) error
+	Mail(
+		ctx context.Context,
+		to string,
+		subjectTemplate string,
+		templateURL string,
+		defaultTemplate string,
+		templateData map[string]interface{},
+		headers map[string][]string,
+		typ string,
+	) error
 }
 
 // TemplateMailer will send mail and use templates from the site for easy mail styling
@@ -81,12 +100,6 @@ const defaultReauthenticateMail = `<h2>Confirm reauthentication</h2>
 
 <p>Enter the code: {{ .Token }}</p>`
 
-// ValidateEmail returns nil if the email is valid,
-// otherwise an error indicating the reason it is invalid
-func (m TemplateMailer) ValidateEmail(email string) error {
-	return checkmail.ValidateFormat(email)
-}
-
 func (m *TemplateMailer) Headers(messageType string) map[string][]string {
 	originalHeaders := m.Config.SMTP.NormalizedHeaders()
 
@@ -145,6 +158,7 @@ func (m *TemplateMailer) InviteMail(r *http.Request, user *models.User, otp, ref
 	}
 
 	return m.Mailer.Mail(
+		r.Context(),
 		user.GetEmail(),
 		withDefault(m.Config.Mailer.Subjects.Invite, "You have been invited"),
 		m.Config.Mailer.Templates.Invite,
@@ -177,6 +191,7 @@ func (m *TemplateMailer) ConfirmationMail(r *http.Request, user *models.User, ot
 	}
 
 	return m.Mailer.Mail(
+		r.Context(),
 		user.GetEmail(),
 		withDefault(m.Config.Mailer.Subjects.Confirmation, "Confirm Your Email"),
 		m.Config.Mailer.Templates.Confirmation,
@@ -197,6 +212,7 @@ func (m *TemplateMailer) ReauthenticateMail(r *http.Request, user *models.User, 
 	}
 
 	return m.Mailer.Mail(
+		r.Context(),
 		user.GetEmail(),
 		withDefault(m.Config.Mailer.Subjects.Reauthentication, "Confirm reauthentication"),
 		m.Config.Mailer.Templates.Reauthentication,
@@ -237,7 +253,10 @@ func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, otp
 		})
 	}
 
-	errors := make(chan error)
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	errors := make(chan error, len(emails))
 	for _, email := range emails {
 		path, err := getPath(
 			m.Config.Mailer.URLPaths.EmailChange,
@@ -263,6 +282,7 @@ func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, otp
 				"RedirectTo":      referrerURL,
 			}
 			errors <- m.Mailer.Mail(
+				ctx,
 				address,
 				withDefault(m.Config.Mailer.Subjects.EmailChange, "Confirm Email Change"),
 				template,
@@ -280,7 +300,6 @@ func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, otp
 			return e
 		}
 	}
-
 	return nil
 }
 
@@ -305,6 +324,7 @@ func (m *TemplateMailer) RecoveryMail(r *http.Request, user *models.User, otp, r
 	}
 
 	return m.Mailer.Mail(
+		r.Context(),
 		user.GetEmail(),
 		withDefault(m.Config.Mailer.Subjects.Recovery, "Reset Your Password"),
 		m.Config.Mailer.Templates.Recovery,
@@ -337,6 +357,7 @@ func (m *TemplateMailer) MagicLinkMail(r *http.Request, user *models.User, otp, 
 	}
 
 	return m.Mailer.Mail(
+		r.Context(),
 		user.GetEmail(),
 		withDefault(m.Config.Mailer.Subjects.MagicLink, "Your Magic Link"),
 		m.Config.Mailer.Templates.MagicLink,
@@ -344,19 +365,6 @@ func (m *TemplateMailer) MagicLinkMail(r *http.Request, user *models.User, otp, 
 		data,
 		m.Headers("magiclink"),
 		"magiclink",
-	)
-}
-
-// Send can be used to send one-off emails to users
-func (m TemplateMailer) Send(user *models.User, subject, body string, data map[string]interface{}) error {
-	return m.Mailer.Mail(
-		user.GetEmail(),
-		subject,
-		"",
-		body,
-		data,
-		m.Headers("other"),
-		"other",
 	)
 }
 

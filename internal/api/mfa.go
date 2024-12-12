@@ -564,7 +564,7 @@ func (a *API) validateChallenge(r *http.Request, db *storage.Connection, factor 
 	}
 
 	if challenge.VerifiedAt != nil || challenge.IPAddress != currentIP {
-		return nil, unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch. Try enrollment again.")
+		return nil, unprocessableEntityError(ErrorCodeMFAIPAddressMismatch, "Challenge and verify IP addresses mismatch.")
 	}
 
 	if challenge.HasExpired(config.MFA.ChallengeExpiryDuration) {

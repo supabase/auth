@@ -399,6 +399,33 @@ type MailerConfiguration struct {
 	OtpLength int  `json:"otp_length" split_words:"true"`
 
 	ExternalHosts []string `json:"external_hosts" split_words:"true"`
+
+	// EXPERIMENTAL: May be removed in a future release.
+	EmailValidationExtended       bool   `json:"email_validation_extended" split_words:"true" default:"false"`
+	EmailValidationServiceURL     string `json:"email_validation_service_url" split_words:"true"`
+	EmailValidationServiceHeaders string `json:"email_validation_service_key" split_words:"true"`
+
+	serviceHeaders map[string][]string `json:"-"`
+}
+
+func (c *MailerConfiguration) Validate() error {
+	headers := make(map[string][]string)
+
+	if c.EmailValidationServiceHeaders != "" {
+		err := json.Unmarshal([]byte(c.EmailValidationServiceHeaders), &headers)
+		if err != nil {
+			return fmt.Errorf("conf: SMTP headers not a map[string][]string format: %w", err)
+		}
+	}
+
+	if len(headers) > 0 {
+		c.serviceHeaders = headers
+	}
+	return nil
+}
+
+func (c *MailerConfiguration) GetEmailValidationServiceHeaders() map[string][]string {
+	return c.serviceHeaders
 }
 
 type PhoneProviderConfiguration struct {
@@ -1020,6 +1047,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Tracing,
 		&c.Metrics,
 		&c.SMTP,
+		&c.Mailer,
 		&c.SAML,
 		&c.Security,
 		&c.Sessions,

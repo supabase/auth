@@ -251,7 +251,7 @@ func (f *Factor) SaveWebAuthnCredential(tx *storage.Connection, credential *weba
 		f.WebAuthnAAGUID = nil
 	}
 
-	return tx.UpdateOnly(f, "web_authn_credential", "aaguid", "updated_at")
+	return tx.UpdateOnly(f, "web_authn_credential", "web_authn_aaguid", "updated_at")
 }
 
 func FindFactorByFactorID(conn *storage.Connection, factorID uuid.UUID) (*Factor, error) {

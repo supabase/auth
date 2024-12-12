@@ -18,6 +18,9 @@ const (
 	ErrorCodeNoAuthorization                   ErrorCode = "no_authorization"
 	ErrorCodeUserNotFound                      ErrorCode = "user_not_found"
 	ErrorCodeSessionNotFound                   ErrorCode = "session_not_found"
+	ErrorCodeSessionExpired                    ErrorCode = "session_expired"
+	ErrorCodeRefreshTokenNotFound              ErrorCode = "refresh_token_not_found"
+	ErrorCodeRefreshTokenAlreadyUsed           ErrorCode = "refresh_token_already_used"
 	ErrorCodeFlowStateNotFound                 ErrorCode = "flow_state_not_found"
 	ErrorCodeFlowStateExpired                  ErrorCode = "flow_state_expired"
 	ErrorCodeSignupDisabled                    ErrorCode = "signup_disabled"
@@ -71,7 +74,7 @@ const (
 	ErrorCodeOverRequestRateLimit              ErrorCode = "over_request_rate_limit"
 	ErrorCodeOverEmailSendRateLimit            ErrorCode = "over_email_send_rate_limit"
 	ErrorCodeOverSMSSendRateLimit              ErrorCode = "over_sms_send_rate_limit"
-	ErrorBadCodeVerifier                       ErrorCode = "bad_code_verifier"
+	ErrorCodeBadCodeVerifier                   ErrorCode = "bad_code_verifier"
 	ErrorCodeAnonymousProviderDisabled         ErrorCode = "anonymous_provider_disabled"
 	ErrorCodeHookTimeout                       ErrorCode = "hook_timeout"
 	ErrorCodeHookTimeoutAfterRetry             ErrorCode = "hook_timeout_after_retry"
@@ -88,4 +91,5 @@ const (
 	//#nosec G101 -- Not a secret value.
 	ErrorCodeInvalidCredentials        ErrorCode = "invalid_credentials"
 	ErrorCodeEmailAddressNotAuthorized ErrorCode = "email_address_not_authorized"
+	ErrorCodeEmailAddressInvalid       ErrorCode = "email_address_invalid"
 )

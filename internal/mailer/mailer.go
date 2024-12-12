@@ -18,7 +18,6 @@ type Mailer interface {
 	MagicLinkMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error
 	EmailChangeMail(r *http.Request, user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error
 	ReauthenticateMail(r *http.Request, user *models.User, otp string) error
-	ValidateEmail(email string) error
 	GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error)
 }
 
@@ -46,18 +45,21 @@ func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
 	var mailClient MailClient
 	if globalConfig.SMTP.Host == "" {
 		logrus.Infof("Noop mail client being used for %v", globalConfig.SiteURL)
-		mailClient = &noopMailClient{}
+		mailClient = &noopMailClient{
+			EmailValidator: newEmailValidator(globalConfig.Mailer),
+		}
 	} else {
 		mailClient = &MailmeMailer{
-			Host:        globalConfig.SMTP.Host,
-			Port:        globalConfig.SMTP.Port,
-			User:        globalConfig.SMTP.User,
-			Pass:        globalConfig.SMTP.Pass,
-			LocalName:   u.Hostname(),
-			From:        from,
-			BaseURL:     globalConfig.SiteURL,
-			Logger:      logrus.StandardLogger(),
-			MailLogging: globalConfig.SMTP.LoggingEnabled,
+			Host:           globalConfig.SMTP.Host,
+			Port:           globalConfig.SMTP.Port,
+			User:           globalConfig.SMTP.User,
+			Pass:           globalConfig.SMTP.Pass,
+			LocalName:      u.Hostname(),
+			From:           from,
+			BaseURL:        globalConfig.SiteURL,
+			Logger:         logrus.StandardLogger(),
+			MailLogging:    globalConfig.SMTP.LoggingEnabled,
+			EmailValidator: newEmailValidator(globalConfig.Mailer),
 		}
 	}
 

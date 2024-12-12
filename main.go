@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -13,11 +14,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+//go:embed migrations/*
+var embeddedMigrations embed.FS
+
 func init() {
 	logrus.SetFormatter(&logrus.JSONFormatter{})
 }
 
 func main() {
+	cmd.EmbeddedMigrations = embeddedMigrations
+
 	execCtx, execCancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGHUP, syscall.SIGINT)
 	defer execCancel()
 

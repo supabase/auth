@@ -20,7 +20,6 @@ func TestRateDecode(t *testing.T) {
 		{str: "100/24h",
 			eps: 0.0011574074074074073,
 			exp: Rate{Events: 100, OverTime: time.Hour * 24}},
-
 		{str: "", eps: 1, exp: Rate{},
 			err: `rate: value does not match`},
 		{str: "1h", eps: 1, exp: Rate{},
@@ -35,6 +34,10 @@ func TestRateDecode(t *testing.T) {
 			err: `rate: over-time part of rate value`},
 		{str: "100/1", eps: 1, exp: Rate{},
 			err: `rate: over-time part of rate value`},
+
+		// zero events
+		{str: "0/1h", eps: 0.0, exp: Rate{Events: 0, OverTime: time.Hour}},
+		{str: "0/24h", eps: 0.0, exp: Rate{Events: 0, OverTime: time.Hour * 24}},
 	}
 	for idx, tc := range cases {
 		var r Rate
