@@ -48,6 +48,15 @@ func (ts *VerifyTestSuite) SetupTest() {
 	u, err := models.NewUser("12345678", "test@example.com", "password", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error creating test user model")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error saving new test user")
+
+	// Create identity
+	i, err := models.NewIdentity(u, "email", map[string]interface{}{
+		"sub":            u.ID.String(),
+		"email":          "test@example.com",
+		"email_verified": false,
+	})
+	require.NoError(ts.T(), err, "Error creating test identity model")
+	require.NoError(ts.T(), ts.API.db.Create(i), "Error saving new test identity")
 }
 
 func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
@@ -673,6 +682,8 @@ func (ts *VerifyTestSuite) TestVerifySignupWithRedirectURLContainedPath() {
 			u, err = models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)
 			assert.True(ts.T(), u.IsConfirmed())
+			assert.True(ts.T(), u.UserMetaData["email_verified"].(bool))
+			assert.True(ts.T(), u.Identities[0].IdentityData["email_verified"].(bool))
 		})
 	}
 }
@@ -876,6 +887,18 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			},
 		},
 		{
+			desc:     "Valid Signup Token Hash",
+			sentTime: time.Now(),
+			body: map[string]interface{}{
+				"type":       mail.SignupVerification,
+				"token_hash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+			},
+			expected: expected{
+				code:      http.StatusOK,
+				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
+			},
+		},
+		{
 			desc:     "Valid Recovery OTP",
 			sentTime: time.Now(),
 			body: map[string]interface{}{
@@ -938,18 +961,6 @@ func (ts *VerifyTestSuite) TestVerifyValidOtp() {
 			expected: expected{
 				code:      http.StatusOK,
 				tokenHash: crypto.GenerateTokenHash(u.PhoneChange, "123456"),
-			},
-		},
-		{
-			desc:     "Valid Signup Token Hash",
-			sentTime: time.Now(),
-			body: map[string]interface{}{
-				"type":       mail.SignupVerification,
-				"token_hash": crypto.GenerateTokenHash(u.GetEmail(), "123456"),
-			},
-			expected: expected{
-				code:      http.StatusOK,
-				tokenHash: crypto.GenerateTokenHash(u.GetEmail(), "123456"),
 			},
 		},
 		{
