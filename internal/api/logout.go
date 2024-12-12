@@ -41,6 +41,13 @@ func (a *API) Logout(w http.ResponseWriter, r *http.Request) error {
 	s := getSession(ctx)
 	u := getUser(ctx)
 
+	if u == nil || s == nil {
+		// Neither session or user actually exist, meaning the user is already logged out.
+		w.WriteHeader(http.StatusNoContent)
+
+		return nil
+	}
+
 	err := db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(r, tx, u, models.LogoutAction, "", nil); terr != nil {
 			return terr
