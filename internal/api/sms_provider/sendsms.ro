@@ -1,0 +1,122 @@
+package sms_provider
+
+import (
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/utilities"
+)
+
+const (
+	defaultSendsmsApiBase = "https://api.sendsms.ro/json"
+)
+
+type SendsmsProvider struct {
+	Config *conf.SendsmsProviderConfiguration
+}
+
+// SendsmsResponse represents the response structure from the sendsms.ro API for sending OTP.
+type SendsmsResponse struct {
+	Status  int    `json:"status"`
+	Message string `json:"message"`
+	Salt    string `json:"salt,omitempty"`
+	Expire  string `json:"expire,omitempty"`
+	UID     string `json:"uid,omitempty"`
+}
+
+// SendsmsCheckResponse represents the response structure from the sendsms.ro API for checking OTP.
+type SendsmsCheckResponse struct {
+	Status  int    `json:"status"`
+	Message string `json:"message"`
+	UID     string `json:"uid,omitempty"`
+}
+
+// Creates a SmsProvider with the Sendsms Config
+func NewSendsmsProvider(config conf.SendsmsProviderConfiguration) (SmsProvider, error) {
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+
+	return &SendsmsProvider{
+		Config: &config,
+	}, nil
+}
+
+// SendMessage sends an OTP to the specified phone number.
+func (s *SendsmsProvider) SendMessage(phone, message, channel, otp string) (string, error) {
+	return s.SendSms(phone, otp)
+}
+
+// SendSms sends an OTP using the sendsms.ro API.
+func (s *SendsmsProvider) SendSms(phone, otp string) (string, error) {
+	// Prepare the request URL
+	reqURL := fmt.Sprintf("%s?action=otp_send&username=%s&password=%s&from=%s&to=%s&template=%s",
+		defaultSendsmsApiBase, s.Config.Username, s.Config.Password, s.Config.From, phone, url.QueryEscape("Your OTP is: ****"))
+
+	// Send the request
+	resp, err := http.Get(reqURL)
+	if err != nil {
+		return "", err
+	}
+	defer utilities.SafeClose(resp.Body)
+
+	// Decode the response
+	var sendsmsResp SendsmsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&sendsmsResp); err != nil {
+		return "", err
+	}
+
+	if sendsmsResp.Status != 1 {
+		return "", fmt.Errorf("failed to send OTP: %s", sendsmsResp.Message)
+	}
+
+	// Generate the hash using the salt and the OTP
+	hash := GenerateHash(sendsmsResp.Salt, otp)
+
+	// Return the UID and the hash for tracking the OTP
+	return sendsmsResp.UID + ":" + hash, nil
+}
+
+// VerifyOTP checks the OTP using the sendsms.ro API.
+func (s *SendsmsProvider) VerifyOTP(phone, hash string) error {
+	// Split the UID and hash
+	parts := strings.Split(hash, ":")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid hash format")
+	}
+	uid := parts[0]
+	otpHash := parts[1]
+
+	reqURL := fmt.Sprintf("%s?action=otp_check&username=%s&password=%s&to=%s&hash=%s",
+		defaultSendsmsApiBase, s.Config.Username, s.Config.Password, phone, otpHash)
+
+	// Send the request
+	resp, err := http.Get(reqURL)
+	if err != nil {
+		return err
+	}
+	defer utilities.SafeClose(resp.Body)
+
+	// Decode the response
+	var checkResp SendsmsCheckResponse
+	if err := json.NewDecoder(resp.Body).Decode(&checkResp); err != nil {
+		return err
+	}
+
+	if checkResp.Status != 1 {
+		return fmt.Errorf("OTP check failed: %s", checkResp.Message)
+	}
+
+	return nil
+}
+
+// GenerateHash generates a SHA256 hash using the salt and OTP.
+func GenerateHash(salt, otp string) string {
+	hash := sha256.Sum256([]byte(salt + otp))
+	return fmt.Sprintf("%x", hash)
+}
