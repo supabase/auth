@@ -650,11 +650,6 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	}
 
 	if config.Hook.SendEmail.Enabled {
-		// When secure email change is disabled, we place the token for the new email on emailData.Token
-		if emailActionType == mail.EmailChangeVerification && !config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
-			otp = otpNew
-		}
-
 		emailData := mail.EmailData{
 			Token:           otp,
 			EmailActionType: emailActionType,
@@ -662,9 +657,14 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			SiteURL:         externalURL.String(),
 			TokenHash:       tokenHashWithPrefix,
 		}
-		if emailActionType == mail.EmailChangeVerification && config.Mailer.SecureEmailChangeEnabled {
-			emailData.TokenNew = otpNew
-			emailData.TokenHashNew = u.EmailChangeTokenCurrent
+		if emailActionType == mail.EmailChangeVerification {
+			// When secure email change is disabled, we place the token for the new email on emailData.Token
+			if !config.Mailer.SecureEmailChangeEnabled {
+				emailData.Token = otpNew
+			} else {
+				emailData.TokenNew = otpNew
+				emailData.TokenHashNew = u.EmailChangeTokenCurrent
+			}
 		}
 		input := hooks.SendEmailInput{
 			User:      u,
