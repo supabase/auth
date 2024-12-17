@@ -664,7 +664,7 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 				emailData.Token = otpNew
 			} else {
 				emailData.TokenNew = otpNew
-				emailData.TokenHashNew = tokenHashWithPrefix
+				emailData.TokenHashNew = u.EmailChangeTokenCurrent
 			}
 		}
 		input := hooks.SendEmailInput{
