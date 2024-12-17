@@ -660,10 +660,11 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		if emailActionType == mail.EmailChangeVerification {
 			// When secure email change is disabled, we place the token for the new email on emailData.Token
 			if !config.Mailer.SecureEmailChangeEnabled {
+				// Token Hash should already be set above
 				emailData.Token = otpNew
 			} else {
 				emailData.TokenNew = otpNew
-				emailData.TokenHashNew = u.EmailChangeTokenCurrent
+				emailData.TokenHashNew = tokenHashWithPrefix
 			}
 		}
 		input := hooks.SendEmailInput{
