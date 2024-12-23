@@ -18,7 +18,7 @@ jobs:
       RELEASE_CANDIDATE: ${{ steps.versions.outputs.RELEASE_CANDIDATE }}
       RELEASE_NAME: ${{ steps.versions.outputs.RELEASE_NAME }}
     steps:
-      - uses: google-github-actions/release-please-action@v4
+      - uses: googleapis/release-please-action@v4
         id: release
         with:
           release-type: go
