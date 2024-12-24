@@ -57,7 +57,7 @@ var ErrArgon2MismatchedHashAndPassword = errors.New("crypto: argon2 hash and pas
 var ErrScryptMismatchedHashAndPassword = errors.New("crypto: fbscrypt hash and password mismatch")
 
 // argon2HashRegexp https://github.com/P-H-C/phc-string-format/blob/master/phc-sf-spec.md#argon2-encoding
-var argon2HashRegexp = regexp.MustCompile("^[$](?P<alg>argon2(d|i|id))[$]v=(?P<v>(16|19))[$]m=(?P<m>[0-9]+),t=(?P<t>[0-9]+),p=(?P<p>[0-9]+)(,keyid=(?P<keyid>[^,]+))?(,data=(?P<data>[^$]+))?[$](?P<salt>[^$]+)[$](?P<hash>.+)$")
+var argon2HashRegexp = regexp.MustCompile("^[$](?P<alg>argon2(d|i|id))[$]v=(?P<v>(16|19))[$]m=(?P<m>[0-9]+),t=(?P<t>[0-9]+),p=(?P<p>[0-9]+)(,keyid=(?P<keyid>[^,$]+))?(,data=(?P<data>[^$]+))?[$](?P<salt>[^$]+)[$](?P<hash>.+)$")
 var scryptHashRegexp = regexp.MustCompile(`^\$(?P<alg>fbscrypt)\$v=(?P<v>[0-9]+),n=(?P<n>[0-9]+),r=(?P<r>[0-9]+),p=(?P<p>[0-9]+)(?:,ss=(?P<ss>[^,]+))?(?:,sk=(?P<sk>[^$]+))?\$(?P<salt>[^$]+)\$(?P<hash>.+)$`)
 
 type Argon2HashInput struct {
@@ -210,13 +210,29 @@ func ParseArgon2Hash(hash string) (*Argon2HashInput, error) {
 	if err != nil {
 		return nil, fmt.Errorf("crypto: argon2 hash has invalid base64 in the hash section %w", err)
 	}
+	if len(rawHash) == 0 {
+		return nil, errors.New("crypto: argon2 hash is empty")
+	}
 
 	salt, err := base64.RawStdEncoding.DecodeString(saltB64)
 	if err != nil {
 		return nil, fmt.Errorf("crypto: argon2 hash has invalid base64 in the salt section %w", err)
 	}
+	if len(salt) == 0 {
+		return nil, errors.New("crypto: argon2 salt is empty")
+	}
 
-	input := Argon2HashInput{alg, v, memory, time, threads, keyid, data, salt, rawHash}
+	input := Argon2HashInput{
+		alg:     alg,
+		v:       v,
+		memory:  memory,
+		time:    time,
+		threads: threads,
+		keyid:   keyid,
+		data:    data,
+		salt:    salt,
+		rawHash: rawHash,
+	}
 
 	return &input, nil
 }
@@ -250,13 +266,13 @@ func compareHashAndPasswordArgon2(ctx context.Context, hash, password string) er
 
 	switch input.alg {
 	case "argon2i":
-		derivedKey = argon2.Key([]byte(password), input.salt, uint32(input.time), uint32(input.memory)*1024, uint8(input.threads), uint32(len(input.rawHash))) // #nosec G115
+		derivedKey = argon2.Key([]byte(password), input.salt, uint32(input.time), uint32(input.memory), uint8(input.threads), uint32(len(input.rawHash))) // #nosec G115
 
 	case "argon2id":
-		derivedKey = argon2.IDKey([]byte(password), input.salt, uint32(input.time), uint32(input.memory)*1024, uint8(input.threads), uint32(len(input.rawHash))) // #nosec G115
+		derivedKey = argon2.IDKey([]byte(password), input.salt, uint32(input.time), uint32(input.memory), uint8(input.threads), uint32(len(input.rawHash))) // #nosec G115
 	}
 
-	match = subtle.ConstantTimeCompare(derivedKey, input.rawHash) == 0
+	match = subtle.ConstantTimeCompare(derivedKey, input.rawHash) == 1
 
 	if !match {
 		return ErrArgon2MismatchedHashAndPassword
