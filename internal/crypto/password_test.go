@@ -19,6 +19,10 @@ func TestArgon2(t *testing.T) {
 	for _, example := range examples {
 		assert.NoError(t, CompareHashAndPassword(context.Background(), example, "test"))
 	}
+
+	for _, example := range examples {
+		assert.Error(t, CompareHashAndPassword(context.Background(), example, "test1"))
+	}
 }
 
 func TestGeneratePassword(t *testing.T) {
