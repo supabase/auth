@@ -393,10 +393,9 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 			return tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(factor.LastChallengedAt, config.MFA.Phone.MaxFrequency))
 		}
 	}
-	otp, err := crypto.GenerateOtp(config.MFA.Phone.OtpLength)
-	if err != nil {
-		panic(err)
-	}
+
+	otp := crypto.GenerateOtp(config.MFA.Phone.OtpLength)
+
 	challenge, err := factor.CreatePhoneChallenge(ipAddress, otp, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID, config.Security.DBEncryption.EncryptionKey)
 	if err != nil {
 		return internalServerError("error creating SMS Challenge")
