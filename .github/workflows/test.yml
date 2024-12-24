@@ -65,6 +65,19 @@ jobs:
         run: make migrate_dev
       - name: Lint and test
         run: make test
+      - name: Cleanup coverage
+        run: |
+          set -x
+
+          # since Go 1.20 these source files need to be deleted from the
+          # coverage profile as they contain legacy or untestable code (like
+          # `main` package)
+
+          sed -i '/^github.com\/supabase\/auth\/client/d' coverage.out
+          sed -i '/^github.com\/supabase\/auth\/cmd/d' coverage.out
+          sed -i '/^github.com\/supabase\/auth\/docs/d' coverage.out
+          sed -i '/^github.com\/supabase\/auth\/main/d' coverage.out
+
       - uses: shogo82148/actions-goveralls@v1
         with:
           path-to-profile: coverage.out
