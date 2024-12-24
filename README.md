@@ -1,6 +1,6 @@
 # Auth - Authentication and User Management by Supabase
 
-[![Coverage Status](https://coveralls.io/repos/github/supabase/auth/badge.svg?branch=master)](https://coveralls.io/github/supabase/gotrue?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/supabase/auth/badge.svg?branch=master)](https://coveralls.io/github/supabase/auth?branch=master)
 
 Auth is a user management and authentication server written in Go that powers
 [Supabase](https://supabase.com)'s features such as:
