@@ -136,7 +136,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Phone != "" && user.GetPhone() != params.Phone {
-		if exists, err := models.IsDuplicatedPhone(db, params.Phone, aud); err != nil {
+		if exists, err := models.HasPhoneIdentity(db, params.Phone, aud); err != nil {
 			return internalServerError("Database error checking phone").WithInternalError(err)
 		} else if exists {
 			return unprocessableEntityError(ErrorCodePhoneExists, DuplicatePhoneMsg)
