@@ -85,15 +85,15 @@ func TestGeneratePassword(t *testing.T) {
 	}
 }
 
-type scryptTestCase struct {
+type compareTestCase struct {
 	name       string
 	hash       string
 	password   string
 	shouldPass bool
 }
 
-func TestScrypt(t *testing.T) {
-	testCases := []scryptTestCase{
+func TestCompareHash(t *testing.T) {
+	testCases := []compareTestCase{
 		{
 			name:       "Firebase Scrypt: appropriate hash",
 			hash:       "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
@@ -104,6 +104,18 @@ func TestScrypt(t *testing.T) {
 			name:       "Firebase Scrypt: incorrect hash",
 			hash:       "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$ZGlmZmVyZW50aGFzaA==",
 			password:   "mytestpassword",
+			shouldPass: false,
+		},
+		{
+			name:       "Argon2: appropriate hash",
+			hash:       "$argon2i$v=19$m=64,t=3,p=2$C0KHS/fE9ANvxWxAQtBpTA$hw+w0r4DkvxfAmmTfogw6CcJdrILS8TOfS/aUBCD3/I",
+			password:   "mytestpassword",
+			shouldPass: true,
+		},
+		{
+			name:       "Argon2: incorrect hash",
+			hash:       "$argon2i$v=19$m=64,t=3,p=2$C0KHS/fE9ANvxWxAQtBpTA$hw+w0r4DkvxfAmmTfogw6CcJdrILS8TOfS/aUBCD3/I",
+			password:   "notmytestpassword",
 			shouldPass: false,
 		},
 	}

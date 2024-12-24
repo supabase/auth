@@ -256,7 +256,7 @@ func compareHashAndPasswordArgon2(ctx context.Context, hash, password string) er
 		derivedKey = argon2.IDKey([]byte(password), input.salt, uint32(input.time), uint32(input.memory)*1024, uint8(input.threads), uint32(len(input.rawHash))) // #nosec G115
 	}
 
-	match = subtle.ConstantTimeCompare(derivedKey, input.rawHash) == 0
+	match = subtle.ConstantTimeCompare(derivedKey, input.rawHash) == 1
 
 	if !match {
 		return ErrArgon2MismatchedHashAndPassword
