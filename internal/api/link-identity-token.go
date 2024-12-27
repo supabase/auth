@@ -1,14 +1,15 @@
 package api
 
 import (
-	"context"
 	"net/http"
 
+	"github.com/fatih/structs"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
-// LinkIdentityWithIDTokenParams represents the parameters for linking an identity using an ID token
+// LinkIdentityWithIDTokenParams represents parameters for linking a new identity using an ID token
 type LinkIdentityWithIDTokenParams struct {
 	IdToken     string `json:"id_token"`
 	Provider    string `json:"provider"`
@@ -16,6 +17,8 @@ type LinkIdentityWithIDTokenParams struct {
 	Nonce       string `json:"nonce,omitempty"`
 	ClientID    string `json:"client_id,omitempty"`
 	Issuer      string `json:"issuer,omitempty"`
+
+	GoTrueMetaSecurity
 }
 
 // LinkIdentityWithIDToken links a new identity to an existing user using an OIDC ID token
