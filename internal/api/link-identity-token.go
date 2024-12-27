@@ -1,15 +1,17 @@
 package api
 
 import (
+
 	"net/http"
 
 	"github.com/fatih/structs"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/storage"
 )
 
-// LinkIdentityWithIDTokenParams represents parameters for linking a new identity using an ID token
+// LinkIdentityWithIDTokenParams are the parameters for linking an identity using an ID token
 type LinkIdentityWithIDTokenParams struct {
 	IdToken     string `json:"id_token"`
 	Provider    string `json:"provider"`
@@ -18,16 +20,22 @@ type LinkIdentityWithIDTokenParams struct {
 	ClientID    string `json:"client_id,omitempty"`
 	Issuer      string `json:"issuer,omitempty"`
 
-	GoTrueMetaSecurity
+	security.GotrueRequest
 }
 
+// LinkIdentityWithIDToken links a new identity to an existing user using an OIDC ID token
 // LinkIdentityWithIDToken links a new identity to an existing user using an OIDC ID token
 func (a *API) LinkIdentityWithIDToken(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 	config := a.config
 
-	params := &LinkIdentityWithIDTokenParams{}
+	user := getUser(ctx)
+	if user == nil {
+		return unprocessableEntityError(ErrorCodeUserNotFound, "Missing authenticated user")
+	}
+
+	params := &IdTokenGrantParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
 		return err
 	}
@@ -40,23 +48,7 @@ func (a *API) LinkIdentityWithIDToken(w http.ResponseWriter, r *http.Request) er
 		return badRequestError(ErrorCodeValidationFailed, "provider or client_id and issuer are required")
 	}
 
-	// Get the authenticated user from context
-	user := getUser(ctx)
-	if user == nil {
-		return unauthorizedError("Missing authenticated user")
-	}
-
-	// Validate and parse the ID token
-	idTokenParams := &IdTokenGrantParams{
-		IdToken:     params.IdToken,
-		AccessToken: params.AccessToken,
-		Nonce:      params.Nonce,
-		Provider:   params.Provider,
-		ClientID:   params.ClientID,
-		Issuer:     params.Issuer,
-	}
-
-	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, err := idTokenParams.getProvider(ctx, config, r)
+	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, err := params.getProvider(ctx, config, r)
 	if err != nil {
 		return err
 	}
@@ -92,21 +84,20 @@ func (a *API) LinkIdentityWithIDToken(w http.ResponseWriter, r *http.Request) er
 	}
 
 	if !skipNonceCheck && params.Nonce != "" {
-		// Verify nonce if provided
 		if params.Nonce != idToken.Nonce {
-			return oauthError("invalid_request", "Invalid nonce")
+			return oauthError("invalid_nonce", "Invalid nonce")
 		}
 	}
 
-	// Process the link within a transaction
 	err = db.Transaction(func(tx *storage.Connection) error {
 		// Check if identity already exists
-		identity, err := models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType)
-		if err != nil {
-			if !models.IsNotFoundError(err) {
-				return internalServerError("Database error finding identity").WithInternalError(err)
+		identity, terr := models.FindIdentityByIdAndProvider(tx, userData.Metadata.Subject, providerType)
+		if terr != nil {
+			if !models.IsNotFoundError(terr) {
+				return internalServerError("Database error finding identity").WithInternalError(terr)
 			}
 		}
+
 		if identity != nil {
 			if identity.UserID == user.ID {
 				return unprocessableEntityError(ErrorCodeIdentityAlreadyExists, "Identity is already linked to this user")
@@ -116,31 +107,30 @@ func (a *API) LinkIdentityWithIDToken(w http.ResponseWriter, r *http.Request) er
 
 		// Create new identity
 		identityData := structs.Map(userData.Metadata)
-		newIdentity, err := models.NewIdentity(user, providerType, identityData)
-		if err != nil {
-			return err
+		newIdentity, terr := models.NewIdentity(user, providerType, identityData)
+		if terr != nil {
+			return terr
 		}
 
-		if err := tx.Create(newIdentity); err != nil {
-			return internalServerError("Error creating identity").WithInternalError(err)
+		if terr := tx.Create(newIdentity); terr != nil {
+			return internalServerError("Error creating identity").WithInternalError(terr)
 		}
 
 		// Update user metadata 
-		if err := user.UpdateUserMetaData(tx, identityData); err != nil {
-			return internalServerError("Error updating user metadata").WithInternalError(err)
+		if terr := user.UpdateUserMetaData(tx, identityData); terr != nil {
+			return internalServerError("Error updating user metadata").WithInternalError(terr)
 		}
 
 		// Update app metadata providers
-		if err := user.UpdateAppMetaDataProviders(tx); err != nil {
-			return internalServerError("Error updating user providers").WithInternalError(err)
+		if terr := user.UpdateAppMetaDataProviders(tx); terr != nil {
+			return internalServerError("Error updating user providers").WithInternalError(terr)
 		}
 
 		// Create audit log entry
-		if err := models.NewAuditLogEntry(r, tx, user, models.IdentityLinkAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", map[string]interface{}{
 			"provider": providerType,
-			"identity_id": newIdentity.ID,
-		}); err != nil {
-			return err
+		}); terr != nil {
+			return terr
 		}
 
 		return nil
