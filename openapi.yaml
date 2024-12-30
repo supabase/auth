@@ -1146,13 +1146,13 @@ paths:
           in: query
           schema:
             type: integer
-            min: 1
+            minimum: 1
             default: 1
         - name: per_page
           in: query
           schema:
             type: integer
-            min: 1
+            minimum: 1
             default: 50
       responses:
         200:
@@ -1241,13 +1241,13 @@ paths:
           in: query
           schema:
             type: integer
-            min: 1
+            minimum: 1
             default: 1
         - name: per_page
           in: query
           schema:
             type: integer
-            min: 1
+            minimum: 1
             default: 50
       responses:
         200:
