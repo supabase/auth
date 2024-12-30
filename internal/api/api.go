@@ -192,6 +192,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.Get("/", api.Reauthenticate)
 		})
 
+		
 		r.With(api.requireAuthentication).Route("/user", func(r *router) {
 			r.Get("/", api.UserGet)
 			r.With(api.limitHandler(api.limiterOpts.User)).Put("/", api.UserUpdate)
@@ -201,6 +202,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				r.Get("/authorize", api.LinkIdentity)
 				r.Delete("/{identity_id}", api.DeleteIdentity)
 			})
+			r.Post("/identities/link_token", api.LinkIdentityWithIDToken)
 		})
 
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
