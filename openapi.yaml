@@ -949,7 +949,7 @@ paths:
       tags:
         - saml
       security:
-        - ApiKeyAuth: []
+        - APIKeyAuth: []
       parameters:
         - name: download
           in: query
