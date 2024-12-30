@@ -133,7 +133,15 @@ You should then see in Docker that `auth_postgresql` is running on `port: 5432`.
 
 3. Next compile the Auth binary:
 
-Make sure the git tag is set before building the binary. If you are not sure, you can check the latest tag by running `git tag` and then set the tag by running `git tag <tag_name>`. For example, `git tag v0.0.1`.
+When you fork a repository, GitHub does not automatically copy all the tags (tags are not included by default). To ensure the correct tag is set before building the binary, you need to fetch the tags from the upstream repository and push them to your fork. Follow these steps:
+
+```zsh
+# Fetch the tags from the upstream repository
+git fetch upstream --tags
+
+# Push the tags to your fork
+git push origin --tags
+```
 
 Then build the binary by running:
 
