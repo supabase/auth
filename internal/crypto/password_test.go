@@ -123,3 +123,72 @@ func TestScrypt(t *testing.T) {
 		})
 	}
 }
+
+type bcryptTestCase struct {
+	name       string
+	hash       string
+	password   string
+	shouldPass bool
+}
+
+func TestBcrypt(t *testing.T) {
+	testCases := []bcryptTestCase{
+		{
+			name:       "Valid bcrypt hash, valid password",
+			hash:       "$2a$10$vVz26aE3xkpSS9HFgafcH.M0Ina2tRm.Kp08WcVfjipXccGakj6i.",
+			password:   "test",
+			shouldPass: true,
+		},
+		{
+			name:       "Invalid bycrypt hash format",
+			hash:       "x2a$10$vVz26aE3xkpSS9HFgafcH.M0Ina2tRm.Kp08WcVfjipXccGakj6i.",
+			password:   "test",
+			shouldPass: false,
+		},
+		{
+			name:       "Invalid bycrypt hash rounds, negative",
+			hash:       "$2a$-1$vVz26aE3xkpSS9HFgafcH.M0Ina2tRm.Kp08WcVfjipXccGakj6i.",
+			password:   "test",
+			shouldPass: false,
+		},
+		{
+			name:       "Invalid bycrypt hash rounds",
+			hash:       "$2a$2000$vVz26aE3xkpSS9HFgafcH.M0Ina2tRm.Kp08WcVfjipXccGakj6i.",
+			password:   "test",
+			shouldPass: false,
+		},
+		{
+			name:       "Valid bcrypt hash, invalid password",
+			hash:       "$2a$10$vVz26aE3xkpSS9HFgafcH.M0Ina2tRm.Kp08WcVfjipXccGakj6i.",
+			password:   "test_Password",
+			shouldPass: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := CompareHashAndPassword(context.Background(), tc.hash, tc.password)
+			if tc.shouldPass {
+				assert.NoError(t, err, "Expected test case to pass, but it failed")
+			} else {
+				assert.Error(t, err, "Expected test case to fail, but it passed")
+			}
+		})
+	}
+}
+
+func TestBcryptHashGeneration(t *testing.T) {
+	plainText := "testPassword"
+	ctx := context.Background()
+
+	hashedPassword, e := GenerateFromPassword(ctx, plainText)
+	assert.NoError(t, e, "No error was expected")
+	assert.NotNil(t, hashedPassword)
+
+	err := CompareHashAndPassword(context.Background(), hashedPassword, plainText)
+	assert.NoError(t, err, "Expected hashedPassword to be valid")
+
+	// validate hash is unique each time
+	newHashedPassword, _ := GenerateFromPassword(ctx, plainText)
+	assert.NotEqual(t, hashedPassword, newHashedPassword)
+}
