@@ -39,6 +39,13 @@ func TestArgon2(t *testing.T) {
 			expectedErr: "crypto: argon2 hash and password mismatch",
 		},
 		{
+			name:        "Argon2: unsupported algorith",
+			hash:        "$argon2d$v=19$m=32,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+			password:    "test1",
+			shouldPass:  false,
+			expectedErr: "crypto: argon2 hash uses unsupported algorithm \"argon2d\" only argon2i and argon2id supported",
+		},
+		{
 			name:        "Argon2: invalid hash alg",
 			hash:        "$argon2ix$v=19$m=32,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
 			password:    "test1",
@@ -47,10 +54,10 @@ func TestArgon2(t *testing.T) {
 		},
 		{
 			name:        "Argon2: invalid hash v",
-			hash:        "$argon2id$v=20$m=32,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+			hash:        "$argon2id$v=16$m=32,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
 			password:    "test1",
 			shouldPass:  false,
-			expectedErr: "crypto: incorrect argon2 hash format",
+			expectedErr: "crypto: argon2 hash uses unsupported version \"16\" only 19 is supported",
 		},
 		{
 			name:        "Argon2: invalid hash keyid",
@@ -218,6 +225,13 @@ func TestScrypt(t *testing.T) {
 			expectedErr: "crypto: fbscrypt hash and password mismatch",
 		},
 		{
+			name:        "Firebase Scrypt: bad hash version",
+			hash:        "$fbscrypt$v=2,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			password:    "mytestpassword",
+			shouldPass:  false,
+			expectedErr: "crypto: Firebase scrypt hash uses unsupported version \"2\" only version 1 is supported",
+		},
+		{
 			name:        "Firebase Scrypt: bad hash",
 			hash:        "$fbscrypts$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
 			password:    "mytestpassword",
@@ -230,6 +244,13 @@ func TestScrypt(t *testing.T) {
 			password:    "mytestpassword",
 			shouldPass:  false,
 			expectedErr: "crypto: Firebase scrypt hash has invalid n parameter \"4294967296\" strconv.ParseUint: parsing \"4294967296\": value out of range",
+		},
+		{
+			name:        "Firebase Scrypt: zero n",
+			hash:        "$fbscrypt$v=1,n=0,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			password:    "mytestpassword",
+			shouldPass:  false,
+			expectedErr: "crypto: Firebase scrypt hash has invalid n parameter \"0\": must be greater than 0",
 		},
 		{
 			name:        "Firebase Scrypt: bad rounds",
@@ -246,18 +267,32 @@ func TestScrypt(t *testing.T) {
 			expectedErr: "crypto: Firebase scrypt hash has invalid p parameter \"256\" strconv.ParseUint: parsing \"256\": value out of range",
 		},
 		{
-			name:        "Firebase Scrypt: bad salt",
-			hash:        "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw?==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			name:        "Firebase Scrypt: bad hash",
+			hash:        "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$!KVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
 			password:    "mytestpassword",
 			shouldPass:  false,
-			expectedErr: "illegal base64 data at input byte 2",
+			expectedErr: "crypto: Firebase scrypt hash has invalid base64 in the hash section illegal base64 data at input byte 0",
 		},
 		{
-			name:        "Firebase Scrypt: bad hash",
-			hash:        "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9!tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			name:        "Firebase Scrypt: bad salt",
+			hash:        "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$!0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
 			password:    "mytestpassword",
 			shouldPass:  false,
-			expectedErr: "illegal base64 data at input byte 3",
+			expectedErr: "crypto: Firebase scrypt salt has invalid base64 in the hash section illegal base64 data at input byte 0",
+		},
+		{
+			name:        "Firebase Scrypt: bad ss",
+			hash:        "$fbscrypt$v=1,n=14,r=8,p=1,ss=B!w==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			password:    "mytestpassword",
+			shouldPass:  false,
+			expectedErr: "illegal base64 data at input byte 1",
+		},
+		{
+			name:        "Firebase Scrypt: bad sk",
+			hash:        "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=!ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			password:    "mytestpassword",
+			shouldPass:  false,
+			expectedErr: "illegal base64 data at input byte 0",
 		},
 	}
 
