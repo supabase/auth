@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -185,6 +186,12 @@ func TestBcryptHashGeneration(t *testing.T) {
 	assert.NoError(t, e, "No error was expected")
 	assert.NotNil(t, hashedPassword)
 
+	// validate bcrypt format -- https://passlib.readthedocs.io/en/stable/lib/passlib.hash.bcrypt.html#format-algorithm
+	bcryptRegex, _ := regexp.Compile(`^\$(?P<alg>2[abxy])\$(?P<rounds>[0-9]{1,})\$(?P<salt>[./A-Za-z0-9]{21}[.Oeu]{1})(?P<checksum>[./A-Za-z0-9]{31})$`)
+	match := bcryptRegex.MatchString(hashedPassword)
+	assert.Equal(t, match, true, "Produced hash not valid bcrypt format")
+
+	// validate hash resolves to plainText
 	err := CompareHashAndPassword(context.Background(), hashedPassword, plainText)
 	assert.NoError(t, err, "Expected hashedPassword to be valid")
 
