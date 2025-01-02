@@ -198,4 +198,11 @@ func TestBcryptHashGeneration(t *testing.T) {
 	// validate hash is unique each time
 	newHashedPassword, _ := GenerateFromPassword(ctx, plainText)
 	assert.NotEqual(t, hashedPassword, newHashedPassword)
+
+	// validate password truncation causes error (passwords longer than 72 chars)
+	// this is technically testing the bcrypt libary but make sure we are erroring because it
+	// very much matters in the context of this package
+	longPassword := strings.Repeat("A", 73)
+	_, e = GenerateFromPassword(ctx, longPassword)
+	assert.Error(t, e, "Password longer than 72 chars did not error")
 }
