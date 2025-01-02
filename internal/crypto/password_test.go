@@ -9,20 +9,112 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type argonTestCase struct {
+	name        string
+	hash        string
+	password    string
+	shouldPass  bool
+	expectedErr string
+}
+
 func TestArgon2(t *testing.T) {
-	// all of these hash the `test` string with various parameters
-
-	examples := []string{
-		"$argon2i$v=19$m=16,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
-		"$argon2id$v=19$m=32,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+	testCases := []argonTestCase{
+		{
+			name:       "Argon2: valid hash",
+			hash:       "$argon2i$v=19$m=16,t=2,p=1$bGJRWThNOHJJTVBSdHl2dQ$NfEnUOuUpb7F2fQkgFUG4g",
+			password:   "test",
+			shouldPass: true,
+		},
+		{
+			name:       "Argon2: valid hash2",
+			hash:       "$argon2id$v=19$m=32,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+			password:   "test",
+			shouldPass: true,
+		},
+		{
+			name:        "Argon2: valid hash, wrong plaintext",
+			hash:        "$argon2id$v=19$m=32,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+			password:    "test1",
+			shouldPass:  false,
+			expectedErr: "crypto: argon2 hash and password mismatch",
+		},
+		{
+			name:        "Argon2: invalid hash alg",
+			hash:        "$argon2ix$v=19$m=32,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+			password:    "test1",
+			shouldPass:  false,
+			expectedErr: "crypto: incorrect argon2 hash format",
+		},
+		{
+			name:        "Argon2: invalid hash v",
+			hash:        "$argon2id$v=20$m=32,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+			password:    "test1",
+			shouldPass:  false,
+			expectedErr: "crypto: incorrect argon2 hash format",
+		},
+		{
+			name:        "Argon2: invalid hash keyid",
+			hash:        "$argon2id$v=19$m=32,t=3,p=2,keyid=1$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+			password:    "test1",
+			shouldPass:  false,
+			expectedErr: "crypto: argon2 hashes with the keyid parameter not supported",
+		},
+		{
+			name:        "Argon2: invalid hash data",
+			hash:        "$argon2id$v=19$m=32,t=3,p=2,data=1$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+			password:    "test1",
+			shouldPass:  false,
+			expectedErr: "crypto: argon2 hashes with the data parameter not supported",
+		},
+		{
+			name:        "Argon2: invalid hash memory",
+			hash:        "$argon2id$v=19$m=4294967296,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+			password:    "test",
+			shouldPass:  false,
+			expectedErr: "crypto: argon2 hash has invalid m parameter \"4294967296\" strconv.ParseUint: parsing \"4294967296\": value out of range",
+		},
+		{
+			name:        "Argon2: invalid hash time",
+			hash:        "$argon2id$v=19$m=32,t=4294967296,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+			password:    "test",
+			shouldPass:  false,
+			expectedErr: "crypto: argon2 hash has invalid t parameter \"4294967296\" strconv.ParseUint: parsing \"4294967296\": value out of range",
+		},
+		{
+			name:        "Argon2: invalid hash p",
+			hash:        "$argon2id$v=19$m=32,t=3,p=4294967296$SFVpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+			password:    "test",
+			shouldPass:  false,
+			expectedErr: "crypto: argon2 hash has invalid p parameter \"4294967296\" strconv.ParseUint: parsing \"4294967296\": value out of range",
+		},
+		{
+			name:        "Argon2: invalid hash, bad saltB64",
+			hash:        "$argon2id$v=19$m=32,t=3,p=2$S!VpOWJ0eXhjRzVkdGN1RQ$RXnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+			password:    "test",
+			shouldPass:  false,
+			expectedErr: "crypto: argon2 hash has invalid base64 in the salt section illegal base64 data at input byte 1",
+		},
+		{
+			name:        "Argon2: invalid hash, bad hashB64",
+			hash:        "$argon2id$v=19$m=32,t=3,p=2$SFVpOWJ0eXhjRzVkdGN1RQ$-Xnb8rh7LaDcn07xsssqqulZYXOM/EUCEFMVcAcyYVk",
+			password:    "test",
+			shouldPass:  false,
+			expectedErr: "crypto: argon2 hash has invalid base64 in the hash section illegal base64 data at input byte 0",
+		},
 	}
 
-	for _, example := range examples {
-		assert.NoError(t, CompareHashAndPassword(context.Background(), example, "test"))
-	}
-
-	for _, example := range examples {
-		assert.Error(t, CompareHashAndPassword(context.Background(), example, "test1"))
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := CompareHashAndPassword(context.Background(), tc.hash, tc.password)
+			if tc.shouldPass {
+				assert.NoError(t, err, "Expected test case to pass, but it failed")
+			} else {
+				assert.Error(t, err, "Expected test case to fail, but it passed")
+				if tc.expectedErr != "" {
+					assert.Equal(t, tc.expectedErr, err.Error(), "Expected error doesn't match")
+				}
+			}
+		})
 	}
 }
 
@@ -91,10 +183,11 @@ func TestGeneratePassword(t *testing.T) {
 }
 
 type scryptTestCase struct {
-	name       string
-	hash       string
-	password   string
-	shouldPass bool
+	name        string
+	hash        string
+	password    string
+	shouldPass  bool
+	expectedErr string
 }
 
 func TestScrypt(t *testing.T) {
@@ -111,6 +204,61 @@ func TestScrypt(t *testing.T) {
 			password:   "mytestpassword",
 			shouldPass: false,
 		},
+		{
+			name:       "Firebase Scrypt: mismatch hash plaintext",
+			hash:       "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			password:   "not_mytestpassword",
+			shouldPass: false,
+		},
+		{
+			name:        "Firebase Scrypt: mismatch hash plaintext",
+			hash:        "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			password:    "not_mytestpassword",
+			shouldPass:  false,
+			expectedErr: "crypto: fbscrypt hash and password mismatch",
+		},
+		{
+			name:        "Firebase Scrypt: bad hash",
+			hash:        "$fbscrypts$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			password:    "mytestpassword",
+			shouldPass:  false,
+			expectedErr: "crypto: incorrect scrypt hash format",
+		},
+		{
+			name:        "Firebase Scrypt: bad n",
+			hash:        "$fbscrypt$v=1,n=4294967296,r=8,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			password:    "mytestpassword",
+			shouldPass:  false,
+			expectedErr: "crypto: Firebase scrypt hash has invalid n parameter \"4294967296\" strconv.ParseUint: parsing \"4294967296\": value out of range",
+		},
+		{
+			name:        "Firebase Scrypt: bad rounds",
+			hash:        "$fbscrypt$v=1,n=14,r=18446744073709551616,p=1,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			password:    "mytestpassword",
+			shouldPass:  false,
+			expectedErr: "crypto: Firebase scrypt hash has invalid r parameter \"18446744073709551616\": strconv.ParseUint: parsing \"18446744073709551616\": value out of range",
+		},
+		{
+			name:        "Firebase Scrypt: bad threads - wrap around",
+			hash:        "$fbscrypt$v=1,n=14,r=8,p=256,ss=Bw==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			password:    "mytestpassword",
+			shouldPass:  false,
+			expectedErr: "crypto: Firebase scrypt hash has invalid p parameter \"256\" strconv.ParseUint: parsing \"256\": value out of range",
+		},
+		{
+			name:        "Firebase Scrypt: bad salt",
+			hash:        "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw?==,sk=ou9tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			password:    "mytestpassword",
+			shouldPass:  false,
+			expectedErr: "illegal base64 data at input byte 2",
+		},
+		{
+			name:        "Firebase Scrypt: bad hash",
+			hash:        "$fbscrypt$v=1,n=14,r=8,p=1,ss=Bw==,sk=ou9!tdYTGyYm8kuR6Dt0Bp0kDuAYoXrK16mbZO4yGwAn3oLspjnN0/c41v8xZnO1n14J3MjKj1b2g6AUCAlFwMw==$C0sHCg9ek77hsg==$zKVTMvnWVw5BBOZNUdnsalx4c4c7y/w7IS5p6Ut2+CfEFFlz37J9huyQfov4iizN8dbjvEJlM5tQaJP84+hfTw==",
+			password:    "mytestpassword",
+			shouldPass:  false,
+			expectedErr: "illegal base64 data at input byte 3",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -120,6 +268,9 @@ func TestScrypt(t *testing.T) {
 				assert.NoError(t, err, "Expected test case to pass, but it failed")
 			} else {
 				assert.Error(t, err, "Expected test case to fail, but it passed")
+				if tc.expectedErr != "" {
+					assert.Equal(t, tc.expectedErr, err.Error(), "Expected error doesn't match")
+				}
 			}
 		})
 	}
