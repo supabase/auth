@@ -61,21 +61,18 @@ Therefore, to contribute to Auth you will need to install these tools.
 
 - Install [Go](https://go.dev) 1.22
 
-```terminal
-# Via Homebrew on OSX
+```zsh
+# Via Homebrew on macOS
 brew install go@1.22
 
-# Set the GOPATH environment variable in the ~/.zshrc file
-export GOPATH="$HOME/go"
-
-# Add the GOPATH to your path
-echo 'export PATH="$GOPATH/bin:$PATH"' >> ~/.zshrc
+# Set the environment variable in the ~/.zshrc file
+echo 'export PATH="/opt/homebrew/opt/go@1.22/bin:$PATH"' >> ~/.zshrc
 ```
 
 - Install [Docker](https://www.docker.com/get-started)
 
-```terminal
-# Via Homebrew on OSX
+```zsh
+# Via Homebrew on macOS
 brew install docker
 ```
 
@@ -83,17 +80,18 @@ Or, if you prefer, download [Docker Desktop](https://www.docker.com/get-started)
 
 - Install [Soda CLI](https://gobuffalo.io/en/docs/db/toolbox)
 
+```zsh
+# Via Homebrew on macOS
+brew install gobuffalo/tap/pop
+```
+
 If you are on macOS Catalina you may [run into issues installing Soda with Brew](https://github.com/gobuffalo/homebrew-tap/issues/5). Do check your `GOPATH` and run
 
 `go build -o /bin/soda github.com/gobuffalo/pop/soda` to resolve.
 
-```
-go install github.com/gobuffalo/pop/soda@latest
-```
-
 - Clone the Auth [repository](https://github.com/supabase/auth)
 
-```
+```zsh
 git clone https://github.com/supabase/auth
 ```
 
@@ -116,7 +114,7 @@ To complete installation, you will:
 1. Start Docker
 2. To install the PostgreSQL Docker image, run:
 
-```
+```zsh
 # Builds the postgres image
 docker-compose -f docker-compose-dev.yml build postgres
 
@@ -124,45 +122,10 @@ docker-compose -f docker-compose-dev.yml build postgres
 docker-compose -f docker-compose-dev.yml up postgres
 ```
 
-You may see a message like:
-
-```
-Unable to find image 'postgres:14' locally
-```
-
-And then
-
-```
-Pulling from library/postgres
-```
-
-as Docker installs the image:
-
-```
-Unable to find image 'postgres:14' locally
-13: Pulling from library/postgres
-968621624b32: Pull complete
-9ef9c0761899: Pull complete
-effb6e89256d: Pull complete
-e19a7fe239e0: Pull complete
-7f97626b93ac: Pull complete
-ecc35a9a2c7c: Pull complete
-b749e660435b: Pull complete
-457ea4f6253a: Pull complete
-722af21d2ec3: Pull complete
-899eee526623: Pull complete
-746f304547aa: Pull complete
-2d4dfc6819e6: Pull complete
-c99864ddd548: Pull complete
-Digest: sha256:3c6d1cef78fe0c84a79c76f0907aed29895dff661fecd45103f7afe2a055078e
-Status: Downloaded newer image for postgres:14
-f709b97d83fddc3b099e4f2ddc4cb2fbf68052e7a8093332bec57672f38cfa36
-```
-
 You should then see in Docker that `auth_postgresql` is running on `port: 5432`.
 
 > **Important** If you happen to already have a local running instance of Postgres running on the port `5432` because you
-> may have installed via [homebrew on OSX](https://formulae.brew.sh/formula/postgresql) then be certain to stop the process using:
+> may have installed via [homebrew on macOS](https://formulae.brew.sh/formula/postgresql) then be certain to stop the process using:
 >
 > - `brew services stop postgresql`
 >
@@ -170,13 +133,25 @@ You should then see in Docker that `auth_postgresql` is running on `port: 5432`.
 
 3. Next compile the Auth binary:
 
+When you fork a repository, GitHub does not automatically copy all the tags (tags are not included by default). To ensure the correct tag is set before building the binary, you need to fetch the tags from the upstream repository and push them to your fork. Follow these steps:
+
+```zsh
+# Fetch the tags from the upstream repository
+git fetch upstream --tags
+
+# Push the tags to your fork
+git push origin --tags
 ```
+
+Then build the binary by running:
+
+```zsh
 make build
 ```
 
 4. To setup the database schema via Soda, run:
 
-```
+```zsh
 make migrate_test
 ```
 
@@ -200,7 +175,8 @@ Version          Name                         Status
 
 That lists each migration that was applied. Note: there may be more migrations than those listed.
 
-4. Create a `.env` file in the root of the project and copy the following config in [example.env](example.env)
+4. Create a `.env` file in the root of the project and copy the following config in [example.env](example.env). Set the values to GOTRUE_SMS_TEST_OTP_VALID_UNTIL in the `.env` file.
+
 5. In order to have Auth connect to your PostgreSQL database running in Docker, it is important to set a connection string like:
 
 ```
@@ -216,13 +192,13 @@ DATABASE_URL="postgres://supabase_auth_admin:root@localhost:5432/postgres"
 
 Start Auth by running the executable:
 
-```
+```zsh
 ./auth
 ```
 
 This command will re-run migrations and then indicate that Auth has started:
 
-```
+```zsh
 INFO[0000] Auth API started on: localhost:9999
 ```
 
@@ -425,7 +401,7 @@ The response from `/admin/users` should return all users:
 
 If you need to run any new migrations:
 
-```
+```zsh
 make migrate_test
 ```
 
@@ -489,7 +465,7 @@ export GOTRUE_DB_DATABASE_URL="postgres://supabase_auth_admin:root@localhost:743
 container_name: auth_postgres
 ```
 
-```
+```zsh
 # Command line into bash on the PostgreSQL container
 docker exec -it auth_postgres bash
 
