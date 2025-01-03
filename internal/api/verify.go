@@ -329,24 +329,18 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 			return internalServerError("Error confirming user").WithInternalError(terr)
 		}
 
-		// on signupVerify, the user will always only have an email identity
-		// so we can safely assume that the first identity is the email identity
-		//
-		// we still check for the length of the identities slice to be safe.
-		if len(user.Identities) != 0 {
-			if len(user.Identities) > 1 {
-				return internalServerError("User has more than one identity on signup")
+		for _, identity := range user.Identities {
+			if identity.Email == "" || user.Email == "" || identity.Email != user.Email {
+				continue
 			}
-			emailIdentity := user.Identities[0]
-			if emailIdentity.Email != user.Email {
-				return internalServerError("User email identity does not match user email")
-			}
-			if terr = emailIdentity.UpdateIdentityData(tx, map[string]interface{}{
+
+			if terr = identity.UpdateIdentityData(tx, map[string]interface{}{
 				"email_verified": true,
 			}); terr != nil {
-				return internalServerError("Error updating email identity").WithInternalError(terr)
+				return internalServerError("Error setting email_verified to true on identity").WithInternalError(terr)
 			}
 		}
+
 		return nil
 	})
 	if err != nil {
