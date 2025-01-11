@@ -1,0 +1,56 @@
+name: Dogfooding Check
+
+on:
+  pull_request_review:
+    types: [submitted, edited]
+
+  pull_request_target:
+    types:
+      - opened
+    branches:
+      - '*'
+
+jobs:
+  check_dogfooding:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event.pull_request.base.ref == 'master' && github.event.pull_request.head.ref == 'release-please--branches--master'
+        with:
+          branch: master # used to identify the current RC version via git describe --tags --exclude rc*
+
+      - if: github.event.pull_request.base.ref == 'master' && github.event.pull_request.head.ref == 'release-please--branches--master'
+        run: |
+          set -ex
+
+          MAIN_RELEASE_VERSION=$(node -e "console.log('${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).title }}'.split(' ').reverse().find(x => x.match(/[0-9]+[.][0-9]+[.][0-9]+/)))")
+          RELEASE_VERSION=$MAIN_RELEASE_VERSION-rc.$(node -e "console.log('$(git describe --tags --exclude rc*)'.split('-')[1])")
+
+          PROD_VERSION=$(curl 'https://auth.supabase.io/auth/v1/health' | jq -r .version)
+          STAGING_VERSION=$(curl 'https://alt.supabase.green/auth/v1/health' | jq -r .version)
+
+          echo "Expecting RC version $RELEASE_VERSION to be up on prod and staging."
+
+          if [ "$PROD_VERSION" != "$STAGING_VERSION" ]
+          then
+            echo "Versions on prod and staging don't match!"
+
+            exit 1
+          fi
+
+          if [ "$PROD_VERSION" != "$RELEASE_VERSION" ]
+          then
+            echo "Version on prod $PROD_VERSION is not the latest release candidate. Please release this RC first to proof the release before merging this PR."
+            exit 1
+          fi
+
+          echo "Release away!"
+          exit 0
+
+      - if: github.event.pull_request.base.ref != 'master' || github.event.pull_request.head.ref != 'release-please--branches--master'
+        run: |
+          set -ex
+
+          echo "This PR is not subject to dogfooding checks."
+          exit 0
+
