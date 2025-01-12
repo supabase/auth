@@ -468,7 +468,7 @@ The base URL used for constructing the URLs to request authorization and access 
 To try out external authentication with Apple locally, you will need to do the following:
 
 1. Remap localhost to \<my_custom_dns \> in your `/etc/hosts` config.
-2. Configure auth to serve HTTPS traffic over localhost by replacing `ListenAndServe` in [api.go](api/api.go) with:
+2. Configure auth to serve HTTPS traffic over localhost by replacing `ListenAndServe` in [api.go](internal/api/api.go) with:
 
    ```
       func (a *API) ListenAndServe(hostAndPort string) {
