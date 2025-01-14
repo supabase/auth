@@ -77,7 +77,6 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 	now := time.Now()
 
 	var otp, messageID string
-	var err error
 
 	if testOTP, ok := config.Sms.GetTestOTP(phone, now); ok {
 		otp = testOTP
@@ -93,10 +92,8 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 				return "", tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
 			}
 		}
-		otp, err = crypto.GenerateOtp(config.Sms.OtpLength)
-		if err != nil {
-			return "", internalServerError("error generating otp").WithInternalError(err)
-		}
+		otp = crypto.GenerateOtp(config.Sms.OtpLength)
+
 		if config.Hook.SendSMS.Enabled {
 			input := hooks.SendSMSInput{
 				User: user,
