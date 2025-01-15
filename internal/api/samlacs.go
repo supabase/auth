@@ -189,7 +189,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 	spAssertion, err := serviceProvider.ParseResponse(r, requestIds)
 	if err != nil {
 		if ire, ok := err.(*saml.InvalidResponseError); ok {
-			return badRequestError(ErrorCodeValidationFailed, "SAML Assertion is not valid").WithInternalError(ire.PrivateErr)
+			return badRequestError(ErrorCodeValidationFailed, "SAML Assertion is not valid %s", ire.Response).WithInternalError(ire.PrivateErr)
 		}
 
 		return badRequestError(ErrorCodeValidationFailed, "SAML Assertion is not valid").WithInternalError(err)
