@@ -20,7 +20,7 @@ var (
 	UserExistsError   error = errors.New("user already exists")
 )
 
-const InvalidChannelError = "Invalid channel, supported values are 'sms' or 'whatsapp'"
+const InvalidChannelError = "Invalid channel, supported values are 'sms' or 'whatsapp'. 'whatsapp' is only supported if Twilio or Twilio Verify is used as the provider."
 
 var oauthErrorMap = map[int]string{
 	http.StatusBadRequest:          "invalid_request",
