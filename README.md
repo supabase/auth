@@ -595,8 +595,7 @@ Default Content (if template is unavailable):
 <h2>You have been invited</h2>
 
 <p>
-  You have been invited to create a user on {{ .SiteURL }}. Follow this link to
-  accept the invite:
+  You have been invited to create a user on {{ .SiteURL }}. Follow this link to accept the invite:
 </p>
 <p><a href="{{ .ConfirmationURL }}">Accept the invite</a></p>
 ```
@@ -653,10 +652,7 @@ Default Content (if template is unavailable):
 ```html
 <h2>Confirm Change of Email</h2>
 
-<p>
-  Follow this link to confirm the update of your email from {{ .Email }} to {{
-  .NewEmail }}:
-</p>
+<p>Follow this link to confirm the update of your email from {{ .Email }} to {{ .NewEmail }}:</p>
 <p><a href="{{ .ConfirmationURL }}">Change Email</a></p>
 ```
 
@@ -680,7 +676,7 @@ Controls the number of digits of the sms otp sent.
 
 `SMS_PROVIDER` - `string`
 
-Available options are: `twilio`, `messagebird`, `textlocal`, and `vonage`
+Available options are: `twilio`, `messagebird`, `textlocal`, `vonage` and `otpiq`
 
 Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/requests-to-twilio#credentials):
 
@@ -868,8 +864,8 @@ if AUTOCONFIRM is enabled and the sign up is a duplicate, then the endpoint will
 
 ```json
 {
-  "code":400,
-  "msg":"User already registered"
+  "code": 400,
+  "msg": "User already registered"
 }
 ```
 

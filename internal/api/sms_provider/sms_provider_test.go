@@ -56,6 +56,9 @@ func TestSmsProvider(t *testing.T) {
 					ApiKey: "test_api_key",
 					Sender: "test_sender",
 				},
+				OTPIQ: conf.OTPIQProviderConfiguration{
+					ApiKey: "test_api_key",
+				},
 			},
 		},
 	}
@@ -224,6 +227,84 @@ func (ts *SmsProviderTestSuite) TestTextLocalSendSms() {
 	_, err = textlocalProvider.SendSms(phone, message)
 	require.NoError(ts.T(), err)
 }
+
+func (ts *SmsProviderTestSuite) TestOTPIQSendSms() {
+	defer gock.Off()
+	provider, err := NewOTPIQProvider(ts.Config.Sms.OTPIQ)
+	require.NoError(ts.T(), err)
+
+	otpiqProvider, ok := provider.(*OTPIQProvider)
+	require.Equal(ts.T(), true, ok)
+
+	phone := "123456789"
+	otp := "123456"
+	channel := "sms"
+
+	body := url.Values{
+		"verificationCode": {otp},
+		"provider":         {channel},
+		"smsType":          {"verification"},
+		"phoneNumber":      {phone},
+	}
+
+	cases := []struct {
+		Desc          string
+		OTPIQResponse *gock.Response
+		ExpectedError error
+	}{
+		{
+			Desc: "Successfully sent sms",
+			OTPIQResponse: gock.New(otpiqProvider.APIPath).Post("").
+				MatchHeader("Authorization", "Bearer "+otpiqProvider.Config.ApiKey).
+				MatchType("url").BodyString(body.Encode()).
+				Reply(200).JSON(OTPIQResponse{
+				Message: "Success",
+				SMSID:   "abc123",
+				Credit:  100,
+			}),
+			ExpectedError: nil,
+		},
+		{
+			Desc: "Insufficient credit error",
+			OTPIQResponse: gock.New(otpiqProvider.APIPath).Post("").
+				MatchHeader("Authorization", "Bearer "+otpiqProvider.Config.ApiKey).
+				MatchType("url").BodyString(body.Encode()).
+				Reply(400).JSON(OTPIQError{
+				Code:           400,
+				Message:        "Insufficient credit",
+				YourCredit:     50,
+				RequiredCredit: 100,
+			}),
+			ExpectedError: fmt.Errorf("OTPIQ error: Insufficient credit (code: 400)"),
+		},
+		{
+			Desc: "Rate limit error",
+			OTPIQResponse: gock.New(otpiqProvider.APIPath).Post("").
+				MatchHeader("Authorization", "Bearer "+otpiqProvider.Config.ApiKey).
+				MatchType("url").BodyString(body.Encode()).
+				Reply(429).JSON(OTPIQError{
+				Code:              429,
+				Message:           "Rate limit exceeded",
+				WaitMinutes:       15,
+				MaxRequests:       100,
+				TimeWindowMinutes: 60,
+			}),
+			ExpectedError: fmt.Errorf("OTPIQ error: Rate limit exceeded (code: 429)"),
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.Desc, func() {
+			_, err = otpiqProvider.SendSms(phone, otp, channel)
+			if c.ExpectedError == nil {
+				require.NoError(ts.T(), err)
+			} else {
+				require.Equal(ts.T(), c.ExpectedError.Error(), err.Error())
+			}
+		})
+	}
+}
+
 func (ts *SmsProviderTestSuite) TestTwilioVerifySendSms() {
 	defer gock.Off()
 	provider, err := NewTwilioVerifyProvider(ts.Config.Sms.TwilioVerify)
