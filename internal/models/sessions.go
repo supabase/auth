@@ -103,6 +103,10 @@ func (s *Session) LastRefreshedAt(refreshTokenTime *time.Time) time.Time {
 }
 
 func (s *Session) UpdateOnlyRefreshInfo(tx *storage.Connection) error {
+	// TODO(kangmingtay): The underlying database type uses timestamp without timezone,
+	// so we need to convert the value to UTC before updating it.
+	// In the future, we should add a migration to update the type to contain the timezone.
+	*s.RefreshedAt = s.RefreshedAt.UTC()
 	return tx.UpdateOnly(s, "refreshed_at", "user_agent", "ip")
 }
 
