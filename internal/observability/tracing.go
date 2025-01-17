@@ -47,7 +47,11 @@ func enableOpenTelemetryTracing(ctx context.Context, tc *conf.TracingConfig) err
 
 	switch tc.ExporterProtocol {
 	case "grpc":
-		traceExporter, err = otlptracegrpc.New(ctx)
+		traceExporter, err = otlptracegrpc.New(
+			ctx,
+			otlptracegrpc.WithHeaders(tc.Headers),
+			otlptracegrpc.WithEndpoint(fmt.Sprintf("%s:%s", tc.Host, tc.Port)),
+		)
 		if err != nil {
 			return err
 		}
