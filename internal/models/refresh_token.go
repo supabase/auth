@@ -118,7 +118,7 @@ func FindTokenBySessionID(tx *storage.Connection, sessionId *uuid.UUID) (*Refres
 func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshToken, params *GrantParams) (*RefreshToken, error) {
 	token := &RefreshToken{
 		UserID: user.ID,
-		Token:  crypto.SecureToken(),
+		Token:  crypto.SecureAlphanumeric(12),
 		Parent: "",
 	}
 	if oldToken != nil {

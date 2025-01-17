@@ -76,6 +76,7 @@ paths:
               - refresh_token
               - id_token
               - pkce
+              - web3
       security:
         - APIKeyAuth: []
       requestBody:
@@ -93,12 +94,18 @@ paths:
                 value:
                   auth_code: 009e5066-fc11-4eca-8c8c-6fd82aa263f2
                   code_verifier: ktPNXpR65N6JtgzQA8_5HHtH6PBSAahMNoLKRzQEa0Tzgl.vdV~b6lPk004XOd.4lR0inCde.NoQx5K63xPfzL8o7tJAjXncnhw5Niv9ycQ.QRV9JG.y3VapqbgLfIrJ
+              grant_type=web3:
+                value:
+                  message: "example.com wants you to sign in with your Solana account:\n0x1234...5678\n\nSign in with Solana\n\nURI: https://example.com\nVersion: 1\nNonce: abc123def456\nIssued At: 2023-09-19T12:00:00Z"
+                  signature: "base64_encoded_signature_string"
+                  chain: "solana"
             schema:
               type: object
               description: |-
                 For the refresh token flow, supply only `refresh_token`.
                 For the email/phone with password flow, supply `email`, `phone` and `password` with an optional `gotrue_meta_security`.
                 For the OIDC ID token flow, supply `id_token`, `nonce`, `provider`, `client_id`, `issuer` with an optional `gotrue_meta_security`.
+                For the Web3 flow, supply `message`, `signature`, and `chain`.
               properties:
                 refresh_token:
                   type: string
@@ -137,6 +144,19 @@ paths:
                   format: uuid
                 code_verifier:
                   type: string
+                message:
+                  type: string
+                  description: |
+                    Signed message for Web3 authentication following the Sign in with Solana standard. Must include: `Issued At`, `URI`, `Version`.
+                signature:
+                  type: string
+                  description: The signature of the message for Web3 authentication encoded as Base64 or Base64-URL.
+                chain:
+                  type: string
+                  description: What blockchain is the Web3 message and signature for.
+                  enum:
+                    - solana
+                  example: solana
       responses:
         200:
           description: >
