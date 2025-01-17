@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/xeipuuv/gojsonschema"
 
+	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
@@ -79,6 +80,7 @@ const InvalidLoginMessage = "Invalid login credentials"
 func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	grantType := r.FormValue("grant_type")
+
 	switch grantType {
 	case "password":
 		return a.ResourceOwnerPasswordGrant(ctx, w, r)
@@ -88,6 +90,8 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 		return a.IdTokenGrant(ctx, w, r)
 	case "pkce":
 		return a.PKCE(ctx, w, r)
+	case "eip4361":
+		return a.EIP4361Grant(ctx, w, r)
 	default:
 		return badRequestError(ErrorCodeInvalidCredentials, "unsupported_grant_type")
 	}
@@ -302,6 +306,74 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	})
 	if err != nil {
 		return err
+	}
+
+	return sendJSON(w, http.StatusOK, token)
+}
+
+func (a *API) EIP4361Grant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	db := a.db.WithContext(ctx)
+
+	params := &Web3GrantParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
+	}
+
+	web3Provider, err := provider.NewEIP4361Provider(ctx, a.config.External.EIP4361)
+	if err != nil {
+		return err
+	}
+
+	// Convert params to SignedMessage
+	msg := &provider.SignedMessage{
+		Message:   params.Message,
+		Signature: params.Signature,
+		Address:   params.Address,
+		Chain:     params.Chain,
+	}
+
+	userData, err := web3Provider.VerifySignedMessage(msg)
+
+	if err != nil {
+		return oauthError("invalid_grant", "Signature verification failed").WithInternalError(err)
+	}
+
+	var token *AccessTokenResponse
+	var grantParams models.GrantParams
+	grantParams.FillGrantParams(r)
+
+	err = db.Transaction(func(tx *storage.Connection) error {
+		user, terr := a.createAccountFromExternalIdentity(tx, r, userData, "eip4361")
+		if terr != nil {
+			return terr
+		}
+
+		// Log the auth attempt
+		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+			"provider": "eip4361",
+			"chain":    msg.Chain,
+			"address":  msg.Address,
+		}); terr != nil {
+			return terr
+		}
+
+		token, terr = a.issueRefreshToken(r, tx, user, models.Web3, grantParams)
+		if terr != nil {
+			return terr
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		switch err.(type) {
+		case *storage.CommitWithError:
+			return err
+		case *HTTPError:
+			return err
+		default:
+			return oauthError("server_error", "Internal Server Error").WithInternalError(err)
+		}
 	}
 
 	return sendJSON(w, http.StatusOK, token)

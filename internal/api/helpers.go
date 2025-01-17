@@ -74,6 +74,7 @@ type RequestParams interface {
 		SignupParams |
 		SingleSignOnParams |
 		SmsParams |
+		Web3GrantParams |
 		UserUpdateParams |
 		VerifyFactorParams |
 		VerifyParams |
@@ -81,6 +82,7 @@ type RequestParams interface {
 		adminUserDeleteParams |
 		security.GotrueRequest |
 		ChallengeFactorParams |
+
 		struct {
 			Email string `json:"email"`
 			Phone string `json:"phone"`

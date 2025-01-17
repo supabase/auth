@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	siws "github.com/supabase/auth/internal/utilities/siws"
 	"gopkg.in/gomail.v2"
 )
 
@@ -339,6 +341,66 @@ type ProviderConfiguration struct {
 	RedirectURL             string                         `json:"redirect_url"`
 	AllowedIdTokenIssuers   []string                       `json:"allowed_id_token_issuers" split_words:"true"`
 	FlowStateExpiryDuration time.Duration                  `json:"flow_state_expiry_duration" split_words:"true"`
+	EIP4361                 EIP4361Configuration           `json:"eip4361" envconfig:"EIP4361"`
+}
+
+type EIP4361Configuration struct {
+	Enabled   bool          `json:"enabled" default:"false" split_words:"true"`
+	Domain    string        `json:"domain" required:"true" split_words:"true"`
+	Statement string        `json:"statement" split_words:"true"`
+	Version   string        `json:"version" default:"1" split_words:"true"`
+	Timeout   time.Duration `json:"timeout" default:"300s" split_words:"true"`
+
+	// Comma-separated list of supported chains (e.g. "ethereum:1,ethereum:137,solana:mainnet")
+	SupportedChains string `json:"supported_chains" split_words:"true"`
+	DefaultChain    string `json:"default_chain" split_words:"true"`
+}
+
+type BlockchainConfig struct {
+	ChainID     string
+	NetworkName string
+}
+
+// ParseSupportedChains processes and validates the SupportedChains string.
+func (c *EIP4361Configuration) ParseSupportedChains() (map[string]BlockchainConfig, error) {
+	chainMap := make(map[string]BlockchainConfig)
+
+	// Split comma-separated chains
+	chains := strings.Split(c.SupportedChains, ",")
+	for _, chain := range chains {
+		chain = strings.TrimSpace(chain)
+		parts := strings.Split(chain, ":")
+
+		// Ensure proper <network>:<chain_id> format
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid chain format: %s, expected <network>:<chain_id>", chain)
+		}
+
+		network := strings.ToLower(parts[0])
+		chainID := parts[1]
+
+		// Validate network type
+		switch network {
+		case "ethereum":
+			if _, ok := new(big.Int).SetString(chainID, 10); !ok {
+				return nil, fmt.Errorf("invalid Ethereum chain ID: %s", chainID)
+			}
+		case "solana":
+			if !siws.IsValidSolanaNetwork(chainID) {
+				return nil, fmt.Errorf("invalid Solana network: %s", chainID)
+			}
+		default:
+			return nil, fmt.Errorf("unsupported network: %s", network)
+		}
+
+		// Add to chain map
+		chainMap[chain] = BlockchainConfig{
+			NetworkName: network,
+			ChainID:     chainID,
+		}
+	}
+
+	return chainMap, nil
 }
 
 type SMTPConfiguration struct {
