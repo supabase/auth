@@ -53,7 +53,7 @@ func LogSIWSExample() {
 
 	// Generate JSON payload
 	payload := map[string]string{
-		"grant_type": "eip4361",
+		"grant_type": "web3",
 		"message":    rawMessage,
 		"signature":  signatureBase64,
 		"address":    pubKeyBase58,
@@ -69,6 +69,7 @@ func LogSIWSExample() {
 	// Print JavaScript fetch code
 	fmt.Println(string(payloadJSON))
 }
-func main() {
-	LogSIWSExample()
-}
+
+// func main() {
+// 	LogSIWSExample()
+// }

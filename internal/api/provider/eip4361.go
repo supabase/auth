@@ -18,9 +18,9 @@ const (
 	BlockchainSolana   = "solana"
 )
 
-// EIP4361Provider implements Web3 authentication following EIP-4361 spec
-type EIP4361Provider struct {
-	config       conf.EIP4361Configuration
+// Web3Provider implements Web3 authentication following EIP-4361 spec
+type Web3Provider struct {
+	config       conf.Web3Configuration
 	chains       map[string]conf.BlockchainConfig
 	defaultChain string
 }
@@ -32,9 +32,9 @@ type SignedMessage struct {
 	Chain     string `json:"chain"`
 }
 
-func NewEIP4361Provider(ctx context.Context, config conf.EIP4361Configuration) (*EIP4361Provider, error) {
+func NewWeb3Provider(ctx context.Context, config conf.Web3Configuration) (*Web3Provider, error) {
 	if !config.Enabled {
-		return nil, errors.New("EIP4361 provider is not enabled")
+		return nil, errors.New("Web3 provider is not enabled")
 	}
 
 	// Parse chains
@@ -50,27 +50,27 @@ func NewEIP4361Provider(ctx context.Context, config conf.EIP4361Configuration) (
 		}
 	}
 
-	return &EIP4361Provider{
+	return &Web3Provider{
 		config:       config,
 		chains:       chains,
 		defaultChain: config.DefaultChain,
 	}, nil
 }
 
-func (p *EIP4361Provider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption) string {
+func (p *Web3Provider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption) string {
 	return "" // Web3 auth doesn't use OAuth flow
 }
 
-func (p *EIP4361Provider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return nil, errors.New("GetOAuthToken not implemented for EIP4361")
+func (p *Web3Provider) GetOAuthToken(code string) (*oauth2.Token, error) {
+	return nil, errors.New("GetOAuthToken not implemented for Web3")
 }
 
-func (p *EIP4361Provider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	return nil, errors.New("GetUserData not implemented for EIP4361")
+func (p *Web3Provider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
+	return nil, errors.New("GetUserData not implemented for Web3")
 }
 
 // VerifySignedMessage verifies a signed Web3 message based on the blockchain
-func (p *EIP4361Provider) VerifySignedMessage(msg *SignedMessage) (*UserProvidedData, error) {
+func (p *Web3Provider) VerifySignedMessage(msg *SignedMessage) (*UserProvidedData, error) {
 	chain, ok := p.chains[msg.Chain]
 	if !ok {
 		return nil, fmt.Errorf("unsupported blockchain: %s", msg.Chain)
@@ -106,11 +106,11 @@ func (p *EIP4361Provider) VerifySignedMessage(msg *SignedMessage) (*UserProvided
 	}, nil
 }
 
-func (p *EIP4361Provider) verifyEthereumSignature(msg *SignedMessage) error {
+func (p *Web3Provider) verifyEthereumSignature(msg *SignedMessage) error {
 	return crypto.VerifyEthereumSignature(msg.Message, msg.Signature, msg.Address)
 }
 
-func (p *EIP4361Provider) verifySolanaSignature(msg *SignedMessage) error {
+func (p *Web3Provider) verifySolanaSignature(msg *SignedMessage) error {
 	parsedMessage, err := siws.ParseSIWSMessage(msg.Message)
 	if err != nil {
 		return fmt.Errorf("failed to parse SIWS message: %w", err)
@@ -135,7 +135,7 @@ func (p *EIP4361Provider) verifySolanaSignature(msg *SignedMessage) error {
 	return nil
 }
 
-func (p *EIP4361Provider) GenerateSignMessage(address string, chain string, uri string) (string, error) {
+func (p *Web3Provider) GenerateSignMessage(address string, chain string, uri string) (string, error) {
 	if chain == "" {
 		chain = p.defaultChain
 	}

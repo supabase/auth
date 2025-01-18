@@ -90,8 +90,8 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 		return a.IdTokenGrant(ctx, w, r)
 	case "pkce":
 		return a.PKCE(ctx, w, r)
-	case "eip4361":
-		return a.EIP4361Grant(ctx, w, r)
+	case "web3":
+		return a.Web3Grant(ctx, w, r)
 	default:
 		return badRequestError(ErrorCodeInvalidCredentials, "unsupported_grant_type")
 	}
@@ -311,7 +311,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	return sendJSON(w, http.StatusOK, token)
 }
 
-func (a *API) EIP4361Grant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 
 	params := &Web3GrantParams{}
@@ -319,7 +319,7 @@ func (a *API) EIP4361Grant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return err
 	}
 
-	web3Provider, err := provider.NewEIP4361Provider(ctx, a.config.External.EIP4361)
+	web3Provider, err := provider.Web3Provider(ctx, a.config.External.Web3)
 	if err != nil {
 		return err
 	}
@@ -343,14 +343,14 @@ func (a *API) EIP4361Grant(ctx context.Context, w http.ResponseWriter, r *http.R
 	grantParams.FillGrantParams(r)
 
 	err = db.Transaction(func(tx *storage.Connection) error {
-		user, terr := a.createAccountFromExternalIdentity(tx, r, userData, "eip4361")
+		user, terr := a.createAccountFromExternalIdentity(tx, r, userData, "web3")
 		if terr != nil {
 			return terr
 		}
 
 		// Log the auth attempt
 		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
-			"provider": "eip4361",
+			"provider": "web3",
 			"chain":    msg.Chain,
 			"address":  msg.Address,
 		}); terr != nil {

@@ -341,10 +341,10 @@ type ProviderConfiguration struct {
 	RedirectURL             string                         `json:"redirect_url"`
 	AllowedIdTokenIssuers   []string                       `json:"allowed_id_token_issuers" split_words:"true"`
 	FlowStateExpiryDuration time.Duration                  `json:"flow_state_expiry_duration" split_words:"true"`
-	EIP4361                 EIP4361Configuration           `json:"eip4361" envconfig:"EIP4361"`
+	Web3                    Web3Configuration              `json:"web3" envconfig:"WEB3"`
 }
 
-type EIP4361Configuration struct {
+type Web3Configuration struct {
 	Enabled   bool          `json:"enabled" default:"false" split_words:"true"`
 	Domain    string        `json:"domain" required:"true" split_words:"true"`
 	Statement string        `json:"statement" split_words:"true"`
@@ -362,7 +362,7 @@ type BlockchainConfig struct {
 }
 
 // ParseSupportedChains processes and validates the SupportedChains string.
-func (c *EIP4361Configuration) ParseSupportedChains() (map[string]BlockchainConfig, error) {
+func (c *Web3Configuration) ParseSupportedChains() (map[string]BlockchainConfig, error) {
 	chainMap := make(map[string]BlockchainConfig)
 
 	// Split comma-separated chains

@@ -1,19 +1,18 @@
 package api
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"strings"
 	"time"
 
 	"github.com/btcsuite/btcutil/base58"
 	"github.com/supabase/auth/internal/conf"
-	siws "github.com/supabase/auth/internal/utilities/siws"
+	siws "github.com/supabase/auth/internal/utilities/solana"
 )
 
 const (
@@ -23,7 +22,7 @@ const (
 )
 
 func SIWSTestSignupSetup(ts *ExternalTestSuite) {
-	ts.Config.External.EIP4361 = conf.EIP4361Configuration{
+	ts.Config.External.Web3 = conf.Web3Configuration{
 		Enabled:         true,
 		Domain:          "test.example.com",
 		Statement:       "Sign in with your Solana account",
@@ -32,6 +31,14 @@ func SIWSTestSignupSetup(ts *ExternalTestSuite) {
 		SupportedChains: "solana:mainnet",
 		DefaultChain:    "solana:mainnet",
 	}
+}
+
+type TokenRequest struct {
+	GrantType string `json:"grant_type"`
+	Message   string `json:"message"`
+	Signature string `json:"signature"`
+	Address   string `json:"address"`
+	Chain     string `json:"chain"`
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalSIWS() {
@@ -48,11 +55,11 @@ func (ts *ExternalTestSuite) TestSignupExternalSIWS() {
 
 	// Create test message
 	msg := siws.SIWSMessage{
-		Domain:    ts.Config.External.EIP4361.Domain,
+		Domain:    ts.Config.External.Web3.Domain,
 		Address:   pubKeyBase58,
-		Statement: ts.Config.External.EIP4361.Statement,
+		Statement: ts.Config.External.Web3.Statement,
 		URI:       "https://example.com",
-		Version:   ts.Config.External.EIP4361.Version,
+		Version:   ts.Config.External.Web3.Version,
 		Nonce:     nonce,
 		IssuedAt:  time.Now().UTC(),
 	}
@@ -61,15 +68,20 @@ func (ts *ExternalTestSuite) TestSignupExternalSIWS() {
 	signature := ed25519.Sign(privKey, []byte(rawMessage))
 	signatureBase64 := base64.StdEncoding.EncodeToString(signature)
 
-	formData := url.Values{}
-	formData.Set("grant_type", "eip4361")
-	formData.Set("message", rawMessage)
-	formData.Set("signature", signatureBase64)
-	formData.Set("address", pubKeyBase58)
-	formData.Set("chain", "solana:mainnet")
+	// Create JSON request body
+	tokenRequest := TokenRequest{
+		GrantType: "web3",
+		Message:   rawMessage,
+		Signature: signatureBase64,
+		Address:   pubKeyBase58,
+		Chain:     "solana:mainnet",
+	}
 
-	req := httptest.NewRequest(http.MethodPost, "/token", strings.NewReader(formData.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	jsonBody, err := json.Marshal(tokenRequest)
+	ts.Require().NoError(err)
+
+	req := httptest.NewRequest(http.MethodPost, "/token", bytes.NewReader(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
 
 	w := httptest.NewRecorder()
 	ts.API.handler.ServeHTTP(w, req)
