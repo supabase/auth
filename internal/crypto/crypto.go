@@ -184,6 +184,10 @@ func VerifySIWS(
 	if params.ExpectedDomain == "" {
 		return errors.New("expected domain is not specified")
 	}
+
+	if !siws.IsValidDomain(msg.Domain) {
+		return errors.New("invalid domain")
+	}
 	if msg.Domain != params.ExpectedDomain {
 		return errors.New("domain mismatch")
 	}

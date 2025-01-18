@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/btcsuite/btcutil/base58"
@@ -24,12 +24,11 @@ func GenerateNonce() (string, error) {
 
 // ValidateDomain checks if a domain is valid or not. This can be expanded with
 // real domain validation logic. Here, we do a simple parse check.
-func ValidateDomain(domain string) error {
-	u, err := url.Parse("https://" + domain)
-	if err != nil || u.Hostname() == "" {
-		return errors.New("siws: invalid domain")
-	}
-	return nil
+func IsValidDomain(domain string) bool {
+	// Regular expression to validate domain name
+	regex := `^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$`
+	match, _ := regexp.MatchString(regex, domain)
+	return match
 }
 
 // IsBase58PubKey checks if the input is a plausible base58 Solana public key.
