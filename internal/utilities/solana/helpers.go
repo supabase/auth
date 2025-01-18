@@ -68,9 +68,18 @@ func ValidateChainConfig(chainStr string) error {
 	return nil
 }
 
-// Add these error types
-var (
-	ErrInvalidSolanaSignature = errors.New("siws: invalid Solana signature")
-	ErrInvalidSolanaAddress   = errors.New("siws: invalid Solana address format")
-	ErrExpiredMessage         = errors.New("siws: SIWS message has expired")
-)
+type SIWSError struct {
+	Message    string
+	StatusCode int
+}
+
+func (e *SIWSError) Error() string {
+	return e.Message
+}
+
+func NewSIWSError(message string, statusCode int) *SIWSError {
+	return &SIWSError{
+		Message:    fmt.Sprintf("siws: %s", message),
+		StatusCode: statusCode,
+	}
+}

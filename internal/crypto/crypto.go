@@ -11,11 +11,11 @@ import (
 	"io"
 	"math"
 	"math/big"
+	"net/http"
 	"strconv"
 	"strings"
 
 	"crypto/ed25519"
-	"errors"
 	"time"
 
 	"golang.org/x/crypto/hkdf"
@@ -175,47 +175,58 @@ func NewEncryptedString(id string, data []byte, keyID string, keyBase64URL strin
 //   - The base58-encoded public key is valid
 //   - The message is within the allowed time window (if requested)
 func VerifySIWS(
-	rawMessage string, // the original textual message
-	signature []byte, // signature returned by the client
-	msg *siws.SIWSMessage, // the parsed SIWS message (from ParseSIWSMessage)
+	rawMessage string,
+	signature []byte,
+	msg *siws.SIWSMessage,
 	params siws.SIWSVerificationParams,
 ) error {
 	// 1) Domain check
 	if params.ExpectedDomain == "" {
-		return errors.New("expected domain is not specified")
+		// Server misconfiguration
+		return siws.NewSIWSError("expected domain is not specified", http.StatusInternalServerError)
 	}
 
 	if !siws.IsValidDomain(msg.Domain) {
-		return errors.New("invalid domain")
+		// Malformed request
+		return siws.NewSIWSError("invalid domain", http.StatusBadRequest)
 	}
+
 	if msg.Domain != params.ExpectedDomain {
-		return errors.New("domain mismatch")
+		// Per RFC 7235, 403 is more appropriate than 401 here since we're not requesting new credentials
+		return siws.NewSIWSError("domain mismatch", http.StatusForbidden)
 	}
 
 	// 2) Base58 decode -> ed25519.PublicKey
 	pubKey := base58.Decode(msg.Address)
 	if !siws.IsBase58PubKey(msg.Address) {
-		return errors.New("invalid base58 public key or wrong size (must be 32 bytes)")
+		// Malformed credentials
+		return siws.NewSIWSError("invalid base58 public key or wrong size (must be 32 bytes)", http.StatusBadRequest)
 	}
 
 	// 3) Verify signature
-	//    The message to verify must be exactly the raw text that was originally signed.
 	if !ed25519.Verify(pubKey, []byte(rawMessage), signature) {
-		return errors.New("signature verification failed")
+		// Per RFC 7235, 401 indicates the credentials were rejected and new ones should be provided
+		return siws.NewSIWSError("signature verification failed", http.StatusUnauthorized)
 	}
 
 	// 4) Time check if requested
 	if params.CheckTime && params.TimeDuration > 0 {
 		if msg.IssuedAt.IsZero() {
-			return errors.New("issuedAt not set, but time check requested")
+			// Malformed request
+			return siws.NewSIWSError("issuedAt not set, but time check requested", http.StatusBadRequest)
 		}
+
 		now := time.Now().UTC()
 		expiry := msg.IssuedAt.Add(params.TimeDuration)
+
 		if now.Before(msg.IssuedAt) {
-			return errors.New("message is issued in the future")
+			// Invalid timestamp in request
+			return siws.NewSIWSError("message is issued in the future", http.StatusBadRequest)
 		}
+
 		if now.After(expiry) {
-			return errors.New("message is expired")
+			// Per RFC 7235, expired credentials should prompt for new ones
+			return siws.NewSIWSError("message is expired", http.StatusUnauthorized)
 		}
 	}
 
@@ -230,12 +241,12 @@ func VerifyEthereumSignature(message string, signature string, address string) e
 	// Convert signature hex to bytes
 	sigBytes, err := hex.DecodeString(signature)
 	if err != nil {
-		return fmt.Errorf("invalid signature hex: %w", err)
+		return fmt.Errorf("siwe: invalid signature hex: %w", err)
 	}
 
 	// Adjust V value in signature (Ethereum specific)
 	if len(sigBytes) != 65 {
-		return fmt.Errorf("invalid signature length")
+		return fmt.Errorf("siwe: invalid signature length")
 	}
 	if sigBytes[64] < 27 {
 		sigBytes[64] += 27
@@ -248,7 +259,7 @@ func VerifyEthereumSignature(message string, signature string, address string) e
 	// Recover public key from signature
 	pubKey, err := crypto.SigToPub(hash.Bytes(), sigBytes)
 	if err != nil {
-		return fmt.Errorf("error recovering public key: %w", err)
+		return fmt.Errorf("siwe: error recovering public key: %w", err)
 	}
 
 	// Derive Ethereum address from public key
@@ -257,7 +268,7 @@ func VerifyEthereumSignature(message string, signature string, address string) e
 
 	// Compare addresses
 	if recoveredAddr != checkAddr {
-		return fmt.Errorf("signature not from expected address")
+		return fmt.Errorf("siwe: signature not from expected address")
 	}
 
 	return nil
