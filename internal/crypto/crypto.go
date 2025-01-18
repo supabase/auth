@@ -25,7 +25,7 @@ import (
 	"github.com/btcsuite/btcutil/base58"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	siws "github.com/supabase/auth/internal/utilities/web3/solana"
+	siws "github.com/supabase/auth/internal/utilities/solana"
 )
 
 // SecureToken creates a new random token

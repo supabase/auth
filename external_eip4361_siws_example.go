@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcutil/base58"
-	siws "github.com/supabase/auth/internal/utilities/web3/solana"
+	siws "github.com/supabase/auth/internal/utilities/solana"
 )
 
 func LogSIWSExample() {
