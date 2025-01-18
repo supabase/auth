@@ -9,7 +9,6 @@ import (
 
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
-	"github.com/supabase/auth/internal/utilities/web3/ethereum"
 	siws "github.com/supabase/auth/internal/utilities/web3/solana"
 	"golang.org/x/oauth2"
 )
@@ -108,7 +107,7 @@ func (p *EIP4361Provider) VerifySignedMessage(msg *SignedMessage) (*UserProvided
 }
 
 func (p *EIP4361Provider) verifyEthereumSignature(msg *SignedMessage) error {
-	return ethereum.VerifySignature(msg.Message, msg.Signature, msg.Address)
+	return crypto.VerifyEthereumSignature(msg.Message, msg.Signature, msg.Address)
 }
 
 func (p *EIP4361Provider) verifySolanaSignature(msg *SignedMessage) error {

@@ -20,7 +20,11 @@ import (
 
 	"golang.org/x/crypto/hkdf"
 
+	"encoding/hex"
+
 	"github.com/btcsuite/btcutil/base58"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	siws "github.com/supabase/auth/internal/utilities/web3/solana"
 )
 
@@ -212,4 +216,52 @@ func VerifySIWS(
 	}
 
 	return nil
+}
+
+func VerifyEthereumSignature(message string, signature string, address string) error {
+	// Remove 0x prefix if present
+	signature = removeHexPrefix(signature)
+	address = removeHexPrefix(address)
+
+	// Convert signature hex to bytes
+	sigBytes, err := hex.DecodeString(signature)
+	if err != nil {
+		return fmt.Errorf("invalid signature hex: %w", err)
+	}
+
+	// Adjust V value in signature (Ethereum specific)
+	if len(sigBytes) != 65 {
+		return fmt.Errorf("invalid signature length")
+	}
+	if sigBytes[64] < 27 {
+		sigBytes[64] += 27
+	}
+
+	// Hash the message according to EIP-191
+	prefixedMessage := fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)
+	hash := crypto.Keccak256Hash([]byte(prefixedMessage))
+
+	// Recover public key from signature
+	pubKey, err := crypto.SigToPub(hash.Bytes(), sigBytes)
+	if err != nil {
+		return fmt.Errorf("error recovering public key: %w", err)
+	}
+
+	// Derive Ethereum address from public key
+	recoveredAddr := crypto.PubkeyToAddress(*pubKey)
+	checkAddr := common.HexToAddress(address)
+
+	// Compare addresses
+	if recoveredAddr != checkAddr {
+		return fmt.Errorf("signature not from expected address")
+	}
+
+	return nil
+}
+
+func removeHexPrefix(signature string) string {
+	if strings.HasPrefix(signature, "0x") {
+		return strings.TrimPrefix(signature, "0x")
+	}
+	return signature
 }
