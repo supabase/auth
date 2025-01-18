@@ -8,6 +8,18 @@ import (
 	"time"
 )
 
+var (
+	// domainRegex matches the first line of a SIWS message containing the domain
+	domainRegex = regexp.MustCompile(`^([^ ]+)\s+wants you to sign in with your Solana account:$`)
+)
+
+// Common errors
+var (
+	ErrMessageTooShort     = errors.New("siws: message is too short or improperly formatted")
+	ErrInvalidDomainFormat = errors.New("siws: first line does not match expected format for domain request")
+	ErrMissingAddress      = errors.New("siws: missing address line")
+)
+
 // ParseSIWSMessage parses a raw SIWS message into an SIWSMessage struct,
 // performing robust checks to ensure correct formatting.
 func ParseSIWSMessage(raw string) (*SIWSMessage, error) {
@@ -22,28 +34,28 @@ func ParseSIWSMessage(raw string) (*SIWSMessage, error) {
 			cleaned = append(cleaned, l)
 		}
 	}
+
 	if len(cleaned) < 2 {
-		return nil, errors.New("message is too short or improperly formatted")
+		return nil, ErrMessageTooShort
 	}
 
 	// 1) First line should match "<domain> wants you to sign in with your Solana account:"
-	// Use a regex to capture the domain.
-	domainRegex := regexp.MustCompile(`^([^ ]+)\s+wants you to sign in with your Solana account:$`)
 	matches := domainRegex.FindStringSubmatch(cleaned[0])
 	if matches == nil || len(matches) < 2 {
-		return nil, errors.New("first line does not match expected format for domain request")
+		return nil, ErrInvalidDomainFormat
 	}
 	domain := matches[1]
 
 	// 2) Second line is the base58-encoded public key
 	address := strings.TrimSpace(cleaned[1])
 	if address == "" {
-		return nil, errors.New("missing address line")
+		return nil, ErrMissingAddress
 	}
 
 	// The third line might be blank or might be the statement. We can handle that carefully.
 	statement := ""
 	lineIndex := 2
+
 	if lineIndex < len(cleaned) {
 		// If the line is blank, skip it; otherwise, treat it as statement
 		if strings.HasPrefix(cleaned[lineIndex], "URI:") ||
@@ -76,10 +88,10 @@ func ParseSIWSMessage(raw string) (*SIWSMessage, error) {
 			var err error
 			issuedAt, err = time.Parse(time.RFC3339, tsString)
 			if err != nil {
-				return nil, fmt.Errorf("failed to parse Issued At time: %w", err)
+				return nil, fmt.Errorf("siws: failed to parse Issued At time: %w", err)
 			}
 		default:
-			return nil, fmt.Errorf("unrecognized line: %s", line)
+			return nil, fmt.Errorf("siws: unrecognized line: %s", line)
 		}
 		lineIndex++
 	}

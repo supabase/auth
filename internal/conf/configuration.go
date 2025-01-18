@@ -20,7 +20,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	siws "github.com/supabase/auth/internal/utilities/siws"
+	siws "github.com/supabase/auth/internal/utilities/web3/solana"
 	"gopkg.in/gomail.v2"
 )
 

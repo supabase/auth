@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcutil/base58"
-	siws "github.com/supabase/auth/internal/utilities/siws"
+	siws "github.com/supabase/auth/internal/utilities/web3/solana"
 )
 
 func LogSIWSExample() {
@@ -69,7 +69,6 @@ func LogSIWSExample() {
 	// Print JavaScript fetch code
 	fmt.Println(string(payloadJSON))
 }
-
-// func main() {
-// 	LogSIWSExample()
-// }
+func main() {
+	LogSIWSExample()
+}

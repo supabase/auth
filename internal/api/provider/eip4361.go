@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/utilities/siws"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/utilities/web3/ethereum"
+	siws "github.com/supabase/auth/internal/utilities/web3/solana"
 	"golang.org/x/oauth2"
 )
 
@@ -128,7 +129,7 @@ func (p *EIP4361Provider) verifySolanaSignature(msg *SignedMessage) error {
 		TimeDuration:   p.config.Timeout,
 	}
 
-	if err := siws.VerifySIWS(msg.Message, sigBytes, parsedMessage, params); err != nil {
+	if err := crypto.VerifySIWS(msg.Message, sigBytes, parsedMessage, params); err != nil {
 		return fmt.Errorf("SIWS verification failed: %w", err)
 	}
 
@@ -146,10 +147,7 @@ func (p *EIP4361Provider) GenerateSignMessage(address string, chain string, uri 
 	}
 
 	// Generate nonce for message uniqueness
-	nonce, err := siws.GenerateNonce()
-	if err != nil {
-		return "", fmt.Errorf("failed to generate nonce: %w", err)
-	}
+	nonce := crypto.SecureToken()
 
 	now := time.Now().UTC()
 
