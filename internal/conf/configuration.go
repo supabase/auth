@@ -111,6 +111,7 @@ type JWTConfiguration struct {
 	KeyID            string         `json:"key_id" split_words:"true"`
 	Keys             JwtKeysDecoder `json:"keys"`
 	ValidMethods     []string       `json:"-"`
+	AdditionalClaims []string       `json:"additional_claims" split_words:"true"`
 }
 
 type MFAFactorTypeConfiguration struct {
