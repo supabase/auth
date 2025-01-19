@@ -887,6 +887,15 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.JWT.AdminRoles = []string{"service_role", "supabase_admin"}
 	}
 
+	// default to all claims that were / are available at the time of this change
+	// to ensure backwards compatibility. To exclude all these claims, the value
+	// of jwt.additional_claims can be set to an invalid claim, such as "none", "empty", "null"
+	// also allow setting to default claims using the "default" keyword, making it possible to use
+	// this config as a binary flag "none" == use_mimimal_jwt == true, "default" == use_mimimal_jwt == false
+	if len(config.JWT.AdditionalClaims) == 0 || (len(config.JWT.AdditionalClaims) == 1 && config.JWT.AdditionalClaims[0] == "default") {
+		config.JWT.AdditionalClaims = []string{"email", "phone", "app_metadata", "user_metadata", "amr", "is_anonymous"}
+	}
+
 	if config.JWT.Exp == 0 {
 		config.JWT.Exp = 3600
 	}
