@@ -1,10 +1,16 @@
 package crypto
 
 import (
+	"crypto/ed25519"
+	"fmt"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/btcsuite/btcutil/base58"
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
+	siws "github.com/supabase/auth/internal/utilities/solana"
 )
 
 func TestEncryptedStringPositive(t *testing.T) {
@@ -105,4 +111,245 @@ func TestEncryptedStringDecryptNegative(t *testing.T) {
 
 func TestSecureToken(t *testing.T) {
 	assert.Equal(t, len(SecureToken()), 22)
+}
+
+
+// package crypto
+
+
+
+func TestVerifySIWS(t *testing.T) {
+    pub, priv, err := ed25519.GenerateKey(nil)
+    if err != nil {
+        t.Fatalf("Failed to generate keypair: %v", err)
+    }
+    
+    now := time.Now().UTC()
+    issuedAt := now.Add(-5 * time.Minute)
+    expiresAt := now.Add(55 * time.Minute)
+
+    // Base test message
+    validMessage := fmt.Sprintf(`example.com wants you to sign in with your Solana account:
+%s
+
+I accept the ServiceOrg Terms of Service
+
+URI: https://example.com/login
+Version: 1
+Chain ID: solana:mainnet
+Nonce: 8lb3dW3F
+Issued At: %s
+Expiration Time: %s
+Resources:
+- https://example.com/profile
+- https://example.com/settings`,
+        base58.Encode(pub),
+        issuedAt.Format(time.RFC3339),
+        expiresAt.Format(time.RFC3339))
+
+    parsedMsg, err := siws.ParseSIWSMessage(validMessage)
+    if err != nil {
+        t.Fatalf("Failed to parse valid message: %v", err)
+    }
+
+    validSignature := ed25519.Sign(priv, []byte(validMessage))
+
+    // Helper function to create a valid base message
+    createBaseMsg := func() *siws.SIWSMessage {
+        return &siws.SIWSMessage{
+            Domain:  "example.com",
+            Address: base58.Encode(pub),
+            Version: "1",
+            URI:     "https://example.com/login",
+            ChainID: "solana:mainnet",
+            Nonce:   "8lb3dW3F",
+        }
+    }
+
+    params := siws.SIWSVerificationParams{
+        ExpectedDomain: "example.com",
+        CheckTime:      true,
+        TimeDuration:  time.Hour,
+    }
+
+    testCases := []struct {
+        name        string
+        message     string
+        signature   []byte
+        msg         *siws.SIWSMessage
+        params      siws.SIWSVerificationParams
+        expectedErr string
+    }{
+        {
+            name:        "valid message",
+            message:     validMessage,
+            signature:   validSignature,
+            msg:         parsedMsg,
+            params:      params,
+            expectedErr: "",
+        },
+        {
+            name:        "empty message",
+            message:     "",
+            signature:   validSignature,
+            msg:         parsedMsg,
+            params:      params,
+            expectedErr: siws.ErrEmptyRawMessage.Message,
+        },
+        {
+            name:        "empty signature",
+            message:     validMessage,
+            signature:   []byte{},
+            msg:         parsedMsg,
+            params:      params,
+            expectedErr: siws.ErrEmptySignature.Message,
+        },
+        {
+            name:        "nil message struct",
+            message:     validMessage,
+            signature:   validSignature,
+            msg:         nil,
+            params:      params,
+            expectedErr: siws.ErrNilMessage.Message,
+        },
+        {
+            name:      "invalid address characters",
+            message:   validMessage,
+            signature: validSignature,
+            msg: func() *siws.SIWSMessage {
+                msg := createBaseMsg()
+                // Create a 32-character address with invalid characters
+                msg.Address = "Invalid@Address!123" + strings.Repeat("1", 19)
+                return msg
+            }(),
+            params:      params,
+            expectedErr: siws.ErrInvalidPubKeySize.Message,
+        },
+        {
+            name:      "address too short",
+            message:   validMessage,
+            signature: validSignature,
+            msg: func() *siws.SIWSMessage {
+                msg := createBaseMsg()
+                msg.Address = "abc123"
+                return msg
+            }(),
+            params:      params,
+            expectedErr: siws.ErrInvalidPubKeySize.Message,
+        },
+        {
+            name:      "invalid version",
+            message:   validMessage,
+            signature: validSignature,
+            msg: func() *siws.SIWSMessage {
+                msg := createBaseMsg()
+                msg.Version = "2"
+                return msg
+            }(),
+            params:      params,
+            expectedErr: siws.ErrInvalidVersion.Message,
+        },
+        {
+            name:      "invalid chain ID",
+            message:   validMessage,
+            signature: validSignature,
+            msg: func() *siws.SIWSMessage {
+                msg := createBaseMsg()
+                msg.ChainID = "invalid-chain"
+                return msg
+            }(),
+            params:      params,
+            expectedErr: siws.ErrInvalidChainID.Message,
+        },
+        {
+            name:      "short nonce",
+            message:   validMessage,
+            signature: validSignature,
+            msg: func() *siws.SIWSMessage {
+                msg := createBaseMsg()
+                msg.Nonce = "abc123"
+                return msg
+            }(),
+            params:      params,
+            expectedErr: siws.ErrNonceTooShort.Message,
+        },
+        
+        {
+            name:      "invalid URI format",
+            message:   validMessage,
+            signature: validSignature,
+            msg: func() *siws.SIWSMessage {
+                msg := createBaseMsg()
+                msg.URI = "://invalid-uri-format"  // Invalid URI scheme
+                return msg
+            }(),
+            params:      params,
+            expectedErr: siws.ErrInvalidURI.Message,
+        },
+        {
+            name:      "invalid resource URI",
+            message:   validMessage,
+            signature: validSignature,
+            msg: func() *siws.SIWSMessage {
+                msg := createBaseMsg()
+                msg.Resources = []string{"://invalid-resource-uri"}  // Invalid URI scheme
+                return msg
+            }(),
+            params:      params,
+            expectedErr: siws.ErrInvalidResourceURI.Message,
+        },
+        {
+            name:      "future timestamp",
+            message:   validMessage,
+            signature: validSignature,
+            msg: func() *siws.SIWSMessage {
+                msg := createBaseMsg()
+                msg.IssuedAt = now.Add(10 * time.Minute)
+                return msg
+            }(),
+            params:      params,
+            expectedErr: siws.ErrFutureMessage.Message,
+        },
+        {
+            name:      "expired message",
+            message:   validMessage,
+            signature: validSignature,
+            msg: func() *siws.SIWSMessage {
+                msg := createBaseMsg()
+                msg.IssuedAt = now.Add(-2 * time.Hour)
+                return msg
+            }(),
+            params:      params,
+            expectedErr: siws.ErrMessageExpired.Message,
+        },
+        {
+            name:      "not yet valid",
+            message:   validMessage,
+            signature: validSignature,
+            msg: func() *siws.SIWSMessage {
+                msg := createBaseMsg()
+                msg.NotBefore = now.Add(1 * time.Hour)
+                return msg
+            }(),
+            params:      params,
+            expectedErr: siws.ErrNotYetValid.Message,
+        },
+    }
+
+    for _, tc := range testCases {
+        t.Run(tc.name, func(t *testing.T) {
+            err := VerifySIWS(tc.message, tc.signature, tc.msg, tc.params)
+            if tc.expectedErr == "" {
+                if err != nil {
+                    t.Errorf("expected success, got error: %v", err)
+                }
+            } else {
+                if err == nil {
+                    t.Errorf("expected error containing %q, got nil", tc.expectedErr)
+                } else if !strings.Contains(err.Error(), tc.expectedErr) {
+                    t.Errorf("expected error containing %q, got %q", tc.expectedErr, err.Error())
+                }
+            }
+        })
+    }
 }

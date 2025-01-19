@@ -14,11 +14,13 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
+	siws "github.com/supabase/auth/internal/utilities/solana"
 )
 
 // AccessTokenClaims is a struct thats used for JWT claims
@@ -311,6 +313,87 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	return sendJSON(w, http.StatusOK, token)
 }
 
+type StoredNonce struct {
+	ID        uuid.UUID `db:"id"`
+	Nonce     string    `db:"nonce"`
+	Address   string    `db:"address"`     // Optional: can be empty until signature verification
+	CreatedAt time.Time `db:"created_at"`
+	ExpiresAt time.Time `db:"expires_at"`
+	Used      bool      `db:"used"`
+}
+
+const NonceExpiration = 5 * time.Minute
+
+// GetNonce handles nonce generation requests
+func (a *API) GetNonce(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+
+	nonce := crypto.SecureToken()
+
+	storedNonce := &StoredNonce{
+		ID:        uuid.Must(uuid.NewV4()),
+		Nonce:     nonce,
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(NonceExpiration),
+		Used:      false,
+	}
+
+	err := db.Transaction(func(tx *storage.Connection) error {
+		// Store the nonce
+		_, err := tx.TX.Exec(`
+			INSERT INTO auth.nonces (id, nonce, created_at, expires_at, used)
+			VALUES ($1, $2, $3, $4, $5)
+		`, storedNonce.ID, storedNonce.Nonce, storedNonce.CreatedAt, 
+		   storedNonce.ExpiresAt, storedNonce.Used)
+		return err
+	})
+
+	if err != nil {
+		return internalServerError("Error storing nonce").WithInternalError(err)
+	}
+
+	return sendJSON(w, http.StatusOK, map[string]interface{}{
+		"nonce": nonce,
+		"expiresAt": storedNonce.ExpiresAt,
+	})
+}
+
+func (a *API) verifyAndConsumeNonce(ctx context.Context, nonce string, address string) error {
+	db := a.db.WithContext(ctx)
+
+	var storedNonce StoredNonce
+	err := db.Transaction(func(tx *storage.Connection) error {
+		// Find the nonce
+		err := tx.TX.QueryRow(`
+			SELECT id, nonce, address, created_at, expires_at, used 
+			FROM auth.nonces 
+			WHERE nonce = $1 AND used = false
+		`, nonce).Scan(&storedNonce.ID, &storedNonce.Nonce, 
+		              &storedNonce.Address, &storedNonce.CreatedAt, 
+		              &storedNonce.ExpiresAt, &storedNonce.Used)
+		if err != nil {
+			return err
+		}
+
+		// Check expiration
+		if time.Now().After(storedNonce.ExpiresAt) {
+			return fmt.Errorf("nonce expired")
+		}
+
+		// Mark as used
+		_, err = tx.TX.Exec(`
+			UPDATE auth.nonces 
+			SET used = true, address = $1 
+			WHERE id = $2
+		`, address, storedNonce.ID)
+		return err
+	})
+
+	return err
+}
+
+
 func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 
@@ -319,7 +402,12 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		return err
 	}
 
-	web3Provider, err := provider.Web3Provider(ctx, a.config.External.Web3)
+	// Verify and consume nonce first
+	if err := a.verifyAndConsumeNonce(ctx, params.Nonce, params.Address); err != nil {
+		return siws.ErrorCodeInvalidNonce
+	}
+
+	web3Provider, err := provider.NewWeb3Provider(ctx, a.config.External.Web3)
 	if err != nil {
 		return err
 	}
@@ -333,7 +421,6 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	userData, err := web3Provider.VerifySignedMessage(msg)
-
 	if err != nil {
 		return oauthError("invalid_grant", "Signature verification failed").WithInternalError(err)
 	}
@@ -348,7 +435,6 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 			return terr
 		}
 
-		// Log the auth attempt
 		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": "web3",
 			"chain":    msg.Chain,
@@ -378,6 +464,7 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 
 	return sendJSON(w, http.StatusOK, token)
 }
+
 
 func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, int64, error) {
 	config := a.config
@@ -576,3 +663,5 @@ func validateTokenClaims(outputClaims map[string]interface{}) error {
 
 	return nil
 }
+
+

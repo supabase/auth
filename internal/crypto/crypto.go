@@ -6,12 +6,13 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math"
 	"math/big"
-	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -19,8 +20,6 @@ import (
 	"time"
 
 	"golang.org/x/crypto/hkdf"
-
-	"encoding/hex"
 
 	"github.com/btcsuite/btcutil/base58"
 	"github.com/ethereum/go-ethereum/common"
@@ -169,68 +168,103 @@ func NewEncryptedString(id string, data []byte, keyID string, keyBase64URL strin
 	return &es, nil
 }
 
-// VerifySIWS fully verifies:
-//   - The domain in msg matches expected domain
-//   - The ed25519 signature matches the parsed SIWS message text
-//   - The base58-encoded public key is valid
-//   - The message is within the allowed time window (if requested)
 func VerifySIWS(
-	rawMessage string,
-	signature []byte,
-	msg *siws.SIWSMessage,
-	params siws.SIWSVerificationParams,
+    rawMessage string,
+    signature []byte,
+    msg *siws.SIWSMessage,
+    params siws.SIWSVerificationParams,
 ) error {
-	// 1) Domain check
-	if params.ExpectedDomain == "" {
-		// Server misconfiguration
-		return siws.NewSIWSError("expected domain is not specified", http.StatusInternalServerError)
-	}
+    // 1) Basic input validation
+    if rawMessage == "" {
+        return siws.ErrEmptyRawMessage
+    }
+    if len(signature) == 0 {
+        return siws.ErrEmptySignature
+    }
+    if msg == nil {
+        return siws.ErrNilMessage
+    }
 
-	if !siws.IsValidDomain(msg.Domain) {
-		// Malformed request
-		return siws.NewSIWSError("invalid domain", http.StatusBadRequest)
-	}
+    // 2) Domain validation
+    if params.ExpectedDomain == "" {
+        return siws.ErrMissingDomain
+    }
+    if !siws.IsValidDomain(msg.Domain) {
+        return siws.ErrInvalidDomainFormat
+    }
+    if msg.Domain != params.ExpectedDomain {
+        return siws.ErrDomainMismatch
+    }
 
-	if msg.Domain != params.ExpectedDomain {
-		// Per RFC 7235, 403 is more appropriate than 401 here since we're not requesting new credentials
-		return siws.NewSIWSError("domain mismatch", http.StatusForbidden)
-	}
+    // 3) Address/Public Key validation (combined checks)
+    pubKey := base58.Decode(msg.Address)
+    if !siws.IsBase58PubKey(pubKey) {
+        return siws.ErrInvalidPubKeySize
+    }
 
-	// 2) Base58 decode -> ed25519.PublicKey
-	pubKey := base58.Decode(msg.Address)
-	if !siws.IsBase58PubKey(msg.Address) {
-		// Malformed credentials
-		return siws.NewSIWSError("invalid base58 public key or wrong size (must be 32 bytes)", http.StatusBadRequest)
-	}
+    // 4) Version validation
+    if msg.Version != "1" {
+        return siws.ErrInvalidVersion
+    }
 
-	// 3) Verify signature
-	if !ed25519.Verify(pubKey, []byte(rawMessage), signature) {
-		// Per RFC 7235, 401 indicates the credentials were rejected and new ones should be provided
-		return siws.NewSIWSError("signature verification failed", http.StatusUnauthorized)
-	}
+    // 5) Chain ID validation (using helper)
+    if msg.ChainID != "" {
+        if !siws.IsValidSolanaNetwork(msg.ChainID) { 
+			
+            return siws.ErrInvalidChainID
+        }
+    }
 
-	// 4) Time check if requested
-	if params.CheckTime && params.TimeDuration > 0 {
-		if msg.IssuedAt.IsZero() {
-			// Malformed request
-			return siws.NewSIWSError("issuedAt not set, but time check requested", http.StatusBadRequest)
-		}
+    // 6) Nonce validation (consolidated)
+    if msg.Nonce != "" {
+        if len(msg.Nonce) < 8 {
+            return siws.ErrNonceTooShort
+        }
+    }
 
-		now := time.Now().UTC()
-		expiry := msg.IssuedAt.Add(params.TimeDuration)
+    // 7) URI and Resources validation
+    if msg.URI != "" {
+        if _, err := url.Parse(msg.URI); err != nil {
+            return siws.ErrInvalidURI
+        }
+    }
 
-		if now.Before(msg.IssuedAt) {
-			// Invalid timestamp in request
-			return siws.NewSIWSError("message is issued in the future", http.StatusBadRequest)
-		}
+    for _, resource := range msg.Resources {
+        if _, err := url.Parse(resource); err != nil {
+            return siws.ErrInvalidResourceURI
+        }
+    }
 
-		if now.After(expiry) {
-			// Per RFC 7235, expired credentials should prompt for new ones
-			return siws.NewSIWSError("message is expired", http.StatusUnauthorized)
-		}
-	}
+    // 8) Signature verification
+    if !ed25519.Verify(pubKey, []byte(rawMessage), signature) {
+        return siws.ErrSignatureVerification
+    }
 
-	return nil
+    // 9) Time validations (consolidated)
+    now := time.Now().UTC()
+
+    if !msg.IssuedAt.IsZero() {
+        if now.Before(msg.IssuedAt) {
+            return siws.ErrFutureMessage
+        }
+
+        if params.CheckTime && params.TimeDuration > 0 {
+            expiry := msg.IssuedAt.Add(params.TimeDuration)
+            if now.After(expiry) {
+                return siws.ErrMessageExpired
+            }
+        }
+    }
+
+    if !msg.NotBefore.IsZero() && now.Before(msg.NotBefore) {
+        return siws.ErrNotYetValid
+    }
+
+    if !msg.ExpirationTime.IsZero() && now.After(msg.ExpirationTime) {
+        return siws.ErrMessageExpired
+    }
+
+    return nil
 }
 
 func VerifyEthereumSignature(message string, signature string, address string) error {
@@ -280,3 +314,5 @@ func removeHexPrefix(signature string) string {
 	}
 	return signature
 }
+
+

@@ -13,8 +13,12 @@ type SIWSMessage struct {
 	Version   string    // recommended (e.g. "1")
 	Nonce     string    // random nonce
 	IssuedAt  time.Time // "Issued At" timestamp
+	ChainID   string    // e.g. "solana:mainnet"
+	NotBefore time.Time // "Not Before" timestamp
+	RequestID string    // optional
 	// ExpirationTime is optional. If set, it should be checked against the current time.
 	ExpirationTime time.Time
+	Resources      []string // optional
 }
 
 // SIWSVerificationParams holds parameters needed to verify an SIWS message.

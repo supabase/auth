@@ -187,3 +187,4 @@ Expiration Time: %s`,
 		return "", fmt.Errorf("message generation not implemented for %s", chainCfg.NetworkName)
 	}
 }
+
