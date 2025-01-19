@@ -180,6 +180,11 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	// Prevent email changes for providers that don't support email
+	if user.AppMetaData["provider"] == "steam" && params.Email != "" {
+		return unprocessableEntityError(ErrorCodeEmailNotSupported, "Email management is not supported for this type of account")
+	}
+
 	err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if params.Password != nil {
