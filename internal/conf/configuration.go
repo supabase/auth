@@ -893,7 +893,7 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	// also allow setting to default claims using the "default" keyword, making it possible to use
 	// this config as a binary flag "none" == use_mimimal_jwt == true, "default" == use_mimimal_jwt == false
 	if len(config.JWT.AdditionalClaims) == 0 || (len(config.JWT.AdditionalClaims) == 1 && config.JWT.AdditionalClaims[0] == "default") {
-		config.JWT.AdditionalClaims = []string{"email", "phone", "app_metadata", "user_metadata", "amr", "is_anonymous"}
+		config.JWT.AdditionalClaims = []string{"email", "phone", "app_metadata", "user_metadata", "amr"}
 	}
 
 	if config.JWT.Exp == 0 {

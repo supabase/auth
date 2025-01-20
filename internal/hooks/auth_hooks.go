@@ -94,7 +94,7 @@ const MinimumViableTokenSchema = `{
       "type": "string"
     }
   },
-  "required": ["aud", "exp", "iat", "sub", "email", "phone", "role", "aal", "session_id", "is_anonymous"]
+  "required": ["aud", "exp", "iat", "sub", "role", "aal", "session_id"]
 }`
 
 // AccessTokenClaims is a struct thats used for JWT claims
@@ -108,7 +108,7 @@ type AccessTokenClaims struct {
 	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
 	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
-	IsAnonymous                   bool                   `json:"is_anonymous,omitempty"`
+	IsAnonymous                   bool                   `json:"is_anonymous"`
 }
 
 type MFAVerificationAttemptInput struct {

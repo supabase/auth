@@ -31,7 +31,7 @@ type AccessTokenClaims struct {
 	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
 	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
-	IsAnonymous                   bool                   `json:"is_anonymous,omitempty"`
+	IsAnonymous                   bool                   `json:"is_anonymous"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -336,6 +336,7 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		AuthenticatorAssuranceLevel: aal.String(),
 		SessionId:                   sid,
 		Role:                        user.Role,
+		IsAnonymous:                 user.IsAnonymous,
 	}
 
 	// add additional claims that are optional
@@ -351,8 +352,6 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 			claims.UserMetaData = user.UserMetaData
 		case "amr":
 			claims.AuthenticationMethodReference = amr
-		case "is_anonymous":
-			claims.IsAnonymous = user.IsAnonymous
 		}
 	}
 

@@ -862,7 +862,7 @@ func (ts *TokenTestSuite) TestConfigureAccessToken() {
 		additionalClaimsConfig []string
 		expectedClaims         []string
 	}
-	requiredClaims := []string{"aud", "exp", "iat", "sub", "role", "aal", "session_id", "user_metadata"}
+	requiredClaims := []string{"aud", "exp", "iat", "sub", "role", "aal", "session_id", "user_metadata", "is_anonymous"}
 	cases := []customAccessTokenTestcase{
 
 		{
