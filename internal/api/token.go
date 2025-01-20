@@ -31,7 +31,7 @@ type AccessTokenClaims struct {
 	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
 	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
-	IsAnonymous                   bool                   `json:"is_anonymous"`
+	IsAnonymous                   bool                   `json:"is_anonymous,omitempty"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -339,8 +339,8 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 	}
 
 	// add additional claims that are optional
-	for _, rc := range config.JWT.AdditionalClaims {
-		switch rc {
+	for _, ac := range config.JWT.AdditionalClaims {
+		switch ac {
 		case "email":
 			claims.Email = user.GetEmail()
 		case "phone":
