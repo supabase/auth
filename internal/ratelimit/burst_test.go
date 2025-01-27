@@ -66,7 +66,9 @@ func TestBurstLimiter(t *testing.T) {
 		type event struct {
 			ok bool
 			at time.Time
-			r  int
+
+			// Event should be `ok` at `at` for `i` times
+			i int
 		}
 
 		type testCase struct {
@@ -176,7 +178,7 @@ func TestBurstLimiter(t *testing.T) {
 		for _, tc := range cases {
 			rl := NewBurstLimiter(tc.cfg)
 			for _, evt := range tc.evts {
-				for i := 0; i <= evt.r; i++ {
+				for i := 0; i <= evt.i; i++ {
 					if exp, got := evt.ok, rl.AllowAt(evt.at); exp != got {
 						t.Fatalf("exp AllowAt(%v) to be %v; got %v", evt.at, exp, got)
 					}
