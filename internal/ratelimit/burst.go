@@ -37,7 +37,7 @@ func NewBurstLimiter(r conf.Rate) *BurstLimiter {
 
 	e := r.Events
 	if e <= 0 {
-		e = 1
+		e = 0
 	}
 
 	// BurstLimiter will have an initial token bucket of size `e`. It will

@@ -150,9 +150,9 @@ func TestBurstLimiter(t *testing.T) {
 				},
 			},
 
-			// zero value for Events = 1 event per second
+			// 1 event per second
 			{
-				cfg: conf.Rate{Events: 0, OverTime: time.Second},
+				cfg: conf.Rate{Events: 1, OverTime: time.Second},
 				now: now,
 				evts: []event{
 					{true, now, 0},
@@ -162,15 +162,40 @@ func TestBurstLimiter(t *testing.T) {
 				},
 			},
 
-			// zero value for both Events and OverTime = 1 event per hour.
+			// 1 events per second and OverTime = 1 event per hour.
 			{
-				cfg: conf.Rate{Events: 0, OverTime: 0},
+				cfg: conf.Rate{Events: 1, OverTime: 0},
 				now: now,
 				evts: []event{
 					{true, now, 0},
 					{false, now.Add(time.Hour - time.Second), 0},
 					{true, now.Add(time.Hour), 0},
 					{true, now.Add(time.Hour * 2), 0},
+				},
+			},
+
+			// zero value for Events = 0 event per second
+			{
+				cfg: conf.Rate{Events: 0, OverTime: time.Second},
+				now: now,
+				evts: []event{
+					{false, now, 0},
+					{false, now.Add(-time.Second), 0},
+					{false, now.Add(time.Second), 0},
+					{false, now.Add(time.Second * 2), 0},
+				},
+			},
+
+			// zero value for both Events and OverTime = 1 event per hour.
+			{
+				cfg: conf.Rate{Events: 0, OverTime: 0},
+				now: now,
+				evts: []event{
+					{false, now, 0},
+					{false, now.Add(time.Hour - time.Second), 0},
+					{false, now.Add(-time.Hour), 0},
+					{false, now.Add(time.Hour), 0},
+					{false, now.Add(time.Hour * 2), 0},
 				},
 			},
 		}
