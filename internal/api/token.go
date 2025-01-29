@@ -2,12 +2,13 @@ package api
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
-
-	"fmt"
 
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
@@ -314,12 +315,12 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 }
 
 type StoredNonce struct {
-	ID        uuid.UUID `db:"id"`
-	Nonce     string    `db:"nonce"`
-	Address   string    `db:"address"`     // Optional: can be empty until signature verification
-	CreatedAt time.Time `db:"created_at"`
-	ExpiresAt time.Time `db:"expires_at"`
-	Used      bool      `db:"used"`
+    ID        uuid.UUID `db:"id"`
+    Nonce     string    `db:"nonce"`
+    Address   sql.NullString `db:"address"`  // Changed this line
+    CreatedAt time.Time `db:"created_at"`
+    ExpiresAt time.Time `db:"expires_at"`
+    Used      bool      `db:"used"`
 }
 
 const NonceExpiration = 5 * time.Minute
@@ -329,7 +330,7 @@ func (a *API) GetNonce(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	nonce := crypto.SecureToken()
+	nonce := crypto.GenerateOtp(12)
 
 	storedNonce := &StoredNonce{
 		ID:        uuid.Must(uuid.NewV4()),
@@ -353,6 +354,9 @@ func (a *API) GetNonce(w http.ResponseWriter, r *http.Request) error {
 		return internalServerError("Error storing nonce").WithInternalError(err)
 	}
 
+	log.Printf("Generated nonce: %s", nonce)
+
+
 	return sendJSON(w, http.StatusOK, map[string]interface{}{
 		"nonce": nonce,
 		"expiresAt": storedNonce.ExpiresAt,
@@ -360,21 +364,28 @@ func (a *API) GetNonce(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (a *API) verifyAndConsumeNonce(ctx context.Context, nonce string, address string) error {
-	db := a.db.WithContext(ctx)
 
-	var storedNonce StoredNonce
-	err := db.Transaction(func(tx *storage.Connection) error {
-		// Find the nonce
-		err := tx.TX.QueryRow(`
-			SELECT id, nonce, address, created_at, expires_at, used 
-			FROM auth.nonces 
-			WHERE nonce = $1 AND used = false
-		`, nonce).Scan(&storedNonce.ID, &storedNonce.Nonce, 
-		              &storedNonce.Address, &storedNonce.CreatedAt, 
-		              &storedNonce.ExpiresAt, &storedNonce.Used)
-		if err != nil {
-			return err
-		}
+	    log.Printf("Starting nonce verification for: %s", nonce)
+    db := a.db.WithContext(ctx)
+
+    var storedNonce StoredNonce
+    err := db.Transaction(func(tx *storage.Connection) error {
+        // Find the nonce
+        log.Printf("Executing query for nonce: %s", nonce)
+        err := tx.TX.QueryRow(`
+            SELECT id, nonce, address, created_at, expires_at, used 
+            FROM auth.nonces 
+            WHERE nonce = $1 AND used = false
+        `, nonce).Scan(&storedNonce.ID, &storedNonce.Nonce, 
+                      &storedNonce.Address, &storedNonce.CreatedAt, 
+                      &storedNonce.ExpiresAt, &storedNonce.Used)
+        if err != nil {
+            log.Printf("Error scanning nonce: %v", err)
+            return err
+        }
+
+        log.Printf("Found nonce in DB: %+v", storedNonce)
+
 
 		// Check expiration
 		if time.Now().After(storedNonce.ExpiresAt) {
@@ -386,7 +397,7 @@ func (a *API) verifyAndConsumeNonce(ctx context.Context, nonce string, address s
 			UPDATE auth.nonces 
 			SET used = true, address = $1 
 			WHERE id = $2
-		`, address, storedNonce.ID)
+		`, sql.NullString{String: address, Valid: true}, storedNonce.ID)
 		return err
 	})
 
@@ -402,8 +413,16 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		return err
 	}
 
+	parsedMessage, err := siws.ParseSIWSMessage(params.Message)
+
+	if err != nil {
+		return siws.ErrorMalformedMessage
+	}
+	
+	
+
 	// Verify and consume nonce first
-	if err := a.verifyAndConsumeNonce(ctx, params.Nonce, params.Address); err != nil {
+	if err := a.verifyAndConsumeNonce(ctx, parsedMessage.Nonce, parsedMessage.Address); err != nil {
 		return siws.ErrorCodeInvalidNonce
 	}
 

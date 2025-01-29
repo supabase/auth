@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"log"
 
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
@@ -72,6 +73,7 @@ func (p *Web3Provider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 // VerifySignedMessage verifies a signed Web3 message based on the blockchain
 func (p *Web3Provider) VerifySignedMessage(msg *SignedMessage) (*UserProvidedData, error) {
 	chain, ok := p.chains[msg.Chain]
+	log.Printf("Verifying supported blockchain: %s", msg.Chain)
 	if !ok {
 		return nil, fmt.Errorf("unsupported blockchain: %s", msg.Chain)
 	}
@@ -129,7 +131,7 @@ func (p *Web3Provider) verifySolanaSignature(msg *SignedMessage) error {
 	}
 
 	if err := crypto.VerifySIWS(msg.Message, sigBytes, parsedMessage, params); err != nil {
-		return fmt.Errorf("SIWS verification failed: %w", err)
+		return err
 	}
 
 	return nil

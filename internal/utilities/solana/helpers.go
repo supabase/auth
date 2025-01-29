@@ -51,6 +51,7 @@ var (
 	ErrorCodeInvalidSignature = NewSIWSError("invalid signature", http.StatusBadRequest)
 	ErrorMalformedMessage = NewSIWSError("malformed message", http.StatusBadRequest)
 	ErrInvalidDomainFormat = NewSIWSError("invalid domain format", http.StatusBadRequest)
+	ErrMessageDomainMismatch =  NewSIWSError("domain's header domain and body domain are mismatched.", http.StatusBadRequest)
 	ErrInvalidStatementFormat = NewSIWSError("invalid statement format", http.StatusBadRequest)
 	ErrInvalidIssuedAtFormat = NewSIWSError("invalid issued at format", http.StatusBadRequest)
 	ErrInvalidExpirationTimeFormat = NewSIWSError("invalid expiration time format", http.StatusBadRequest)
@@ -73,10 +74,10 @@ func GenerateNonce() (string, error) {
 // ValidateDomain checks if a domain is valid or not. This can be expanded with
 // real domain validation logic. Here, we do a simple parse check.
 func IsValidDomain(domain string) bool {
-	// Regular expression to validate domain name
-	regex := `^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$`
-	match, _ := regexp.MatchString(regex, domain)
-	return match
+    // Regular expression to validate domain name including localhost and ports
+    regex := `^(localhost|(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,})(?::\d{1,5})?$`
+    match, _ := regexp.MatchString(regex, domain)
+    return match
 }
 
 // IsBase58PubKey checks if the input is a plausible base58 Solana public key.

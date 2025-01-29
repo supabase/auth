@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"math/big"
 	"net/url"
@@ -174,96 +175,137 @@ func VerifySIWS(
     msg *siws.SIWSMessage,
     params siws.SIWSVerificationParams,
 ) error {
+    log.Printf("[DEBUG] Starting SIWS verification - Signature length: %d", len(signature))
+
     // 1) Basic input validation
     if rawMessage == "" {
+        log.Printf("[ERROR] Empty raw message")
         return siws.ErrEmptyRawMessage
     }
     if len(signature) == 0 {
+        log.Printf("[ERROR] Empty signature")
         return siws.ErrEmptySignature
     }
     if msg == nil {
+        log.Printf("[ERROR] Nil message")
         return siws.ErrNilMessage
     }
 
+    log.Printf("[DEBUG] Basic validation passed - Message length: %d", len(rawMessage))
+
     // 2) Domain validation
+    log.Printf("[DEBUG] Validating domain - Expected: %s, Actual: %s", params.ExpectedDomain, msg.Domain)
     if params.ExpectedDomain == "" {
+        log.Printf("[ERROR] Missing expected domain")
         return siws.ErrMissingDomain
     }
     if !siws.IsValidDomain(msg.Domain) {
+        log.Printf("[ERROR] Invalid domain format: %s", msg.Domain)
         return siws.ErrInvalidDomainFormat
     }
     if msg.Domain != params.ExpectedDomain {
+        log.Printf("[ERROR] Domain mismatch - Expected: %s, Got: %s", params.ExpectedDomain, msg.Domain)
         return siws.ErrDomainMismatch
     }
 
-    // 3) Address/Public Key validation (combined checks)
+    // 3) Address/Public Key validation
     pubKey := base58.Decode(msg.Address)
+    log.Printf("[DEBUG] Validating public key - Address: %s, Decoded length: %d", msg.Address, len(pubKey))
     if !siws.IsBase58PubKey(pubKey) {
+        log.Printf("[ERROR] Invalid public key size: %d", len(pubKey))
         return siws.ErrInvalidPubKeySize
     }
 
     // 4) Version validation
+    log.Printf("[DEBUG] Checking version: %s", msg.Version)
     if msg.Version != "1" {
+        log.Printf("[ERROR] Invalid version: %s", msg.Version)
         return siws.ErrInvalidVersion
     }
 
-    // 5) Chain ID validation (using helper)
+    // 5) Chain ID validation
     if msg.ChainID != "" {
-        if !siws.IsValidSolanaNetwork(msg.ChainID) { 
-			
+        log.Printf("[DEBUG] Validating chain ID: %s", msg.ChainID)
+        if !siws.IsValidSolanaNetwork(msg.ChainID) {
+            log.Printf("[ERROR] Invalid chain ID: %s", msg.ChainID)
             return siws.ErrInvalidChainID
         }
     }
 
-    // 6) Nonce validation (consolidated)
+    // 6) Nonce validation
     if msg.Nonce != "" {
+        log.Printf("[DEBUG] Checking nonce length: %d", len(msg.Nonce))
         if len(msg.Nonce) < 8 {
+            log.Printf("[ERROR] Nonce too short: %d chars", len(msg.Nonce))
             return siws.ErrNonceTooShort
         }
     }
 
-    // 7) URI and Resources validation
+    // 7) URI validation
     if msg.URI != "" {
+        log.Printf("[DEBUG] Validating URI: %s", msg.URI)
         if _, err := url.Parse(msg.URI); err != nil {
+            log.Printf("[ERROR] Invalid URI: %s - %v", msg.URI, err)
             return siws.ErrInvalidURI
         }
     }
 
+    // Resources validation
     for _, resource := range msg.Resources {
+        log.Printf("[DEBUG] Validating resource URI: %s", resource)
         if _, err := url.Parse(resource); err != nil {
+            log.Printf("[ERROR] Invalid resource URI: %s - %v", resource, err)
             return siws.ErrInvalidResourceURI
         }
     }
 
     // 8) Signature verification
+    log.Printf("[DEBUG] Verifying ed25519 signature")
+	log.Printf("[DEBUG] Verification inputs - Message bytes: %v", []byte(rawMessage))
+	log.Printf("[DEBUG] Verification inputs - Signature bytes: %v", signature)
     if !ed25519.Verify(pubKey, []byte(rawMessage), signature) {
+        log.Printf("[ERROR] Signature verification failed")
         return siws.ErrSignatureVerification
     }
 
-    // 9) Time validations (consolidated)
+    // 9) Time validations
     now := time.Now().UTC()
+    log.Printf("[DEBUG] Time validation - Current time: %s", now)
 
     if !msg.IssuedAt.IsZero() {
+        log.Printf("[DEBUG] Checking issuedAt: %s", msg.IssuedAt)
         if now.Before(msg.IssuedAt) {
+            log.Printf("[ERROR] Message from future - IssuedAt: %s", msg.IssuedAt)
             return siws.ErrFutureMessage
         }
 
         if params.CheckTime && params.TimeDuration > 0 {
             expiry := msg.IssuedAt.Add(params.TimeDuration)
+            log.Printf("[DEBUG] Checking message expiry - Expiry: %s", expiry)
             if now.After(expiry) {
+                log.Printf("[ERROR] Message expired - Expiry: %s", expiry)
                 return siws.ErrMessageExpired
             }
         }
     }
 
-    if !msg.NotBefore.IsZero() && now.Before(msg.NotBefore) {
-        return siws.ErrNotYetValid
+    if !msg.NotBefore.IsZero() {
+        log.Printf("[DEBUG] Checking notBefore: %s", msg.NotBefore)
+        if now.Before(msg.NotBefore) {
+            log.Printf("[ERROR] Message not yet valid - NotBefore: %s", msg.NotBefore)
+            return siws.ErrNotYetValid
+        }
     }
 
-    if !msg.ExpirationTime.IsZero() && now.After(msg.ExpirationTime) {
-        return siws.ErrMessageExpired
+    if !msg.ExpirationTime.IsZero() {
+        log.Printf("[DEBUG] Checking expirationTime: %s", msg.ExpirationTime)
+        if now.After(msg.ExpirationTime) {
+            log.Printf("[ERROR] Message expired - ExpirationTime: %s", msg.ExpirationTime)
+            return siws.ErrMessageExpired
+        }
     }
 
+    log.Printf("[INFO] SIWS verification successful")
     return nil
 }
 
