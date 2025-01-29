@@ -5,11 +5,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 	"time"
-	"log"
 
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/storage"
 	siws "github.com/supabase/auth/internal/utilities/solana"
 	"golang.org/x/oauth2"
 )
@@ -26,10 +28,9 @@ type Web3Provider struct {
 	defaultChain string
 }
 
-type SignedMessage struct {
+type Web3GrantParams struct {
 	Message   string `json:"message"`
 	Signature string `json:"signature"`
-	Address   string `json:"address"`
 	Chain     string `json:"chain"`
 }
 
@@ -71,35 +72,52 @@ func (p *Web3Provider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 }
 
 // VerifySignedMessage verifies a signed Web3 message based on the blockchain
-func (p *Web3Provider) VerifySignedMessage(msg *SignedMessage) (*UserProvidedData, error) {
-	chain, ok := p.chains[msg.Chain]
-	log.Printf("Verifying supported blockchain: %s", msg.Chain)
-	if !ok {
-		return nil, fmt.Errorf("unsupported blockchain: %s", msg.Chain)
-	}
-
+func (p *Web3Provider) VerifySignedMessage(db *storage.Connection, params *Web3GrantParams) (*UserProvidedData, error) {   
 	var err error
-	switch chain.NetworkName {
+	
+	parsedMessage, err := siws.ParseSIWSMessage(params.Message)
+
+	if err != nil {
+		return nil, siws.ErrorMalformedMessage
+	}
+	
+	
+
+	// Verify and consume nonce first
+	if err := crypto.VerifyAndConsumeNonce(db, parsedMessage.Nonce, parsedMessage.Address); err != nil {
+		return nil, siws.ErrorCodeInvalidNonce
+	}
+	network := strings.Split(params.Chain, ":")
+	if len(network) != 2 {
+		return nil, siws.ErrInvalidChainID
+	}
+	chain := network[0]
+	if chain == "" {
+		return nil, siws.ErrInvalidChainID
+	}
+	
+	switch chain {
 	case BlockchainEthereum:
-		err = p.verifyEthereumSignature(msg)
+		return nil, httpError(http.StatusNotImplemented, "signature verification not implemented for %s", network)
+		
 	case BlockchainSolana:
-		err = p.verifySolanaSignature(msg)
+		err = p.verifySolanaSignature(params.Signature, params.Message, parsedMessage)
 	default:
-		return nil, fmt.Errorf("signature verification not implemented for %s", chain.NetworkName)
+		return nil, httpError(http.StatusNotImplemented, "signature verification not implemented for %s", network)
 	}
 
 	if err != nil {
 		return nil, fmt.Errorf("signature verification failed: %w", err)
 	}
 
-	// Construct the provider_id as chain:address to make it unique
-	providerId := fmt.Sprintf("%s:%s", msg.Chain, msg.Address)
+	// Construct the provider_id as network:chain:address to make it unique
+	providerId := fmt.Sprintf("%s:%s", params.Chain, parsedMessage.Address)
 
 	return &UserProvidedData{
 		Metadata: &Claims{
 			CustomClaims: map[string]interface{}{
-				"address": msg.Address,
-				"chain":   msg.Chain,
+				"address": parsedMessage.Address,
+				"chain":   parsedMessage.ChainID,
 				"role":    "authenticated",
 			},
 			Subject: providerId, // This becomes the provider_id in the identity
@@ -108,18 +126,10 @@ func (p *Web3Provider) VerifySignedMessage(msg *SignedMessage) (*UserProvidedDat
 	}, nil
 }
 
-func (p *Web3Provider) verifyEthereumSignature(msg *SignedMessage) error {
-	return crypto.VerifyEthereumSignature(msg.Message, msg.Signature, msg.Address)
-}
 
-func (p *Web3Provider) verifySolanaSignature(msg *SignedMessage) error {
-	parsedMessage, err := siws.ParseSIWSMessage(msg.Message)
-	if err != nil {
-		return fmt.Errorf("failed to parse SIWS message: %w", err)
-	}
-
+func (p *Web3Provider) verifySolanaSignature(signature string, rawMessage string, msg *siws.SIWSMessage) error {
 	// Decode base64 signature into bytes
-	sigBytes, err := base64.StdEncoding.DecodeString(msg.Signature)
+	sigBytes, err := base64.StdEncoding.DecodeString(string(signature))
 	if err != nil {
 		return fmt.Errorf("invalid signature encoding: %w", err)
 	}
@@ -130,7 +140,7 @@ func (p *Web3Provider) verifySolanaSignature(msg *SignedMessage) error {
 		TimeDuration:   p.config.Timeout,
 	}
 
-	if err := crypto.VerifySIWS(msg.Message, sigBytes, parsedMessage, params); err != nil {
+	if err := crypto.VerifySIWS(rawMessage, sigBytes, msg, params); err != nil {
 		return err
 	}
 

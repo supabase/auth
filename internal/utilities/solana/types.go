@@ -30,3 +30,4 @@ type SIWSVerificationParams struct {
 	CheckTime    bool
 	TimeDuration time.Duration
 }
+

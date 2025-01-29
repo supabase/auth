@@ -2,7 +2,7 @@
 create table if not exists {{ index .Options "Namespace" }}.nonces (
     id uuid primary key,
     nonce text not null,
-    address text,
+    address text not null,
     created_at timestamp with time zone not null default now(),
     expires_at timestamp with time zone not null,
     used boolean not null default false

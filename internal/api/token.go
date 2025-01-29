@@ -2,9 +2,8 @@ package api
 
 import (
 	"context"
-	"database/sql"
+	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -21,7 +20,6 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
-	siws "github.com/supabase/auth/internal/utilities/solana"
 )
 
 // AccessTokenClaims is a struct thats used for JWT claims
@@ -317,7 +315,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 type StoredNonce struct {
     ID        uuid.UUID `db:"id"`
     Nonce     string    `db:"nonce"`
-    Address   sql.NullString `db:"address"`  // Changed this line
+    Address   string `db:"address"`
     CreatedAt time.Time `db:"created_at"`
     ExpiresAt time.Time `db:"expires_at"`
     Used      bool      `db:"used"`
@@ -330,10 +328,22 @@ func (a *API) GetNonce(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	nonce := crypto.GenerateOtp(12)
+	var body struct {
+		Address string `json:"address"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return badRequestError(ErrorCodeBadJSON, "Invalid request body: %v", err)
+	}
+	
+	if body.Address == "" {
+		return badRequestError(ErrorCodeBadJSON, "Missing required field: address")
+	}
+
+	nonce := crypto.SecureAlphanumeric(12)
 
 	storedNonce := &StoredNonce{
 		ID:        uuid.Must(uuid.NewV4()),
+		Address:   body.Address,
 		Nonce:     nonce,
 		CreatedAt: time.Now(),
 		ExpiresAt: time.Now().Add(NonceExpiration),
@@ -343,19 +353,16 @@ func (a *API) GetNonce(w http.ResponseWriter, r *http.Request) error {
 	err := db.Transaction(func(tx *storage.Connection) error {
 		// Store the nonce
 		_, err := tx.TX.Exec(`
-			INSERT INTO auth.nonces (id, nonce, created_at, expires_at, used)
-			VALUES ($1, $2, $3, $4, $5)
-		`, storedNonce.ID, storedNonce.Nonce, storedNonce.CreatedAt, 
-		   storedNonce.ExpiresAt, storedNonce.Used)
+			INSERT INTO auth.nonces (id, address, nonce, created_at, expires_at, used)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, storedNonce.ID, storedNonce.Address, storedNonce.Nonce, 
+		   storedNonce.CreatedAt, storedNonce.ExpiresAt, storedNonce.Used)
 		return err
 	})
 
 	if err != nil {
-		return internalServerError("Error storing nonce").WithInternalError(err)
+		return internalServerError("DB error while storing nonce: %v", err)
 	}
-
-	log.Printf("Generated nonce: %s", nonce)
-
 
 	return sendJSON(w, http.StatusOK, map[string]interface{}{
 		"nonce": nonce,
@@ -363,46 +370,7 @@ func (a *API) GetNonce(w http.ResponseWriter, r *http.Request) error {
 	})
 }
 
-func (a *API) verifyAndConsumeNonce(ctx context.Context, nonce string, address string) error {
 
-	    log.Printf("Starting nonce verification for: %s", nonce)
-    db := a.db.WithContext(ctx)
-
-    var storedNonce StoredNonce
-    err := db.Transaction(func(tx *storage.Connection) error {
-        // Find the nonce
-        log.Printf("Executing query for nonce: %s", nonce)
-        err := tx.TX.QueryRow(`
-            SELECT id, nonce, address, created_at, expires_at, used 
-            FROM auth.nonces 
-            WHERE nonce = $1 AND used = false
-        `, nonce).Scan(&storedNonce.ID, &storedNonce.Nonce, 
-                      &storedNonce.Address, &storedNonce.CreatedAt, 
-                      &storedNonce.ExpiresAt, &storedNonce.Used)
-        if err != nil {
-            log.Printf("Error scanning nonce: %v", err)
-            return err
-        }
-
-        log.Printf("Found nonce in DB: %+v", storedNonce)
-
-
-		// Check expiration
-		if time.Now().After(storedNonce.ExpiresAt) {
-			return fmt.Errorf("nonce expired")
-		}
-
-		// Mark as used
-		_, err = tx.TX.Exec(`
-			UPDATE auth.nonces 
-			SET used = true, address = $1 
-			WHERE id = $2
-		`, sql.NullString{String: address, Valid: true}, storedNonce.ID)
-		return err
-	})
-
-	return err
-}
 
 
 func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -413,33 +381,19 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		return err
 	}
 
-	parsedMessage, err := siws.ParseSIWSMessage(params.Message)
-
-	if err != nil {
-		return siws.ErrorMalformedMessage
-	}
-	
-	
-
-	// Verify and consume nonce first
-	if err := a.verifyAndConsumeNonce(ctx, parsedMessage.Nonce, parsedMessage.Address); err != nil {
-		return siws.ErrorCodeInvalidNonce
-	}
-
 	web3Provider, err := provider.NewWeb3Provider(ctx, a.config.External.Web3)
 	if err != nil {
 		return err
 	}
 
 	// Convert params to SignedMessage
-	msg := &provider.SignedMessage{
+	msg := &provider.Web3GrantParams{
 		Message:   params.Message,
 		Signature: params.Signature,
-		Address:   params.Address,
 		Chain:     params.Chain,
 	}
 
-	userData, err := web3Provider.VerifySignedMessage(msg)
+	userData, err := web3Provider.VerifySignedMessage(db, msg)
 	if err != nil {
 		return oauthError("invalid_grant", "Signature verification failed").WithInternalError(err)
 	}
@@ -457,7 +411,7 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": "web3",
 			"chain":    msg.Chain,
-			"address":  msg.Address,
+			"address":  userData.Metadata.CustomClaims["address"],
 		}); terr != nil {
 			return terr
 		}

@@ -10,6 +10,7 @@ import (
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/security"
+
 	"github.com/supabase/auth/internal/utilities"
 )
 
