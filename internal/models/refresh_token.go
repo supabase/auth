@@ -159,6 +159,15 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 		return nil, errors.Wrap(err, "error creating refresh token")
 	}
 
+	// destroy the parent of the oldToken to keep the token_family tree trimmed
+	// there only ever needs to be two entries, the current token and its parent
+	if oldToken != nil && oldToken.Parent.String() != "" {
+		tablename := (&pop.Model{Value: RefreshToken{}}).TableName()
+		if err := tx.RawQuery(`delete from `+tablename+` where session_id = ? and token = ?;`, token.SessionId, oldToken.Parent.String()).Exec(); err != nil {
+			return nil, errors.Wrap(err, "error removing expired refresh_token parent")
+		}
+	}
+
 	if err := user.UpdateLastSignInAt(tx); err != nil {
 		return nil, errors.Wrap(err, "error update user`s last_sign_in field")
 	}
