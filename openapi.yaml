@@ -1974,7 +1974,7 @@ components:
             - phone
             - webauthn
         web_authn_credential:
-          type: jsonb
+          type: string
         phone:
           type: string
           format: phone
