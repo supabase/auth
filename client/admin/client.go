@@ -60,6 +60,9 @@ type ErrorSchema struct {
 	//   - unsupported_otp_type
 	Error *string `json:"error,omitempty"`
 
+	// ErrorCode A short code used to describe the class of error encountered.
+	ErrorCode *string `json:"error_code,omitempty"`
+
 	// ErrorDescription Certain responses that have an `error` property may have this property which describes the error.
 	ErrorDescription *string `json:"error_description,omitempty"`
 
