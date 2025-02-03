@@ -65,7 +65,7 @@ func (rl *Reloader) reloadCheckAt(at, lastUpdate time.Time) bool {
 func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 	wr, err := rl.watchFn()
 	if err != nil {
-		logrus.WithError(err).Error(err)
+		logrus.WithError(err).Error("reloader: error creating fsnotify Watcher")
 		return err
 	}
 	defer wr.Close()
@@ -75,7 +75,7 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 
 	// Ignore errors, if watch dir doesn't exist we can add it later.
 	if err := wr.Add(rl.watchDir); err != nil {
-		logrus.WithError(err).Error(err)
+		logrus.WithError(err).Error("reloader: error watching config directory")
 	}
 
 	var lastUpdate time.Time
@@ -103,7 +103,7 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 
 			cfg, err := rl.reload()
 			if err != nil {
-				logrus.WithError(err).Error(err)
+				logrus.WithError(err).Error("reloader: error loading config")
 				continue
 			}
 
@@ -112,8 +112,8 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 
 		case evt, ok := <-wr.Events():
 			if !ok {
-				err := errors.New("fsnotify event channel was closed")
-				logrus.WithError(err).Error("fsnotify event channel was closed")
+				err := errors.New("reloader: fsnotify event channel was closed")
+				logrus.WithError(err).Error(err)
 				return err
 			}
 
@@ -131,11 +131,12 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 			}
 		case err, ok := <-wr.Errors():
 			if !ok {
-				err := errors.New("fsnotify error channel was closed")
+				err := errors.New("reloader: fsnotify error channel was closed")
 				logrus.WithError(err).Error(err)
 				return err
 			}
-			logrus.WithError(err).Error("fsnotify has reported an error")
+			logrus.WithError(err).Error(
+				"reloader: fsnotify has reported an error")
 		}
 	}
 }

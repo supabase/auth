@@ -32,7 +32,7 @@ func TestWatch(t *testing.T) {
 
 		err := rl.Watch(ctx, rr.configFn)
 		if exp, got := sentinelErr, err; exp != got {
-			t.Fatalf("exp err %v; got %v", exp, got)
+			assert.Equal(t, exp, got)
 		}
 	}
 
@@ -45,7 +45,7 @@ func TestWatch(t *testing.T) {
 		rl := NewReloader(path.Join(dir, "__not_found__"))
 		err := rl.Watch(doneCtx, rr.configFn)
 		if exp, got := context.Canceled, err; exp != got {
-			t.Fatalf("exp err %v; got %v", exp, got)
+			assert.Equal(t, exp, got)
 		}
 	}
 
@@ -60,11 +60,11 @@ func TestWatch(t *testing.T) {
 		rl.watchFn = func() (watcher, error) { return wr, nil }
 
 		err := rl.Watch(ctx, rr.configFn)
-		if err == nil {
-			t.Fatal("exp non-nil err")
-		}
-		if exp, got := "fsnotify error channel was closed", err.Error(); exp != got {
-			t.Fatalf("exp err %v; got %v", exp, got)
+		assert.NotNil(t, err)
+
+		msg := "reloader: fsnotify error channel was closed"
+		if exp, got := msg, err.Error(); exp != got {
+			assert.Equal(t, exp, got)
 		}
 	}
 
@@ -80,10 +80,12 @@ func TestWatch(t *testing.T) {
 
 		err := rl.Watch(ctx, rr.configFn)
 		if err == nil {
-			t.Fatal("exp non-nil err")
+			assert.NotNil(t, err)
 		}
-		if exp, got := "fsnotify event channel was closed", err.Error(); exp != got {
-			t.Fatalf("exp err %v; got %v", exp, got)
+
+		msg := "reloader: fsnotify event channel was closed"
+		if exp, got := msg, err.Error(); exp != got {
+			assert.Equal(t, exp, got)
 		}
 	}
 
@@ -125,7 +127,7 @@ func TestWatch(t *testing.T) {
 
 		err := eg.Wait()
 		if exp, got := context.Canceled, err; exp != got {
-			t.Fatalf("exp err %v; got %v", exp, got)
+			assert.Equal(t, exp, got)
 		}
 	}
 
@@ -153,7 +155,7 @@ func TestWatch(t *testing.T) {
 		{
 			select {
 			case <-egCtx.Done():
-				t.Fatalf("exp nil err; got %v", egCtx.Err())
+				assert.Nil(t, egCtx.Err())
 			case v := <-wr.addCh:
 				assert.Equal(t, v, dir)
 			}
@@ -165,7 +167,7 @@ func TestWatch(t *testing.T) {
 			}
 			select {
 			case <-egCtx.Done():
-				t.Fatalf("exp nil err; got %v", egCtx.Err())
+				assert.Nil(t, egCtx.Err())
 			case cfg := <-rr.configCh:
 				assert.NotNil(t, cfg)
 				assert.Equal(t, cfg.External.Apple.Enabled, false)
@@ -185,7 +187,7 @@ func TestWatch(t *testing.T) {
 			}
 			select {
 			case <-egCtx.Done():
-				t.Fatalf("exp nil err; got %v", egCtx.Err())
+				assert.Nil(t, egCtx.Err())
 			case cfg := <-rr.configCh:
 				assert.NotNil(t, cfg)
 				assert.Equal(t, cfg.External.Apple.Enabled, true)
@@ -216,10 +218,10 @@ func TestWatch(t *testing.T) {
 
 			select {
 			case <-egCtx.Done():
-				t.Fatalf("exp nil err; got %v", egCtx.Err())
+				assert.Nil(t, egCtx.Err())
 			case p := <-rr.reloadCh:
 				if exp, got := dir, p; exp != got {
-					t.Fatalf("exp err %v; got %v", exp, got)
+					assert.Equal(t, exp, got)
 				}
 			}
 		}
@@ -234,7 +236,7 @@ func TestWatch(t *testing.T) {
 			}
 			select {
 			case <-egCtx.Done():
-				t.Fatalf("exp nil err; got %v", egCtx.Err())
+				assert.Nil(t, egCtx.Err())
 			case cfg := <-rr.configCh:
 				assert.NotNil(t, cfg)
 				assert.Equal(t, cfg.SMTP.Port, 2222)
@@ -256,7 +258,7 @@ func TestWatch(t *testing.T) {
 			}
 			select {
 			case <-egCtx.Done():
-				t.Fatalf("exp nil err; got %v", egCtx.Err())
+				assert.Nil(t, egCtx.Err())
 			case cfg := <-rr.configCh:
 				assert.NotNil(t, cfg)
 				assert.Equal(t, cfg.SMTP.Port, 2222)
@@ -268,7 +270,7 @@ func TestWatch(t *testing.T) {
 
 		err := eg.Wait()
 		if exp, got := context.Canceled, err; exp != got {
-			t.Fatalf("exp err %v; got %v", exp, got)
+			assert.Equal(t, exp, got)
 		}
 	}
 }
@@ -283,9 +285,7 @@ func TestReloadConfig(t *testing.T) {
 	helpCopyEnvFile(t, dir, "01_example.env", "testdata/50_example.env")
 	{
 		cfg, err := rl.reload()
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.Nil(t, err)
 		assert.NotNil(t, cfg)
 		assert.Equal(t, cfg.External.Apple.Enabled, false)
 	}
@@ -295,9 +295,7 @@ func TestReloadConfig(t *testing.T) {
 	})
 	{
 		cfg, err := rl.reload()
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.Nil(t, err)
 		assert.NotNil(t, cfg)
 		assert.Equal(t, cfg.External.Apple.Enabled, true)
 	}
@@ -307,9 +305,7 @@ func TestReloadConfig(t *testing.T) {
 	})
 	{
 		cfg, err := rl.reload()
-		if err != nil {
-			t.Fatal(err)
-		}
+		assert.Nil(t, err)
 		assert.NotNil(t, cfg)
 		assert.Equal(t, cfg.External.Apple.Enabled, true)
 	}
@@ -321,9 +317,7 @@ func TestReloadConfig(t *testing.T) {
 	})
 	{
 		cfg, err := rl.reload()
-		if err == nil {
-			t.Fatal("exp non-nil error")
-		}
+		assert.NotNil(t, err)
 		assert.Nil(t, cfg)
 	}
 
@@ -332,9 +326,7 @@ func TestReloadConfig(t *testing.T) {
 		cleanup()
 
 		cfg, err := rl.reload()
-		if err == nil {
-			t.Fatal("exp non-nil error")
-		}
+		assert.NotNil(t, err)
 		assert.Nil(t, cfg)
 	}
 }
@@ -422,7 +414,7 @@ func helpTestDir(t testing.TB) (dir string, cleanup func()) {
 	dir = filepath.Join("testdata", t.Name())
 	err := os.MkdirAll(dir, 0750)
 	if err != nil && !os.IsExist(err) {
-		t.Fatal(err)
+		assert.Nil(t, err)
 	}
 	return dir, func() { os.RemoveAll(dir) }
 }
@@ -430,13 +422,13 @@ func helpTestDir(t testing.TB) (dir string, cleanup func()) {
 func helpCopyEnvFile(t testing.TB, dir, name, src string) string {
 	data, err := os.ReadFile(src) // #nosec G304
 	if err != nil {
-		t.Fatal(err)
+		assert.Nil(t, err)
 	}
 
 	dst := filepath.Join(dir, name)
 	err = os.WriteFile(dst, data, 0600)
 	if err != nil {
-		t.Fatal(err)
+		assert.Nil(t, err)
 	}
 	return dst
 }
@@ -452,9 +444,7 @@ func helpWriteEnvFile(t testing.TB, dir, name string, values map[string]string) 
 
 	dst := filepath.Join(dir, name)
 	err := os.WriteFile(dst, buf.Bytes(), 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Nil(t, err)
 	return dst
 }
 
