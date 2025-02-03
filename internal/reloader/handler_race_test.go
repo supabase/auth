@@ -50,6 +50,9 @@ func TestAtomicHandlerRaces(t *testing.T) {
 
 				hr.Store(hrFunc)
 
+				// Calling string should be safe
+				hr.String()
+
 				got := hr.load()
 				_, ok := hrFuncMap[got]
 				if !ok {

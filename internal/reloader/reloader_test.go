@@ -2,14 +2,276 @@ package reloader
 
 import (
 	"bytes"
-	"log"
+	"context"
+	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/stretchr/testify/assert"
+	"github.com/supabase/auth/internal/conf"
+	"golang.org/x/sync/errgroup"
 )
+
+func TestWatch(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	dir, cleanup := helpTestDir(t)
+	defer cleanup()
+
+	// test broken watcher
+	{
+		sentinelErr := errors.New("sentinel")
+		rr := mockReloadRecorder()
+		rl := NewReloader(dir)
+		rl.watchFn = func() (watcher, error) { return nil, sentinelErr }
+
+		err := rl.Watch(ctx, rr.configFn)
+		if exp, got := sentinelErr, err; exp != got {
+			t.Fatalf("exp err %v; got %v", exp, got)
+		}
+	}
+
+	// test watch invalid dir
+	{
+		doneCtx, doneCancel := context.WithCancel(ctx)
+		doneCancel()
+
+		rr := mockReloadRecorder()
+		rl := NewReloader(path.Join(dir, "__not_found__"))
+		err := rl.Watch(doneCtx, rr.configFn)
+		if exp, got := context.Canceled, err; exp != got {
+			t.Fatalf("exp err %v; got %v", exp, got)
+		}
+	}
+
+	// test watch error chan closed
+	{
+		rr := mockReloadRecorder()
+		wr := newMockWatcher(nil)
+		wr.errorCh <- errors.New("sentinel")
+		close(wr.errorCh)
+
+		rl := NewReloader(dir)
+		rl.watchFn = func() (watcher, error) { return wr, nil }
+
+		err := rl.Watch(ctx, rr.configFn)
+		if err == nil {
+			t.Fatal("exp non-nil err")
+		}
+		if exp, got := "fsnotify error channel was closed", err.Error(); exp != got {
+			t.Fatalf("exp err %v; got %v", exp, got)
+		}
+	}
+
+	// test watch event chan closed
+	{
+		rr := mockReloadRecorder()
+		wr := newMockWatcher(nil)
+		close(wr.eventCh)
+
+		rl := NewReloader(dir)
+		rl.reloadIval = time.Second / 100
+		rl.watchFn = func() (watcher, error) { return wr, nil }
+
+		err := rl.Watch(ctx, rr.configFn)
+		if err == nil {
+			t.Fatal("exp non-nil err")
+		}
+		if exp, got := "fsnotify event channel was closed", err.Error(); exp != got {
+			t.Fatalf("exp err %v; got %v", exp, got)
+		}
+	}
+
+	// test watch error chan
+	{
+		rr := mockReloadRecorder()
+		wr := newMockWatcher(nil)
+		wr.errorCh <- errors.New("sentinel")
+
+		rl := NewReloader(dir)
+		rl.watchFn = func() (watcher, error) { return wr, nil }
+
+		egCtx, egCancel := context.WithCancel(ctx)
+		defer egCancel()
+
+		var eg errgroup.Group
+		eg.Go(func() error {
+			return rl.Watch(egCtx, rr.configFn)
+		})
+
+		// need to ensure errorCh drains so test isn't racey
+		eg.Go(func() error {
+			defer egCancel()
+
+			tr := time.NewTicker(time.Second / 100)
+			defer tr.Stop()
+
+			for {
+				select {
+				case <-egCtx.Done():
+					return egCtx.Err()
+				case <-tr.C:
+					if len(wr.errorCh) == 0 {
+						return nil
+					}
+				}
+			}
+		})
+
+		err := eg.Wait()
+		if exp, got := context.Canceled, err; exp != got {
+			t.Fatalf("exp err %v; got %v", exp, got)
+		}
+	}
+
+	// test an end to end config reload
+	{
+		rr := mockReloadRecorder()
+		wr := newMockWatcher(nil)
+		rl := NewReloader(dir)
+		rl.watchFn = func() (watcher, error) { return wr, wr.getErr() }
+		rl.reloadFn = rr.reloadFn
+
+		// Need to lower reload ival to pickup config write quicker.
+		rl.reloadIval = time.Second / 10
+		rl.tickerIval = rl.reloadIval / 10
+
+		egCtx, egCancel := context.WithCancel(ctx)
+		defer egCancel()
+
+		var eg errgroup.Group
+		eg.Go(func() error {
+			return rl.Watch(egCtx, rr.configFn)
+		})
+
+		// Copy a full and valid example configuration to trigger Watch
+		{
+			select {
+			case <-egCtx.Done():
+				t.Fatalf("exp nil err; got %v", egCtx.Err())
+			case v := <-wr.addCh:
+				assert.Equal(t, v, dir)
+			}
+
+			name := helpCopyEnvFile(t, dir, "01_example.env", "testdata/50_example.env")
+			wr.eventCh <- fsnotify.Event{
+				Name: name,
+				Op:   fsnotify.Create,
+			}
+			select {
+			case <-egCtx.Done():
+				t.Fatalf("exp nil err; got %v", egCtx.Err())
+			case cfg := <-rr.configCh:
+				assert.NotNil(t, cfg)
+				assert.Equal(t, cfg.External.Apple.Enabled, false)
+			}
+		}
+
+		{
+			drain(rr.configCh)
+			drain(rr.reloadCh)
+
+			name := helpWriteEnvFile(t, dir, "02_example.env", map[string]string{
+				"GOTRUE_EXTERNAL_APPLE_ENABLED": "true",
+			})
+			wr.eventCh <- fsnotify.Event{
+				Name: name,
+				Op:   fsnotify.Create,
+			}
+			select {
+			case <-egCtx.Done():
+				t.Fatalf("exp nil err; got %v", egCtx.Err())
+			case cfg := <-rr.configCh:
+				assert.NotNil(t, cfg)
+				assert.Equal(t, cfg.External.Apple.Enabled, true)
+			}
+		}
+
+		{
+			name := helpWriteEnvFile(t, dir, "03_example.env.bak", map[string]string{
+				"GOTRUE_EXTERNAL_APPLE_ENABLED": "false",
+			})
+			wr.eventCh <- fsnotify.Event{
+				Name: name,
+				Op:   fsnotify.Create,
+			}
+		}
+
+		{
+			// empty the reload ch
+			drain(rr.reloadCh)
+
+			name := helpWriteEnvFile(t, dir, "04_example.env", map[string]string{
+				"GOTRUE_SMTP_PORT": "ABC",
+			})
+			wr.eventCh <- fsnotify.Event{
+				Name: name,
+				Op:   fsnotify.Create,
+			}
+
+			select {
+			case <-egCtx.Done():
+				t.Fatalf("exp nil err; got %v", egCtx.Err())
+			case p := <-rr.reloadCh:
+				if exp, got := dir, p; exp != got {
+					t.Fatalf("exp err %v; got %v", exp, got)
+				}
+			}
+		}
+
+		{
+			name := helpWriteEnvFile(t, dir, "05_example.env", map[string]string{
+				"GOTRUE_SMTP_PORT": "2222",
+			})
+			wr.eventCh <- fsnotify.Event{
+				Name: name,
+				Op:   fsnotify.Create,
+			}
+			select {
+			case <-egCtx.Done():
+				t.Fatalf("exp nil err; got %v", egCtx.Err())
+			case cfg := <-rr.configCh:
+				assert.NotNil(t, cfg)
+				assert.Equal(t, cfg.SMTP.Port, 2222)
+			}
+		}
+
+		// test the wr.Add doesn't exit if bad watch dir is given during tick
+		{
+			// set the error on watcher
+			sentinelErr := errors.New("sentinel")
+			wr.setErr(sentinelErr)
+
+			name := helpWriteEnvFile(t, dir, "05_example.env", map[string]string{
+				"GOTRUE_SMTP_PORT": "2222",
+			})
+			wr.eventCh <- fsnotify.Event{
+				Name: name,
+				Op:   fsnotify.Create,
+			}
+			select {
+			case <-egCtx.Done():
+				t.Fatalf("exp nil err; got %v", egCtx.Err())
+			case cfg := <-rr.configCh:
+				assert.NotNil(t, cfg)
+				assert.Equal(t, cfg.SMTP.Port, 2222)
+			}
+		}
+
+		// test cases ran, end context to unblock Wait()
+		egCancel()
+
+		err := eg.Wait()
+		if exp, got := context.Canceled, err; exp != got {
+			t.Fatalf("exp err %v; got %v", exp, got)
+		}
+	}
+}
 
 func TestReloadConfig(t *testing.T) {
 	dir, cleanup := helpTestDir(t)
@@ -50,6 +312,30 @@ func TestReloadConfig(t *testing.T) {
 		}
 		assert.NotNil(t, cfg)
 		assert.Equal(t, cfg.External.Apple.Enabled, true)
+	}
+
+	// test cfg reload failure
+	helpWriteEnvFile(t, dir, "04_example.env", map[string]string{
+		"PORT":             "INVALIDPORT",
+		"GOTRUE_SMTP_PORT": "ABC",
+	})
+	{
+		cfg, err := rl.reload()
+		if err == nil {
+			t.Fatal("exp non-nil error")
+		}
+		assert.Nil(t, cfg)
+	}
+
+	// test directory loading failure
+	{
+		cleanup()
+
+		cfg, err := rl.reload()
+		if err == nil {
+			t.Fatal("exp non-nil error")
+		}
+		assert.Nil(t, cfg)
 	}
 }
 
@@ -144,7 +430,7 @@ func helpTestDir(t testing.TB) (dir string, cleanup func()) {
 func helpCopyEnvFile(t testing.TB, dir, name, src string) string {
 	data, err := os.ReadFile(src) // #nosec G304
 	if err != nil {
-		log.Fatal(err)
+		t.Fatal(err)
 	}
 
 	dst := filepath.Join(dir, name)
@@ -170,4 +456,46 @@ func helpWriteEnvFile(t testing.TB, dir, name string, values map[string]string) 
 		t.Fatal(err)
 	}
 	return dst
+}
+
+func mockReloadRecorder() *reloadRecorder {
+	rr := &reloadRecorder{
+		configCh: make(chan *conf.GlobalConfiguration, 1024),
+		reloadCh: make(chan string, 1024),
+	}
+	return rr
+}
+
+func drain[C ~chan T, T any](ch C) (out []T) {
+	for {
+		select {
+		case v := <-ch:
+			out = append(out, v)
+		default:
+			return out
+		}
+	}
+}
+
+type reloadRecorder struct {
+	ctx      context.Context
+	configCh chan *conf.GlobalConfiguration
+	reloadCh chan string
+}
+
+func (o *reloadRecorder) reloadFn(dir string) (*conf.GlobalConfiguration, error) {
+	defer func() {
+		select {
+		case o.reloadCh <- dir:
+		default:
+		}
+	}()
+	return defaultReloadFn(dir)
+}
+
+func (o *reloadRecorder) configFn(gc *conf.GlobalConfiguration) {
+	select {
+	case o.configCh <- gc:
+	default:
+	}
 }
