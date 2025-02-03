@@ -478,7 +478,6 @@ func drain[C ~chan T, T any](ch C) (out []T) {
 }
 
 type reloadRecorder struct {
-	ctx      context.Context
 	configCh chan *conf.GlobalConfiguration
 	reloadCh chan string
 }

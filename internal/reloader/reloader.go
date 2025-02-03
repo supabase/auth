@@ -179,7 +179,6 @@ type mockWatcher struct {
 	eventCh chan fsnotify.Event
 	errorCh chan error
 	addCh   chan string
-	addMap  map[string]bool
 }
 
 func newMockWatcher(err error) *mockWatcher {
