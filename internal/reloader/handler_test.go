@@ -2,6 +2,7 @@ package reloader
 
 import (
 	"net/http"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,8 +12,11 @@ func TestAtomicHandler(t *testing.T) {
 	// for ptr identity
 	type testHandler struct{ http.Handler }
 
+	var calls atomic.Int64
 	hrFn := func() http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls.Add(1)
+		})
 	}
 
 	hrFunc1 := &testHandler{hrFn()}
@@ -20,14 +24,19 @@ func TestAtomicHandler(t *testing.T) {
 	assert.NotEqual(t, hrFunc1, hrFunc2)
 
 	// a new AtomicHandler should be non-nil
-	hr := NewAtomicHandler(nil)
+	hr := NewAtomicHandler(hrFunc1)
 	assert.NotNil(t, hr)
+	assert.Equal(t, "reloader.AtomicHandler", hr.String())
 
-	// should have no stored handler
+	// should implement http.Handler
 	{
-		hrCur := hr.load()
-		assert.Nil(t, hrCur)
-		assert.Equal(t, true, hrCur == nil)
+		v := (http.Handler)(hr)
+		before := calls.Load()
+		v.ServeHTTP(nil, nil)
+		after := calls.Load()
+		if exp, got := before+1, after; exp != got {
+			t.Fatalf("exp %v to be %v after handler was called", got, exp)
+		}
 	}
 
 	// should be non-nil after store
