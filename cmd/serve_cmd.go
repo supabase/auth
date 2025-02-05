@@ -46,13 +46,13 @@ func serve(ctx context.Context) {
 	defer db.Close()
 
 	addr := net.JoinHostPort(config.API.Host, config.API.Port)
-	logrus.Infof("GoTrue API started on: %s", addr)
 
 	opts := []api.Option{
 		api.NewLimiterOptions(config),
 	}
 	a := api.NewAPIWithVersion(config, db, utilities.Version, opts...)
 	ah := reloader.NewAtomicHandler(a)
+	logrus.WithField("version", a.Version()).Infof("GoTrue API started on: %s", addr)
 
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	defer baseCancel()

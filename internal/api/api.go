@@ -39,6 +39,10 @@ type API struct {
 	limiterOpts *LimiterOptions
 }
 
+func (a *API) Version() string {
+	return a.version
+}
+
 func (a *API) Now() time.Time {
 	if a.overrideTime != nil {
 		return a.overrideTime()
