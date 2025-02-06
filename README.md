@@ -829,7 +829,7 @@ Register a new user with an email and password.
 
 returns:
 
-```json
+```js
 {
   "id": "11111111-2222-3333-4444-5555555555555",
   "email": "email@example.com",
@@ -854,7 +854,7 @@ Register a new user with a phone number and password.
 
 Returns:
 
-```json
+```js
 {
   "id": "11111111-2222-3333-4444-5555555555555", // if duplicate sign up, this ID will be faux
   "phone": "12345678",
@@ -906,7 +906,7 @@ This endpoint requires the `service_role` or `supabase_admin` JWT set as an Auth
 
 e.g.
 
-```json
+```js
 headers: {
   "Authorization" : "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO"
 }
@@ -996,7 +996,7 @@ query params:
 
 User will be logged in and redirected to:
 
-```json
+```
 SITE_URL/#access_token=jwt-token-representing-the-user&token_type=bearer&expires_in=3600&refresh_token=a-refresh-token&type=invite
 ```
 
@@ -1011,7 +1011,7 @@ One-Time-Password. Will deliver a magiclink or sms otp to the user depending on 
 
 If `"create_user": true`, user will not be automatically signed up if the user doesn't exist.
 
-```json
+```js
 {
   "phone": "12345678" // follows the E.164 format
   "create_user": true
@@ -1020,7 +1020,7 @@ If `"create_user": true`, user will not be automatically signed up if the user d
 
 OR
 
-```json
+```js
 // exactly the same as /magiclink
 {
   "email": "email@example.com"
@@ -1087,7 +1087,7 @@ query params:
 
 body:
 
-```json
+```js
 // Email login
 {
   "email": "name@domain.com",
@@ -1192,7 +1192,7 @@ If `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` is enabled, the us
 
 Sends a nonce to the user's email (preferred) or phone. This endpoint requires the user to be logged in / authenticated first. The user needs to have either an email or phone number for the nonce to be sent successfully.
 
-```json
+```js
 headers: {
   "Authorization" : "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO"
 }
