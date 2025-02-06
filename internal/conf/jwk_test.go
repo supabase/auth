@@ -396,12 +396,6 @@ func TestJWTConfiguration(t *testing.T) {
 	}
 }
 
-func helpToJSON(t *testing.T, v any) string {
-	b, err := json.Marshal(v)
-	require.NoError(t, err)
-	return string(b)
-}
-
 func helpToMap(t *testing.T, str string) map[string]map[string]interface{} {
 	out := make(map[string]map[string]interface{})
 
@@ -420,6 +414,7 @@ func helpToMockKey(t *testing.T, mockErr error) *mockKey {
 	require.NoError(t, err)
 
 	privJwk, err := jwk.ParseKey(jwt)
+	require.NoError(t, err)
 	return &mockKey{Key: privJwk, err: mockErr}
 }
 

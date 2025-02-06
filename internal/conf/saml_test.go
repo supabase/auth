@@ -44,7 +44,7 @@ func TestSAMLConfiguration(t *testing.T) {
 		err := c.PopulateFields("https://projectref.supabase.co")
 		require.NoError(t, err)
 
-		isSet := 0 != (c.Certificate.KeyUsage & x509.KeyUsageDataEncipherment)
+		isSet := (c.Certificate.KeyUsage & x509.KeyUsageDataEncipherment) != 0
 		require.False(t, isSet)
 		require.NotNil(t, c.RSAPrivateKey)
 		require.NotNil(t, c.RSAPublicKey)
@@ -60,7 +60,7 @@ func TestSAMLConfiguration(t *testing.T) {
 		err := c.PopulateFields("https://projectref.supabase.co")
 		require.NoError(t, err)
 
-		isSet := 0 != (c.Certificate.KeyUsage & x509.KeyUsageDataEncipherment)
+		isSet := (c.Certificate.KeyUsage & x509.KeyUsageDataEncipherment) != 0
 		require.True(t, isSet)
 		require.NotNil(t, c.RSAPrivateKey)
 		require.NotNil(t, c.RSAPublicKey)

@@ -874,15 +874,15 @@ func TestMethods(t *testing.T) {
 		}
 
 		got := val.AllAllowedHeaders(nil)
-		sort.Sort(sort.StringSlice(got))
+		sort.Strings(got)
 		require.Equal(t, []string{"X-Test1"}, got)
 
 		got = val.AllAllowedHeaders([]string{"X-Test2"})
-		sort.Sort(sort.StringSlice(got))
+		sort.Strings(got)
 		require.Equal(t, []string{"X-Test1", "X-Test2"}, got)
 
 		val.AllowedHeaders = nil
-		sort.Sort(sort.StringSlice(got))
+		sort.Strings(got)
 		got = val.AllAllowedHeaders([]string{"X-Test2"})
 		require.Equal(t, []string{"X-Test2"}, got)
 
