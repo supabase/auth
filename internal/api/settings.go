@@ -28,6 +28,7 @@ type ProviderSettings struct {
 	Email          bool `json:"email"`
 	Phone          bool `json:"phone"`
 	Zoom           bool `json:"zoom"`
+	Steam          bool `json:"steam"`
 }
 
 type Settings struct {
@@ -69,6 +70,7 @@ func (a *API) Settings(w http.ResponseWriter, r *http.Request) error {
 			Email:          config.External.Email.Enabled,
 			Phone:          config.External.Phone.Enabled,
 			Zoom:           config.External.Zoom.Enabled,
+			Steam:          config.External.Steam.Enabled,
 		},
 		DisableSignup:     config.DisableSignup,
 		MailerAutoconfirm: config.Mailer.Autoconfirm,

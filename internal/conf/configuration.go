@@ -66,6 +66,7 @@ type OAuthProviderConfiguration struct {
 	ApiURL         string   `json:"api_url" split_words:"true"`
 	Enabled        bool     `json:"enabled"`
 	SkipNonceCheck bool     `json:"skip_nonce_check" split_words:"true"`
+	Realm          string   `split_words:"true"`
 }
 
 type AnonymousProviderConfiguration struct {
@@ -339,6 +340,7 @@ type ProviderConfiguration struct {
 	RedirectURL             string                         `json:"redirect_url"`
 	AllowedIdTokenIssuers   []string                       `json:"allowed_id_token_issuers" split_words:"true"`
 	FlowStateExpiryDuration time.Duration                  `json:"flow_state_expiry_duration" split_words:"true"`
+	Steam                   OAuthProviderConfiguration     `json:"steam"`
 }
 
 type SMTPConfiguration struct {
