@@ -1,14 +1,124 @@
 package conf
 
 import (
-	tst "testing"
-
+	"crypto/x509"
 	"encoding/base64"
+	"fmt"
+	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestSAMLConfigurationValidate(t *tst.T) {
+func TestSAMLConfiguration(t *testing.T) {
+	t.Run("String", func(t *testing.T) {
+		// string disabled
+		{
+			cfg := &SAMLConfiguration{Enabled: false}
+			const expStr = "SAMLConfiguration(Enabled: false)"
+			require.Equal(t, expStr, fmt.Sprintf("%v", cfg))
+			require.Equal(t, expStr, fmt.Sprintf("%#v", cfg))
+		}
+
+		// string enabled
+		{
+			cfg := &SAMLConfiguration{Enabled: true}
+			const expStr = "SAMLConfiguration(Enabled: true)"
+			require.Equal(t, expStr, fmt.Sprintf("%v", cfg))
+			require.Equal(t, expStr, fmt.Sprintf("%#v", cfg))
+		}
+
+		// string (nil)
+		{
+			var cfg *SAMLConfiguration
+			const expStr = "(*SAMLConfiguration)(nil)"
+			require.Equal(t, expStr, fmt.Sprintf("%v", cfg))
+			require.Equal(t, expStr, fmt.Sprintf("%#v", cfg))
+		}
+	})
+
+	t.Run("PopulateFields", func(t *testing.T) {
+		c := &SAMLConfiguration{
+			Enabled:    true,
+			PrivateKey: validPrivateKey,
+		}
+		err := c.PopulateFields("https://projectref.supabase.co")
+		require.NoError(t, err)
+
+		isSet := (c.Certificate.KeyUsage & x509.KeyUsageDataEncipherment) != 0
+		require.False(t, isSet)
+		require.NotNil(t, c.RSAPrivateKey)
+		require.NotNil(t, c.RSAPublicKey)
+		require.NotNil(t, c.Certificate)
+	})
+
+	t.Run("PopulateFieldsEncryptedAssertions", func(t *testing.T) {
+		c := &SAMLConfiguration{
+			Enabled:                  true,
+			PrivateKey:               validPrivateKey,
+			AllowEncryptedAssertions: true,
+		}
+		err := c.PopulateFields("https://projectref.supabase.co")
+		require.NoError(t, err)
+
+		isSet := (c.Certificate.KeyUsage & x509.KeyUsageDataEncipherment) != 0
+		require.True(t, isSet)
+		require.NotNil(t, c.RSAPrivateKey)
+		require.NotNil(t, c.RSAPublicKey)
+		require.NotNil(t, c.Certificate)
+	})
+
+	t.Run("PopulateFieldsInvalidExternalURL", func(t *testing.T) {
+		c := &SAMLConfiguration{
+			Enabled:    true,
+			PrivateKey: "invalidprivatekey",
+		}
+		err := c.PopulateFields("\n")
+		require.Error(t, err)
+	})
+
+	t.Run("PopulateFieldsInvalidx509", func(t *testing.T) {
+		c := &SAMLConfiguration{
+			Enabled:    true,
+			PrivateKey: validPrivateKey,
+		}
+		err := c.PopulateFields("http://invalid\nhost/foo")
+		require.Error(t, err)
+	})
+
+	t.Run("PopulateFieldsInvalidPKCS1", func(t *testing.T) {
+		c := &SAMLConfiguration{
+			Enabled:    true,
+			PrivateKey: base64.StdEncoding.EncodeToString([]byte("INVALID")),
+		}
+		err := c.PopulateFields("https://projectref.supabase.co")
+		require.Error(t, err)
+	})
+
+	t.Run("PopulateFieldInvalidCreateCertificate", func(t *testing.T) {
+		c := &SAMLConfiguration{
+			Enabled:    true,
+			PrivateKey: base64.StdEncoding.EncodeToString([]byte("INVALID")),
+		}
+
+		tmpl := &x509.Certificate{}
+		err := c.createCertificate(tmpl)
+		require.Error(t, err)
+	})
+
+	t.Run("PopulateFieldInvalidCertificateDer", func(t *testing.T) {
+		c := &SAMLConfiguration{
+			Enabled:    true,
+			PrivateKey: validPrivateKey,
+		}
+		err := c.PopulateFields("https://projectref.supabase.co")
+		require.NoError(t, err)
+
+		err = c.parseCertificateDer([]byte{0x0, 0x0})
+		require.Error(t, err)
+	})
+}
+
+func TestSAMLConfigurationValidate(t *testing.T) {
 	invalidExamples := []*SAMLConfiguration{
 		{
 			Enabled:    true,
@@ -17,6 +127,20 @@ func TestSAMLConfigurationValidate(t *tst.T) {
 		{
 			Enabled:    true,
 			PrivateKey: "InvalidBase64!",
+		},
+		{
+			Enabled:                  true,
+			PrivateKey:               validPrivateKey,
+			RelayStateValidityPeriod: -1,
+		},
+		{
+			Enabled:     true,
+			PrivateKey:  validPrivateKey,
+			ExternalURL: "\n",
+		},
+		{
+			Enabled:    true,
+			PrivateKey: base64.StdEncoding.EncodeToString([]byte("not PKCS#1")),
 		},
 		{
 			Enabled:    true,
@@ -46,7 +170,7 @@ func TestSAMLConfigurationValidate(t *tst.T) {
 		{
 			// RSA 2048
 			Enabled:    true,
-			PrivateKey: "MIIEowIBAAKCAQEAsBuxTUWFrfy0qYXaqNSeVWcJOd6TQ4+4b/3N4p/58r1d/kMU+K+BGR+tF0GKHGYngTF6puvNDff2wgW3dp3LUSMjxOhC3sK0uL90vd+IR6v1EDDGLyQNo6EjP/x5Gp/PcL2s6hZb8iLBEq4FksPnEhWqf9Nsmgf1YPJV4AvaaWe3oBFo9zJobSs3etTVitc3qEH2DpgYFtrCKhMWv5qoZtZTyZRE3LU3rvInDgYw6HDGF1G4y4Fvah6VpRmTdyMR81r1tCLmGvk61QJp7i4HteazQ6Raqh2EZ1sH/UfEp8mrwYRaRdgLDQ/Q6/YlO8NTQwzp6YwwAybhMBnOrABLCQIDAQABAoIBADqobq0DPByQsIhKmmNjtn1RvYP1++0kANXknuAeUv2kT5tyMpkGtCRvJZM6dEszR3NDzMuufPVrI1jK2Kn8sw0KfE6I4kUaa2Gh+7uGqfjdcNn8tPZctuJKuNgGOzxAALNXqjGqUuPa6Z5UMm0JLX0blFfRTzoa7oNlFG9040H6CRjJQQGfYyPS8xeo+RUR009sK/222E5jz6ThIiCrOU/ZGm5Ws9y3AAIASqJd9QPy7qxKoFZ1qKZ/cDaf1txCKq9VBXH6ypZoU1dQibhyLCIJ3tYapBtV4p8V12oHhITXb6Vbo1P9bQSVz+2rQ0nJkjdXX/N4aHE01ecbu8MpMxUCgYEA5P4ZCAdpkTaOSJi7GyL4AcZ5MN26eifFnRO/tbmw07f6vi//vdqzC9T7kxmZ8e1OvhX5OMGNb3nsXm78WgS2EVLTkaTInG6XhlOeYj9BHAQZDBr7rcAxrVQxVgaGDiZpYun++kXw+39iq3gxuYuC9mM0AQze3SjTRIM9WWXJSqMCgYEAxODfXcWMk2P/WfjE3u+8fhjc3cvqyWSyThEZC9YzpN59dL73SE7BRkMDyZO19fFvVO9mKsRfsTio0ceC5XQOO6hUxAm4gAEvMpeapQgXTxIxF5FAQ0vGmBMxT+xg7lX8HTTJX/UCttKo3BdIJQeTf8bKVzJCoLFh8Rcv5qI6umMCgYAEuj44DTcfuVmcpBKQz9sA5mEQIjO8W9/Xi1XU4Z2F8XFqxcDo4X/6yY3cDpZACV8ry3ZWtqA94e2AUZhCH4DGwMf/ZMCDgkD8k/NcIeQtOORvfIsfni0oX+mY1g+kcSSR1zTdY95CwvF9isC0DO5KOegT8XkUZchezLrSgqhyMwKBgQCvS0mWRH6V/UMu6MDhfrNl0t1U3mt+RZo8yBx03ZO+CBvMBvxF9VlBJgoJQOuSwBVQmpdtHMvXD4vAvNNfWaYSmB5hLgaIcoWDlliq+DlIvfnX8gw13xJD9VLCxsTHcOe5WXazaYOxJIAU9uXVkplR+73NRYLtcQKzluGfiHKh4QKBgFpPtOqcAbkMsV+1qPYvvvX7E4+l52Odb4tbxGBYV8tzCqMRETqMPVxFWwsj+EQ8lyAu15rCRH7DKHVK5zL6JvIZEjt0tptKqSL2o3ovS6y3DmD6t+YpvjKME7a+vunOoJWe9pWl3wZmodfyZMpAdDLvDGhPR7Jlhun41tbMMaQF",
+			PrivateKey: validPrivateKey,
 		},
 		{
 			// RSA 3072
@@ -66,21 +190,7 @@ func TestSAMLConfigurationValidate(t *tst.T) {
 	}
 }
 
-func TestSAMLConfigurationPopulateFields(t *tst.T) {
-	c := &SAMLConfiguration{
-		Enabled:    true,
-		PrivateKey: "MIIEowIBAAKCAQEAt7dS8iM5MsQ+1mVkNpoaUnL8BCdxSrSx8jsSnvqN/GIJ4ipqbdrTgLpFVklVTqfaa5CykGVEV577l6AWkpkm2p7SvSkCQglmyAMMjY9glmztytAnfBpm+cQ6ZVTHC4XKlUG1aJigEuXPcZUU3FiBHWEuV2huYy2bLOtIY1v9N0i2v61QCdG+SM/Yb5t86KzApRl7VyHqquge6vvRuchfF0msv/2LW32hwxg3Gt4zkAF0SJqCCcfAPZ9pQwmbdUhoX16dRFU98nyIvuR8LH/wONZe/YyywFFHDEwkFa4XEzjCEm+AD+xvK7eEu55w21xB8JKMLEBy8uRuI3bIEG4pawIDAQABAoIBADw4IT4xgYw8e4R3U7P6K2qfOjB6ZU5hkHqgFmh6JJR35ll2IdDEi9OEOzofa5EOwC/GDGH8b7xw5nM7DGsdPHko2lca3BydTE1/glvchYKJTiDOvkKVvO9d/O4+Lch/IHpwQXB5pu7K2YaXoXDgqeHhevk3yAdGabj9norDGmtGIeU/x1hialKbw6L080CdbxpjeAsM/w+G/VtwvyOKYFBYxBflRW+sS8UeclVqKRAvaXKd1JGleWzH3hFZyFI54x5LyyjPI1JyVXRjNbf8xcS6eRaN849grL1+wBxEs/lQFn4JLhAcNi912iJ3lhxvkNleXZw7B7JAM8x4wUbK7zECgYEA6SYmu3YH8XuLUfT8MMCp+ETjPkNMOJGQmTXOkW6zuXP3J8iCPIxtuz09cGIro+yJU23yPUzOVCDZMmnMWBmkoTKAFoFL9TX0Eyqn/t1MD77i3NdkMp16yI5fwOO6yX1bZgLiG00W2E5/IGgNfTtEafU/mre95JBnTgxS3sAvz8UCgYEAybjfBVt+1X0vSVAGKYHI9wtzoSx3dIGE8G5LIchPTdNDZ0ke0QCRffhyCGKy6bPos0P2z5nLgWSePBPZQowpwZiQVXdWE05ID641E2zGULdYL1yVHDt6tVTpSzTAy89BiS1G8HvgpQyaBTmvmF11Fyd/YbrDxEIHN+qQdDkM928CgYEA4lJ4ksz21QF6sqpADQtZc3lbplspqFgVp8RFq4Nsz3+00lefpSskcff2phuGBXBdtjEqTzs5pwzkCj4NcRAjcZ9WG4KTu4sOTXTA83TamwZPrtUfnMqmH/2lEdd+wI0BpjryRlJE9ODuIwUe4wwfU0QQ5B2tJizPO0JXR4gEYYkCgYBzqidm4QGm1DLq7JG79wkObmiMv/x2t1VMr1ExO7QNQdfiP1EGMjc6bdyk5kMEMf5527yHaP4BYXpBpHfs6oV+1kXcW6LlSvuS0iboznQgECDmd0WgfJJtqxRh5QuvUVWYnHeSqNU0jjc6S8tdqCjdb+5gUUCzJdERxNOzcIr4zQKBgAqcBQwlWy0PdlZ06JhJUYlwX1pOU8mWPz9LIF0wrSm9LEtAl37zZJaD3uscvk/fCixAGHOktkDGVO7aUYIAlX9iD49huGkeRTn9tz7Wanw6am04Xj0y7H1oPPV7k5nJ4s9AOWq/gkZEhrRIis2anAczsx1YHSjq/M05+AbuRzvs",
-	}
-
-	err := c.PopulateFields("https://projectref.supabase.co")
-	require.NoError(t, err)
-
-	require.NotNil(t, c.RSAPrivateKey)
-	require.NotNil(t, c.RSAPublicKey)
-	require.NotNil(t, c.Certificate)
-}
-
-func TestSAMLConfigurationDeterministicCertificate(t *tst.T) {
+func TestSAMLConfigurationDeterministicCertificate(t *testing.T) {
 	a := &SAMLConfiguration{
 		Enabled:    true,
 		PrivateKey: "MIIEowIBAAKCAQEAt7dS8iM5MsQ+1mVkNpoaUnL8BCdxSrSx8jsSnvqN/GIJ4ipqbdrTgLpFVklVTqfaa5CykGVEV577l6AWkpkm2p7SvSkCQglmyAMMjY9glmztytAnfBpm+cQ6ZVTHC4XKlUG1aJigEuXPcZUU3FiBHWEuV2huYy2bLOtIY1v9N0i2v61QCdG+SM/Yb5t86KzApRl7VyHqquge6vvRuchfF0msv/2LW32hwxg3Gt4zkAF0SJqCCcfAPZ9pQwmbdUhoX16dRFU98nyIvuR8LH/wONZe/YyywFFHDEwkFa4XEzjCEm+AD+xvK7eEu55w21xB8JKMLEBy8uRuI3bIEG4pawIDAQABAoIBADw4IT4xgYw8e4R3U7P6K2qfOjB6ZU5hkHqgFmh6JJR35ll2IdDEi9OEOzofa5EOwC/GDGH8b7xw5nM7DGsdPHko2lca3BydTE1/glvchYKJTiDOvkKVvO9d/O4+Lch/IHpwQXB5pu7K2YaXoXDgqeHhevk3yAdGabj9norDGmtGIeU/x1hialKbw6L080CdbxpjeAsM/w+G/VtwvyOKYFBYxBflRW+sS8UeclVqKRAvaXKd1JGleWzH3hFZyFI54x5LyyjPI1JyVXRjNbf8xcS6eRaN849grL1+wBxEs/lQFn4JLhAcNi912iJ3lhxvkNleXZw7B7JAM8x4wUbK7zECgYEA6SYmu3YH8XuLUfT8MMCp+ETjPkNMOJGQmTXOkW6zuXP3J8iCPIxtuz09cGIro+yJU23yPUzOVCDZMmnMWBmkoTKAFoFL9TX0Eyqn/t1MD77i3NdkMp16yI5fwOO6yX1bZgLiG00W2E5/IGgNfTtEafU/mre95JBnTgxS3sAvz8UCgYEAybjfBVt+1X0vSVAGKYHI9wtzoSx3dIGE8G5LIchPTdNDZ0ke0QCRffhyCGKy6bPos0P2z5nLgWSePBPZQowpwZiQVXdWE05ID641E2zGULdYL1yVHDt6tVTpSzTAy89BiS1G8HvgpQyaBTmvmF11Fyd/YbrDxEIHN+qQdDkM928CgYEA4lJ4ksz21QF6sqpADQtZc3lbplspqFgVp8RFq4Nsz3+00lefpSskcff2phuGBXBdtjEqTzs5pwzkCj4NcRAjcZ9WG4KTu4sOTXTA83TamwZPrtUfnMqmH/2lEdd+wI0BpjryRlJE9ODuIwUe4wwfU0QQ5B2tJizPO0JXR4gEYYkCgYBzqidm4QGm1DLq7JG79wkObmiMv/x2t1VMr1ExO7QNQdfiP1EGMjc6bdyk5kMEMf5527yHaP4BYXpBpHfs6oV+1kXcW6LlSvuS0iboznQgECDmd0WgfJJtqxRh5QuvUVWYnHeSqNU0jjc6S8tdqCjdb+5gUUCzJdERxNOzcIr4zQKBgAqcBQwlWy0PdlZ06JhJUYlwX1pOU8mWPz9LIF0wrSm9LEtAl37zZJaD3uscvk/fCixAGHOktkDGVO7aUYIAlX9iD49huGkeRTn9tz7Wanw6am04Xj0y7H1oPPV7k5nJ4s9AOWq/gkZEhrRIis2anAczsx1YHSjq/M05+AbuRzvs",
@@ -99,3 +209,7 @@ func TestSAMLConfigurationDeterministicCertificate(t *tst.T) {
 
 	require.Equal(t, a.Certificate.Raw, b.Certificate.Raw, "Certificate generation should be deterministic")
 }
+
+const (
+	validPrivateKey = "MIIEowIBAAKCAQEAsBuxTUWFrfy0qYXaqNSeVWcJOd6TQ4+4b/3N4p/58r1d/kMU+K+BGR+tF0GKHGYngTF6puvNDff2wgW3dp3LUSMjxOhC3sK0uL90vd+IR6v1EDDGLyQNo6EjP/x5Gp/PcL2s6hZb8iLBEq4FksPnEhWqf9Nsmgf1YPJV4AvaaWe3oBFo9zJobSs3etTVitc3qEH2DpgYFtrCKhMWv5qoZtZTyZRE3LU3rvInDgYw6HDGF1G4y4Fvah6VpRmTdyMR81r1tCLmGvk61QJp7i4HteazQ6Raqh2EZ1sH/UfEp8mrwYRaRdgLDQ/Q6/YlO8NTQwzp6YwwAybhMBnOrABLCQIDAQABAoIBADqobq0DPByQsIhKmmNjtn1RvYP1++0kANXknuAeUv2kT5tyMpkGtCRvJZM6dEszR3NDzMuufPVrI1jK2Kn8sw0KfE6I4kUaa2Gh+7uGqfjdcNn8tPZctuJKuNgGOzxAALNXqjGqUuPa6Z5UMm0JLX0blFfRTzoa7oNlFG9040H6CRjJQQGfYyPS8xeo+RUR009sK/222E5jz6ThIiCrOU/ZGm5Ws9y3AAIASqJd9QPy7qxKoFZ1qKZ/cDaf1txCKq9VBXH6ypZoU1dQibhyLCIJ3tYapBtV4p8V12oHhITXb6Vbo1P9bQSVz+2rQ0nJkjdXX/N4aHE01ecbu8MpMxUCgYEA5P4ZCAdpkTaOSJi7GyL4AcZ5MN26eifFnRO/tbmw07f6vi//vdqzC9T7kxmZ8e1OvhX5OMGNb3nsXm78WgS2EVLTkaTInG6XhlOeYj9BHAQZDBr7rcAxrVQxVgaGDiZpYun++kXw+39iq3gxuYuC9mM0AQze3SjTRIM9WWXJSqMCgYEAxODfXcWMk2P/WfjE3u+8fhjc3cvqyWSyThEZC9YzpN59dL73SE7BRkMDyZO19fFvVO9mKsRfsTio0ceC5XQOO6hUxAm4gAEvMpeapQgXTxIxF5FAQ0vGmBMxT+xg7lX8HTTJX/UCttKo3BdIJQeTf8bKVzJCoLFh8Rcv5qI6umMCgYAEuj44DTcfuVmcpBKQz9sA5mEQIjO8W9/Xi1XU4Z2F8XFqxcDo4X/6yY3cDpZACV8ry3ZWtqA94e2AUZhCH4DGwMf/ZMCDgkD8k/NcIeQtOORvfIsfni0oX+mY1g+kcSSR1zTdY95CwvF9isC0DO5KOegT8XkUZchezLrSgqhyMwKBgQCvS0mWRH6V/UMu6MDhfrNl0t1U3mt+RZo8yBx03ZO+CBvMBvxF9VlBJgoJQOuSwBVQmpdtHMvXD4vAvNNfWaYSmB5hLgaIcoWDlliq+DlIvfnX8gw13xJD9VLCxsTHcOe5WXazaYOxJIAU9uXVkplR+73NRYLtcQKzluGfiHKh4QKBgFpPtOqcAbkMsV+1qPYvvvX7E4+l52Odb4tbxGBYV8tzCqMRETqMPVxFWwsj+EQ8lyAu15rCRH7DKHVK5zL6JvIZEjt0tptKqSL2o3ovS6y3DmD6t+YpvjKME7a+vunOoJWe9pWl3wZmodfyZMpAdDLvDGhPR7Jlhun41tbMMaQF"
+)

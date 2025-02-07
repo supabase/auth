@@ -45,10 +45,11 @@ func TestRateDecode(t *testing.T) {
 			exp: Rate{Events: 0, OverTime: time.Hour * 24, typ: BurstRateType}},
 	}
 	for idx, tc := range cases {
+		t.Logf("test #%v - duration str %v", idx, tc.str)
+
 		var r Rate
 		err := r.Decode(tc.str)
 		require.Equal(t, tc.exp, r) // verify don't mutate r on errr
-		t.Logf("tc #%v - duration str %v", idx, tc.str)
 		if tc.err != "" {
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tc.err)

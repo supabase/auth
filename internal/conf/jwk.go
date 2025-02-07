@@ -24,31 +24,53 @@ func (j *JwtKeysDecoder) Decode(value string) error {
 
 	config := JwtKeysDecoder{}
 	for _, key := range data {
-		privJwk, err := jwk.ParseKey(key)
-		if err != nil {
+		if err := j.decodeKey(config, key); err != nil {
 			return err
-		}
-		pubJwk, err := jwk.PublicKeyOf(privJwk)
-		if err != nil {
-			return err
-		}
-
-		// all public keys should have the the use claim set to 'sig
-		if err := pubJwk.Set(jwk.KeyUsageKey, "sig"); err != nil {
-			return err
-		}
-
-		// all public keys should only have 'verify' set as the key_ops
-		if err := pubJwk.Set(jwk.KeyOpsKey, jwk.KeyOperationList{jwk.KeyOpVerify}); err != nil {
-			return err
-		}
-
-		config[pubJwk.KeyID()] = JwkInfo{
-			PublicKey:  pubJwk,
-			PrivateKey: privJwk,
 		}
 	}
+
 	*j = config
+	return nil
+}
+
+func (j *JwtKeysDecoder) decodeKey(config JwtKeysDecoder, key []byte) error {
+	privJwk, err := jwk.ParseKey(key)
+	if err != nil {
+		return err
+	}
+	return j.decodePrivateKey(config, privJwk)
+}
+
+func (j *JwtKeysDecoder) decodePrivateKey(
+	config JwtKeysDecoder,
+	privJwk jwk.Key,
+) error {
+	pubJwk, err := jwk.PublicKeyOf(privJwk)
+	if err != nil {
+		return err
+	}
+	return j.decodePublicKey(config, privJwk, pubJwk)
+}
+
+func (j *JwtKeysDecoder) decodePublicKey(
+	config JwtKeysDecoder,
+	privJwk jwk.Key,
+	pubJwk jwk.Key,
+) error {
+	// all public keys should have the the use claim set to 'sig
+	if err := pubJwk.Set(jwk.KeyUsageKey, "sig"); err != nil {
+		return err
+	}
+
+	// all public keys should only have 'verify' set as the key_ops
+	if err := pubJwk.Set(jwk.KeyOpsKey, jwk.KeyOperationList{jwk.KeyOpVerify}); err != nil {
+		return err
+	}
+
+	config[pubJwk.KeyID()] = JwkInfo{
+		PublicKey:  pubJwk,
+		PrivateKey: privJwk,
+	}
 	return nil
 }
 
