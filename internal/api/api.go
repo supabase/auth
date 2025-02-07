@@ -137,7 +137,11 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	})
 
 	r.Route("/", func(r *router) {
+		
+
 		r.Use(api.isValidExternalHost)
+
+		r.Post("/nonce", api.GetNonce)
 
 		r.Get("/settings", api.Settings)
 

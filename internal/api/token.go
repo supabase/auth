@@ -2,17 +2,19 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
 
-	"fmt"
-
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/xeipuuv/gojsonschema"
 
+	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
@@ -79,6 +81,7 @@ const InvalidLoginMessage = "Invalid login credentials"
 func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	grantType := r.FormValue("grant_type")
+
 	switch grantType {
 	case "password":
 		return a.ResourceOwnerPasswordGrant(ctx, w, r)
@@ -88,6 +91,8 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 		return a.IdTokenGrant(ctx, w, r)
 	case "pkce":
 		return a.PKCE(ctx, w, r)
+	case "web3":
+		return a.Web3Grant(ctx, w, r)
 	default:
 		return badRequestError(ErrorCodeInvalidCredentials, "unsupported_grant_type")
 	}
@@ -307,6 +312,133 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	return sendJSON(w, http.StatusOK, token)
 }
 
+type StoredNonce struct {
+    ID        uuid.UUID `db:"id"`
+    Nonce     string    `db:"nonce"`
+    Address   string `db:"address"`
+    CreatedAt time.Time `db:"created_at"`
+    ExpiresAt time.Time `db:"expires_at"`
+    Used      bool      `db:"used"`
+}
+
+const NonceExpiration = 5 * time.Minute
+
+// GetNonce handles nonce generation requests
+func (a *API) GetNonce(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+
+	var body struct {
+		Address string `json:"address"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		return badRequestError(ErrorCodeBadJSON, "Invalid request body: %v", err)
+	}
+	
+	if body.Address == "" {
+		return badRequestError(ErrorCodeBadJSON, "Missing required field: address")
+	}
+
+	nonce := crypto.SecureAlphanumeric(12)
+
+	storedNonce := &StoredNonce{
+		ID:        uuid.Must(uuid.NewV4()),
+		Address:   body.Address,
+		Nonce:     nonce,
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(NonceExpiration),
+		Used:      false,
+	}
+
+	err := db.Transaction(func(tx *storage.Connection) error {
+		// Store the nonce
+		_, err := tx.TX.Exec(`
+			INSERT INTO auth.nonces (id, address, nonce, created_at, expires_at, used)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, storedNonce.ID, storedNonce.Address, storedNonce.Nonce, 
+		   storedNonce.CreatedAt, storedNonce.ExpiresAt, storedNonce.Used)
+		return err
+	})
+
+	if err != nil {
+		return internalServerError("DB error while storing nonce: %v", err)
+	}
+
+	return sendJSON(w, http.StatusOK, map[string]interface{}{
+		"nonce": nonce,
+		"expiresAt": storedNonce.ExpiresAt,
+	})
+}
+
+
+
+
+func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	db := a.db.WithContext(ctx)
+
+	params := &Web3GrantParams{}
+	if err := retrieveRequestParams(r, params); err != nil {
+		return err
+	}
+
+	web3Provider, err := provider.NewWeb3Provider(ctx, a.config.External.Web3)
+	if err != nil {
+		return err
+	}
+
+	// Convert params to SignedMessage
+	msg := &provider.Web3GrantParams{
+		Message:   params.Message,
+		Signature: params.Signature,
+		Chain:     params.Chain,
+	}
+
+	userData, err := web3Provider.VerifySignedMessage(db, msg)
+	if err != nil {
+		return oauthError("invalid_grant", "Signature verification failed").WithInternalError(err)
+	}
+
+	var token *AccessTokenResponse
+	var grantParams models.GrantParams
+	grantParams.FillGrantParams(r)
+
+	err = db.Transaction(func(tx *storage.Connection) error {
+		user, terr := a.createAccountFromExternalIdentity(tx, r, userData, "web3")
+		if terr != nil {
+			return terr
+		}
+
+		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+			"provider": "web3",
+			"chain":    msg.Chain,
+			"address":  userData.Metadata.CustomClaims["address"],
+		}); terr != nil {
+			return terr
+		}
+
+		token, terr = a.issueRefreshToken(r, tx, user, models.Web3, grantParams)
+		if terr != nil {
+			return terr
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		switch err.(type) {
+		case *storage.CommitWithError:
+			return err
+		case *HTTPError:
+			return err
+		default:
+			return oauthError("server_error", "Internal Server Error").WithInternalError(err)
+		}
+	}
+
+	return sendJSON(w, http.StatusOK, token)
+}
+
+
 func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, int64, error) {
 	config := a.config
 	if sessionId == nil {
@@ -504,3 +636,5 @@ func validateTokenClaims(outputClaims map[string]interface{}) error {
 
 	return nil
 }
+
+

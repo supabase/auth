@@ -10,6 +10,7 @@ import (
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/security"
+
 	"github.com/supabase/auth/internal/utilities"
 )
 
@@ -74,6 +75,7 @@ type RequestParams interface {
 		SignupParams |
 		SingleSignOnParams |
 		SmsParams |
+		Web3GrantParams |
 		UserUpdateParams |
 		VerifyFactorParams |
 		VerifyParams |
@@ -81,6 +83,7 @@ type RequestParams interface {
 		adminUserDeleteParams |
 		security.GotrueRequest |
 		ChallengeFactorParams |
+
 		struct {
 			Email string `json:"email"`
 			Phone string `json:"phone"`

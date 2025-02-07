@@ -5,16 +5,29 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
+	"encoding/base32"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"math/big"
+	"net/url"
 	"strconv"
 	"strings"
 
+	"crypto/ed25519"
+	"time"
+
 	"golang.org/x/crypto/hkdf"
+
+	"github.com/btcsuite/btcutil/base58"
+	"github.com/gofrs/uuid"
+	"github.com/supabase/auth/internal/storage"
+	siws "github.com/supabase/auth/internal/utilities/solana"
 )
 
 // SecureToken creates a new random token
@@ -156,4 +169,258 @@ func NewEncryptedString(id string, data []byte, keyID string, keyBase64URL strin
 	es.Data = cipher.Seal(nil, es.Nonce, data, nil) // #nosec G407
 
 	return &es, nil
+}
+
+func VerifySIWS(
+    rawMessage string,
+    signature []byte,
+    msg *siws.SIWSMessage,
+    params siws.SIWSVerificationParams,
+) error {
+    log.Printf("[DEBUG] Starting SIWS verification - Signature length: %d", len(signature))
+
+    // 1) Basic input validation
+    if rawMessage == "" {
+        log.Printf("[ERROR] Empty raw message")
+        return siws.ErrEmptyRawMessage
+    }
+    if len(signature) == 0 {
+        log.Printf("[ERROR] Empty signature")
+        return siws.ErrEmptySignature
+    }
+    if msg == nil {
+        log.Printf("[ERROR] Nil message")
+        return siws.ErrNilMessage
+    }
+
+    log.Printf("[DEBUG] Basic validation passed - Message length: %d", len(rawMessage))
+
+    // 2) Domain validation
+    log.Printf("[DEBUG] Validating domain - Expected: %s, Actual: %s", params.ExpectedDomain, msg.Domain)
+    if params.ExpectedDomain == "" {
+        log.Printf("[ERROR] Missing expected domain")
+        return siws.ErrMissingDomain
+    }
+    if !siws.IsValidDomain(msg.Domain) {
+        log.Printf("[ERROR] Invalid domain format: %s", msg.Domain)
+        return siws.ErrInvalidDomainFormat
+    }
+    if msg.Domain != params.ExpectedDomain {
+        log.Printf("[ERROR] Domain mismatch - Expected: %s, Got: %s", params.ExpectedDomain, msg.Domain)
+        return siws.ErrDomainMismatch
+    }
+
+    // 3) Address/Public Key validation
+    pubKey := base58.Decode(msg.Address)
+    log.Printf("[DEBUG] Validating public key - Address: %s, Decoded length: %d", msg.Address, len(pubKey))
+    if !siws.IsBase58PubKey(pubKey) {
+        log.Printf("[ERROR] Invalid public key size: %d", len(pubKey))
+        return siws.ErrInvalidPubKeySize
+    }
+
+    // 4) Version validation
+    log.Printf("[DEBUG] Checking version: %s", msg.Version)
+    if msg.Version != "1" {
+        log.Printf("[ERROR] Invalid version: %s", msg.Version)
+        return siws.ErrInvalidVersion
+    }
+
+    // 5) Chain ID validation
+    if msg.ChainID != "" {
+        log.Printf("[DEBUG] Validating chain ID: %s", msg.ChainID)
+        if !siws.IsValidSolanaNetwork(msg.ChainID) {
+            log.Printf("[ERROR] Invalid chain ID: %s", msg.ChainID)
+            return siws.ErrInvalidChainID
+        }
+    }
+
+    // 6) Nonce validation
+    if msg.Nonce != "" {
+        log.Printf("[DEBUG] Checking nonce length: %d", len(msg.Nonce))
+        if len(msg.Nonce) < 8 {
+            log.Printf("[ERROR] Nonce too short: %d chars", len(msg.Nonce))
+            return siws.ErrNonceTooShort
+        }
+    }
+
+    // 7) URI validation
+    if msg.URI != "" {
+        log.Printf("[DEBUG] Validating URI: %s", msg.URI)
+        if _, err := url.Parse(msg.URI); err != nil {
+            log.Printf("[ERROR] Invalid URI: %s - %v", msg.URI, err)
+            return siws.ErrInvalidURI
+        }
+    }
+
+    // Resources validation
+    for _, resource := range msg.Resources {
+        log.Printf("[DEBUG] Validating resource URI: %s", resource)
+        if _, err := url.Parse(resource); err != nil {
+            log.Printf("[ERROR] Invalid resource URI: %s - %v", resource, err)
+            return siws.ErrInvalidResourceURI
+        }
+    }
+
+    // 8) Signature verification
+    log.Printf("[DEBUG] Verifying ed25519 signature")
+	log.Printf("[DEBUG] Verification inputs - Message bytes: %v", []byte(rawMessage))
+	log.Printf("[DEBUG] Verification inputs - Signature bytes: %v", signature)
+    if !ed25519.Verify(pubKey, []byte(rawMessage), signature) {
+        log.Printf("[ERROR] Signature verification failed")
+        return siws.ErrSignatureVerification
+    }
+
+    // 9) Time validations
+    now := time.Now().UTC()
+    log.Printf("[DEBUG] Time validation - Current time: %s", now)
+
+    if !msg.IssuedAt.IsZero() {
+        log.Printf("[DEBUG] Checking issuedAt: %s", msg.IssuedAt)
+        if now.Before(msg.IssuedAt) {
+            log.Printf("[ERROR] Message from future - IssuedAt: %s", msg.IssuedAt)
+            return siws.ErrFutureMessage
+        }
+
+        if params.CheckTime && params.TimeDuration > 0 {
+            expiry := msg.IssuedAt.Add(params.TimeDuration)
+            log.Printf("[DEBUG] Checking message expiry - Expiry: %s", expiry)
+            if now.After(expiry) {
+                log.Printf("[ERROR] Message expired - Expiry: %s", expiry)
+                return siws.ErrMessageExpired
+            }
+        }
+    }
+
+    if !msg.NotBefore.IsZero() {
+        log.Printf("[DEBUG] Checking notBefore: %s", msg.NotBefore)
+        if now.Before(msg.NotBefore) {
+            log.Printf("[ERROR] Message not yet valid - NotBefore: %s", msg.NotBefore)
+            return siws.ErrNotYetValid
+        }
+    }
+
+    if !msg.ExpirationTime.IsZero() {
+        log.Printf("[DEBUG] Checking expirationTime: %s", msg.ExpirationTime)
+        if now.After(msg.ExpirationTime) {
+            log.Printf("[ERROR] Message expired - ExpirationTime: %s", msg.ExpirationTime)
+            return siws.ErrMessageExpired
+        }
+    }
+
+    log.Printf("[INFO] SIWS verification successful")
+    return nil
+}
+
+func VerifyEthereumSignature(message string, signature string) error {
+	// Remove 0x prefix if present
+	signature = removeHexPrefix(signature)
+	// address = removeHexPrefix(address)
+
+	// Convert signature hex to bytes
+	sigBytes, err := hex.DecodeString(signature)
+	if err != nil {
+		return fmt.Errorf("siwe: invalid signature hex: %w", err)
+	}
+
+	// Adjust V value in signature (Ethereum specific)
+	if len(sigBytes) != 65 {
+		return fmt.Errorf("siwe: invalid signature length")
+	}
+	if sigBytes[64] < 27 {
+		sigBytes[64] += 27
+	}
+
+	// Hash the message according to EIP-191
+	// prefixedMessage := fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)
+	// hash := crypto.Keccak256Hash([]byte(prefixedMessage))
+
+	// Recover public key from signature
+	// pubKey, err := crypto.SigToPub(hash.Bytes(), sigBytes)
+	// if err != nil {
+	// 	return fmt.Errorf("siwe: error recovering public key: %w", err)
+	// }
+
+	// Derive Ethereum address from public key
+	// recoveredAddr := crypto.PubkeyToAddress(*pubKey)
+	// checkAddr := common.HexToAddress(address)
+
+	// Compare addresses
+	// if recoveredAddr != checkAddr {
+	// 	return fmt.Errorf("siwe: signature not from expected address")
+	// }
+
+	return nil
+}
+
+func removeHexPrefix(signature string) string {
+	if strings.HasPrefix(signature, "0x") {
+		return strings.TrimPrefix(signature, "0x")
+	}
+	return signature
+}
+
+// SecureAlphanumeric generates a secure random alphanumeric string using standard library
+func SecureAlphanumeric(length int) string {
+    if length < 8 {
+        length = 8
+    }
+    
+    // Calculate bytes needed for desired length
+    // base32 encoding: 5 bytes -> 8 chars
+    numBytes := (length * 5 + 7) / 8
+    
+    b := make([]byte, numBytes)
+    must(io.ReadFull(rand.Reader, b))
+    
+    // Use standard library's base32 without padding
+    return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b))[:length]
+}
+
+
+type StoredNonce struct {
+    ID        uuid.UUID `db:"id"`
+    Nonce     string    `db:"nonce"`
+    Address   string `db:"address"`
+    CreatedAt time.Time `db:"created_at"`
+    ExpiresAt time.Time `db:"expires_at"`
+    Used      bool      `db:"used"`
+}
+
+func VerifyAndConsumeNonce(db *storage.Connection, nonce string, address string) error {
+
+	log.Printf("Starting nonce verification for: %s", nonce)
+var storedNonce StoredNonce
+err := db.Transaction(func(tx *storage.Connection) error {
+	// Find the nonce
+	log.Printf("Executing query for nonce: %s", nonce)
+	err := tx.TX.QueryRow(`
+		SELECT id, nonce, address, created_at, expires_at, used 
+		FROM auth.nonces 
+		WHERE nonce = $1 AND used = false AND address = $2
+	`, nonce, address).Scan(&storedNonce.ID, &storedNonce.Nonce, 
+				  &storedNonce.Address, &storedNonce.CreatedAt, 
+				  &storedNonce.ExpiresAt, &storedNonce.Used)
+	if err != nil {
+		log.Printf("Error scanning nonce: %v", err)
+		return err
+	}
+
+	log.Printf("Found nonce in DB: %+v", storedNonce)
+
+
+	// Check expiration
+	if time.Now().After(storedNonce.ExpiresAt) {
+		return fmt.Errorf("nonce expired")
+	}
+
+	// Mark as used
+	_, err = tx.TX.Exec(`
+		UPDATE auth.nonces 
+		SET used = true, address = $1 
+		WHERE id = $2
+	`, sql.NullString{String: address, Valid: true}, storedNonce.ID)
+	return err
+})
+
+return err
 }
