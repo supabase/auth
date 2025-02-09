@@ -4,14 +4,8 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/conf"
 )
 
-type Web3Provider struct {
-	config       conf.Web3Configuration
-	chains       map[string]conf.BlockchainConfig
-	defaultChain string
-}
 
 type Web3GrantParams struct {
 	Message   string `json:"message"`
@@ -26,4 +20,9 @@ type StoredNonce struct {
 	CreatedAt time.Time `db:"created_at"`
 	ExpiresAt time.Time `db:"expires_at"`
 	Used      bool      `db:"used"`
+}
+
+func (StoredNonce) TableName() string {
+	tableName := "nonces"
+	return tableName
 }

@@ -30,14 +30,6 @@ import (
 	siws "github.com/supabase/auth/internal/utilities/solana"
 )
 
-// SecureToken creates a new random token
-func SecureToken() string {
-	b := make([]byte, 16)
-	must(io.ReadFull(rand.Reader, b))
-
-	return base64.RawURLEncoding.EncodeToString(b)
-}
-
 // GenerateOtp generates a random n digit otp
 func GenerateOtp(digits int) string {
 	upper := math.Pow10(digits)
@@ -386,9 +378,14 @@ type StoredNonce struct {
     Used      bool      `db:"used"`
 }
 
+func (StoredNonce) TableName() string {
+	tableName := "nonces"
+	return tableName
+}
+
 func VerifyAndConsumeNonce(db *storage.Connection, nonce string, address string) error {
 
-	log.Printf("Starting nonce verification for: %s", nonce)
+	
 var storedNonce StoredNonce
 err := db.Transaction(func(tx *storage.Connection) error {
 	// Find the nonce
@@ -401,18 +398,13 @@ err := db.Transaction(func(tx *storage.Connection) error {
 				  &storedNonce.Address, &storedNonce.CreatedAt, 
 				  &storedNonce.ExpiresAt, &storedNonce.Used)
 	if err != nil {
-		log.Printf("Error scanning nonce: %v", err)
+		log.Printf("Error looking up nonce: %v", err)
 		return err
 	}
-
-	log.Printf("Found nonce in DB: %+v", storedNonce)
-
-
 	// Check expiration
 	if time.Now().After(storedNonce.ExpiresAt) {
-		return fmt.Errorf("nonce expired")
+		return siws.ErrExpiredNonce
 	}
-
 	// Mark as used
 	_, err = tx.TX.Exec(`
 		UPDATE auth.nonces 

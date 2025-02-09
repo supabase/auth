@@ -110,13 +110,8 @@ func TestEncryptedStringDecryptNegative(t *testing.T) {
 }
 
 func TestSecureToken(t *testing.T) {
-	assert.Equal(t, len(SecureToken()), 22)
+	assert.Equal(t, len(SecureAlphanumeric(22)), 22)
 }
-
-
-// package crypto
-
-
 
 func TestVerifySIWS(t *testing.T) {
     pub, priv, err := ed25519.GenerateKey(nil)

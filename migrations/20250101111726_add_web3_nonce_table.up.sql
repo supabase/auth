@@ -5,7 +5,8 @@ create table if not exists {{ index .Options "Namespace" }}.nonces (
     address text not null,
     created_at timestamp with time zone not null default now(),
     expires_at timestamp with time zone not null,
-    used boolean not null default false
+    used boolean not null default false,
+    constraint nonces_expiry_check check (expires_at > created_at)
 );
 
 -- Create index for nonce lookup

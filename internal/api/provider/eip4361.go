@@ -80,8 +80,7 @@ func (p *Web3Provider) VerifySignedMessage(db *storage.Connection, params *Web3G
 	if err != nil {
 		return nil, siws.ErrorMalformedMessage
 	}
-	
-	
+
 
 	// Verify and consume nonce first
 	if err := crypto.VerifyAndConsumeNonce(db, parsedMessage.Nonce, parsedMessage.Address); err != nil {
@@ -158,7 +157,7 @@ func (p *Web3Provider) GenerateSignMessage(address string, chain string, uri str
 	}
 
 	// Generate nonce for message uniqueness
-	nonce := crypto.SecureToken()
+	nonce := crypto.SecureAlphanumeric(12)
 
 	now := time.Now().UTC()
 

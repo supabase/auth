@@ -2,8 +2,6 @@ package siws
 
 import (
 	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -57,19 +55,11 @@ var (
 	ErrInvalidExpirationTimeFormat = NewSIWSError("invalid expiration time format", http.StatusBadRequest)
 	ErrInvalidNotBeforeFormat = NewSIWSError("invalid not before format", http.StatusBadRequest)
 	ErrUnrecognizedLine = NewSIWSError("unrecognized line", http.StatusBadRequest)
+	ErrExpiredNonce = NewSIWSError("expired nonce", http.StatusBadRequest)
+	ErrInvalidNonce = NewSIWSError("invalid nonce", http.StatusBadRequest)
 	
 	
 )
-
-// GenerateNonce creates a random 16-byte nonce, returning a hex-encoded string.
-func GenerateNonce() (string, error) {
-	b := make([]byte, 16)
-	_, err := rand.Read(b)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
-}
 
 // ValidateDomain checks if a domain is valid or not. This can be expanded with
 // real domain validation logic. Here, we do a simple parse check.
