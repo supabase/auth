@@ -11,6 +11,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/sirupsen/logrus"
 	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/supabase/auth/internal/api/provider"
@@ -312,51 +313,72 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	return sendJSON(w, http.StatusOK, token)
 }
 
-type StoredNonce struct {
-    ID        uuid.UUID `db:"id"`
-    Nonce     string    `db:"nonce"`
-    Address   string `db:"address"`
-    CreatedAt time.Time `db:"created_at"`
-    ExpiresAt time.Time `db:"expires_at"`
-    Used      bool      `db:"used"`
-}
-
-const NonceExpiration = 5 * time.Minute
-
 // GetNonce handles nonce generation requests
 func (a *API) GetNonce(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
+	logEntry := observability.GetLogEntry(r) // Get the log entry
 
 	var body struct {
 		Address string `json:"address"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		logEntry.Entry.WithError(err).Error("Invalid request body in GetNonce") // Use .Entry
 		return badRequestError(ErrorCodeBadJSON, "Invalid request body: %v", err)
 	}
-	
+
+	logEntry.Entry.WithFields(logrus.Fields{ // Use .Entry and WithFields
+		"address": body.Address,
+	}).Info("GetNonce request received")
+
 	if body.Address == "" {
 		return badRequestError(ErrorCodeBadJSON, "Missing required field: address")
 	}
 
 	nonce := crypto.SecureAlphanumeric(12)
+	id, err := uuid.NewV4()
+	if err != nil {
+		logEntry.Entry.WithError(err).Error("Failed to generate UUID in GetNonce") // Use .Entry
+		return internalServerError("Failed to generate UUID: %v", err)
+	}
 
 	storedNonce := &StoredNonce{
-		ID:        uuid.Must(uuid.NewV4()),
+		ID:        id,
 		Address:   body.Address,
 		Nonce:     nonce,
 		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(NonceExpiration),
+		ExpiresAt: time.Now().Add(a.config.External.Web3.Timeout),
 		Used:      false,
 	}
 
-	err := db.Transaction(func(tx *storage.Connection) error {
+	logEntry.Entry.WithFields(logrus.Fields{ // Use .Entry and WithFields
+		"nonce":   nonce,
+		"uuid":    id,
+		"address": body.Address,
+	}).Info("Generated nonce and UUID")
+
+	err = db.Transaction(func(tx *storage.Connection) error {
 		// Store the nonce
-		_, err := tx.TX.Exec(`
+		query := `
 			INSERT INTO auth.nonces (id, address, nonce, created_at, expires_at, used)
 			VALUES ($1, $2, $3, $4, $5, $6)
-		`, storedNonce.ID, storedNonce.Address, storedNonce.Nonce, 
-		   storedNonce.CreatedAt, storedNonce.ExpiresAt, storedNonce.Used)
+		`
+		logEntry.Entry.WithFields(logrus.Fields{ // Use .Entry and WithFields
+			"query":     query,
+			"id":        storedNonce.ID,
+			"address":   storedNonce.Address,
+			"nonce":     storedNonce.Nonce,
+			"createdAt": storedNonce.CreatedAt,
+			"expiresAt": storedNonce.ExpiresAt,
+			"used":      storedNonce.Used,
+		}).Debug("Executing SQL query")
+
+		_, err := tx.TX.Exec(query,
+			storedNonce.ID, storedNonce.Address, storedNonce.Nonce,
+			storedNonce.CreatedAt, storedNonce.ExpiresAt, storedNonce.Used)
+		if err != nil {
+			logEntry.Entry.WithError(err).Error("DB error while storing nonce") // Use .Entry
+		}
 		return err
 	})
 
@@ -365,7 +387,7 @@ func (a *API) GetNonce(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, map[string]interface{}{
-		"nonce": nonce,
+		"nonce":     nonce,
 		"expiresAt": storedNonce.ExpiresAt,
 	})
 }
