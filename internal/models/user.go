@@ -468,7 +468,7 @@ func (u *User) ConfirmPhone(tx *storage.Connection) error {
 	now := time.Now()
 	u.PhoneConfirmedAt = &now
 	if err := tx.UpdateOnly(u, "confirmation_token", "phone_confirmed_at"); err != nil {
-		return nil
+		return err
 	}
 
 	return ClearAllOneTimeTokensForUser(tx, u.ID)
