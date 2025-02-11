@@ -680,13 +680,21 @@ Controls the number of digits of the sms otp sent.
 
 `SMS_PROVIDER` - `string`
 
-Available options are: `twilio`, `messagebird`, `textlocal`, and `vonage`
+Available options are: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, and `vonage`
 
 Then you can use your [twilio credentials](https://www.twilio.com/docs/usage/requests-to-twilio#credentials):
+
+#### Twilio Messaging
 
 - `SMS_TWILIO_ACCOUNT_SID`
 - `SMS_TWILIO_AUTH_TOKEN`
 - `SMS_TWILIO_MESSAGE_SERVICE_SID` - can be set to your twilio sender mobile number
+
+#### Twilio Verify
+
+- `SMS_TWILIO_VERIFY_ACCOUNT_SID`
+- `SMS_TWILIO_VERIFY_AUTH_TOKEN`
+- `SMS_TWILIO_VERIFY_MESSAGE_SERVICE_SID`
 
 Or Messagebird credentials, which can be obtained in the [Dashboard](https://dashboard.messagebird.com/en/developers/access):
 
