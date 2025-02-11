@@ -491,6 +491,17 @@ func TestValidate(t *testing.T) {
 				` be positive when set, was -1`,
 		},
 		{
+			val: &SessionsConfiguration{AllowLowAAL: nil},
+		},
+		{
+			val: &SessionsConfiguration{AllowLowAAL: new(time.Duration)},
+			err: `conf: session allow low AAL duration must be positive when set, was 0`,
+		},
+		{
+			val: &SessionsConfiguration{AllowLowAAL: toPtr(time.Duration(-1))},
+			err: `conf: session allow low AAL duration must be positive when set, was -1`,
+		},
+		{
 			val: &SessionsConfiguration{Timebox: toPtr(time.Duration(1))},
 		},
 

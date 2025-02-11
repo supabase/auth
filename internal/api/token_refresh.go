@@ -65,7 +65,13 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			return badRequestError(apierrors.ErrorCodeSessionNotFound, "Invalid Refresh Token: No Valid Session Found")
 		}
 
-		result := session.CheckValidity(retryStart, &token.UpdatedAt, config.Sessions.Timebox, config.Sessions.InactivityTimeout)
+		sessionValidityConfig := models.SessionValidityConfig{
+			Timebox:           config.Sessions.Timebox,
+			InactivityTimeout: config.Sessions.InactivityTimeout,
+			AllowLowAAL:       config.Sessions.AllowLowAAL,
+		}
+
+		result := session.CheckValidity(sessionValidityConfig, retryStart, &token.UpdatedAt, user.HighestPossibleAAL())
 
 		switch result {
 		case models.SessionValid:
@@ -73,6 +79,9 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 
 		case models.SessionTimedOut:
 			return badRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Inactivity)")
+
+		case models.SessionLowAAL:
+			return badRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Low AAL: User Needs MFA Verification)")
 
 		default:
 			return badRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired")
@@ -134,7 +143,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 						continue
 					}
 
-					if s.CheckValidity(retryStart, nil, config.Sessions.Timebox, config.Sessions.InactivityTimeout) != models.SessionValid {
+					if s.CheckValidity(sessionValidityConfig, retryStart, nil, user.HighestPossibleAAL()) != models.SessionValid {
 						// session is not valid so it
 						// can't be regarded as active
 						// on the user
