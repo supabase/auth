@@ -137,8 +137,6 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Use(api.isValidExternalHost)
 
-		r.Post("/nonce", api.GetNonce)
-
 		r.Get("/settings", api.Settings)
 
 		r.Get("/authorize", api.ExternalProviderRedirect)

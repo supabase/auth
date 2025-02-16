@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
@@ -17,7 +16,6 @@ import (
 )
 
 const (
-	BlockchainEthereum = "ethereum"
 	BlockchainSolana   = "solana"
 )
 
@@ -60,15 +58,15 @@ func NewWeb3Provider(ctx context.Context, config conf.Web3Configuration) (*Web3P
 }
 
 func (p *Web3Provider) AuthCodeURL(state string, args ...oauth2.AuthCodeOption) string {
-	return "" // Web3 auth doesn't use OAuth flow
+	panic("Web3 auth doesn't use OAuth flow")
 }
 
 func (p *Web3Provider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return nil, errors.New("GetOAuthToken not implemented for Web3")
+	panic("GetOAuthToken not implemented for Web3")
 }
 
 func (p *Web3Provider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
-	return nil, errors.New("GetUserData not implemented for Web3")
+	panic("GetUserData not implemented for Web3")
 }
 
 // VerifySignedMessage verifies a signed Web3 message based on the blockchain
@@ -81,11 +79,6 @@ func (p *Web3Provider) VerifySignedMessage(db *storage.Connection, params *Web3G
 		return nil, siws.ErrorMalformedMessage
 	}
 
-
-	// Verify and consume nonce first
-	if err := crypto.VerifyAndConsumeNonce(db, parsedMessage.Nonce, parsedMessage.Address); err != nil {
-		return nil, siws.ErrorCodeInvalidNonce
-	}
 	network := strings.Split(params.Chain, ":")
 	if len(network) != 2 {
 		return nil, siws.ErrInvalidChainID
@@ -96,13 +89,10 @@ func (p *Web3Provider) VerifySignedMessage(db *storage.Connection, params *Web3G
 	}
 	
 	switch chain {
-	case BlockchainEthereum:
-		return nil, httpError(http.StatusNotImplemented, "signature verification not implemented for %s", network)
-		
-	case BlockchainSolana:
-		err = p.verifySolanaSignature(params.Signature, params.Message, parsedMessage)
-	default:
-		return nil, httpError(http.StatusNotImplemented, "signature verification not implemented for %s", network)
+		case BlockchainSolana:
+			err = p.verifySolanaSignature(params.Signature, params.Message, parsedMessage)
+		default:
+			return nil, httpError(http.StatusNotImplemented, "signature verification not implemented for %s", network)
 	}
 
 	if err != nil {
@@ -110,7 +100,8 @@ func (p *Web3Provider) VerifySignedMessage(db *storage.Connection, params *Web3G
 	}
 
 	// Construct the provider_id as network:chain:address to make it unique
-	providerId := fmt.Sprintf("%s:%s", params.Chain, parsedMessage.Address)
+	// use concat
+	providerId := (network[0] + ":" + network[1] + ":" + parsedMessage.Address)
 
 	return &UserProvidedData{
 		Metadata: &Claims{
@@ -144,58 +135,5 @@ func (p *Web3Provider) verifySolanaSignature(signature string, rawMessage string
 	}
 
 	return nil
-}
-
-func (p *Web3Provider) GenerateSignMessage(address string, chain string, uri string) (string, error) {
-	if chain == "" {
-		chain = p.defaultChain
-	}
-
-	chainCfg, ok := p.chains[chain]
-	if !ok {
-		return "", fmt.Errorf("unsupported chain: %s", chain)
-	}
-
-	// Generate nonce for message uniqueness
-	nonce := crypto.SecureAlphanumeric(12)
-
-	now := time.Now().UTC()
-
-	switch chainCfg.NetworkName {
-	case BlockchainSolana:
-		msg := siws.SIWSMessage{
-			Domain:    p.config.Domain,
-			Address:   address,
-			Statement: p.config.Statement,
-			URI:       uri,
-			Version:   p.config.Version,
-			Nonce:     nonce,
-			IssuedAt:  now,
-		}
-		return siws.ConstructMessage(msg), nil
-
-	case BlockchainEthereum:
-		return fmt.Sprintf(`%s wants you to sign in with your %s account:
-%s
-
-URI: %s
-Version: %s
-Chain ID: %s
-Nonce: %d
-Issued At: %s
-Expiration Time: %s`,
-			p.config.Domain,
-			chainCfg.NetworkName,
-			address,
-			uri,
-			p.config.Version,
-			chainCfg.ChainID,
-			now.UnixNano(),
-			now.Format(time.RFC3339),
-			now.Add(p.config.Timeout).Format(time.RFC3339)), nil
-
-	default:
-		return "", fmt.Errorf("message generation not implemented for %s", chainCfg.NetworkName)
-	}
 }
 

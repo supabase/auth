@@ -71,8 +71,6 @@ github.com/deepmap/oapi-codegen v1.12.4 h1:pPmn6qI9MuOtCz82WY2Xaw46EQjgvxednXXrP
 github.com/deepmap/oapi-codegen v1.12.4/go.mod h1:3lgHGMu6myQ2vqbbTXH2H1o4eXFTGnFiDaOaKKl5yas=
 github.com/didip/tollbooth/v5 v5.1.1 h1:QpKFg56jsbNuQ6FFj++Z1gn2fbBsvAc1ZPLUaDOYW5k=
 github.com/didip/tollbooth/v5 v5.1.1/go.mod h1:d9rzwOULswrD3YIrAQmP3bfjxab32Df4IaO6+D25l9g=
-github.com/ethereum/go-ethereum v1.14.12 h1:8hl57x77HSUo+cXExrURjU/w1VhL+ShCTJrTwcCQSe4=
-github.com/ethereum/go-ethereum v1.14.12/go.mod h1:RAC2gVMWJ6FkxSPESfbshrcKpIokgQKsVKmAuqdekDY=
 github.com/fatih/color v1.13.0 h1:8LOYc1KYPPmyKMuN8QV2DNRWNbLo6LZ0iLs8+mlH53w=
 github.com/fatih/color v1.13.0/go.mod h1:kLAiJbzzSOZDVNGyDpeOxJ47H46qBXwg5ILebYFFOfk=
 github.com/fatih/color v1.16.0 h1:zmkK9Ngbjj+K0yRhTVONQh1p/HknKYSlNT+vZCzyokM=

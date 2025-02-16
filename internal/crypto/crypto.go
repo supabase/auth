@@ -5,10 +5,8 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/base32"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,8 +23,6 @@ import (
 	"golang.org/x/crypto/hkdf"
 
 	"github.com/btcsuite/btcutil/base58"
-	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/storage"
 	siws "github.com/supabase/auth/internal/utilities/solana"
 )
 
@@ -226,15 +222,6 @@ func VerifySIWS(
         }
     }
 
-    // 6) Nonce validation
-    if msg.Nonce != "" {
-        log.Printf("[DEBUG] Checking nonce length: %d", len(msg.Nonce))
-        if len(msg.Nonce) < 8 {
-            log.Printf("[ERROR] Nonce too short: %d chars", len(msg.Nonce))
-            return siws.ErrNonceTooShort
-        }
-    }
-
     // 7) URI validation
     if msg.URI != "" {
         log.Printf("[DEBUG] Validating URI: %s", msg.URI)
@@ -303,54 +290,6 @@ func VerifySIWS(
     return nil
 }
 
-func VerifyEthereumSignature(message string, signature string) error {
-	// Remove 0x prefix if present
-	signature = removeHexPrefix(signature)
-	// address = removeHexPrefix(address)
-
-	// Convert signature hex to bytes
-	sigBytes, err := hex.DecodeString(signature)
-	if err != nil {
-		return fmt.Errorf("siwe: invalid signature hex: %w", err)
-	}
-
-	// Adjust V value in signature (Ethereum specific)
-	if len(sigBytes) != 65 {
-		return fmt.Errorf("siwe: invalid signature length")
-	}
-	if sigBytes[64] < 27 {
-		sigBytes[64] += 27
-	}
-
-	// Hash the message according to EIP-191
-	// prefixedMessage := fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(message), message)
-	// hash := crypto.Keccak256Hash([]byte(prefixedMessage))
-
-	// Recover public key from signature
-	// pubKey, err := crypto.SigToPub(hash.Bytes(), sigBytes)
-	// if err != nil {
-	// 	return fmt.Errorf("siwe: error recovering public key: %w", err)
-	// }
-
-	// Derive Ethereum address from public key
-	// recoveredAddr := crypto.PubkeyToAddress(*pubKey)
-	// checkAddr := common.HexToAddress(address)
-
-	// Compare addresses
-	// if recoveredAddr != checkAddr {
-	// 	return fmt.Errorf("siwe: signature not from expected address")
-	// }
-
-	return nil
-}
-
-func removeHexPrefix(signature string) string {
-	if strings.HasPrefix(signature, "0x") {
-		return strings.TrimPrefix(signature, "0x")
-	}
-	return signature
-}
-
 // SecureAlphanumeric generates a secure random alphanumeric string using standard library
 func SecureAlphanumeric(length int) string {
     if length < 8 {
@@ -368,51 +307,3 @@ func SecureAlphanumeric(length int) string {
     return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b))[:length]
 }
 
-
-type StoredNonce struct {
-    ID        uuid.UUID `db:"id"`
-    Nonce     string    `db:"nonce"`
-    Address   string `db:"address"`
-    CreatedAt time.Time `db:"created_at"`
-    ExpiresAt time.Time `db:"expires_at"`
-    Used      bool      `db:"used"`
-}
-
-func (StoredNonce) TableName() string {
-	tableName := "nonces"
-	return tableName
-}
-
-func VerifyAndConsumeNonce(db *storage.Connection, nonce string, address string) error {
-
-	
-var storedNonce StoredNonce
-err := db.Transaction(func(tx *storage.Connection) error {
-	// Find the nonce
-	log.Printf("Executing query for nonce: %s", nonce)
-	err := tx.TX.QueryRow(`
-		SELECT id, nonce, address, created_at, expires_at, used 
-		FROM auth.nonces 
-		WHERE nonce = $1 AND used = false AND address = $2
-	`, nonce, address).Scan(&storedNonce.ID, &storedNonce.Nonce, 
-				  &storedNonce.Address, &storedNonce.CreatedAt, 
-				  &storedNonce.ExpiresAt, &storedNonce.Used)
-	if err != nil {
-		log.Printf("Error looking up nonce: %v", err)
-		return err
-	}
-	// Check expiration
-	if time.Now().After(storedNonce.ExpiresAt) {
-		return siws.ErrExpiredNonce
-	}
-	// Mark as used
-	_, err = tx.TX.Exec(`
-		UPDATE auth.nonces 
-		SET used = true, address = $1 
-		WHERE id = $2
-	`, sql.NullString{String: address, Valid: true}, storedNonce.ID)
-	return err
-})
-
-return err
-}

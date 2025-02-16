@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -381,17 +380,13 @@ func (c *Web3Configuration) ParseSupportedChains() (map[string]BlockchainConfig,
 
 		// Validate network type
 		switch network {
-		case "ethereum":
-			if _, ok := new(big.Int).SetString(chainID, 10); !ok {
-				return nil, fmt.Errorf("invalid Ethereum chain ID: %s", chainID)
+			case "solana":
+				if !siws.IsValidSolanaNetwork(chainID) {
+					return nil, fmt.Errorf("invalid Solana network: %s", chainID)
+				}
+			default:
+				return nil, fmt.Errorf("unsupported network: %s", network)
 			}
-		case "solana":
-			if !siws.IsValidSolanaNetwork(chainID) {
-				return nil, fmt.Errorf("invalid Solana network: %s", chainID)
-			}
-		default:
-			return nil, fmt.Errorf("unsupported network: %s", network)
-		}
 
 		// Add to chain map
 		chainMap[chain] = BlockchainConfig{
