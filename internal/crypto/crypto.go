@@ -25,13 +25,13 @@ func SecureToken() string {
 }
 
 // GenerateOtp generates a random n digit otp
-func GenerateOtp(digits int, charset conf.OtpCharset) string {
+func GenerateOtp(length int, charset conf.OtpCharset) string {
 	characters := must(conf.GetCharactersForCharset(charset))
 
 	charactersLength := big.NewInt(int64(len(characters)))
 
 	var otp strings.Builder
-	for i := 0; i < digits; i++ {
+	for i := 0; i < length; i++ {
 		index := must(rand.Int(rand.Reader, charactersLength))
 		otp.WriteByte(characters[index.Int64()])
 	}
