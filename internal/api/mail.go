@@ -87,7 +87,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 
 	var url string
 	now := time.Now()
-	otp := crypto.GenerateOtp(config.Mailer.OtpLength)
+	otp := crypto.GenerateOtp(config.Mailer.OtpLength, config.Mailer.OtpCharset)
 
 	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
 
@@ -301,12 +301,13 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 	config := a.config
 	maxFrequency := config.SMTP.MaxFrequency
 	otpLength := config.Mailer.OtpLength
+	otpCharset := config.Mailer.OtpCharset
 
 	if err = validateSentWithinFrequencyLimit(u.ConfirmationSentAt, maxFrequency); err != nil {
 		return err
 	}
 	oldToken := u.ConfirmationToken
-	otp := crypto.GenerateOtp(otpLength)
+	otp := crypto.GenerateOtp(otpLength, otpCharset)
 
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.ConfirmationToken = addFlowPrefixToToken(token, flowType)
@@ -335,9 +336,10 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 func (a *API) sendInvite(r *http.Request, tx *storage.Connection, u *models.User) error {
 	config := a.config
 	otpLength := config.Mailer.OtpLength
+	otpCharset := config.Mailer.OtpCharset
 	var err error
 	oldToken := u.ConfirmationToken
-	otp := crypto.GenerateOtp(otpLength)
+	otp := crypto.GenerateOtp(otpLength, otpCharset)
 
 	u.ConfirmationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
@@ -368,13 +370,14 @@ func (a *API) sendInvite(r *http.Request, tx *storage.Connection, u *models.User
 func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *models.User, flowType models.FlowType) error {
 	config := a.config
 	otpLength := config.Mailer.OtpLength
+	otpCharset := config.Mailer.OtpCharset
 
 	if err := validateSentWithinFrequencyLimit(u.RecoverySentAt, config.SMTP.MaxFrequency); err != nil {
 		return err
 	}
 
 	oldToken := u.RecoveryToken
-	otp := crypto.GenerateOtp(otpLength)
+	otp := crypto.GenerateOtp(otpLength, otpCharset)
 
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
@@ -405,13 +408,14 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 	config := a.config
 	maxFrequency := config.SMTP.MaxFrequency
 	otpLength := config.Mailer.OtpLength
+	otpCharset := config.Mailer.OtpCharset
 
 	if err := validateSentWithinFrequencyLimit(u.ReauthenticationSentAt, maxFrequency); err != nil {
 		return err
 	}
 
 	oldToken := u.ReauthenticationToken
-	otp := crypto.GenerateOtp(otpLength)
+	otp := crypto.GenerateOtp(otpLength, otpCharset)
 
 	u.ReauthenticationToken = crypto.GenerateTokenHash(u.GetEmail(), otp)
 	now := time.Now()
@@ -441,6 +445,7 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 	var err error
 	config := a.config
 	otpLength := config.Mailer.OtpLength
+	otpCharset := config.Mailer.OtpCharset
 
 	// since Magic Link is just a recovery with a different template and behaviour
 	// around new users we will reuse the recovery db timer to prevent potential abuse
@@ -449,7 +454,7 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 	}
 
 	oldToken := u.RecoveryToken
-	otp := crypto.GenerateOtp(otpLength)
+	otp := crypto.GenerateOtp(otpLength, otpCharset)
 
 	token := crypto.GenerateTokenHash(u.GetEmail(), otp)
 	u.RecoveryToken = addFlowPrefixToToken(token, flowType)
@@ -480,12 +485,13 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models.User, email string, flowType models.FlowType) error {
 	config := a.config
 	otpLength := config.Mailer.OtpLength
+	otpCharset := config.Mailer.OtpCharset
 
 	if err := validateSentWithinFrequencyLimit(u.EmailChangeSentAt, config.SMTP.MaxFrequency); err != nil {
 		return err
 	}
 
-	otpNew := crypto.GenerateOtp(otpLength)
+	otpNew := crypto.GenerateOtp(otpLength, otpCharset)
 
 	u.EmailChange = email
 	token := crypto.GenerateTokenHash(u.EmailChange, otpNew)
@@ -493,7 +499,7 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 
 	otpCurrent := ""
 	if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
-		otpCurrent = crypto.GenerateOtp(otpLength)
+		otpCurrent = crypto.GenerateOtp(otpLength, otpCharset)
 
 		currentToken := crypto.GenerateTokenHash(u.GetEmail(), otpCurrent)
 		u.EmailChangeTokenCurrent = addFlowPrefixToToken(currentToken, flowType)
