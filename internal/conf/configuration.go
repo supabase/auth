@@ -985,6 +985,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.Mailer.OtpLength = 6
 	}
 
+	if config.Mailer.OtpCharset == "" {
+		config.Mailer.OtpCharset = "numeric"
+	}
+
 	if config.SMTP.MaxFrequency == 0 {
 		config.SMTP.MaxFrequency = 1 * time.Minute
 	}
@@ -1000,6 +1004,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.Sms.OtpLength == 0 || config.Sms.OtpLength < 6 || config.Sms.OtpLength > 10 {
 		// 6-digit otp by default
 		config.Sms.OtpLength = 6
+	}
+
+	if config.Sms.OtpCharset == "" {
+		config.Sms.OtpCharset = "numeric"
 	}
 
 	if config.Sms.TestOTP != nil {
@@ -1046,6 +1054,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.MFA.Phone.OtpLength < 6 || config.MFA.Phone.OtpLength > 10 {
 		// 6-digit otp by default
 		config.MFA.Phone.OtpLength = 6
+	}
+
+	if config.MFA.Phone.OtpCharset == "" {
+		config.MFA.Phone.OtpCharset = "numeric"
 	}
 
 	if config.External.FlowStateExpiryDuration < defaultFlowStateExpiryDuration {
