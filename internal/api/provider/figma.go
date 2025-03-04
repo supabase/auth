@@ -51,7 +51,7 @@ func NewFigmaProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 			ClientSecret: ext.Secret,
 			Endpoint: oauth2.Endpoint{
 				AuthURL:  authHost + "/oauth",
-				TokenURL: authHost + "/api/oauth/token",
+				TokenURL: apiHost + "/v1/oauth/token",
 			},
 			RedirectURL: ext.RedirectURI,
 			Scopes:      oauthScopes,
