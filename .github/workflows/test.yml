@@ -11,7 +11,7 @@ jobs:
   test:
     strategy:
       matrix:
-        go-version: [1.22.x]
+        go-version: [1.23.x]
     runs-on: ubuntu-20.04
     services:
       postgres:
@@ -34,8 +34,6 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - name: Checkout code
         uses: actions/checkout@v2
-        with:
-          skip-unshallow: "true"
       - name: Check gofmt
         run: |
           set -x
