@@ -448,6 +448,7 @@ type SmsProviderConfiguration struct {
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
+	Kaleyra      KaleyraConfiguration              `json:"kaleyra"`
 }
 
 func (c *SmsProviderConfiguration) GetTestOTP(phone string, now time.Time) (string, bool) {
@@ -486,6 +487,11 @@ type VonageProviderConfiguration struct {
 	ApiKey    string `json:"api_key" split_words:"true"`
 	ApiSecret string `json:"api_secret" split_words:"true"`
 	From      string `json:"from" split_words:"true"`
+}
+
+type KaleyraConfiguration struct {
+	ApiKey    string `json:"api_key" split_words:"true"`
+	SenderID  string `json:"sender_id" split_words:"true"`
 }
 
 type CaptchaConfiguration struct {
