@@ -48,10 +48,10 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 
 	user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil {
-		if models.IsNotFoundError(err) {
-			return sendJSON(w, http.StatusOK, map[string]string{})
+		if user != nil && (user.IsSSOUser || user.AppMetaData["provider"] == "steam") {
+			return unprocessableEntityError(ErrorCodeSSOUser, "Password recovery is not supported for this type of account")
 		}
-		return internalServerError("Unable to process request").WithInternalError(err)
+		return oauthError("invalid_request", "Recovery requires a valid email")
 	}
 	if isPKCEFlow(flowType) {
 		if _, err := generateFlowState(db, models.Recovery.String(), models.Recovery, params.CodeChallengeMethod, params.CodeChallenge, &(user.ID)); err != nil {
