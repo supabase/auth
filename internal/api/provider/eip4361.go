@@ -101,7 +101,7 @@ func (p *Web3Provider) VerifySignedMessage(db *storage.Connection, params *Web3G
 
 	// Construct the provider_id as network:chain:address to make it unique
 	// use concat
-	providerId := (network[0] + ":" + network[1] + ":" + parsedMessage.Address)
+	providerId := ("web3:" + network[0] + ":" + network[1] + ":" + parsedMessage.Address)
 
 	return &UserProvidedData{
 		Metadata: &Claims{

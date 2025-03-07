@@ -344,15 +344,15 @@ type ProviderConfiguration struct {
 }
 
 type Web3Configuration struct {
-	Enabled   bool          `json:"enabled" default:"false" split_words:"true"`
-	Domain    string        `json:"domain" required:"true" split_words:"true"`
-	Statement string        `json:"statement" split_words:"true"`
-	Version   string        `json:"version" default:"1" split_words:"true"`
-	Timeout   time.Duration `json:"timeout" default:"300s" split_words:"true"`
+    Enabled   bool          `json:"enabled,omitempty" default:"false" split_words:"true"`
+    Domain    string        `json:"domain,omitempty" required:"true" split_words:"true"`
+    Statement string        `json:"statement,omitempty" split_words:"true"`
+    Version   string        `json:"version,omitempty" default:"1" split_words:"true"`
+    Timeout   time.Duration `json:"timeout,omitempty" default:"300s" split_words:"true"`
 
-	// Comma-separated list of supported chains (e.g. "ethereum:1,ethereum:137,solana:mainnet")
-	SupportedChains string `json:"supported_chains" split_words:"true"`
-	DefaultChain    string `json:"default_chain" split_words:"true"`
+    // Comma-separated list of supported chains (e.g. "ethereum:1,ethereum:137,solana:mainnet")
+    SupportedChains string `json:"supported_chains,omitempty" split_words:"true"`
+    DefaultChain    string `json:"default_chain,omitempty" split_words:"true"`
 }
 
 type BlockchainConfig struct {

@@ -116,17 +116,6 @@ func (ts *Web3TestSuite) generateSIWSMessageAndSignature(nonce string) (string, 
 	return rawMessage, signatureBase64
 }
 
-func (ts *Web3TestSuite) assertTokenResponse(w *httptest.ResponseRecorder) AccessTokenResponse {
-	ts.Require().Equal(http.StatusOK, w.Code)
-	var token AccessTokenResponse
-	ts.Require().NoError(json.NewDecoder(w.Body).Decode(&token))
-	ts.Require().NotEmpty(token.Token)
-	ts.Require().NotEmpty(token.RefreshToken)
-	ts.Require().Equal("bearer", token.TokenType)
-	ts.Require().NotNil(token.User)
-	return token
-}
-
 func (ts *Web3TestSuite) assertErrorResponse(w *httptest.ResponseRecorder, expectedCode int, expectedError string) {
 	ts.Require().Equal(expectedCode, w.Code)
 	var errorResponse map[string]interface{}
