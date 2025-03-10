@@ -83,19 +83,17 @@ func (m *MailmeMailer) Mail(
 
 	mail := gomail.NewMessage()
 	
-	// Apply headers first
+	mail := gomail.NewMessage()
+	mail.SetHeader("From", m.From)
+	mail.SetHeader("To", to)
+	mail.SetHeader("Subject", subject.String())
+	
 	for k, v := range headers {
 		if v != nil && k != "From" { // Skip From header from headers
 			mail.SetHeader(k, v...)
 		}
 	}
 	
-	// Set From, To, Subject headers after other headers
-	// This ensures From from configuration takes precedence
-	mail.SetHeader("From", m.From)
-	mail.SetHeader("To", to)
-	mail.SetHeader("Subject", subject.String())
-
 	mail.SetBody("text/html", body)
 
 	dial := gomail.NewDialer(m.Host, m.Port, m.User, m.Pass)
