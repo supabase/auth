@@ -1,13 +1,16 @@
 -- previous backfill migration left last_sign_in_at to be null, which broke some projects
 
 do $$
-begin
-update {{ index .Options "Namespace" }}.identities
-  set last_sign_in_at = '2022-11-25'
-  where
-    last_sign_in_at is null and
-    created_at = '2022-11-25' and
-    updated_at = '2022-11-25' and
-    provider = 'email' and
-    id = user_id::text;
-end $$;
+BEGIN
+UPDATE {{ index .Options "Namespace" }}.identities
+  SET last_sign_in_at = '2022-11-25'
+    WHERE 
+        last_sign_in_at IS NULL AND
+        created_at = '2022-11-25' AND
+        updated_at = '2022-11-25' AND
+        provider = 'email' AND
+        id::text = user_id::text;
+EXCEPTION 
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Error in backfill migration: %', SQLERRM;
+END $$;

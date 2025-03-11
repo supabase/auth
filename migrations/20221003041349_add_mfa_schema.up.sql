@@ -1,50 +1,66 @@
--- see: https://stackoverflow.com/questions/7624919/check-if-a-user-defined-type-already-exists-in-postgresql/48382296#48382296
-do $$ begin
-    create type factor_type as enum('totp', 'webauthn');
-    create type factor_status as enum('unverified', 'verified');
-    create type aal_level as enum('aal1', 'aal2', 'aal3');
-exception
-    when duplicate_object then null;
-end $$;
+-- Create types in the specified namespace using template variable
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_type
+        WHERE typname = 'factor_type'
+        AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '{{ index .Options "Namespace" }}')
+    ) THEN
+        CREATE TYPE {{ index .Options "Namespace" }}.factor_type AS ENUM ('totp', 'webauthn');
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_type
+        WHERE typname = 'factor_status'
+        AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '{{ index .Options "Namespace" }}')
+    ) THEN
+        CREATE TYPE {{ index .Options "Namespace" }}.factor_status AS ENUM ('unverified', 'verified');
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_type
+        WHERE typname = 'aal_level'
+        AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = '{{ index .Options "Namespace" }}')
+    ) THEN
+        CREATE TYPE {{ index .Options "Namespace" }}.aal_level AS ENUM ('aal1', 'aal2', 'aal3');
+    END IF;
+END $$;
 
 -- auth.mfa_factors definition
-create table if not exists {{ index .Options "Namespace" }}.mfa_factors(
-       id uuid not null,
-       user_id uuid not null,
-       friendly_name text null,
-       factor_type factor_type not null,
-       status factor_status not null,
-       created_at timestamptz not null,
-       updated_at timestamptz not null,
-       secret text null,
-       constraint mfa_factors_pkey primary key(id),
-       constraint mfa_factors_user_id_fkey foreign key (user_id) references {{ index .Options "Namespace" }}.users(id) on delete cascade
+CREATE TABLE IF NOT EXISTS {{ index .Options "Namespace" }}.mfa_factors (
+    id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    friendly_name TEXT NULL,
+    factor_type {{ index .Options "Namespace" }}.factor_type NOT NULL,
+    status {{ index .Options "Namespace" }}.factor_status NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    secret TEXT NULL,
+    CONSTRAINT mfa_factors_pkey PRIMARY KEY (id),
+    CONSTRAINT mfa_factors_user_id_fkey FOREIGN KEY (user_id) REFERENCES {{ index .Options "Namespace" }}.users(id) ON DELETE CASCADE
 );
-comment on table {{ index .Options "Namespace" }}.mfa_factors is 'auth: stores metadata about factors';
+COMMENT ON TABLE {{ index .Options "Namespace" }}.mfa_factors IS 'auth: stores metadata about factors';
 
-create unique index if not exists mfa_factors_user_friendly_name_unique on {{ index .Options "Namespace" }}.mfa_factors (friendly_name, user_id) where trim(friendly_name) <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS mfa_factors_user_friendly_name_unique ON {{ index .Options "Namespace" }}.mfa_factors (friendly_name, user_id) WHERE TRIM(friendly_name) <> '';
 
 -- auth.mfa_challenges definition
-create table if not exists {{ index .Options "Namespace" }}.mfa_challenges(
-       id uuid not null,
-       factor_id uuid not null,
-       created_at timestamptz not null,
-       verified_at timestamptz  null,
-       ip_address  inet not null,
-       constraint mfa_challenges_pkey primary key (id),
-       constraint mfa_challenges_auth_factor_id_fkey foreign key (factor_id) references {{ index .Options "Namespace" }}.mfa_factors(id) on delete cascade
+CREATE TABLE IF NOT EXISTS {{ index .Options "Namespace" }}.mfa_challenges (
+    id UUID NOT NULL,
+    factor_id UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    verified_at TIMESTAMPTZ NULL,
+    ip_address INET NOT NULL,
+    CONSTRAINT mfa_challenges_pkey PRIMARY KEY (id),
+    CONSTRAINT mfa_challenges_auth_factor_id_fkey FOREIGN KEY (factor_id) REFERENCES {{ index .Options "Namespace" }}.mfa_factors(id) ON DELETE CASCADE
 );
-comment on table {{ index .Options "Namespace" }}.mfa_challenges is 'auth: stores metadata about challenge requests made';
-
-
+COMMENT ON TABLE {{ index .Options "Namespace" }}.mfa_challenges IS 'auth: stores metadata about challenge requests made';
 
 -- add factor_id and amr claims to session
-create table if not exists {{ index .Options "Namespace" }}.mfa_amr_claims(
-    session_id uuid not null,
-    created_at timestamptz not null,
-    updated_at timestamptz not null,
-    authentication_method text not null,
-    constraint mfa_amr_claims_session_id_authentication_method_pkey unique(session_id, authentication_method),
-    constraint mfa_amr_claims_session_id_fkey foreign key(session_id) references {{ index .Options "Namespace" }}.sessions(id) on delete cascade
+CREATE TABLE IF NOT EXISTS {{ index .Options "Namespace" }}.mfa_amr_claims (
+    session_id UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    authentication_method TEXT NOT NULL,
+    CONSTRAINT mfa_amr_claims_session_id_authentication_method_pkey UNIQUE (session_id, authentication_method),
+    CONSTRAINT mfa_amr_claims_session_id_fkey FOREIGN KEY (session_id) REFERENCES {{ index .Options "Namespace" }}.sessions(id) ON DELETE CASCADE
 );
-comment on table {{ index .Options "Namespace" }}.mfa_amr_claims is 'auth: stores authenticator method reference claims for multi factor authentication';
+COMMENT ON TABLE {{ index .Options "Namespace" }}.mfa_amr_claims IS 'auth: stores authenticator method reference claims for multi factor authentication';

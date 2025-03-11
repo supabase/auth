@@ -1,9 +1,13 @@
 FROM golang:1.23.7-alpine3.20
+
 ENV GO111MODULE=on
 ENV CGO_ENABLED=0
 ENV GOOS=linux
 
-RUN apk add --no-cache make git bash
+# Install make, git, bash, zsh, curl, and postgresql-client (for psql)
+RUN apk add --no-cache make git bash zsh curl postgresql-client && \
+    # Install oh-my-zsh non-interactively
+    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
 
 WORKDIR /go/src/github.com/supabase/auth
 
@@ -13,6 +17,18 @@ COPY ./Makefile ./go.* ./
 # Production dependencies
 RUN make deps
 
-# Development dependences
-RUN go get github.com/githubnemo/CompileDaemon
-RUN go install github.com/githubnemo/CompileDaemon
+# Development dependencies
+RUN go get github.com/githubnemo/CompileDaemon && \
+    go install github.com/githubnemo/CompileDaemon
+
+# Create a default .env.docker file if needed
+RUN touch .env.docker
+
+# Copy the full source (including .git for version info if available)
+COPY . /go/src/github.com/supabase/auth
+
+# Build with a fallback version if git describe fails
+RUN CGO_ENABLED=0 go build -ldflags "-X github.com/supabase/auth/internal/utilities.Version=$(git describe --tags 2>/dev/null || echo unspecified)" -buildvcs=false
+
+# Command to start CompileDaemon with zsh as the shell
+CMD ["zsh", "-c", "CompileDaemon --build=\"make build\" --directory=/go/src/github.com/supabase/auth --recursive=true -pattern=\"(.+\\.go|.+\\.env)\" -exclude=auth -exclude=auth-arm64 -exclude=.env --command=\"/go/src/github.com/supabase/auth/auth\""]

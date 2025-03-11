@@ -34,7 +34,9 @@ require (
 )
 
 require (
+	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.10.0 // indirect
+	github.com/charmbracelet/x/ansi v0.4.2 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
@@ -54,9 +56,13 @@ require (
 	github.com/lestrrat-go/httprc v1.0.5 // indirect
 	github.com/lestrrat-go/iter v1.0.2 // indirect
 	github.com/lestrrat-go/option v1.0.1 // indirect
+	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
+	github.com/muesli/termenv v0.15.2 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/speakeasy-api/openapi-overlay v0.9.0 // indirect
 	github.com/vmware-labs/yaml-jsonpath v0.3.2 // indirect
@@ -112,6 +118,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/crewjam/httperr v0.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.13.0 // indirect
