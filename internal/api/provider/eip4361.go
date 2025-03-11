@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -16,7 +15,7 @@ import (
 )
 
 const (
-	BlockchainSolana   = "solana"
+	BlockchainSolana = "solana"
 )
 
 // Web3Provider implements Web3 authentication following EIP-4361 spec
@@ -70,9 +69,9 @@ func (p *Web3Provider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 }
 
 // VerifySignedMessage verifies a signed Web3 message based on the blockchain
-func (p *Web3Provider) VerifySignedMessage(db *storage.Connection, params *Web3GrantParams) (*UserProvidedData, error) {   
+func (p *Web3Provider) VerifySignedMessage(db *storage.Connection, params *Web3GrantParams, sigBytes []byte) (*UserProvidedData, error) {
 	var err error
-	
+
 	parsedMessage, err := siws.ParseSIWSMessage(params.Message)
 
 	if err != nil {
@@ -87,16 +86,11 @@ func (p *Web3Provider) VerifySignedMessage(db *storage.Connection, params *Web3G
 	if chain == "" {
 		return nil, siws.ErrInvalidChainID
 	}
-	
-	switch chain {
-		case BlockchainSolana:
-			err = p.verifySolanaSignature(params.Signature, params.Message, parsedMessage)
-		default:
-			return nil, httpError(http.StatusNotImplemented, "signature verification not implemented for %s", network)
-	}
+
+	err = p.verifySolanaSignature(sigBytes, params.Message, parsedMessage)
 
 	if err != nil {
-		return nil, fmt.Errorf("signature verification failed: %w", err)
+		return nil, fmt.Errorf("siws: signature verification failed: %w", err)
 	}
 
 	// Construct the provider_id as network:chain:address to make it unique
@@ -116,8 +110,7 @@ func (p *Web3Provider) VerifySignedMessage(db *storage.Connection, params *Web3G
 	}, nil
 }
 
-
-func (p *Web3Provider) verifySolanaSignature(signature string, rawMessage string, msg *siws.SIWSMessage) error {
+func (p *Web3Provider) verifySolanaSignature(signature []byte, rawMessage string, msg *siws.SIWSMessage) error {
 	// Decode base64 signature into bytes
 	sigBytes, err := base64.StdEncoding.DecodeString(string(signature))
 	if err != nil {
@@ -136,4 +129,3 @@ func (p *Web3Provider) verifySolanaSignature(signature string, rawMessage string
 
 	return nil
 }
-

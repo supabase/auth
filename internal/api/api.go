@@ -133,7 +133,6 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	})
 
 	r.Route("/", func(r *router) {
-		
 
 		r.Use(api.isValidExternalHost)
 

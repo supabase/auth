@@ -344,15 +344,15 @@ type ProviderConfiguration struct {
 }
 
 type Web3Configuration struct {
-    Enabled   bool          `json:"enabled,omitempty" default:"false" split_words:"true"`
-    Domain    string        `json:"domain,omitempty" required:"true" split_words:"true"`
-    Statement string        `json:"statement,omitempty" split_words:"true"`
-    Version   string        `json:"version,omitempty" default:"1" split_words:"true"`
-    Timeout   time.Duration `json:"timeout,omitempty" default:"300s" split_words:"true"`
+	Enabled   bool          `json:"enabled,omitempty" default:"false" split_words:"true"`
+	Domain    string        `json:"domain,omitempty" required:"true" split_words:"true"`
+	Statement string        `json:"statement,omitempty" split_words:"true"`
+	Version   string        `json:"version,omitempty" default:"1" split_words:"true"`
+	Timeout   time.Duration `json:"timeout,omitempty" default:"300s" split_words:"true"`
 
-    // Comma-separated list of supported chains (e.g. "ethereum:1,ethereum:137,solana:mainnet")
-    SupportedChains string `json:"supported_chains,omitempty" split_words:"true"`
-    DefaultChain    string `json:"default_chain,omitempty" split_words:"true"`
+	// Comma-separated list of supported chains (e.g. "ethereum:1,ethereum:137,solana:mainnet")
+	SupportedChains string `json:"supported_chains,omitempty" split_words:"true"`
+	DefaultChain    string `json:"default_chain,omitempty" split_words:"true"`
 }
 
 type BlockchainConfig struct {
@@ -380,13 +380,13 @@ func (c *Web3Configuration) ParseSupportedChains() (map[string]BlockchainConfig,
 
 		// Validate network type
 		switch network {
-			case "solana":
-				if !siws.IsValidSolanaNetwork(chainID) {
-					return nil, fmt.Errorf("invalid Solana network: %s", chainID)
-				}
-			default:
-				return nil, fmt.Errorf("unsupported network: %s", network)
+		case "solana":
+			if !siws.IsValidSolanaNetwork(chainID) {
+				return nil, fmt.Errorf("invalid Solana network: %s", chainID)
 			}
+		default:
+			return nil, fmt.Errorf("unsupported network: %s", network)
+		}
 
 		// Add to chain map
 		chainMap[chain] = BlockchainConfig{

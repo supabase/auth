@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -330,7 +331,17 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		Chain:     params.Chain,
 	}
 
-	userData, err := web3Provider.VerifySignedMessage(db, msg)
+	if params.Chain != provider.BlockchainSolana {
+		panic("Web3 provider only supports 'solana', but got " + params.Chain)
+	}
+
+	// Decode base64 signature into bytes
+	sigBytes, err := base64.StdEncoding.DecodeString(string(params.Signature))
+	if err != nil {
+		panic("invalid signature encoding: " + err.Error())
+	}
+
+	userData, err := web3Provider.VerifySignedMessage(db, msg, sigBytes)
 	if err != nil {
 		return oauthError("invalid_grant", "Signature verification failed").WithInternalError(err)
 	}
@@ -374,7 +385,6 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 
 	return sendJSON(w, http.StatusOK, token)
 }
-
 
 func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, int64, error) {
 	config := a.config
@@ -573,5 +583,3 @@ func validateTokenClaims(outputClaims map[string]interface{}) error {
 
 	return nil
 }
-
-

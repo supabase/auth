@@ -24,16 +24,16 @@ import (
 const (
 	// Chain identifiers
 	chainSolanaMainnet = "solana:mainnet"
-	
+
 	// Grant type
 	grantTypeWeb3 = "web3"
-	
+
 	// Error responses
 	errorInvalidGrant = "invalid_grant"
-	
+
 	// Test values
 	defaultTestURI = "https://example.com"
-	
+
 	// Endpoints
 	tokenEndpoint = "/token"
 )
@@ -45,7 +45,7 @@ type Web3TestSuite struct {
 	pubKey       ed25519.PublicKey
 	privKey      ed25519.PrivateKey
 	pubKeyBase58 string
-	
+
 	// Test configuration
 	testURI string
 }
@@ -125,7 +125,7 @@ func (ts *Web3TestSuite) assertErrorResponse(w *httptest.ResponseRecorder, expec
 }
 
 func (ts *Web3TestSuite) TestSignupWeb3_InvalidSignature() {
-	nonce:= crypto.SecureAlphanumeric(12)
+	nonce := crypto.SecureAlphanumeric(12)
 
 	rawMessage, _ := ts.generateSIWSMessageAndSignature(nonce)
 
@@ -138,7 +138,7 @@ func (ts *Web3TestSuite) TestSignupWeb3_InvalidSignature() {
 }
 
 func (ts *Web3TestSuite) TestSignupWeb3_MalformedMessage() {
-	nonce:= crypto.SecureAlphanumeric(12)
+	nonce := crypto.SecureAlphanumeric(12)
 
 	malformedMessage := fmt.Sprintf(`{
 		"domain": "%s",
@@ -156,7 +156,7 @@ func (ts *Web3TestSuite) TestSignupWeb3_MalformedMessage() {
 }
 
 func (ts *Web3TestSuite) TestSignupWeb3_InvalidChain() {
-	nonce:= crypto.SecureAlphanumeric(12)
+	nonce := crypto.SecureAlphanumeric(12)
 	rawMessage, signatureBase64 := ts.generateSIWSMessageAndSignature(nonce)
 
 	invalidChain := "invalid-chain"
