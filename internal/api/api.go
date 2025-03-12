@@ -205,6 +205,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				r.Get("/authorize", api.LinkIdentity)
 				r.Delete("/{identity_id}", api.DeleteIdentity)
 			})
+			r.Post("/identities/link_token", api.LinkIdentityWithIDToken)
 		})
 
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {
