@@ -2079,9 +2079,9 @@ components:
           example: 1674840917
           description: UNIX seconds of the timestamp past which the challenge should not be verified.
         credential_request_options:
-          $ref: "#/components/schemas/CredentialRequestOptions"
+          $ref: '#/components/schemas/CredentialRequestOptions'
         credential_creation_options:
-          $ref: "#/components/schemas/CredentialCreationOptions"
+          $ref: '#/components/schemas/CredentialCreationOptions'
 
     CredentialAssertion:
       type: object
