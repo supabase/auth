@@ -789,8 +789,8 @@ paths:
             application/json:
               schema:
                 oneOf:
-                  - $ref: "#/components/schemas/TOTPPhoneChallengeResponse"
-                  - $ref: "#/components/schemas/WebAuthnChallengeResponse"
+                  - $ref: '#/components/schemas/TOTPPhoneChallengeResponse'
+                  - $ref: '#/components/schemas/WebAuthnChallengeResponse'
         400:
           $ref: "#/components/responses/BadRequestResponse"
         429:
@@ -2007,6 +2007,7 @@ components:
           format: date-time
           nullable: true
 
+
     IdentitySchema:
       type: object
       properties:
@@ -2209,7 +2210,7 @@ components:
         allowCredentials:
           type: array
           items:
-            $ref: "#/components/schemas/PublicKeyCredentialDescriptor"
+            $ref: '#/components/schemas/PublicKeyCredentialDescriptor'
         userVerification:
           type: string
           enum: [required, preferred, discouraged]
@@ -2227,7 +2228,7 @@ components:
             name:
               type: string
         user:
-          $ref: "#/components/schemas/UserSchema"
+          $ref: '#/components/schemas/UserSchema'
 
         challenge:
           type: string
@@ -2249,7 +2250,7 @@ components:
         excludeCredentials:
           type: array
           items:
-            $ref: "#/components/schemas/PublicKeyCredentialDescriptor"
+            $ref: '#/components/schemas/PublicKeyCredentialDescriptor'
         authenticatorSelection:
           type: object
           properties:
