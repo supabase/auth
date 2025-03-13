@@ -24,6 +24,9 @@ type nextcloudUser struct {
 	Name             string   `json:"displayname"`
 	AdditionalEmails []string `json:"additional_mail"`
 	ID               string   `json:"id"`
+	Website          string   `json:"website"`
+	Phone            string   `json:"phone"`
+	Locale           string   `json:"locale"`
 }
 
 type nextcloudUserResponse struct {
@@ -85,6 +88,9 @@ func (g nextcloudProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (
 		Issuer:  g.Host,
 		Subject: u.ID,
 		Name:    u.Name,
+		Website: u.Website,
+		Phone:   u.Phone,
+		Locale:  u.Locale,
 
 		// To be deprecated
 		FullName:   u.Name,
