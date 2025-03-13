@@ -325,6 +325,15 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 	issuedAt := time.Now().UTC()
 	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
 
+	atLeastOneVerifiedFactor := false
+	for i := 0; i < len(user.Factors); i++ {
+		factor := user.Factors[i]
+		if factor.IsVerified() {
+			atLeastOneVerifiedFactor = true
+			break
+		}
+	}
+
 	claims := &hooks.AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID.String(),
@@ -340,6 +349,7 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		Role:                          user.Role,
 		SessionId:                     sid,
 		AuthenticatorAssuranceLevel:   aal.String(),
+		AtLeastOneVerifiedFactor:      atLeastOneVerifiedFactor,
 		AuthenticationMethodReference: amr,
 		IsAnonymous:                   user.IsAnonymous,
 	}
