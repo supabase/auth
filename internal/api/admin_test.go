@@ -238,7 +238,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			desc: "Only phone",
 			params: map[string]interface{}{
 				"phone":    "123456789",
-				"password": "test1",
+				"password": "StrongPassword123!",
 			},
 			expected: map[string]interface{}{
 				"email":           "",
@@ -246,7 +246,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "phone",
 				"providers":       []string{"phone"},
-				"password":        "test1",
+				"password":        "StrongPassword123!",
 			},
 		},
 		{
@@ -254,7 +254,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			params: map[string]interface{}{
 				"email":    "test1@example.com",
 				"phone":    "123456789",
-				"password": "test1",
+				"password": "StrongPassword123!",
 			},
 			expected: map[string]interface{}{
 				"email":           "test1@example.com",
@@ -262,7 +262,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email", "phone"},
-				"password":        "test1",
+				"password":        "StrongPassword123!",
 			},
 		},
 		{
@@ -300,7 +300,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			params: map[string]interface{}{
 				"email":        "test4@example.com",
 				"phone":        "",
-				"password":     "test1",
+				"password":     "StrongPassword123!",
 				"ban_duration": "24h",
 			},
 			expected: map[string]interface{}{
@@ -309,7 +309,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email"},
-				"password":        "test1",
+				"password":        "StrongPassword123!",
 			},
 		},
 		{
@@ -332,7 +332,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			params: map[string]interface{}{
 				"id":       "fc56ab41-2010-4870-a9b9-767c1dc573fb",
 				"email":    "test6@example.com",
-				"password": "test",
+				"password": "StrongPassword123!", // Updated to meet requirements
 			},
 			expected: map[string]interface{}{
 				"id":              "fc56ab41-2010-4870-a9b9-767c1dc573fb",
@@ -341,7 +341,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 				"isAuthenticated": true,
 				"provider":        "email",
 				"providers":       []string{"email"},
-				"password":        "test",
+				"password":        "StrongPassword123!",
 			},
 		},
 	}
@@ -711,7 +711,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			},
 			userData: map[string]interface{}{
 				"email":    "test1@example.com",
-				"password": "test1",
+				"password": "StrongPassword123!",
 			},
 			expected: http.StatusOK,
 		},
@@ -727,7 +727,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			},
 			userData: map[string]interface{}{
 				"phone":    "123456789",
-				"password": "test1",
+				"password": "StrongPassword123!",
 			},
 			expected: http.StatusOK,
 		},
@@ -739,7 +739,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithDisabledLogin() {
 			},
 			userData: map[string]interface{}{
 				"email":    "test2@example.com",
-				"password": "test2",
+				"password": "StrongPassword123!",
 			},
 			expected: http.StatusOK,
 		},
@@ -860,20 +860,31 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 	cases := []struct {
 		desc   string
 		params map[string]interface{}
+		code   int
 	}{
 		{
 			desc: "create user without email and phone",
 			params: map[string]interface{}{
-				"password": "test_password",
+				"password": "StrongPassword123!",
 			},
+			code: http.StatusBadRequest,
+		},
+		{
+			desc: "weak password that doesn't meet the minimum length",
+			params: map[string]interface{}{
+				"email":    "test@example.com",
+				"password": "weak",
+			},
+			code: http.StatusUnprocessableEntity,
 		},
 		{
 			desc: "create user with password and password hash",
 			params: map[string]interface{}{
 				"email":         "test@example.com",
-				"password":      "test_password",
+				"password":      "StrongPassword123!",
 				"password_hash": "$2y$10$Tk6yEdmTbb/eQ/haDMaCsuCsmtPVprjHMcij1RqiJdLGPDXnL3L1a",
 			},
+			code: http.StatusBadRequest,
 		},
 		{
 			desc: "invalid ban duration",
@@ -881,6 +892,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 				"email":        "test@example.com",
 				"ban_duration": "never",
 			},
+			code: http.StatusBadRequest,
 		},
 		{
 			desc: "custom id is nil",
@@ -888,6 +900,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 				"id":    "00000000-0000-0000-0000-000000000000",
 				"email": "test@example.com",
 			},
+			code: http.StatusBadRequest,
 		},
 		{
 			desc: "bad id format",
@@ -895,8 +908,13 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 				"id":    "bad_uuid_format",
 				"email": "test@example.com",
 			},
+			code: http.StatusBadRequest,
 		},
 	}
+
+	originalMinLength := ts.Config.Password.MinLength
+	ts.Config.Password.MinLength = 8
+
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			var buffer bytes.Buffer
@@ -905,12 +923,20 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
 			w := httptest.NewRecorder()
 			ts.API.handler.ServeHTTP(w, req)
-			require.Equal(ts.T(), http.StatusBadRequest, w.Code, w)
+
+			require.Equal(ts.T(), c.code, w.Code, "Expected status code %d but got %d for test case: %s", c.code, w.Code, c.desc)
 
 			data := map[string]interface{}{}
 			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-			require.Equal(ts.T(), data["error_code"], apierrors.ErrorCodeValidationFailed)
+
+			if c.code == http.StatusBadRequest {
+				require.Equal(ts.T(), data["error_code"], apierrors.ErrorCodeValidationFailed)
+			} else if c.code == http.StatusUnprocessableEntity && c.desc == "weak password that doesn't meet the minimum length" {
+				require.Equal(ts.T(), "weak_password", data["error_code"])
+			}
 		})
 
 	}
+
+	ts.Config.Password.MinLength = originalMinLength
 }

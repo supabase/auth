@@ -381,6 +381,12 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 		params.Password = &password
 	}
 
+	if params.Password != nil {
+		if err := a.checkPasswordStrength(ctx, *params.Password); err != nil {
+			return err
+		}
+	}
+
 	var user *models.User
 	if params.PasswordHash != "" {
 		user, err = models.NewUserWithPasswordHash(params.Phone, params.Email, params.PasswordHash, aud, params.UserMetaData)
