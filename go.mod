@@ -35,7 +35,6 @@ require (
 
 require (
 	github.com/bits-and-blooms/bitset v1.13.0 // indirect
-	github.com/btcsuite/btcutil v1.0.2 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/dprotaso/go-yit v0.0.0-20220510233725-9ba8df137936 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
@@ -47,7 +46,6 @@ require (
 	github.com/gobuffalo/nulls v0.4.2 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/google/go-tpm v0.9.1 // indirect
-	github.com/holiman/uint256 v1.3.1 // indirect
 	github.com/invopop/yaml v0.3.1 // indirect
 	github.com/jackc/pgx/v4 v4.18.2 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
@@ -88,6 +86,7 @@ require (
 
 require (
 	github.com/bits-and-blooms/bloom/v3 v3.6.0
+	github.com/btcsuite/btcutil v1.0.2
 	github.com/crewjam/saml v0.4.14
 	github.com/fatih/structs v1.1.0
 	github.com/fsnotify/fsnotify v1.7.0
