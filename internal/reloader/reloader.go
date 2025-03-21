@@ -3,8 +3,9 @@ package reloader
 
 import (
 	"context"
-	"log"
+	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -27,6 +28,8 @@ type Reloader struct {
 	watchDir   string
 	reloadIval time.Duration
 	tickerIval time.Duration
+	watchFn    func() (watcher, error)
+	reloadFn   func(dir string) (*conf.GlobalConfiguration, error)
 }
 
 func NewReloader(watchDir string) *Reloader {
@@ -34,21 +37,15 @@ func NewReloader(watchDir string) *Reloader {
 		watchDir:   watchDir,
 		reloadIval: reloadInterval,
 		tickerIval: tickerInterval,
+		watchFn:    newFSWatcher,
+		reloadFn:   defaultReloadFn,
 	}
 }
 
 // reload attempts to create a new *conf.GlobalConfiguration after loading the
 // currently configured watchDir.
 func (rl *Reloader) reload() (*conf.GlobalConfiguration, error) {
-	if err := conf.LoadDirectory(rl.watchDir); err != nil {
-		return nil, err
-	}
-
-	cfg, err := conf.LoadGlobalFromEnv()
-	if err != nil {
-		return nil, err
-	}
-	return cfg, nil
+	return rl.reloadFn(rl.watchDir)
 }
 
 // reloadCheckAt checks if reloadConfig should be called, returns true if config
@@ -66,9 +63,10 @@ func (rl *Reloader) reloadCheckAt(at, lastUpdate time.Time) bool {
 }
 
 func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
-	wr, err := fsnotify.NewWatcher()
+	wr, err := rl.watchFn()
 	if err != nil {
-		log.Fatal(err)
+		logrus.WithError(err).Error("reloader: error creating fsnotify Watcher")
+		return err
 	}
 	defer wr.Close()
 
@@ -77,7 +75,7 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 
 	// Ignore errors, if watch dir doesn't exist we can add it later.
 	if err := wr.Add(rl.watchDir); err != nil {
-		logrus.WithError(err).Error("watch dir failed")
+		logrus.WithError(err).Error("reloader: error watching config directory")
 	}
 
 	var lastUpdate time.Time
@@ -92,7 +90,7 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 			// scenarios and wr.WatchList() does not grow which aligns with
 			// the documented behavior.
 			if err := wr.Add(rl.watchDir); err != nil {
-				logrus.WithError(err).Error("watch dir failed")
+				logrus.WithError(err).Error(err)
 			}
 
 			// Check to see if the config is ready to be relaoded.
@@ -105,17 +103,18 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 
 			cfg, err := rl.reload()
 			if err != nil {
-				logrus.WithError(err).Error("config reload failed")
+				logrus.WithError(err).Error("reloader: error loading config")
 				continue
 			}
 
 			// Call the callback function with the latest cfg.
 			fn(cfg)
 
-		case evt, ok := <-wr.Events:
+		case evt, ok := <-wr.Events():
 			if !ok {
-				logrus.WithError(err).Error("fsnotify has exited")
-				return nil
+				err := errors.New("reloader: fsnotify event channel was closed")
+				logrus.WithError(err).Error(err)
+				return err
 			}
 
 			// We only read files ending in .env
@@ -130,12 +129,95 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 				evt.Op.Has(fsnotify.Write):
 				lastUpdate = time.Now()
 			}
-		case err, ok := <-wr.Errors:
+		case err, ok := <-wr.Errors():
 			if !ok {
-				logrus.Error("fsnotify has exited")
-				return nil
+				err := errors.New("reloader: fsnotify error channel was closed")
+				logrus.WithError(err).Error(err)
+				return err
 			}
-			logrus.WithError(err).Error("fsnotify has reported an error")
+			logrus.WithError(err).Error(
+				"reloader: fsnotify has reported an error")
 		}
 	}
 }
+
+func defaultReloadFn(dir string) (*conf.GlobalConfiguration, error) {
+	if err := conf.LoadDirectory(dir); err != nil {
+		return nil, err
+	}
+
+	cfg, err := conf.LoadGlobalFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+type watcher interface {
+	Add(path string) error
+	Close() error
+	Events() chan fsnotify.Event
+	Errors() chan error
+}
+
+type fsNotifyWatcher struct {
+	wr *fsnotify.Watcher
+}
+
+func newFSWatcher() (watcher, error) {
+	wr, err := fsnotify.NewWatcher()
+	return &fsNotifyWatcher{wr}, err
+}
+
+func (o *fsNotifyWatcher) Add(path string) error       { return o.wr.Add(path) }
+func (o *fsNotifyWatcher) Close() error                { return o.wr.Close() }
+func (o *fsNotifyWatcher) Errors() chan error          { return o.wr.Errors }
+func (o *fsNotifyWatcher) Events() chan fsnotify.Event { return o.wr.Events }
+
+type mockWatcher struct {
+	mu      sync.Mutex
+	err     error
+	eventCh chan fsnotify.Event
+	errorCh chan error
+	addCh   chan string
+}
+
+func newMockWatcher(err error) *mockWatcher {
+	wr := &mockWatcher{
+		err:     err,
+		eventCh: make(chan fsnotify.Event, 1024),
+		errorCh: make(chan error, 1024),
+		addCh:   make(chan string, 1024),
+	}
+	return wr
+}
+
+func (o *mockWatcher) getErr() error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	err := o.err
+	return err
+}
+
+func (o *mockWatcher) setErr(err error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.err = err
+}
+
+func (o *mockWatcher) Add(path string) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if err := o.err; err != nil {
+		return err
+	}
+
+	select {
+	case o.addCh <- path:
+	default:
+	}
+	return nil
+}
+func (o *mockWatcher) Close() error                { return o.getErr() }
+func (o *mockWatcher) Events() chan fsnotify.Event { return o.eventCh }
+func (o *mockWatcher) Errors() chan error          { return o.errorCh }

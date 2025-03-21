@@ -9,22 +9,28 @@ import (
 
 const defaultOverTime = time.Hour
 
+const (
+	BurstRateType    = "burst"
+	IntervalRateType = "interval"
+)
+
 type Rate struct {
 	Events   float64       `json:"events,omitempty"`
 	OverTime time.Duration `json:"over_time,omitempty"`
+	typ      string
 }
 
-func (r *Rate) EventsPerSecond() float64 {
-	d := r.OverTime
-	if d == 0 {
-		d = defaultOverTime
+func (r *Rate) GetRateType() string {
+	if r.typ == "" {
+		return IntervalRateType
 	}
-	return r.Events / d.Seconds()
+	return r.typ
 }
 
 // Decode is used by envconfig to parse the env-config string to a Rate value.
 func (r *Rate) Decode(value string) error {
 	if f, err := strconv.ParseFloat(value, 64); err == nil {
+		r.typ = IntervalRateType
 		r.Events = f
 		r.OverTime = defaultOverTime
 		return nil
@@ -45,6 +51,7 @@ func (r *Rate) Decode(value string) error {
 		return fmt.Errorf("rate: over-time part of rate value %q failed to parse as duration: %w", value, err)
 	}
 
+	r.typ = BurstRateType
 	r.Events = float64(e)
 	r.OverTime = d
 	return nil

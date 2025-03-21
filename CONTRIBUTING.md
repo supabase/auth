@@ -495,7 +495,7 @@ We actively welcome your pull requests.
 
 - Is there a corresponding issue created for it? If so, please include it in the PR description so we can track / refer to it.
 - Does your PR follow the [semantic-release commit guidelines](https://github.com/angular/angular.js/blob/master/DEVELOPERS.md#-git-commit-guidelines)?
-- If the PR is a `feat`, an [RFC](https://github.com/supabase/rfcs) or a detailed description of the design implementation is required. The former (RFC) is prefered before starting on the PR.
+- If the PR is a `feat`, an [RFC](https://github.com/supabase/rfcs) or a detailed description of the design implementation is required. The former (RFC) is preferred before starting on the PR.
 - Are the existing tests passing?
 - Have you written some tests for your PR?
 

@@ -824,8 +824,15 @@ func LoadDirectory(configDir string) error {
 	// If at least one path was found we load the configuration files in the
 	// directory. We don't call override without config files because it will
 	// override the env vars previously set with a ".env", if one exists.
-	if len(paths) > 0 {
-		if err := godotenv.Overload(paths...); err != nil {
+	return loadDirectoryPaths(paths...)
+}
+
+func loadDirectoryPaths(p ...string) error {
+	// If at least one path was found we load the configuration files in the
+	// directory. We don't call override without config files because it will
+	// override the env vars previously set with a ".env", if one exists.
+	if len(p) > 0 {
+		if err := godotenv.Overload(p...); err != nil {
 			return err
 		}
 	}
@@ -868,7 +875,10 @@ func loadGlobal(config *GlobalConfiguration) error {
 	if err := config.Validate(); err != nil {
 		return err
 	}
+	return populateGlobal(config)
+}
 
+func populateGlobal(config *GlobalConfiguration) error {
 	if config.Hook.PasswordVerificationAttempt.Enabled {
 		if err := config.Hook.PasswordVerificationAttempt.PopulateExtensibilityPoint(); err != nil {
 			return err
@@ -949,36 +959,8 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 
 	if len(config.JWT.Keys) == 0 {
 		// transform the secret into a JWK for consistency
-		privKey, err := jwk.FromRaw([]byte(config.JWT.Secret))
-		if err != nil {
+		if err := config.applyDefaultsJWT([]byte(config.JWT.Secret)); err != nil {
 			return err
-		}
-		if config.JWT.KeyID != "" {
-			if err := privKey.Set(jwk.KeyIDKey, config.JWT.KeyID); err != nil {
-				return err
-			}
-		}
-		if privKey.Algorithm().String() == "" {
-			if err := privKey.Set(jwk.AlgorithmKey, jwt.SigningMethodHS256.Name); err != nil {
-				return err
-			}
-		}
-		if err := privKey.Set(jwk.KeyUsageKey, "sig"); err != nil {
-			return err
-		}
-		if len(privKey.KeyOps()) == 0 {
-			if err := privKey.Set(jwk.KeyOpsKey, jwk.KeyOperationList{jwk.KeyOpSign, jwk.KeyOpVerify}); err != nil {
-				return err
-			}
-		}
-		pubKey, err := privKey.PublicKey()
-		if err != nil {
-			return err
-		}
-		config.JWT.Keys = make(JwtKeysDecoder)
-		config.JWT.Keys[config.JWT.KeyID] = JwkInfo{
-			PublicKey:  pubKey,
-			PrivateKey: privKey,
 		}
 	}
 
@@ -1091,6 +1073,45 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 		config.External.AllowedIdTokenIssuers = append(config.External.AllowedIdTokenIssuers, "https://appleid.apple.com", "https://accounts.google.com")
 	}
 
+	return nil
+}
+func (config *GlobalConfiguration) applyDefaultsJWT(secret []byte) error {
+	// transform the secret into a JWK for consistency
+	privKey, err := jwk.FromRaw(secret)
+	if err != nil {
+		return err
+	}
+	return config.applyDefaultsJWTPrivateKey(privKey)
+}
+
+func (config *GlobalConfiguration) applyDefaultsJWTPrivateKey(privKey jwk.Key) error {
+	if config.JWT.KeyID != "" {
+		if err := privKey.Set(jwk.KeyIDKey, config.JWT.KeyID); err != nil {
+			return err
+		}
+	}
+	if privKey.Algorithm().String() == "" {
+		if err := privKey.Set(jwk.AlgorithmKey, jwt.SigningMethodHS256.Name); err != nil {
+			return err
+		}
+	}
+	if err := privKey.Set(jwk.KeyUsageKey, "sig"); err != nil {
+		return err
+	}
+	if len(privKey.KeyOps()) == 0 {
+		if err := privKey.Set(jwk.KeyOpsKey, jwk.KeyOperationList{jwk.KeyOpSign, jwk.KeyOpVerify}); err != nil {
+			return err
+		}
+	}
+	pubKey, err := privKey.PublicKey()
+	if err != nil {
+		return err
+	}
+	config.JWT.Keys = make(JwtKeysDecoder)
+	config.JWT.Keys[config.JWT.KeyID] = JwkInfo{
+		PublicKey:  pubKey,
+		PrivateKey: privKey,
+	}
 	return nil
 }
 

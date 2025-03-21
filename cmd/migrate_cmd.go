@@ -99,11 +99,11 @@ func migrate(cmd *cobra.Command, args []string) {
 	// turn off schema dump
 	mig.SchemaPath = ""
 
-	err = mig.Up()
+	count, err := mig.UpTo(0)
 	if err != nil {
 		log.Fatalf("%v", errors.Wrap(err, "running db migrations"))
 	} else {
-		log.Infof("GoTrue migrations applied successfully")
+		log.WithField("count", count).Infof("GoTrue migrations applied successfully")
 	}
 
 	log.Debugf("after status")
