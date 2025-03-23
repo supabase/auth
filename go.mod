@@ -92,7 +92,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.12
 	github.com/go-webauthn/webauthn v0.11.1
 	github.com/gobuffalo/pop/v6 v6.1.1
-	github.com/golang-jwt/jwt/v5 v5.2.1
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/lestrrat-go/jwx/v2 v2.1.0
 	github.com/oapi-codegen/oapi-codegen/v2 v2.4.2-0.20250102212541-8bbe226927c9
 	github.com/oapi-codegen/runtime v1.1.1
