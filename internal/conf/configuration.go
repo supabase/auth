@@ -19,8 +19,9 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	siws "github.com/supabase/auth/internal/utilities/solana"
 	"gopkg.in/gomail.v2"
+
+	"github.com/supabase/auth/internal/utilities/siws"
 )
 
 const defaultMinPasswordLength int = 6
@@ -344,58 +345,43 @@ type ProviderConfiguration struct {
 }
 
 type Web3Configuration struct {
-	Enabled   bool          `json:"enabled,omitempty" default:"false" split_words:"true"`
-	Domain    string        `json:"domain,omitempty" required:"true" split_words:"true"`
-	Statement string        `json:"statement,omitempty" split_words:"true"`
-	Version   string        `json:"version,omitempty" default:"1" split_words:"true"`
-	Timeout   time.Duration `json:"timeout,omitempty" default:"300s" split_words:"true"`
+	Enabled                 bool          `json:"enabled,omitempty" split_words:"true"`
+	MaximumValidityDuration time.Duration `json:"maximum_validity_duration,omitempty" default:"10m" split_words:"true"`
 
-	// Comma-separated list of supported chains (e.g. "ethereum:1,ethereum:137,solana:mainnet")
-	SupportedChains string `json:"supported_chains,omitempty" split_words:"true"`
-	DefaultChain    string `json:"default_chain,omitempty" split_words:"true"`
+	SupportedChains []string `json:"supported_chains,omitempty" split_words:"true"`
+}
+
+func (c *Web3Configuration) IsChainSupported(chain string) bool {
+	if !c.Enabled {
+		return false
+	}
+
+	if len(c.SupportedChains) == 0 {
+		return true
+	}
+
+	for _, supportedChain := range c.SupportedChains {
+		if chain == supportedChain {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *Web3Configuration) Validate() error {
+	for _, chain := range c.SupportedChains {
+		if !siws.IsValidSolanaNetwork(chain) {
+			return fmt.Errorf("conf: Web3 chain %q is not supported", chain)
+		}
+	}
+
+	return nil
 }
 
 type BlockchainConfig struct {
 	ChainID     string
 	NetworkName string
-}
-
-// ParseSupportedChains processes and validates the SupportedChains string.
-func (c *Web3Configuration) ParseSupportedChains() (map[string]BlockchainConfig, error) {
-	chainMap := make(map[string]BlockchainConfig)
-
-	// Split comma-separated chains
-	chains := strings.Split(c.SupportedChains, ",")
-	for _, chain := range chains {
-		chain = strings.TrimSpace(chain)
-		parts := strings.Split(chain, ":")
-
-		// Ensure proper <network>:<chain_id> format
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid chain format: %s, expected <network>:<chain_id>", chain)
-		}
-
-		network := strings.ToLower(parts[0])
-		chainID := parts[1]
-
-		// Validate network type
-		switch network {
-		case "solana":
-			if !siws.IsValidSolanaNetwork(chainID) {
-				return nil, fmt.Errorf("invalid Solana network: %s", chainID)
-			}
-		default:
-			return nil, fmt.Errorf("unsupported network: %s", network)
-		}
-
-		// Add to chain map
-		chainMap[chain] = BlockchainConfig{
-			NetworkName: network,
-			ChainID:     chainID,
-		}
-	}
-
-	return chainMap, nil
 }
 
 type SMTPConfiguration struct {
@@ -1131,6 +1117,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Sessions,
 		&c.Hook,
 		&c.JWT.Keys,
+		&c.External.Web3,
 	}
 
 	for _, validatable := range validatables {

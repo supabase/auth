@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -13,7 +12,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/xeipuuv/gojsonschema"
 
-	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
@@ -306,81 +304,6 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	})
 	if err != nil {
 		return err
-	}
-
-	return sendJSON(w, http.StatusOK, token)
-}
-
-func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	db := a.db.WithContext(ctx)
-
-	params := &Web3GrantParams{}
-	if err := retrieveRequestParams(r, params); err != nil {
-		return err
-	}
-
-	web3Provider, err := provider.NewWeb3Provider(ctx, a.config.External.Web3)
-	if err != nil {
-		return err
-	}
-
-	// Convert params to SignedMessage
-	msg := &provider.Web3GrantParams{
-		Message:   params.Message,
-		Signature: params.Signature,
-		Chain:     params.Chain,
-	}
-
-	if params.Chain != provider.BlockchainSolana {
-		panic("Web3 provider only supports 'solana', but got " + params.Chain)
-	}
-
-	// Decode base64 signature into bytes
-	sigBytes, err := base64.StdEncoding.DecodeString(string(params.Signature))
-	if err != nil {
-		panic("invalid signature encoding: " + err.Error())
-	}
-
-	userData, err := web3Provider.VerifySignedMessage(db, msg, sigBytes)
-	if err != nil {
-		return oauthError("invalid_grant", "Signature verification failed").WithInternalError(err)
-	}
-
-	var token *AccessTokenResponse
-	var grantParams models.GrantParams
-	grantParams.FillGrantParams(r)
-
-	err = db.Transaction(func(tx *storage.Connection) error {
-		user, terr := a.createAccountFromExternalIdentity(tx, r, userData, "web3")
-		if terr != nil {
-			return terr
-		}
-
-		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
-			"provider": "web3",
-			"chain":    msg.Chain,
-			"address":  userData.Metadata.CustomClaims["address"],
-		}); terr != nil {
-			return terr
-		}
-
-		token, terr = a.issueRefreshToken(r, tx, user, models.Web3, grantParams)
-		if terr != nil {
-			return terr
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		switch err.(type) {
-		case *storage.CommitWithError:
-			return err
-		case *HTTPError:
-			return err
-		default:
-			return oauthError("server_error", "Internal Server Error").WithInternalError(err)
-		}
 	}
 
 	return sendJSON(w, http.StatusOK, token)

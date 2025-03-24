@@ -12,17 +12,10 @@ import (
 	"io"
 	"math"
 	"math/big"
-	"net/url"
 	"strconv"
 	"strings"
 
-	"crypto/ed25519"
-	"time"
-
 	"golang.org/x/crypto/hkdf"
-
-	"github.com/btcsuite/btcutil/base58"
-	siws "github.com/supabase/auth/internal/utilities/solana"
 )
 
 // GenerateOtp generates a random n digit otp
@@ -156,118 +149,6 @@ func NewEncryptedString(id string, data []byte, keyID string, keyBase64URL strin
 	es.Data = cipher.Seal(nil, es.Nonce, data, nil) // #nosec G407
 
 	return &es, nil
-}
-
-func VerifySIWS(
-	rawMessage string,
-	signature []byte,
-	msg *siws.SIWSMessage,
-	params siws.SIWSVerificationParams,
-) error {
-	var errors []error
-
-	// Basic input validation
-	if rawMessage == "" {
-		errors = append(errors, siws.ErrEmptyRawMessage)
-	}
-	if len(signature) == 0 {
-		errors = append(errors, siws.ErrEmptySignature)
-	}
-	if msg == nil {
-		return siws.ErrNilMessage
-	}
-
-	// Domain validation
-	if params.ExpectedDomain == "" {
-		errors = append(errors, siws.ErrMissingDomain)
-	}
-	if !siws.IsValidDomain(msg.Domain) {
-		errors = append(errors, siws.ErrInvalidDomainFormat)
-	}
-	if msg.Domain != params.ExpectedDomain {
-		errors = append(errors, siws.ErrDomainMismatch)
-	}
-
-	// Address/Public Key validation
-	pubKey := base58.Decode(msg.Address)
-	validPubKey := siws.IsBase58PubKey(pubKey)
-	if !validPubKey {
-		errors = append(errors, siws.ErrInvalidPubKeySize)
-	}
-
-	// Version validation
-	if msg.Version != "1" {
-		errors = append(errors, siws.ErrInvalidVersion)
-	}
-
-	// Chain ID validation
-	if msg.ChainID != "" && !siws.IsValidSolanaNetwork(msg.ChainID) {
-		errors = append(errors, siws.ErrInvalidChainID)
-	}
-
-	// URI validation
-	if msg.URI != "" {
-		if _, err := url.Parse(msg.URI); err != nil {
-			errors = append(errors, siws.ErrInvalidURI)
-		}
-	}
-
-	// Resources validation
-	for _, resource := range msg.Resources {
-		if _, err := url.Parse(resource); err != nil {
-			errors = append(errors, siws.ErrInvalidResourceURI)
-		}
-	}
-
-	// Signature verification - only try if we have a valid public key
-	if validPubKey && len(rawMessage) > 0 && len(signature) > 0 {
-		if !ed25519.Verify(pubKey, []byte(rawMessage), signature) {
-			errors = append(errors, siws.ErrSignatureVerification)
-		}
-	}
-
-	// Time validations
-	now := time.Now().UTC()
-
-	if !msg.IssuedAt.IsZero() {
-		if now.Before(msg.IssuedAt) {
-			errors = append(errors, siws.ErrFutureMessage)
-		}
-
-		if params.CheckTime && params.TimeDuration > 0 {
-			expiry := msg.IssuedAt.Add(params.TimeDuration)
-			if now.After(expiry) {
-				errors = append(errors, siws.ErrMessageExpired)
-			}
-		}
-	}
-
-	if !msg.NotBefore.IsZero() && now.Before(msg.NotBefore) {
-		errors = append(errors, siws.ErrNotYetValid)
-	}
-
-	if !msg.ExpirationTime.IsZero() && now.After(msg.ExpirationTime) {
-		errors = append(errors, siws.ErrMessageExpired)
-	}
-
-	// Return all validation errors as one error if any exist
-	if len(errors) > 0 {
-		if len(errors) == 1 {
-			return errors[0] // Return single error directly to preserve its type
-		}
-
-		// Create error message with all errors
-		var errMsgs []string
-		for _, err := range errors {
-			errMsgs = append(errMsgs, err.Error())
-		}
-
-		// Wrap the first error to maintain error type for errors.Is checks
-		return fmt.Errorf("SIWS verification failed with multiple errors: %s (primary error: %w)",
-			strings.Join(errMsgs, "; "), errors[0])
-	}
-
-	return nil
 }
 
 // SecureAlphanumeric generates a secure random alphanumeric string using standard library
