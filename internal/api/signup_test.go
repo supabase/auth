@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -150,4 +151,27 @@ func (ts *SignupTestSuite) TestVerifySignup() {
 	require.NotEmpty(ts.T(), v.Get("access_token"))
 	require.NotEmpty(ts.T(), v.Get("expires_in"))
 	require.NotEmpty(ts.T(), v.Get("refresh_token"))
+}
+
+func (ts *SignupTestSuite) TestValidateSignupParamsWithBypass() {
+	originalMinLength := ts.Config.Password.MinLength
+	ts.Config.Password.MinLength = 20
+
+	weakPassword := "short"
+
+	params := &SignupParams{
+		Email:    "non-existing@example.com",
+		Password: weakPassword,
+		Provider: "email",
+		Aud:      ts.Config.JWT.Aud,
+	}
+
+	err := ts.API.validateSignupParams(context.Background(), params, false)
+	require.Error(ts.T(), err, "Should fail validation without bypass")
+	require.Contains(ts.T(), err.Error(), "should be at least")
+
+	err = ts.API.validateSignupParams(context.Background(), params, true)
+	require.NoError(ts.T(), err, "Should bypass validation with flag set")
+
+	ts.Config.Password.MinLength = originalMinLength
 }

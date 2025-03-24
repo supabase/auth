@@ -29,16 +29,19 @@ type SignupParams struct {
 	CodeChallenge       string                 `json:"code_challenge"`
 }
 
-func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
+func (a *API) validateSignupParams(ctx context.Context, p *SignupParams, bypassPasswordCheck bool) error {
 	config := a.config
 
 	if p.Password == "" {
 		return badRequestError(apierrors.ErrorCodeValidationFailed, "Signup requires a valid password")
 	}
 
-	if err := a.checkPasswordStrength(ctx, p.Password); err != nil {
-		return err
+	if !bypassPasswordCheck {
+		if err := a.checkPasswordStrength(ctx, p.Password); err != nil {
+			return err
+		}
 	}
+
 	if p.Email != "" && p.Phone != "" {
 		return badRequestError(apierrors.ErrorCodeValidationFailed, "Only an email address or phone number should be provided on signup.")
 	}
@@ -123,7 +126,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 
 	params.ConfigureDefaults()
 
-	if err := a.validateSignupParams(ctx, params); err != nil {
+	if err := a.validateSignupParams(ctx, params, false); err != nil {
 		return err
 	}
 

@@ -332,7 +332,7 @@ func (ts *AdminTestSuite) TestAdminUserCreate() {
 			params: map[string]interface{}{
 				"id":       "fc56ab41-2010-4870-a9b9-767c1dc573fb",
 				"email":    "test6@example.com",
-				"password": "StrongPassword123!", // Updated to meet requirements
+				"password": "StrongPassword123!",
 			},
 			expected: map[string]interface{}{
 				"id":              "fc56ab41-2010-4870-a9b9-767c1dc573fb",
@@ -937,6 +937,110 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 		})
 
 	}
+
+	ts.Config.Password.MinLength = originalMinLength
+}
+
+func (ts *AdminTestSuite) TestAdminUserCreateWithBypassCheck() {
+	originalMinLength := ts.Config.Password.MinLength
+	ts.Config.Password.MinLength = 20
+
+	weakPassword := "short"
+
+	ts.Run("Without bypass flag, should fail validation", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email":    "test@example.com",
+			"password": weakPassword,
+		}))
+
+		req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
+	})
+
+	ts.Run("With bypass flag, should succeed despite weak password", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email":                 "test@example.com",
+			"password":              weakPassword,
+			"bypass_password_check": true,
+		}))
+
+		req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+
+		data := models.User{}
+		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
+		require.Equal(ts.T(), "test@example.com", data.GetEmail())
+
+		u, err := models.FindUserByID(ts.API.db, data.ID)
+		require.NoError(ts.T(), err)
+		isAuthenticated, _, err := u.Authenticate(context.Background(), ts.API.db, weakPassword,
+			ts.API.config.Security.DBEncryption.DecryptionKeys,
+			ts.API.config.Security.DBEncryption.Encrypt,
+			ts.API.config.Security.DBEncryption.EncryptionKeyID)
+		require.NoError(ts.T(), err)
+		require.True(ts.T(), isAuthenticated)
+	})
+
+	ts.Config.Password.MinLength = originalMinLength
+}
+
+func (ts *AdminTestSuite) TestAdminUserUpdateWithBypassCheck() {
+	u, err := models.NewUser("", "test@example.com", "original", ts.Config.JWT.Aud, nil)
+	require.NoError(ts.T(), err, "Error making new user")
+	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
+
+	originalMinLength := ts.Config.Password.MinLength
+	ts.Config.Password.MinLength = 20
+
+	weakPassword := "short"
+
+	ts.Run("Without bypass flag, update should fail validation", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"password": weakPassword,
+		}))
+
+		req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
+	})
+
+	ts.Run("With bypass flag, update should succeed despite weak password", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"password":              weakPassword,
+			"bypass_password_check": true,
+		}))
+
+		req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+
+		updatedUser, err := models.FindUserByID(ts.API.db, u.ID)
+		require.NoError(ts.T(), err)
+		isAuthenticated, _, err := updatedUser.Authenticate(context.Background(), ts.API.db, weakPassword,
+			ts.API.config.Security.DBEncryption.DecryptionKeys,
+			ts.API.config.Security.DBEncryption.Encrypt,
+			ts.API.config.Security.DBEncryption.EncryptionKeyID)
+		require.NoError(ts.T(), err)
+		require.True(ts.T(), isAuthenticated)
+	})
 
 	ts.Config.Password.MinLength = originalMinLength
 }

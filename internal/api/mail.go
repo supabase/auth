@@ -34,6 +34,7 @@ type GenerateLinkParams struct {
 	Password   string                 `json:"password"`
 	Data       map[string]interface{} `json:"data"`
 	RedirectTo string                 `json:"redirect_to"`
+	BypassPasswordCheck bool          `json:"bypass_password_check"`
 }
 
 type GenerateLinkResponse struct {
@@ -102,7 +103,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			Aud:      aud,
 		}
 
-		if err := a.validateSignupParams(ctx, signupParams); err != nil {
+		if err := a.validateSignupParams(ctx, signupParams, params.BypassPasswordCheck); err != nil {
 			return err
 		}
 
