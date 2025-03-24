@@ -54,6 +54,7 @@ const (
 	EmailChange
 	TokenRefresh
 	Anonymous
+	Web3
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -86,6 +87,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "mfa/phone"
 	case MFAWebAuthn:
 		return "mfa/webauthn"
+	case Web3:
+		return "web3"
 	}
 	return ""
 }
@@ -121,6 +124,9 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return MFAPhone, nil
 	case "mfa/webauthn":
 		return MFAWebAuthn, nil
+	case "web3":
+		return Web3, nil
+
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
 }

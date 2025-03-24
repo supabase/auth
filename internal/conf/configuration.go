@@ -20,6 +20,8 @@ import (
 	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"gopkg.in/gomail.v2"
+
+	"github.com/supabase/auth/internal/utilities/siws"
 )
 
 const defaultMinPasswordLength int = 6
@@ -339,6 +341,47 @@ type ProviderConfiguration struct {
 	RedirectURL             string                         `json:"redirect_url"`
 	AllowedIdTokenIssuers   []string                       `json:"allowed_id_token_issuers" split_words:"true"`
 	FlowStateExpiryDuration time.Duration                  `json:"flow_state_expiry_duration" split_words:"true"`
+	Web3                    Web3Configuration              `json:"web3" envconfig:"WEB3"`
+}
+
+type Web3Configuration struct {
+	Enabled                 bool          `json:"enabled,omitempty" split_words:"true"`
+	MaximumValidityDuration time.Duration `json:"maximum_validity_duration,omitempty" default:"10m" split_words:"true"`
+
+	SupportedChains []string `json:"supported_chains,omitempty" split_words:"true"`
+}
+
+func (c *Web3Configuration) IsChainSupported(chain string) bool {
+	if !c.Enabled {
+		return false
+	}
+
+	if len(c.SupportedChains) == 0 {
+		return true
+	}
+
+	for _, supportedChain := range c.SupportedChains {
+		if chain == supportedChain {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *Web3Configuration) Validate() error {
+	for _, chain := range c.SupportedChains {
+		if !siws.IsValidSolanaNetwork(chain) {
+			return fmt.Errorf("conf: Web3 chain %q is not supported", chain)
+		}
+	}
+
+	return nil
+}
+
+type BlockchainConfig struct {
+	ChainID     string
+	NetworkName string
 }
 
 type SMTPConfiguration struct {
@@ -1074,6 +1117,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Sessions,
 		&c.Hook,
 		&c.JWT.Keys,
+		&c.External.Web3,
 	}
 
 	for _, validatable := range validatables {

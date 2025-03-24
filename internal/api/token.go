@@ -2,12 +2,11 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
-
-	"fmt"
 
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
@@ -79,6 +78,7 @@ const InvalidLoginMessage = "Invalid login credentials"
 func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	grantType := r.FormValue("grant_type")
+
 	switch grantType {
 	case "password":
 		return a.ResourceOwnerPasswordGrant(ctx, w, r)
@@ -88,6 +88,8 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 		return a.IdTokenGrant(ctx, w, r)
 	case "pkce":
 		return a.PKCE(ctx, w, r)
+	case "web3":
+		return a.Web3Grant(ctx, w, r)
 	default:
 		return badRequestError(ErrorCodeInvalidCredentials, "unsupported_grant_type")
 	}
