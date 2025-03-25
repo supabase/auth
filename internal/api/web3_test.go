@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -97,14 +96,7 @@ func (ts *Web3TestSuite) TestHappyPath() {
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"chain":     "solana",
 		"signature": "gRaUDNnz5nsTERT9udZgK5rqVt_P5sVEzgYFCLtEUo2DXfIQBTFJM2CghGWVKoCvPuz-DePAgOs2Fe_z-ZdgBQ",
-		"message": `phantom.com wants you to sign in with your Solana account:
-2EZEiBdw47VHT6SpZSW9VnuSvBe7DxuYHBTxj19gxvv8
-
-supabase/auth tests
-
-URI: https://phantom.com/download
-Version: 1
-Issued At: 2025-03-24T18:20:11.629Z`,
+		"message":   "phantom.com wants you to sign in with your Solana account:\n2EZEiBdw47VHT6SpZSW9VnuSvBe7DxuYHBTxj19gxvv8\n\nsupabase/auth tests\n\nURI: https://phantom.com/download\nVersion: 1\nIssued At: 2025-03-24T18:20:11.629Z",
 	}))
 
 	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=web3", &buffer)
@@ -116,16 +108,11 @@ Issued At: 2025-03-24T18:20:11.629Z`,
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
 	var firstResult struct {
-		AccessToken  string                 `json:"access_token"`
-		RefreshToken string                 `json:"refresh_token"`
-		User         map[string]interface{} `json:"user"`
-		ErrorCode    string                 `json:"error_code"`
-		Message      string                 `json:"msg"`
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
 	}
 
 	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
-
-	fmt.Printf("@@@@@@@@@@@@@@@@@@@@@ %v\n", firstResult.ErrorCode)
 
 	assert.NotEmpty(ts.T(), firstResult.AccessToken)
 	assert.NotEmpty(ts.T(), firstResult.RefreshToken)

@@ -40,14 +40,6 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 }
 
 func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *http.Request, params *Web3GrantParams) error {
-	defer func() {
-		rerr := recover()
-
-		if rerr != nil {
-			fmt.Printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ %v", rerr)
-		}
-	}()
-
 	config := a.config
 	db := a.db.WithContext(ctx)
 
@@ -63,6 +55,7 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 
 	parsedMessage, err := siws.ParseMessage(params.Message)
 	if err != nil {
+		fmt.Printf("@@@@@@@@@@@@@@@@@@ %v\n", err)
 		return badRequestError(ErrorCodeValidationFailed, err.Error())
 	}
 
@@ -80,12 +73,22 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 		return oauthError("invalid_grant", "Signed Solana message is for a Chain ID that is not allowed")
 	}
 
+	if parsedMessage.URI.Scheme == "http" && parsedMessage.URI.Hostname() != "localhost" {
+		return oauthError("invalid_grant", "Signed Solana message is using URI which uses HTTP, only HTTPS is allowed")
+	} else if parsedMessage.URI.Scheme != "https" {
+		return oauthError("invalid_grant", "Signed Solana message is using URI which does not use HTTPS")
+	}
+
 	if !utilities.IsRedirectURLValid(config, parsedMessage.URI.String()) {
 		return oauthError("invalid_grant", "Signed Solana message is using URI which is not allowed on this server, message was signed for another app")
 	}
 
-	if (strings.Contains(parsedMessage.Domain, "@") && !utilities.IsRedirectURLValid(config, "mailto:"+parsedMessage.Domain)) || !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain) {
-		return oauthError("invalid_grant", "Signed Solana message is using a Domain which is not allowed on this server, message was requested by another app")
+	if strings.Contains(parsedMessage.Domain, "@") {
+		if !utilities.IsRedirectURLValid(config, "mailto:"+parsedMessage.Domain) {
+			return oauthError("invalid_grant", "Signed Solana message is using a Domain in the form of user@domain which is not allowed on this server")
+		}
+	} else if parsedMessage.URI.Host != parsedMessage.Domain && !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain+"/") {
+		return oauthError("invalid_grant", "Signed Solana message is using a Domain that does not match the one in URI which is not allowed on this server")
 	}
 
 	now := a.Now()
