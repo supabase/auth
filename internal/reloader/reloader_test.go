@@ -154,6 +154,13 @@ func TestWatch(t *testing.T) {
 		rl := NewReloader(dir)
 		rl.watchFn = func() (watcher, error) { return wr, wr.getErr() }
 		rl.reloadFn = rr.reloadFn
+		rl.addDirFn = func(ctx context.Context, wr watcher, dir string, dur time.Duration) error {
+			if err := wr.Add(dir); err != nil {
+				logrus.WithError(err).Error("reloader: error watching config directory")
+				return err
+			}
+			return nil
+		}
 
 		// Need to lower reload ival to pickup config write quicker.
 		rl.reloadIval = time.Second / 10
@@ -265,15 +272,6 @@ func TestWatch(t *testing.T) {
 			sentinelErr := errors.New("sentinel")
 			wr.setErr(sentinelErr)
 
-			prevAddDir := rl.addDirFn
-			rl.addDirFn = func(ctx context.Context, wr watcher, dir string, dur time.Duration) error {
-				if err := wr.Add(dir); err != nil {
-					logrus.WithError(err).Error("reloader: error watching config directory")
-					return err
-				}
-				return nil
-			}
-
 			name := helpWriteEnvFile(t, dir, "05_example.env", map[string]string{
 				"GOTRUE_SMTP_PORT": "2222",
 			})
@@ -289,8 +287,6 @@ func TestWatch(t *testing.T) {
 				assert.NotNil(t, cfg)
 				assert.Equal(t, cfg.SMTP.Port, 2222)
 			}
-
-			rl.addDirFn = prevAddDir
 		}
 
 		// test cases ran, end context to unblock Wait()
