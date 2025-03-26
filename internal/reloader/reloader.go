@@ -30,6 +30,7 @@ type Reloader struct {
 	tickerIval time.Duration
 	watchFn    func() (watcher, error)
 	reloadFn   func(dir string) (*conf.GlobalConfiguration, error)
+	addDirFn   func(ctx context.Context, wr watcher, dir string, dur time.Duration) error
 }
 
 func NewReloader(watchDir string) *Reloader {
@@ -39,6 +40,7 @@ func NewReloader(watchDir string) *Reloader {
 		tickerIval: tickerInterval,
 		watchFn:    newFSWatcher,
 		reloadFn:   defaultReloadFn,
+		addDirFn:   defaultAddDirFn,
 	}
 }
 
@@ -74,7 +76,7 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 	defer tr.Stop()
 
 	// Ignore errors, if watch dir doesn't exist we can add it later.
-	if err := wr.Add(rl.watchDir); err != nil {
+	if err := rl.addDirFn(ctx, wr, rl.watchDir, reloadInterval); err != nil {
 		logrus.WithError(err).Error("reloader: error watching config directory")
 	}
 
@@ -89,8 +91,8 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 			// being moved and then recreated. I've tested all of these basic
 			// scenarios and wr.WatchList() does not grow which aligns with
 			// the documented behavior.
-			if err := wr.Add(rl.watchDir); err != nil {
-				logrus.WithError(err).Error(err)
+			if err := rl.addDirFn(ctx, wr, rl.watchDir, reloadInterval); err != nil {
+				logrus.WithError(err).Error("reloader: error watching config directory")
 			}
 
 			// Check to see if the config is ready to be relaoded.
@@ -139,6 +141,23 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 				"reloader: fsnotify has reported an error")
 		}
 	}
+}
+
+// defaultAddDirFn adds a dir to a watcher with a common error and sleep
+// duration if the directory doesn't exist.
+func defaultAddDirFn(ctx context.Context, wr watcher, dir string, dur time.Duration) error {
+	if err := wr.Add(dir); err != nil {
+		tr := time.NewTicker(dur)
+		defer tr.Stop()
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tr.C:
+			return err
+		}
+	}
+	return nil
 }
 
 func defaultReloadFn(dir string) (*conf.GlobalConfiguration, error) {

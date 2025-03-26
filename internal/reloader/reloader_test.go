@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/sync/errgroup"
@@ -45,6 +47,20 @@ func TestWatch(t *testing.T) {
 		rl := NewReloader(path.Join(dir, "__not_found__"))
 		err := rl.Watch(doneCtx, rr.configFn)
 		if exp, got := context.Canceled, err; exp != got {
+			assert.Equal(t, exp, got)
+		}
+	}
+
+	// test watch invalid dir in addDirFn
+	{
+
+		sentinel := errors.New("sentinel")
+		wr := newMockWatcher(sentinel)
+		rl := NewReloader(path.Join(dir, "__not_found__"))
+		rl.watchFn = func() (watcher, error) { return wr, nil }
+
+		err := rl.addDirFn(ctx, wr, "__not_found__", time.Millisecond)
+		if exp, got := sentinel, err; exp != got {
 			assert.Equal(t, exp, got)
 		}
 	}
@@ -249,6 +265,15 @@ func TestWatch(t *testing.T) {
 			sentinelErr := errors.New("sentinel")
 			wr.setErr(sentinelErr)
 
+			prevAddDir := rl.addDirFn
+			rl.addDirFn = func(ctx context.Context, wr watcher, dir string, dur time.Duration) error {
+				if err := wr.Add(dir); err != nil {
+					logrus.WithError(err).Error("reloader: error watching config directory")
+					return err
+				}
+				return nil
+			}
+
 			name := helpWriteEnvFile(t, dir, "05_example.env", map[string]string{
 				"GOTRUE_SMTP_PORT": "2222",
 			})
@@ -256,6 +281,7 @@ func TestWatch(t *testing.T) {
 				Name: name,
 				Op:   fsnotify.Create,
 			}
+
 			select {
 			case <-egCtx.Done():
 				assert.Nil(t, egCtx.Err())
@@ -263,6 +289,8 @@ func TestWatch(t *testing.T) {
 				assert.NotNil(t, cfg)
 				assert.Equal(t, cfg.SMTP.Port, 2222)
 			}
+
+			rl.addDirFn = prevAddDir
 		}
 
 		// test cases ran, end context to unblock Wait()
@@ -411,7 +439,8 @@ func TestReloadCheckAt(t *testing.T) {
 }
 
 func helpTestDir(t testing.TB) (dir string, cleanup func()) {
-	dir = filepath.Join("testdata", t.Name())
+	name := fmt.Sprintf("%v_%v", t.Name(), time.Now().Nanosecond())
+	dir = filepath.Join("testdata", name)
 	err := os.MkdirAll(dir, 0750)
 	if err != nil && !os.IsExist(err) {
 		assert.Nil(t, err)
