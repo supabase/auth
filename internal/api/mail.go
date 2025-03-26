@@ -551,7 +551,7 @@ func (a *API) validateEmail(email string) (string, error) {
 		return "", badRequestError(ErrorCodeValidationFailed, "Unable to validate email address: "+err.Error())
 	}
 
-	if err := validateMX(email, a.config.Mailer.Denylist); err != nil {
+	if err := validateMX(email, a.config.Mailer.MXBlocklist); err != nil {
 		return "", badRequestError(ErrorCodeValidationFailed, "Unauthorised email address: "+err.Error())
 	}
 
@@ -569,7 +569,7 @@ func validateMX(email string, denylist []string) error {
 	for _, mx := range mxRecords {
 		for _, deniedHost := range denylist {
 			if strings.Contains(mx.Host, deniedHost) {
-				return fmt.Errorf("host is in the denylist")
+				return fmt.Errorf("host is in the blocklist")
 			}
 		}
 	}

@@ -406,6 +406,8 @@ type MailerConfiguration struct {
 	EmailValidationServiceHeaders string `json:"email_validation_service_headers" split_words:"true"`
 
 	serviceHeaders map[string][]string `json:"-"`
+
+	MXBlocklist []string `json:"mx_blocklist" split_words:"true"`
 }
 
 func (c *MailerConfiguration) Validate() error {
@@ -420,6 +422,13 @@ func (c *MailerConfiguration) Validate() error {
 
 	if len(headers) > 0 {
 		c.serviceHeaders = headers
+	}
+	if len(c.MXBlocklist) > 0 {
+		for _, domain := range c.MXBlocklist {
+			if strings.TrimSpace(domain) == "" {
+				return fmt.Errorf("conf: Blocklist contains an empty domain")
+			}
+		}
 	}
 	return nil
 }
