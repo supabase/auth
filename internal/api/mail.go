@@ -1,6 +1,8 @@
 package api
 
 import (
+	"fmt"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -549,7 +551,29 @@ func (a *API) validateEmail(email string) (string, error) {
 		return "", badRequestError(ErrorCodeValidationFailed, "Unable to validate email address: "+err.Error())
 	}
 
+	if err := validateMX(email, a.config.Mailer.Denylist); err != nil {
+		return "", badRequestError(ErrorCodeValidationFailed, "Unauthorised email address: "+err.Error())
+	}
+
 	return strings.ToLower(email), nil
+}
+
+func validateMX(email string, denylist []string) error {
+
+	_, host := splitEmail(email)
+	mxRecords, err := net.LookupMX(host)
+	if err != nil {
+		return errors.New("unresolvable host")
+	}
+
+	for _, mx := range mxRecords {
+		for _, deniedHost := range denylist {
+			if strings.Contains(mx.Host, deniedHost) {
+				return fmt.Errorf("host is in the denylist")
+			}
+		}
+	}
+	return nil
 }
 
 func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration) error {
@@ -682,4 +706,11 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	default:
 		return err
 	}
+}
+
+func splitEmail(email string) (account, host string) {
+	i := strings.LastIndexByte(email, '@')
+	account = email[:i]
+	host = email[i+1:]
+	return
 }
