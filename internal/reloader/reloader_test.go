@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/sync/errgroup"
@@ -45,6 +47,20 @@ func TestWatch(t *testing.T) {
 		rl := NewReloader(path.Join(dir, "__not_found__"))
 		err := rl.Watch(doneCtx, rr.configFn)
 		if exp, got := context.Canceled, err; exp != got {
+			assert.Equal(t, exp, got)
+		}
+	}
+
+	// test watch invalid dir in addDirFn
+	{
+
+		sentinel := errors.New("sentinel")
+		wr := newMockWatcher(sentinel)
+		rl := NewReloader(path.Join(dir, "__not_found__"))
+		rl.watchFn = func() (watcher, error) { return wr, nil }
+
+		err := rl.addDirFn(ctx, wr, "__not_found__", time.Millisecond)
+		if exp, got := sentinel, err; exp != got {
 			assert.Equal(t, exp, got)
 		}
 	}
@@ -138,6 +154,13 @@ func TestWatch(t *testing.T) {
 		rl := NewReloader(dir)
 		rl.watchFn = func() (watcher, error) { return wr, wr.getErr() }
 		rl.reloadFn = rr.reloadFn
+		rl.addDirFn = func(ctx context.Context, wr watcher, dir string, dur time.Duration) error {
+			if err := wr.Add(dir); err != nil {
+				logrus.WithError(err).Error("reloader: error watching config directory")
+				return err
+			}
+			return nil
+		}
 
 		// Need to lower reload ival to pickup config write quicker.
 		rl.reloadIval = time.Second / 10
@@ -256,6 +279,7 @@ func TestWatch(t *testing.T) {
 				Name: name,
 				Op:   fsnotify.Create,
 			}
+
 			select {
 			case <-egCtx.Done():
 				assert.Nil(t, egCtx.Err())
@@ -411,7 +435,8 @@ func TestReloadCheckAt(t *testing.T) {
 }
 
 func helpTestDir(t testing.TB) (dir string, cleanup func()) {
-	dir = filepath.Join("testdata", t.Name())
+	name := fmt.Sprintf("%v_%v", t.Name(), time.Now().Nanosecond())
+	dir = filepath.Join("testdata", name)
 	err := os.MkdirAll(dir, 0750)
 	if err != nil && !os.IsExist(err) {
 		assert.Nil(t, err)

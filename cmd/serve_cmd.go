@@ -34,7 +34,7 @@ func serve(ctx context.Context) {
 	}
 
 	if err := conf.LoadDirectory(watchDir); err != nil {
-		logrus.WithError(err).Fatal("unable to load config from watch dir")
+		logrus.WithError(err).Error("unable to load config from watch dir")
 	}
 
 	config, err := conf.LoadGlobalFromEnv()
