@@ -61,6 +61,14 @@ var invalidHostMap = map[string]bool{
 	"email.com":     true,
 }
 
+var blockedMXRecords = map[string]bool{
+	"mail.wallywatts.com":   true,
+	"mail.wabblywabble.com": true,
+	"mail.gufum.com":        true,
+	"mail.vvatxiy.com":      true,
+	"mail.qacmjeq.com":      true,
+}
+
 const (
 	validateEmailTimeout = 3 * time.Second
 )
@@ -74,6 +82,7 @@ var (
 	ErrInvalidEmailAddress = errors.New("invalid_email_address")
 	ErrInvalidEmailFormat  = errors.New("invalid_email_format")
 	ErrInvalidEmailDNS     = errors.New("invalid_email_dns")
+	ErrInvalidEmailMX      = errors.New("invalid_email_mx")
 )
 
 type EmailValidator struct {
@@ -132,6 +141,9 @@ func (ev *EmailValidator) Validate(ctx context.Context, email string) error {
 
 		// Start the goroutine to validate the host.
 		g.Go(func() error { return ev.validateHost(ctx, host) })
+
+		// Start the goroutine to check the MX record against an abuse list.
+		g.Go(func() error { return ev.validateMX(ctx, host) })
 	}
 
 	// If the service check is enabled we start a goroutine to run
@@ -265,6 +277,20 @@ func (ev *EmailValidator) validateHost(ctx context.Context, host string) error {
 
 	// No addrs or mx records were found
 	return ErrInvalidEmailDNS
+}
+
+// Justification for this function is based on automated signups at scale.
+// The goal is to reduce the number of automated signups from bots
+func (ev *EmailValidator) validateMX(ctx context.Context, host string) error {
+	// This check occurs just after validateHost so there is an assumption that this MX lookup will be cached locally.
+	mxRecords, _ := validateEmailResolver.LookupMX(ctx, host)
+
+	for _, mx := range mxRecords {
+		if blockedMXRecords[mx.Host] {
+			return ErrInvalidEmailMX
+		}
+	}
+	return nil
 }
 
 func isHostNotFound(err error) bool {

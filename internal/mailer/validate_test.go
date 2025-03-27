@@ -242,6 +242,11 @@ func TestValidateEmailExtended(t *testing.T) {
 		{email: "test@invalid.example.com", err: "invalid_email_dns"},
 		{email: "test@no.such.email.host.supabase.io", err: "invalid_email_dns"},
 
+		// various invalid mx records
+		{email: "user@gufum.com", err: "invalid_email_mx"},
+		{email: "user@vvatxiy.com", err: "invalid_email_mx"},
+		{email: "user@qacmjeq.com", err: "invalid_email_mx"},
+
 		// this low timeout should simulate a dns timeout, which should
 		// not be treated as an invalid email.
 		{email: "validemail@probablyaaaaaaaanotarealdomain.com",
