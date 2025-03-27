@@ -1,6 +1,4 @@
-package api
-
-/*
+package apierrors
 
 type ErrorCode = string
 
@@ -95,5 +93,3 @@ const (
 	ErrorCodeEmailAddressNotAuthorized ErrorCode = "email_address_not_authorized"
 	ErrorCodeEmailAddressInvalid       ErrorCode = "email_address_invalid"
 )
-
-*/

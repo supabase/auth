@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/security"
@@ -97,7 +98,7 @@ func retrieveRequestParams[A RequestParams](r *http.Request, params *A) error {
 		return internalServerError("Could not read body into byte slice").WithInternalError(err)
 	}
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError(ErrorCodeBadJSON, "Could not parse request body as JSON: %v", err)
+		return badRequestError(apierrors.ErrorCodeBadJSON, "Could not parse request body as JSON: %v", err)
 	}
 	return nil
 }

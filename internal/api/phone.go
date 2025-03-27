@@ -11,6 +11,7 @@ import (
 	"github.com/supabase/auth/internal/hooks"
 
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
@@ -27,7 +28,7 @@ const (
 func validatePhone(phone string) (string, error) {
 	phone = formatPhoneNumber(phone)
 	if isValid := validateE164Format(phone); !isValid {
-		return "", badRequestError(ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
+		return "", badRequestError(apierrors.ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
 	}
 	return phone, nil
 }
@@ -71,7 +72,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 	// intentionally keeping this before the test OTP, so that the behavior
 	// of regular and test OTPs is similar
 	if sentAt != nil && !sentAt.Add(config.Sms.MaxFrequency).Before(time.Now()) {
-		return "", tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(sentAt, config.Sms.MaxFrequency))
+		return "", tooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(sentAt, config.Sms.MaxFrequency))
 	}
 
 	now := time.Now()
@@ -89,7 +90,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		if !config.Sms.Autoconfirm {
 			// apply rate limiting before the sms is sent out
 			if ok := a.limiterOpts.Phone.Allow(); !ok {
-				return "", tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
+				return "", tooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
 			}
 		}
 		otp = crypto.GenerateOtp(config.Sms.OtpLength)
@@ -117,7 +118,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 			}
 			messageID, err := smsProvider.SendMessage(phone, message, channel, otp)
 			if err != nil {
-				return messageID, unprocessableEntityError(ErrorCodeSMSSendFailed, "Error sending %s OTP to provider: %v", otpType, err)
+				return messageID, unprocessableEntityError(apierrors.ErrorCodeSMSSendFailed, "Error sending %s OTP to provider: %v", otpType, err)
 			}
 		}
 	}

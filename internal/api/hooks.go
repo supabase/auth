@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
 
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/observability"
@@ -120,7 +121,7 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 
 		rsp, err := client.Do(req)
 		if err != nil && errors.Is(err, context.DeadlineExceeded) {
-			return nil, unprocessableEntityError(ErrorCodeHookTimeout, fmt.Sprintf("Failed to reach hook within maximum time of %f seconds", DefaultHTTPHookTimeout.Seconds()))
+			return nil, unprocessableEntityError(apierrors.ErrorCodeHookTimeout, fmt.Sprintf("Failed to reach hook within maximum time of %f seconds", DefaultHTTPHookTimeout.Seconds()))
 
 		} else if err != nil {
 			if terr, ok := err.(net.Error); ok && terr.Timeout() || i < DefaultHTTPHookRetries-1 {
@@ -128,7 +129,7 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 				time.Sleep(HTTPHookBackoffDuration)
 				continue
 			} else if i == DefaultHTTPHookRetries-1 {
-				return nil, unprocessableEntityError(ErrorCodeHookTimeoutAfterRetry, "Failed to reach hook after maximum retries")
+				return nil, unprocessableEntityError(apierrors.ErrorCodeHookTimeoutAfterRetry, "Failed to reach hook after maximum retries")
 			} else {
 				return nil, internalServerError("Failed to trigger auth hook, error making HTTP request").WithInternalError(err)
 			}
@@ -141,14 +142,14 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 			// Header.Get is case insensitive
 			contentType := rsp.Header.Get("Content-Type")
 			if contentType == "" {
-				return nil, badRequestError(ErrorCodeHookPayloadInvalidContentType, "Invalid Content-Type: Missing Content-Type header")
+				return nil, badRequestError(apierrors.ErrorCodeHookPayloadInvalidContentType, "Invalid Content-Type: Missing Content-Type header")
 			}
 			mediaType, _, err := mime.ParseMediaType(contentType)
 			if err != nil {
-				return nil, badRequestError(ErrorCodeHookPayloadInvalidContentType, fmt.Sprintf("Invalid Content-Type header: %s", err.Error()))
+				return nil, badRequestError(apierrors.ErrorCodeHookPayloadInvalidContentType, fmt.Sprintf("Invalid Content-Type header: %s", err.Error()))
 			}
 			if mediaType != "application/json" {
-				return nil, badRequestError(ErrorCodeHookPayloadInvalidContentType, "Invalid JSON response. Received content-type: "+contentType)
+				return nil, badRequestError(apierrors.ErrorCodeHookPayloadInvalidContentType, "Invalid JSON response. Received content-type: "+contentType)
 			}
 			if rsp.Body == nil {
 				return nil, nil
@@ -161,7 +162,7 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 			if limitedReader.N <= 0 {
 				// check if the response body still has excess bytes to be read
 				if n, _ := rsp.Body.Read(make([]byte, 1)); n > 0 {
-					return nil, unprocessableEntityError(ErrorCodeHookPayloadOverSizeLimit, fmt.Sprintf("Payload size exceeded size limit of %d bytes", PayloadLimit))
+					return nil, unprocessableEntityError(apierrors.ErrorCodeHookPayloadOverSizeLimit, fmt.Sprintf("Payload size exceeded size limit of %d bytes", PayloadLimit))
 				}
 			}
 			return body, nil

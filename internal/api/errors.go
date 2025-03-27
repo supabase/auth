@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/utilities"
 )
@@ -69,32 +70,32 @@ func oauthError(err string, description string) *OAuthError {
 	return &OAuthError{Err: err, Description: description}
 }
 
-func badRequestError(errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
+func badRequestError(errorCode apierrors.ErrorCode, fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusBadRequest, errorCode, fmtString, args...)
 }
 
 func internalServerError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusInternalServerError, ErrorCodeUnexpectedFailure, fmtString, args...)
+	return httpError(http.StatusInternalServerError, apierrors.ErrorCodeUnexpectedFailure, fmtString, args...)
 }
 
-func notFoundError(errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
+func notFoundError(errorCode apierrors.ErrorCode, fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusNotFound, errorCode, fmtString, args...)
 }
 
-func forbiddenError(errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
+func forbiddenError(errorCode apierrors.ErrorCode, fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusForbidden, errorCode, fmtString, args...)
 }
 
-func unprocessableEntityError(errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
+func unprocessableEntityError(errorCode apierrors.ErrorCode, fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusUnprocessableEntity, errorCode, fmtString, args...)
 }
 
-func tooManyRequestsError(errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
+func tooManyRequestsError(errorCode apierrors.ErrorCode, fmtString string, args ...interface{}) *HTTPError {
 	return httpError(http.StatusTooManyRequests, errorCode, fmtString, args...)
 }
 
 func conflictError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusConflict, ErrorCodeConflict, fmtString, args...)
+	return httpError(http.StatusConflict, apierrors.ErrorCodeConflict, fmtString, args...)
 }
 
 // HTTPError is an error with a message and an HTTP status code.
@@ -138,7 +139,7 @@ func (e *HTTPError) WithInternalMessage(fmtString string, args ...interface{}) *
 	return e
 }
 
-func httpError(httpStatus int, errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
+func httpError(httpStatus int, errorCode apierrors.ErrorCode, fmtString string, args ...interface{}) *HTTPError {
 	return &HTTPError{
 		HTTPStatus: httpStatus,
 		ErrorCode:  errorCode,
@@ -179,8 +180,8 @@ type ErrorCause interface {
 }
 
 type HTTPErrorResponse20240101 struct {
-	Code    ErrorCode `json:"code"`
-	Message string    `json:"message"`
+	Code    apierrors.ErrorCode `json:"code"`
+	Message string              `json:"message"`
 }
 
 func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
@@ -205,7 +206,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 				} `json:"weak_password,omitempty"`
 			}
 
-			output.Code = ErrorCodeWeakPassword
+			output.Code = apierrors.ErrorCodeWeakPassword
 			output.Message = e.Message
 			output.Payload.Reasons = e.Reasons
 
@@ -222,7 +223,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 			}
 
 			output.HTTPStatus = http.StatusUnprocessableEntity
-			output.ErrorCode = ErrorCodeWeakPassword
+			output.ErrorCode = apierrors.ErrorCodeWeakPassword
 			output.Message = e.Message
 			output.Payload.Reasons = e.Reasons
 
@@ -257,9 +258,9 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 
 			if resp.Code == "" {
 				if e.HTTPStatus == http.StatusInternalServerError {
-					resp.Code = ErrorCodeUnexpectedFailure
+					resp.Code = apierrors.ErrorCodeUnexpectedFailure
 				} else {
-					resp.Code = ErrorCodeUnknown
+					resp.Code = apierrors.ErrorCodeUnknown
 				}
 			}
 
@@ -269,9 +270,9 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 		} else {
 			if e.ErrorCode == "" {
 				if e.HTTPStatus == http.StatusInternalServerError {
-					e.ErrorCode = ErrorCodeUnexpectedFailure
+					e.ErrorCode = apierrors.ErrorCodeUnexpectedFailure
 				} else {
-					e.ErrorCode = ErrorCodeUnknown
+					e.ErrorCode = apierrors.ErrorCodeUnknown
 				}
 			}
 
@@ -302,7 +303,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 
 		if apiVersion.Compare(APIVersion20240101) >= 0 {
 			resp := HTTPErrorResponse20240101{
-				Code:    ErrorCodeUnexpectedFailure,
+				Code:    apierrors.ErrorCodeUnexpectedFailure,
 				Message: "Unexpected failure, please check server logs for more information",
 			}
 
@@ -312,7 +313,7 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 		} else {
 			httpError := HTTPError{
 				HTTPStatus: http.StatusInternalServerError,
-				ErrorCode:  ErrorCodeUnexpectedFailure,
+				ErrorCode:  apierrors.ErrorCodeUnexpectedFailure,
 				Message:    "Unexpected failure, please check server logs for more information",
 			}
 

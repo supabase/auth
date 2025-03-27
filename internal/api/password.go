@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/api/apierrors"
 )
 
 // BCrypt hashed passwords have a 72 character limit
@@ -28,7 +29,7 @@ func (a *API) checkPasswordStrength(ctx context.Context, password string) error 
 	config := a.config
 
 	if len(password) > MaxPasswordLength {
-		return badRequestError(ErrorCodeValidationFailed, fmt.Sprintf("Password cannot be longer than %v characters", MaxPasswordLength))
+		return badRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Password cannot be longer than %v characters", MaxPasswordLength))
 	}
 
 	var messages, reasons []string

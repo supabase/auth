@@ -7,6 +7,7 @@ import (
 	"github.com/fatih/structs"
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -22,18 +23,18 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 
 	identityID, err := uuid.FromString(chi.URLParam(r, "identity_id"))
 	if err != nil {
-		return notFoundError(ErrorCodeValidationFailed, "identity_id must be an UUID")
+		return notFoundError(apierrors.ErrorCodeValidationFailed, "identity_id must be an UUID")
 	}
 
 	aud := a.requestAud(ctx, r)
 	audienceFromClaims, _ := claims.GetAudience()
 	if len(audienceFromClaims) == 0 || aud != audienceFromClaims[0] {
-		return forbiddenError(ErrorCodeUnexpectedAudience, "Token audience doesn't match request audience")
+		return forbiddenError(apierrors.ErrorCodeUnexpectedAudience, "Token audience doesn't match request audience")
 	}
 
 	user := getUser(ctx)
 	if len(user.Identities) <= 1 {
-		return unprocessableEntityError(ErrorCodeSingleIdentityNotDeletable, "User must have at least 1 identity after unlinking")
+		return unprocessableEntityError(apierrors.ErrorCodeSingleIdentityNotDeletable, "User must have at least 1 identity after unlinking")
 	}
 	var identityToBeDeleted *models.Identity
 	for i := range user.Identities {
@@ -44,7 +45,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	if identityToBeDeleted == nil {
-		return unprocessableEntityError(ErrorCodeIdentityNotFound, "Identity doesn't exist")
+		return unprocessableEntityError(apierrors.ErrorCodeIdentityNotFound, "Identity doesn't exist")
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
@@ -71,7 +72,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 		default:
 			if terr := user.UpdateUserEmailFromIdentities(tx); terr != nil {
 				if models.IsUniqueConstraintViolatedError(terr) {
-					return unprocessableEntityError(ErrorCodeEmailConflictIdentityNotDeletable, "Unable to unlink identity due to email conflict").WithInternalError(terr)
+					return unprocessableEntityError(apierrors.ErrorCodeEmailConflictIdentityNotDeletable, "Unable to unlink identity due to email conflict").WithInternalError(terr)
 				}
 				return internalServerError("Database error updating user email").WithInternalError(terr)
 			}
@@ -115,9 +116,9 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 	}
 	if identity != nil {
 		if identity.UserID == targetUser.ID {
-			return nil, unprocessableEntityError(ErrorCodeIdentityAlreadyExists, "Identity is already linked")
+			return nil, unprocessableEntityError(apierrors.ErrorCodeIdentityAlreadyExists, "Identity is already linked")
 		}
-		return nil, unprocessableEntityError(ErrorCodeIdentityAlreadyExists, "Identity is already linked to another user")
+		return nil, unprocessableEntityError(apierrors.ErrorCodeIdentityAlreadyExists, "Identity is already linked to another user")
 	}
 	if _, terr := a.createNewIdentity(tx, targetUser, providerType, structs.Map(userData.Metadata)); terr != nil {
 		return nil, terr
@@ -126,7 +127,7 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 	if targetUser.GetEmail() == "" {
 		if terr := targetUser.UpdateUserEmailFromIdentities(tx); terr != nil {
 			if models.IsUniqueConstraintViolatedError(terr) {
-				return nil, badRequestError(ErrorCodeEmailExists, DuplicateEmailMsg)
+				return nil, badRequestError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 			}
 			return nil, terr
 		}
@@ -134,7 +135,7 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 			if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
 				return nil, terr
 			}
-			return nil, storage.NewCommitWithError(unprocessableEntityError(ErrorCodeEmailNotConfirmed, "Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType))
+			return nil, storage.NewCommitWithError(unprocessableEntityError(apierrors.ErrorCodeEmailNotConfirmed, "Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType))
 		}
 		if terr := targetUser.Confirm(tx); terr != nil {
 			return nil, terr
