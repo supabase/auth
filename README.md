@@ -1,4 +1,4 @@
-# Auth - Authentication and User Management by Supabase and tailored by and for Stork Labs
+# Gotrue - Authentication and User Management by Supabase and tailored by and for Stork Labs
 
 [![Coverage Status](https://coveralls.io/repos/github/supabase/auth/badge.svg?branch=master)](https://coveralls.io/github/supabase/auth?branch=master)
 
