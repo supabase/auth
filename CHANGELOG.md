@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.171.0](https://github.com/supabase/auth/compare/v2.170.0...v2.171.0) (2025-03-28)
+
+
+### Features
+
+* allow invalid config directories ([#1969](https://github.com/supabase/auth/issues/1969)) ([6b842f6](https://github.com/supabase/auth/commit/6b842f6b304bba5f886c6bf8b5675d914f881a2d))
+
+
+### Bug Fixes
+
+* propagate error when when confirming phone ([#1939](https://github.com/supabase/auth/issues/1939)) ([e882b42](https://github.com/supabase/auth/commit/e882b42f3929ab2e587a41ba6593edaf237e5535))
+
 ## [2.170.0](https://github.com/supabase/auth/compare/v2.169.0...v2.170.0) (2025-03-06)
 
 
