@@ -260,7 +260,18 @@ func TestValidateEmailExtended(t *testing.T) {
 		EmailValidationExtended:       true,
 		EmailValidationServiceURL:     "",
 		EmailValidationServiceHeaders: "",
+		EmailValidationBlockedMX: `[
+			"mail.gufum.com",
+			"mail.vvatxiy.com",
+			"mail.qacmjeq.com"
+		]`,
 	}
+
+	// Ensure the BlockedMX transformation occurs by calling Validate
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("failed to validate MailerConfiguration: %v", err)
+	}
+
 	ev := newEmailValidator(cfg)
 
 	for idx, tc := range cases {

@@ -433,6 +433,12 @@ func (c *MailerConfiguration) Validate() error {
 	}
 
 	if len(blockedMXRecords) > 0 {
+		// MX records end with a period, so we add it here if it's missing.
+		for i, record := range blockedMXRecords {
+			if !strings.HasSuffix(record, ".") {
+				blockedMXRecords[i] = record + "."
+			}
+		}
 		c.blockedMXRecords = blockedMXRecords
 	}
 
@@ -962,16 +968,6 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.Mailer.OtpLength == 0 || config.Mailer.OtpLength < 6 || config.Mailer.OtpLength > 10 {
 		// 6-digit otp by default
 		config.Mailer.OtpLength = 6
-	}
-
-	if config.Mailer.EmailValidationBlockedMX == "" {
-		config.Mailer.EmailValidationBlockedMX = `[
-			"mail.wallywatts.com",
-			"mail.wabblywabble.com",
-			"mail.gufum.com",
-			"mail.vvatxiy.com",
-			"mail.qacmjeq.com"
-		]`
 	}
 
 	if config.SMTP.MaxFrequency == 0 {
