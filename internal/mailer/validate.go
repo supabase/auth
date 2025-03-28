@@ -61,14 +61,6 @@ var invalidHostMap = map[string]bool{
 	"email.com":     true,
 }
 
-var blockedMXRecords = map[string]bool{
-	"mail.wallywatts.com":   true,
-	"mail.wabblywabble.com": true,
-	"mail.gufum.com":        true,
-	"mail.vvatxiy.com":      true,
-	"mail.qacmjeq.com":      true,
-}
-
 const (
 	validateEmailTimeout = 3 * time.Second
 )
@@ -86,16 +78,18 @@ var (
 )
 
 type EmailValidator struct {
-	extended       bool
-	serviceURL     string
-	serviceHeaders map[string][]string
+	extended         bool
+	serviceURL       string
+	serviceHeaders   map[string][]string
+	blockedMXRecords []string
 }
 
 func newEmailValidator(mc conf.MailerConfiguration) *EmailValidator {
 	return &EmailValidator{
-		extended:       mc.EmailValidationExtended,
-		serviceURL:     mc.EmailValidationServiceURL,
-		serviceHeaders: mc.GetEmailValidationServiceHeaders(),
+		extended:         mc.EmailValidationExtended,
+		serviceURL:       mc.EmailValidationServiceURL,
+		serviceHeaders:   mc.GetEmailValidationServiceHeaders(),
+		blockedMXRecords: mc.GetEmailValidationBlockedMXRecords(),
 	}
 }
 
@@ -141,9 +135,6 @@ func (ev *EmailValidator) Validate(ctx context.Context, email string) error {
 
 		// Start the goroutine to validate the host.
 		g.Go(func() error { return ev.validateHost(ctx, host) })
-
-		// Start the goroutine to check the MX record against an abuse list.
-		g.Go(func() error { return ev.validateMX(ctx, host) })
 	}
 
 	// If the service check is enabled we start a goroutine to run
@@ -265,32 +256,28 @@ func (ev *EmailValidator) validateProviders(name, host string) error {
 }
 
 func (ev *EmailValidator) validateHost(ctx context.Context, host string) error {
-	_, err := validateEmailResolver.LookupMX(ctx, host)
+	// Perform MX lookup
+	mxRecords, err := validateEmailResolver.LookupMX(ctx, host)
 	if !isHostNotFound(err) {
+		// Check MX records against the blocked list
+		for _, mx := range mxRecords {
+			for _, blockedMX := range ev.blockedMXRecords {
+				if blockedMX == mx.Host {
+					return ErrInvalidEmailMX
+				}
+			}
+		}
 		return nil
 	}
 
+	// Perform host lookup if no valid MX records were found
 	_, err = validateEmailResolver.LookupHost(ctx, host)
 	if !isHostNotFound(err) {
 		return nil
 	}
 
-	// No addrs or mx records were found
+	// No addresses or MX records were found
 	return ErrInvalidEmailDNS
-}
-
-// Justification for this function is based on automated signups at scale.
-// The goal is to reduce the number of automated signups from bots
-func (ev *EmailValidator) validateMX(ctx context.Context, host string) error {
-	// This check occurs just after validateHost so there is an assumption that this MX lookup will be cached locally.
-	mxRecords, _ := validateEmailResolver.LookupMX(ctx, host)
-
-	for _, mx := range mxRecords {
-		if blockedMXRecords[mx.Host] {
-			return ErrInvalidEmailMX
-		}
-	}
-	return nil
 }
 
 func isHostNotFound(err error) bool {

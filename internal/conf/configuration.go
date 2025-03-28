@@ -404,8 +404,10 @@ type MailerConfiguration struct {
 	EmailValidationExtended       bool   `json:"email_validation_extended" split_words:"true" default:"false"`
 	EmailValidationServiceURL     string `json:"email_validation_service_url" split_words:"true"`
 	EmailValidationServiceHeaders string `json:"email_validation_service_headers" split_words:"true"`
+	EmailValidationBlockedMX      string `json:"email_validation_blocked_mx" split_words:"true"`
 
-	serviceHeaders map[string][]string `json:"-"`
+	serviceHeaders   map[string][]string `json:"-"`
+	blockedMXRecords []string            `json:"-"`
 }
 
 func (c *MailerConfiguration) Validate() error {
@@ -421,11 +423,28 @@ func (c *MailerConfiguration) Validate() error {
 	if len(headers) > 0 {
 		c.serviceHeaders = headers
 	}
+
+	var blockedMXRecords []string
+	if c.EmailValidationBlockedMX != "" {
+		err := json.Unmarshal([]byte(c.EmailValidationBlockedMX), &blockedMXRecords)
+		if err != nil {
+			return fmt.Errorf("conf: email_validation_blocked_mx is not a valid JSON array: %w", err)
+		}
+	}
+
+	if len(blockedMXRecords) > 0 {
+		c.blockedMXRecords = blockedMXRecords
+	}
+
 	return nil
 }
 
 func (c *MailerConfiguration) GetEmailValidationServiceHeaders() map[string][]string {
 	return c.serviceHeaders
+}
+
+func (c *MailerConfiguration) GetEmailValidationBlockedMXRecords() []string {
+	return c.blockedMXRecords
 }
 
 type PhoneProviderConfiguration struct {
@@ -943,6 +962,16 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 	if config.Mailer.OtpLength == 0 || config.Mailer.OtpLength < 6 || config.Mailer.OtpLength > 10 {
 		// 6-digit otp by default
 		config.Mailer.OtpLength = 6
+	}
+
+	if config.Mailer.EmailValidationBlockedMX == "" {
+		config.Mailer.EmailValidationBlockedMX = `[
+			"mail.wallywatts.com",
+			"mail.wabblywabble.com",
+			"mail.gufum.com",
+			"mail.vvatxiy.com",
+			"mail.qacmjeq.com"
+		]`
 	}
 
 	if config.SMTP.MaxFrequency == 0 {
