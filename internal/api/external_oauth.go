@@ -8,6 +8,7 @@ import (
 
 	"github.com/mrjones/oauth"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/utilities"
@@ -65,12 +66,12 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 
 	oauthCode := rq.Get("code")
 	if oauthCode == "" {
-		return nil, badRequestError(ErrorCodeBadOAuthCallback, "OAuth callback with missing authorization code missing")
+		return nil, badRequestError(apierrors.ErrorCodeBadOAuthCallback, "OAuth callback with missing authorization code missing")
 	}
 
 	oAuthProvider, err := a.OAuthProvider(ctx, providerType)
 	if err != nil {
-		return nil, badRequestError(ErrorCodeOAuthProviderNotSupported, "Unsupported provider: %+v", err).WithInternalError(err)
+		return nil, badRequestError(apierrors.ErrorCodeOAuthProviderNotSupported, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
 
 	log := observability.GetLogEntry(r).Entry
@@ -112,7 +113,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 func (a *API) oAuth1Callback(ctx context.Context, providerType string) (*OAuthProviderData, error) {
 	oAuthProvider, err := a.OAuthProvider(ctx, providerType)
 	if err != nil {
-		return nil, badRequestError(ErrorCodeOAuthProviderNotSupported, "Unsupported provider: %+v", err).WithInternalError(err)
+		return nil, badRequestError(apierrors.ErrorCodeOAuthProviderNotSupported, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
 	oauthToken := getRequestToken(ctx)
 	oauthVerifier := getOAuthVerifier(ctx)

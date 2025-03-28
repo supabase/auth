@@ -13,6 +13,7 @@ import (
 
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/security"
@@ -70,7 +71,7 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 			} else {
 				err := tollbooth.LimitByKeys(lmt, []string{key})
 				if err != nil {
-					return c, tooManyRequestsError(ErrorCodeOverRequestRateLimit, "Request rate limit reached")
+					return c, tooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
 				}
 			}
 		}
@@ -97,7 +98,7 @@ func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (co
 	config := a.config
 
 	if !config.External.Email.Enabled {
-		return nil, badRequestError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
+		return nil, badRequestError(apierrors.ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 	}
 
 	return ctx, nil
@@ -129,7 +130,7 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 	}
 
 	if !verificationResult.Success {
-		return nil, badRequestError(ErrorCodeCaptchaFailed, "captcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
+		return nil, badRequestError(apierrors.ErrorCodeCaptchaFailed, "captcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
 	}
 
 	return ctx, nil
@@ -233,7 +234,7 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.SAML.Enabled {
-		return nil, notFoundError(ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled")
+		return nil, notFoundError(apierrors.ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled")
 	}
 	return ctx, nil
 }
@@ -241,7 +242,7 @@ func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (cont
 func (a *API) requireManualLinkingEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.Security.ManualLinkingEnabled {
-		return nil, notFoundError(ErrorCodeManualLinkingDisabled, "Manual linking is disabled")
+		return nil, notFoundError(apierrors.ErrorCodeManualLinkingDisabled, "Manual linking is disabled")
 	}
 	return ctx, nil
 }
@@ -381,7 +382,7 @@ func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 				if err == context.DeadlineExceeded {
 					httpError := &HTTPError{
 						HTTPStatus: http.StatusGatewayTimeout,
-						ErrorCode:  ErrorCodeRequestTimeout,
+						ErrorCode:  apierrors.ErrorCodeRequestTimeout,
 						Message:    "Processing this request timed out, please retry after a moment.",
 					}
 

@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 )
@@ -94,7 +95,7 @@ func (ts *TokenTestSuite) TestSessionTimebox() {
 	}
 
 	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
-	assert.Equal(ts.T(), ErrorCodeSessionExpired, firstResult.ErrorCode)
+	assert.Equal(ts.T(), apierrors.ErrorCodeSessionExpired, firstResult.ErrorCode)
 	assert.Equal(ts.T(), "Invalid Refresh Token: Session Expired", firstResult.Message)
 }
 
@@ -129,7 +130,7 @@ func (ts *TokenTestSuite) TestSessionInactivityTimeout() {
 	}
 
 	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
-	assert.Equal(ts.T(), ErrorCodeSessionExpired, firstResult.ErrorCode)
+	assert.Equal(ts.T(), apierrors.ErrorCodeSessionExpired, firstResult.ErrorCode)
 	assert.Equal(ts.T(), "Invalid Refresh Token: Session Expired (Inactivity)", firstResult.Message)
 }
 
@@ -218,7 +219,7 @@ func (ts *TokenTestSuite) TestSingleSessionPerUserNoTags() {
 	}
 
 	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
-	assert.Equal(ts.T(), ErrorCodeSessionExpired, firstResult.ErrorCode)
+	assert.Equal(ts.T(), apierrors.ErrorCodeSessionExpired, firstResult.ErrorCode)
 	assert.Equal(ts.T(), "Invalid Refresh Token: Session Expired (Revoked by Newer Login)", firstResult.Message)
 }
 
@@ -433,7 +434,7 @@ func (ts *TokenTestSuite) TestRefreshTokenReuseRevocation() {
 	}
 
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&response))
-	require.Equal(ts.T(), ErrorCodeRefreshTokenAlreadyUsed, response.ErrorCode)
+	require.Equal(ts.T(), apierrors.ErrorCodeRefreshTokenAlreadyUsed, response.ErrorCode)
 	require.Equal(ts.T(), "Invalid Refresh Token: Already Used", response.Message)
 
 	// ensure that the refresh tokens are marked as revoked in the database
@@ -466,7 +467,7 @@ func (ts *TokenTestSuite) TestRefreshTokenReuseRevocation() {
 		}
 
 		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&response))
-		require.Equal(ts.T(), ErrorCodeRefreshTokenAlreadyUsed, response.ErrorCode, "For refresh token %d", i)
+		require.Equal(ts.T(), apierrors.ErrorCodeRefreshTokenAlreadyUsed, response.ErrorCode, "For refresh token %d", i)
 		require.Equal(ts.T(), "Invalid Refresh Token: Already Used", response.Message, "For refresh token %d", i)
 	}
 }

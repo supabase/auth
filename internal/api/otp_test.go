@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 )
@@ -81,7 +82,7 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 				http.StatusBadRequest,
 				map[string]interface{}{
 					"code":       float64(http.StatusBadRequest),
-					"error_code": ErrorCodeValidationFailed,
+					"error_code": apierrors.ErrorCodeValidationFailed,
 					"msg":        "PKCE flow requires code_challenge_method and code_challenge",
 				},
 			},
@@ -100,7 +101,7 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 				http.StatusBadRequest,
 				map[string]interface{}{
 					"code":       float64(http.StatusBadRequest),
-					"error_code": ErrorCodeValidationFailed,
+					"error_code": apierrors.ErrorCodeValidationFailed,
 					"msg":        "PKCE flow requires code_challenge_method and code_challenge",
 				},
 			},
@@ -185,7 +186,7 @@ func (ts *OtpTestSuite) TestOtp() {
 				http.StatusBadRequest,
 				map[string]interface{}{
 					"code":       float64(http.StatusBadRequest),
-					"error_code": ErrorCodeValidationFailed,
+					"error_code": apierrors.ErrorCodeValidationFailed,
 					"msg":        "Only an email address or phone number should be provided",
 				},
 			},
@@ -204,7 +205,7 @@ func (ts *OtpTestSuite) TestOtp() {
 				http.StatusBadRequest,
 				map[string]interface{}{
 					"code":       float64(http.StatusBadRequest),
-					"error_code": ErrorCodeValidationFailed,
+					"error_code": apierrors.ErrorCodeValidationFailed,
 					"msg":        InvalidChannelError,
 				},
 			},
@@ -256,7 +257,7 @@ func (ts *OtpTestSuite) TestNoSignupsForOtp() {
 	// response should be empty
 	assert.Equal(ts.T(), data, map[string]interface{}{
 		"code":       float64(http.StatusUnprocessableEntity),
-		"error_code": ErrorCodeOTPDisabled,
+		"error_code": apierrors.ErrorCodeOTPDisabled,
 		"msg":        "Signups not allowed for otp",
 	})
 }

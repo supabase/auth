@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/supabase/auth/internal/api/apierrors"
 	mail "github.com/supabase/auth/internal/mailer"
 
 	"github.com/stretchr/testify/assert"
@@ -314,7 +315,7 @@ func (ts *VerifyTestSuite) TestExpiredConfirmationToken() {
 
 	f, err := url.ParseQuery(rurl.Fragment)
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), ErrorCodeOTPExpired, f.Get("error_code"))
+	assert.Equal(ts.T(), apierrors.ErrorCodeOTPExpired, f.Get("error_code"))
 	assert.Equal(ts.T(), "Email link is invalid or has expired", f.Get("error_description"))
 	assert.Equal(ts.T(), "access_denied", f.Get("error"))
 }
@@ -835,7 +836,7 @@ func (ts *VerifyTestSuite) TestVerifyBannedUser() {
 
 			f, err := url.ParseQuery(rurl.Fragment)
 			require.NoError(ts.T(), err)
-			assert.Equal(ts.T(), ErrorCodeUserBanned, f.Get("error_code"))
+			assert.Equal(ts.T(), apierrors.ErrorCodeUserBanned, f.Get("error_code"))
 		})
 	}
 }
@@ -1197,7 +1198,7 @@ func (ts *VerifyTestSuite) TestPrepErrorRedirectURL() {
 	for _, c := range cases {
 		ts.Run(c.desc, func() {
 			req := httptest.NewRequest(http.MethodGet, "http://localhost", nil)
-			rurl, err := ts.API.prepErrorRedirectURL(badRequestError(ErrorCodeValidationFailed, DefaultError), req, c.rurl, c.flowType)
+			rurl, err := ts.API.prepErrorRedirectURL(badRequestError(apierrors.ErrorCodeValidationFailed, DefaultError), req, c.rurl, c.flowType)
 			require.NoError(ts.T(), err)
 			require.Equal(ts.T(), c.expected, rurl)
 		})
@@ -1247,7 +1248,7 @@ func (ts *VerifyTestSuite) TestVerifyValidateParams() {
 				Token: "some-token",
 			},
 			method:   http.MethodPost,
-			expected: badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided on verify"),
+			expected: badRequestError(apierrors.ErrorCodeValidationFailed, "Only an email address or phone number should be provided on verify"),
 		},
 		{
 			desc: "Cannot send both TokenHash and Token",
@@ -1257,7 +1258,7 @@ func (ts *VerifyTestSuite) TestVerifyValidateParams() {
 				TokenHash: "some-token-hash",
 			},
 			method:   http.MethodPost,
-			expected: badRequestError(ErrorCodeValidationFailed, "Verify requires either a token or a token hash"),
+			expected: badRequestError(apierrors.ErrorCodeValidationFailed, "Verify requires either a token or a token hash"),
 		},
 		{
 			desc: "No verification type specified",
@@ -1266,7 +1267,7 @@ func (ts *VerifyTestSuite) TestVerifyValidateParams() {
 				Email: "email@example.com",
 			},
 			method:   http.MethodPost,
-			expected: badRequestError(ErrorCodeValidationFailed, "Verify requires a verification type"),
+			expected: badRequestError(apierrors.ErrorCodeValidationFailed, "Verify requires a verification type"),
 		},
 	}
 

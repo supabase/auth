@@ -1,4 +1,4 @@
-package api
+package apierrors
 
 type ErrorCode = string
 

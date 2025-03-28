@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/xeipuuv/gojsonschema"
 
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
@@ -89,7 +90,7 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	case "pkce":
 		return a.PKCE(ctx, w, r)
 	default:
-		return badRequestError(ErrorCodeInvalidCredentials, "unsupported_grant_type")
+		return badRequestError(apierrors.ErrorCodeInvalidCredentials, "unsupported_grant_type")
 	}
 }
 
@@ -106,7 +107,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	config := a.config
 
 	if params.Email != "" && params.Phone != "" {
-		return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided on login.")
+		return badRequestError(apierrors.ErrorCodeValidationFailed, "Only an email address or phone number should be provided on login.")
 	}
 	var user *models.User
 	var grantParams models.GrantParams
@@ -118,33 +119,33 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	if params.Email != "" {
 		provider = "email"
 		if !config.External.Email.Enabled {
-			return unprocessableEntityError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
+			return unprocessableEntityError(apierrors.ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 		}
 		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 	} else if params.Phone != "" {
 		provider = "phone"
 		if !config.External.Phone.Enabled {
-			return unprocessableEntityError(ErrorCodePhoneProviderDisabled, "Phone logins are disabled")
+			return unprocessableEntityError(apierrors.ErrorCodePhoneProviderDisabled, "Phone logins are disabled")
 		}
 		params.Phone = formatPhoneNumber(params.Phone)
 		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
 	} else {
-		return badRequestError(ErrorCodeValidationFailed, "missing email or phone")
+		return badRequestError(apierrors.ErrorCodeValidationFailed, "missing email or phone")
 	}
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return badRequestError(ErrorCodeInvalidCredentials, InvalidLoginMessage)
+			return badRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
 		}
 		return internalServerError("Database error querying schema").WithInternalError(err)
 	}
 
 	if !user.HasPassword() {
-		return badRequestError(ErrorCodeInvalidCredentials, InvalidLoginMessage)
+		return badRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
 	}
 
 	if user.IsBanned() {
-		return badRequestError(ErrorCodeUserBanned, "User is banned")
+		return badRequestError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
 	isValidPassword, shouldReEncrypt, err := user.Authenticate(ctx, db, params.Password, config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
@@ -196,17 +197,17 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 					return err
 				}
 			}
-			return badRequestError(ErrorCodeInvalidCredentials, output.Message)
+			return badRequestError(apierrors.ErrorCodeInvalidCredentials, output.Message)
 		}
 	}
 	if !isValidPassword {
-		return badRequestError(ErrorCodeInvalidCredentials, InvalidLoginMessage)
+		return badRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
 	}
 
 	if params.Email != "" && !user.IsConfirmed() {
-		return badRequestError(ErrorCodeEmailNotConfirmed, "Email not confirmed")
+		return badRequestError(apierrors.ErrorCodeEmailNotConfirmed, "Email not confirmed")
 	} else if params.Phone != "" && !user.IsPhoneConfirmed() {
-		return badRequestError(ErrorCodePhoneNotConfirmed, "Phone not confirmed")
+		return badRequestError(apierrors.ErrorCodePhoneNotConfirmed, "Phone not confirmed")
 	}
 
 	var token *AccessTokenResponse
@@ -250,18 +251,18 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	}
 
 	if params.AuthCode == "" || params.CodeVerifier == "" {
-		return badRequestError(ErrorCodeValidationFailed, "invalid request: both auth code and code verifier should be non-empty")
+		return badRequestError(apierrors.ErrorCodeValidationFailed, "invalid request: both auth code and code verifier should be non-empty")
 	}
 
 	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
 	// Sanity check in case user ID was not set properly
 	if models.IsNotFoundError(err) || flowState.UserID == nil {
-		return notFoundError(ErrorCodeFlowStateNotFound, "invalid flow state, no valid flow state found")
+		return notFoundError(apierrors.ErrorCodeFlowStateNotFound, "invalid flow state, no valid flow state found")
 	} else if err != nil {
 		return err
 	}
 	if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
-		return unprocessableEntityError(ErrorCodeFlowStateExpired, "invalid flow state, flow state has expired")
+		return unprocessableEntityError(apierrors.ErrorCodeFlowStateExpired, "invalid flow state, flow state has expired")
 	}
 
 	user, err := models.FindUserByID(db, *flowState.UserID)
@@ -269,7 +270,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 	if err := flowState.VerifyPKCE(params.CodeVerifier); err != nil {
-		return badRequestError(ErrorCodeBadCodeVerifier, err.Error())
+		return badRequestError(apierrors.ErrorCodeBadCodeVerifier, err.Error())
 	}
 
 	var token *AccessTokenResponse

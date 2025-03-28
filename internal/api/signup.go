@@ -8,6 +8,7 @@ import (
 	"github.com/fatih/structs"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/metering"
@@ -32,21 +33,21 @@ func (a *API) validateSignupParams(ctx context.Context, p *SignupParams) error {
 	config := a.config
 
 	if p.Password == "" {
-		return badRequestError(ErrorCodeValidationFailed, "Signup requires a valid password")
+		return badRequestError(apierrors.ErrorCodeValidationFailed, "Signup requires a valid password")
 	}
 
 	if err := a.checkPasswordStrength(ctx, p.Password); err != nil {
 		return err
 	}
 	if p.Email != "" && p.Phone != "" {
-		return badRequestError(ErrorCodeValidationFailed, "Only an email address or phone number should be provided on signup.")
+		return badRequestError(apierrors.ErrorCodeValidationFailed, "Only an email address or phone number should be provided on signup.")
 	}
 	if p.Provider == "phone" && !sms_provider.IsValidMessageChannel(p.Channel, config) {
-		return badRequestError(ErrorCodeValidationFailed, InvalidChannelError)
+		return badRequestError(apierrors.ErrorCodeValidationFailed, InvalidChannelError)
 	}
 	// PKCE not needed as phone signups already return access token in body
 	if p.Phone != "" && p.CodeChallenge != "" {
-		return badRequestError(ErrorCodeValidationFailed, "PKCE not supported for phone signups")
+		return badRequestError(apierrors.ErrorCodeValidationFailed, "PKCE not supported for phone signups")
 	}
 	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
 		return err
@@ -112,7 +113,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
 
 	if config.DisableSignup {
-		return unprocessableEntityError(ErrorCodeSignupDisabled, "Signups not allowed for this instance")
+		return unprocessableEntityError(apierrors.ErrorCodeSignupDisabled, "Signups not allowed for this instance")
 	}
 
 	params := &SignupParams{}
@@ -139,7 +140,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 	switch params.Provider {
 	case "email":
 		if !config.External.Email.Enabled {
-			return badRequestError(ErrorCodeEmailProviderDisabled, "Email signups are disabled")
+			return badRequestError(apierrors.ErrorCodeEmailProviderDisabled, "Email signups are disabled")
 		}
 		params.Email, err = a.validateEmail(params.Email)
 		if err != nil {
@@ -148,7 +149,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud, nil)
 	case "phone":
 		if !config.External.Phone.Enabled {
-			return badRequestError(ErrorCodePhoneProviderDisabled, "Phone signups are disabled")
+			return badRequestError(apierrors.ErrorCodePhoneProviderDisabled, "Phone signups are disabled")
 		}
 		params.Phone, err = validatePhone(params.Phone)
 		if err != nil {
@@ -167,7 +168,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			msg = "Sign up with this provider not possible"
 		}
 
-		return badRequestError(ErrorCodeValidationFailed, msg)
+		return badRequestError(apierrors.ErrorCodeValidationFailed, msg)
 	}
 
 	if err != nil && !models.IsNotFoundError(err) {
@@ -287,7 +288,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			if config.Mailer.Autoconfirm || config.Sms.Autoconfirm {
-				return unprocessableEntityError(ErrorCodeUserAlreadyExists, "User already registered")
+				return unprocessableEntityError(apierrors.ErrorCodeUserAlreadyExists, "User already registered")
 			}
 			sanitizedUser, err := sanitizeUser(user, params)
 			if err != nil {

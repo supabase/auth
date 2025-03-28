@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -16,7 +17,7 @@ type RecoverParams struct {
 
 func (p *RecoverParams) Validate(a *API) error {
 	if p.Email == "" {
-		return badRequestError(ErrorCodeValidationFailed, "Password recovery requires an email")
+		return badRequestError(apierrors.ErrorCodeValidationFailed, "Password recovery requires an email")
 	}
 	var err error
 	if p.Email, err = a.validateEmail(p.Email); err != nil {

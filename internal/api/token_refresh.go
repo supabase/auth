@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -47,13 +48,13 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		user, token, session, err := models.FindUserWithRefreshToken(db, params.RefreshToken, false)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return badRequestError(ErrorCodeRefreshTokenNotFound, "Invalid Refresh Token: Refresh Token Not Found")
+				return badRequestError(apierrors.ErrorCodeRefreshTokenNotFound, "Invalid Refresh Token: Refresh Token Not Found")
 			}
 			return internalServerError(err.Error())
 		}
 
 		if user.IsBanned() {
-			return badRequestError(ErrorCodeUserBanned, "Invalid Refresh Token: User Banned")
+			return badRequestError(apierrors.ErrorCodeUserBanned, "Invalid Refresh Token: User Banned")
 		}
 
 		if session == nil {
@@ -61,7 +62,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			if err := db.Destroy(token); err != nil {
 				return internalServerError("Error deleting refresh token with missing session").WithInternalError(err)
 			}
-			return badRequestError(ErrorCodeSessionNotFound, "Invalid Refresh Token: No Valid Session Found")
+			return badRequestError(apierrors.ErrorCodeSessionNotFound, "Invalid Refresh Token: No Valid Session Found")
 		}
 
 		result := session.CheckValidity(retryStart, &token.UpdatedAt, config.Sessions.Timebox, config.Sessions.InactivityTimeout)
@@ -71,10 +72,10 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			// do nothing
 
 		case models.SessionTimedOut:
-			return badRequestError(ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Inactivity)")
+			return badRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Inactivity)")
 
 		default:
-			return badRequestError(ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired")
+			return badRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired")
 		}
 
 		// Basic checks above passed, now we need to serialize access
@@ -153,7 +154,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 					if s.LastRefreshedAt(nil).After(session.LastRefreshedAt(&token.UpdatedAt)) {
 						// session is not the most
 						// recently active one
-						return badRequestError(ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Revoked by Newer Login)")
+						return badRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Revoked by Newer Login)")
 					}
 				}
 
@@ -196,7 +197,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 							}
 						}
 
-						return storage.NewCommitWithError(badRequestError(ErrorCodeRefreshTokenAlreadyUsed, "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID))
+						return storage.NewCommitWithError(badRequestError(apierrors.ErrorCodeRefreshTokenAlreadyUsed, "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID))
 					}
 				}
 			}
