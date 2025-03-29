@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -55,7 +54,6 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 
 	parsedMessage, err := siws.ParseMessage(params.Message)
 	if err != nil {
-		fmt.Printf("@@@@@@@@@@@@@@@@@@ %v\n", err)
 		return badRequestError(ErrorCodeValidationFailed, err.Error())
 	}
 
@@ -66,28 +64,22 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 	}
 
 	if !parsedMessage.VerifySignature(signatureBytes) {
-		return badRequestError(ErrorCodeValidationFailed, "signature does not match over the message")
+		return oauthError("invalid_grant", "Signature does not match address in message")
 	}
 
-	if parsedMessage.ChainID != "" && !config.External.Web3.IsChainSupported(parsedMessage.ChainID) {
-		return oauthError("invalid_grant", "Signed Solana message is for a Chain ID that is not allowed")
-	}
-
-	if parsedMessage.URI.Scheme == "http" && parsedMessage.URI.Hostname() != "localhost" {
-		return oauthError("invalid_grant", "Signed Solana message is using URI which uses HTTP, only HTTPS is allowed")
-	} else if parsedMessage.URI.Scheme != "https" {
-		return oauthError("invalid_grant", "Signed Solana message is using URI which does not use HTTPS")
+	if parsedMessage.URI.Scheme != "https" {
+		if parsedMessage.URI.Scheme == "http" && parsedMessage.URI.Hostname() != "localhost" {
+			return oauthError("invalid_grant", "Signed Solana message is using URI which uses HTTP and hostname is not localhost, only HTTPS is allowed")
+		} else {
+			return oauthError("invalid_grant", "Signed Solana message is using URI which does not use HTTPS")
+		}
 	}
 
 	if !utilities.IsRedirectURLValid(config, parsedMessage.URI.String()) {
 		return oauthError("invalid_grant", "Signed Solana message is using URI which is not allowed on this server, message was signed for another app")
 	}
 
-	if strings.Contains(parsedMessage.Domain, "@") {
-		if !utilities.IsRedirectURLValid(config, "mailto:"+parsedMessage.Domain) {
-			return oauthError("invalid_grant", "Signed Solana message is using a Domain in the form of user@domain which is not allowed on this server")
-		}
-	} else if parsedMessage.URI.Host != parsedMessage.Domain && !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain+"/") {
+	if parsedMessage.URI.Host != parsedMessage.Domain || !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain+"/") {
 		return oauthError("invalid_grant", "Signed Solana message is using a Domain that does not match the one in URI which is not allowed on this server")
 	}
 
@@ -101,12 +93,16 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 		return oauthError("invalid_grant", "Signed Solana message is expired")
 	}
 
-	if parsedMessage.ExpirationTime.IsZero() {
-		expiresAt := parsedMessage.IssuedAt.Add(config.External.Web3.MaximumValidityDuration)
+	latestExpiryAt := parsedMessage.IssuedAt.Add(config.External.Web3.MaximumValidityDuration)
 
-		if now.After(expiresAt) {
-			return oauthError("invalid_grant", "Signed Solana message is considered expired based on Issued At time")
-		}
+	if now.After(latestExpiryAt) {
+		return oauthError("invalid_grant", "Solana message was issued too long ago")
+	}
+
+	earliestIssuedAt := parsedMessage.IssuedAt.Add(-config.External.Web3.MaximumValidityDuration)
+
+	if now.Before(earliestIssuedAt) {
+		return oauthError("invalid_grant", "Solana message was issued too far in the future")
 	}
 
 	providerId := strings.Join([]string{

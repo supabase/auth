@@ -20,8 +20,6 @@ import (
 	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"gopkg.in/gomail.v2"
-
-	"github.com/supabase/auth/internal/utilities/siws"
 )
 
 const defaultMinPasswordLength int = 6
@@ -351,27 +349,9 @@ type Web3Configuration struct {
 	SupportedChains []string `json:"supported_chains,omitempty" split_words:"true"`
 }
 
-func (c *Web3Configuration) IsChainSupported(chain string) bool {
-	if !c.Enabled {
-		return false
-	}
-
-	if len(c.SupportedChains) == 0 {
-		return true
-	}
-
-	for _, supportedChain := range c.SupportedChains {
-		if chain == supportedChain {
-			return true
-		}
-	}
-
-	return false
-}
-
 func (c *Web3Configuration) Validate() error {
 	for _, chain := range c.SupportedChains {
-		if !siws.IsValidSolanaNetwork(chain) {
+		if chain != "solana" {
 			return fmt.Errorf("conf: Web3 chain %q is not supported", chain)
 		}
 	}
