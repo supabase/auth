@@ -258,9 +258,7 @@ func TestValidateEmailExtended(t *testing.T) {
 		EmailValidationExtended:       true,
 		EmailValidationServiceURL:     "",
 		EmailValidationServiceHeaders: "",
-		EmailValidationBlockedMX: `[
-			"hotmail-com.olc.protection.outlook.com"
-		]`,
+		EmailValidationBlockedMX:      `["hotmail-com.olc.protection.outlook.com"]`,
 	}
 
 	// Ensure the BlockedMX transformation occurs by calling Validate

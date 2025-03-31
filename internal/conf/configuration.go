@@ -407,7 +407,7 @@ type MailerConfiguration struct {
 	EmailValidationBlockedMX      string `json:"email_validation_blocked_mx" split_words:"true"`
 
 	serviceHeaders   map[string][]string `json:"-"`
-	blockedMXRecords []string            `json:"-"`
+	blockedMXRecords map[string]bool     `json:"-"`
 }
 
 func (c *MailerConfiguration) Validate() error {
@@ -424,23 +424,22 @@ func (c *MailerConfiguration) Validate() error {
 		c.serviceHeaders = headers
 	}
 
-	var blockedMXRecords []string
+	// EmailValidationBlockedMX is a JSON array in the config string for brevity.
+	var blockedMXRecords map[string]bool
 	if c.EmailValidationBlockedMX != "" {
-		err := json.Unmarshal([]byte(c.EmailValidationBlockedMX), &blockedMXRecords)
+		var blockedMXArray []string
+		err := json.Unmarshal([]byte(c.EmailValidationBlockedMX), &blockedMXArray)
 		if err != nil {
 			return fmt.Errorf("conf: email_validation_blocked_mx is not a valid JSON array: %w", err)
 		}
+		blockedMXRecords = make(map[string]bool, len(blockedMXArray)*2)
+		for _, record := range blockedMXArray {
+			blockedMXRecords[record] = true
+			blockedMXRecords[record+"."] = true
+		}
 	}
 
-	if len(blockedMXRecords) > 0 {
-		// MX records end with a period, so we add it here if it's missing.
-		for i, record := range blockedMXRecords {
-			if !strings.HasSuffix(record, ".") {
-				blockedMXRecords[i] = record + "."
-			}
-		}
-		c.blockedMXRecords = blockedMXRecords
-	}
+	c.blockedMXRecords = blockedMXRecords
 
 	return nil
 }
@@ -449,7 +448,7 @@ func (c *MailerConfiguration) GetEmailValidationServiceHeaders() map[string][]st
 	return c.serviceHeaders
 }
 
-func (c *MailerConfiguration) GetEmailValidationBlockedMXRecords() []string {
+func (c *MailerConfiguration) GetEmailValidationBlockedMXRecords() map[string]bool {
 	return c.blockedMXRecords
 }
 
