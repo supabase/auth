@@ -2,25 +2,13 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/mrjones/oauth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/conf"
-)
-
-const (
-	testTwitterAPIBase = "api.twitter.com"
-	testClientKey      = "test-client-key"
-	testClientSecret   = "test-client-secret"
-	testCallbackURL    = "https://example.com/callback"
-	testState          = "test-state"
-	testUserID         = "12345678"
-	testUserName       = "testuser"
-	testFullName       = "Test User"
-	testEmail          = "test@example.com"
-	testAvatarURL      = "https://pbs.twimg.com/profile_images/test.jpg"
 )
 
 func TestNewTwitterProvider(t *testing.T) {
@@ -111,8 +99,7 @@ func TestNewTwitterProvider(t *testing.T) {
 	})
 }
 
-// Skip these tests for now as they require mocking the OAuth library
-// which is complex due to the OAuth1.0 implementation details
+// We'll skip these tests as they're hard to mock without reimplementing the OAuth library
 func TestTwitterProviderAuthCodeURL(t *testing.T) {
 	t.Skip("Skipping test as it requires complex mocking of OAuth1.0 library")
 }
@@ -162,4 +149,50 @@ func TestTwitterProviderStubMethods(t *testing.T) {
 	userData, err := provider.GetUserData(context.Background(), token)
 	assert.NoError(t, err)
 	assert.NotNil(t, userData)
+}
+
+// Add some basic tests for Twitter user struct parsing
+func TestTwitterUserParsing(t *testing.T) {
+	t.Run("parses Twitter user JSON correctly", func(t *testing.T) {
+		// Sample Twitter user JSON
+		userJSON := `{
+			"id_str": "12345678",
+			"name": "Test User",
+			"screen_name": "testuser",
+			"email": "test@example.com",
+			"profile_image_url_https": "https://pbs.twimg.com/profile_images/test.jpg"
+		}`
+
+		// Parse the JSON
+		var user twitterUser
+		err := json.Unmarshal([]byte(userJSON), &user)
+		require.NoError(t, err)
+
+		// Verify fields were parsed correctly
+		assert.Equal(t, "12345678", user.ID)
+		assert.Equal(t, "Test User", user.Name)
+		assert.Equal(t, "testuser", user.UserName)
+		assert.Equal(t, "test@example.com", user.Email)
+		assert.Equal(t, "https://pbs.twimg.com/profile_images/test.jpg", user.AvatarURL)
+	})
+
+	t.Run("handles missing fields", func(t *testing.T) {
+		// Sample Twitter user JSON with missing fields
+		userJSON := `{
+			"id_str": "12345678",
+			"name": "Test User"
+		}`
+
+		// Parse the JSON
+		var user twitterUser
+		err := json.Unmarshal([]byte(userJSON), &user)
+		require.NoError(t, err)
+
+		// Verify required fields were parsed and missing ones are empty
+		assert.Equal(t, "12345678", user.ID)
+		assert.Equal(t, "Test User", user.Name)
+		assert.Empty(t, user.UserName)
+		assert.Empty(t, user.Email)
+		assert.Empty(t, user.AvatarURL)
+	})
 }
