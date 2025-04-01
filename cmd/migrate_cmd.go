@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"embed"
-	"fmt"
-	"net/url"
 	"os"
 
 	"github.com/gobuffalo/pop/v6"
@@ -23,14 +21,6 @@ var migrateCmd = cobra.Command{
 
 func migrate(cmd *cobra.Command, args []string) {
 	globalConfig := loadGlobalConfig(cmd.Context())
-
-	if globalConfig.DB.Driver == "" && globalConfig.DB.URL != "" {
-		u, err := url.Parse(globalConfig.DB.URL)
-		if err != nil {
-			logrus.Fatalf("%+v", errors.Wrap(err, "parsing db connection url"))
-		}
-		globalConfig.DB.Driver = u.Scheme
-	}
 
 	log := logrus.StandardLogger()
 
@@ -53,16 +43,14 @@ func migrate(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	u, _ := url.Parse(globalConfig.DB.URL)
-	processedUrl := globalConfig.DB.URL
-	if len(u.Query()) != 0 {
-		processedUrl = fmt.Sprintf("%s&application_name=gotrue_migrations", processedUrl)
-	} else {
-		processedUrl = fmt.Sprintf("%s?application_name=gotrue_migrations", processedUrl)
-	}
 	deets := &pop.ConnectionDetails{
-		Dialect: globalConfig.DB.Driver,
-		URL:     processedUrl,
+		Dialect:    globalConfig.DB.Driver,
+		Host:       globalConfig.DB.Host,
+		Port:       globalConfig.DB.Port,
+		Database:   globalConfig.DB.Database,
+		User:       globalConfig.DB.User,
+		Password:   globalConfig.DB.Password,
+		RawOptions: "application_name=gotrue_migrations",
 	}
 	deets.Options = map[string]string{
 		"migration_table_name": "schema_migrations",

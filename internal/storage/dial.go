@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"database/sql"
-	"net/url"
 	"reflect"
 	"time"
 
@@ -23,14 +22,6 @@ type Connection struct {
 
 // Dial will connect to that storage engine
 func Dial(config *conf.GlobalConfiguration) (*Connection, error) {
-	if config.DB.Driver == "" && config.DB.URL != "" {
-		u, err := url.Parse(config.DB.URL)
-		if err != nil {
-			return nil, errors.Wrap(err, "parsing db connection url")
-		}
-		config.DB.Driver = u.Scheme
-	}
-
 	driver := ""
 	if config.DB.Driver != "postgres" {
 		logrus.Warn("DEPRECATION NOTICE: only PostgreSQL is supported by Supabase's GoTrue, will be removed soon")
@@ -68,7 +59,11 @@ func Dial(config *conf.GlobalConfiguration) (*Connection, error) {
 	db, err := pop.NewConnection(&pop.ConnectionDetails{
 		Dialect:         config.DB.Driver,
 		Driver:          driver,
-		URL:             config.DB.URL,
+		Host:            config.DB.Host,
+		Port:            config.DB.Port,
+		Database:        config.DB.Database,
+		User:            config.DB.User,
+		Password:        config.DB.Password,
 		Pool:            config.DB.MaxPoolSize,
 		IdlePool:        config.DB.MaxIdlePoolSize,
 		ConnMaxLifetime: config.DB.ConnMaxLifetime,

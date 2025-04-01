@@ -1,7 +1,7 @@
 .PHONY: all build deps dev-deps image migrate test vet sec format unused
 CHECK_FILES?=./...
 
-FLAGS=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=`git describe --tags`" -buildvcs=false
+FLAGS=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=`git rev-parse HEAD`" -buildvcs=false
 ifdef RELEASE_VERSION
 	FLAGS=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=v$(RELEASE_VERSION)" -buildvcs=false
 endif
@@ -68,7 +68,7 @@ generate: dev-deps
 	go generate ./...
 
 dev: ## Run the development containers
-	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) up
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) up --build
 
 down: ## Shutdown the development containers
 	# Start postgres first and apply migrations
