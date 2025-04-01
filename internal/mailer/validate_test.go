@@ -242,6 +242,9 @@ func TestValidateEmailExtended(t *testing.T) {
 		{email: "test@invalid.example.com", err: "invalid_email_dns"},
 		{email: "test@no.such.email.host.supabase.io", err: "invalid_email_dns"},
 
+		// test blocked mx records
+		{email: "test@hotmail.com", err: "invalid_email_mx"},
+
 		// this low timeout should simulate a dns timeout, which should
 		// not be treated as an invalid email.
 		{email: "validemail@probablyaaaaaaaanotarealdomain.com",
@@ -255,7 +258,14 @@ func TestValidateEmailExtended(t *testing.T) {
 		EmailValidationExtended:       true,
 		EmailValidationServiceURL:     "",
 		EmailValidationServiceHeaders: "",
+		EmailValidationBlockedMX:      `["hotmail-com.olc.protection.outlook.com"]`,
 	}
+
+	// Ensure the BlockedMX transformation occurs by calling Validate
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("failed to validate MailerConfiguration: %v", err)
+	}
+
 	ev := newEmailValidator(cfg)
 
 	for idx, tc := range cases {

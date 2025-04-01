@@ -74,19 +74,22 @@ var (
 	ErrInvalidEmailAddress = errors.New("invalid_email_address")
 	ErrInvalidEmailFormat  = errors.New("invalid_email_format")
 	ErrInvalidEmailDNS     = errors.New("invalid_email_dns")
+	ErrInvalidEmailMX      = errors.New("invalid_email_mx")
 )
 
 type EmailValidator struct {
-	extended       bool
-	serviceURL     string
-	serviceHeaders map[string][]string
+	extended         bool
+	serviceURL       string
+	serviceHeaders   map[string][]string
+	blockedMXRecords map[string]bool
 }
 
 func newEmailValidator(mc conf.MailerConfiguration) *EmailValidator {
 	return &EmailValidator{
-		extended:       mc.EmailValidationExtended,
-		serviceURL:     mc.EmailValidationServiceURL,
-		serviceHeaders: mc.GetEmailValidationServiceHeaders(),
+		extended:         mc.EmailValidationExtended,
+		serviceURL:       mc.EmailValidationServiceURL,
+		serviceHeaders:   mc.GetEmailValidationServiceHeaders(),
+		blockedMXRecords: mc.GetEmailValidationBlockedMXRecords(),
 	}
 }
 
@@ -253,18 +256,32 @@ func (ev *EmailValidator) validateProviders(name, host string) error {
 }
 
 func (ev *EmailValidator) validateHost(ctx context.Context, host string) error {
-	_, err := validateEmailResolver.LookupMX(ctx, host)
+	mxs, err := validateEmailResolver.LookupMX(ctx, host)
 	if !isHostNotFound(err) {
-		return nil
+		return ev.validateMXRecords(mxs, nil)
 	}
 
-	_, err = validateEmailResolver.LookupHost(ctx, host)
+	hosts, err := validateEmailResolver.LookupHost(ctx, host)
 	if !isHostNotFound(err) {
-		return nil
+		return ev.validateMXRecords(nil, hosts)
 	}
 
 	// No addrs or mx records were found
 	return ErrInvalidEmailDNS
+}
+
+func (ev *EmailValidator) validateMXRecords(mxs []*net.MX, hosts []string) error {
+	for _, mx := range mxs {
+		if ev.blockedMXRecords[mx.Host] {
+			return ErrInvalidEmailMX
+		}
+	}
+	for _, host := range hosts {
+		if ev.blockedMXRecords[host] {
+			return ErrInvalidEmailMX
+		}
+	}
+	return nil
 }
 
 func isHostNotFound(err error) bool {
