@@ -1,5 +1,5 @@
 do $$ begin
-    alter type {{ index .Options "Namespace" }}.factor_type add value 'phone';
+    alter type factor_type add value 'phone';
 exception
     when duplicate_object then null;
 end $$;
