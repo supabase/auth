@@ -360,7 +360,10 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return nil, forbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
-	if !user.IsConfirmed() {
+	// TODO(hf): Expand this boolean with all providers that may not have emails (like X/Twitter, Discord).
+	hasEmails := providerType != "web3" // intentionally not using len(userData.Emails) != 0 for better backward compatibility control
+
+	if hasEmails && !user.IsConfirmed() {
 		// The user may have other unconfirmed email + password
 		// combination, phone or oauth identities. These identities
 		// need to be removed when a new oauth identity is being added
@@ -379,6 +382,10 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 				return nil, internalServerError("Error updating user").WithInternalError(terr)
 			}
 		} else {
+			// Some providers, like web3 don't have email data.
+			// Treat these as if a confirmation email has been
+			// sent, although the user will be created without an
+			// email address.
 			emailConfirmationSent := false
 			if decision.CandidateEmail.Email != "" {
 				if terr = a.sendConfirmation(r, tx, user, models.ImplicitFlow); terr != nil {

@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base32"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -16,14 +17,6 @@ import (
 
 	"golang.org/x/crypto/hkdf"
 )
-
-// SecureToken creates a new random token
-func SecureToken() string {
-	b := make([]byte, 16)
-	must(io.ReadFull(rand.Reader, b))
-
-	return base64.RawURLEncoding.EncodeToString(b)
-}
 
 // GenerateOtp generates a random n digit otp
 func GenerateOtp(digits int) string {
@@ -156,4 +149,21 @@ func NewEncryptedString(id string, data []byte, keyID string, keyBase64URL strin
 	es.Data = cipher.Seal(nil, es.Nonce, data, nil) // #nosec G407
 
 	return &es, nil
+}
+
+// SecureAlphanumeric generates a secure random alphanumeric string using standard library
+func SecureAlphanumeric(length int) string {
+	if length < 8 {
+		length = 8
+	}
+
+	// Calculate bytes needed for desired length
+	// base32 encoding: 5 bytes -> 8 chars
+	numBytes := (length*5 + 7) / 8
+
+	b := make([]byte, numBytes)
+	must(io.ReadFull(rand.Reader, b))
+
+	// Use standard library's base32 without padding
+	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b))[:length]
 }
