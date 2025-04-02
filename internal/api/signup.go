@@ -29,14 +29,14 @@ type SignupParams struct {
 	CodeChallenge       string                 `json:"code_challenge"`
 }
 
-func (a *API) validateSignupParams(ctx context.Context, p *SignupParams, bypassPasswordCheck bool) error {
+func (a *API) validateSignupParams(ctx context.Context, p *SignupParams, enforcePasswordCheck bool) error {
 	config := a.config
 
 	if p.Password == "" {
 		return badRequestError(apierrors.ErrorCodeValidationFailed, "Signup requires a valid password")
 	}
 
-	if !bypassPasswordCheck {
+	if enforcePasswordCheck {
 		if err := a.checkPasswordStrength(ctx, p.Password); err != nil {
 			return err
 		}

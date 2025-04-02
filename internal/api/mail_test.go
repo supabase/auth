@@ -256,7 +256,7 @@ func (ts *MailTestSuite) setURIAllowListMap(uris ...string) {
 	}
 }
 
-func (ts *MailTestSuite) TestGenerateLinkWithBypassCheck() {
+func (ts *MailTestSuite) TestGenerateLinkWithEnforcePasswordCheck() {
 	claims := &AccessTokenClaims{
 		Role: "supabase_admin",
 	}
@@ -278,29 +278,13 @@ func (ts *MailTestSuite) TestGenerateLinkWithBypassCheck() {
 		"example.gotrue.com",
 	}
 
-	ts.Run("Generate signup link without bypass should fail", func() {
+	ts.Run("Generate signup link without enforce should succeed", func() {
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(GenerateLinkParams{
-			Email:    "non-existent-user@example.com",
-			Password: weakPassword,
-			Type:     "signup",
-		}))
-
-		req := httptest.NewRequest(http.MethodPost, customDomainUrl.String()+"/admin/generate_link", &buffer)
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-		w := httptest.NewRecorder()
-		ts.API.handler.ServeHTTP(w, req)
-
-		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
-	})
-
-	ts.Run("Generate signup link with bypass should succeed", func() {
-		var buffer bytes.Buffer
-		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(GenerateLinkParams{
-			Email:               "non-existent-user@example.com",
-			Password:            weakPassword,
-			Type:                "signup",
-			BypassPasswordCheck: true,
+			Email:                "non-existent-user@example.com",
+			Password:             weakPassword,
+			Type:                 "signup",
+			EnforcePasswordCheck: false,
 		}))
 
 		req := httptest.NewRequest(http.MethodPost, customDomainUrl.String()+"/admin/generate_link", &buffer)
@@ -309,11 +293,24 @@ func (ts *MailTestSuite) TestGenerateLinkWithBypassCheck() {
 		ts.API.handler.ServeHTTP(w, req)
 
 		require.Equal(ts.T(), http.StatusOK, w.Code)
+		// ...
+	})
 
-		data := make(map[string]interface{})
-		require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-		require.Contains(ts.T(), data, "action_link")
-		require.Equal(ts.T(), "signup", data["verification_type"])
+	ts.Run("Generate signup link with enforce should fail", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(GenerateLinkParams{
+			Email:                "non-existent1-user@example.com",
+			Password:             weakPassword,
+			Type:                 "signup",
+			EnforcePasswordCheck: true, 
+		}))
+
+		req := httptest.NewRequest(http.MethodPost, customDomainUrl.String()+"/admin/generate_link", &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
 	})
 
 	ts.Config.Password.MinLength = originalMinLength

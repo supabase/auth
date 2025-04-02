@@ -505,6 +505,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdatePasswordFailed() {
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 			"password": "",
+			"enforce_password_check": true,
 		}))
 
 		// Setup request
@@ -874,6 +875,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 			params: map[string]interface{}{
 				"email":    "test@example.com",
 				"password": "weak",
+				"enforce_password_check": true,
 			},
 			code: http.StatusUnprocessableEntity,
 		},
@@ -941,17 +943,18 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 	ts.Config.Password.MinLength = originalMinLength
 }
 
-func (ts *AdminTestSuite) TestAdminUserCreateWithBypassCheck() {
+func (ts *AdminTestSuite) TestAdminUserCreateWithEnforcePasswordCheck() {
 	originalMinLength := ts.Config.Password.MinLength
 	ts.Config.Password.MinLength = 20
 
 	weakPassword := "short"
 
-	ts.Run("Without bypass flag, should fail validation", func() {
+	ts.Run("With enforce flag, should fail validation", func() {
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-			"email":    "test@example.com",
-			"password": weakPassword,
+			"email":                  "test@example.com",
+			"password":               weakPassword,
+			"enforce_password_check": true,
 		}))
 
 		req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
@@ -962,12 +965,12 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithBypassCheck() {
 		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
 	})
 
-	ts.Run("With bypass flag, should succeed despite weak password", func() {
+	ts.Run("Without enforce flag, should succeed despite weak password", func() {
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-			"email":                 "test@example.com",
-			"password":              weakPassword,
-			"bypass_password_check": true,
+			"email":                  "test@example.com",
+			"password":               weakPassword,
+			"enforce_password_check": false,
 		}))
 
 		req := httptest.NewRequest(http.MethodPost, "/admin/users", &buffer)
@@ -994,17 +997,17 @@ func (ts *AdminTestSuite) TestAdminUserCreateWithBypassCheck() {
 	ts.Config.Password.MinLength = originalMinLength
 }
 
-func (ts *AdminTestSuite) TestAdminUserUpdateWithBypassCheck() {
+func (ts *AdminTestSuite) TestAdminUserUpdateWithEnforcePasswordCheck() {
 	u, err := models.NewUser("", "test@example.com", "original", ts.Config.JWT.Aud, nil)
 	require.NoError(ts.T(), err, "Error making new user")
 	require.NoError(ts.T(), ts.API.db.Create(u), "Error creating user")
 
 	originalMinLength := ts.Config.Password.MinLength
-	ts.Config.Password.MinLength = 20
+	ts.Config.Password.MinLength = 20 // Set a high minimum to ensure our test password is "weak"
 
 	weakPassword := "short"
 
-	ts.Run("Without bypass flag, update should fail validation", func() {
+	ts.Run("Without enforce_password_check parameter (default), should accept weak password", func() {
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 			"password": weakPassword,
@@ -1015,22 +1018,7 @@ func (ts *AdminTestSuite) TestAdminUserUpdateWithBypassCheck() {
 		w := httptest.NewRecorder()
 		ts.API.handler.ServeHTTP(w, req)
 
-		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
-	})
-
-	ts.Run("With bypass flag, update should succeed despite weak password", func() {
-		var buffer bytes.Buffer
-		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-			"password":              weakPassword,
-			"bypass_password_check": true,
-		}))
-
-		req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
-		w := httptest.NewRecorder()
-		ts.API.handler.ServeHTTP(w, req)
-
-		require.Equal(ts.T(), http.StatusOK, w.Code)
+		require.Equal(ts.T(), http.StatusOK, w.Code, "Expected weak password to be accepted when enforce_password_check is not provided")
 
 		updatedUser, err := models.FindUserByID(ts.API.db, u.ID)
 		require.NoError(ts.T(), err)
@@ -1039,7 +1027,46 @@ func (ts *AdminTestSuite) TestAdminUserUpdateWithBypassCheck() {
 			ts.API.config.Security.DBEncryption.Encrypt,
 			ts.API.config.Security.DBEncryption.EncryptionKeyID)
 		require.NoError(ts.T(), err)
-		require.True(ts.T(), isAuthenticated)
+		require.True(ts.T(), isAuthenticated, "Should be able to authenticate with the weak password")
+	})
+
+	ts.Run("With enforce_password_check=false, should accept weak password", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"password":               weakPassword,
+			"enforce_password_check": false,
+		}))
+
+		req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusOK, w.Code, "Expected weak password to be accepted when enforce_password_check=false")
+
+		updatedUser, err := models.FindUserByID(ts.API.db, u.ID)
+		require.NoError(ts.T(), err)
+		isAuthenticated, _, err := updatedUser.Authenticate(context.Background(), ts.API.db, weakPassword,
+			ts.API.config.Security.DBEncryption.DecryptionKeys,
+			ts.API.config.Security.DBEncryption.Encrypt,
+			ts.API.config.Security.DBEncryption.EncryptionKeyID)
+		require.NoError(ts.T(), err)
+		require.True(ts.T(), isAuthenticated, "Should be able to authenticate with the weak password")
+	})
+
+	ts.Run("With enforce_password_check=true, should reject weak password", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"password":               weakPassword,
+			"enforce_password_check": true,
+		}))
+
+		req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/admin/users/%s", u.ID), &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code, "Expected weak password to be rejected when enforce_password_check=true")
 	})
 
 	ts.Config.Password.MinLength = originalMinLength

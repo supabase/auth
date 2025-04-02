@@ -32,7 +32,7 @@ type AdminUserParams struct {
 	UserMetaData map[string]interface{} `json:"user_metadata"`
 	AppMetaData  map[string]interface{} `json:"app_metadata"`
 	BanDuration  string                 `json:"ban_duration"`
-	BypassPasswordCheck bool            `json:"bypass_password_check"`
+	EnforcePasswordCheck bool            `json:"enforce_password_check"`
 }
 
 type adminUserDeleteParams struct {
@@ -180,7 +180,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 	if params.Password != nil {
 		password := *params.Password
 
-		if !params.BypassPasswordCheck {
+		if params.EnforcePasswordCheck {
 			if err := a.checkPasswordStrength(ctx, password); err != nil {
 				return err
 			}
@@ -385,7 +385,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Password != nil {
-		if !params.BypassPasswordCheck {
+		if params.EnforcePasswordCheck {
 			if err := a.checkPasswordStrength(ctx, *params.Password); err != nil {
 				return err
 			}

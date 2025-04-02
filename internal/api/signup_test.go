@@ -153,7 +153,7 @@ func (ts *SignupTestSuite) TestVerifySignup() {
 	require.NotEmpty(ts.T(), v.Get("refresh_token"))
 }
 
-func (ts *SignupTestSuite) TestValidateSignupParamsWithBypass() {
+func (ts *SignupTestSuite) TestValidateSignupParamsWithEnforcePasswordCheck() {
 	originalMinLength := ts.Config.Password.MinLength
 	ts.Config.Password.MinLength = 20
 
@@ -167,11 +167,11 @@ func (ts *SignupTestSuite) TestValidateSignupParamsWithBypass() {
 	}
 
 	err := ts.API.validateSignupParams(context.Background(), params, false)
-	require.Error(ts.T(), err, "Should fail validation without bypass")
-	require.Contains(ts.T(), err.Error(), "should be at least")
+    require.NoError(ts.T(), err, "Should bypass validation with enforcePasswordCheck=false")
 
 	err = ts.API.validateSignupParams(context.Background(), params, true)
-	require.NoError(ts.T(), err, "Should bypass validation with flag set")
+    require.Error(ts.T(), err, "Should fail validation with enforcePasswordCheck=true")
+    require.Contains(ts.T(), err.Error(), "should be at least")
 
 	ts.Config.Password.MinLength = originalMinLength
 }
