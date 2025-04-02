@@ -334,6 +334,7 @@ type ProviderConfiguration struct {
 	WorkOS                  OAuthProviderConfiguration     `json:"workos"`
 	Email                   EmailProviderConfiguration     `json:"email"`
 	Phone                   PhoneProviderConfiguration     `json:"phone"`
+	Zitadel                 OAuthProviderConfiguration     `json:"zitadel"`
 	Zoom                    OAuthProviderConfiguration     `json:"zoom"`
 	IosBundleId             string                         `json:"ios_bundle_id" split_words:"true"`
 	RedirectURL             string                         `json:"redirect_url"`
