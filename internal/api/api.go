@@ -157,7 +157,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				}
 				if params.Email == "" && params.Phone == "" {
 					if !api.config.External.AnonymousUsers.Enabled {
-						return unprocessableEntityError(apierrors.ErrorCodeAnonymousProviderDisabled, "Anonymous sign-ins are disabled")
+						return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeAnonymousProviderDisabled, "Anonymous sign-ins are disabled")
 					}
 					if _, err := api.limitHandler(limitAnonymousSignIns)(w, r); err != nil {
 						return err

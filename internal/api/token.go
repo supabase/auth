@@ -92,7 +92,7 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	case "web3":
 		return a.Web3Grant(ctx, w, r)
 	default:
-		return badRequestError(apierrors.ErrorCodeInvalidCredentials, "unsupported_grant_type")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "unsupported_grant_type")
 	}
 }
 
@@ -109,7 +109,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	config := a.config
 
 	if params.Email != "" && params.Phone != "" {
-		return badRequestError(apierrors.ErrorCodeValidationFailed, "Only an email address or phone number should be provided on login.")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Only an email address or phone number should be provided on login.")
 	}
 	var user *models.User
 	var grantParams models.GrantParams
@@ -121,33 +121,33 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	if params.Email != "" {
 		provider = "email"
 		if !config.External.Email.Enabled {
-			return unprocessableEntityError(apierrors.ErrorCodeEmailProviderDisabled, "Email logins are disabled")
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 		}
 		user, err = models.FindUserByEmailAndAudience(db, params.Email, aud)
 	} else if params.Phone != "" {
 		provider = "phone"
 		if !config.External.Phone.Enabled {
-			return unprocessableEntityError(apierrors.ErrorCodePhoneProviderDisabled, "Phone logins are disabled")
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodePhoneProviderDisabled, "Phone logins are disabled")
 		}
 		params.Phone = formatPhoneNumber(params.Phone)
 		user, err = models.FindUserByPhoneAndAudience(db, params.Phone, aud)
 	} else {
-		return badRequestError(apierrors.ErrorCodeValidationFailed, "missing email or phone")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "missing email or phone")
 	}
 
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return badRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
 		}
-		return internalServerError("Database error querying schema").WithInternalError(err)
+		return apierrors.NewInternalServerError("Database error querying schema").WithInternalError(err)
 	}
 
 	if !user.HasPassword() {
-		return badRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
 	}
 
 	if user.IsBanned() {
-		return badRequestError(apierrors.ErrorCodeUserBanned, "User is banned")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
 	isValidPassword, shouldReEncrypt, err := user.Authenticate(ctx, db, params.Password, config.Security.DBEncryption.DecryptionKeys, config.Security.DBEncryption.Encrypt, config.Security.DBEncryption.EncryptionKeyID)
@@ -199,17 +199,17 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 					return err
 				}
 			}
-			return badRequestError(apierrors.ErrorCodeInvalidCredentials, output.Message)
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, output.Message)
 		}
 	}
 	if !isValidPassword {
-		return badRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
 	}
 
 	if params.Email != "" && !user.IsConfirmed() {
-		return badRequestError(apierrors.ErrorCodeEmailNotConfirmed, "Email not confirmed")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeEmailNotConfirmed, "Email not confirmed")
 	} else if params.Phone != "" && !user.IsPhoneConfirmed() {
-		return badRequestError(apierrors.ErrorCodePhoneNotConfirmed, "Phone not confirmed")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodePhoneNotConfirmed, "Phone not confirmed")
 	}
 
 	var token *AccessTokenResponse
@@ -253,18 +253,18 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 	}
 
 	if params.AuthCode == "" || params.CodeVerifier == "" {
-		return badRequestError(apierrors.ErrorCodeValidationFailed, "invalid request: both auth code and code verifier should be non-empty")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid request: both auth code and code verifier should be non-empty")
 	}
 
 	flowState, err := models.FindFlowStateByAuthCode(db, params.AuthCode)
 	// Sanity check in case user ID was not set properly
 	if models.IsNotFoundError(err) || flowState.UserID == nil {
-		return notFoundError(apierrors.ErrorCodeFlowStateNotFound, "invalid flow state, no valid flow state found")
+		return apierrors.NewNotFoundError(apierrors.ErrorCodeFlowStateNotFound, "invalid flow state, no valid flow state found")
 	} else if err != nil {
 		return err
 	}
 	if flowState.IsExpired(a.config.External.FlowStateExpiryDuration) {
-		return unprocessableEntityError(apierrors.ErrorCodeFlowStateExpired, "invalid flow state, flow state has expired")
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeFlowStateExpired, "invalid flow state, flow state has expired")
 	}
 
 	user, err := models.FindUserByID(db, *flowState.UserID)
@@ -272,7 +272,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 	if err := flowState.VerifyPKCE(params.CodeVerifier); err != nil {
-		return badRequestError(apierrors.ErrorCodeBadCodeVerifier, err.Error())
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeBadCodeVerifier, err.Error())
 	}
 
 	var token *AccessTokenResponse
@@ -313,7 +313,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, int64, error) {
 	config := a.config
 	if sessionId == nil {
-		return "", 0, internalServerError("Session is required to issue access token")
+		return "", 0, apierrors.NewInternalServerError("Session is required to issue access token")
 	}
 	sid := sessionId.String()
 	session, terr := models.FindSessionByID(tx, *sessionId, false)
@@ -387,7 +387,7 @@ func (a *API) issueRefreshToken(r *http.Request, conn *storage.Connection, user 
 
 		refreshToken, terr = models.GrantAuthenticatedUser(tx, user, grantParams)
 		if terr != nil {
-			return internalServerError("Database error granting user").WithInternalError(terr)
+			return apierrors.NewInternalServerError("Database error granting user").WithInternalError(terr)
 		}
 
 		terr = models.AddClaimToSession(tx, *refreshToken.SessionId, authenticationMethod)
@@ -402,7 +402,7 @@ func (a *API) issueRefreshToken(r *http.Request, conn *storage.Connection, user 
 			if ok {
 				return httpErr
 			}
-			return internalServerError("error generating jwt token").WithInternalError(terr)
+			return apierrors.NewInternalServerError("error generating jwt token").WithInternalError(terr)
 		}
 		return nil
 	})
@@ -429,7 +429,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 	currentClaims := getClaims(ctx)
 	sessionId, err := uuid.FromString(currentClaims.SessionId)
 	if err != nil {
-		return nil, internalServerError("Cannot read SessionId claim as UUID").WithInternalError(err)
+		return nil, apierrors.NewInternalServerError("Cannot read SessionId claim as UUID").WithInternalError(err)
 	}
 
 	err = tx.Transaction(func(tx *storage.Connection) error {
@@ -467,7 +467,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			if ok {
 				return httpErr
 			}
-			return internalServerError("error generating jwt token").WithInternalError(terr)
+			return apierrors.NewInternalServerError("error generating jwt token").WithInternalError(terr)
 		}
 		return nil
 	})

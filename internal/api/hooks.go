@@ -121,7 +121,7 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 
 		rsp, err := client.Do(req)
 		if err != nil && errors.Is(err, context.DeadlineExceeded) {
-			return nil, unprocessableEntityError(apierrors.ErrorCodeHookTimeout, fmt.Sprintf("Failed to reach hook within maximum time of %f seconds", DefaultHTTPHookTimeout.Seconds()))
+			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeHookTimeout, fmt.Sprintf("Failed to reach hook within maximum time of %f seconds", DefaultHTTPHookTimeout.Seconds()))
 
 		} else if err != nil {
 			if terr, ok := err.(net.Error); ok && terr.Timeout() || i < DefaultHTTPHookRetries-1 {
@@ -129,9 +129,9 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 				time.Sleep(HTTPHookBackoffDuration)
 				continue
 			} else if i == DefaultHTTPHookRetries-1 {
-				return nil, unprocessableEntityError(apierrors.ErrorCodeHookTimeoutAfterRetry, "Failed to reach hook after maximum retries")
+				return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeHookTimeoutAfterRetry, "Failed to reach hook after maximum retries")
 			} else {
-				return nil, internalServerError("Failed to trigger auth hook, error making HTTP request").WithInternalError(err)
+				return nil, apierrors.NewInternalServerError("Failed to trigger auth hook, error making HTTP request").WithInternalError(err)
 			}
 		}
 
@@ -142,14 +142,14 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 			// Header.Get is case insensitive
 			contentType := rsp.Header.Get("Content-Type")
 			if contentType == "" {
-				return nil, badRequestError(apierrors.ErrorCodeHookPayloadInvalidContentType, "Invalid Content-Type: Missing Content-Type header")
+				return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeHookPayloadInvalidContentType, "Invalid Content-Type: Missing Content-Type header")
 			}
 			mediaType, _, err := mime.ParseMediaType(contentType)
 			if err != nil {
-				return nil, badRequestError(apierrors.ErrorCodeHookPayloadInvalidContentType, fmt.Sprintf("Invalid Content-Type header: %s", err.Error()))
+				return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeHookPayloadInvalidContentType, fmt.Sprintf("Invalid Content-Type header: %s", err.Error()))
 			}
 			if mediaType != "application/json" {
-				return nil, badRequestError(apierrors.ErrorCodeHookPayloadInvalidContentType, "Invalid JSON response. Received content-type: "+contentType)
+				return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeHookPayloadInvalidContentType, "Invalid JSON response. Received content-type: "+contentType)
 			}
 			if rsp.Body == nil {
 				return nil, nil
@@ -162,7 +162,7 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 			if limitedReader.N <= 0 {
 				// check if the response body still has excess bytes to be read
 				if n, _ := rsp.Body.Read(make([]byte, 1)); n > 0 {
-					return nil, unprocessableEntityError(apierrors.ErrorCodeHookPayloadOverSizeLimit, fmt.Sprintf("Payload size exceeded size limit of %d bytes", PayloadLimit))
+					return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeHookPayloadOverSizeLimit, fmt.Sprintf("Payload size exceeded size limit of %d bytes", PayloadLimit))
 				}
 			}
 			return body, nil
@@ -172,13 +172,13 @@ func (a *API) runHTTPHook(r *http.Request, hookConfig conf.ExtensibilityPointCon
 			if retryAfterHeader != "" {
 				continue
 			}
-			return nil, internalServerError("Service currently unavailable due to hook")
+			return nil, apierrors.NewInternalServerError("Service currently unavailable due to hook")
 		case http.StatusBadRequest:
-			return nil, internalServerError("Invalid payload sent to hook")
+			return nil, apierrors.NewInternalServerError("Invalid payload sent to hook")
 		case http.StatusUnauthorized:
-			return nil, internalServerError("Hook requires authorization token")
+			return nil, apierrors.NewInternalServerError("Hook requires authorization token")
 		default:
-			return nil, internalServerError("Unexpected status code returned from hook: %d", rsp.StatusCode)
+			return nil, apierrors.NewInternalServerError("Unexpected status code returned from hook: %d", rsp.StatusCode)
 		}
 	}
 	return nil, nil
@@ -202,7 +202,7 @@ func (a *API) invokeHook(conn *storage.Connection, r *http.Request, input, outpu
 			return err
 		}
 		if err := json.Unmarshal(response, hookOutput); err != nil {
-			return internalServerError("Error unmarshaling Send SMS output.").WithInternalError(err)
+			return apierrors.NewInternalServerError("Error unmarshaling Send SMS output.").WithInternalError(err)
 		}
 		if hookOutput.IsError() {
 			httpCode := hookOutput.HookError.HTTPCode
@@ -226,7 +226,7 @@ func (a *API) invokeHook(conn *storage.Connection, r *http.Request, input, outpu
 			return err
 		}
 		if err := json.Unmarshal(response, hookOutput); err != nil {
-			return internalServerError("Error unmarshaling Send Email output.").WithInternalError(err)
+			return apierrors.NewInternalServerError("Error unmarshaling Send Email output.").WithInternalError(err)
 		}
 		if hookOutput.IsError() {
 			httpCode := hookOutput.HookError.HTTPCode
@@ -252,7 +252,7 @@ func (a *API) invokeHook(conn *storage.Connection, r *http.Request, input, outpu
 			return err
 		}
 		if err := json.Unmarshal(response, hookOutput); err != nil {
-			return internalServerError("Error unmarshaling MFA Verification Attempt output.").WithInternalError(err)
+			return apierrors.NewInternalServerError("Error unmarshaling MFA Verification Attempt output.").WithInternalError(err)
 		}
 		if hookOutput.IsError() {
 			httpCode := hookOutput.HookError.HTTPCode
@@ -279,7 +279,7 @@ func (a *API) invokeHook(conn *storage.Connection, r *http.Request, input, outpu
 			return err
 		}
 		if err := json.Unmarshal(response, hookOutput); err != nil {
-			return internalServerError("Error unmarshaling Password Verification Attempt output.").WithInternalError(err)
+			return apierrors.NewInternalServerError("Error unmarshaling Password Verification Attempt output.").WithInternalError(err)
 		}
 		if hookOutput.IsError() {
 			httpCode := hookOutput.HookError.HTTPCode
@@ -306,7 +306,7 @@ func (a *API) invokeHook(conn *storage.Connection, r *http.Request, input, outpu
 			return err
 		}
 		if err := json.Unmarshal(response, hookOutput); err != nil {
-			return internalServerError("Error unmarshaling Custom Access Token output.").WithInternalError(err)
+			return apierrors.NewInternalServerError("Error unmarshaling Custom Access Token output.").WithInternalError(err)
 		}
 
 		if hookOutput.IsError() {
@@ -369,7 +369,7 @@ func (a *API) runHook(r *http.Request, conn *storage.Connection, hookConfig conf
 			"duration": duration.Microseconds(),
 		}).WithError(err).Warn("Hook errored out")
 
-		return nil, internalServerError("Error running hook URI: %v", hookConfig.URI).WithInternalError(err)
+		return nil, apierrors.NewInternalServerError("Error running hook URI: %v", hookConfig.URI).WithInternalError(err)
 	}
 
 	logEntry.Entry.WithFields(logrus.Fields{

@@ -28,7 +28,7 @@ const (
 func validatePhone(phone string) (string, error) {
 	phone = formatPhoneNumber(phone)
 	if isValid := validateE164Format(phone); !isValid {
-		return "", badRequestError(apierrors.ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
+		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
 	}
 	return phone, nil
 }
@@ -66,13 +66,13 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		sentAt = user.ReauthenticationSentAt
 		includeFields = append(includeFields, "reauthentication_token", "reauthentication_sent_at")
 	default:
-		return "", internalServerError("invalid otp type")
+		return "", apierrors.NewInternalServerError("invalid otp type")
 	}
 
 	// intentionally keeping this before the test OTP, so that the behavior
 	// of regular and test OTPs is similar
 	if sentAt != nil && !sentAt.Add(config.Sms.MaxFrequency).Before(time.Now()) {
-		return "", tooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(sentAt, config.Sms.MaxFrequency))
+		return "", apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(sentAt, config.Sms.MaxFrequency))
 	}
 
 	now := time.Now()
@@ -90,7 +90,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		if !config.Sms.Autoconfirm {
 			// apply rate limiting before the sms is sent out
 			if ok := a.limiterOpts.Phone.Allow(); !ok {
-				return "", tooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
+				return "", apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
 			}
 		}
 		otp = crypto.GenerateOtp(config.Sms.OtpLength)
@@ -110,15 +110,15 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		} else {
 			smsProvider, err := sms_provider.GetSmsProvider(*config)
 			if err != nil {
-				return "", internalServerError("Unable to get SMS provider").WithInternalError(err)
+				return "", apierrors.NewInternalServerError("Unable to get SMS provider").WithInternalError(err)
 			}
 			message, err := generateSMSFromTemplate(config.Sms.SMSTemplate, otp)
 			if err != nil {
-				return "", internalServerError("error generating sms template").WithInternalError(err)
+				return "", apierrors.NewInternalServerError("error generating sms template").WithInternalError(err)
 			}
 			messageID, err := smsProvider.SendMessage(phone, message, channel, otp)
 			if err != nil {
-				return messageID, unprocessableEntityError(apierrors.ErrorCodeSMSSendFailed, "Error sending %s OTP to provider: %v", otpType, err)
+				return messageID, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeSMSSendFailed, "Error sending %s OTP to provider: %v", otpType, err)
 			}
 		}
 	}
@@ -154,7 +154,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		}
 	}
 	if ottErr != nil {
-		return messageID, internalServerError("error creating one time token").WithInternalError(ottErr)
+		return messageID, apierrors.NewInternalServerError("error creating one time token").WithInternalError(ottErr)
 	}
 	return messageID, nil
 }
