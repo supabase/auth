@@ -584,6 +584,18 @@ func (u *User) Recover(tx *storage.Connection) error {
 	return ClearAllOneTimeTokensForUser(tx, u.ID)
 }
 
+// HighestPossibleAAL returns the AAL level that this user can obtain. Derived
+// from the number of verified MFA factors associated with the user object.
+func (u *User) HighestPossibleAAL() AuthenticatorAssuranceLevel {
+	for _, factor := range u.Factors {
+		if factor.Status == FactorStateVerified.String() {
+			return AAL2
+		}
+	}
+
+	return AAL1
+}
+
 // CountOtherUsers counts how many other users exist besides the one provided
 func CountOtherUsers(tx *storage.Connection, id uuid.UUID) (int, error) {
 	userCount, err := tx.Q().Where("instance_id = ? and id != ?", uuid.Nil, id).Count(&User{})
