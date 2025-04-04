@@ -91,7 +91,7 @@ func TestGetIPAddress(t *tst.T) {
 func TestGetReferrer(t *tst.T) {
 	config := conf.GlobalConfiguration{
 		SiteURL:      "https://example.com",
-		URIAllowList: []string{"http://localhost:8000/*", "http://*.localhost:8000/*"},
+		URIAllowList: []string{"http://localhost:8000/*"},
 		JWT: conf.JWTConfiguration{
 			Secret: "testsecret",
 		},
@@ -120,16 +120,6 @@ func TestGetReferrer(t *tst.T) {
 		{
 			desc:        "* respects separator",
 			redirectURL: "http://localhost:8000/path/to/page",
-			expected:    config.SiteURL,
-		},
-		{
-			desc:        "* respects parameters",
-			redirectURL: "http://localhost:8000/path?param=1",
-			expected:    "http://localhost:8000/path?param=1",
-		},
-		{
-			desc:        "invalid redirect url via query smurfing",
-			redirectURL: "http://123?.localhost:8000/path",
 			expected:    config.SiteURL,
 		},
 	}

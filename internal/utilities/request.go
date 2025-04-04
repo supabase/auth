@@ -92,13 +92,9 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 		return true
 	}
 
-	// Clean up the referrer URL to avoid pattern matching an invalid URL
-	refurl.Fragment = ""
-	refurl.RawQuery = ""
-
 	// For case when user came from mobile app or other permitted resource - redirect back
 	for _, pattern := range config.URIAllowListMap {
-		if pattern.Match(refurl.String()) {
+		if pattern.Match(redirectURL) {
 			return true
 		}
 	}
