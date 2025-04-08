@@ -206,7 +206,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		return badRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
 	}
 
-	if params.Email != "" && !user.IsConfirmed() {
+	if params.Email != "" && !user.IsConfirmed() && !a.config.Mailer.AllowUnverifiedEmailSignIns {
 		return badRequestError(apierrors.ErrorCodeEmailNotConfirmed, "Email not confirmed")
 	} else if params.Phone != "" && !user.IsPhoneConfirmed() {
 		return badRequestError(apierrors.ErrorCodePhoneNotConfirmed, "Phone not confirmed")
