@@ -1,110 +1,143 @@
-name: Build and Release on Push to Master
+name: Release
 
 on:
   push:
     branches:
       - master
+      - release/*
+
+permissions:
+  contents: read
 
 jobs:
-  release:
-    strategy:
-      matrix:
-        node: ["16"]
-
+  release_please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
-      status: ${{ steps.pre-release.outputs.release != steps.post-release.outputs.release }}
-
-    runs-on: ubuntu-18.04
+      MAIN_RELEASE_VERSION: ${{ steps.versions.outputs.MAIN_RELEASE_VERSION }}
+      RELEASE_VERSION: ${{ steps.versions.outputs.RELEASE_VERSION }}
+      RELEASE_CANDIDATE: ${{ steps.versions.outputs.RELEASE_CANDIDATE }}
+      RELEASE_NAME: ${{ steps.versions.outputs.RELEASE_NAME }}
     steps:
-      - uses: actions/checkout@v2
-
-      - id: pre-release
-        uses: pozetroninc/github-action-get-latest-release@master
+      - uses: googleapis/release-please-action@v4
+        id: release
         with:
-          owner: supabase
-          repo: gotrue
-          excludes: prerelease, draft
+          release-type: go
+          target-branch: ${{ github.ref_name }}
 
-      - name: Set up Node
-        uses: actions/setup-node@v2
+      - uses: actions/checkout@v4
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
-          node-version: ${{ matrix.node }}
+          fetch-depth: 0
 
-      - name: Release on GitHub
-        id: github-release
-        run: npx semantic-release -p        \
-          @semantic-release/commit-analyzer \
-          @semantic-release/github         \
-          @semantic-release/release-notes-generator
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
+        id: versions
+        run: |
+          set -ex
 
-      - id: post-release
-        uses: pozetroninc/github-action-get-latest-release@master
+          RELEASE_CANDIDATE=true
+          NOT_RELEASE_CANDIDATE='${{ steps.release.outputs.release_created }}'
+          if [ "$NOT_RELEASE_CANDIDATE" == "true" ]
+          then
+            RELEASE_CANDIDATE=false
+          fi
+
+          MAIN_RELEASE_VERSION=x
+          RELEASE_VERSION=y
+
+          if [ "$RELEASE_CANDIDATE" == "true" ]
+          then
+            # Release please doesn't tell you the candidate version when it
+            # creates the PR, so we have to take it from the title.
+            MAIN_RELEASE_VERSION=$(node -e "console.log('${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).title }}'.split(' ').reverse().find(x => x.match(/[0-9]+[.][0-9]+[.][0-9]+/)))")
+
+            # Use git describe tags to identify the number of commits the branch
+            # is ahead of the most recent non-release-candidate tag, which is
+            # part of the rc.<commits> value.
+            RELEASE_VERSION=$MAIN_RELEASE_VERSION-rc.$(node -e "console.log('$(git describe --tags --exclude rc*)'.split('-')[1])")
+
+            # release-please only ignores releases that have a form like [A-Z0-9]<version>, so prefixing with rc<version>
+            RELEASE_NAME="rc$RELEASE_VERSION"
+          else
+            MAIN_RELEASE_VERSION=${{ steps.release.outputs.major }}.${{ steps.release.outputs.minor }}.${{ steps.release.outputs.patch }}
+            RELEASE_VERSION="$MAIN_RELEASE_VERSION"
+            RELEASE_NAME="v$RELEASE_VERSION"
+          fi
+
+          echo "MAIN_RELEASE_VERSION=${MAIN_RELEASE_VERSION}" >> "${GITHUB_ENV}"
+          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
+          echo "RELEASE_CANDIDATE=${RELEASE_CANDIDATE}" >> "${GITHUB_ENV}"
+          echo "RELEASE_NAME=${RELEASE_NAME}" >> "${GITHUB_ENV}"
+
+          echo "MAIN_RELEASE_VERSION=${MAIN_RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "RELEASE_CANDIDATE=${RELEASE_CANDIDATE}" >> "${GITHUB_OUTPUT}"
+          echo "RELEASE_NAME=${RELEASE_NAME}" >> "${GITHUB_OUTPUT}"
+
+      - uses: actions/setup-go@v5
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
-          owner: supabase
-          repo: gotrue
-          excludes: prerelease, draft
+          go-version: "1.23.7" # The Go version to download (if necessary) and use.
 
-  deploy:
-    needs: release
-    runs-on: ubuntu-18.04
-    if: success() && needs.release.outputs.status == 'true'
-    steps:
-      - uses: actions/checkout@v2
+      - name: Build release artifacts
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
+        run: |
+          set -ex
 
-      - uses: actions/setup-go@v2
-        with:
-          go-version: "^1.14.4" # The Go version to download (if necessary) and use.
+          RELEASE_VERSION=$RELEASE_VERSION make deps
+          RELEASE_VERSION=$RELEASE_VERSION make all
+          ln -s auth gotrue
+          tar -czvf auth-v$RELEASE_VERSION-x86.tar.gz auth gotrue migrations/
+          mv auth-arm64 auth
+          tar -czvf auth-v$RELEASE_VERSION-arm64.tar.gz auth gotrue migrations/
 
-      - run: make deps
+      - name: Upload release artifacts
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
+        run: |
+          set -ex
 
-      - run: make all
+          if [ "$RELEASE_CANDIDATE" == "true" ]
+          then
+            PR_NUMBER='${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }}'
 
-      - id: releases
-        uses: pozetroninc/github-action-get-latest-release@master
-        with:
-          owner: supabase
-          repo: gotrue
-          excludes: prerelease, draft
+            GH_TOKEN='${{ github.token }}' gh release \
+              create $RELEASE_NAME \
+              --title "v$RELEASE_VERSION" \
+              --prerelease \
+              -n "This is a release candidate. See release-please PR #$PR_NUMBER for context."
 
-      - run: tar -czvf gotrue-${{ steps.releases.outputs.release }}-x86.tar.gz gotrue migrations/
-      - run: mv gotrue-arm64 gotrue
-      - run: tar -czvf gotrue-${{ steps.releases.outputs.release }}-arm64.tar.gz gotrue migrations/
+            GH_TOKEN='${{ github.token }}' gh pr comment "$PR_NUMBER" \
+              -b "Release candidate [v$RELEASE_VERSION](https://github.com/supabase/gotrue/releases/tag/$RELEASE_NAME) published."
+          else
+            if [ "$GITHUB_REF" == "refs/heads/main" ] || [ "$GITHUB_REF" == "refs/heads/master" ]
+            then
+              IS_PATCH_ZERO=$(node -e "console.log('$RELEASE_VERSION'.endsWith('.0'))")
 
-      - uses: AButler/upload-release-assets@v2.0
-        with:
-          files: "gotrue-${{ steps.releases.outputs.release }}*.tar.gz"
-          release-tag: ${{ steps.releases.outputs.release }}
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+              if [ "$IS_PATCH_ZERO" == "true" ]
+              then
+                # Only create release branch if patch version is 0, as this
+                # means that the release can be patched in the future.
 
-      - name: Upload image to Docker Hub
-        uses: docker/build-push-action@v1
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-          repository: ${{ secrets.DOCKER_REPO }}
-          tags: latest,${{ steps.releases.outputs.release }}
+                GH_TOKEN='${{ github.token }}' gh api \
+                  --method POST \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  /repos/supabase/gotrue/git/refs \
+                  -f "ref=refs/heads/release/${RELEASE_VERSION}" \
+                  -f "sha=$GITHUB_SHA"
+                fi
+              fi
+          fi
 
-      - name: Login to ECR account - staging
-        uses: docker/login-action@v1
-        with:
-          registry: 436098097459.dkr.ecr.us-east-1.amazonaws.com
-          username: ${{ secrets.DEV_ACCESS_KEY_ID }}
-          password: ${{ secrets.DEV_SECRET_ACCESS_KEY }}
+          GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz
 
-      - name: Login to ECR account - prod
-        uses: docker/login-action@v1
-        with:
-          registry: 646182064048.dkr.ecr.us-east-1.amazonaws.com
-          username: ${{ secrets.PROD_ACCESS_KEY_ID }}
-          password: ${{ secrets.PROD_SECRET_ACCESS_KEY }}
-
-      - name: Upload image to ECR
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          push: true
-          tags: |
-            436098097459.dkr.ecr.us-east-1.amazonaws.com/gotrue:${{ steps.releases.outputs.release }}
-            646182064048.dkr.ecr.us-east-1.amazonaws.com/gotrue:${{ steps.releases.outputs.release }}
+  publish:
+    needs:
+      - release_please
+    if: ${{ success() && needs.release_please.outputs.RELEASE_VERSION }}
+    uses: ./.github/workflows/publish.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.release_please.outputs.RELEASE_VERSION }}
