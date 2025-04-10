@@ -37,6 +37,8 @@ type User struct {
 	ConfirmationToken  string     `json:"-" db:"confirmation_token"`
 	ConfirmationSentAt *time.Time `json:"confirmation_sent_at,omitempty" db:"confirmation_sent_at"`
 
+	PhoneConfirmationSentAt *time.Time `json:"phone_confirmation_sent_at,omitempty" db:"phone_confirmation_sent_at"`
+
 	// For backward compatibility only. Use EmailConfirmedAt or PhoneConfirmedAt instead.
 	ConfirmedAt *time.Time `json:"confirmed_at,omitempty" db:"confirmed_at" rw:"r"`
 
@@ -161,6 +163,9 @@ func (u *User) BeforeSave(tx *pop.Connection) error {
 	}
 	if u.ConfirmationSentAt != nil && u.ConfirmationSentAt.IsZero() {
 		u.ConfirmationSentAt = nil
+	}
+	if u.PhoneConfirmationSentAt != nil && u.PhoneConfirmationSentAt.IsZero() {
+		u.PhoneConfirmationSentAt = nil
 	}
 	if u.RecoverySentAt != nil && u.RecoverySentAt.IsZero() {
 		u.RecoverySentAt = nil

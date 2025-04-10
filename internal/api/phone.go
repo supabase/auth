@@ -59,8 +59,8 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		includeFields = append(includeFields, "phone_change", "phone_change_token", "phone_change_sent_at")
 	case phoneConfirmationOtp:
 		token = &user.ConfirmationToken
-		sentAt = user.ConfirmationSentAt
-		includeFields = append(includeFields, "confirmation_token", "confirmation_sent_at")
+		sentAt = user.PhoneConfirmationSentAt
+		includeFields = append(includeFields, "confirmation_token", "phone_confirmation_sent_at")
 	case phoneReauthenticationOtp:
 		token = &user.ReauthenticationToken
 		sentAt = user.ReauthenticationSentAt
@@ -127,7 +127,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 
 	switch otpType {
 	case phoneConfirmationOtp:
-		user.ConfirmationSentAt = &now
+		user.PhoneConfirmationSentAt = &now
 	case phoneChangeVerification:
 		user.PhoneChangeSentAt = &now
 	case phoneReauthenticationOtp:
