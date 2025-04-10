@@ -57,25 +57,27 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 
 var emailRateLimitCounter = observability.ObtainMetricCounter("gotrue_email_rate_limit_counter", "Number of times an email rate limit has been triggered")
 
-func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
-	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
-		c := req.Context()
+func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error {
+	if limitHeader := a.config.RateLimitHeader; limitHeader != "" {
+		key := req.Header.Get(limitHeader)
 
-		if limitHeader := a.config.RateLimitHeader; limitHeader != "" {
-			key := req.Header.Get(limitHeader)
-
-			if key == "" {
-				log := observability.GetLogEntry(req).Entry
-				log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
-				return c, nil
-			} else {
-				err := tollbooth.LimitByKeys(lmt, []string{key})
-				if err != nil {
-					return c, tooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
-				}
+		if key == "" {
+			log := observability.GetLogEntry(req).Entry
+			log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
+		} else {
+			err := tollbooth.LimitByKeys(lmt, []string{key})
+			if err != nil {
+				return tooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
 			}
 		}
-		return c, nil
+	}
+
+	return nil
+}
+
+func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
+	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+		return req.Context(), a.performRateLimiting(lmt, req)
 	}
 }
 
@@ -137,11 +139,27 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 }
 
 func isIgnoreCaptchaRoute(req *http.Request) bool {
-	// captcha shouldn't be enabled on the following grant_types
-	// id_token, refresh_token, pkce
-	if req.URL.Path == "/token" && req.FormValue("grant_type") != "password" {
-		return true
+	if req.URL.Path != "/token" {
+		return false
 	}
+
+	switch req.FormValue("grant_type") {
+	case "pkce":
+		return true
+
+	case "refresh_token":
+		return true
+
+	case "id_token":
+		return true
+
+	case "password":
+		return false
+
+	case "web3":
+		return false
+	}
+
 	return false
 }
 

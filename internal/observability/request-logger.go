@@ -55,6 +55,10 @@ func (l *structuredLogger) NewLogEntry(r *http.Request) chimiddleware.LogEntry {
 		"referer":     referrer,
 	}
 
+	if r.URL.Path == "/token" {
+		logFields["grant_type"] = r.FormValue("grant_type")
+	}
+
 	if reqID := utilities.GetRequestID(r.Context()); reqID != "" {
 		logFields["request_id"] = reqID
 	}

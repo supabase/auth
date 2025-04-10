@@ -184,8 +184,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		r.With(api.limitHandler(api.limiterOpts.Otp)).
 			With(api.verifyCaptcha).Post("/otp", api.Otp)
 
-		r.With(api.limitHandler(api.limiterOpts.Token)).
-			With(api.verifyCaptcha).Post("/token", api.Token)
+		// rate limiting applied in handler
+		r.With(api.verifyCaptcha).Post("/token", api.Token)
 
 		r.With(api.limitHandler(api.limiterOpts.Verify)).Route("/verify", func(r *router) {
 			r.Get("/", api.Verify)

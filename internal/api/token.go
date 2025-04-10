@@ -80,20 +80,30 @@ func (a *API) Token(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	grantType := r.FormValue("grant_type")
 
+	handler := a.ResourceOwnerPasswordGrant
+	limiter := a.limiterOpts.Token
+
 	switch grantType {
 	case "password":
-		return a.ResourceOwnerPasswordGrant(ctx, w, r)
+		// set above
 	case "refresh_token":
-		return a.RefreshTokenGrant(ctx, w, r)
+		handler = a.RefreshTokenGrant
 	case "id_token":
-		return a.IdTokenGrant(ctx, w, r)
+		handler = a.IdTokenGrant
 	case "pkce":
-		return a.PKCE(ctx, w, r)
+		handler = a.PKCE
 	case "web3":
-		return a.Web3Grant(ctx, w, r)
+		handler = a.Web3Grant
+		limiter = a.limiterOpts.Web3
 	default:
 		return badRequestError(apierrors.ErrorCodeInvalidCredentials, "unsupported_grant_type")
 	}
+
+	if err := a.performRateLimiting(limiter, r); err != nil {
+		return err
+	}
+
+	return handler(ctx, w, r)
 }
 
 // ResourceOwnerPasswordGrant implements the password grant type flow
