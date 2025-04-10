@@ -30,6 +30,7 @@ type LimiterOptions struct {
 	FactorChallenge  *limiter.Limiter
 	SSO              *limiter.Limiter
 	SAMLAssertion    *limiter.Limiter
+	Web3             *limiter.Limiter
 }
 
 func (lo *LimiterOptions) apply(a *API) { a.limiterOpts = lo }
@@ -81,6 +82,11 @@ func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 		}).SetBurst(30)
 
 	o.Signups = tollbooth.NewLimiter(gc.RateLimitOtp/(60*5),
+		&limiter.ExpirableOptions{
+			DefaultExpirationTTL: time.Hour,
+		}).SetBurst(30)
+
+	o.Web3 = tollbooth.NewLimiter(gc.RateLimitWeb3/(60*5),
 		&limiter.ExpirableOptions{
 			DefaultExpirationTTL: time.Hour,
 		}).SetBurst(30)
