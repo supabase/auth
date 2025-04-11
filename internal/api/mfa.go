@@ -22,7 +22,7 @@ import (
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
-	"github.com/supabase/auth/internal/hooks"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -408,15 +408,15 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 	}
 
 	if config.Hook.SendSMS.Enabled {
-		input := hooks.SendSMSInput{
+		input := v0hooks.SendSMSInput{
 			User: user,
-			SMS: hooks.SMS{
+			SMS: v0hooks.SMS{
 				OTP:     otp,
 				SMSType: "mfa",
 			},
 		}
-		output := hooks.SendSMSOutput{}
-		err := a.invokeHook(a.db, r, &input, &output)
+		output := v0hooks.SendSMSOutput{}
+		err := a.hooksMgr.InvokeHook(a.db, r, &input, &output)
 		if err != nil {
 			return apierrors.NewInternalServerError("error invoking hook")
 		}
@@ -630,25 +630,25 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 	})
 
 	if config.Hook.MFAVerificationAttempt.Enabled {
-		input := hooks.MFAVerificationAttemptInput{
+		input := v0hooks.MFAVerificationAttemptInput{
 			UserID:   user.ID,
 			FactorID: factor.ID,
 			Valid:    valid,
 		}
 
-		output := hooks.MFAVerificationAttemptOutput{}
-		err := a.invokeHook(nil, r, &input, &output)
+		output := v0hooks.MFAVerificationAttemptOutput{}
+		err := a.hooksMgr.InvokeHook(nil, r, &input, &output)
 		if err != nil {
 			return err
 		}
 
-		if output.Decision == hooks.HookRejection {
+		if output.Decision == v0hooks.HookRejection {
 			if err := models.Logout(db, user.ID); err != nil {
 				return err
 			}
 
 			if output.Message == "" {
-				output.Message = hooks.DefaultMFAHookRejectionMessage
+				output.Message = v0hooks.DefaultMFAHookRejectionMessage
 			}
 
 			return apierrors.NewForbiddenError(apierrors.ErrorCodeMFAVerificationRejected, output.Message)
@@ -768,26 +768,26 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 		valid = subtle.ConstantTimeCompare([]byte(otpCode), []byte(params.Code)) == 1
 	}
 	if config.Hook.MFAVerificationAttempt.Enabled {
-		input := hooks.MFAVerificationAttemptInput{
+		input := v0hooks.MFAVerificationAttemptInput{
 			UserID:     user.ID,
 			FactorID:   factor.ID,
 			FactorType: factor.FactorType,
 			Valid:      valid,
 		}
 
-		output := hooks.MFAVerificationAttemptOutput{}
-		err := a.invokeHook(nil, r, &input, &output)
+		output := v0hooks.MFAVerificationAttemptOutput{}
+		err := a.hooksMgr.InvokeHook(nil, r, &input, &output)
 		if err != nil {
 			return err
 		}
 
-		if output.Decision == hooks.HookRejection {
+		if output.Decision == v0hooks.HookRejection {
 			if err := models.Logout(db, user.ID); err != nil {
 				return err
 			}
 
 			if output.Message == "" {
-				output.Message = hooks.DefaultMFAHookRejectionMessage
+				output.Message = v0hooks.DefaultMFAHookRejectionMessage
 			}
 
 			return apierrors.NewForbiddenError(apierrors.ErrorCodeMFAVerificationRejected, output.Message)

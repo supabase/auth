@@ -8,12 +8,11 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/supabase/auth/internal/hooks"
-
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -96,14 +95,14 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		otp = crypto.GenerateOtp(config.Sms.OtpLength)
 
 		if config.Hook.SendSMS.Enabled {
-			input := hooks.SendSMSInput{
+			input := v0hooks.SendSMSInput{
 				User: user,
-				SMS: hooks.SMS{
+				SMS: v0hooks.SMS{
 					OTP: otp,
 				},
 			}
-			output := hooks.SendSMSOutput{}
-			err := a.invokeHook(tx, r, &input, &output)
+			output := v0hooks.SendSMSOutput{}
+			err := a.hooksMgr.InvokeHook(tx, r, &input, &output)
 			if err != nil {
 				return "", err
 			}

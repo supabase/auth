@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -10,10 +9,9 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/supabase/auth/internal/api/apierrors"
-	"github.com/supabase/auth/internal/hooks"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
@@ -181,18 +179,18 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	}
 
 	if config.Hook.PasswordVerificationAttempt.Enabled {
-		input := hooks.PasswordVerificationAttemptInput{
+		input := v0hooks.PasswordVerificationAttemptInput{
 			UserID: user.ID,
 			Valid:  isValidPassword,
 		}
-		output := hooks.PasswordVerificationAttemptOutput{}
-		if err := a.invokeHook(nil, r, &input, &output); err != nil {
+		output := v0hooks.PasswordVerificationAttemptOutput{}
+		if err := a.hooksMgr.InvokeHook(nil, r, &input, &output); err != nil {
 			return err
 		}
 
-		if output.Decision == hooks.HookRejection {
+		if output.Decision == v0hooks.HookRejection {
 			if output.Message == "" {
-				output.Message = hooks.DefaultPasswordHookRejectionMessage
+				output.Message = v0hooks.DefaultPasswordHookRejectionMessage
 			}
 			if output.ShouldLogoutUser {
 				if err := models.Logout(a.db, user.ID); err != nil {
@@ -328,7 +326,7 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 	issuedAt := time.Now().UTC()
 	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
 
-	claims := &hooks.AccessTokenClaims{
+	claims := &v0hooks.AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID.String(),
 			Audience:  jwt.ClaimStrings{user.Aud},
@@ -349,15 +347,15 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 
 	var gotrueClaims jwt.Claims = claims
 	if config.Hook.CustomAccessToken.Enabled {
-		input := hooks.CustomAccessTokenInput{
+		input := v0hooks.CustomAccessTokenInput{
 			UserID:               user.ID,
 			Claims:               claims,
 			AuthenticationMethod: authenticationMethod.String(),
 		}
 
-		output := hooks.CustomAccessTokenOutput{}
+		output := v0hooks.CustomAccessTokenOutput{}
 
-		err := a.invokeHook(tx, r, &input, &output)
+		err := a.hooksMgr.InvokeHook(tx, r, &input, &output)
 		if err != nil {
 			return "", 0, err
 		}
@@ -482,28 +480,4 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		RefreshToken: refreshToken.Token,
 		User:         user,
 	}, nil
-}
-
-func validateTokenClaims(outputClaims map[string]interface{}) error {
-	schemaLoader := gojsonschema.NewStringLoader(hooks.MinimumViableTokenSchema)
-
-	documentLoader := gojsonschema.NewGoLoader(outputClaims)
-
-	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
-	if err != nil {
-		return err
-	}
-
-	if !result.Valid() {
-		var errorMessages string
-
-		for _, desc := range result.Errors() {
-			errorMessages += fmt.Sprintf("- %s\n", desc)
-			fmt.Printf("- %s\n", desc)
-		}
-		return fmt.Errorf("output claims do not conform to the expected schema: \n%s", errorMessages)
-
-	}
-
-	return nil
 }

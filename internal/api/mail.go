@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/supabase/auth/internal/hooks"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
 	mail "github.com/supabase/auth/internal/mailer"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -645,12 +645,12 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			emailData.TokenNew = otpNew
 			emailData.TokenHashNew = u.EmailChangeTokenCurrent
 		}
-		input := hooks.SendEmailInput{
+		input := v0hooks.SendEmailInput{
 			User:      u,
 			EmailData: emailData,
 		}
-		output := hooks.SendEmailOutput{}
-		return a.invokeHook(tx, r, &input, &output)
+		output := v0hooks.SendEmailOutput{}
+		return a.hooksMgr.InvokeHook(tx, r, &input, &output)
 	}
 
 	mr := a.Mailer()
