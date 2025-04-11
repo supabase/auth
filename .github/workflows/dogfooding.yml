@@ -4,11 +4,14 @@ on:
   pull_request_review:
     types: [submitted, edited]
 
-  pull_request_target:
+  pull_request:
     types:
       - opened
     branches:
       - '*'
+
+permissions:
+  contents: read
 
 jobs:
   check_dogfooding:
