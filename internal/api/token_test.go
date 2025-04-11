@@ -887,3 +887,67 @@ $$;`
 		})
 	}
 }
+
+func (ts *TokenTestSuite) TestConfigureAccessToken() {
+	type customAccessTokenTestcase struct {
+		desc                   string
+		additionalClaimsConfig []string
+		expectedClaims         []string
+	}
+	requiredClaims := []string{"aud", "exp", "iat", "sub", "role", "aal", "session_id", "user_metadata", "is_anonymous"}
+	cases := []customAccessTokenTestcase{
+
+		{
+			desc:                   "Default claims all present",
+			additionalClaimsConfig: []string{"empty"},
+			expectedClaims:         requiredClaims,
+		}, {
+			desc:                   "Minimal set of claims is returned",
+			additionalClaimsConfig: []string{},
+			expectedClaims:         requiredClaims,
+		},
+		{
+			desc:                   "Selected additional claims are returned",
+			additionalClaimsConfig: []string{"email"},
+			expectedClaims:         append(requiredClaims, []string{"email"}...),
+		},
+	}
+	for _, c := range cases {
+		ts.T().Run(c.desc, func(t *testing.T) {
+			ts.Config.JWT.AdditionalClaims = c.additionalClaimsConfig
+
+			var buffer bytes.Buffer
+			require.NoError(t, json.NewEncoder(&buffer).Encode(map[string]interface{}{
+				"refresh_token": ts.RefreshToken.Token,
+			}))
+
+			req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=refresh_token", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+
+			var tokenResponse struct {
+				AccessToken string `json:"access_token"`
+			}
+			require.NoError(t, json.NewDecoder(w.Result().Body).Decode(&tokenResponse))
+			parts := strings.Split(tokenResponse.AccessToken, ".")
+			require.Equal(t, 3, len(parts), "Token should have 3 parts")
+
+			payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+			require.NoError(t, err)
+
+			var responseClaims map[string]interface{}
+			require.NoError(t, json.Unmarshal(payload, &responseClaims))
+
+			assert.Len(t, responseClaims, len(c.expectedClaims), "More or less claims in the response than expected")
+			for _, expectedClaim := range c.expectedClaims {
+				_, exists := responseClaims[expectedClaim]
+				assert.True(t, exists, "Claim should exist {%s}", expectedClaim)
+			}
+
+			// reset
+			ts.Config.JWT.AdditionalClaims = []string{"email", "phone", "app_metadata", "user_metadata", "amr", "is_anonymous"}
+		})
+	}
+}
