@@ -55,7 +55,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		if issuer == "" || !provider.IsAzureIssuer(issuer) {
 			detectedIssuer, err := provider.DetectAzureIDTokenIssuer(ctx, p.IdToken)
 			if err != nil {
-				return nil, false, "", nil, badRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
+				return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
 			}
 			issuer = detectedIssuer
 		}
@@ -102,7 +102,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		}
 
 		if !allowed {
-			return nil, false, "", nil, badRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Custom OIDC provider %q not allowed", p.Provider))
+			return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Custom OIDC provider %q not allowed", p.Provider))
 		}
 
 		cfg = &conf.OAuthProviderConfiguration{
@@ -112,7 +112,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 	}
 
 	if !cfg.Enabled {
-		return nil, false, "", nil, badRequestError(apierrors.ErrorCodeProviderDisabled, fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
+		return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
 	}
 
 	oidcProvider, err := oidc.NewProvider(ctx, issuer)
@@ -136,11 +136,11 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	if params.IdToken == "" {
-		return oauthError("invalid request", "id_token required")
+		return apierrors.NewOAuthError("invalid request", "id_token required")
 	}
 
 	if params.Provider == "" && (params.ClientID == "" || params.Issuer == "") {
-		return oauthError("invalid request", "provider or client_id and issuer required")
+		return apierrors.NewOAuthError("invalid request", "provider or client_id and issuer required")
 	}
 
 	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, err := params.getProvider(ctx, config, r)
@@ -153,7 +153,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		AccessToken:          params.AccessToken,
 	})
 	if err != nil {
-		return oauthError("invalid request", "Bad ID token").WithInternalError(err)
+		return apierrors.NewOAuthError("invalid request", "Bad ID token").WithInternalError(err)
 	}
 
 	userData.Metadata.EmailVerified = false
@@ -169,7 +169,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	if idToken.Subject == "" {
-		return oauthError("invalid request", "Missing sub claim in id_token")
+		return apierrors.NewOAuthError("invalid request", "Missing sub claim in id_token")
 	}
 
 	correctAudience := false
@@ -191,7 +191,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	if !correctAudience {
-		return oauthError("invalid request", fmt.Sprintf("Unacceptable audience in id_token: %v", idToken.Audience))
+		return apierrors.NewOAuthError("invalid request", fmt.Sprintf("Unacceptable audience in id_token: %v", idToken.Audience))
 	}
 
 	if !skipNonceCheck {
@@ -199,12 +199,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		paramsHasNonce := params.Nonce != ""
 
 		if tokenHasNonce != paramsHasNonce {
-			return oauthError("invalid request", "Passed nonce and nonce in id_token should either both exist or not.")
+			return apierrors.NewOAuthError("invalid request", "Passed nonce and nonce in id_token should either both exist or not.")
 		} else if tokenHasNonce && paramsHasNonce {
 			// verify nonce to mitigate replay attacks
 			hash := fmt.Sprintf("%x", sha256.Sum256([]byte(params.Nonce)))
 			if hash != idToken.Nonce {
-				return oauthError("invalid nonce", "Nonces mismatch")
+				return apierrors.NewOAuthError("invalid nonce", "Nonces mismatch")
 			}
 		}
 	}
@@ -246,7 +246,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		case *HTTPError:
 			return err
 		default:
-			return oauthError("server_error", "Internal Server Error").WithInternalError(err)
+			return apierrors.NewOAuthError("server_error", "Internal Server Error").WithInternalError(err)
 		}
 	}
 

@@ -2,6 +2,7 @@ package apierrors
 
 import (
 	"fmt"
+	"net/http"
 )
 
 // OAuthError is the JSON handler for OAuth2 error responses
@@ -30,7 +31,7 @@ func (e *OAuthError) WithInternalError(err error) *OAuthError {
 }
 
 // WithInternalMessage adds internal message information to the error
-func (e *OAuthError) WithInternalMessage(fmtString string, args ...interface{}) *OAuthError {
+func (e *OAuthError) WithInternalMessage(fmtString string, args ...any) *OAuthError {
 	e.InternalMessage = fmt.Sprintf(fmtString, args...)
 	return e
 }
@@ -53,12 +54,40 @@ type HTTPError struct {
 	ErrorID         string `json:"error_id,omitempty"`
 }
 
-func NewHTTPError(httpStatus int, errorCode ErrorCode, fmtString string, args ...interface{}) *HTTPError {
+func NewHTTPError(httpStatus int, errorCode ErrorCode, fmtString string, args ...any) *HTTPError {
 	return &HTTPError{
 		HTTPStatus: httpStatus,
 		ErrorCode:  errorCode,
 		Message:    fmt.Sprintf(fmtString, args...),
 	}
+}
+
+func NewBadRequestError(errorCode ErrorCode, fmtString string, args ...any) *HTTPError {
+	return NewHTTPError(http.StatusBadRequest, errorCode, fmtString, args...)
+}
+
+func NewNotFoundError(errorCode ErrorCode, fmtString string, args ...any) *HTTPError {
+	return NewHTTPError(http.StatusNotFound, errorCode, fmtString, args...)
+}
+
+func NewForbiddenError(errorCode ErrorCode, fmtString string, args ...any) *HTTPError {
+	return NewHTTPError(http.StatusForbidden, errorCode, fmtString, args...)
+}
+
+func NewUnprocessableEntityError(errorCode ErrorCode, fmtString string, args ...any) *HTTPError {
+	return NewHTTPError(http.StatusUnprocessableEntity, errorCode, fmtString, args...)
+}
+
+func NewTooManyRequestsError(errorCode ErrorCode, fmtString string, args ...any) *HTTPError {
+	return NewHTTPError(http.StatusTooManyRequests, errorCode, fmtString, args...)
+}
+
+func NewInternalServerError(fmtString string, args ...any) *HTTPError {
+	return NewHTTPError(http.StatusInternalServerError, ErrorCodeUnexpectedFailure, fmtString, args...)
+}
+
+func NewConflictError(fmtString string, args ...any) *HTTPError {
+	return NewHTTPError(http.StatusConflict, ErrorCodeConflict, fmtString, args...)
 }
 
 func (e *HTTPError) Error() string {
@@ -87,7 +116,7 @@ func (e *HTTPError) WithInternalError(err error) *HTTPError {
 }
 
 // WithInternalMessage adds internal message information to the error
-func (e *HTTPError) WithInternalMessage(fmtString string, args ...interface{}) *HTTPError {
+func (e *HTTPError) WithInternalMessage(fmtString string, args ...any) *HTTPError {
 	e.InternalMessage = fmt.Sprintf(fmtString, args...)
 	return e
 }

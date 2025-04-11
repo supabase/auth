@@ -98,10 +98,10 @@ type RequestParams interface {
 func retrieveRequestParams[A RequestParams](r *http.Request, params *A) error {
 	body, err := utilities.GetBodyBytes(r)
 	if err != nil {
-		return internalServerError("Could not read body into byte slice").WithInternalError(err)
+		return apierrors.NewInternalServerError("Could not read body into byte slice").WithInternalError(err)
 	}
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError(apierrors.ErrorCodeBadJSON, "Could not parse request body as JSON: %v", err)
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeBadJSON, "Could not parse request body as JSON: %v", err)
 	}
 	return nil
 }

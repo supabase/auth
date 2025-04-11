@@ -16,7 +16,7 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 	aud := a.requestAud(ctx, r)
 
 	if config.DisableSignup {
-		return unprocessableEntityError(apierrors.ErrorCodeSignupDisabled, "Signups not allowed for this instance")
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeSignupDisabled, "Signups not allowed for this instance")
 	}
 
 	params := &SignupParams{}
@@ -48,7 +48,7 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	})
 	if err != nil {
-		return internalServerError("Database error creating anonymous user").WithInternalError(err)
+		return apierrors.NewInternalServerError("Database error creating anonymous user").WithInternalError(err)
 	}
 
 	metering.RecordLogin("anonymous", newUser.ID)

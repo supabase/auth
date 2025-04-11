@@ -328,7 +328,7 @@ func (ts *MiddlewareTestSuite) TestRequireSAMLEnabled() {
 		{
 			desc:        "SAML not enabled",
 			isEnabled:   false,
-			expectedErr: notFoundError(apierrors.ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled"),
+			expectedErr: apierrors.NewNotFoundError(apierrors.ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled"),
 		},
 		{
 			desc:        "SAML enabled",

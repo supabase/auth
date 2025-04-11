@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
@@ -99,7 +100,7 @@ func doTestSendPhoneConfirmation(ts *PhoneTestSuite, useTestOTP bool) {
 		{
 			desc:     "send invalid otp type ",
 			otpType:  "invalid otp type",
-			expected: internalServerError("invalid otp type"),
+			expected: apierrors.NewInternalServerError("invalid otp type"),
 		},
 	}
 

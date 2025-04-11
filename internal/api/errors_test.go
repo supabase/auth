@@ -21,17 +21,17 @@ func TestHandleResponseErrorWithHTTPError(t *testing.T) {
 		ExpectedBody string
 	}{
 		{
-			HTTPError:    badRequestError(apierrors.ErrorCodeBadJSON, "Unable to parse JSON"),
+			HTTPError:    apierrors.NewBadRequestError(apierrors.ErrorCodeBadJSON, "Unable to parse JSON"),
 			APIVersion:   "",
 			ExpectedBody: "{\"code\":400,\"error_code\":\"" + apierrors.ErrorCodeBadJSON + "\",\"msg\":\"Unable to parse JSON\"}",
 		},
 		{
-			HTTPError:    badRequestError(apierrors.ErrorCodeBadJSON, "Unable to parse JSON"),
+			HTTPError:    apierrors.NewBadRequestError(apierrors.ErrorCodeBadJSON, "Unable to parse JSON"),
 			APIVersion:   "2023-12-31",
 			ExpectedBody: "{\"code\":400,\"error_code\":\"" + apierrors.ErrorCodeBadJSON + "\",\"msg\":\"Unable to parse JSON\"}",
 		},
 		{
-			HTTPError:    badRequestError(apierrors.ErrorCodeBadJSON, "Unable to parse JSON"),
+			HTTPError:    apierrors.NewBadRequestError(apierrors.ErrorCodeBadJSON, "Unable to parse JSON"),
 			APIVersion:   "2024-01-01",
 			ExpectedBody: "{\"code\":\"" + apierrors.ErrorCodeBadJSON + "\",\"message\":\"Unable to parse JSON\"}",
 		},

@@ -37,42 +37,6 @@ type (
 	OAuthError = apierrors.OAuthError
 )
 
-func oauthError(err string, description string) *OAuthError {
-	return apierrors.NewOAuthError(err, description)
-}
-
-func httpError(httpStatus int, errorCode apierrors.ErrorCode, fmtString string, args ...any) *HTTPError {
-	return apierrors.NewHTTPError(httpStatus, errorCode, fmtString, args...)
-}
-
-func badRequestError(errorCode apierrors.ErrorCode, fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusBadRequest, errorCode, fmtString, args...)
-}
-
-func internalServerError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusInternalServerError, apierrors.ErrorCodeUnexpectedFailure, fmtString, args...)
-}
-
-func notFoundError(errorCode apierrors.ErrorCode, fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusNotFound, errorCode, fmtString, args...)
-}
-
-func forbiddenError(errorCode apierrors.ErrorCode, fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusForbidden, errorCode, fmtString, args...)
-}
-
-func unprocessableEntityError(errorCode apierrors.ErrorCode, fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusUnprocessableEntity, errorCode, fmtString, args...)
-}
-
-func tooManyRequestsError(errorCode apierrors.ErrorCode, fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusTooManyRequests, errorCode, fmtString, args...)
-}
-
-func conflictError(fmtString string, args ...interface{}) *HTTPError {
-	return httpError(http.StatusConflict, apierrors.ErrorCodeConflict, fmtString, args...)
-}
-
 // Recoverer is a middleware that recovers from panics, logs the panic (and a
 // backtrace), and returns a HTTP 500 (Internal Server Error) status if
 // possible. Recoverer prints a request ID if one is provided.

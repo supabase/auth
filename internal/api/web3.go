@@ -24,7 +24,7 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	config := a.config
 
 	if !config.External.Web3Solana.Enabled {
-		return unprocessableEntityError(apierrors.ErrorCodeWeb3ProviderDisabled, "Web3 provider is disabled")
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeWeb3ProviderDisabled, "Web3 provider is disabled")
 	}
 
 	params := &Web3GrantParams{}
@@ -33,7 +33,7 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	if params.Chain != "solana" {
-		return badRequestError(apierrors.ErrorCodeWeb3UnsupportedChain, "Unsupported chain")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeWeb3UnsupportedChain, "Unsupported chain")
 	}
 
 	return a.web3GrantSolana(ctx, w, r, params)
@@ -44,66 +44,66 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 	db := a.db.WithContext(ctx)
 
 	if len(params.Message) < 64 {
-		return badRequestError(apierrors.ErrorCodeValidationFailed, "message is too short")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "message is too short")
 	} else if len(params.Message) > 20*1024 {
-		return badRequestError(apierrors.ErrorCodeValidationFailed, "message must not exceed 20KB")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "message must not exceed 20KB")
 	}
 
 	if len(params.Signature) != 86 && len(params.Signature) != 88 {
-		return badRequestError(apierrors.ErrorCodeValidationFailed, "signature must be 64 bytes encoded as base64 with or without padding")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "signature must be 64 bytes encoded as base64 with or without padding")
 	}
 
 	base64URLSignature := strings.ReplaceAll(strings.ReplaceAll(strings.TrimRight(params.Signature, "="), "+", "-"), "/", "_")
 	signatureBytes, err := base64.RawURLEncoding.DecodeString(base64URLSignature)
 	if err != nil {
-		return badRequestError(apierrors.ErrorCodeValidationFailed, "signature does not contain valid base64 characters")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "signature does not contain valid base64 characters")
 	}
 
 	parsedMessage, err := siws.ParseMessage(params.Message)
 	if err != nil {
-		return badRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
 	}
 
 	if !parsedMessage.VerifySignature(signatureBytes) {
-		return oauthError("invalid_grant", "Signature does not match address in message")
+		return apierrors.NewOAuthError("invalid_grant", "Signature does not match address in message")
 	}
 
 	if parsedMessage.URI.Scheme != "https" {
 		if parsedMessage.URI.Scheme == "http" && parsedMessage.URI.Hostname() != "localhost" {
-			return oauthError("invalid_grant", "Signed Solana message is using URI which uses HTTP and hostname is not localhost, only HTTPS is allowed")
+			return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using URI which uses HTTP and hostname is not localhost, only HTTPS is allowed")
 		} else {
-			return oauthError("invalid_grant", "Signed Solana message is using URI which does not use HTTPS")
+			return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using URI which does not use HTTPS")
 		}
 	}
 
 	if !utilities.IsRedirectURLValid(config, parsedMessage.URI.String()) {
-		return oauthError("invalid_grant", "Signed Solana message is using URI which is not allowed on this server, message was signed for another app")
+		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using URI which is not allowed on this server, message was signed for another app")
 	}
 
 	if parsedMessage.URI.Host != parsedMessage.Domain || !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain+"/") {
-		return oauthError("invalid_grant", "Signed Solana message is using a Domain that does not match the one in URI which is not allowed on this server")
+		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using a Domain that does not match the one in URI which is not allowed on this server")
 	}
 
 	now := a.Now()
 
 	if !parsedMessage.NotBefore.IsZero() && now.Before(parsedMessage.NotBefore) {
-		return oauthError("invalid_grant", "Signed Solana message becomes valid in the future")
+		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message becomes valid in the future")
 	}
 
 	if !parsedMessage.ExpirationTime.IsZero() && now.After(parsedMessage.ExpirationTime) {
-		return oauthError("invalid_grant", "Signed Solana message is expired")
+		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is expired")
 	}
 
 	latestExpiryAt := parsedMessage.IssuedAt.Add(config.External.Web3Solana.MaximumValidityDuration)
 
 	if now.After(latestExpiryAt) {
-		return oauthError("invalid_grant", "Solana message was issued too long ago")
+		return apierrors.NewOAuthError("invalid_grant", "Solana message was issued too long ago")
 	}
 
 	earliestIssuedAt := parsedMessage.IssuedAt.Add(-config.External.Web3Solana.MaximumValidityDuration)
 
 	if now.Before(earliestIssuedAt) {
-		return oauthError("invalid_grant", "Solana message was issued too far in the future")
+		return apierrors.NewOAuthError("invalid_grant", "Solana message was issued too far in the future")
 	}
 
 	providerId := strings.Join([]string{
@@ -162,7 +162,7 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 		case *HTTPError:
 			return err
 		default:
-			return oauthError("server_error", "Internal Server Error").WithInternalError(err)
+			return apierrors.NewOAuthError("server_error", "Internal Server Error").WithInternalError(err)
 		}
 	}
 
