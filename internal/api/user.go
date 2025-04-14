@@ -45,7 +45,7 @@ func (a *API) validateUserUpdateParams(ctx context.Context, p *UserUpdateParams)
 			p.Channel = sms_provider.SMSProvider
 		}
 		if !sms_provider.IsValidMessageChannel(p.Channel, config) {
-			return badRequestError(apierrors.ErrorCodeValidationFailed, InvalidChannelError)
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, InvalidChannelError)
 		}
 	}
 
@@ -63,13 +63,13 @@ func (a *API) UserGet(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	claims := getClaims(ctx)
 	if claims == nil {
-		return internalServerError("Could not read claims")
+		return apierrors.NewInternalServerError("Could not read claims")
 	}
 
 	aud := a.requestAud(ctx, r)
 	audienceFromClaims, _ := claims.GetAudience()
 	if len(audienceFromClaims) == 0 || aud != audienceFromClaims[0] {
-		return badRequestError(apierrors.ErrorCodeValidationFailed, "Token audience doesn't match request audience")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Token audience doesn't match request audience")
 	}
 
 	user := getUser(ctx)
@@ -97,20 +97,20 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 	if params.AppData != nil && !isAdmin(user, config) {
 		if !isAdmin(user, config) {
-			return forbiddenError(apierrors.ErrorCodeNotAdmin, "Updating app_metadata requires admin privileges")
+			return apierrors.NewForbiddenError(apierrors.ErrorCodeNotAdmin, "Updating app_metadata requires admin privileges")
 		}
 	}
 
 	if user.HasMFAEnabled() && !session.IsAAL2() {
 		if (params.Password != nil && *params.Password != "") || (params.Email != "" && user.GetEmail() != params.Email) || (params.Phone != "" && user.GetPhone() != params.Phone) {
-			return httpError(http.StatusUnauthorized, apierrors.ErrorCodeInsufficientAAL, "AAL2 session is required to update email or password when MFA is enabled.")
+			return apierrors.NewHTTPError(http.StatusUnauthorized, apierrors.ErrorCodeInsufficientAAL, "AAL2 session is required to update email or password when MFA is enabled.")
 		}
 	}
 
 	if user.IsAnonymous {
 		if params.Password != nil && *params.Password != "" {
 			if params.Email == "" && params.Phone == "" {
-				return unprocessableEntityError(apierrors.ErrorCodeValidationFailed, "Updating password of an anonymous user without an email or phone is not allowed")
+				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeValidationFailed, "Updating password of an anonymous user without an email or phone is not allowed")
 			}
 		}
 	}
@@ -124,23 +124,23 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		updatingForbiddenFields = updatingForbiddenFields || (params.Nonce != "")
 
 		if updatingForbiddenFields {
-			return unprocessableEntityError(apierrors.ErrorCodeUserSSOManaged, "Updating email, phone, password of a SSO account only possible via SSO")
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeUserSSOManaged, "Updating email, phone, password of a SSO account only possible via SSO")
 		}
 	}
 
 	if params.Email != "" && user.GetEmail() != params.Email {
 		if duplicateUser, err := models.IsDuplicatedEmail(db, params.Email, aud, user); err != nil {
-			return internalServerError("Database error checking email").WithInternalError(err)
+			return apierrors.NewInternalServerError("Database error checking email").WithInternalError(err)
 		} else if duplicateUser != nil {
-			return unprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 		}
 	}
 
 	if params.Phone != "" && user.GetPhone() != params.Phone {
 		if exists, err := models.IsDuplicatedPhone(db, params.Phone, aud); err != nil {
-			return internalServerError("Database error checking phone").WithInternalError(err)
+			return apierrors.NewInternalServerError("Database error checking phone").WithInternalError(err)
 		} else if exists {
-			return unprocessableEntityError(apierrors.ErrorCodePhoneExists, DuplicatePhoneMsg)
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodePhoneExists, DuplicatePhoneMsg)
 		}
 	}
 
@@ -150,7 +150,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			// we require reauthentication if the user hasn't signed in recently in the current session
 			if session == nil || now.After(session.CreatedAt.Add(24*time.Hour)) {
 				if len(params.Nonce) == 0 {
-					return badRequestError(apierrors.ErrorCodeReauthenticationNeeded, "Password update requires reauthentication")
+					return apierrors.NewBadRequestError(apierrors.ErrorCodeReauthenticationNeeded, "Password update requires reauthentication")
 				}
 				if err := a.verifyReauthentication(params.Nonce, db, config, user); err != nil {
 					return err
@@ -172,7 +172,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 
 			if isSamePassword {
-				return unprocessableEntityError(apierrors.ErrorCodeSamePassword, "New password should be different from the old password.")
+				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeSamePassword, "New password should be different from the old password.")
 			}
 		}
 
@@ -190,7 +190,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 
 			if terr = user.UpdatePassword(tx, sessionID); terr != nil {
-				return internalServerError("Error during password storage").WithInternalError(terr)
+				return apierrors.NewInternalServerError("Error during password storage").WithInternalError(terr)
 			}
 
 			if terr := models.NewAuditLogEntry(r, tx, user, models.UserUpdatePasswordAction, "", nil); terr != nil {
@@ -200,13 +200,13 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 		if params.Data != nil {
 			if terr = user.UpdateUserMetaData(tx, params.Data); terr != nil {
-				return internalServerError("Error updating user").WithInternalError(terr)
+				return apierrors.NewInternalServerError("Error updating user").WithInternalError(terr)
 			}
 		}
 
 		if params.AppData != nil {
 			if terr = user.UpdateAppMetaData(tx, params.AppData); terr != nil {
-				return internalServerError("Error updating user").WithInternalError(terr)
+				return apierrors.NewInternalServerError("Error updating user").WithInternalError(terr)
 			}
 		}
 
@@ -254,7 +254,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		if terr = models.NewAuditLogEntry(r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
-			return internalServerError("Error recording audit log entry").WithInternalError(terr)
+			return apierrors.NewInternalServerError("Error recording audit log entry").WithInternalError(terr)
 		}
 
 		return nil

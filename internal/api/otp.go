@@ -36,10 +36,10 @@ type SmsParams struct {
 
 func (p *OtpParams) Validate() error {
 	if p.Email != "" && p.Phone != "" {
-		return badRequestError(apierrors.ErrorCodeValidationFailed, "Only an email address or phone number should be provided")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Only an email address or phone number should be provided")
 	}
 	if p.Email != "" && p.Channel != "" {
-		return badRequestError(apierrors.ErrorCodeValidationFailed, "Channel should only be specified with Phone OTP")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Channel should only be specified with Phone OTP")
 	}
 	if err := validatePKCEParams(p.CodeChallengeMethod, p.CodeChallenge); err != nil {
 		return err
@@ -54,7 +54,7 @@ func (p *SmsParams) Validate(config *conf.GlobalConfiguration) error {
 		return err
 	}
 	if !sms_provider.IsValidMessageChannel(p.Channel, config) {
-		return badRequestError(apierrors.ErrorCodeValidationFailed, InvalidChannelError)
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, InvalidChannelError)
 	}
 	return nil
 }
@@ -80,7 +80,7 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if ok, err := a.shouldCreateUser(r, params); !ok {
-		return unprocessableEntityError(apierrors.ErrorCodeOTPDisabled, "Signups not allowed for otp")
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeOTPDisabled, "Signups not allowed for otp")
 	} else if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 		return a.SmsOtp(w, r)
 	}
 
-	return badRequestError(apierrors.ErrorCodeValidationFailed, "One of email or phone must be set")
+	return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "One of email or phone must be set")
 }
 
 type SmsOtpResponse struct {
@@ -105,7 +105,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 
 	if !config.External.Phone.Enabled {
-		return badRequestError(apierrors.ErrorCodePhoneProviderDisabled, "Unsupported phone provider")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodePhoneProviderDisabled, "Unsupported phone provider")
 	}
 	var err error
 
@@ -130,7 +130,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		if models.IsNotFoundError(err) {
 			isNewUser = true
 		} else {
-			return internalServerError("Database error finding user").WithInternalError(err)
+			return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 		}
 	}
 	if user != nil {
@@ -141,7 +141,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 		// Sign them up with temporary password.
 		password, err := password.Generate(64, 10, 1, false, true)
 		if err != nil {
-			return internalServerError("error creating user").WithInternalError(err)
+			return apierrors.NewInternalServerError("error creating user").WithInternalError(err)
 		}
 
 		signUpParams := &SignupParams{

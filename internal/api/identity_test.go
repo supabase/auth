@@ -102,7 +102,7 @@ func (ts *IdentityTestSuite) TestLinkIdentityToUser() {
 		},
 	}
 	u, err = ts.API.linkIdentityToUser(r, ctx, ts.API.db, testExistingUserData, "email")
-	require.ErrorIs(ts.T(), err, unprocessableEntityError(apierrors.ErrorCodeIdentityAlreadyExists, "Identity is already linked"))
+	require.ErrorIs(ts.T(), err, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityAlreadyExists, "Identity is already linked"))
 	require.Nil(ts.T(), u)
 }
 
@@ -123,13 +123,13 @@ func (ts *IdentityTestSuite) TestUnlinkIdentityError() {
 			desc:          "User must have at least 1 identity after unlinking",
 			user:          userWithOneIdentity,
 			identityId:    userWithOneIdentity.Identities[0].ID,
-			expectedError: unprocessableEntityError(apierrors.ErrorCodeSingleIdentityNotDeletable, "User must have at least 1 identity after unlinking"),
+			expectedError: apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeSingleIdentityNotDeletable, "User must have at least 1 identity after unlinking"),
 		},
 		{
 			desc:          "Identity doesn't exist",
 			user:          userWithTwoIdentities,
 			identityId:    uuid.Must(uuid.NewV4()),
-			expectedError: unprocessableEntityError(apierrors.ErrorCodeIdentityNotFound, "Identity doesn't exist"),
+			expectedError: apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityNotFound, "Identity doesn't exist"),
 		},
 	}
 

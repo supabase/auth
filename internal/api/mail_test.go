@@ -72,14 +72,14 @@ func (ts *MailTestSuite) TestValidateEmail() {
 			desc:          "empty email should return error",
 			email:         "",
 			expectedEmail: "",
-			expectedError: badRequestError(apierrors.ErrorCodeValidationFailed, "An email address is required"),
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "An email address is required"),
 		},
 		{
 			desc: "email length exceeds 255 characters",
 			// email has 256 characters
 			email:         "testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttesttest@example.com",
 			expectedEmail: "",
-			expectedError: badRequestError(apierrors.ErrorCodeValidationFailed, "An email address is too long"),
+			expectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "An email address is too long"),
 		},
 	}
 
