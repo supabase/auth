@@ -163,20 +163,25 @@ func (a *APIConfiguration) Validate() error {
 }
 
 type SessionsConfiguration struct {
-	Timebox           *time.Duration `json:"timebox"`
+	Timebox           *time.Duration `json:"timebox,omitempty"`
 	InactivityTimeout *time.Duration `json:"inactivity_timeout,omitempty" split_words:"true"`
+	AllowLowAAL       *time.Duration `json:"allow_low_aal,omitempty" split_words:"true"`
 
 	SinglePerUser bool     `json:"single_per_user" split_words:"true"`
 	Tags          []string `json:"tags,omitempty"`
 }
 
 func (c *SessionsConfiguration) Validate() error {
-	if c.Timebox == nil {
-		return nil
+	if c.Timebox != nil && *c.Timebox <= time.Duration(0) {
+		return fmt.Errorf("conf: session timebox duration must be positive when set, was %v", (*c.Timebox).String())
 	}
 
-	if *c.Timebox <= time.Duration(0) {
-		return fmt.Errorf("conf: session timebox duration must be positive when set, was %v", (*c.Timebox).String())
+	if c.InactivityTimeout != nil && *c.InactivityTimeout <= time.Duration(0) {
+		return fmt.Errorf("conf: session inactivity timeout duration must be positive when set, was %v", (*c.InactivityTimeout).String())
+	}
+
+	if c.AllowLowAAL != nil && *c.AllowLowAAL <= time.Duration(0) {
+		return fmt.Errorf("conf: session allow low AAL duration must be positive when set, was %v", (*c.AllowLowAAL).String())
 	}
 
 	return nil
