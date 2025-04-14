@@ -1,4 +1,4 @@
-package hooks
+package v0hooks
 
 import (
 	"github.com/gofrs/uuid"

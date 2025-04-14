@@ -17,7 +17,7 @@ type RecoverParams struct {
 
 func (p *RecoverParams) Validate(a *API) error {
 	if p.Email == "" {
-		return badRequestError(apierrors.ErrorCodeValidationFailed, "Password recovery requires an email")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Password recovery requires an email")
 	}
 	var err error
 	if p.Email, err = a.validateEmail(p.Email); err != nil {
@@ -52,7 +52,7 @@ func (a *API) Recover(w http.ResponseWriter, r *http.Request) error {
 		if models.IsNotFoundError(err) {
 			return sendJSON(w, http.StatusOK, map[string]string{})
 		}
-		return internalServerError("Unable to process request").WithInternalError(err)
+		return apierrors.NewInternalServerError("Unable to process request").WithInternalError(err)
 	}
 	if isPKCEFlow(flowType) {
 		if _, err := generateFlowState(db, models.Recovery.String(), models.Recovery, params.CodeChallengeMethod, params.CodeChallenge, &(user.ID)); err != nil {

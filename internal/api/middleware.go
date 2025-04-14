@@ -67,7 +67,7 @@ func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error
 		} else {
 			err := tollbooth.LimitByKeys(lmt, []string{key})
 			if err != nil {
-				return tooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
+				return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
 			}
 		}
 	}
@@ -100,7 +100,7 @@ func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (co
 	config := a.config
 
 	if !config.External.Email.Enabled {
-		return nil, badRequestError(apierrors.ErrorCodeEmailProviderDisabled, "Email logins are disabled")
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 	}
 
 	return ctx, nil
@@ -128,11 +128,11 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 
 	verificationResult, err := security.VerifyRequest(body, utilities.GetIPAddress(req), strings.TrimSpace(config.Security.Captcha.Secret), config.Security.Captcha.Provider)
 	if err != nil {
-		return nil, internalServerError("captcha verification process failed").WithInternalError(err)
+		return nil, apierrors.NewInternalServerError("captcha verification process failed").WithInternalError(err)
 	}
 
 	if !verificationResult.Success {
-		return nil, badRequestError(apierrors.ErrorCodeCaptchaFailed, "captcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeCaptchaFailed, "captcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
 	}
 
 	return ctx, nil
@@ -252,7 +252,7 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.SAML.Enabled {
-		return nil, notFoundError(apierrors.ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled")
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled")
 	}
 	return ctx, nil
 }
@@ -260,7 +260,7 @@ func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (cont
 func (a *API) requireManualLinkingEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.Security.ManualLinkingEnabled {
-		return nil, notFoundError(apierrors.ErrorCodeManualLinkingDisabled, "Manual linking is disabled")
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeManualLinkingDisabled, "Manual linking is disabled")
 	}
 	return ctx, nil
 }

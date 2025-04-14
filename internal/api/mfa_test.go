@@ -749,7 +749,7 @@ func (ts *MFATestSuite) TestChallengeFactorNotOwnedByUser() {
 
 	w := ServeAuthenticatedRequest(ts, http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", otherUsersPhoneFactor.ID), signUpResp.Token, buffer)
 
-	expectedError := notFoundError(apierrors.ErrorCodeMFAFactorNotFound, "Factor not found")
+	expectedError := apierrors.NewNotFoundError(apierrors.ErrorCodeMFAFactorNotFound, "Factor not found")
 
 	var data HTTPError
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))

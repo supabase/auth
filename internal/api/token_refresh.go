@@ -31,7 +31,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 	}
 
 	if params.RefreshToken == "" {
-		return oauthError("invalid_request", "refresh_token required")
+		return apierrors.NewOAuthError("invalid_request", "refresh_token required")
 	}
 
 	// A 5 second retry loop is used to make sure that refresh token
@@ -48,21 +48,21 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		user, token, session, err := models.FindUserWithRefreshToken(db, params.RefreshToken, false)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return badRequestError(apierrors.ErrorCodeRefreshTokenNotFound, "Invalid Refresh Token: Refresh Token Not Found")
+				return apierrors.NewBadRequestError(apierrors.ErrorCodeRefreshTokenNotFound, "Invalid Refresh Token: Refresh Token Not Found")
 			}
-			return internalServerError(err.Error())
+			return apierrors.NewInternalServerError(err.Error())
 		}
 
 		if user.IsBanned() {
-			return badRequestError(apierrors.ErrorCodeUserBanned, "Invalid Refresh Token: User Banned")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeUserBanned, "Invalid Refresh Token: User Banned")
 		}
 
 		if session == nil {
 			// a refresh token won't have a session if it's created prior to the sessions table introduced
 			if err := db.Destroy(token); err != nil {
-				return internalServerError("Error deleting refresh token with missing session").WithInternalError(err)
+				return apierrors.NewInternalServerError("Error deleting refresh token with missing session").WithInternalError(err)
 			}
-			return badRequestError(apierrors.ErrorCodeSessionNotFound, "Invalid Refresh Token: No Valid Session Found")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeSessionNotFound, "Invalid Refresh Token: No Valid Session Found")
 		}
 
 		sessionValidityConfig := models.SessionValidityConfig{
@@ -78,13 +78,13 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			// do nothing
 
 		case models.SessionTimedOut:
-			return badRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Inactivity)")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Inactivity)")
 
 		case models.SessionLowAAL:
-			return badRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Low AAL: User Needs MFA Verification)")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Low AAL: User Needs MFA Verification)")
 
 		default:
-			return badRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired")
 		}
 
 		// Basic checks above passed, now we need to serialize access
@@ -113,7 +113,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 					retry = true
 					return terr
 				}
-				return internalServerError(terr.Error())
+				return apierrors.NewInternalServerError(terr.Error())
 			}
 
 			if a.config.Sessions.SinglePerUser {
@@ -129,7 +129,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 					retry = true
 					return terr
 				} else if terr != nil {
-					return internalServerError(terr.Error())
+					return apierrors.NewInternalServerError(terr.Error())
 				}
 
 				sessionTag := session.DetermineTag(config.Sessions.Tags)
@@ -163,7 +163,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 					if s.LastRefreshedAt(nil).After(session.LastRefreshedAt(&token.UpdatedAt)) {
 						// session is not the most
 						// recently active one
-						return badRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Revoked by Newer Login)")
+						return apierrors.NewBadRequestError(apierrors.ErrorCodeSessionExpired, "Invalid Refresh Token: Session Expired (Revoked by Newer Login)")
 					}
 				}
 
@@ -178,7 +178,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			if token.Revoked {
 				activeRefreshToken, terr := session.FindCurrentlyActiveRefreshToken(tx)
 				if terr != nil && !models.IsNotFoundError(terr) {
-					return internalServerError(terr.Error())
+					return apierrors.NewInternalServerError(terr.Error())
 				}
 
 				if activeRefreshToken != nil && activeRefreshToken.Parent.String() == token.Token {
@@ -202,11 +202,11 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 						if config.Security.RefreshTokenRotationEnabled {
 							// Revoke all tokens in token family
 							if err := models.RevokeTokenFamily(tx, token); err != nil {
-								return internalServerError(err.Error())
+								return apierrors.NewInternalServerError(err.Error())
 							}
 						}
 
-						return storage.NewCommitWithError(badRequestError(apierrors.ErrorCodeRefreshTokenAlreadyUsed, "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID))
+						return storage.NewCommitWithError(apierrors.NewBadRequestError(apierrors.ErrorCodeRefreshTokenAlreadyUsed, "Invalid Refresh Token: Already Used").WithInternalMessage("Possible abuse attempt: %v", token.ID))
 					}
 				}
 			}
@@ -230,7 +230,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				if ok {
 					return httpErr
 				}
-				return internalServerError("error generating jwt token").WithInternalError(terr)
+				return apierrors.NewInternalServerError("error generating jwt token").WithInternalError(terr)
 			}
 
 			refreshedAt := a.Now()
@@ -251,7 +251,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 			}
 
 			if terr := session.UpdateOnlyRefreshInfo(tx); terr != nil {
-				return internalServerError("failed to update session information").WithInternalError(terr)
+				return apierrors.NewInternalServerError("failed to update session information").WithInternalError(terr)
 			}
 
 			newTokenResponse = &AccessTokenResponse{
@@ -280,5 +280,5 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return sendJSON(w, http.StatusOK, newTokenResponse)
 	}
 
-	return conflictError("Too many concurrent token refresh requests on the same session or refresh token")
+	return apierrors.NewConflictError("Too many concurrent token refresh requests on the same session or refresh token")
 }

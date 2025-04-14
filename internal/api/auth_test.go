@@ -185,7 +185,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 				},
 				Role: "authenticated",
 			},
-			ExpectedError: forbiddenError(apierrors.ErrorCodeBadJWT, "invalid claim: missing sub claim"),
+			ExpectedError: apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "invalid claim: missing sub claim"),
 			ExpectedUser:  nil,
 		},
 		{
@@ -207,7 +207,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 				},
 				Role: "authenticated",
 			},
-			ExpectedError: badRequestError(apierrors.ErrorCodeBadJWT, "invalid claim: sub claim must be a UUID"),
+			ExpectedError: apierrors.NewBadRequestError(apierrors.ErrorCodeBadJWT, "invalid claim: sub claim must be a UUID"),
 			ExpectedUser:  nil,
 		},
 		{
@@ -256,7 +256,7 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 				Role:      "authenticated",
 				SessionId: "73bf9ee0-9e8c-453b-b484-09cb93e2f341",
 			},
-			ExpectedError:   forbiddenError(apierrors.ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist").WithInternalError(models.SessionNotFoundError{}).WithInternalMessage("session id (73bf9ee0-9e8c-453b-b484-09cb93e2f341) doesn't exist"),
+			ExpectedError:   apierrors.NewForbiddenError(apierrors.ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist").WithInternalError(models.SessionNotFoundError{}).WithInternalMessage("session id (73bf9ee0-9e8c-453b-b484-09cb93e2f341) doesn't exist"),
 			ExpectedUser:    u,
 			ExpectedSession: nil,
 		},
