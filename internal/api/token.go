@@ -23,9 +23,9 @@ import (
 // AccessTokenClaims is a struct thats used for JWT claims
 type AccessTokenClaims struct {
 	jwt.RegisteredClaims
-	Email                         string                 `json:"email"`
-	Phone                         string                 `json:"phone"`
-	AppMetaData                   map[string]interface{} `json:"app_metadata"`
+	Email                         string                 `json:"email,omitempty"`
+	Phone                         string                 `json:"phone,omitempty"`
+	AppMetaData                   map[string]interface{} `json:"app_metadata,omitempty"`
 	UserMetaData                  map[string]interface{} `json:"user_metadata"`
 	Role                          string                 `json:"role"`
 	AuthenticatorAssuranceLevel   string                 `json:"aal,omitempty"`
@@ -346,15 +346,26 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			Issuer:    config.JWT.Issuer,
 		},
-		Email:                         user.GetEmail(),
-		Phone:                         user.GetPhone(),
-		AppMetaData:                   user.AppMetaData,
-		UserMetaData:                  user.UserMetaData,
-		Role:                          user.Role,
-		SessionId:                     sid,
-		AuthenticatorAssuranceLevel:   aal.String(),
-		AuthenticationMethodReference: amr,
-		IsAnonymous:                   user.IsAnonymous,
+		AuthenticatorAssuranceLevel: aal.String(),
+		SessionId:                   sid,
+		Role:                        user.Role,
+		IsAnonymous:                 user.IsAnonymous,
+	}
+
+	// add additional claims that are optional
+	for _, ac := range config.JWT.AdditionalClaims {
+		switch ac {
+		case "email":
+			claims.Email = user.GetEmail()
+		case "phone":
+			claims.Phone = user.GetPhone()
+		case "app_metadata":
+			claims.AppMetaData = user.AppMetaData
+		case "user_metadata":
+			claims.UserMetaData = user.UserMetaData
+		case "amr":
+			claims.AuthenticationMethodReference = amr
+		}
 	}
 
 	var gotrueClaims jwt.Claims = claims
