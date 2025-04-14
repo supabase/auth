@@ -73,10 +73,15 @@ const defaultInviteMail = `<h2>You have been invited</h2>
 
 const defaultConfirmationMail = `<h2>Confirm your email</h2>
 
+<!--
 <p>Follow this link to confirm your email:</p>
 <p><a href="{{ .ConfirmationURL }}">Confirm your email address</a></p>
-<p>Alternatively, enter the code: {{ .Token }}</p>
+-->
+
+<p>Enter the code to confirm your account:</p>
+<p><strong>{{ .Token }}</strong></p>
 `
+
 
 const defaultRecoveryMail = `<h2>Reset password</h2>
 
