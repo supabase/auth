@@ -356,6 +356,7 @@ func parseKakaoIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 type VercelMarketplaceIDTokenClaims struct {
 	jwt.RegisteredClaims
 
+	GlobalUserID  string `json:"global_user_id"`
 	UserEmail     string `json:"user_email"`
 	UserName      string `json:"user_name"`
 	UserAvatarUrl string `json:"user_avatar_url"`
@@ -376,10 +377,16 @@ func parseVercelMarketplaceIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserPro
 		Primary:  true,
 	})
 
+	subject := token.Subject
+
+	if claims.GlobalUserID != "" {
+		subject = "global_user_id:" + claims.GlobalUserID
+	}
+
 	data.Metadata = &Claims{
 		Issuer:     token.Issuer,
-		Subject:    token.Subject,
-		ProviderId: token.Subject,
+		Subject:    subject,
+		ProviderId: subject,
 		Name:       claims.UserName,
 		Picture:    claims.UserAvatarUrl,
 	}
