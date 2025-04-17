@@ -1,0 +1,6 @@
+{
+    "dockerComposeFile": "../docker-compose-dev.yml",
+    "service": "auth",
+    "workspaceFolder": "/go/src/github.com/supabase/auth"
+}
+  
