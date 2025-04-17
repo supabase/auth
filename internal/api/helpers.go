@@ -12,12 +12,9 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/security"
 
-	"github.com/supabase/auth/internal/utilities"
-	"encoding/json"
-	"net/http"
 	"strings"
 
-	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 func sendJSON(w http.ResponseWriter, status int, obj interface{}) error {
@@ -111,12 +108,10 @@ func retrieveRequestParams[A RequestParams](r *http.Request, params *A) error {
 	return nil
 }
 
-
 type IDRequestParams interface {
 	Validate(r *http.Request, a *API) error
 	SetID(id string)
 }
-
 
 func retrieveIDRequestParams(r *http.Request, p IDRequestParams, a *API) error {
 	switch r.Method {
@@ -143,4 +138,3 @@ func retrieveIDRequestParams(r *http.Request, p IDRequestParams, a *API) error {
 
 	return p.Validate(r, a)
 }
-

@@ -3,9 +3,13 @@ ENV GO111MODULE=on
 ENV CGO_ENABLED=0
 ENV GOOS=linux
 
-RUN apk add --no-cache make git bash
+RUN apk add --no-cache make git bash python3 py3-pip curl
 
 WORKDIR /go/src/github.com/supabase/auth
+
+RUN python -m venv .venv && \
+  echo ". /go/src/github.com/supabase/auth/.venv/bin/activate" >> /root/.bashrc
+Ï
 
 # Pulling dependencies
 COPY ./Makefile ./go.* ./
