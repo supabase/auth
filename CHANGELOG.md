@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.172.0](https://github.com/supabase/auth/compare/v2.171.0...v2.172.0) (2025-04-17)
+
+
+### Features
+
+* use `global_user_id` over `sub` for `vercel_marketplace` issuer ([#1990](https://github.com/supabase/auth/issues/1990)) ([f94f97e](https://github.com/supabase/auth/commit/f94f97e8d3e530d730d9352a14b477fd33548df2))
+
 ## [2.171.0](https://github.com/supabase/auth/compare/v2.170.0...v2.171.0) (2025-04-14)
 
 
