@@ -9,7 +9,6 @@ WORKDIR /go/src/github.com/supabase/auth
 
 RUN python -m venv .venv && \
   echo ". /go/src/github.com/supabase/auth/.venv/bin/activate" >> /root/.bashrc
-Ï
 
 # Pulling dependencies
 COPY ./Makefile ./go.* ./

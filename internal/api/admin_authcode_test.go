@@ -155,7 +155,6 @@ func (ts *AdminAuthCodeTestSuite) TestAdminIssueAuthCode() {
 				flowState, err := models.FindFlowStateByUserID(ts.API.db, user.ID.String(), models.OTP)
 				require.NoError(ts.T(), err)
 
-				// Now check the fields
 				require.Equal(ts.T(), tc.body["code_challenge_method"], flowState.CodeChallengeMethod)
 				require.Equal(ts.T(), tc.body["code_challenge"], flowState.CodeChallenge)
 				require.Equal(ts.T(), user.ID, flowState.UserID)
@@ -163,7 +162,6 @@ func (ts *AdminAuthCodeTestSuite) TestAdminIssueAuthCode() {
 		})
 	}
 
-	// Clean up
 	require.NoError(ts.T(), ts.API.db.Destroy(user))
 }
 

@@ -68,6 +68,19 @@ func (a *API) adminIssueAuthCode(w http.ResponseWriter, r *http.Request) error {
 			return terr
 		}
 
+		if terr := models.NewAuditLogEntry(
+			r,
+			tx,
+			user,
+			models.IssueAuthCodeAction,
+			"",
+			map[string]interface{}{
+				"user_id": user.ID,
+			},
+		); terr != nil {
+			return terr
+		}
+
 		if _, terr = generateFlowState(
 			tx,
 			models.OTP.String(),

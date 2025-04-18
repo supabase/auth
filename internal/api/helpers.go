@@ -12,8 +12,6 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/security"
 
-	"strings"
-
 	"github.com/supabase/auth/internal/utilities"
 )
 
