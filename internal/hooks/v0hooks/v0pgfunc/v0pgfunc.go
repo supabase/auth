@@ -21,17 +21,16 @@ type Dispatcher struct {
 }
 
 type Option interface {
-	apply(*Dispatcher) error
+	apply(*Dispatcher)
 }
 
-type optionFunc func(*Dispatcher) error
+type optionFunc func(*Dispatcher)
 
-func (f optionFunc) apply(o *Dispatcher) error { return f(o) }
+func (f optionFunc) apply(o *Dispatcher) { f(o) }
 
 func WithTimeout(d time.Duration) Option {
-	return optionFunc(func(o *Dispatcher) error {
+	return optionFunc(func(o *Dispatcher) {
 		o.hookTimeoutMS = int(d / 1000000)
-		return nil
 	})
 }
 

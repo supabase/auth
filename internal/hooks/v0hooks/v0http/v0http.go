@@ -37,37 +37,33 @@ type Dispatcher struct {
 }
 
 type Option interface {
-	apply(*Dispatcher) error
+	apply(*Dispatcher)
 }
 
-type optionFunc func(*Dispatcher) error
+type optionFunc func(*Dispatcher)
 
-func (f optionFunc) apply(o *Dispatcher) error { return f(o) }
+func (f optionFunc) apply(o *Dispatcher) { f(o) }
 
 func WithTimeout(d time.Duration) Option {
-	return optionFunc(func(o *Dispatcher) error {
+	return optionFunc(func(o *Dispatcher) {
 		o.hookTimeout = d
-		return nil
 	})
 }
 
 func WithBackoff(d time.Duration) Option {
-	return optionFunc(func(o *Dispatcher) error {
+	return optionFunc(func(o *Dispatcher) {
 		o.hookBackoff = d
-		return nil
 	})
 }
 
 func WithRetries(n int) Option {
-	return optionFunc(func(o *Dispatcher) error {
+	return optionFunc(func(o *Dispatcher) {
 		o.hookRetries = n
-		return nil
 	})
 }
 func WithResponseLimit(n int64) Option {
-	return optionFunc(func(o *Dispatcher) error {
+	return optionFunc(func(o *Dispatcher) {
 		o.limitResponse = n
-		return nil
 	})
 }
 
