@@ -5,6 +5,8 @@ import (
 
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
+	"github.com/supabase/auth/internal/hooks/v0hooks/v0http"
+	"github.com/supabase/auth/internal/hooks/v0hooks/v0pgfunc"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -16,8 +18,10 @@ func NewManager(
 	db *storage.Connection,
 	config *conf.GlobalConfiguration,
 ) *Manager {
+	httpDr := v0http.New()
+	pgfuncDr := v0pgfunc.New(db)
 	return &Manager{
-		v0mgr: v0hooks.NewManager(db, config),
+		v0mgr: v0hooks.NewManager(config, httpDr, pgfuncDr),
 	}
 }
 
