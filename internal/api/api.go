@@ -273,7 +273,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				})
 			})
 
-			r.Post("/issue_authcode", api.adminIssueAuthCode)
+			r.Post("/authcode", api.adminIssueAuthCode)
 			r.Post("/generate_link", api.adminGenerateLink)
 
 			r.Route("/sso", func(r *router) {
