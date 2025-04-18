@@ -103,6 +103,6 @@ func (a *API) adminIssueAuthCode(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	return sendJSON(w, http.StatusOK, map[string]string{
-		"auth_code": code,
+		"authcode": code,
 	})
 }
