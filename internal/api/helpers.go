@@ -107,34 +107,3 @@ func retrieveRequestParams[A RequestParams](r *http.Request, params *A) error {
 	}
 	return nil
 }
-
-type IDRequestParams interface {
-	Validate(r *http.Request, a *API) error
-	SetID(id string)
-}
-
-func retrieveIDRequestParams(r *http.Request, p IDRequestParams, a *API) error {
-	switch r.Method {
-	case http.MethodGet:
-		id := r.URL.Query().Get("id")
-		p.SetID(id)
-
-	case http.MethodPost:
-		if err := json.NewDecoder(r.Body).Decode(p); err != nil {
-			if strings.Contains(err.Error(), "EOF") {
-				return apierrors.NewBadRequestError(
-					apierrors.ErrorCodeValidationFailed,
-					"Request body must not be empty",
-				)
-			}
-			return err
-		}
-	default:
-		return apierrors.NewBadRequestError(
-			apierrors.ErrorCodeValidationFailed,
-			"Only GET and POST methods allowed",
-		)
-	}
-
-	return p.Validate(r, a)
-}

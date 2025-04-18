@@ -1,7 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
@@ -35,7 +37,13 @@ func (p *authCodeParams) SetID(id string) {
 func (a *API) adminIssueAuthCode(w http.ResponseWriter, r *http.Request) error {
 	params := &authCodeParams{}
 
-	if err := retrieveIDRequestParams(r, params, a); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(params); err != nil {
+		if strings.Contains(err.Error(), "EOF") {
+			return apierrors.NewBadRequestError(
+				apierrors.ErrorCodeValidationFailed,
+				"Request body must not be empty",
+			)
+		}
 		return err
 	}
 
