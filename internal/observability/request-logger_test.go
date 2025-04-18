@@ -2,10 +2,12 @@ package observability
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -69,4 +71,25 @@ func TestExcludeHealthFromLogs(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 
 	require.Empty(t, logBuffer)
+}
+
+func TestContext(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	le := &logEntry{Entry: logrus.NewEntry(logrus.StandardLogger())}
+	{
+		got := GetLogEntryFromContext(ctx)
+		if got == le {
+			t.Fatal("exp new log entry")
+		}
+	}
+
+	ctx = SetLogEntryWithContext(ctx, le)
+	{
+		got := GetLogEntryFromContext(ctx)
+		if got != le {
+			t.Fatal("exp new log entry")
+		}
+	}
 }
