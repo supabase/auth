@@ -5,10 +5,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/oauth2"
 )
@@ -161,4 +165,197 @@ func (g azureProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 	// Only ID tokens supported, UserInfo endpoint has a history of being less secure.
 
 	return nil, fmt.Errorf("azure: no OIDC ID token present in response")
+}
+
+type AzureIDTokenClaimSource struct {
+	Endpoint string `json:"endpoint"`
+}
+
+type AzureIDTokenClaims struct {
+	jwt.RegisteredClaims
+
+	Email                              string `json:"email"`
+	Name                               string `json:"name"`
+	PreferredUsername                  string `json:"preferred_username"`
+	XMicrosoftEmailDomainOwnerVerified any    `json:"xms_edov"`
+
+	ClaimNames   map[string]string                  `json:"__claim_names"`
+	ClaimSources map[string]AzureIDTokenClaimSource `json:"__claim_sources"`
+}
+
+// ResolveIndirectClaims resolves claims in the Azure Token that require a call to the Microsoft Graph API. This is typically to an API like this: https://learn.microsoft.com/en-us/graph/api/directoryobject-getmemberobjects?view=graph-rest-1.0&tabs=http
+func (c *AzureIDTokenClaims) ResolveIndirectClaims(ctx context.Context, httpClient *http.Client, accessToken string) (map[string]any, error) {
+	if len(c.ClaimNames) == 0 || len(c.ClaimSources) == 0 {
+		return nil, nil
+	}
+
+	result := make(map[string]any)
+
+	for claimName, claimSource := range c.ClaimNames {
+		claimEndpointObject, ok := c.ClaimSources[claimSource]
+
+		if !ok || !strings.HasPrefix(claimEndpointObject.Endpoint, "https://") {
+			continue
+		}
+
+		claimEndpoint := claimEndpointObject.Endpoint
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, claimEndpoint, strings.NewReader(`{"securityEnabledOnly":true}`))
+		if err != nil {
+			return nil, fmt.Errorf("azure: failed to create POST request to %q (resolving overage claim %q): %w", claimEndpoint, claimName, err)
+		}
+
+		req.Header.Add("Authorization", "Bearer "+accessToken)
+		req.Header.Add("Content-Type", "application/json")
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("azure: failed to send POST request to %q (resolving overage claim %q): %w", claimEndpoint, claimName, err)
+		}
+
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			resBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 2*1024))
+
+			body := "<empty>"
+			if len(resBody) > 0 {
+				if utf8.Valid(resBody) {
+					body = string(resBody)
+				} else {
+					body = "<invalid-utf8>"
+				}
+			}
+
+			readErrString := ""
+			if readErr != nil {
+				readErrString = fmt.Sprintf(" with read error %q", readErr.Error())
+			}
+
+			return nil, fmt.Errorf("azure: received %d but expected 200 HTTP status code when sending POST to %q (resolving overage claim %q) with response body %q%s", resp.StatusCode, claimEndpoint, claimName, body, readErrString)
+		}
+
+		var responseResult struct {
+			Value any `json:"value"`
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&responseResult); err != nil {
+			return nil, fmt.Errorf("azure: failed to parse JSON response from POST to %q (resolving overage claim %q): %w", claimEndpoint, claimName, err)
+		}
+
+		result[claimName] = responseResult.Value
+	}
+
+	return result, nil
+}
+
+func (c *AzureIDTokenClaims) IsEmailVerified() bool {
+	emailVerified := false
+
+	edov := c.XMicrosoftEmailDomainOwnerVerified
+
+	// If xms_edov is not set, and an email is present or xms_edov is true,
+	// only then is the email regarded as verified.
+	// https://learn.microsoft.com/en-us/azure/active-directory/develop/migrate-off-email-claim-authorization#using-the-xms_edov-optional-claim-to-determine-email-verification-status-and-migrate-users
+	if edov == nil {
+		// An email is provided, but xms_edov is not -- probably not
+		// configured, so we must assume the email is verified as Azure
+		// will only send out a potentially unverified email address in
+		// single-tenanat apps.
+		emailVerified = c.Email != ""
+	} else {
+		edovBool := false
+
+		// Azure can't be trusted with how they encode the xms_edov
+		// claim. Sometimes it's "xms_edov": "1", sometimes "xms_edov": true.
+		switch v := edov.(type) {
+		case bool:
+			edovBool = v
+
+		case string:
+			edovBool = v == "1" || v == "true"
+
+		default:
+			edovBool = false
+		}
+
+		emailVerified = c.Email != "" && edovBool
+	}
+
+	return emailVerified
+}
+
+// removeAzureClaimsFromCustomClaims contains the list of claims to be removed
+// from the CustomClaims map. See:
+// https://learn.microsoft.com/en-us/azure/active-directory/develop/id-token-claims-reference
+var removeAzureClaimsFromCustomClaims = []string{
+	"aud",
+	"iss",
+	"iat",
+	"nbf",
+	"exp",
+	"c_hash",
+	"at_hash",
+	"aio",
+	"nonce",
+	"rh",
+	"uti",
+	"jti",
+	"ver",
+	"sub",
+	"name",
+	"preferred_username",
+}
+
+func parseAzureIDToken(ctx context.Context, token *oidc.IDToken, accessToken string) (*oidc.IDToken, *UserProvidedData, error) {
+	var data UserProvidedData
+
+	var azureClaims AzureIDTokenClaims
+	if err := token.Claims(&azureClaims); err != nil {
+		return nil, nil, err
+	}
+
+	data.Metadata = &Claims{
+		Issuer:            token.Issuer,
+		Subject:           token.Subject,
+		ProviderId:        token.Subject,
+		PreferredUsername: azureClaims.PreferredUsername,
+		FullName:          azureClaims.Name,
+		CustomClaims:      make(map[string]any),
+	}
+
+	if azureClaims.Email != "" {
+		data.Emails = []Email{{
+			Email:    azureClaims.Email,
+			Verified: azureClaims.IsEmailVerified(),
+			Primary:  true,
+		}}
+	}
+
+	if err := token.Claims(&data.Metadata.CustomClaims); err != nil {
+		return nil, nil, err
+	}
+
+	resolvedClaims, err := azureClaims.ResolveIndirectClaims(ctx, http.DefaultClient, accessToken)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if data.Metadata.CustomClaims == nil {
+		if resolvedClaims != nil {
+			data.Metadata.CustomClaims = make(map[string]any, len(resolvedClaims))
+		}
+	}
+
+	if data.Metadata.CustomClaims != nil {
+		for _, claim := range removeAzureClaimsFromCustomClaims {
+			delete(data.Metadata.CustomClaims, claim)
+		}
+	}
+
+	for k, v := range resolvedClaims {
+		data.Metadata.CustomClaims[k] = v
+	}
+
+	return token, &data, nil
 }
