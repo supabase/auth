@@ -598,7 +598,7 @@ func (u *User) HighestPossibleAAL() AuthenticatorAssuranceLevel {
 
 // CountOtherUsers counts how many other users exist besides the one provided
 func CountOtherUsers(tx *storage.Connection, id uuid.UUID) (int, error) {
-	userCount, err := tx.Q().Where("instance_id = ? and id != ?", uuid.Nil, id).Count(&User{})
+	userCount, err := tx.Q().Where("and id != ?", id).Count(&User{})
 	return userCount, errors.Wrap(err, "error finding registered users")
 }
 
@@ -616,17 +616,17 @@ func findUser(tx *storage.Connection, query string, args ...interface{}) (*User,
 
 // FindUserByEmailAndAudience finds a user with the matching email and audience.
 func FindUserByEmailAndAudience(tx *storage.Connection, email, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and LOWER(email) = ? and aud = ? and is_sso_user = false", uuid.Nil, strings.ToLower(email), aud)
+	return findUser(tx, "LOWER(email) = ? and aud = ? and is_sso_user = false", strings.ToLower(email), aud)
 }
 
 // FindUserByPhoneAndAudience finds a user with the matching email and audience.
 func FindUserByPhoneAndAudience(tx *storage.Connection, phone, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and phone = ? and aud = ? and is_sso_user = false", uuid.Nil, phone, aud)
+	return findUser(tx, "phone = ? and aud = ? and is_sso_user = false", phone, aud)
 }
 
 // FindUserByID finds a user matching the provided ID.
 func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
-	return findUser(tx, "instance_id = ? and id = ?", uuid.Nil, id)
+	return findUser(tx, "id = ?", id)
 }
 
 // FindUserWithRefreshToken finds a user from the provided refresh token. If
@@ -691,7 +691,7 @@ func FindUserWithRefreshToken(tx *storage.Connection, token string, forUpdate bo
 // FindUsersInAudience finds users with the matching audience.
 func FindUsersInAudience(tx *storage.Connection, aud string, pageParams *Pagination, sortParams *SortParams, filter string) ([]*User, error) {
 	users := []*User{}
-	q := tx.Q().Where("instance_id = ? and aud = ?", uuid.Nil, aud)
+	q := tx.Q().Where("aud = ?", aud)
 
 	if filter != "" {
 		lf := "%" + filter + "%"
@@ -997,5 +997,5 @@ func obfuscateIdentityProviderId(identity *Identity) string {
 
 // FindUserByPhoneChangeAndAudience finds a user with the matching phone change and audience.
 func FindUserByPhoneChangeAndAudience(tx *storage.Connection, phone, aud string) (*User, error) {
-	return findUser(tx, "instance_id = ? and phone_change = ? and aud = ? and is_sso_user = false", uuid.Nil, phone, aud)
+	return findUser(tx, "phone_change = ? and aud = ? and is_sso_user = false", phone, aud)
 }
