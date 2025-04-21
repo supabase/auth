@@ -12,11 +12,19 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/sync/errgroup"
 )
+
+func TestLoadConfigFile(t *testing.T) {
+	// test bad multi line config value
+	if err := godotenv.Overload("testdata/60_example_newline.env"); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestWatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
@@ -463,7 +471,9 @@ func helpWriteEnvFile(t testing.TB, dir, name string, values map[string]string) 
 	for k, v := range values {
 		buf.WriteString(k)
 		buf.WriteString("=")
+		buf.WriteString(`"`)
 		buf.WriteString(v)
+		buf.WriteString(`"`)
 		buf.WriteString("\n")
 	}
 
