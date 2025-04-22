@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -103,6 +104,21 @@ func GetLogEntry(r *http.Request) *logEntry {
 		return &logEntry{Entry: logrus.NewEntry(logrus.StandardLogger())}
 	}
 	return l
+}
+
+func GetLogEntryFromContext(ctx context.Context) *logEntry {
+	l, _ := ctx.Value(chimiddleware.LogEntryCtxKey).(*logEntry)
+	if l == nil {
+		return &logEntry{Entry: logrus.NewEntry(logrus.StandardLogger())}
+	}
+	return l
+}
+
+func SetLogEntryWithContext(
+	ctx context.Context,
+	entry chimiddleware.LogEntry,
+) context.Context {
+	return context.WithValue(ctx, chimiddleware.LogEntryCtxKey, entry)
 }
 
 func LogEntrySetField(r *http.Request, key string, value interface{}) {
