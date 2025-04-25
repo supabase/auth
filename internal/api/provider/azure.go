@@ -179,8 +179,8 @@ type AzureIDTokenClaims struct {
 	PreferredUsername                  string `json:"preferred_username"`
 	XMicrosoftEmailDomainOwnerVerified any    `json:"xms_edov"`
 
-	ClaimNames   map[string]string                  `json:"__claim_names"`
-	ClaimSources map[string]AzureIDTokenClaimSource `json:"__claim_sources"`
+	ClaimNames   map[string]string                  `json:"_claim_names"`
+	ClaimSources map[string]AzureIDTokenClaimSource `json:"_claim_sources"`
 }
 
 // ResolveIndirectClaims resolves claims in the Azure Token that require a call to the Microsoft Graph API. This is typically to an API like this: https://learn.microsoft.com/en-us/graph/api/directoryobject-getmemberobjects?view=graph-rest-1.0&tabs=http
