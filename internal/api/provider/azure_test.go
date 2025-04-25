@@ -99,7 +99,7 @@ func TestAzureResolveIndirectClaimsFailures(t *testing.T) {
 		{
 			name:          "invalid url",
 			urlSuffix:     "\000",
-			expectedError: "azure: failed to create POST request to \"SERVER-URL\\x00\" (resolving overage claim \"groups\"): parse \"SERVER-URL\\x00\": net/url: invalid control character in URL",
+			expectedError: "azure: failed to parse endpoint URL \"SERVER-URL\\x00\" (resolving overage claim \"groups\"): parse \"SERVER-URL\\x00\": net/url: invalid control character in URL",
 		},
 		{
 			name:          "no such server",
@@ -141,6 +141,8 @@ func TestAzureResolveIndirectClaimsFailures(t *testing.T) {
 	for _, example := range examples {
 		t.Run(example.name, func(t *testing.T) {
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, "1.6", r.URL.Query().Get("api-version"))
+
 				w.WriteHeader(example.statusCode)
 
 				w.Write(example.body)
@@ -164,7 +166,7 @@ func TestAzureResolveIndirectClaimsFailures(t *testing.T) {
 			resolvedClaims, err := claims.ResolveIndirectClaims(context.Background(), server.Client(), "access-token")
 			require.Nil(t, resolvedClaims)
 			require.Error(t, err)
-			require.Equal(t, example.expectedError, strings.ReplaceAll(strings.ReplaceAll(err.Error(), server.URL, "SERVER-URL"), u.Port(), "PORT"))
+			require.Equal(t, example.expectedError, strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(err.Error(), server.URL, "SERVER-URL"), u.Port(), "PORT"), "?api-version=1.6", ""))
 		})
 	}
 

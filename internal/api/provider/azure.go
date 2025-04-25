@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -198,7 +199,19 @@ func (c *AzureIDTokenClaims) ResolveIndirectClaims(ctx context.Context, httpClie
 			continue
 		}
 
-		claimEndpoint := claimEndpointObject.Endpoint
+		u, err := url.ParseRequestURI(claimEndpointObject.Endpoint)
+		if err != nil {
+			return nil, fmt.Errorf("azure: failed to parse endpoint URL %q (resolving overage claim %q): %w", claimEndpointObject.Endpoint, claimName, err)
+		}
+
+		queryParams := u.Query()
+		if !queryParams.Has("api-version") {
+			// https://stackoverflow.com/questions/51085863/retrieve-group-claims-using-claim-sources-returns-the-specified-api-version-is
+			queryParams.Add("api-version", "1.6")
+			u.RawQuery = queryParams.Encode()
+		}
+
+		claimEndpoint := u.String()
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, claimEndpoint, strings.NewReader(`{"securityEnabledOnly":true}`))
 		if err != nil {
