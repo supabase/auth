@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.172.0](https://github.com/supabase/auth/compare/v2.171.0...v2.172.0) (2025-05-04)
+
+
+### Features
+
+* fix large group claim handling in azure id tokens ([#1995](https://github.com/supabase/auth/issues/1995)) ([2f323fe](https://github.com/supabase/auth/commit/2f323fe3ce2c1d24343d822ac093f28fdda3a4a9))
+* use `global_user_id` over `sub` for `vercel_marketplace` issuer ([#1990](https://github.com/supabase/auth/issues/1990)) ([f94f97e](https://github.com/supabase/auth/commit/f94f97e8d3e530d730d9352a14b477fd33548df2))
+
+
+### Bug Fixes
+
+* azure overage claims start with single `_` not two ([#1999](https://github.com/supabase/auth/issues/1999)) ([29f3440](https://github.com/supabase/auth/commit/29f3440d6376fac22568284d5b417836bf335a74))
+* remove azure claim overage code. ([#2005](https://github.com/supabase/auth/issues/2005)) ([63dce14](https://github.com/supabase/auth/commit/63dce14488f92d9e0e67028cd0ae6e002ebf532a))
+* resolving azure overage claim should include `api-version=1.6` query parameter ([#2000](https://github.com/supabase/auth/issues/2000)) ([44890d0](https://github.com/supabase/auth/commit/44890d0a6df903e765bcde509231a78f61890bec))
+* upgrade godotenv to v1.5.1 to fix multiline file loading ([#1997](https://github.com/supabase/auth/issues/1997)) ([f2af4b2](https://github.com/supabase/auth/commit/f2af4b250dc7d351ee8d0ede3a814439cac43fee))
+
 ## [2.171.0](https://github.com/supabase/auth/compare/v2.170.0...v2.171.0) (2025-04-14)
 
 
