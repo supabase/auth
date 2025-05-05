@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.172.1](https://github.com/supabase/auth/compare/v2.172.0...v2.172.1) (2025-05-05)
+
+
+### Bug Fixes
+
+* use redirect URL as-is for mobile apps ([#2007](https://github.com/supabase/auth/issues/2007)) ([b36cdcd](https://github.com/supabase/auth/commit/b36cdcdb90b8f0a96aba9572e2643c0dee3bdd9c))
+
 ## [2.172.0](https://github.com/supabase/auth/compare/v2.171.0...v2.172.0) (2025-05-04)
 
 
