@@ -109,7 +109,7 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 
 	// For case when user came from mobile app or other permitted resource - redirect back
 	for _, pattern := range config.URIAllowListMap {
-		if pattern.Match(refurl.String()) {
+		if pattern.Match(redirectURL) {
 			return true
 		}
 	}
