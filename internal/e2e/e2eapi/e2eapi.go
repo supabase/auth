@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 
 	"github.com/supabase/auth/internal/api"
 	"github.com/supabase/auth/internal/api/apierrors"
@@ -24,7 +23,6 @@ type Instance struct {
 	Conn      *storage.Connection
 	APIServer *httptest.Server
 
-	mu      sync.Mutex
 	closers []func()
 }
 
@@ -38,7 +36,7 @@ func New(globalCfg *conf.GlobalConfiguration) (*Instance, error) {
 	}
 	o.addCloser(func() {
 		if conn.Store != nil {
-			conn.Close()
+			_ = conn.Close()
 		}
 	})
 	o.Conn = conn
