@@ -34,6 +34,36 @@ func (aal AuthenticatorAssuranceLevel) String() string {
 	}
 }
 
+func (aal AuthenticatorAssuranceLevel) PointerString() *string {
+	value := aal.String()
+
+	return &value
+}
+
+// CompareAAL returns 0 if both AAL levels are equal, > 0 if A is a higher level than B or < 0 if A is a lower level than B.
+func CompareAAL(a, b AuthenticatorAssuranceLevel) int {
+	return strings.Compare(a.String(), b.String())
+}
+
+func ParseAAL(value *string) AuthenticatorAssuranceLevel {
+	if value == nil {
+		return AAL1
+	}
+
+	switch *value {
+	case AAL1.String():
+		return AAL1
+
+	case AAL2.String():
+		return AAL2
+
+	case AAL3.String():
+		return AAL3
+	}
+
+	return AAL1
+}
+
 // AMREntry represents a method that a user has logged in together with the corresponding time
 type AMREntry struct {
 	Method    string `json:"method"`
@@ -103,6 +133,10 @@ func (s *Session) LastRefreshedAt(refreshTokenTime *time.Time) time.Time {
 }
 
 func (s *Session) UpdateOnlyRefreshInfo(tx *storage.Connection) error {
+	// TODO(kangmingtay): The underlying database type uses timestamp without timezone,
+	// so we need to convert the value to UTC before updating it.
+	// In the future, we should add a migration to update the type to contain the timezone.
+	*s.RefreshedAt = s.RefreshedAt.UTC()
 	return tx.UpdateOnly(s, "refreshed_at", "user_agent", "ip")
 }
 
@@ -113,19 +147,30 @@ const (
 	SessionPastNotAfter                       = iota
 	SessionPastTimebox                        = iota
 	SessionTimedOut                           = iota
+	SessionLowAAL                             = iota
 )
 
-func (s *Session) CheckValidity(now time.Time, refreshTokenTime *time.Time, timebox, inactivityTimeout *time.Duration) SessionValidityReason {
+type SessionValidityConfig struct {
+	Timebox           *time.Duration
+	InactivityTimeout *time.Duration
+	AllowLowAAL       *time.Duration
+}
+
+func (s *Session) CheckValidity(config SessionValidityConfig, now time.Time, refreshTokenTime *time.Time, userHighestPossibleAAL AuthenticatorAssuranceLevel) SessionValidityReason {
 	if s.NotAfter != nil && now.After(*s.NotAfter) {
 		return SessionPastNotAfter
 	}
 
-	if timebox != nil && *timebox != 0 && now.After(s.CreatedAt.Add(*timebox)) {
+	if config.Timebox != nil && *config.Timebox != 0 && now.After(s.CreatedAt.Add(*config.Timebox)) {
 		return SessionPastTimebox
 	}
 
-	if inactivityTimeout != nil && *inactivityTimeout != 0 && now.After(s.LastRefreshedAt(refreshTokenTime).Add(*inactivityTimeout)) {
+	if config.InactivityTimeout != nil && *config.InactivityTimeout != 0 && now.After(s.LastRefreshedAt(refreshTokenTime).Add(*config.InactivityTimeout)) {
 		return SessionTimedOut
+	}
+
+	if config.AllowLowAAL != nil && *config.AllowLowAAL != 0 && CompareAAL(ParseAAL(s.AAL), userHighestPossibleAAL) < 0 && now.After(s.CreatedAt.Add(*config.AllowLowAAL)) {
+		return SessionLowAAL
 	}
 
 	return SessionValid
@@ -157,11 +202,9 @@ func (s *Session) DetermineTag(tags []string) string {
 func NewSession(userID uuid.UUID, factorID *uuid.UUID) (*Session, error) {
 	id := uuid.Must(uuid.NewV4())
 
-	defaultAAL := AAL1.String()
-
 	session := &Session{
 		ID:       id,
-		AAL:      &defaultAAL,
+		AAL:      AAL1.PointerString(),
 		UserID:   userID,
 		FactorID: factorID,
 	}

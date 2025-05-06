@@ -5,7 +5,10 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -31,7 +34,7 @@ func serve(ctx context.Context) {
 	}
 
 	if err := conf.LoadDirectory(watchDir); err != nil {
-		logrus.WithError(err).Fatal("unable to load config from watch dir")
+		logrus.WithError(err).Error("unable to load config from watch dir")
 	}
 
 	config, err := conf.LoadGlobalFromEnv()
@@ -46,13 +49,13 @@ func serve(ctx context.Context) {
 	defer db.Close()
 
 	addr := net.JoinHostPort(config.API.Host, config.API.Port)
-	logrus.Infof("GoTrue API started on: %s", addr)
 
 	opts := []api.Option{
 		api.NewLimiterOptions(config),
 	}
 	a := api.NewAPIWithVersion(config, db, utilities.Version, opts...)
 	ah := reloader.NewAtomicHandler(a)
+	logrus.WithField("version", a.Version()).Infof("GoTrue API started on: %s", addr)
 
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	defer baseCancel()
@@ -105,7 +108,22 @@ func serve(ctx context.Context) {
 		}
 	}()
 
-	if err := httpSrv.ListenAndServe(); err != http.ErrServerClosed {
+	lc := net.ListenConfig{
+		Control: func(network, address string, c syscall.RawConn) error {
+			var serr error
+			if err := c.Control(func(fd uintptr) {
+				serr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_REUSEPORT, 1)
+			}); err != nil {
+				return err
+			}
+			return serr
+		},
+	}
+	listener, err := lc.Listen(ctx, "tcp", addr)
+	if err != nil {
 		log.WithError(err).Fatal("http server listen failed")
+	}
+	if err := httpSrv.Serve(listener); err != nil {
+		log.WithError(err).Fatal("http server serve failed")
 	}
 }

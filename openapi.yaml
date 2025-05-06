@@ -1,13 +1,13 @@
 openapi: 3.0.3
 info:
   version: latest
-  title: GoTrue REST API (Supabase Auth)
+  title: Supabase Auth REST API
   description: |-
-    GoTrue is the software behind [Supabase Auth](https://supabase.com/auth). This is its REST API.
+    This is the REST API for [Supabase Auth](https://supabase.com/auth). Visit https://supabase.com/docs/guides/auth for complete documentation.
 
     **Notes:**
     - HTTP 5XX errors are not listed for each endpoint.
-      These should be handled globally. Not all HTTP 5XX errors are generated from GoTrue, and they may serve non-JSON content. Make sure you inspect the `Content-Type` header before parsing as JSON.
+      These should be handled globally. Not all HTTP 5XX errors are generated from Auth, and they may serve non-JSON content. Make sure you inspect the `Content-Type` header before parsing as JSON.
     - Error responses are somewhat inconsistent.
       Avoid using the `msg` and HTTP status code to identify errors. HTTP 400 and 422 are used interchangeably in many APIs.
     - If the server has CAPTCHA protection enabled, the verification token should be included in the request body.
@@ -25,7 +25,7 @@ info:
     url: https://github.com/supabase/supabase/discussions
   license:
     name: MIT License
-    url: https://github.com/supabase/gotrue/blob/master/LICENSE
+    url: https://github.com/supabase/auth/blob/master/LICENSE
 externalDocs:
   description: Learn more about Supabase Auth
   url: https://supabase.com/docs/guides/auth/overview
@@ -43,8 +43,6 @@ tags:
     description: APIs used by a user to manage their account.
   - name: oauth
     description: APIs for dealing with OAuth flows.
-  - name: oidc
-    description: APIs for dealing with OIDC authentication flows. (Experimental.)
   - name: sso
     description: APIs for authenticating using SSO providers (SAML). (Experimental.)
   - name: saml
@@ -59,13 +57,18 @@ paths:
       summary: Issues access and refresh tokens based on grant type.
       tags:
         - auth
-        - oidc
       parameters:
         - name: grant_type
           in: query
           required: true
           description: >
-            What grant type should be used to issue an access and refresh token. Note that `id_token` is only offered in experimental mode. CAPTCHA protection is not effective on the `refresh_token` grant flow.
+            - What grant type should be used to issue an access and refresh token. Note: `id_token` is only offered in experimental mode. 
+
+            - CAPTCHA protection does not apply on the `refresh_token` grant flow.
+
+            - Using `password` is akin to a user signing in. 
+
+            - `pkce` is used for exchanging the authorization code for a pair of access and refresh tokens.
           schema:
             type: string
             enum:
@@ -73,6 +76,7 @@ paths:
               - refresh_token
               - id_token
               - pkce
+              - web3
       security:
         - APIKeyAuth: []
       requestBody:
@@ -90,12 +94,18 @@ paths:
                 value:
                   auth_code: 009e5066-fc11-4eca-8c8c-6fd82aa263f2
                   code_verifier: ktPNXpR65N6JtgzQA8_5HHtH6PBSAahMNoLKRzQEa0Tzgl.vdV~b6lPk004XOd.4lR0inCde.NoQx5K63xPfzL8o7tJAjXncnhw5Niv9ycQ.QRV9JG.y3VapqbgLfIrJ
+              grant_type=web3:
+                value:
+                  message: "example.com wants you to sign in with your Solana account:\n0x1234...5678\n\nSign in with Solana\n\nURI: https://example.com\nVersion: 1\nNonce: abc123def456\nIssued At: 2023-09-19T12:00:00Z"
+                  signature: "base64_encoded_signature_string"
+                  chain: "solana"
             schema:
               type: object
               description: |-
                 For the refresh token flow, supply only `refresh_token`.
                 For the email/phone with password flow, supply `email`, `phone` and `password` with an optional `gotrue_meta_security`.
                 For the OIDC ID token flow, supply `id_token`, `nonce`, `provider`, `client_id`, `issuer` with an optional `gotrue_meta_security`.
+                For the Web3 flow, supply `message`, `signature`, and `chain`.
               properties:
                 refresh_token:
                   type: string
@@ -128,12 +138,25 @@ paths:
                   type: string
                   description: If `provider` is `azure` then you can specify any Azure OIDC issuer string here, which will be used for verification.
                 gotrue_meta_security:
-                  $ref: "#/components/schemas/GoTrueMetaSecurity"
+                  $ref: "#/components/schemas/GoTrueSecurity"
                 auth_code:
                   type: string
                   format: uuid
                 code_verifier:
                   type: string
+                message:
+                  type: string
+                  description: |
+                    Signed message for Web3 authentication following the Sign in with Solana standard. Must include: `Issued At`, `URI`, `Version`.
+                signature:
+                  type: string
+                  description: The signature of the message for Web3 authentication encoded as Base64 or Base64-URL.
+                chain:
+                  type: string
+                  description: What blockchain is the Web3 message and signature for.
+                  enum:
+                    - solana
+                  example: solana
       responses:
         200:
           description: >
@@ -372,7 +395,7 @@ paths:
                     - plain
                     - s256
                 gotrue_meta_security:
-                  $ref: "#/components/schemas/GoTrueMetaSecurity"
+                  $ref: "#/components/schemas/GoTrueSecurity"
       responses:
         200:
           description: >
@@ -416,7 +439,7 @@ paths:
                     - plain
                     - s256
                 gotrue_meta_security:
-                  $ref: "#/components/schemas/GoTrueMetaSecurity"
+                  $ref: "#/components/schemas/GoTrueSecurity"
       responses:
         200:
           description: A recovery email has been sent to the address. An empty JSON object is returned. To obfuscate whether such an email address already exists in the system this response is sent regardless whether the address exists or not.
@@ -468,7 +491,7 @@ paths:
                     - sms
                     - phone_change
                 gotrue_meta_security:
-                  $ref: "#/components/schemas/GoTrueMetaSecurity"
+                  $ref: "#/components/schemas/GoTrueSecurity"
       responses:
         200:
           description: A One-Time Password was sent to the email or phone. To obfuscate whether such an address or number already exists in the system this response is sent in both cases.
@@ -514,7 +537,7 @@ paths:
                 data:
                   type: object
                 gotrue_meta_security:
-                  $ref: "#/components/schemas/GoTrueMetaSecurity"
+                  $ref: "#/components/schemas/GoTrueSecurity"
       responses:
         200:
           description: A recovery email has been sent to the address. An empty JSON object is returned. To obfuscate whether such an email address already exists in the system this response is sent regardless whether the address exists or not.
@@ -569,7 +592,7 @@ paths:
                 code_challenge:
                   type: string
                 gotrue_meta_security:
-                  $ref: "#/components/schemas/GoTrueMetaSecurity"
+                  $ref: "#/components/schemas/GoTrueSecurity"
       responses:
         200:
           description: A One-Time Password was sent to the email or phone. To obfuscate whether such an address or number already exists in the system this response is sent in both cases.
@@ -650,6 +673,136 @@ paths:
           $ref: "#/components/responses/BadRequestResponse"
         429:
           $ref: "#/components/responses/RateLimitResponse"
+
+  /user/identities/authorize:
+    get:
+      summary: Links an OAuth identity to an existing user. Redirects to an external OAuth provider.
+      tags:
+        - user
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      parameters:
+        - name: provider
+          in: query
+          description: Name of the OAuth provider.
+          example: google
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-zA-Z0-9]+$"
+        - name: scopes
+          in: query
+          required: true
+          description: Space separated list of OAuth scopes to pass on to `provider`.
+          schema:
+            type: string
+            pattern: "[^ ]+( +[^ ]+)*"
+        - name: redirect_to
+          in: query
+          description: >
+            (Optional) URL to redirect back into the app on after OAuth sign-in completes successfully or not. If not specified will use the "Site URL" configuration option. If not allowed per the allow list it will use the "Site URL" configuration option.
+          schema:
+            type: string
+            format: uri
+        - name: code_challenge_method
+          in: query
+          description: (Optional) Method used to encrypt the verifier. Can be `plain` (no transformation) or `s256` (where SHA-256 is used). It is always recommended that `s256` is used.
+          schema:
+            type: string
+            enum:
+              - plain
+              - s256
+      responses:
+        302:
+          $ref: "#/components/responses/OAuthAuthorizeRedirectResponse"
+    
+  /user/identities/{identityId}:
+    parameters:
+      - name: identityId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      summary: Unlinks an identity from the current user.
+      tags:
+        - user
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      responses:
+        200:
+          description: User's account data.
+          content:
+            application/json:
+              schema:
+                type: object
+        401:
+          description: The user is not authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/responses/UnauthorizedResponse"
+              examples:
+                example:
+                  summary: no_authorization
+                  value:
+                    error_code: no_authorization
+        403:
+          description: Forbidden error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/responses/ForbiddenResponse"
+              examples:
+                example:
+                  summary: bad_jwt
+                  value:
+                    error_code: bad_jwt
+                example1:
+                  summary: unexpected_audience
+                  value:
+                    error_code: unexpected_audience
+        404:
+          description: Not found error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: manual_linking_disabled
+                  value:
+                    error_code: manual_linking_disabled
+                example1:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+        422: 
+          description: Unprocessable entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                example:
+                  summary: single_identity_not_deletable
+                  value:
+                    error_code: single_identity_not_deletable
+                example1:
+                  summary: identity_already_exists
+                  value:
+                    error_code: identity_already_exists
+                example2:
+                  summary: identity_not_found
+                  value:
+                    error_code: identity_not_found
+                example3:
+                  summary: email_conflict_identity_not_deletable
+                  value:
+                    error_code: email_conflict_identity_not_deletable
 
   /reauthenticate:
     post:
@@ -910,7 +1063,7 @@ paths:
                     - plain
                     - s256
                 gotrue_meta_security:
-                  $ref: "#/components/schemas/GoTrueMetaSecurity"
+                  $ref: "#/components/schemas/GoTrueSecurity"
       responses:
         200:
           description: >
@@ -949,7 +1102,7 @@ paths:
       tags:
         - saml
       security:
-        - ApiKeyAuth: []
+        - APIKeyAuth: []
       parameters:
         - name: download
           in: query
@@ -1146,13 +1299,13 @@ paths:
           in: query
           schema:
             type: integer
-            min: 1
+            minimum: 1
             default: 1
         - name: per_page
           in: query
           schema:
             type: integer
-            min: 1
+            minimum: 1
             default: 50
       responses:
         200:
@@ -1241,13 +1394,13 @@ paths:
           in: query
           schema:
             type: integer
-            min: 1
+            minimum: 1
             default: 1
         - name: per_page
           in: query
           schema:
             type: integer
-            min: 1
+            minimum: 1
             default: 50
       responses:
         200:
@@ -1739,7 +1892,7 @@ components:
         When deployed on Supabase, this server requires an `apikey` header containing a valid Supabase-issued API key to call any endpoint.
 
   schemas:
-    GoTrueMetaSecurity:
+    GoTrueSecurity:
       type: object
       description: >
         Use this property to pass a CAPTCHA token only if you have enabled CAPTCHA protection.
@@ -1775,6 +1928,10 @@ components:
           type: string
           description: >
             A basic message describing the problem with the request. Usually missing if `error` is present.
+        error_code:
+          type: string
+          description: >
+            A short code used to describe the class of error encountered.
         weak_password:
           type: object
           description: >
@@ -1974,7 +2131,7 @@ components:
             - phone
             - webauthn
         web_authn_credential:
-          type: jsonb
+          type: string
         phone:
           type: string
           format: phone

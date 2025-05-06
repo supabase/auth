@@ -8,6 +8,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -36,7 +37,7 @@ func (a *API) requireNotAnonymous(w http.ResponseWriter, r *http.Request) (conte
 	ctx := r.Context()
 	claims := getClaims(ctx)
 	if claims.IsAnonymous {
-		return nil, forbiddenError(ErrorCodeNoAuthorization, "Anonymous user not allowed to perform these actions")
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeNoAuthorization, "Anonymous user not allowed to perform these actions")
 	}
 	return ctx, nil
 }
@@ -45,7 +46,7 @@ func (a *API) requireAdmin(ctx context.Context) (context.Context, error) {
 	// Find the administrative user
 	claims := getClaims(ctx)
 	if claims == nil {
-		return nil, forbiddenError(ErrorCodeBadJWT, "Invalid token")
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "Invalid token")
 	}
 
 	adminRoles := a.config.JWT.AdminRoles
@@ -55,14 +56,14 @@ func (a *API) requireAdmin(ctx context.Context) (context.Context, error) {
 		return withAdminUser(ctx, &models.User{Role: claims.Role, Email: storage.NullString(claims.Role)}), nil
 	}
 
-	return nil, forbiddenError(ErrorCodeNotAdmin, "User not allowed").WithInternalMessage(fmt.Sprintf("this token needs to have one of the following roles: %v", strings.Join(adminRoles, ", ")))
+	return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeNotAdmin, "User not allowed").WithInternalMessage(fmt.Sprintf("this token needs to have one of the following roles: %v", strings.Join(adminRoles, ", ")))
 }
 
 func (a *API) extractBearerToken(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	matches := bearerRegexp.FindStringSubmatch(authHeader)
 	if len(matches) != 2 {
-		return "", httpError(http.StatusUnauthorized, ErrorCodeNoAuthorization, "This endpoint requires a Bearer token")
+		return "", apierrors.NewHTTPError(http.StatusUnauthorized, apierrors.ErrorCodeNoAuthorization, "This endpoint requires a Bearer token")
 	}
 
 	return matches[1], nil
@@ -88,7 +89,7 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request) (context.Context, e
 		return nil, fmt.Errorf("missing kid")
 	})
 	if err != nil {
-		return nil, forbiddenError(ErrorCodeBadJWT, "invalid JWT: unable to parse or verify signature, %v", err).WithInternalError(err)
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "invalid JWT: unable to parse or verify signature, %v", err).WithInternalError(err)
 	}
 
 	return withToken(ctx, token), nil
@@ -99,23 +100,23 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 	claims := getClaims(ctx)
 
 	if claims == nil {
-		return ctx, forbiddenError(ErrorCodeBadJWT, "invalid token: missing claims")
+		return ctx, apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "invalid token: missing claims")
 	}
 
 	if claims.Subject == "" {
-		return nil, forbiddenError(ErrorCodeBadJWT, "invalid claim: missing sub claim")
+		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "invalid claim: missing sub claim")
 	}
 
 	var user *models.User
 	if claims.Subject != "" {
 		userId, err := uuid.FromString(claims.Subject)
 		if err != nil {
-			return ctx, badRequestError(ErrorCodeBadJWT, "invalid claim: sub claim must be a UUID").WithInternalError(err)
+			return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadJWT, "invalid claim: sub claim must be a UUID").WithInternalError(err)
 		}
 		user, err = models.FindUserByID(db, userId)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return ctx, forbiddenError(ErrorCodeUserNotFound, "User from sub claim in JWT does not exist")
+				return ctx, apierrors.NewForbiddenError(apierrors.ErrorCodeUserNotFound, "User from sub claim in JWT does not exist")
 			}
 			return ctx, err
 		}
@@ -126,12 +127,12 @@ func (a *API) maybeLoadUserOrSession(ctx context.Context) (context.Context, erro
 	if claims.SessionId != "" && claims.SessionId != uuid.Nil.String() {
 		sessionId, err := uuid.FromString(claims.SessionId)
 		if err != nil {
-			return ctx, forbiddenError(ErrorCodeBadJWT, "invalid claim: session_id claim must be a UUID").WithInternalError(err)
+			return ctx, apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "invalid claim: session_id claim must be a UUID").WithInternalError(err)
 		}
 		session, err = models.FindSessionByID(db, sessionId, false)
 		if err != nil {
 			if models.IsNotFoundError(err) {
-				return ctx, forbiddenError(ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist").WithInternalError(err).WithInternalMessage(fmt.Sprintf("session id (%s) doesn't exist", sessionId))
+				return ctx, apierrors.NewForbiddenError(apierrors.ErrorCodeSessionNotFound, "Session from session_id claim in JWT does not exist").WithInternalError(err).WithInternalMessage(fmt.Sprintf("session id (%s) doesn't exist", sessionId))
 			}
 			return ctx, err
 		}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/api/apierrors"
 )
 
 // BCrypt hashed passwords have a 72 character limit
@@ -28,7 +29,7 @@ func (a *API) checkPasswordStrength(ctx context.Context, password string) error 
 	config := a.config
 
 	if len(password) > MaxPasswordLength {
-		return badRequestError(ErrorCodeValidationFailed, fmt.Sprintf("Password cannot be longer than %v characters", MaxPasswordLength))
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Password cannot be longer than %v characters", MaxPasswordLength))
 	}
 
 	var messages, reasons []string
@@ -52,7 +53,7 @@ func (a *API) checkPasswordStrength(ctx context.Context, password string) error 
 		pwned, err := a.hibpClient.Check(ctx, password)
 		if err != nil {
 			if config.Password.HIBP.FailClosed {
-				return internalServerError("Unable to perform password strength check with HaveIBeenPwned.org.").WithInternalError(err)
+				return apierrors.NewInternalServerError("Unable to perform password strength check with HaveIBeenPwned.org.").WithInternalError(err)
 			} else {
 				logrus.WithError(err).Warn("Unable to perform password strength check with HaveIBeenPwned.org, pwned passwords are being allowed")
 			}

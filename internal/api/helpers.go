@@ -7,9 +7,11 @@ import (
 	"net/http"
 
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/security"
+
 	"github.com/supabase/auth/internal/utilities"
 )
 
@@ -74,6 +76,7 @@ type RequestParams interface {
 		SignupParams |
 		SingleSignOnParams |
 		SmsParams |
+		Web3GrantParams |
 		UserUpdateParams |
 		VerifyFactorParams |
 		VerifyParams |
@@ -81,6 +84,7 @@ type RequestParams interface {
 		adminUserDeleteParams |
 		security.GotrueRequest |
 		ChallengeFactorParams |
+
 		struct {
 			Email string `json:"email"`
 			Phone string `json:"phone"`
@@ -94,10 +98,10 @@ type RequestParams interface {
 func retrieveRequestParams[A RequestParams](r *http.Request, params *A) error {
 	body, err := utilities.GetBodyBytes(r)
 	if err != nil {
-		return internalServerError("Could not read body into byte slice").WithInternalError(err)
+		return apierrors.NewInternalServerError("Could not read body into byte slice").WithInternalError(err)
 	}
 	if err := json.Unmarshal(body, params); err != nil {
-		return badRequestError(ErrorCodeBadJSON, "Could not parse request body as JSON: %v", err)
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeBadJSON, "Could not parse request body as JSON: %v", err)
 	}
 	return nil
 }

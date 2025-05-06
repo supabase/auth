@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/supabase/auth/internal/conf"
@@ -79,6 +80,8 @@ func GetReferrer(r *http.Request, config *conf.GlobalConfiguration) string {
 	return config.SiteURL
 }
 
+var decimalIPAddressPattern = regexp.MustCompile("^[0-9]+$")
+
 func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bool {
 	if redirectURL == "" {
 		return false
@@ -90,6 +93,18 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 	// As long as the referrer came from the site, we will redirect back there
 	if berr == nil && rerr == nil && base.Hostname() == refurl.Hostname() {
 		return true
+	}
+
+	if rerr != nil {
+		// redirect URL is for some reason invalid
+		return false
+	}
+
+	if decimalIPAddressPattern.MatchString(refurl.Hostname()) {
+		// IP address in decimal form also not allowed in redirects!
+		return false
+	} else if ip := net.ParseIP(refurl.Hostname()); ip != nil {
+		return ip.IsLoopback()
 	}
 
 	// For case when user came from mobile app or other permitted resource - redirect back

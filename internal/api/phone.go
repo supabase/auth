@@ -8,11 +8,11 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/supabase/auth/internal/hooks"
-
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -27,7 +27,7 @@ const (
 func validatePhone(phone string) (string, error) {
 	phone = formatPhoneNumber(phone)
 	if isValid := validateE164Format(phone); !isValid {
-		return "", badRequestError(ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
+		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid phone number format (E.164 required)")
 	}
 	return phone, nil
 }
@@ -65,19 +65,18 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		sentAt = user.ReauthenticationSentAt
 		includeFields = append(includeFields, "reauthentication_token", "reauthentication_sent_at")
 	default:
-		return "", internalServerError("invalid otp type")
+		return "", apierrors.NewInternalServerError("invalid otp type")
 	}
 
 	// intentionally keeping this before the test OTP, so that the behavior
 	// of regular and test OTPs is similar
 	if sentAt != nil && !sentAt.Add(config.Sms.MaxFrequency).Before(time.Now()) {
-		return "", tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(sentAt, config.Sms.MaxFrequency))
+		return "", apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(sentAt, config.Sms.MaxFrequency))
 	}
 
 	now := time.Now()
 
 	var otp, messageID string
-	var err error
 
 	if testOTP, ok := config.Sms.GetTestOTP(phone, now); ok {
 		otp = testOTP
@@ -90,37 +89,35 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		if !config.Sms.Autoconfirm {
 			// apply rate limiting before the sms is sent out
 			if ok := a.limiterOpts.Phone.Allow(); !ok {
-				return "", tooManyRequestsError(ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
+				return "", apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
 			}
 		}
-		otp, err = crypto.GenerateOtp(config.Sms.OtpLength)
-		if err != nil {
-			return "", internalServerError("error generating otp").WithInternalError(err)
-		}
+		otp = crypto.GenerateOtp(config.Sms.OtpLength)
+
 		if config.Hook.SendSMS.Enabled {
-			input := hooks.SendSMSInput{
+			input := v0hooks.SendSMSInput{
 				User: user,
-				SMS: hooks.SMS{
+				SMS: v0hooks.SMS{
 					OTP: otp,
 				},
 			}
-			output := hooks.SendSMSOutput{}
-			err := a.invokeHook(tx, r, &input, &output)
+			output := v0hooks.SendSMSOutput{}
+			err := a.hooksMgr.InvokeHook(tx, r, &input, &output)
 			if err != nil {
 				return "", err
 			}
 		} else {
 			smsProvider, err := sms_provider.GetSmsProvider(*config)
 			if err != nil {
-				return "", internalServerError("Unable to get SMS provider").WithInternalError(err)
+				return "", apierrors.NewInternalServerError("Unable to get SMS provider").WithInternalError(err)
 			}
 			message, err := generateSMSFromTemplate(config.Sms.SMSTemplate, otp)
 			if err != nil {
-				return "", internalServerError("error generating sms template").WithInternalError(err)
+				return "", apierrors.NewInternalServerError("error generating sms template").WithInternalError(err)
 			}
 			messageID, err := smsProvider.SendMessage(phone, message, channel, otp)
 			if err != nil {
-				return messageID, unprocessableEntityError(ErrorCodeSMSSendFailed, "Error sending %s OTP to provider: %v", otpType, err)
+				return messageID, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeSMSSendFailed, "Error sending %s OTP to provider: %v", otpType, err)
 			}
 		}
 	}
@@ -156,7 +153,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 		}
 	}
 	if ottErr != nil {
-		return messageID, internalServerError("error creating one time token").WithInternalError(ottErr)
+		return messageID, apierrors.NewInternalServerError("error creating one time token").WithInternalError(ottErr)
 	}
 	return messageID, nil
 }

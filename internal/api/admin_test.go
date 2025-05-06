@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 )
@@ -908,7 +909,7 @@ func (ts *AdminTestSuite) TestAdminUserCreateValidationErrors() {
 
 			data := map[string]interface{}{}
 			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-			require.Equal(ts.T(), data["error_code"], ErrorCodeValidationFailed)
+			require.Equal(ts.T(), data["error_code"], apierrors.ErrorCodeValidationFailed)
 		})
 
 	}

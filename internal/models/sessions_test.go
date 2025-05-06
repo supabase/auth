@@ -102,3 +102,53 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 	}
 	require.True(ts.T(), found)
 }
+
+func pointerDuration(value time.Duration) *time.Duration {
+	return &value
+}
+
+func TestCheckValidity(t *testing.T) {
+	start := time.Now()
+
+	examples := []struct {
+		name               string
+		session            *Session
+		highestPossibleAAL AuthenticatorAssuranceLevel
+		now                time.Time
+		config             SessionValidityConfig
+		expected           SessionValidityReason
+	}{
+		{
+			name:               "low aal session past creation time is invalid",
+			now:                start.Add(time.Second * 61),
+			highestPossibleAAL: AAL2,
+			session: &Session{
+				AAL:       AAL1.PointerString(),
+				CreatedAt: start,
+			},
+			config: SessionValidityConfig{
+				AllowLowAAL: pointerDuration(time.Second * 60),
+			},
+			expected: SessionLowAAL,
+		},
+		{
+			name:               "high aal session is valid past creation time",
+			now:                start.Add(time.Second * 61),
+			highestPossibleAAL: AAL2,
+			session: &Session{
+				AAL:       AAL2.PointerString(),
+				CreatedAt: start,
+			},
+			config: SessionValidityConfig{
+				AllowLowAAL: pointerDuration(time.Second * 60),
+			},
+			expected: SessionValid,
+		},
+	}
+
+	for _, example := range examples {
+		t.Run(example.name, func(t *testing.T) {
+			require.Equal(t, example.expected, example.session.CheckValidity(example.config, example.now, &example.now, example.highestPossibleAAL))
+		})
+	}
+}

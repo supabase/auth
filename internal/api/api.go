@@ -8,7 +8,9 @@ import (
 	"github.com/rs/cors"
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
@@ -31,12 +33,20 @@ type API struct {
 	config  *conf.GlobalConfiguration
 	version string
 
+	hooksMgr   *hooks.Manager
 	hibpClient *hibp.PwnedClient
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
 
 	limiterOpts *LimiterOptions
+}
+
+func (a *API) GetConfig() *conf.GlobalConfiguration { return a.config }
+func (a *API) GetDB() *storage.Connection           { return a.db }
+
+func (a *API) Version() string {
+	return a.version
 }
 
 func (a *API) Now() time.Time {
@@ -75,6 +85,9 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	}
 	if api.limiterOpts == nil {
 		api.limiterOpts = NewLimiterOptions(globalConfig)
+	}
+	if api.hooksMgr == nil {
+		api.hooksMgr = hooks.NewManager(db, globalConfig)
 	}
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
@@ -133,6 +146,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	})
 
 	r.Route("/", func(r *router) {
+
 		r.Use(api.isValidExternalHost)
 
 		r.Get("/settings", api.Settings)
@@ -151,7 +165,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				}
 				if params.Email == "" && params.Phone == "" {
 					if !api.config.External.AnonymousUsers.Enabled {
-						return unprocessableEntityError(ErrorCodeAnonymousProviderDisabled, "Anonymous sign-ins are disabled")
+						return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeAnonymousProviderDisabled, "Anonymous sign-ins are disabled")
 					}
 					if _, err := api.limitHandler(limitAnonymousSignIns)(w, r); err != nil {
 						return err
@@ -178,8 +192,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		r.With(api.limitHandler(api.limiterOpts.Otp)).
 			With(api.verifyCaptcha).Post("/otp", api.Otp)
 
-		r.With(api.limitHandler(api.limiterOpts.Token)).
-			With(api.verifyCaptcha).Post("/token", api.Token)
+		// rate limiting applied in handler
+		r.With(api.verifyCaptcha).Post("/token", api.Token)
 
 		r.With(api.limitHandler(api.limiterOpts.Verify)).Route("/verify", func(r *router) {
 			r.Get("/", api.Verify)

@@ -449,6 +449,12 @@ func (u *User) Confirm(tx *storage.Connection) error {
 		return err
 	}
 
+	if err := u.UpdateUserMetaData(tx, map[string]interface{}{
+		"email_verified": true,
+	}); err != nil {
+		return err
+	}
+
 	if err := ClearAllOneTimeTokensForUser(tx, u.ID); err != nil {
 		return err
 	}
@@ -462,7 +468,7 @@ func (u *User) ConfirmPhone(tx *storage.Connection) error {
 	now := time.Now()
 	u.PhoneConfirmedAt = &now
 	if err := tx.UpdateOnly(u, "confirmation_token", "phone_confirmed_at"); err != nil {
-		return nil
+		return err
 	}
 
 	return ClearAllOneTimeTokensForUser(tx, u.ID)
@@ -576,6 +582,18 @@ func (u *User) Recover(tx *storage.Connection) error {
 	}
 
 	return ClearAllOneTimeTokensForUser(tx, u.ID)
+}
+
+// HighestPossibleAAL returns the AAL level that this user can obtain. Derived
+// from the number of verified MFA factors associated with the user object.
+func (u *User) HighestPossibleAAL() AuthenticatorAssuranceLevel {
+	for _, factor := range u.Factors {
+		if factor.Status == FactorStateVerified.String() {
+			return AAL2
+		}
+	}
+
+	return AAL1
 }
 
 // CountOtherUsers counts how many other users exist besides the one provided

@@ -1,4 +1,4 @@
-FROM golang:1.22.3-alpine3.20 as build
+FROM golang:1.23.7-alpine3.20 as build
 ENV GO111MODULE=on
 ENV CGO_ENABLED=0
 ENV GOOS=linux
@@ -17,7 +17,8 @@ COPY . /go/src/github.com/supabase/auth
 # Make sure you change the RELEASE_VERSION value before publishing an image.
 RUN RELEASE_VERSION=unspecified make build
 
-FROM alpine:3.20
+# Always use alpine:3 so the latest version is used. This will keep CA certs more up to date.
+FROM alpine:3
 RUN adduser -D -u 1000 supabase
 
 RUN apk add --no-cache ca-certificates

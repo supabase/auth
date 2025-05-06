@@ -13,6 +13,7 @@ import (
 	"github.com/gofrs/uuid"
 
 	"github.com/pquerna/otp"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
@@ -299,7 +300,7 @@ func (ts *MFATestSuite) TestDuplicateTOTPEnrollsReturnExpectedMessage() {
 	err := json.NewDecoder(response.Body).Decode(&errorResponse)
 	require.NoError(ts.T(), err)
 
-	require.Contains(ts.T(), errorResponse.ErrorCode, ErrorCodeMFAFactorNameConflict)
+	require.Contains(ts.T(), errorResponse.ErrorCode, apierrors.ErrorCodeMFAFactorNameConflict)
 }
 
 func (ts *MFATestSuite) AAL2RequiredToUpdatePasswordAfterEnrollment() {
@@ -525,7 +526,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			} else if v.factorType == models.Phone {
 				friendlyName := uuid.Must(uuid.NewV4()).String()
 				numDigits := 10
-				otp, err := crypto.GenerateOtp(numDigits)
+				otp := crypto.GenerateOtp(numDigits)
 				require.NoError(ts.T(), err)
 				phone := fmt.Sprintf("+%s", otp)
 				f = models.NewPhoneFactor(ts.TestUser, phone, friendlyName)
@@ -748,7 +749,7 @@ func (ts *MFATestSuite) TestChallengeFactorNotOwnedByUser() {
 
 	w := ServeAuthenticatedRequest(ts, http.MethodPost, fmt.Sprintf("http://localhost/factors/%s/challenge", otherUsersPhoneFactor.ID), signUpResp.Token, buffer)
 
-	expectedError := notFoundError(ErrorCodeMFAFactorNotFound, "Factor not found")
+	expectedError := apierrors.NewNotFoundError(apierrors.ErrorCodeMFAFactorNotFound, "Factor not found")
 
 	var data HTTPError
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))

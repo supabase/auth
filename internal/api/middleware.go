@@ -11,7 +11,9 @@ import (
 	"sync"
 	"time"
 
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/security"
@@ -55,25 +57,27 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 
 var emailRateLimitCounter = observability.ObtainMetricCounter("gotrue_email_rate_limit_counter", "Number of times an email rate limit has been triggered")
 
-func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
-	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
-		c := req.Context()
+func (a *API) performRateLimiting(lmt *limiter.Limiter, req *http.Request) error {
+	if limitHeader := a.config.RateLimitHeader; limitHeader != "" {
+		key := req.Header.Get(limitHeader)
 
-		if limitHeader := a.config.RateLimitHeader; limitHeader != "" {
-			key := req.Header.Get(limitHeader)
-
-			if key == "" {
-				log := observability.GetLogEntry(req).Entry
-				log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
-				return c, nil
-			} else {
-				err := tollbooth.LimitByKeys(lmt, []string{key})
-				if err != nil {
-					return c, tooManyRequestsError(ErrorCodeOverRequestRateLimit, "Request rate limit reached")
-				}
+		if key == "" {
+			log := observability.GetLogEntry(req).Entry
+			log.WithField("header", limitHeader).Warn("request does not have a value for the rate limiting header, rate limiting is not applied")
+		} else {
+			err := tollbooth.LimitByKeys(lmt, []string{key})
+			if err != nil {
+				return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverRequestRateLimit, "Request rate limit reached")
 			}
 		}
-		return c, nil
+	}
+
+	return nil
+}
+
+func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
+	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+		return req.Context(), a.performRateLimiting(lmt, req)
 	}
 }
 
@@ -96,7 +100,7 @@ func (a *API) requireEmailProvider(w http.ResponseWriter, req *http.Request) (co
 	config := a.config
 
 	if !config.External.Email.Enabled {
-		return nil, badRequestError(ErrorCodeEmailProviderDisabled, "Email logins are disabled")
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeEmailProviderDisabled, "Email logins are disabled")
 	}
 
 	return ctx, nil
@@ -124,22 +128,38 @@ func (a *API) verifyCaptcha(w http.ResponseWriter, req *http.Request) (context.C
 
 	verificationResult, err := security.VerifyRequest(body, utilities.GetIPAddress(req), strings.TrimSpace(config.Security.Captcha.Secret), config.Security.Captcha.Provider)
 	if err != nil {
-		return nil, internalServerError("captcha verification process failed").WithInternalError(err)
+		return nil, apierrors.NewInternalServerError("captcha verification process failed").WithInternalError(err)
 	}
 
 	if !verificationResult.Success {
-		return nil, badRequestError(ErrorCodeCaptchaFailed, "captcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeCaptchaFailed, "captcha protection: request disallowed (%s)", strings.Join(verificationResult.ErrorCodes, ", "))
 	}
 
 	return ctx, nil
 }
 
 func isIgnoreCaptchaRoute(req *http.Request) bool {
-	// captcha shouldn't be enabled on the following grant_types
-	// id_token, refresh_token, pkce
-	if req.URL.Path == "/token" && req.FormValue("grant_type") != "password" {
-		return true
+	if req.URL.Path != "/token" {
+		return false
 	}
+
+	switch req.FormValue("grant_type") {
+	case "pkce":
+		return true
+
+	case "refresh_token":
+		return true
+
+	case "id_token":
+		return true
+
+	case "password":
+		return false
+
+	case "web3":
+		return false
+	}
+
 	return false
 }
 
@@ -232,7 +252,7 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.SAML.Enabled {
-		return nil, notFoundError(ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled")
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled")
 	}
 	return ctx, nil
 }
@@ -240,20 +260,23 @@ func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (cont
 func (a *API) requireManualLinkingEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.Security.ManualLinkingEnabled {
-		return nil, notFoundError(ErrorCodeManualLinkingDisabled, "Manual linking is disabled")
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeManualLinkingDisabled, "Manual linking is disabled")
 	}
 	return ctx, nil
 }
 
-func (a *API) databaseCleanup(cleanup *models.Cleanup) func(http.Handler) http.Handler {
+func (a *API) databaseCleanup(cleanup models.Cleaner) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
-
+			wrappedResp := chimiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
+			next.ServeHTTP(wrappedResp, r)
 			switch r.Method {
 			case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+				if (wrappedResp.Status() / 100) != 2 {
+					// don't do any cleanups for non-2xx responses
+					return
+				}
 				// continue
-
 			default:
 				return
 			}
@@ -377,7 +400,7 @@ func timeoutMiddleware(timeout time.Duration) func(http.Handler) http.Handler {
 				if err == context.DeadlineExceeded {
 					httpError := &HTTPError{
 						HTTPStatus: http.StatusGatewayTimeout,
-						ErrorCode:  ErrorCodeRequestTimeout,
+						ErrorCode:  apierrors.ErrorCodeRequestTimeout,
 						Message:    "Processing this request timed out, please retry after a moment.",
 					}
 

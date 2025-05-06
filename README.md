@@ -1,6 +1,6 @@
 # Auth - Authentication and User Management by Supabase
 
-[![Coverage Status](https://coveralls.io/repos/github/supabase/auth/badge.svg?branch=master)](https://coveralls.io/github/supabase/gotrue?branch=master)
+[![Coverage Status](https://coveralls.io/repos/github/supabase/auth/badge.svg?branch=master)](https://coveralls.io/github/supabase/auth?branch=master)
 
 Auth is a user management and authentication server written in Go that powers
 [Supabase](https://supabase.com)'s features such as:
@@ -30,12 +30,12 @@ Create a `.env` file to store your own custom env vars. See [`example.env`](exam
 1. Start the local postgres database in a postgres container: `docker-compose -f docker-compose-dev.yml up postgres`
 2. Build the auth binary: `make build` . You should see an output like this:
 
-```
+```bash
 go build -ldflags "-X github.com/supabase/auth/cmd.Version=`git rev-parse HEAD`"
 GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/supabase/auth/cmd.Version=`git rev-parse HEAD`" -o gotrue-arm64
 ```
 
-3. Execute the auth binary: `./gotrue`
+3. Execute the auth binary: `./auth`
 
 ### If you have docker installed
 
@@ -468,7 +468,7 @@ The base URL used for constructing the URLs to request authorization and access 
 To try out external authentication with Apple locally, you will need to do the following:
 
 1. Remap localhost to \<my_custom_dns \> in your `/etc/hosts` config.
-2. Configure auth to serve HTTPS traffic over localhost by replacing `ListenAndServe` in [api.go](api/api.go) with:
+2. Configure auth to serve HTTPS traffic over localhost by replacing `ListenAndServe` in [api.go](internal/api/api.go) with:
 
    ```
       func (a *API) ListenAndServe(hostAndPort string) {
@@ -820,7 +820,7 @@ Returns
 
 Register a new user with an email and password.
 
-```js
+```json
 {
   "email": "email@example.com",
   "password": "secret"
@@ -829,7 +829,7 @@ Register a new user with an email and password.
 
 returns:
 
-```json
+```js
 {
   "id": "11111111-2222-3333-4444-5555555555555",
   "email": "email@example.com",
@@ -854,7 +854,7 @@ Register a new user with a phone number and password.
 
 Returns:
 
-```json
+```js
 {
   "id": "11111111-2222-3333-4444-5555555555555", // if duplicate sign up, this ID will be faux
   "phone": "12345678",
@@ -866,10 +866,36 @@ Returns:
 
 if AUTOCONFIRM is enabled and the sign up is a duplicate, then the endpoint will return:
 
-```
+```json
 {
   "code":400,
   "msg":"User already registered"
+}
+```
+
+### **POST /resend**
+
+Allows a user to resend an existing signup, sms, email_change or phone_change OTP.
+
+```json
+{
+  "email": "user@example.com",
+  "type": "signup"
+}
+```
+
+```json
+{
+  "phone": "12345678",
+  "type": "sms"
+}
+```
+
+returns:
+
+```json
+{
+  "message_id": "msgid123456"
 }
 ```
 
@@ -880,7 +906,7 @@ This endpoint requires the `service_role` or `supabase_admin` JWT set as an Auth
 
 e.g.
 
-```json
+```js
 headers: {
   "Authorization" : "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO"
 }
@@ -970,7 +996,7 @@ query params:
 
 User will be logged in and redirected to:
 
-```json
+```
 SITE_URL/#access_token=jwt-token-representing-the-user&token_type=bearer&expires_in=3600&refresh_token=a-refresh-token&type=invite
 ```
 
@@ -990,9 +1016,11 @@ If `"create_user": true`, user will not be automatically signed up if the user d
   "phone": "12345678" // follows the E.164 format
   "create_user": true
 }
+```
 
 OR
 
+```js
 // exactly the same as /magiclink
 {
   "email": "email@example.com"
@@ -1002,7 +1030,7 @@ OR
 
 Returns:
 
-```
+```json
 {}
 ```
 
@@ -1059,7 +1087,7 @@ query params:
 
 body:
 
-```json
+```js
 // Email login
 {
   "email": "name@domain.com",
@@ -1164,7 +1192,7 @@ If `GOTRUE_SECURITY_UPDATE_PASSWORD_REQUIRE_REAUTHENTICATION` is enabled, the us
 
 Sends a nonce to the user's email (preferred) or phone. This endpoint requires the user to be logged in / authenticated first. The user needs to have either an email or phone number for the nonce to be sent successfully.
 
-```json
+```js
 headers: {
   "Authorization" : "Bearer eyJhbGciOiJI...M3A90LCkxxtX9oNP9KZO"
 }

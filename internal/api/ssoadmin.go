@@ -12,6 +12,7 @@ import (
 	"github.com/crewjam/saml/samlsp"
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -29,16 +30,16 @@ func (a *API) loadSSOProvider(w http.ResponseWriter, r *http.Request) (context.C
 	idpID, err := uuid.FromString(idpParam)
 	if err != nil {
 		// idpParam is not UUIDv4
-		return nil, notFoundError(ErrorCodeSSOProviderNotFound, "SSO Identity Provider not found")
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "SSO Identity Provider not found")
 	}
 
 	// idpParam is a UUIDv4
 	provider, err := models.FindSSOProviderByID(db, idpID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, notFoundError(ErrorCodeSSOProviderNotFound, "SSO Identity Provider not found")
+			return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "SSO Identity Provider not found")
 		} else {
-			return nil, internalServerError("Database error finding SSO Identity Provider").WithInternalError(err)
+			return nil, apierrors.NewInternalServerError("Database error finding SSO Identity Provider").WithInternalError(err)
 		}
 	}
 
@@ -80,19 +81,19 @@ type CreateSSOProviderParams struct {
 
 func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
 	if !forUpdate && p.Type != "saml" {
-		return badRequestError(ErrorCodeValidationFailed, "Only 'saml' supported for SSO provider type")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Only 'saml' supported for SSO provider type")
 	} else if p.MetadataURL != "" && p.MetadataXML != "" {
-		return badRequestError(ErrorCodeValidationFailed, "Only one of metadata_xml or metadata_url needs to be set")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Only one of metadata_xml or metadata_url needs to be set")
 	} else if !forUpdate && p.MetadataURL == "" && p.MetadataXML == "" {
-		return badRequestError(ErrorCodeValidationFailed, "Either metadata_xml or metadata_url must be set")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Either metadata_xml or metadata_url must be set")
 	} else if p.MetadataURL != "" {
 		metadataURL, err := url.ParseRequestURI(p.MetadataURL)
 		if err != nil {
-			return badRequestError(ErrorCodeValidationFailed, "metadata_url is not a valid URL")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "metadata_url is not a valid URL")
 		}
 
 		if metadataURL.Scheme != "https" {
-			return badRequestError(ErrorCodeValidationFailed, "metadata_url is not a HTTPS URL")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "metadata_url is not a HTTPS URL")
 		}
 	}
 
@@ -105,7 +106,7 @@ func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
 		// it's valid
 
 	default:
-		return badRequestError(ErrorCodeValidationFailed, "name_id_format must be unspecified or one of %v", strings.Join([]string{
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "name_id_format must be unspecified or one of %v", strings.Join([]string{
 			string(saml.PersistentNameIDFormat),
 			string(saml.EmailAddressNameIDFormat),
 			string(saml.TransientNameIDFormat),
@@ -142,7 +143,7 @@ func (p *CreateSSOProviderParams) metadata(ctx context.Context) ([]byte, *saml.E
 
 func parseSAMLMetadata(rawMetadata []byte) (*saml.EntityDescriptor, error) {
 	if !utf8.Valid(rawMetadata) {
-		return nil, badRequestError(ErrorCodeValidationFailed, "SAML Metadata XML contains invalid UTF-8 characters, which are not supported at this time")
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "SAML Metadata XML contains invalid UTF-8 characters, which are not supported at this time")
 	}
 
 	metadata, err := samlsp.ParseMetadata(rawMetadata)
@@ -151,15 +152,15 @@ func parseSAMLMetadata(rawMetadata []byte) (*saml.EntityDescriptor, error) {
 	}
 
 	if metadata.EntityID == "" {
-		return nil, badRequestError(ErrorCodeValidationFailed, "SAML Metadata does not contain an EntityID")
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "SAML Metadata does not contain an EntityID")
 	}
 
 	if len(metadata.IDPSSODescriptors) < 1 {
-		return nil, badRequestError(ErrorCodeValidationFailed, "SAML Metadata does not contain any IDPSSODescriptor")
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "SAML Metadata does not contain any IDPSSODescriptor")
 	}
 
 	if len(metadata.IDPSSODescriptors) > 1 {
-		return nil, badRequestError(ErrorCodeValidationFailed, "SAML Metadata contains multiple IDPSSODescriptors")
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "SAML Metadata contains multiple IDPSSODescriptors")
 	}
 
 	return metadata, nil
@@ -168,7 +169,7 @@ func parseSAMLMetadata(rawMetadata []byte) (*saml.EntityDescriptor, error) {
 func fetchSAMLMetadata(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return nil, internalServerError("Unable to create a request to metadata_url").WithInternalError(err)
+		return nil, apierrors.NewInternalServerError("Unable to create a request to metadata_url").WithInternalError(err)
 	}
 
 	req = req.WithContext(ctx)
@@ -183,7 +184,7 @@ func fetchSAMLMetadata(ctx context.Context, url string) ([]byte, error) {
 
 	defer utilities.SafeClose(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return nil, badRequestError(ErrorCodeSAMLMetadataFetchFailed, "HTTP %v error fetching SAML Metadata from URL '%s'", resp.StatusCode, url)
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeSAMLMetadataFetchFailed, "HTTP %v error fetching SAML Metadata from URL '%s'", resp.StatusCode, url)
 	}
 
 	data, err := io.ReadAll(resp.Body)
@@ -218,7 +219,7 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 	if existingProvider != nil {
-		return unprocessableEntityError(ErrorCodeSAMLIdPAlreadyExists, "SAML Identity Provider with this EntityID (%s) already exists", metadata.EntityID)
+		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeSAMLIdPAlreadyExists, "SAML Identity Provider with this EntityID (%s) already exists", metadata.EntityID)
 	}
 
 	provider := &models.SSOProvider{
@@ -245,7 +246,7 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 			return err
 		}
 		if existingProvider != nil {
-			return badRequestError(ErrorCodeSSODomainAlreadyExists, "SSO Domain '%s' is already assigned to an SSO identity provider (%s)", domain, existingProvider.ID.String())
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeSSODomainAlreadyExists, "SSO Domain '%s' is already assigned to an SSO identity provider (%s)", domain, existingProvider.ID.String())
 		}
 
 		provider.SSODomains = append(provider.SSODomains, models.SSODomain{
@@ -300,7 +301,7 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 		}
 
 		if provider.SAMLProvider.EntityID != metadata.EntityID {
-			return badRequestError(ErrorCodeSAMLEntityIDMismatch, "SAML Metadata can be updated only if the EntityID matches for the provider; expected '%s' but got '%s'", provider.SAMLProvider.EntityID, metadata.EntityID)
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeSAMLEntityIDMismatch, "SAML Metadata can be updated only if the EntityID matches for the provider; expected '%s' but got '%s'", provider.SAMLProvider.EntityID, metadata.EntityID)
 		}
 
 		if params.MetadataURL != "" {
@@ -329,7 +330,7 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 			if existingProvider.ID == provider.ID {
 				keepDomains[domain] = true
 			} else {
-				return badRequestError(ErrorCodeSSODomainAlreadyExists, "SSO domain '%s' already assigned to another provider (%s)", domain, existingProvider.ID.String())
+				return apierrors.NewBadRequestError(apierrors.ErrorCodeSSODomainAlreadyExists, "SSO domain '%s' already assigned to another provider (%s)", domain, existingProvider.ID.String())
 			}
 		} else {
 			modified = true
@@ -397,7 +398,7 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 
 			return tx.Eager().Load(provider)
 		}); err != nil {
-			return unprocessableEntityError(ErrorCodeConflict, "Updating SSO provider failed, likely due to a conflict. Try again?").WithInternalError(err)
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeConflict, "Updating SSO provider failed, likely due to a conflict. Try again?").WithInternalError(err)
 		}
 	}
 

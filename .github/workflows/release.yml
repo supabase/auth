@@ -6,6 +6,12 @@ on:
       - master
       - release/*
 
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+  id-token: write
+
 jobs:
   release_please:
     runs-on: ubuntu-latest
@@ -18,7 +24,7 @@ jobs:
       RELEASE_CANDIDATE: ${{ steps.versions.outputs.RELEASE_CANDIDATE }}
       RELEASE_NAME: ${{ steps.versions.outputs.RELEASE_NAME }}
     steps:
-      - uses: google-github-actions/release-please-action@v4
+      - uses: googleapis/release-please-action@v4
         id: release
         with:
           release-type: go
@@ -76,7 +82,7 @@ jobs:
       - uses: actions/setup-go@v5
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
-          go-version: "^1.22.0" # The Go version to download (if necessary) and use.
+          go-version: "1.23.7" # The Go version to download (if necessary) and use.
 
       - name: Build release artifacts
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
@@ -97,12 +103,6 @@ jobs:
 
           cp auth gotrue
           tar -czvf auth-v$RELEASE_VERSION-arm64-supabase.tar.gz gotrue migrations persistent
-
-      - name: configure aws credentials for uploading release artifacts
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          role-to-assume: ${{ secrets.PROD_AWS_ROLE }}
-          aws-region: us-east-1
 
       - name: Upload release artifacts
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
@@ -140,8 +140,6 @@ jobs:
                   -f "sha=$GITHUB_SHA"
                 fi
               fi
-
-              aws s3api put-object --bucket ${{ secrets.PROD_ARTIFACTS_BUCKET }} --key auth-v$RELEASE_VERSION-arm64.tar.gz --body ./auth-v$RELEASE_VERSION-arm64.tar.gz
           fi
 
           GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz

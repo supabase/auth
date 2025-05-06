@@ -14,9 +14,12 @@ import (
 	"github.com/didip/tollbooth/v5/limiter"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/storage"
 )
 
 const (
@@ -325,7 +328,7 @@ func (ts *MiddlewareTestSuite) TestRequireSAMLEnabled() {
 		{
 			desc:        "SAML not enabled",
 			isEnabled:   false,
-			expectedErr: notFoundError(ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled"),
+			expectedErr: apierrors.NewNotFoundError(apierrors.ErrorCodeSAMLProviderDisabled, "SAML 2.0 is disabled"),
 		},
 		{
 			desc:        "SAML enabled",
@@ -386,7 +389,7 @@ func (ts *MiddlewareTestSuite) TestTimeoutMiddleware() {
 
 	var data map[string]interface{}
 	require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-	require.Equal(ts.T(), ErrorCodeRequestTimeout, data["error_code"])
+	require.Equal(ts.T(), apierrors.ErrorCodeRequestTimeout, data["error_code"])
 	require.Equal(ts.T(), float64(504), data["code"])
 	require.NotNil(ts.T(), data["msg"])
 }
@@ -442,4 +445,67 @@ func (ts *MiddlewareTestSuite) TestLimitHandler() {
 	w := httptest.NewRecorder()
 	ts.API.limitHandler(lmt).handler(okHandler).ServeHTTP(w, req)
 	require.Equal(ts.T(), http.StatusTooManyRequests, w.Code)
+}
+
+type MockCleanup struct {
+	mock.Mock
+}
+
+func (m *MockCleanup) Clean(db *storage.Connection) (int, error) {
+	m.Called(db)
+	return 0, nil
+}
+
+func (ts *MiddlewareTestSuite) TestDatabaseCleanup() {
+	testHandler := func(statusCode int) http.HandlerFunc {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(statusCode)
+			b, _ := json.Marshal(map[string]interface{}{"message": "ok"})
+			w.Write([]byte(b))
+		})
+	}
+
+	cases := []struct {
+		desc       string
+		statusCode int
+		method     string
+	}{
+		{
+			desc:       "Run cleanup successfully",
+			statusCode: http.StatusOK,
+			method:     http.MethodPost,
+		},
+		{
+			desc:       "Skip cleanup if GET",
+			statusCode: http.StatusOK,
+			method:     http.MethodGet,
+		},
+		{
+			desc:       "Skip cleanup if 3xx",
+			statusCode: http.StatusSeeOther,
+			method:     http.MethodPost,
+		},
+		{
+			desc:       "Skip cleanup if 4xx",
+			statusCode: http.StatusBadRequest,
+			method:     http.MethodPost,
+		},
+		{
+			desc:       "Skip cleanup if 5xx",
+			statusCode: http.StatusInternalServerError,
+			method:     http.MethodPost,
+		},
+	}
+
+	mockCleanup := new(MockCleanup)
+	mockCleanup.On("Clean", mock.Anything).Return(0, nil)
+	for _, c := range cases {
+		ts.Run("DatabaseCleanup", func() {
+			req := httptest.NewRequest(c.method, "http://localhost", nil)
+			w := httptest.NewRecorder()
+			ts.API.databaseCleanup(mockCleanup)(testHandler(c.statusCode)).ServeHTTP(w, req)
+			require.Equal(ts.T(), c.statusCode, w.Code)
+		})
+	}
+	mockCleanup.AssertNumberOfCalls(ts.T(), "Clean", 1)
 }

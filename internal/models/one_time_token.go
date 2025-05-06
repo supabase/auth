@@ -218,7 +218,7 @@ func FindUserByEmailChangeToken(tx *storage.Connection, token string) (*User, er
 // FindUserByEmailChangeCurrentAndAudience finds a user with the matching email change and audience.
 func FindUserByEmailChangeCurrentAndAudience(tx *storage.Connection, email, token, aud string) (*User, error) {
 	ott, err := FindOneTimeToken(tx, token, EmailChangeTokenCurrent)
-	if err != nil {
+	if err != nil && !IsNotFoundError(err) {
 		return nil, err
 	}
 

@@ -6,6 +6,12 @@ ifdef RELEASE_VERSION
 	FLAGS=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=v$(RELEASE_VERSION)" -buildvcs=false
 endif
 
+ifneq ($(shell docker compose version 2>/dev/null),)
+  DOCKER_COMPOSE=docker compose
+else
+  DOCKER_COMPOSE=docker-compose
+endif
+
 DEV_DOCKER_COMPOSE:=docker-compose-dev.yml
 
 help: ## Show this help.
@@ -36,6 +42,7 @@ migrate_test: ## Run database migrations for test.
 
 test: build ## Run tests.
 	go test $(CHECK_FILES) -coverprofile=coverage.out -coverpkg ./... -p 1 -race -v -count=1
+	./hack/coverage.sh
 
 vet: # Vet the code
 	go vet $(CHECK_FILES)
@@ -61,26 +68,26 @@ generate: dev-deps
 	go generate ./...
 
 dev: ## Run the development containers
-	docker-compose -f $(DEV_DOCKER_COMPOSE) up
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) up
 
 down: ## Shutdown the development containers
 	# Start postgres first and apply migrations
-	docker-compose -f $(DEV_DOCKER_COMPOSE) down
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) down
 
 docker-test: ## Run the tests using the development containers
-	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
-	docker-compose -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make migrate_test"
-	docker-compose -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make test"
-	docker-compose -f $(DEV_DOCKER_COMPOSE) down -v
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) up -d postgres
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make migrate_test"
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make test"
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) down -v
 
 docker-build: ## Force a full rebuild of the development containers
-	docker-compose -f $(DEV_DOCKER_COMPOSE) build --no-cache
-	docker-compose -f $(DEV_DOCKER_COMPOSE) up -d postgres
-	docker-compose -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make migrate_dev"
-	docker-compose -f $(DEV_DOCKER_COMPOSE) down
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) build --no-cache
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) up -d postgres
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) run auth sh -c "make migrate_dev"
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) down
 
 docker-clean: ## Remove the development containers and volumes
-	docker-compose -f $(DEV_DOCKER_COMPOSE) rm -fsv
+	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) rm -fsv
 
 format:
 	gofmt -s -w .

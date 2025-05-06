@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/fatih/structs"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -34,13 +35,13 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	aud := a.requestAud(ctx, r)
 	user, err := models.FindUserByEmailAndAudience(db, params.Email, aud)
 	if err != nil && !models.IsNotFoundError(err) {
-		return internalServerError("Database error finding user").WithInternalError(err)
+		return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if user != nil {
 			if user.IsConfirmed() {
-				return unprocessableEntityError(ErrorCodeEmailExists, DuplicateEmailMsg)
+				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 			}
 		} else {
 			signupParams := SignupParams{

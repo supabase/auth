@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base32"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,74 +14,29 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/gofrs/uuid"
-	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
 	"golang.org/x/crypto/hkdf"
-
-	"github.com/pkg/errors"
 )
 
-// SecureToken creates a new random token
-func SecureToken(options ...int) string {
-	length := 16
-	if len(options) > 0 {
-		length = options[0]
-	}
-	b := make([]byte, length)
-	if _, err := io.ReadFull(rand.Reader, b); err != nil {
-		panic(err.Error()) // rand should never fail
-	}
-	return base64.RawURLEncoding.EncodeToString(b)
-}
-
 // GenerateOtp generates a random n digit otp
-func GenerateOtp(digits int) (string, error) {
+func GenerateOtp(digits int) string {
 	upper := math.Pow10(digits)
-	val, err := rand.Int(rand.Reader, big.NewInt(int64(upper)))
-	if err != nil {
-		return "", errors.WithMessage(err, "Error generating otp")
-	}
+	val := must(rand.Int(rand.Reader, big.NewInt(int64(upper))))
+
 	// adds a variable zero-padding to the left to ensure otp is uniformly random
 	expr := "%0" + strconv.Itoa(digits) + "v"
 	otp := fmt.Sprintf(expr, val.String())
-	return otp, nil
+
+	return otp
 }
 func GenerateTokenHash(emailOrPhone, otp string) string {
 	return fmt.Sprintf("%x", sha256.Sum224([]byte(emailOrPhone+otp)))
 }
 
 // Generated a random secure integer from [0, max[
-func secureRandomInt(max int) (int, error) {
-	randomInt, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
-	if err != nil {
-		return 0, errors.WithMessage(err, "Error generating random integer")
-	}
-	return int(randomInt.Int64()), nil
-}
-
-func GenerateSignatures(secrets []string, msgID uuid.UUID, currentTime time.Time, inputPayload []byte) ([]string, error) {
-	SymmetricSignaturePrefix := "v1,"
-	// TODO(joel): Handle asymmetric case once library has been upgraded
-	var signatureList []string
-	for _, secret := range secrets {
-		if strings.HasPrefix(secret, SymmetricSignaturePrefix) {
-			trimmedSecret := strings.TrimPrefix(secret, SymmetricSignaturePrefix)
-			wh, err := standardwebhooks.NewWebhook(trimmedSecret)
-			if err != nil {
-				return nil, err
-			}
-			signature, err := wh.Sign(msgID.String(), currentTime, inputPayload)
-			if err != nil {
-				return nil, err
-			}
-			signatureList = append(signatureList, signature)
-		} else {
-			return nil, errors.New("invalid signature format")
-		}
-	}
-	return signatureList, nil
+func secureRandomInt(max int) int {
+	randomInt := must(rand.Int(rand.Reader, big.NewInt(int64(max))))
+	return int(randomInt.Int64())
 }
 
 type EncryptedString struct {
@@ -111,15 +67,8 @@ func (es *EncryptedString) Decrypt(id string, decryptionKeys map[string]string) 
 		return nil, err
 	}
 
-	aes, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-
-	cipher, err := cipher.NewGCM(aes)
-	if err != nil {
-		return nil, err
-	}
+	block := must(aes.NewCipher(key))
+	cipher := must(cipher.NewGCM(block))
 
 	decrypted, err := cipher.Open(nil, es.Nonce, es.Data, nil) // #nosec G407
 	if err != nil {
@@ -148,10 +97,7 @@ func ParseEncryptedString(str string) *EncryptedString {
 }
 
 func (es *EncryptedString) String() string {
-	out, err := json.Marshal(es)
-	if err != nil {
-		panic(err)
-	}
+	out := must(json.Marshal(es))
 
 	return string(out)
 }
@@ -179,9 +125,7 @@ func deriveSymmetricKey(id, keyID, keyBase64URL string) ([]byte, error) {
 	keyReader := hkdf.New(sha256.New, hkdfKey, nil, []byte(id))
 	key := make([]byte, 256/8)
 
-	if _, err := io.ReadFull(keyReader, key); err != nil {
-		panic(err)
-	}
+	must(io.ReadFull(keyReader, key))
 
 	return key, nil
 }
@@ -192,15 +136,8 @@ func NewEncryptedString(id string, data []byte, keyID string, keyBase64URL strin
 		return nil, err
 	}
 
-	aes, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-
-	cipher, err := cipher.NewGCM(aes)
-	if err != nil {
-		panic(err)
-	}
+	block := must(aes.NewCipher(key))
+	cipher := must(cipher.NewGCM(block))
 
 	es := EncryptedString{
 		KeyID:     keyID,
@@ -208,11 +145,25 @@ func NewEncryptedString(id string, data []byte, keyID string, keyBase64URL strin
 		Nonce:     make([]byte, 12),
 	}
 
-	if _, err := io.ReadFull(rand.Reader, es.Nonce); err != nil {
-		panic(err)
-	}
-
+	must(io.ReadFull(rand.Reader, es.Nonce))
 	es.Data = cipher.Seal(nil, es.Nonce, data, nil) // #nosec G407
 
 	return &es, nil
+}
+
+// SecureAlphanumeric generates a secure random alphanumeric string using standard library
+func SecureAlphanumeric(length int) string {
+	if length < 8 {
+		length = 8
+	}
+
+	// Calculate bytes needed for desired length
+	// base32 encoding: 5 bytes -> 8 chars
+	numBytes := (length*5 + 7) / 8
+
+	b := make([]byte, numBytes)
+	must(io.ReadFull(rand.Reader, b))
+
+	// Use standard library's base32 without padding
+	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b))[:length]
 }

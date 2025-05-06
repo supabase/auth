@@ -1,4 +1,4 @@
-package hooks
+package v0hooks
 
 import (
 	"github.com/gofrs/uuid"
@@ -13,11 +13,6 @@ const (
 	PostgresHook HookType = "pg-functions"
 )
 
-const (
-	// In Miliseconds
-	DefaultTimeout = 2000
-)
-
 // Hook Names
 const (
 	HookRejection = "reject"
@@ -30,6 +25,7 @@ type HTTPHookInput interface {
 type HookOutput interface {
 	IsError() bool
 	Error() string
+	GetHookError() AuthHookError
 }
 
 // TODO(joel): Move this to phone package
@@ -173,6 +169,8 @@ func (mf *MFAVerificationAttemptOutput) Error() string {
 	return mf.HookError.Message
 }
 
+func (mf *MFAVerificationAttemptOutput) GetHookError() AuthHookError { return mf.HookError }
+
 func (p *PasswordVerificationAttemptOutput) IsError() bool {
 	return p.HookError.Message != ""
 }
@@ -180,6 +178,8 @@ func (p *PasswordVerificationAttemptOutput) IsError() bool {
 func (p *PasswordVerificationAttemptOutput) Error() string {
 	return p.HookError.Message
 }
+
+func (p *PasswordVerificationAttemptOutput) GetHookError() AuthHookError { return p.HookError }
 
 func (ca *CustomAccessTokenOutput) IsError() bool {
 	return ca.HookError.Message != ""
@@ -189,6 +189,8 @@ func (ca *CustomAccessTokenOutput) Error() string {
 	return ca.HookError.Message
 }
 
+func (ca *CustomAccessTokenOutput) GetHookError() AuthHookError { return ca.HookError }
+
 func (cs *SendSMSOutput) IsError() bool {
 	return cs.HookError.Message != ""
 }
@@ -197,6 +199,8 @@ func (cs *SendSMSOutput) Error() string {
 	return cs.HookError.Message
 }
 
+func (cs *SendSMSOutput) GetHookError() AuthHookError { return cs.HookError }
+
 func (cs *SendEmailOutput) IsError() bool {
 	return cs.HookError.Message != ""
 }
@@ -204,6 +208,8 @@ func (cs *SendEmailOutput) IsError() bool {
 func (cs *SendEmailOutput) Error() string {
 	return cs.HookError.Message
 }
+
+func (cs *SendEmailOutput) GetHookError() AuthHookError { return cs.HookError }
 
 type AuthHookError struct {
 	HTTPCode int    `json:"http_code,omitempty"`
