@@ -54,6 +54,7 @@ func configByName(
 	cfg *conf.HookConfiguration,
 	name v0hooks.Name,
 ) (*conf.ExtensibilityPointConfiguration, bool) {
+	//exhaustive:ignore
 	switch name {
 	case BeforeUserCreated:
 		return &cfg.BeforeUserCreated, true

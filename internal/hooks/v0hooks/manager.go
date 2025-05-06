@@ -33,6 +33,7 @@ func configByName(
 	cfg *conf.HookConfiguration,
 	name Name,
 ) (*conf.ExtensibilityPointConfiguration, bool) {
+	//exhaustive:ignore
 	switch name {
 	case SendSMS:
 		return &cfg.SendSMS, true
