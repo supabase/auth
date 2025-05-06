@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.172.2](https://github.com/supabase/auth/compare/v2.172.1...v2.172.2) (2025-05-06)
+
+
+### Bug Fixes
+
+* add `supafast` tarball for upgrading auth via supabase-admin-api ([#2009](https://github.com/supabase/auth/issues/2009)) ([9b55785](https://github.com/supabase/auth/commit/9b557855a3ab80ee93ab95159055a444bff53f01))
+* fix `supafast` tarball generation ([#2011](https://github.com/supabase/auth/issues/2011)) ([88bb2c0](https://github.com/supabase/auth/commit/88bb2c0638863f94f9f0d7f4ca88ba04929dfd55))
+
 ## [2.172.1](https://github.com/supabase/auth/compare/v2.172.0...v2.172.1) (2025-05-05)
 
 
