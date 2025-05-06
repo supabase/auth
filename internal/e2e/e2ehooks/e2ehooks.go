@@ -132,6 +132,7 @@ func NewHookRecorder() *HookRecorder {
 	}
 
 	o.mux.HandleFunc("POST /hooks/{hook}", func(w http.ResponseWriter, r *http.Request) {
+		//exhaustive:ignore
 		switch v0hooks.Name(r.PathValue("hook")) {
 		case v1hooks.BeforeUserCreated:
 			o.BeforeUserCreated.ServeHTTP(w, r)
