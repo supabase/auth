@@ -87,7 +87,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.limiterOpts = NewLimiterOptions(globalConfig)
 	}
 	if api.hooksMgr == nil {
-		api.hooksMgr = hooks.NewManager(db, globalConfig)
+		api.hooksMgr = hooks.New(globalConfig, db)
 	}
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{

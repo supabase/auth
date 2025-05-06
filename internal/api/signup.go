@@ -11,6 +11,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/hooks/v1hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -193,7 +194,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			}
 			// do not update the user because we can't be sure of their claimed identity
 		} else {
-			user, terr = a.signupNewUser(tx, signupUser)
+			user, terr = a.signupNewUser(r, tx, signupUser)
 			if terr != nil {
 				return terr
 			}
@@ -363,8 +364,21 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 	return u, nil
 }
 
-func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*models.User, error) {
+func (a *API) signupNewUser(
+	r *http.Request,
+	conn *storage.Connection,
+	user *models.User,
+) (*models.User, error) {
 	config := a.config
+
+	if a.hooksMgr.Enabled(v1hooks.BeforeUserCreated) {
+		req := v1hooks.NewBeforeUserCreatedRequest(r, user)
+		res := new(v1hooks.BeforeUserCreatedResponse)
+		err := a.hooksMgr.BeforeUserCreated(r.Context(), conn, req, res)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -387,5 +401,13 @@ func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*model
 		return nil, apierrors.NewInternalServerError("Database error loading user after sign-up").WithInternalError(err)
 	}
 
+	if a.hooksMgr.Enabled(v1hooks.AfterUserCreated) {
+		req := v1hooks.NewAfterUserCreatedRequest(r, user)
+		res := new(v1hooks.AfterUserCreatedResponse)
+		err := a.hooksMgr.AfterUserCreated(r.Context(), conn, req, res)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return user, nil
 }

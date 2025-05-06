@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/hooks/hookerrors"
 	"github.com/supabase/auth/internal/observability"
 
 	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
@@ -80,7 +81,7 @@ func New(opts ...Option) *Dispatcher {
 	return dr
 }
 
-func (o *Dispatcher) Dispatch(
+func (o *Dispatcher) HTTPDispatch(
 	ctx context.Context,
 	cfg conf.ExtensibilityPointConfiguration,
 	req any,
@@ -218,6 +219,9 @@ func (o *Dispatcher) RunHTTPHook(
 					return nil, apierrors.NewUnprocessableEntityError(
 						apierrors.ErrorCodeHookPayloadOverSizeLimit, msg)
 				}
+			}
+			if err := hookerrors.Check(body); err != nil {
+				return nil, err
 			}
 			return body, nil
 		case http.StatusTooManyRequests, http.StatusServiceUnavailable:

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/hooks/hookerrors"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -70,7 +71,7 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
 	ts.Config.Hook.SendSMS.URI = testURL
 
-	unsuccessfulResponse := v0hooks.AuthHookError{
+	unsuccessfulResponse := hookerrors.Error{
 		HTTPCode: http.StatusUnprocessableEntity,
 		Message:  "test error",
 	}
@@ -78,12 +79,12 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 	testCases := []struct {
 		description  string
 		expectError  bool
-		mockResponse v0hooks.AuthHookError
+		mockResponse hookerrors.Error
 	}{
 		{
 			description:  "Hook returns success",
 			expectError:  false,
-			mockResponse: v0hooks.AuthHookError{},
+			mockResponse: hookerrors.Error{},
 		},
 		{
 			description:  "Hook returns error",
@@ -102,7 +103,9 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 		Post("/").
 		MatchType("json").
 		Reply(http.StatusUnprocessableEntity).
-		JSON(v0hooks.SendSMSOutput{HookError: unsuccessfulResponse})
+		JSON(struct {
+			Error *hookerrors.Error `json:"error,omitempty"`
+		}{Error: &unsuccessfulResponse})
 
 	for _, tc := range testCases {
 		ts.Run(tc.description, func() {
@@ -113,12 +116,7 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 				require.NoError(ts.T(), err)
 			} else {
 				require.Error(ts.T(), err)
-				if body != nil {
-					var output v0hooks.SendSMSOutput
-					require.NoError(ts.T(), json.Unmarshal(body, &output))
-					require.Equal(ts.T(), unsuccessfulResponse.HTTPCode, output.HookError.HTTPCode)
-					require.Equal(ts.T(), unsuccessfulResponse.Message, output.HookError.Message)
-				}
+				require.Nil(ts.T(), body)
 			}
 		})
 	}

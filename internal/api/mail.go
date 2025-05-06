@@ -153,7 +153,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 
-				user, terr = a.signupNewUser(tx, user)
+				user, terr = a.signupNewUser(r, tx, user)
 				if terr != nil {
 					return terr
 				}
@@ -198,7 +198,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				// password here to generate a new user, use
 				// signupUser which is a model generated from
 				// SignupParams above
-				user, terr = a.signupNewUser(tx, signupUser)
+				user, terr = a.signupNewUser(r, tx, signupUser)
 				if terr != nil {
 					return terr
 				}

@@ -1,139 +1,122 @@
 package hooks_test
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/gofrs/uuid"
-	"github.com/supabase/auth/internal/api"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
-	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/hooks/v1hooks"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/storage/test"
 )
 
-const (
-	apiTestVersion = "1"
-	apiTestConfig  = "../../hack/test.env"
-)
+type mockService struct{}
 
-func TestNewManager(t *testing.T) {
-	{
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*4)
-		defer cancel()
+func (*mockService) Enabled(v0hooks.Name) bool { return true }
 
-		config := helpConfig(t, apiTestConfig)
-		conn := helpConn(t, config)
-
-		hr := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("content-type", "application/json")
-
-			fmt.Fprintln(w, `{}`)
-		})
-
-		ts := httptest.NewServer(hr)
-		defer ts.Close()
-
-		config.Hook.SendEmail.Enabled = true
-		config.Hook.SendEmail.URI = ts.URL + "/SendEmail"
-
-		a := newAPI(config, conn)
-		mgr := hooks.NewManager(a.GetDB(), a.GetConfig())
-
-		{
-			in := &v0hooks.SendEmailInput{
-				User: &models.User{
-					ID: uuid.Must(uuid.NewV4()),
-				},
-			}
-			buf := new(bytes.Buffer)
-			err := json.NewEncoder(buf).Encode(in)
-			if err != nil {
-				t.Fatalf("exp nil err; got %v", err)
-			}
-
-			out := &v0hooks.SendEmailOutput{}
-			req, err := http.NewRequestWithContext(
-				ctx, "POST", config.Hook.SendEmail.URI, buf)
-			if err != nil {
-				t.Fatalf("exp nil err; got %v", err)
-			}
-
-			err = mgr.InvokeHook(nil, req, in, out)
-			if err != nil {
-				t.Fatalf("exp nil err; got %v", err)
-			}
-			if exp, got := "", out.HookError.Message; exp != got {
-				t.Fatalf("exp %v; got %v", exp, got)
-			}
-		}
-
-		{
-			in := &v0hooks.SendEmailInput{
-				User: &models.User{
-					ID: uuid.Must(uuid.NewV4()),
-				},
-			}
-			buf := new(bytes.Buffer)
-			err := json.NewEncoder(buf).Encode(in)
-			if err != nil {
-				t.Fatalf("exp nil err; got %v", err)
-			}
-
-			req, err := http.NewRequestWithContext(
-				ctx, "POST", config.Hook.SendEmail.URI, buf)
-			if err != nil {
-				t.Fatalf("exp nil err; got %v", err)
-			}
-
-			res, err := mgr.RunHTTPHook(req, config.Hook.SendEmail, in)
-			if err != nil {
-				t.Fatalf("exp nil err; got %v", err)
-			}
-
-			out := &v0hooks.SendEmailOutput{}
-			if err := json.Unmarshal(res, out); err != nil {
-				t.Fatalf("exp nil err; got %v", err)
-			}
-			if exp, got := "", out.HookError.Message; exp != got {
-				t.Fatalf("exp %v; got %v", exp, got)
-			}
-		}
-	}
-}
-
-func newAPI(
-	config *conf.GlobalConfiguration,
+func (*mockService) InvokeHook(
 	conn *storage.Connection,
-) *api.API {
-	limiterOpts := api.NewLimiterOptions(config)
-	return api.NewAPIWithVersion(config, conn, apiTestVersion, limiterOpts)
+	r *http.Request,
+	input, output any,
+) error {
+	return nil
 }
 
-func helpConfig(tb testing.TB, configPath string) *conf.GlobalConfiguration {
-	tb.Helper()
-
-	config, err := conf.LoadGlobal(configPath)
-	if err != nil {
-		tb.Fatalf("error loading config %q; got %v", configPath, err)
-	}
-	return config
+func (*mockService) RunHTTPHook(
+	r *http.Request,
+	hookConfig conf.ExtensibilityPointConfiguration,
+	input any,
+) ([]byte, error) {
+	return nil, nil
 }
 
-func helpConn(tb testing.TB, config *conf.GlobalConfiguration) *storage.Connection {
-	tb.Helper()
+func (*mockService) BeforeUserCreated(
+	ctx context.Context,
+	tx *storage.Connection,
+	req *v1hooks.BeforeUserCreatedRequest,
+	res *v1hooks.BeforeUserCreatedResponse,
+) error {
+	return nil
+}
 
-	conn, err := test.SetupDBConnection(config)
-	if err != nil {
-		tb.Fatalf("error setting up db connection: %v", err)
+func (*mockService) AfterUserCreated(
+	ctx context.Context,
+	tx *storage.Connection,
+	req *v1hooks.AfterUserCreatedRequest,
+	res *v1hooks.AfterUserCreatedResponse,
+) error {
+	return nil
+}
+
+func TestNew(t *testing.T) {
+	globalCfg := e2e.Must(e2e.Config())
+	conn := e2e.Must(e2e.Conn(globalCfg))
+	mgr := hooks.New(globalCfg, conn)
+	if mgr == nil {
+		t.Fatal("exp non-nil *Manager")
 	}
-	return conn
+}
+
+func TestManager(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	svc := &mockService{}
+	mgr := hooks.NewFromServices(svc, svc)
+
+	{
+		ok := mgr.Enabled(v1hooks.AfterUserCreated)
+		if exp, got := true, ok; exp != got {
+			t.Fatalf("exp %v; got %v", exp, got)
+		}
+	}
+
+	{
+		err := mgr.InvokeHook(nil, nil, nil, nil)
+		if err != nil {
+			t.Fatalf("exp nil err; got %v", err)
+		}
+	}
+
+	{
+		cfg := conf.ExtensibilityPointConfiguration{}
+		data, err := mgr.RunHTTPHook(nil, cfg, nil)
+		if err != nil {
+			t.Fatalf("exp nil err; got %v", err)
+		}
+		if len(data) > 0 {
+			t.Fatal("exp mock svc to return no data")
+		}
+	}
+
+	{
+		req := new(v1hooks.BeforeUserCreatedRequest)
+		res := new(v1hooks.BeforeUserCreatedResponse)
+		err := mgr.BeforeUserCreated(ctx, nil, req, res)
+		if err != nil {
+			t.Fatalf("exp nil err; got %v", err)
+		}
+	}
+
+	{
+		req := new(v1hooks.BeforeUserCreatedRequest)
+		res := new(v1hooks.BeforeUserCreatedResponse)
+		err := mgr.BeforeUserCreated(ctx, nil, req, res)
+		if err != nil {
+			t.Fatalf("exp nil err; got %v", err)
+		}
+	}
+
+	{
+		req := new(v1hooks.AfterUserCreatedRequest)
+		res := new(v1hooks.AfterUserCreatedResponse)
+		err := mgr.AfterUserCreated(ctx, nil, req, res)
+		if err != nil {
+			t.Fatalf("exp nil err; got %v", err)
+		}
+	}
 }
