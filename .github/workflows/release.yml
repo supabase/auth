@@ -97,7 +97,8 @@ jobs:
           tar -czvf auth-v$RELEASE_VERSION-arm64.tar.gz auth gotrue migrations/
 
           # Create a "supafast" tarball that can be used by supabase-admin-api to upgrade Auth quickly
-          cp auth gotrue
+          rm gotrue
+          mv auth gotrue
           tar -czvf auth-v$RELEASE_VERSION.supafast-arm64.tar.gz gotrue migrations/
 
       - name: Upload release artifacts
