@@ -163,7 +163,7 @@ func TestDispatch(t *testing.T) {
 		},
 
 		{
-			desc: "fail - limit reader exceeeded",
+			desc: "fail - limit reader exceeded",
 			dr: New(
 				WithResponseLimit(1),
 			),
@@ -176,6 +176,20 @@ func TestDispatch(t *testing.T) {
 		},
 
 		{
+			desc: "fail - io error",
+			dr: New(
+				WithResponseLimit(1024),
+			),
+			errStr: "unexpected EOF",
+			hr: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Add("Content-Type", "application/json")
+				w.Header().Add("Content-Length", "123456789")
+				w.WriteHeader(http.StatusOK)
+				w.Write(bytes.Repeat([]byte("a"), 10))
+			}),
+		},
+
+		{
 			desc:   "fail - unmarshal error",
 			dr:     New(),
 			errStr: "500: Error unmarshaling JSON output.",
@@ -183,6 +197,17 @@ func TestDispatch(t *testing.T) {
 				w.Header().Add("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 				io.WriteString(w, "12345")
+			}),
+		},
+
+		{
+			desc:   "fail - error object present",
+			dr:     New(),
+			errStr: "hookerrors.Check",
+			hr: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Add("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				io.WriteString(w, `{"error": {"message": "hookerrors.Check"}}`)
 			}),
 		},
 	}
@@ -267,7 +292,7 @@ func TestDispatch(t *testing.T) {
 		}
 
 		res := M{}
-		err := dr.Dispatch(testCtx, cfg, tc.req, &res)
+		err := dr.HTTPDispatch(testCtx, cfg, tc.req, &res)
 		if tc.err != nil {
 			require.Error(t, err)
 			require.Equal(t, tc.err, err)

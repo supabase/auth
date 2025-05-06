@@ -10,10 +10,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/hooks/v0hooks/v0http"
 	"github.com/supabase/auth/internal/hooks/v0hooks/v0pgfunc"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/storage/test"
 )
 
 type M = map[string]any
@@ -25,11 +24,11 @@ func TestHooks(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	globalCfg := helpConfig(t, apiTestConfig)
-	db := helpConn(t, globalCfg)
+	globalCfg := e2e.Must(e2e.Config())
+	db := e2e.Must(e2e.Conn(globalCfg))
 	httpDr := v0http.New(v0http.WithTimeout(time.Second / 10))
 	pgfuncDr := v0pgfunc.New(db, v0pgfunc.WithTimeout(time.Second/10))
-	mr := NewManager(globalCfg, httpDr, pgfuncDr)
+	mr := New(globalCfg, httpDr, pgfuncDr)
 	now := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 	// cover RunHTTPHook
@@ -47,13 +46,13 @@ func TestHooks(t *testing.T) {
 		}
 	}
 
-	// Cover auth hook errors single method
-	{
-		ae := &AuthHookError{Message: "test"}
-		if exp, got := "test", ae.Error(); exp != got {
-			t.Fatalf("exp %v; got %v", exp, got)
-		}
-	}
+	// // Cover auth hook errors single method
+	// {
+	// 	ae := &AuthHookError{Message: "test"}
+	// 	if exp, got := "test", ae.Error(); exp != got {
+	// 		t.Fatalf("exp %v; got %v", exp, got)
+	// 	}
+	// }
 
 	type testCase struct {
 		desc   string
@@ -78,7 +77,7 @@ func TestHooks(t *testing.T) {
 			req:    &SendSMSInput{},
 			res:    &SendSMSOutput{},
 			exp:    &SendSMSOutput{},
-			errStr: "500: Error running hook URI: http://0.0.0.0:12345",
+			errStr: "422: Failed to reach hook within maximum time of 0.100000 seconds",
 		},
 
 		{
@@ -242,64 +241,6 @@ func TestHooks(t *testing.T) {
 				$$ language plpgsql;`,
 		},
 
-		// fail - missing required claims
-		{
-			desc: "fail - customize_access_token - missing required claims",
-			setup: func() {
-				globalCfg.Hook.CustomAccessToken =
-					conf.ExtensibilityPointConfiguration{
-						URI: `pg-functions://postgres/auth/` +
-							`v0hooks_test_customize_access_token_fail_missing`,
-						HookName: `"auth"."v0hooks_test_customize_access_token_fail_missing"`,
-					}
-			},
-			req: &CustomAccessTokenInput{
-				Claims: &AccessTokenClaims{
-					RegisteredClaims: jwt.RegisteredClaims{
-						Audience:  []string{"myaudience"},
-						ExpiresAt: jwt.NewNumericDate(now),
-						IssuedAt:  jwt.NewNumericDate(now),
-						Subject:   "mysubject",
-					},
-					Email:                       "valid.email@supabase.co",
-					AuthenticatorAssuranceLevel: "aal1",
-					SessionId:                   "sid",
-					Phone:                       "1234567890",
-					AppMetaData:                 M{"appmeta": "val2"},
-					Role:                        "myrole",
-				},
-			},
-			res: &CustomAccessTokenOutput{},
-			exp: &CustomAccessTokenOutput{
-				Claims: M{
-					"aud":          []interface{}{"myaudience"},
-					"email":        "valid.email@supabase.co",
-					"exp":          1.7040672e+09,
-					"iat":          1.7040672e+09,
-					"sub":          "mysubject",
-					"aal":          "aal1",
-					"session_id":   "sid",
-					"is_anonymous": false,
-					"phone":        "1234567890",
-					"app_metadata": M{"appmeta": "val2"},
-					"custom_claim": "custom_value",
-					"role":         "myrole",
-				},
-			},
-			sql: `
-				create or replace function
-					v0hooks_test_customize_access_token_fail_missing(input jsonb)
-				 returns json as $$
-				 	declare
-						claims jsonb;
-					begin
-						claims := input->'claims' || '{"custom_claim": "custom_value"}'::jsonb;
-						return jsonb_build_object('claims', claims);
-					end;
-				$$ language plpgsql;`,
-			errStr: "500: output claims do not conform to the expected schema",
-		},
-
 		// fail
 		{
 			desc: "fail - customize_access_token - error propagation",
@@ -311,13 +252,8 @@ func TestHooks(t *testing.T) {
 						HookName: `"auth"."v0hooks_test_customize_access_token_failure"`,
 					}
 			},
-			req: &CustomAccessTokenInput{},
-			res: &CustomAccessTokenOutput{},
-			exp: &CustomAccessTokenOutput{
-				HookError: AuthHookError{
-					Message: "failed hook",
-				},
-			},
+			req:    &CustomAccessTokenInput{},
+			res:    &CustomAccessTokenOutput{},
 			errStr: "500: failed hook",
 			sql: `
 				create or replace function
@@ -325,6 +261,28 @@ func TestHooks(t *testing.T) {
 				returns json as $$
 				begin
 					return '{"error": {"message": "failed hook"}}'::jsonb;
+				end; $$ language plpgsql;`,
+		},
+
+		{
+			desc: "fail - customize_access_token - error propagation http code",
+			setup: func() {
+				globalCfg.Hook.CustomAccessToken =
+					conf.ExtensibilityPointConfiguration{
+						URI: `pg-functions://postgres/auth/` +
+							`v0hooks_test_customize_access_token_failure`,
+						HookName: `"auth"."v0hooks_test_customize_access_token_failure"`,
+					}
+			},
+			req:    &CustomAccessTokenInput{},
+			res:    &CustomAccessTokenOutput{},
+			errStr: "403: auth failure",
+			sql: `
+				create or replace function
+					v0hooks_test_customize_access_token_failure(input jsonb)
+				returns json as $$
+				begin
+					return '{"error": {"message": "auth failure", "http_code": 403}}'::jsonb;
 				end; $$ language plpgsql;`,
 		},
 
@@ -477,35 +435,67 @@ func TestHooks(t *testing.T) {
 		}
 		require.NoError(t, err)
 		require.Equal(t, tc.exp, tc.res)
+	}
+}
 
-		if h, ok := tc.res.(HookOutput); ok {
-			_ = h.Error()
-			_ = h.GetHookError()
-			_ = h.IsError()
+func TestConfig(t *testing.T) {
+	globalCfg := &conf.GlobalConfiguration{
+		Hook: conf.HookConfiguration{
+			SendSMS: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(SendSMS),
+			},
+			SendEmail: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(SendEmail),
+			},
+			CustomAccessToken: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(CustomizeAccessToken),
+			},
+			MFAVerificationAttempt: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(MFAVerification),
+			},
+			PasswordVerificationAttempt: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(PasswordVerification),
+			},
+		},
+	}
+	cfg := &globalCfg.Hook
+
+	mr := new(Manager)
+	mr.config = globalCfg
+
+	tests := []struct {
+		cfg  *conf.HookConfiguration
+		name Name
+		exp  *conf.ExtensibilityPointConfiguration
+		ok   bool
+	}{
+		{},
+		{cfg: cfg, ok: true,
+			name: SendSMS, exp: &cfg.SendSMS},
+		{cfg: cfg, ok: true,
+			name: SendEmail, exp: &cfg.SendEmail},
+		{cfg: cfg, ok: true,
+			name: CustomizeAccessToken, exp: &cfg.CustomAccessToken},
+		{cfg: cfg, ok: true,
+			name: MFAVerification, exp: &cfg.MFAVerificationAttempt},
+		{cfg: cfg, ok: true,
+			name: PasswordVerification, exp: &cfg.PasswordVerificationAttempt},
+	}
+	for idx, test := range tests {
+		t.Logf("test #%v - exp ok %v with cfg %v from name %v",
+			idx, test.ok, test.exp, test.name)
+
+		require.Equal(t, false, mr.Enabled(test.name))
+
+		got, ok := configByName(test.cfg, test.name)
+		require.Equal(t, test.ok, ok)
+		require.Equal(t, test.exp, got)
+
+		if got == nil {
+			continue
 		}
+
+		got.Enabled = true
+		require.Equal(t, true, mr.Enabled(test.name))
 	}
-}
-
-const (
-	apiTestConfig = "../../../hack/test.env"
-)
-
-func helpConfig(t testing.TB, configPath string) *conf.GlobalConfiguration {
-	t.Helper()
-
-	config, err := conf.LoadGlobal(configPath)
-	if err != nil {
-		t.Fatalf("error loading config %q; got %v", configPath, err)
-	}
-	return config
-}
-
-func helpConn(t testing.TB, config *conf.GlobalConfiguration) *storage.Connection {
-	t.Helper()
-
-	conn, err := test.SetupDBConnection(config)
-	if err != nil {
-		t.Fatalf("error setting up db connection: %v", err)
-	}
-	return conn
 }

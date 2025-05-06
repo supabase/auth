@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
@@ -369,6 +371,13 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		if err != nil {
 			return "", 0, err
 		}
+		if err := validateTokenClaims(output.Claims); err != nil {
+			err = &apierrors.HTTPError{
+				HTTPStatus: http.StatusInternalServerError,
+				Message:    err.Error(),
+			}
+			return "", 0, err
+		}
 		gotrueClaims = jwt.MapClaims(output.Claims)
 	}
 
@@ -490,4 +499,23 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		RefreshToken: refreshToken.Token,
 		User:         user,
 	}, nil
+}
+
+func validateTokenClaims(outputClaims map[string]any) error {
+	schemaLoader := gojsonschema.NewStringLoader(v0hooks.MinimumViableTokenSchema)
+	documentLoader := gojsonschema.NewGoLoader(outputClaims)
+	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+	if err != nil {
+		return err
+	}
+
+	if !result.Valid() {
+		var errorMessages string
+		for _, desc := range result.Errors() {
+			errorMessages += fmt.Sprintf("- %s\n", desc)
+		}
+		return fmt.Errorf(
+			"output claims do not conform to the expected schema: \n%s", errorMessages)
+	}
+	return nil
 }
