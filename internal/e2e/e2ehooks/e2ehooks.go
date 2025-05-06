@@ -105,7 +105,7 @@ func (o *Hook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(name, val)
 		}
 	}
-	io.WriteString(w, o.res)
+	_, _ = io.WriteString(w, o.res)
 }
 
 type HookCall struct {
