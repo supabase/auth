@@ -96,6 +96,10 @@ jobs:
           mv auth-arm64 auth
           tar -czvf auth-v$RELEASE_VERSION-arm64.tar.gz auth gotrue migrations/
 
+          # Create a "supafast" tarball that can be used by supabase-admin-api to upgrade Auth quickly
+          cp auth gotrue
+          tar -czvf auth-v$RELEASE_VERSION.supafast-arm64.tar.gz gotrue migrations/
+
       - name: Upload release artifacts
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         run: |
@@ -134,7 +138,7 @@ jobs:
               fi
           fi
 
-          GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz
+          GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz ./auth-v$RELEASE_VERSION.supafast-arm64.tar.gz
 
   publish:
     needs:
