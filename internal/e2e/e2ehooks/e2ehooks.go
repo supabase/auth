@@ -119,16 +119,26 @@ func (o *HookCall) Unmarshal(v any) error {
 }
 
 type HookRecorder struct {
-	mux               *http.ServeMux
-	BeforeUserCreated *Hook
-	AfterUserCreated  *Hook
+	mux                  *http.ServeMux
+	BeforeUserCreated    *Hook
+	AfterUserCreated     *Hook
+	CustomizeAccessToken *Hook
+	MFAVerification      *Hook
+	PasswordVerification *Hook
+	SendEmail            *Hook
+	SendSMS              *Hook
 }
 
 func NewHookRecorder() *HookRecorder {
 	o := &HookRecorder{
-		mux:               http.NewServeMux(),
-		BeforeUserCreated: NewHook(v1hooks.BeforeUserCreated),
-		AfterUserCreated:  NewHook(v1hooks.AfterUserCreated),
+		mux:                  http.NewServeMux(),
+		BeforeUserCreated:    NewHook(v1hooks.BeforeUserCreated),
+		AfterUserCreated:     NewHook(v1hooks.AfterUserCreated),
+		CustomizeAccessToken: NewHook(v0hooks.CustomizeAccessToken),
+		MFAVerification:      NewHook(v0hooks.MFAVerification),
+		PasswordVerification: NewHook(v0hooks.PasswordVerification),
+		SendEmail:            NewHook(v0hooks.SendEmail),
+		SendSMS:              NewHook(v0hooks.SendSMS),
 	}
 
 	o.mux.HandleFunc("POST /hooks/{hook}", func(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +149,21 @@ func NewHookRecorder() *HookRecorder {
 
 		case v1hooks.AfterUserCreated:
 			o.AfterUserCreated.ServeHTTP(w, r)
+
+		case v0hooks.CustomizeAccessToken:
+			o.CustomizeAccessToken.ServeHTTP(w, r)
+
+		case v0hooks.MFAVerification:
+			o.MFAVerification.ServeHTTP(w, r)
+
+		case v0hooks.PasswordVerification:
+			o.PasswordVerification.ServeHTTP(w, r)
+
+		case v0hooks.SendEmail:
+			o.SendEmail.ServeHTTP(w, r)
+
+		case v0hooks.SendSMS:
+			o.SendSMS.ServeHTTP(w, r)
 
 		default:
 			http.NotFound(w, r)
@@ -151,14 +176,19 @@ func (o *HookRecorder) Register(
 	hookCfg *conf.HookConfiguration,
 	baseURL string,
 ) {
-	hookCfg.BeforeUserCreated = conf.ExtensibilityPointConfiguration{
-		Enabled: true,
-		URI:     baseURL + "/hooks/" + string(v1hooks.BeforeUserCreated),
+	set := func(cfg *conf.ExtensibilityPointConfiguration, name v0hooks.Name) {
+		*cfg = conf.ExtensibilityPointConfiguration{
+			Enabled: true,
+			URI:     baseURL + "/hooks/" + string(name),
+		}
 	}
-	hookCfg.AfterUserCreated = conf.ExtensibilityPointConfiguration{
-		Enabled: true,
-		URI:     baseURL + "/hooks/" + string(v1hooks.AfterUserCreated),
-	}
+	set(&hookCfg.BeforeUserCreated, v1hooks.BeforeUserCreated)
+	set(&hookCfg.AfterUserCreated, v1hooks.AfterUserCreated)
+	set(&hookCfg.CustomAccessToken, v0hooks.CustomizeAccessToken)
+	set(&hookCfg.MFAVerificationAttempt, v0hooks.MFAVerification)
+	set(&hookCfg.PasswordVerificationAttempt, v0hooks.PasswordVerification)
+	set(&hookCfg.SendEmail, v0hooks.SendEmail)
+	set(&hookCfg.SendSMS, v0hooks.SendSMS)
 }
 
 func (o *HookRecorder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
