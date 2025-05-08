@@ -67,10 +67,10 @@ func (o *state) add(name v0hooks.Name, fn func() error) error {
 
 var (
 	ctxKey         = new(int)
-	ctxErrInternal = errors.New("context is missing *hookafter.state")
-	ctxErr         = apierrors.NewInternalServerError(
+	errCtxInternal = errors.New("context is missing *hookafter.state")
+	errCtx         = apierrors.NewInternalServerError(
 		"context is missing unable to trigger hooks").
-		WithInternalError(ctxErrInternal)
+		WithInternalError(errCtxInternal)
 )
 
 // Fire will call each trigger previously queued with Defer and return a nil
@@ -79,7 +79,7 @@ var (
 func Fire(ctx context.Context) error {
 	st := from(ctx)
 	if st == nil {
-		return ctxErr
+		return errCtx
 	}
 	return st.fire()
 }
@@ -93,7 +93,7 @@ func Defer(
 ) error {
 	st := from(ctx)
 	if st == nil {
-		return ctxErr
+		return errCtx
 	}
 	return st.add(name, fn)
 }

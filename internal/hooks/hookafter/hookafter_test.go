@@ -15,10 +15,10 @@ func TestContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	if exp, got := ctxErr, Defer(ctx, `any`, func() error { return nil }); exp != got {
+	if exp, got := errCtx, Defer(ctx, `any`, func() error { return nil }); exp != got {
 		t.Fatalf("exp err %v; got %v", exp, got)
 	}
-	if exp, got := ctxErr, Fire(ctx); exp != got {
+	if exp, got := errCtx, Fire(ctx); exp != got {
 		t.Fatalf("exp err %v; got %v", exp, got)
 	}
 
