@@ -11,7 +11,6 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
-	"github.com/supabase/auth/internal/hooks/v1hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -371,15 +370,9 @@ func (a *API) signupNewUser(
 ) (*models.User, error) {
 	config := a.config
 
-	if a.hooksMgr.Enabled(v1hooks.BeforeUserCreated) {
-		req := v1hooks.NewBeforeUserCreatedRequest(r, user)
-		res := new(v1hooks.BeforeUserCreatedResponse)
-		err := a.hooksMgr.BeforeUserCreated(r.Context(), conn, req, res)
-		if err != nil {
-			return nil, err
-		}
+	if err := a.triggerBeforeUserCreated(r, conn, user); err != nil {
+		return nil, err
 	}
-
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = tx.Create(user); terr != nil {
@@ -393,21 +386,15 @@ func (a *API) signupNewUser(
 	if err != nil {
 		return nil, err
 	}
+	if err := a.triggerAfterUserCreated(r, user.ID); err != nil {
+		return nil, err
+	}
 
 	// there may be triggers or generated column values in the database that will modify the
 	// user data as it is being inserted. thus we load the user object
 	// again to fetch those changes.
 	if err := conn.Reload(user); err != nil {
 		return nil, apierrors.NewInternalServerError("Database error loading user after sign-up").WithInternalError(err)
-	}
-
-	if a.hooksMgr.Enabled(v1hooks.AfterUserCreated) {
-		req := v1hooks.NewAfterUserCreatedRequest(r, user)
-		res := new(v1hooks.AfterUserCreatedResponse)
-		err := a.hooksMgr.AfterUserCreated(r.Context(), conn, req, res)
-		if err != nil {
-			return nil, err
-		}
 	}
 	return user, nil
 }

@@ -134,6 +134,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		r.UseBypass(api.databaseCleanup(cleanup))
 	}
 
+	r.UseBypass(api.afterhooksMiddleware)
+
 	r.Get("/health", api.HealthCheck)
 	r.Get("/.well-known/jwks.json", api.Jwks)
 
