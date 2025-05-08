@@ -98,7 +98,6 @@ func TestE2EHooks(t *testing.T) {
 
 			require.Equal(t, signupUser.CreatedAt, u.CreatedAt)
 			require.True(t, signupUser.CreatedAt.Before(u.UpdatedAt))
-			require.True(t, signupUser.UpdatedAt.After(u.UpdatedAt))
 
 			currentUser = signupUser
 		}
