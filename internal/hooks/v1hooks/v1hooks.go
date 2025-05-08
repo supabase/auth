@@ -50,9 +50,7 @@ func NewBeforeUserCreatedRequest(
 	}
 }
 
-type BeforeUserCreatedResponse struct {
-	User *models.User `json:"user"`
-}
+type BeforeUserCreatedResponse struct{}
 
 type AfterUserCreatedRequest struct {
 	Header *Header      `json:"header"`
@@ -69,6 +67,4 @@ func NewAfterUserCreatedRequest(
 	}
 }
 
-type AfterUserCreatedResponse struct {
-	User *models.User `json:"user"`
-}
+type AfterUserCreatedResponse struct{}
