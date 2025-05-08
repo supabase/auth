@@ -157,6 +157,11 @@ func TestHookRecorder(t *testing.T) {
 			}
 			call := calls[0]
 
+			test.hook.ClearCalls()
+			if exp, got := 0, len(test.hook.GetCalls()); exp != got {
+				t.Fatalf("exp %v; got %v", exp, got)
+			}
+
 			var got int
 			if err := call.Unmarshal(&got); err != nil {
 				t.Fatalf("exp nil err; got %v", err)
