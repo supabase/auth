@@ -2,6 +2,7 @@
 package e2ehooks
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -49,23 +50,33 @@ func New(globalCfg *conf.GlobalConfiguration) (*Instance, error) {
 	return o, nil
 }
 
+func HandleSuccess() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("content-type", "application/json")
+		_, _ = io.WriteString(w, "{}")
+	})
+}
+
 type Hook struct {
 	mu    sync.Mutex
 	name  v0hooks.Name
 	calls []*HookCall
 
-	res string
-	hdr http.Header
+	hr http.Handler
 }
 
 func NewHook(name v0hooks.Name) *Hook {
 	o := &Hook{
 		name: name,
 	}
-	o.SetResponse(`{}`, http.Header{
-		"content-type": []string{"application/json"},
-	})
+	o.SetHandler(HandleSuccess())
 	return o
+}
+
+func (o *Hook) ClearCalls() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.calls = nil
 }
 
 func (o *Hook) GetCalls() []*HookCall {
@@ -74,11 +85,10 @@ func (o *Hook) GetCalls() []*HookCall {
 	return slices.Clone(o.calls)
 }
 
-func (o *Hook) SetResponse(res string, hdr http.Header) {
+func (o *Hook) SetHandler(hr http.Handler) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.res = res
-	o.hdr = hdr
+	o.hr = hr
 }
 
 func (o *Hook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -92,6 +102,7 @@ func (o *Hook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(code), code)
 		return
 	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
 
 	hc := &HookCall{
 		Dump:   string(dump),
@@ -100,12 +111,7 @@ func (o *Hook) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	o.calls = append(o.calls, hc)
 
-	for name, vals := range o.hdr {
-		for _, val := range vals {
-			w.Header().Add(name, val)
-		}
-	}
-	_, _ = io.WriteString(w, o.res)
+	o.hr.ServeHTTP(w, r)
 }
 
 type HookCall struct {
