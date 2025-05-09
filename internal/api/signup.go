@@ -193,7 +193,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			}
 			// do not update the user because we can't be sure of their claimed identity
 		} else {
-			user, terr = a.signupNewUser(tx, signupUser)
+			user, terr = a.signupNewUser(r, tx, signupUser)
 			if terr != nil {
 				return terr
 			}
@@ -363,9 +363,16 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 	return u, nil
 }
 
-func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*models.User, error) {
+func (a *API) signupNewUser(
+	r *http.Request,
+	conn *storage.Connection,
+	user *models.User,
+) (*models.User, error) {
 	config := a.config
 
+	if err := a.triggerBeforeUserCreated(r, conn, user); err != nil {
+		return nil, err
+	}
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = tx.Create(user); terr != nil {
@@ -379,6 +386,9 @@ func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*model
 	if err != nil {
 		return nil, err
 	}
+	if err := a.triggerAfterUserCreated(r, user.ID); err != nil {
+		return nil, err
+	}
 
 	// there may be triggers or generated column values in the database that will modify the
 	// user data as it is being inserted. thus we load the user object
@@ -386,6 +396,5 @@ func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*model
 	if err := conn.Reload(user); err != nil {
 		return nil, apierrors.NewInternalServerError("Database error loading user after sign-up").WithInternalError(err)
 	}
-
 	return user, nil
 }

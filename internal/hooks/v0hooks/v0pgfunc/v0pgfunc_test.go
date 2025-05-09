@@ -8,8 +8,8 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/storage/test"
 )
 
 type M = map[string]any
@@ -18,8 +18,8 @@ func TestDispatch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	globalCfg := helpConfig(t, apiTestConfig)
-	db := helpConn(t, globalCfg)
+	globalCfg := e2e.Must(e2e.Config())
+	db := e2e.Must(e2e.Conn(globalCfg))
 
 	type testCase struct {
 		ctx    context.Context
@@ -182,6 +182,38 @@ func TestDispatch(t *testing.T) {
 				end; $$ language plpgsql;`,
 			errStr: "500: Error unmarshaling JSON output.",
 		},
+
+		{
+			desc: "fail - returned error",
+			cfg: conf.ExtensibilityPointConfiguration{
+				URI:      `pg-functions://postgres/auth/v0pgfunc_test_return_input`,
+				HookName: `"auth"."v0pgfunc_test_return_input"`,
+			},
+			req: M{"error": M{"message": "failed"}},
+			sql: `
+				create or replace function v0pgfunc_test_return_input(input jsonb)
+				returns json as $$
+				begin
+					return input;
+				end; $$ language plpgsql;`,
+			errStr: "500: failed",
+		},
+
+		{
+			desc: "fail - returned error with status",
+			cfg: conf.ExtensibilityPointConfiguration{
+				URI:      `pg-functions://postgres/auth/v0pgfunc_test_return_input`,
+				HookName: `"auth"."v0pgfunc_test_return_input"`,
+			},
+			req: M{"error": M{"message": "failed", "http_code": 403}},
+			sql: `
+				create or replace function v0pgfunc_test_return_input(input jsonb)
+				returns json as $$
+				begin
+					return input;
+				end; $$ language plpgsql;`,
+			errStr: "403: failed",
+		},
 	}
 
 	for idx, tc := range cases {
@@ -210,7 +242,7 @@ func TestDispatch(t *testing.T) {
 		tx := tc.tx
 		cfg := tc.cfg
 		res := M{}
-		err := dr.Dispatch(testCtx, cfg, tx, tc.req, &res)
+		err := dr.PGFuncDispatch(testCtx, cfg, tx, tc.req, &res)
 		if tc.err != nil {
 			require.Error(t, err)
 			require.Equal(t, tc.err, err)
@@ -224,28 +256,4 @@ func TestDispatch(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, tc.exp, res)
 	}
-}
-
-const (
-	apiTestConfig = "../../../../hack/test.env"
-)
-
-func helpConfig(t testing.TB, configPath string) *conf.GlobalConfiguration {
-	t.Helper()
-
-	config, err := conf.LoadGlobal(configPath)
-	if err != nil {
-		t.Fatalf("error loading config %q; got %v", configPath, err)
-	}
-	return config
-}
-
-func helpConn(t testing.TB, config *conf.GlobalConfiguration) *storage.Connection {
-	t.Helper()
-
-	conn, err := test.SetupDBConnection(config)
-	if err != nil {
-		t.Fatalf("error setting up db connection: %v", err)
-	}
-	return conn
 }

@@ -87,7 +87,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.limiterOpts = NewLimiterOptions(globalConfig)
 	}
 	if api.hooksMgr == nil {
-		api.hooksMgr = hooks.NewManager(db, globalConfig)
+		api.hooksMgr = hooks.New(globalConfig, db)
 	}
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
@@ -133,6 +133,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		cleanup := models.NewCleanup(globalConfig)
 		r.UseBypass(api.databaseCleanup(cleanup))
 	}
+
+	r.UseBypass(api.afterhooksMiddleware)
 
 	r.Get("/health", api.HealthCheck)
 	r.Get("/.well-known/jwks.json", api.Jwks)
