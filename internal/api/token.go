@@ -502,7 +502,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 }
 
 func validateTokenClaims(outputClaims map[string]any) error {
-	schemaLoader := gojsonschema.NewStringLoader(v0hooks.MinimumViableTokenSchema)
+	schemaLoader := gojsonschema.NewStringLoader(minimumViableTokenSchema)
 	documentLoader := gojsonschema.NewGoLoader(outputClaims)
 	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
 	if err != nil {
@@ -519,3 +519,62 @@ func validateTokenClaims(outputClaims map[string]any) error {
 	}
 	return nil
 }
+
+// #nosec
+const minimumViableTokenSchema = `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "aud": {
+      "type": ["string", "array"]
+    },
+    "exp": {
+      "type": "integer"
+    },
+    "jti": {
+      "type": "string"
+    },
+    "iat": {
+      "type": "integer"
+    },
+    "iss": {
+      "type": "string"
+    },
+    "nbf": {
+      "type": "integer"
+    },
+    "sub": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "app_metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "user_metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "role": {
+      "type": "string"
+    },
+    "aal": {
+      "type": "string"
+    },
+    "amr": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "session_id": {
+      "type": "string"
+    }
+  },
+  "required": ["aud", "exp", "iat", "sub", "email", "phone", "role", "aal", "session_id", "is_anonymous"]
+}`

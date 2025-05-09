@@ -32,65 +32,6 @@ type SMS struct {
 	SMSType string `json:"sms_type,omitempty"`
 }
 
-// #nosec
-const MinimumViableTokenSchema = `{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "properties": {
-    "aud": {
-      "type": ["string", "array"]
-    },
-    "exp": {
-      "type": "integer"
-    },
-    "jti": {
-      "type": "string"
-    },
-    "iat": {
-      "type": "integer"
-    },
-    "iss": {
-      "type": "string"
-    },
-    "nbf": {
-      "type": "integer"
-    },
-    "sub": {
-      "type": "string"
-    },
-    "email": {
-      "type": "string"
-    },
-    "phone": {
-      "type": "string"
-    },
-    "app_metadata": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "user_metadata": {
-      "type": "object",
-      "additionalProperties": true
-    },
-    "role": {
-      "type": "string"
-    },
-    "aal": {
-      "type": "string"
-    },
-    "amr": {
-      "type": "array",
-      "items": {
-        "type": "object"
-      }
-    },
-    "session_id": {
-      "type": "string"
-    }
-  },
-  "required": ["aud", "exp", "iat", "sub", "email", "phone", "role", "aal", "session_id", "is_anonymous"]
-}`
-
 // AccessTokenClaims is a struct thats used for JWT claims
 type AccessTokenClaims struct {
 	jwt.RegisteredClaims
