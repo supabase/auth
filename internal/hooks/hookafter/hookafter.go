@@ -21,10 +21,11 @@ type state struct {
 	mu    sync.Mutex
 	done  bool
 	queue []*trigger
+	seen  map[v0hooks.Name]bool
 }
 
 func newState() *state {
-	return &state{}
+	return &state{seen: make(map[v0hooks.Name]bool)}
 }
 
 func (o *state) fire() error {
@@ -38,8 +39,7 @@ func (o *state) fire() error {
 	o.done = true
 
 	var errs []error
-	for i := len(o.queue) - 1; i >= 0; i-- {
-		tr := o.queue[i]
+	for _, tr := range o.queue {
 		err := tr.fn()
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%v: %w", tr.name, err))
@@ -52,10 +52,14 @@ func (o *state) add(name v0hooks.Name, fn func() error) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.done {
-		err := errors.New("call to Defer after all triggers have fired")
+		err := errors.New("call to Queue after all triggers have fired")
 		return apierrors.NewInternalServerError(
 			"error triggering hooks").WithInternalError(err)
 	}
+	if o.seen[name] {
+		return nil
+	}
+	o.seen[name] = true
 
 	tr := &trigger{
 		fn:   fn,
@@ -69,7 +73,7 @@ var (
 	ctxKey         = new(int)
 	errCtxInternal = errors.New("context is missing *hookafter.state")
 	errCtx         = apierrors.NewInternalServerError(
-		"context is missing unable to trigger hooks").
+		"unable to trigger hooks").
 		WithInternalError(errCtxInternal)
 )
 
@@ -84,9 +88,9 @@ func Fire(ctx context.Context) error {
 	return st.fire()
 }
 
-// Defer will queue a trigger in LIFO order much like the defer built-in. It
+// Queue will queue a trigger in LIFO order much like the defer built-in. It
 // will return an error if Fire has already been called.
-func Defer(
+func Queue(
 	ctx context.Context,
 	name v0hooks.Name,
 	fn func() error,
