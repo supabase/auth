@@ -3,7 +3,6 @@ package hookafter
 import (
 	"context"
 	"errors"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +14,7 @@ func TestContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	if exp, got := errCtx, Defer(ctx, `any`, func() error { return nil }); exp != got {
+	if exp, got := errCtx, Queue(ctx, `any`, func() error { return nil }); exp != got {
 		t.Fatalf("exp err %v; got %v", exp, got)
 	}
 	if exp, got := errCtx, Fire(ctx); exp != got {
@@ -32,7 +31,7 @@ func TestContext(t *testing.T) {
 		t.Fatalf("exp same state %v; got %v", exp, got)
 	}
 
-	if err := Defer(ctx, `any`, func() error { return nil }); err != nil {
+	if err := Queue(ctx, `any`, func() error { return nil }); err != nil {
 		t.Fatalf("exp nil err; got %v", err)
 	}
 	if err := Fire(ctx); err != nil {
@@ -71,10 +70,7 @@ func TestState(t *testing.T) {
 		t.Fatalf("exp %v; got %v", exp, got)
 	}
 
-	hookNamesRev := slices.Clone(hookNames)
-	slices.Reverse(hookNamesRev)
-
-	for i, hookName := range hookNamesRev {
+	for i, hookName := range hookNames {
 		if exp, got := hookName, calls[i]; exp != got {
 			t.Fatalf("exp %v; got %v", exp, got)
 		}
@@ -104,7 +100,14 @@ func TestStateErrors(t *testing.T) {
 
 	st := newState()
 	for _, hookName := range hookNames {
-		st.add(triggerFn(hookName))
+		if err := st.add(triggerFn(hookName)); err != nil {
+			t.Fatalf("exp nil error; got %v", err)
+		}
+
+		// double trigger should just be ignored, less burden on callers
+		if err := st.add(triggerFn(hookName)); err != nil {
+			t.Fatalf("exp nil error; got %v", err)
+		}
 	}
 	if exp, got := 0, len(calls); exp != got {
 		t.Fatalf("exp %v; got %v", exp, got)
@@ -118,11 +121,8 @@ func TestStateErrors(t *testing.T) {
 		t.Fatalf("exp %v; got %v", exp, got)
 	}
 
-	hookNamesRev := slices.Clone(hookNames)
-	slices.Reverse(hookNamesRev)
-
 	var b strings.Builder
-	for i, hookName := range hookNamesRev {
+	for i, hookName := range hookNames {
 		if exp, got := hookName, calls[i]; exp != got {
 			t.Fatalf("exp %v; got %v", exp, got)
 		}

@@ -46,8 +46,13 @@ func (a *API) triggerAfterUserCreated(
 		return nil
 	}
 
-	return hookafter.Defer(r.Context(), v1hooks.AfterUserCreated, func() error {
+	return hookafter.Queue(r.Context(), v1hooks.AfterUserCreated, func() error {
 		db := a.db.WithContext(r.Context())
+
+		// We reload the user so if some kind of rollback occurs later in
+		// the request we don't send an after-user-created event with no
+		// associated user. This also guarantees we fetch the user as
+		// it would be seen in future requests.
 		user, err := models.FindUserByID(db, userID)
 		if err != nil {
 			return err
