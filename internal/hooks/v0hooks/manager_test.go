@@ -46,14 +46,6 @@ func TestHooks(t *testing.T) {
 		}
 	}
 
-	// // Cover auth hook errors single method
-	// {
-	// 	ae := &AuthHookError{Message: "test"}
-	// 	if exp, got := "test", ae.Error(); exp != got {
-	// 		t.Fatalf("exp %v; got %v", exp, got)
-	// 	}
-	// }
-
 	type testCase struct {
 		desc   string
 		setup  func()
