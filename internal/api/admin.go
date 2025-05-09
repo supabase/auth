@@ -155,6 +155,14 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
+
+		if params.Email != user.GetEmail() {
+			if user, err := models.IsDuplicatedEmail(db, params.Email, user.Aud, nil); err != nil {
+				return apierrors.NewInternalServerError("Database error checking email").WithInternalError(err)
+			} else if user != nil {
+				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
+			}
+		}
 	}
 
 	if params.Phone != "" {
@@ -214,7 +222,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		var identities []models.Identity
-		if params.Email != "" {
+		if params.Email != "" && user.GetEmail() != params.Email {
 			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "email"); terr != nil && !models.IsNotFoundError(terr) {
 				return terr
 			} else if identity == nil {
@@ -250,7 +258,7 @@ func (a *API) adminUserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
-		if params.Phone != "" {
+		if params.Phone != "" && user.GetPhone() != params.Phone {
 			if identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), "phone"); terr != nil && !models.IsNotFoundError(terr) {
 				return terr
 			} else if identity == nil {
