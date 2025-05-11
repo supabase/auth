@@ -299,7 +299,7 @@ func isHostNotFound(err error) bool {
 	// domain is not configured to receive email.
 	var dnsError *net.DNSError
 	if !errors.As(err, &dnsError) {
-		// We will be unable to determine with absolute certainy the email was
+		// We will be unable to determine with absolute certainty the email was
 		// invalid so we will err on the side of caution and return nil.
 		return false
 	}

@@ -77,7 +77,7 @@ func (g spotifyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*U
 	if u.Email != "" {
 		data.Emails = []Email{{
 			Email: u.Email,
-			// Spotify dosen't provide data on whether the user's email is verified.
+			// Spotify doesn't provide data on whether the user's email is verified.
 			// https://developer.spotify.com/documentation/web-api/reference/get-current-users-profile
 			Verified: false,
 			Primary:  true,

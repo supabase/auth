@@ -75,7 +75,7 @@ func (ts *VerifyTestSuite) TestVerifyPasswordRecovery() {
 		isPKCE bool
 	}{
 		{
-			desc: "Implict Flow Recovery",
+			desc: "Implicit Flow Recovery",
 			body: map[string]interface{}{
 				"email": testEmail,
 			},
@@ -156,7 +156,7 @@ func (ts *VerifyTestSuite) TestVerifySecureEmailChange() {
 		newEmail     string
 	}{
 		{
-			desc: "Implict Flow Email Change",
+			desc: "Implicit Flow Email Change",
 			body: map[string]interface{}{
 				"email": newEmail,
 			},
@@ -461,7 +461,7 @@ func (ts *VerifyTestSuite) TestExpiredRecoveryToken() {
 	assert.Equal(ts.T(), http.StatusSeeOther, w.Code, w.Body.String())
 }
 
-func (ts *VerifyTestSuite) TestVerifyPermitedCustomUri() {
+func (ts *VerifyTestSuite) TestVerifyPermittedCustomUri() {
 	// verify variant testing not necessary in this test as it's testing
 	// the redirect URL behavior, not the RecoveryToken behavior
 
@@ -507,7 +507,7 @@ func (ts *VerifyTestSuite) TestVerifyPermitedCustomUri() {
 	assert.True(ts.T(), u.IsConfirmed())
 }
 
-func (ts *VerifyTestSuite) TestVerifyNotPermitedCustomUri() {
+func (ts *VerifyTestSuite) TestVerifyNotPermittedCustomUri() {
 	// verify variant testing not necessary in this test as it's testing
 	// the redirect URL behavior, not the RecoveryToken behavior
 
@@ -1125,7 +1125,7 @@ func (ts *VerifyTestSuite) TestPrepRedirectURL() {
 			expected: fmt.Sprintf("https://example.com/?first=another&message=%s&second=other#message=%s", escapedMessage, escapedMessage),
 		},
 		{
-			desc:     "(PKCE): Query params in redirect url are overriden",
+			desc:     "(PKCE): Query params in redirect url are overridden",
 			message:  singleConfirmationAccepted,
 			rurl:     "https://example.com/?message=Valid+redirect+URL",
 			flowType: models.PKCEFlow,

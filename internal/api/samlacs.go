@@ -48,7 +48,7 @@ func (a *API) SamlAcs(w http.ResponseWriter, r *http.Request) error {
 	if err := a.handleSamlAcs(w, r); err != nil {
 		u, uerr := url.Parse(a.config.SiteURL)
 		if uerr != nil {
-			return apierrors.NewInternalServerError("site url is improperly formattted").WithInternalError(err)
+			return apierrors.NewInternalServerError("site url is improperly formatted").WithInternalError(err)
 		}
 
 		q := getErrorQueryString(err, utilities.GetRequestID(r.Context()), observability.GetLogEntry(r).Entry, u.Query())

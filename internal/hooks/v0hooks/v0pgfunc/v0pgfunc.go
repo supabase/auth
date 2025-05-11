@@ -59,7 +59,7 @@ func (o *Dispatcher) Dispatch(
 	if data != nil {
 		if err := json.Unmarshal(data, res); err != nil {
 			return apierrors.NewInternalServerError(
-				"Error unmarshaling JSON output.").WithInternalError(err)
+				"Error unmarshalling JSON output.").WithInternalError(err)
 		}
 	}
 	return nil
@@ -76,7 +76,7 @@ func (o *Dispatcher) RunPostgresHook(
 	request, err := json.Marshal(input)
 	if err != nil {
 		return nil, apierrors.NewInternalServerError(
-			"Error marshaling JSON input.").WithInternalError(err)
+			"Error marshalling JSON input.").WithInternalError(err)
 	}
 
 	var response []byte

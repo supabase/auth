@@ -101,7 +101,7 @@ func (g notionProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	if u.Bot.Owner.User.Person.Email != "" {
 		data.Emails = []Email{{
 			Email:    u.Bot.Owner.User.Person.Email,
-			Verified: true, // Notion dosen't provide data on if email is verified.
+			Verified: true, // Notion doesn't provide data on if email is verified.
 			Primary:  true,
 		}}
 	}

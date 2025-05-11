@@ -38,7 +38,7 @@ const (
 	FirebaseScryptKeyLen = 32 // Firebase uses AES-256 which requires 32 byte keys: https://pkg.go.dev/golang.org/x/crypto/scrypt#Key
 )
 
-// PasswordHashCost is the current pasword hashing cost
+// PasswordHashCost is the current password hashing cost
 // for all new hashes generated with
 // GenerateHashFromPassword.
 var PasswordHashCost = DefaultHashCost

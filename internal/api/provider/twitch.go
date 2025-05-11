@@ -82,7 +82,7 @@ func (t twitchProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
 func (t twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
 	var u twitchUsers
 
-	// Perform http request, because we neeed to set the Client-Id header
+	// Perform http request, because we need to set the Client-Id header
 	req, err := http.NewRequest("GET", t.APIHost+"/helix/users", nil)
 
 	if err != nil {

@@ -91,7 +91,7 @@ type Session struct {
 	ID     uuid.UUID `json:"-" db:"id"`
 	UserID uuid.UUID `json:"user_id" db:"user_id"`
 
-	// NotAfter is overriden by timeboxed sessions.
+	// NotAfter is overridden by timeboxed sessions.
 	NotAfter *time.Time `json:"not_after,omitempty" db:"not_after"`
 
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`
@@ -216,7 +216,7 @@ func NewSession(userID uuid.UUID, factorID *uuid.UUID) (*Session, error) {
 // to true, then the SELECT statement used by the query has the form SELECT ...
 // FOR UPDATE SKIP LOCKED. This means that a FOR UPDATE lock will only be
 // acquired if there's no other lock. In case there is a lock, a
-// IsNotFound(err) error will be retured.
+// IsNotFound(err) error will be returned.
 func FindSessionByID(tx *storage.Connection, id uuid.UUID, forUpdate bool) (*Session, error) {
 	session := &Session{}
 

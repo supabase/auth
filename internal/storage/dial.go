@@ -107,7 +107,7 @@ func registerOpenTelemetryDatabaseStats(db *pop.Connection) {
 	}
 
 	if err := otelsql.RegisterDBStatsMetrics(sqldb); err != nil {
-		logrus.WithError(err).Error("unable to register OpenTelemetry stats metrics for databse")
+		logrus.WithError(err).Error("unable to register OpenTelemetry stats metrics for database")
 	} else {
 		logrus.Debug("registered OpenTelemetry stats metrics for database")
 	}

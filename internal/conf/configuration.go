@@ -44,12 +44,12 @@ type Time struct {
 }
 
 func (t *Time) UnmarshalText(text []byte) error {
-	trimed := bytes.TrimSpace(text)
+	trimmed := bytes.TrimSpace(text)
 
-	if len(trimed) < 1 {
+	if len(trimmed) < 1 {
 		t.Time = time.Time{}
 	} else {
-		if err := t.Time.UnmarshalText(trimed); err != nil {
+		if err := t.Time.UnmarshalText(trimmed); err != nil {
 			return err
 		}
 	}

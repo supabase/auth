@@ -95,7 +95,7 @@ func (rl *Reloader) Watch(ctx context.Context, fn ConfigFunc) error {
 				logrus.WithError(err).Error("reloader: error watching config directory")
 			}
 
-			// Check to see if the config is ready to be relaoded.
+			// Check to see if the config is ready to be reloaded.
 			if !rl.reloadCheckAt(time.Now(), lastUpdate) {
 				continue
 			}

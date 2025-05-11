@@ -180,7 +180,7 @@ func TestDispatch(t *testing.T) {
 				begin
 					return input;
 				end; $$ language plpgsql;`,
-			errStr: "500: Error unmarshaling JSON output.",
+			errStr: "500: Error unmarshalling JSON output.",
 		},
 	}
 

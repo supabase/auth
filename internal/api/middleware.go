@@ -40,7 +40,7 @@ func (f *FunctionHooks) UnmarshalJSON(b []byte) error {
 		*f = FunctionHooks(raw)
 		return nil
 	}
-	// If unmarshaling into map[string][]string fails, try legacy format.
+	// If unmarshalling into map[string][]string fails, try legacy format.
 	var legacy map[string]string
 	err = json.Unmarshal(b, &legacy)
 	if err != nil {

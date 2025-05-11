@@ -93,7 +93,7 @@ func (o *Dispatcher) Dispatch(
 	if data != nil {
 		if err := json.Unmarshal(data, res); err != nil {
 			return apierrors.NewInternalServerError(
-				"Error unmarshaling JSON output.").WithInternalError(err)
+				"Error unmarshalling JSON output.").WithInternalError(err)
 		}
 	}
 	return nil
