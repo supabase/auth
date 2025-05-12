@@ -52,5 +52,10 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	metering.RecordLogin("anonymous", newUser.ID)
+
+	if err := a.triggerAfterUserCreated(newUser.ID); err != nil {
+		return err
+	}
+
 	return sendJSON(w, http.StatusOK, token)
 }

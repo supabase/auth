@@ -334,6 +334,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			return nil, terr
 		}
 		user.Identities = append(user.Identities, *identity)
+
 	case models.AccountExists:
 		user = decision.User
 		identity = decision.Identities[0]
@@ -405,6 +406,12 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			"provider": providerType,
 		}); terr != nil {
 			return nil, terr
+		}
+	}
+
+	if decision.Decision == models.CreateAccount {
+		if err := a.triggerAfterUserCreated(user.ID); err != nil {
+			return nil, err
 		}
 	}
 

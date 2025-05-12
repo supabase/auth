@@ -112,6 +112,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	userWasSignedUp := false
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		switch params.Type {
@@ -165,6 +166,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 				user.Identities = []models.Identity{*identity}
+				userWasSignedUp = true
 			}
 			if terr = models.NewAuditLogEntry(r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
 				"user_id":    user.ID,
@@ -210,6 +212,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 				user.Identities = []models.Identity{*identity}
+				userWasSignedUp = true
 			}
 			user.ConfirmationToken = hashedToken
 			user.ConfirmationSentAt = &now
@@ -282,6 +285,12 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 
 	if err != nil {
 		return err
+	}
+
+	if userWasSignedUp && user != nil {
+		if err := a.triggerAfterUserCreated(user.ID); err != nil {
+			return err
+		}
 	}
 
 	resp := GenerateLinkResponse{

@@ -11,6 +11,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -185,6 +186,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	userWasSignedUp := false
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if user != nil {
@@ -197,6 +199,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
+			userWasSignedUp = true
 		}
 		identity, terr := models.FindIdentityByIdAndProvider(tx, user.ID.String(), params.Provider)
 		if terr != nil {
@@ -327,6 +330,13 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		user.UserMetaData = map[string]interface{}{}
 		user.Identities = []models.Identity{}
 	}
+
+	if userWasSignedUp {
+		if err := a.triggerAfterUserCreated(user.ID); err != nil {
+			return err
+		}
+	}
+
 	return sendJSON(w, http.StatusOK, user)
 }
 
@@ -366,6 +376,10 @@ func sanitizeUser(u *models.User, params *SignupParams) (*models.User, error) {
 func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*models.User, error) {
 	config := a.config
 
+	if err := a.triggerBeforeUserCreated(); err != nil {
+		return user, err
+	}
+
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if terr = tx.Create(user); terr != nil {
@@ -388,4 +402,27 @@ func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*model
 	}
 
 	return user, nil
+}
+
+func (a *API) triggerAfterUserCreated(userID uuid.UUID) error {
+	// todo: fetch fresh user based on userID
+	input := v0hooks.AfterUserCreatedOutput{}
+	output := v0hooks.AfterUserCreatedOutput{}
+	err := a.hooksMgr.InvokeHook(nil, nil, &input, &output)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (a *API) triggerBeforeUserCreated( /* todo: params */ ) error {
+	input := v0hooks.BeforeUserCreatedOutput{}
+	output := v0hooks.BeforeUserCreatedOutput{}
+	err := a.hooksMgr.InvokeHook(nil, nil, &input, &output)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
