@@ -1,5 +1,5 @@
 // Package hookafter contains utilities for contextually queueing and firing
-// hooks in LIFO order.
+// hooks in FIFO order.
 package hookafter
 
 import (
@@ -88,8 +88,8 @@ func Fire(ctx context.Context) error {
 	return st.fire()
 }
 
-// Queue will queue a trigger in LIFO order much like the defer built-in. It
-// will return an error if Fire has already been called.
+// Queue will queue a trigger in FIFO order or return an error if Fire has
+// already been called.
 func Queue(
 	ctx context.Context,
 	name v0hooks.Name,
