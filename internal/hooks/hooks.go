@@ -11,8 +11,38 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
+type Service interface {
+	Enabled(name v0hooks.Name) bool
+
+	InvokeHook(
+		conn *storage.Connection,
+		r *http.Request,
+		input, output any,
+	) error
+
+	RunHTTPHook(
+		r *http.Request,
+		hookConfig conf.ExtensibilityPointConfiguration,
+		input any,
+	) ([]byte, error)
+
+	BeforeUserCreated(
+		ctx context.Context,
+		tx *storage.Connection,
+		req *v0hooks.BeforeUserCreatedRequest,
+		res *v0hooks.BeforeUserCreatedResponse,
+	) error
+
+	AfterUserCreated(
+		ctx context.Context,
+		tx *storage.Connection,
+		req *v0hooks.AfterUserCreatedRequest,
+		res *v0hooks.AfterUserCreatedResponse,
+	) error
+}
+
 type Manager struct {
-	v0svc v0hooks.Service
+	v0svc Service
 }
 
 func New(
@@ -26,7 +56,7 @@ func New(
 }
 
 func NewFromService(
-	v0svc v0hooks.Service,
+	v0svc Service,
 ) *Manager {
 	return &Manager{
 		v0svc: v0svc,

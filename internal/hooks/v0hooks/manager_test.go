@@ -629,7 +629,7 @@ type mockDispatcher struct {
 
 func newMockService(err error) *mockDispatcher { return &mockDispatcher{err: err} }
 
-func (o *mockDispatcher) Dispatch(
+func (o *mockDispatcher) dispatch(
 	ctx context.Context,
 	hookConfig *conf.ExtensibilityPointConfiguration,
 	conn *storage.Connection,
