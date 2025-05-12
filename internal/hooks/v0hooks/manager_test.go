@@ -2,7 +2,9 @@ package v0hooks
 
 import (
 	"context"
+	"errors"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,8 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/e2e"
-	"github.com/supabase/auth/internal/hooks/v0hooks/v0http"
-	"github.com/supabase/auth/internal/hooks/v0hooks/v0pgfunc"
+	"github.com/supabase/auth/internal/hooks/hookhttp"
+	"github.com/supabase/auth/internal/hooks/hookpgfunc"
+	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/storage"
 )
 
 type M = map[string]any
@@ -26,8 +30,8 @@ func TestHooks(t *testing.T) {
 
 	globalCfg := e2e.Must(e2e.Config())
 	db := e2e.Must(e2e.Conn(globalCfg))
-	httpDr := v0http.New(v0http.WithTimeout(time.Second / 10))
-	pgfuncDr := v0pgfunc.New(db, v0pgfunc.WithTimeout(time.Second/10))
+	httpDr := hookhttp.New(hookhttp.WithTimeout(time.Second / 10))
+	pgfuncDr := hookpgfunc.New(db, hookpgfunc.WithTimeout(time.Second/10))
 	mr := New(globalCfg, httpDr, pgfuncDr)
 	now := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
 
@@ -448,6 +452,12 @@ func TestConfig(t *testing.T) {
 			PasswordVerificationAttempt: conf.ExtensibilityPointConfiguration{
 				URI: "http:localhost/" + string(PasswordVerification),
 			},
+			BeforeUserCreated: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(BeforeUserCreated),
+			},
+			AfterUserCreated: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(AfterUserCreated),
+			},
 		},
 	}
 	cfg := &globalCfg.Hook
@@ -472,6 +482,10 @@ func TestConfig(t *testing.T) {
 			name: MFAVerification, exp: &cfg.MFAVerificationAttempt},
 		{cfg: cfg, ok: true,
 			name: PasswordVerification, exp: &cfg.PasswordVerificationAttempt},
+		{cfg: cfg, ok: true,
+			name: BeforeUserCreated, exp: &cfg.BeforeUserCreated},
+		{cfg: cfg, ok: true,
+			name: AfterUserCreated, exp: &cfg.AfterUserCreated},
 	}
 	for idx, test := range tests {
 		t.Logf("test #%v - exp ok %v with cfg %v from name %v",
@@ -490,4 +504,144 @@ func TestConfig(t *testing.T) {
 		got.Enabled = true
 		require.Equal(t, true, mr.Enabled(test.name))
 	}
+}
+
+func TestUserHooks(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	t.Run("BeforeUserCreated", func(t *testing.T) {
+		httpReq := httptest.NewRequest("GET", "http://localhost/test", nil)
+		user := &models.User{}
+		req := NewBeforeUserCreatedRequest(httpReq, user)
+		res := new(BeforeUserCreatedResponse)
+
+		t.Run("BeforeUserCreatedSuccess", func(t *testing.T) {
+			cfg := e2e.Must(e2e.Config())
+			dr := newMockService(nil)
+			mr := &Manager{config: cfg, dr: dr}
+
+			err := mr.BeforeUserCreated(ctx, nil, req, res)
+			if err != nil {
+				t.Fatalf("exp nil err; got %v", err)
+			}
+			if exp, got := 1, len(dr.calls); exp != got {
+				t.Fatalf("exp %v; got %v", exp, got)
+			}
+
+			call := dr.calls[0]
+			if exp, got := req, call.input; exp != got {
+				t.Fatalf("exp %v; got %v", exp, got)
+			}
+			if exp, got := res, call.output; exp != got {
+				t.Fatalf("exp %v; got %v", exp, got)
+			}
+		})
+
+		t.Run("BeforeUserCreatedError", func(t *testing.T) {
+			cfg := e2e.Must(e2e.Config())
+			sentinel := errors.New("sentinel")
+			dr := newMockService(sentinel)
+			mr := &Manager{config: cfg, dr: dr}
+
+			err := mr.BeforeUserCreated(ctx, nil, req, res)
+			if err != sentinel {
+				t.Fatalf("exp err %v; got %v", sentinel, err)
+			}
+			if exp, got := 1, len(dr.calls); exp != got {
+				t.Fatalf("exp %v; got %v", exp, got)
+			}
+
+			call := dr.calls[0]
+			if exp, got := req, call.input; exp != got {
+				t.Fatalf("exp %v; got %v", exp, got)
+			}
+			if exp, got := res, call.output; exp != got {
+				t.Fatalf("exp %v; got %v", exp, got)
+			}
+		})
+	})
+
+	t.Run("AfterUserCreated", func(t *testing.T) {
+		httpReq := httptest.NewRequest("GET", "http://localhost/test", nil)
+		user := &models.User{}
+		req := NewAfterUserCreatedRequest(httpReq, user)
+		res := new(AfterUserCreatedResponse)
+
+		t.Run("AfterUserCreatedSuccess", func(t *testing.T) {
+			cfg := e2e.Must(e2e.Config())
+			dr := newMockService(nil)
+			mr := &Manager{config: cfg, dr: dr}
+
+			err := mr.AfterUserCreated(ctx, nil, req, res)
+			if err != nil {
+				t.Fatalf("exp nil err; got %v", err)
+			}
+			if exp, got := 1, len(dr.calls); exp != got {
+				t.Fatalf("exp %v; got %v", exp, got)
+			}
+
+			call := dr.calls[0]
+			if exp, got := req, call.input; exp != got {
+				t.Fatalf("exp %v; got %v", exp, got)
+			}
+			if exp, got := res, call.output; exp != got {
+				t.Fatalf("exp %v; got %v", exp, got)
+			}
+		})
+
+		t.Run("AfterUserCreatedError", func(t *testing.T) {
+			cfg := e2e.Must(e2e.Config())
+			sentinel := errors.New("sentinel")
+			dr := newMockService(sentinel)
+			mr := &Manager{config: cfg, dr: dr}
+
+			err := mr.AfterUserCreated(ctx, nil, req, res)
+			if err != sentinel {
+				t.Fatalf("exp err %v; got %v", sentinel, err)
+			}
+			if exp, got := 1, len(dr.calls); exp != got {
+				t.Fatalf("exp %v; got %v", exp, got)
+			}
+
+			call := dr.calls[0]
+			if exp, got := req, call.input; exp != got {
+				t.Fatalf("exp %v; got %v", exp, got)
+			}
+			if exp, got := res, call.output; exp != got {
+				t.Fatalf("exp %v; got %v", exp, got)
+			}
+		})
+	})
+}
+
+type mockCall struct {
+	conn          *storage.Connection
+	hookConfig    *conf.ExtensibilityPointConfiguration
+	input, output any
+}
+
+type mockDispatcher struct {
+	mu    sync.Mutex
+	err   error
+	calls []*mockCall
+}
+
+func newMockService(err error) *mockDispatcher { return &mockDispatcher{err: err} }
+
+func (o *mockDispatcher) Dispatch(
+	ctx context.Context,
+	hookConfig *conf.ExtensibilityPointConfiguration,
+	conn *storage.Connection,
+	input, output any,
+) error {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.calls = append(o.calls, &mockCall{
+		conn:       conn,
+		hookConfig: hookConfig,
+		input:      input,
+		output:     output,
+	})
+	return o.err
 }

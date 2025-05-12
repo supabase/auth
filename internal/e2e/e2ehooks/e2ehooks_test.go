@@ -11,7 +11,6 @@ import (
 
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
-	"github.com/supabase/auth/internal/hooks/v1hooks"
 )
 
 func TestInstance(t *testing.T) {
@@ -55,7 +54,7 @@ func TestHook(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	hook := NewHook(v1hooks.AfterUserCreated)
+	hook := NewHook(v0hooks.AfterUserCreated)
 
 	{
 		calls := hook.GetCalls()
@@ -106,11 +105,11 @@ func TestHookRecorder(t *testing.T) {
 		hook *Hook
 	}{
 		{
-			name: v1hooks.BeforeUserCreated,
+			name: v0hooks.BeforeUserCreated,
 			hook: hookRec.BeforeUserCreated,
 		},
 		{
-			name: v1hooks.AfterUserCreated,
+			name: v0hooks.AfterUserCreated,
 			hook: hookRec.AfterUserCreated,
 		},
 		{

@@ -1,26 +1,27 @@
 package v0hooks
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/dispatch"
-	"github.com/supabase/auth/internal/hooks/v0hooks/v0http"
-	"github.com/supabase/auth/internal/hooks/v0hooks/v0pgfunc"
+	"github.com/supabase/auth/internal/hooks/hookhttp"
+	"github.com/supabase/auth/internal/hooks/hookpgfunc"
 	"github.com/supabase/auth/internal/storage"
 )
 
 type Manager struct {
 	config *conf.GlobalConfiguration
-	v0http v0http.Service
+	v0http hookhttp.Service
 	dr     dispatch.Service
 }
 
 func New(
 	config *conf.GlobalConfiguration,
-	httpSvc v0http.Service,
-	pgfuncSvc v0pgfunc.Service,
+	httpSvc hookhttp.Service,
+	pgfuncSvc hookpgfunc.Service,
 ) *Manager {
 	return &Manager{
 		config: config,
@@ -33,7 +34,6 @@ func configByName(
 	cfg *conf.HookConfiguration,
 	name Name,
 ) (*conf.ExtensibilityPointConfiguration, bool) {
-	//exhaustive:ignore
 	switch name {
 	case SendSMS:
 		return &cfg.SendSMS, true
@@ -45,6 +45,10 @@ func configByName(
 		return &cfg.MFAVerificationAttempt, true
 	case PasswordVerification:
 		return &cfg.PasswordVerificationAttempt, true
+	case BeforeUserCreated:
+		return &cfg.BeforeUserCreated, true
+	case AfterUserCreated:
+		return &cfg.AfterUserCreated, true
 	default:
 		return nil, false
 	}
@@ -55,6 +59,24 @@ func (o *Manager) Enabled(name Name) bool {
 		return cfg.Enabled
 	}
 	return false
+}
+
+func (o *Manager) BeforeUserCreated(
+	ctx context.Context,
+	tx *storage.Connection,
+	req *BeforeUserCreatedRequest,
+	res *BeforeUserCreatedResponse,
+) error {
+	return o.dr.Dispatch(ctx, &o.config.Hook.BeforeUserCreated, tx, req, res)
+}
+
+func (o *Manager) AfterUserCreated(
+	ctx context.Context,
+	tx *storage.Connection,
+	req *AfterUserCreatedRequest,
+	res *AfterUserCreatedResponse,
+) error {
+	return o.dr.Dispatch(ctx, &o.config.Hook.AfterUserCreated, tx, req, res)
 }
 
 func (o *Manager) InvokeHook(

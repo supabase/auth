@@ -502,9 +502,8 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 }
 
 func validateTokenClaims(outputClaims map[string]any) error {
-	schemaLoader := gojsonschema.NewStringLoader(minimumViableTokenSchema)
 	documentLoader := gojsonschema.NewGoLoader(outputClaims)
-	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+	result, err := gojsonschema.Validate(tokenSchemaLoader, documentLoader)
 	if err != nil {
 		return err
 	}
@@ -519,6 +518,10 @@ func validateTokenClaims(outputClaims map[string]any) error {
 	}
 	return nil
 }
+
+var (
+	tokenSchemaLoader = gojsonschema.NewStringLoader(minimumViableTokenSchema)
+)
 
 // #nosec
 const minimumViableTokenSchema = `{

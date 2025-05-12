@@ -1,10 +1,14 @@
 package v0hooks
 
 import (
+	"net/http"
+	"time"
+
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 type Name string
@@ -15,6 +19,8 @@ const (
 	CustomizeAccessToken Name = "customize-access-token"
 	MFAVerification      Name = "mfa-verification"
 	PasswordVerification Name = "password-verification"
+	BeforeUserCreated    Name = "before-user-created"
+	AfterUserCreated     Name = "after-user-created"
 )
 
 const (
@@ -25,6 +31,60 @@ const (
 	DefaultMFAHookRejectionMessage      = "Further MFA verification attempts will be rejected."
 	DefaultPasswordHookRejectionMessage = "Further password verification attempts will be rejected."
 )
+
+type Header struct {
+	UUID uuid.UUID `json:"uuid"`
+	Time time.Time `json:"time"`
+
+	// Hook name
+	Name Name `json:"name,omitempty"`
+
+	// IP Address of the request, if present
+	IPAddress string `json:"ip_address,omitempty"`
+}
+
+func NewHeader(r *http.Request, name Name) *Header {
+	return &Header{
+		UUID:      uuid.Must(uuid.NewV4()),
+		Time:      time.Now(),
+		IPAddress: utilities.GetIPAddress(r),
+		Name:      name,
+	}
+}
+
+type BeforeUserCreatedRequest struct {
+	Header *Header      `json:"header"`
+	User   *models.User `json:"user"`
+}
+
+func NewBeforeUserCreatedRequest(
+	r *http.Request,
+	user *models.User,
+) *BeforeUserCreatedRequest {
+	return &BeforeUserCreatedRequest{
+		Header: NewHeader(r, BeforeUserCreated),
+		User:   user,
+	}
+}
+
+type BeforeUserCreatedResponse struct{}
+
+type AfterUserCreatedRequest struct {
+	Header *Header      `json:"header"`
+	User   *models.User `json:"user"`
+}
+
+func NewAfterUserCreatedRequest(
+	r *http.Request,
+	user *models.User,
+) *AfterUserCreatedRequest {
+	return &AfterUserCreatedRequest{
+		Header: NewHeader(r, AfterUserCreated),
+		User:   user,
+	}
+}
+
+type AfterUserCreatedResponse struct{}
 
 // TODO(joel): Move this to phone package
 type SMS struct {

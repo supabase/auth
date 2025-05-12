@@ -14,7 +14,6 @@ import (
 	"github.com/supabase/auth/internal/e2e/e2eapi"
 	"github.com/supabase/auth/internal/e2e/e2ehooks"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
-	"github.com/supabase/auth/internal/hooks/v1hooks"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -62,7 +61,7 @@ func TestE2EHooks(t *testing.T) {
 			}
 			call := calls[0]
 
-			hookReq := &v1hooks.BeforeUserCreatedRequest{}
+			hookReq := &v0hooks.BeforeUserCreatedRequest{}
 			if err := call.Unmarshal(hookReq); err != nil {
 				t.Fatalf("exp nil err; got %v", err)
 			}
@@ -84,7 +83,7 @@ func TestE2EHooks(t *testing.T) {
 			}
 			call := calls[0]
 
-			hookReq := &v1hooks.AfterUserCreatedRequest{}
+			hookReq := &v0hooks.AfterUserCreatedRequest{}
 			if err := call.Unmarshal(hookReq); err != nil {
 				t.Fatalf("exp nil err; got %v", err)
 			}

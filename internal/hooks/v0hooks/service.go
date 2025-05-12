@@ -1,6 +1,7 @@
 package v0hooks
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/supabase/auth/internal/conf"
@@ -21,4 +22,18 @@ type Service interface {
 		hookConfig conf.ExtensibilityPointConfiguration,
 		input any,
 	) ([]byte, error)
+
+	BeforeUserCreated(
+		ctx context.Context,
+		tx *storage.Connection,
+		req *BeforeUserCreatedRequest,
+		res *BeforeUserCreatedResponse,
+	) error
+
+	AfterUserCreated(
+		ctx context.Context,
+		tx *storage.Connection,
+		req *AfterUserCreatedRequest,
+		res *AfterUserCreatedResponse,
+	) error
 }

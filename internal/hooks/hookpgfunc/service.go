@@ -1,4 +1,4 @@
-package v0pgfunc
+package hookpgfunc
 
 import (
 	"context"

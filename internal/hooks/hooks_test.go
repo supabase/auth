@@ -10,7 +10,6 @@ import (
 	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
-	"github.com/supabase/auth/internal/hooks/v1hooks"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -37,8 +36,8 @@ func (*mockService) RunHTTPHook(
 func (*mockService) BeforeUserCreated(
 	ctx context.Context,
 	tx *storage.Connection,
-	req *v1hooks.BeforeUserCreatedRequest,
-	res *v1hooks.BeforeUserCreatedResponse,
+	req *v0hooks.BeforeUserCreatedRequest,
+	res *v0hooks.BeforeUserCreatedResponse,
 ) error {
 	return nil
 }
@@ -46,8 +45,8 @@ func (*mockService) BeforeUserCreated(
 func (*mockService) AfterUserCreated(
 	ctx context.Context,
 	tx *storage.Connection,
-	req *v1hooks.AfterUserCreatedRequest,
-	res *v1hooks.AfterUserCreatedResponse,
+	req *v0hooks.AfterUserCreatedRequest,
+	res *v0hooks.AfterUserCreatedResponse,
 ) error {
 	return nil
 }
@@ -66,10 +65,10 @@ func TestManager(t *testing.T) {
 	defer cancel()
 
 	svc := &mockService{}
-	mgr := hooks.NewFromServices(svc, svc)
+	mgr := hooks.NewFromService(svc)
 
 	{
-		ok := mgr.Enabled(v1hooks.AfterUserCreated)
+		ok := mgr.Enabled(v0hooks.AfterUserCreated)
 		if exp, got := true, ok; exp != got {
 			t.Fatalf("exp %v; got %v", exp, got)
 		}
@@ -94,8 +93,8 @@ func TestManager(t *testing.T) {
 	}
 
 	{
-		req := new(v1hooks.BeforeUserCreatedRequest)
-		res := new(v1hooks.BeforeUserCreatedResponse)
+		req := new(v0hooks.BeforeUserCreatedRequest)
+		res := new(v0hooks.BeforeUserCreatedResponse)
 		err := mgr.BeforeUserCreated(ctx, nil, req, res)
 		if err != nil {
 			t.Fatalf("exp nil err; got %v", err)
@@ -103,17 +102,8 @@ func TestManager(t *testing.T) {
 	}
 
 	{
-		req := new(v1hooks.BeforeUserCreatedRequest)
-		res := new(v1hooks.BeforeUserCreatedResponse)
-		err := mgr.BeforeUserCreated(ctx, nil, req, res)
-		if err != nil {
-			t.Fatalf("exp nil err; got %v", err)
-		}
-	}
-
-	{
-		req := new(v1hooks.AfterUserCreatedRequest)
-		res := new(v1hooks.AfterUserCreatedResponse)
+		req := new(v0hooks.AfterUserCreatedRequest)
+		res := new(v0hooks.AfterUserCreatedResponse)
 		err := mgr.AfterUserCreated(ctx, nil, req, res)
 		if err != nil {
 			t.Fatalf("exp nil err; got %v", err)

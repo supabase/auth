@@ -5,7 +5,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/hooks/hookafter"
-	"github.com/supabase/auth/internal/hooks/v1hooks"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -29,12 +29,12 @@ func (a *API) triggerBeforeUserCreated(
 	conn *storage.Connection,
 	user *models.User,
 ) error {
-	if !a.hooksMgr.Enabled(v1hooks.BeforeUserCreated) {
+	if !a.hooksMgr.Enabled(v0hooks.BeforeUserCreated) {
 		return nil
 	}
 
-	req := v1hooks.NewBeforeUserCreatedRequest(r, user)
-	res := new(v1hooks.BeforeUserCreatedResponse)
+	req := v0hooks.NewBeforeUserCreatedRequest(r, user)
+	res := new(v0hooks.BeforeUserCreatedResponse)
 	return a.hooksMgr.BeforeUserCreated(r.Context(), conn, req, res)
 }
 
@@ -42,11 +42,11 @@ func (a *API) triggerAfterUserCreated(
 	r *http.Request,
 	userID uuid.UUID,
 ) error {
-	if !a.hooksMgr.Enabled(v1hooks.AfterUserCreated) {
+	if !a.hooksMgr.Enabled(v0hooks.AfterUserCreated) {
 		return nil
 	}
 
-	return hookafter.Queue(r.Context(), v1hooks.AfterUserCreated, func() error {
+	return hookafter.Queue(r.Context(), v0hooks.AfterUserCreated, func() error {
 		db := a.db.WithContext(r.Context())
 
 		// We reload the user so if some kind of rollback occurs later in
@@ -58,8 +58,8 @@ func (a *API) triggerAfterUserCreated(
 			return err
 		}
 
-		req := v1hooks.NewAfterUserCreatedRequest(r, user)
-		res := new(v1hooks.AfterUserCreatedResponse)
+		req := v0hooks.NewAfterUserCreatedRequest(r, user)
+		res := new(v0hooks.AfterUserCreatedResponse)
 		return a.hooksMgr.AfterUserCreated(r.Context(), db, req, res)
 	})
 }

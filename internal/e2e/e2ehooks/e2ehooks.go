@@ -14,7 +14,6 @@ import (
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/e2e/e2eapi"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
-	"github.com/supabase/auth/internal/hooks/v1hooks"
 )
 
 type Instance struct {
@@ -138,8 +137,8 @@ type HookRecorder struct {
 func NewHookRecorder() *HookRecorder {
 	o := &HookRecorder{
 		mux:                  http.NewServeMux(),
-		BeforeUserCreated:    NewHook(v1hooks.BeforeUserCreated),
-		AfterUserCreated:     NewHook(v1hooks.AfterUserCreated),
+		BeforeUserCreated:    NewHook(v0hooks.BeforeUserCreated),
+		AfterUserCreated:     NewHook(v0hooks.AfterUserCreated),
 		CustomizeAccessToken: NewHook(v0hooks.CustomizeAccessToken),
 		MFAVerification:      NewHook(v0hooks.MFAVerification),
 		PasswordVerification: NewHook(v0hooks.PasswordVerification),
@@ -150,10 +149,10 @@ func NewHookRecorder() *HookRecorder {
 	o.mux.HandleFunc("POST /hooks/{hook}", func(w http.ResponseWriter, r *http.Request) {
 		//exhaustive:ignore
 		switch v0hooks.Name(r.PathValue("hook")) {
-		case v1hooks.BeforeUserCreated:
+		case v0hooks.BeforeUserCreated:
 			o.BeforeUserCreated.ServeHTTP(w, r)
 
-		case v1hooks.AfterUserCreated:
+		case v0hooks.AfterUserCreated:
 			o.AfterUserCreated.ServeHTTP(w, r)
 
 		case v0hooks.CustomizeAccessToken:
@@ -188,8 +187,8 @@ func (o *HookRecorder) Register(
 			URI:     baseURL + "/hooks/" + string(name),
 		}
 	}
-	set(&hookCfg.BeforeUserCreated, v1hooks.BeforeUserCreated)
-	set(&hookCfg.AfterUserCreated, v1hooks.AfterUserCreated)
+	set(&hookCfg.BeforeUserCreated, v0hooks.BeforeUserCreated)
+	set(&hookCfg.AfterUserCreated, v0hooks.AfterUserCreated)
 	set(&hookCfg.CustomAccessToken, v0hooks.CustomizeAccessToken)
 	set(&hookCfg.MFAVerificationAttempt, v0hooks.MFAVerification)
 	set(&hookCfg.PasswordVerificationAttempt, v0hooks.PasswordVerification)

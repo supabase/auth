@@ -5,43 +5,36 @@ import (
 	"net/http"
 
 	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/hooks/dispatch"
+	"github.com/supabase/auth/internal/hooks/hookhttp"
+	"github.com/supabase/auth/internal/hooks/hookpgfunc"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
-	"github.com/supabase/auth/internal/hooks/v0hooks/v0http"
-	"github.com/supabase/auth/internal/hooks/v0hooks/v0pgfunc"
-	"github.com/supabase/auth/internal/hooks/v1hooks"
 	"github.com/supabase/auth/internal/storage"
 )
 
 type Manager struct {
 	v0svc v0hooks.Service
-	v1svc v1hooks.Service
 }
 
 func New(
 	globalConfig *conf.GlobalConfiguration,
 	db *storage.Connection,
 ) *Manager {
-	httpDr := v0http.New()
-	pgfuncDr := v0pgfunc.New(db)
-	dr := dispatch.New(httpDr, pgfuncDr)
+	httpDr := hookhttp.New()
+	pgfuncDr := hookpgfunc.New(db)
 	v0svc := v0hooks.New(globalConfig, httpDr, pgfuncDr)
-	v1svc := v1hooks.New(&globalConfig.Hook, dr)
-	return NewFromServices(v0svc, v1svc)
+	return NewFromService(v0svc)
 }
 
-func NewFromServices(
+func NewFromService(
 	v0svc v0hooks.Service,
-	v1svc v1hooks.Service,
 ) *Manager {
 	return &Manager{
 		v0svc: v0svc,
-		v1svc: v1svc,
 	}
 }
 
 func (o *Manager) Enabled(name v0hooks.Name) bool {
-	return o.v0svc.Enabled(name) || o.v1svc.Enabled(name)
+	return o.v0svc.Enabled(name)
 }
 
 func (o *Manager) InvokeHook(
@@ -63,17 +56,17 @@ func (o *Manager) RunHTTPHook(
 func (o *Manager) BeforeUserCreated(
 	ctx context.Context,
 	tx *storage.Connection,
-	req *v1hooks.BeforeUserCreatedRequest,
-	res *v1hooks.BeforeUserCreatedResponse,
+	req *v0hooks.BeforeUserCreatedRequest,
+	res *v0hooks.BeforeUserCreatedResponse,
 ) error {
-	return o.v1svc.BeforeUserCreated(ctx, tx, req, res)
+	return o.v0svc.BeforeUserCreated(ctx, tx, req, res)
 }
 
 func (o *Manager) AfterUserCreated(
 	ctx context.Context,
 	tx *storage.Connection,
-	req *v1hooks.AfterUserCreatedRequest,
-	res *v1hooks.AfterUserCreatedResponse,
+	req *v0hooks.AfterUserCreatedRequest,
+	res *v0hooks.AfterUserCreatedResponse,
 ) error {
-	return o.v1svc.AfterUserCreated(ctx, tx, req, res)
+	return o.v0svc.AfterUserCreated(ctx, tx, req, res)
 }

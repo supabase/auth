@@ -12,8 +12,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/hooks/v0hooks/v0http"
-	"github.com/supabase/auth/internal/hooks/v0hooks/v0pgfunc"
+	"github.com/supabase/auth/internal/hooks/hookhttp"
+	"github.com/supabase/auth/internal/hooks/hookpgfunc"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
 )
@@ -28,17 +28,17 @@ type Service interface {
 }
 
 type Dispatcher struct {
-	v0http   v0http.Service
-	v0pgfunc v0pgfunc.Service
+	http   hookhttp.Service
+	pgfunc hookpgfunc.Service
 }
 
 func New(
-	v0http v0http.Service,
-	v0pgfunc v0pgfunc.Service,
+	http hookhttp.Service,
+	pgfunc hookpgfunc.Service,
 ) *Dispatcher {
 	o := &Dispatcher{
-		v0http:   v0http,
-		v0pgfunc: v0pgfunc,
+		http:   http,
+		pgfunc: pgfunc,
 	}
 	return o
 }
@@ -56,10 +56,10 @@ func (o *Dispatcher) Dispatch(
 	switch {
 	case strings.HasPrefix(hookConfig.URI, "http:") ||
 		strings.HasPrefix(hookConfig.URI, "https:"):
-		err = o.v0http.HTTPDispatch(ctx, *hookConfig, input, output)
+		err = o.http.HTTPDispatch(ctx, *hookConfig, input, output)
 
 	case strings.HasPrefix(hookConfig.URI, "pg-functions:"):
-		err = o.v0pgfunc.PGFuncDispatch(ctx, *hookConfig, conn, input, output)
+		err = o.pgfunc.PGFuncDispatch(ctx, *hookConfig, conn, input, output)
 
 	default:
 		return fmt.Errorf(
