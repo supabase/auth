@@ -1,3 +1,5 @@
+// Package hookerrors holds the Error type and some convenience methods to Check
+// responses for errors from any dispatcher (hookhttp, hookpgfunc).
 package hookerrors
 
 import (
@@ -7,12 +9,17 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 )
 
+// Error is the type propagated by hook endpoints to communicate failure.
 type Error struct {
 	HTTPCode int    `json:"http_code,omitempty"`
 	Message  string `json:"message,omitempty"`
 }
 
+// Error implements the error interface by returning e.Message.
 func (e *Error) Error() string { return e.Message }
+
+// As implements the errors.As interface to allow unwrapping as either an
+// Error or apierrors.HTTPError, depending on the needs of the caller.
 func (e *Error) As(target any) bool {
 	switch T := target.(type) {
 	case **Error:
@@ -44,6 +51,8 @@ func (e *Error) As(target any) bool {
 	}
 }
 
+// Check will attempt to extract a hook Error from a byte slice and return a
+// non-nil error, otherwise Check returns nil if no error was found.
 func Check(b []byte) error {
 	e, ok := fromBytes(b)
 	if !ok {

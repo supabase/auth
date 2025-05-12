@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -110,13 +109,15 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 	for _, tc := range testCases {
 		ts.Run(tc.description, func() {
 			req, _ := http.NewRequest("POST", ts.Config.Hook.SendSMS.URI, nil)
-			body, err := ts.API.hooksMgr.RunHTTPHook(req, ts.Config.Hook.SendSMS, &input)
+
+			var output v0hooks.SendSMSOutput
+			err := ts.API.hooksMgr.InvokeHook(ts.API.db, req, &input, &output)
 
 			if !tc.expectError {
 				require.NoError(ts.T(), err)
 			} else {
 				require.Error(ts.T(), err)
-				require.Nil(ts.T(), body)
+				require.Equal(ts.T(), output, v0hooks.SendSMSOutput{})
 			}
 		})
 	}
@@ -152,12 +153,9 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 	req, err := http.NewRequest("POST", "http://localhost:9998/otp", nil)
 	require.NoError(ts.T(), err)
 
-	body, err := ts.API.hooksMgr.RunHTTPHook(req, ts.Config.Hook.SendSMS, &input)
-	require.NoError(ts.T(), err)
-
 	var output v0hooks.SendSMSOutput
-	err = json.Unmarshal(body, &output)
-	require.NoError(ts.T(), err, "Unmarshal should not fail")
+	err = ts.API.hooksMgr.InvokeHook(ts.API.db, req, &input, &output)
+	require.NoError(ts.T(), err)
 
 	// Ensure that all expected HTTP interactions (mocks) have been called
 	require.True(ts.T(), gock.IsDone(), "Expected all mocks to have been called including retry")
@@ -184,10 +182,10 @@ func (ts *HooksTestSuite) TestShouldReturnErrorForNonJSONContentType() {
 	req, err := http.NewRequest("POST", "http://localhost:9999/otp", nil)
 	require.NoError(ts.T(), err)
 
-	_, err = ts.API.hooksMgr.RunHTTPHook(req, ts.Config.Hook.SendSMS, &input)
+	var output v0hooks.SendSMSOutput
+	err = ts.API.hooksMgr.InvokeHook(ts.API.db, req, &input, &output)
 	require.Error(ts.T(), err, "Expected an error due to wrong content type")
 	require.Contains(ts.T(), err.Error(), "Invalid JSON response.")
-
 	require.True(ts.T(), gock.IsDone(), "Expected all mocks to have been called")
 }
 

@@ -46,14 +46,13 @@ func New(db *storage.Connection, opts ...Option) *Dispatcher {
 	return dr
 }
 
-func (o *Dispatcher) PGFuncDispatch(
+func (o *Dispatcher) Dispatch(
 	ctx context.Context,
-	cfg conf.ExtensibilityPointConfiguration,
+	cfg *conf.ExtensibilityPointConfiguration,
 	tx *storage.Connection,
-	req any,
-	res any,
+	req, res any,
 ) error {
-	data, err := o.RunPostgresHook(ctx, cfg, tx, req)
+	data, err := o.runPostgresHook(ctx, *cfg, tx, req)
 	if err != nil {
 		return err
 	}
@@ -66,7 +65,7 @@ func (o *Dispatcher) PGFuncDispatch(
 	return nil
 }
 
-func (o *Dispatcher) RunPostgresHook(
+func (o *Dispatcher) runPostgresHook(
 	ctx context.Context,
 	hookConfig conf.ExtensibilityPointConfiguration,
 	tx *storage.Connection,

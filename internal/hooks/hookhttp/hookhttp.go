@@ -19,6 +19,7 @@ import (
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/hookerrors"
 	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/storage"
 
 	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
 )
@@ -81,13 +82,13 @@ func New(opts ...Option) *Dispatcher {
 	return dr
 }
 
-func (o *Dispatcher) HTTPDispatch(
+func (o *Dispatcher) Dispatch(
 	ctx context.Context,
-	cfg conf.ExtensibilityPointConfiguration,
-	req any,
-	res any,
+	cfg *conf.ExtensibilityPointConfiguration,
+	tx *storage.Connection,
+	req, res any,
 ) error {
-	data, err := o.RunHTTPHook(ctx, cfg, req)
+	data, err := o.runHTTPHook(ctx, *cfg, req)
 	if err != nil {
 		return err
 	}
@@ -100,7 +101,7 @@ func (o *Dispatcher) HTTPDispatch(
 	return nil
 }
 
-func (o *Dispatcher) RunHTTPHook(
+func (o *Dispatcher) runHTTPHook(
 	ctx context.Context,
 	hookConfig conf.ExtensibilityPointConfiguration,
 	input any,

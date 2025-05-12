@@ -292,7 +292,7 @@ func TestDispatch(t *testing.T) {
 		}
 
 		res := M{}
-		err := dr.HTTPDispatch(testCtx, cfg, tc.req, &res)
+		err := dr.Dispatch(testCtx, &cfg, nil, tc.req, &res)
 		if tc.err != nil {
 			require.Error(t, err)
 			require.Equal(t, tc.err, err)

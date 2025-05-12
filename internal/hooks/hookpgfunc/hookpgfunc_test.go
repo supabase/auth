@@ -242,7 +242,7 @@ func TestDispatch(t *testing.T) {
 		tx := tc.tx
 		cfg := tc.cfg
 		res := M{}
-		err := dr.PGFuncDispatch(testCtx, cfg, tx, tc.req, &res)
+		err := dr.Dispatch(testCtx, &cfg, tx, tc.req, &res)
 		if tc.err != nil {
 			require.Error(t, err)
 			require.Equal(t, tc.err, err)

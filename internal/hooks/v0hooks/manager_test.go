@@ -35,21 +35,6 @@ func TestHooks(t *testing.T) {
 	mr := New(globalCfg, httpDr, pgfuncDr)
 	now := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
 
-	// cover RunHTTPHook
-	{
-		globalCfg.Hook.SendSMS =
-			conf.ExtensibilityPointConfiguration{
-				URI: `http://0.0.0.0:12345`,
-			}
-
-		req := &SendSMSInput{}
-		htr := httptest.NewRequestWithContext(ctx, "POST", "/api", nil)
-		_, err := mr.RunHTTPHook(htr, globalCfg.Hook.SendSMS, req)
-		if err == nil {
-			t.Fatal("exp non-nil err")
-		}
-	}
-
 	type testCase struct {
 		desc   string
 		setup  func()
@@ -629,7 +614,7 @@ type mockDispatcher struct {
 
 func newMockService(err error) *mockDispatcher { return &mockDispatcher{err: err} }
 
-func (o *mockDispatcher) dispatch(
+func (o *mockDispatcher) Dispatch(
 	ctx context.Context,
 	hookConfig *conf.ExtensibilityPointConfiguration,
 	conn *storage.Connection,

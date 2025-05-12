@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/hooks"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
@@ -23,14 +22,6 @@ func (*mockService) InvokeHook(
 	input, output any,
 ) error {
 	return nil
-}
-
-func (*mockService) RunHTTPHook(
-	r *http.Request,
-	hookConfig conf.ExtensibilityPointConfiguration,
-	input any,
-) ([]byte, error) {
-	return nil, nil
 }
 
 func (*mockService) BeforeUserCreated(
@@ -78,17 +69,6 @@ func TestManager(t *testing.T) {
 		err := mgr.InvokeHook(nil, nil, nil, nil)
 		if err != nil {
 			t.Fatalf("exp nil err; got %v", err)
-		}
-	}
-
-	{
-		cfg := conf.ExtensibilityPointConfiguration{}
-		data, err := mgr.RunHTTPHook(nil, cfg, nil)
-		if err != nil {
-			t.Fatalf("exp nil err; got %v", err)
-		}
-		if len(data) > 0 {
-			t.Fatal("exp mock svc to return no data")
 		}
 	}
 

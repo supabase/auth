@@ -11,14 +11,12 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/hooks/hookhttp"
-	"github.com/supabase/auth/internal/hooks/hookpgfunc"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
 )
 
-type dispatcher interface {
-	dispatch(
+type Dispatcher interface {
+	Dispatch(
 		ctx context.Context,
 		hookConfig *conf.ExtensibilityPointConfiguration,
 		conn *storage.Connection,
@@ -28,15 +26,15 @@ type dispatcher interface {
 
 type Manager struct {
 	config *conf.GlobalConfiguration
-	http   hookhttp.Service
-	pgfunc hookpgfunc.Service
-	dr     dispatcher // dep injection
+	http   Dispatcher
+	pgfunc Dispatcher
+	dr     Dispatcher // dep injection
 }
 
 func New(
 	config *conf.GlobalConfiguration,
-	httpSvc hookhttp.Service,
-	pgfuncSvc hookpgfunc.Service,
+	httpSvc Dispatcher,
+	pgfuncSvc Dispatcher,
 ) *Manager {
 	o := &Manager{
 		config: config,
@@ -47,7 +45,7 @@ func New(
 	return o
 }
 
-func (o *Manager) dispatch(
+func (o *Manager) Dispatch(
 	ctx context.Context,
 	hookConfig *conf.ExtensibilityPointConfiguration,
 	conn *storage.Connection,
@@ -60,10 +58,10 @@ func (o *Manager) dispatch(
 	switch {
 	case strings.HasPrefix(hookConfig.URI, "http:") ||
 		strings.HasPrefix(hookConfig.URI, "https:"):
-		err = o.http.HTTPDispatch(ctx, *hookConfig, input, output)
+		err = o.http.Dispatch(ctx, hookConfig, conn, input, output)
 
 	case strings.HasPrefix(hookConfig.URI, "pg-functions:"):
-		err = o.pgfunc.PGFuncDispatch(ctx, *hookConfig, conn, input, output)
+		err = o.pgfunc.Dispatch(ctx, hookConfig, conn, input, output)
 
 	default:
 		return fmt.Errorf(
@@ -136,7 +134,7 @@ func (o *Manager) BeforeUserCreated(
 	req *BeforeUserCreatedRequest,
 	res *BeforeUserCreatedResponse,
 ) error {
-	return o.dr.dispatch(ctx, &o.config.Hook.BeforeUserCreated, tx, req, res)
+	return o.dr.Dispatch(ctx, &o.config.Hook.BeforeUserCreated, tx, req, res)
 }
 
 func (o *Manager) AfterUserCreated(
@@ -145,7 +143,7 @@ func (o *Manager) AfterUserCreated(
 	req *AfterUserCreatedRequest,
 	res *AfterUserCreatedResponse,
 ) error {
-	return o.dr.dispatch(ctx, &o.config.Hook.AfterUserCreated, tx, req, res)
+	return o.dr.Dispatch(ctx, &o.config.Hook.AfterUserCreated, tx, req, res)
 }
 
 func (o *Manager) InvokeHook(
@@ -154,14 +152,6 @@ func (o *Manager) InvokeHook(
 	input, output any,
 ) error {
 	return o.invokeHook(conn, r, input, output)
-}
-
-func (o *Manager) RunHTTPHook(
-	r *http.Request,
-	hookConfig conf.ExtensibilityPointConfiguration,
-	input any,
-) ([]byte, error) {
-	return o.http.RunHTTPHook(r.Context(), hookConfig, input)
 }
 
 // invokeHook invokes the hook code. conn can be nil, in which case a new
@@ -183,7 +173,7 @@ func (o *Manager) invokeHook(
 			return apierrors.NewInternalServerError(
 				"output should be *hooks.SendSMSOutput")
 		}
-		return o.dr.dispatch(
+		return o.dr.Dispatch(
 			r.Context(), &o.config.Hook.SendSMS, conn, input, output)
 
 	case *SendEmailInput:
@@ -191,7 +181,7 @@ func (o *Manager) invokeHook(
 			return apierrors.NewInternalServerError(
 				"output should be *hooks.SendEmailOutput")
 		}
-		return o.dr.dispatch(
+		return o.dr.Dispatch(
 			r.Context(), &o.config.Hook.SendEmail, conn, input, output)
 
 	case *MFAVerificationAttemptInput:
@@ -199,7 +189,7 @@ func (o *Manager) invokeHook(
 			return apierrors.NewInternalServerError(
 				"output should be *hooks.MFAVerificationAttemptOutput")
 		}
-		return o.dr.dispatch(
+		return o.dr.Dispatch(
 			r.Context(), &o.config.Hook.MFAVerificationAttempt, conn, input, output)
 
 	case *PasswordVerificationAttemptInput:
@@ -207,7 +197,7 @@ func (o *Manager) invokeHook(
 			return apierrors.NewInternalServerError(
 				"output should be *hooks.PasswordVerificationAttemptOutput")
 		}
-		return o.dr.dispatch(
+		return o.dr.Dispatch(
 			r.Context(), &o.config.Hook.PasswordVerificationAttempt, conn, input, output)
 
 	case *CustomAccessTokenInput:
@@ -216,7 +206,7 @@ func (o *Manager) invokeHook(
 			return apierrors.NewInternalServerError(
 				"output should be *hooks.CustomAccessTokenOutput")
 		}
-		return o.dr.dispatch(
+		return o.dr.Dispatch(
 			r.Context(), &o.config.Hook.CustomAccessToken, conn, input, output)
 	}
 }

@@ -20,12 +20,6 @@ type Service interface {
 		input, output any,
 	) error
 
-	RunHTTPHook(
-		r *http.Request,
-		hookConfig conf.ExtensibilityPointConfiguration,
-		input any,
-	) ([]byte, error)
-
 	BeforeUserCreated(
 		ctx context.Context,
 		tx *storage.Connection,
@@ -73,14 +67,6 @@ func (o *Manager) InvokeHook(
 	input, output any,
 ) error {
 	return o.v0svc.InvokeHook(conn, r, input, output)
-}
-
-func (o *Manager) RunHTTPHook(
-	r *http.Request,
-	hookConfig conf.ExtensibilityPointConfiguration,
-	input any,
-) ([]byte, error) {
-	return o.v0svc.RunHTTPHook(r, hookConfig, input)
 }
 
 func (o *Manager) BeforeUserCreated(
