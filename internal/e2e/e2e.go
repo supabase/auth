@@ -4,6 +4,7 @@ package e2e
 import (
 	"path/filepath"
 	"runtime"
+	"testing"
 
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/storage"
@@ -16,9 +17,13 @@ var (
 )
 
 func init() {
-	_, thisFile, _, _ := runtime.Caller(0)
-	projectRoot = filepath.Join(filepath.Dir(thisFile), "../..")
-	configPath = filepath.Join(GetProjectRoot(), "hack", "test.env")
+	if testing.Testing() {
+		_, thisFile, _, _ := runtime.Caller(0)
+		projectRoot = filepath.Join(filepath.Dir(thisFile), "../..")
+		configPath = filepath.Join(GetProjectRoot(), "hack", "test.env")
+	} else {
+		panic("package e2e may not be used in a main package")
+	}
 }
 
 // GetProjectRoot returns the path to the root of the project. This may be used
