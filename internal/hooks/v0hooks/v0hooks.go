@@ -32,7 +32,7 @@ const (
 	DefaultPasswordHookRejectionMessage = "Further password verification attempts will be rejected."
 )
 
-type Header struct {
+type Metadata struct {
 	UUID uuid.UUID `json:"uuid"`
 	Time time.Time `json:"time"`
 
@@ -43,8 +43,8 @@ type Header struct {
 	IPAddress string `json:"ip_address,omitempty"`
 }
 
-func NewHeader(r *http.Request, name Name) *Header {
-	return &Header{
+func NewMetadata(r *http.Request, name Name) *Metadata {
+	return &Metadata{
 		UUID:      uuid.Must(uuid.NewV4()),
 		Time:      time.Now(),
 		IPAddress: utilities.GetIPAddress(r),
@@ -53,7 +53,7 @@ func NewHeader(r *http.Request, name Name) *Header {
 }
 
 type BeforeUserCreatedInput struct {
-	Header *Header      `json:"header"`
+	Header *Metadata    `json:"header"`
 	User   *models.User `json:"user"`
 }
 
@@ -62,7 +62,7 @@ func NewBeforeUserCreatedInput(
 	user *models.User,
 ) *BeforeUserCreatedInput {
 	return &BeforeUserCreatedInput{
-		Header: NewHeader(r, BeforeUserCreated),
+		Header: NewMetadata(r, BeforeUserCreated),
 		User:   user,
 	}
 }
@@ -70,7 +70,7 @@ func NewBeforeUserCreatedInput(
 type BeforeUserCreatedOutput struct{}
 
 type AfterUserCreatedInput struct {
-	Header *Header      `json:"header"`
+	Header *Metadata    `json:"header"`
 	User   *models.User `json:"user"`
 }
 
@@ -79,7 +79,7 @@ func NewAfterUserCreatedInput(
 	user *models.User,
 ) *AfterUserCreatedInput {
 	return &AfterUserCreatedInput{
-		Header: NewHeader(r, AfterUserCreated),
+		Header: NewMetadata(r, AfterUserCreated),
 		User:   user,
 	}
 }
