@@ -23,15 +23,15 @@ type Service interface {
 	BeforeUserCreated(
 		ctx context.Context,
 		tx *storage.Connection,
-		req *v0hooks.BeforeUserCreatedRequest,
-		res *v0hooks.BeforeUserCreatedResponse,
+		req *v0hooks.BeforeUserCreatedInput,
+		res *v0hooks.BeforeUserCreatedOutput,
 	) error
 
 	AfterUserCreated(
 		ctx context.Context,
 		tx *storage.Connection,
-		req *v0hooks.AfterUserCreatedRequest,
-		res *v0hooks.AfterUserCreatedResponse,
+		req *v0hooks.AfterUserCreatedInput,
+		res *v0hooks.AfterUserCreatedOutput,
 	) error
 }
 
@@ -72,8 +72,8 @@ func (o *Manager) InvokeHook(
 func (o *Manager) BeforeUserCreated(
 	ctx context.Context,
 	tx *storage.Connection,
-	req *v0hooks.BeforeUserCreatedRequest,
-	res *v0hooks.BeforeUserCreatedResponse,
+	req *v0hooks.BeforeUserCreatedInput,
+	res *v0hooks.BeforeUserCreatedOutput,
 ) error {
 	return o.v0svc.BeforeUserCreated(ctx, tx, req, res)
 }
@@ -81,8 +81,8 @@ func (o *Manager) BeforeUserCreated(
 func (o *Manager) AfterUserCreated(
 	ctx context.Context,
 	tx *storage.Connection,
-	req *v0hooks.AfterUserCreatedRequest,
-	res *v0hooks.AfterUserCreatedResponse,
+	req *v0hooks.AfterUserCreatedInput,
+	res *v0hooks.AfterUserCreatedOutput,
 ) error {
 	return o.v0svc.AfterUserCreated(ctx, tx, req, res)
 }

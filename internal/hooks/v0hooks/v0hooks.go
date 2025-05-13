@@ -52,39 +52,39 @@ func NewHeader(r *http.Request, name Name) *Header {
 	}
 }
 
-type BeforeUserCreatedRequest struct {
+type BeforeUserCreatedInput struct {
 	Header *Header      `json:"header"`
 	User   *models.User `json:"user"`
 }
 
-func NewBeforeUserCreatedRequest(
+func NewBeforeUserCreatedInput(
 	r *http.Request,
 	user *models.User,
-) *BeforeUserCreatedRequest {
-	return &BeforeUserCreatedRequest{
+) *BeforeUserCreatedInput {
+	return &BeforeUserCreatedInput{
 		Header: NewHeader(r, BeforeUserCreated),
 		User:   user,
 	}
 }
 
-type BeforeUserCreatedResponse struct{}
+type BeforeUserCreatedOutput struct{}
 
-type AfterUserCreatedRequest struct {
+type AfterUserCreatedInput struct {
 	Header *Header      `json:"header"`
 	User   *models.User `json:"user"`
 }
 
-func NewAfterUserCreatedRequest(
+func NewAfterUserCreatedInput(
 	r *http.Request,
 	user *models.User,
-) *AfterUserCreatedRequest {
-	return &AfterUserCreatedRequest{
+) *AfterUserCreatedInput {
+	return &AfterUserCreatedInput{
 		Header: NewHeader(r, AfterUserCreated),
 		User:   user,
 	}
 }
 
-type AfterUserCreatedResponse struct{}
+type AfterUserCreatedOutput struct{}
 
 // TODO(joel): Move this to phone package
 type SMS struct {

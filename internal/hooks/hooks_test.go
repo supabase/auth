@@ -27,8 +27,8 @@ func (*mockService) InvokeHook(
 func (*mockService) BeforeUserCreated(
 	ctx context.Context,
 	tx *storage.Connection,
-	req *v0hooks.BeforeUserCreatedRequest,
-	res *v0hooks.BeforeUserCreatedResponse,
+	req *v0hooks.BeforeUserCreatedInput,
+	res *v0hooks.BeforeUserCreatedOutput,
 ) error {
 	return nil
 }
@@ -36,8 +36,8 @@ func (*mockService) BeforeUserCreated(
 func (*mockService) AfterUserCreated(
 	ctx context.Context,
 	tx *storage.Connection,
-	req *v0hooks.AfterUserCreatedRequest,
-	res *v0hooks.AfterUserCreatedResponse,
+	req *v0hooks.AfterUserCreatedInput,
+	res *v0hooks.AfterUserCreatedOutput,
 ) error {
 	return nil
 }
@@ -73,8 +73,8 @@ func TestManager(t *testing.T) {
 	}
 
 	{
-		req := new(v0hooks.BeforeUserCreatedRequest)
-		res := new(v0hooks.BeforeUserCreatedResponse)
+		req := new(v0hooks.BeforeUserCreatedInput)
+		res := new(v0hooks.BeforeUserCreatedOutput)
 		err := mgr.BeforeUserCreated(ctx, nil, req, res)
 		if err != nil {
 			t.Fatalf("exp nil err; got %v", err)
@@ -82,8 +82,8 @@ func TestManager(t *testing.T) {
 	}
 
 	{
-		req := new(v0hooks.AfterUserCreatedRequest)
-		res := new(v0hooks.AfterUserCreatedResponse)
+		req := new(v0hooks.AfterUserCreatedInput)
+		res := new(v0hooks.AfterUserCreatedOutput)
 		err := mgr.AfterUserCreated(ctx, nil, req, res)
 		if err != nil {
 			t.Fatalf("exp nil err; got %v", err)

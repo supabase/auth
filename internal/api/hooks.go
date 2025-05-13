@@ -33,8 +33,8 @@ func (a *API) triggerBeforeUserCreated(
 		return nil
 	}
 
-	req := v0hooks.NewBeforeUserCreatedRequest(r, user)
-	res := new(v0hooks.BeforeUserCreatedResponse)
+	req := v0hooks.NewBeforeUserCreatedInput(r, user)
+	res := new(v0hooks.BeforeUserCreatedOutput)
 	return a.hooksMgr.BeforeUserCreated(r.Context(), conn, req, res)
 }
 
@@ -58,8 +58,8 @@ func (a *API) triggerAfterUserCreated(
 			return err
 		}
 
-		req := v0hooks.NewAfterUserCreatedRequest(r, user)
-		res := new(v0hooks.AfterUserCreatedResponse)
+		req := v0hooks.NewAfterUserCreatedInput(r, user)
+		res := new(v0hooks.AfterUserCreatedOutput)
 		return a.hooksMgr.AfterUserCreated(r.Context(), db, req, res)
 	})
 }

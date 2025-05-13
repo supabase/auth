@@ -131,8 +131,8 @@ func (o *Manager) Enabled(name Name) bool {
 func (o *Manager) BeforeUserCreated(
 	ctx context.Context,
 	tx *storage.Connection,
-	req *BeforeUserCreatedRequest,
-	res *BeforeUserCreatedResponse,
+	req *BeforeUserCreatedInput,
+	res *BeforeUserCreatedOutput,
 ) error {
 	return o.dr.Dispatch(ctx, &o.config.Hook.BeforeUserCreated, tx, req, res)
 }
@@ -140,8 +140,8 @@ func (o *Manager) BeforeUserCreated(
 func (o *Manager) AfterUserCreated(
 	ctx context.Context,
 	tx *storage.Connection,
-	req *AfterUserCreatedRequest,
-	res *AfterUserCreatedResponse,
+	req *AfterUserCreatedInput,
+	res *AfterUserCreatedOutput,
 ) error {
 	return o.dr.Dispatch(ctx, &o.config.Hook.AfterUserCreated, tx, req, res)
 }

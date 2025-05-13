@@ -61,7 +61,7 @@ func TestE2EHooks(t *testing.T) {
 			}
 			call := calls[0]
 
-			hookReq := &v0hooks.BeforeUserCreatedRequest{}
+			hookReq := &v0hooks.BeforeUserCreatedInput{}
 			if err := call.Unmarshal(hookReq); err != nil {
 				t.Fatalf("exp nil err; got %v", err)
 			}
@@ -83,7 +83,7 @@ func TestE2EHooks(t *testing.T) {
 			}
 			call := calls[0]
 
-			hookReq := &v0hooks.AfterUserCreatedRequest{}
+			hookReq := &v0hooks.AfterUserCreatedInput{}
 			if err := call.Unmarshal(hookReq); err != nil {
 				t.Fatalf("exp nil err; got %v", err)
 			}

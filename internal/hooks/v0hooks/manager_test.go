@@ -498,8 +498,8 @@ func TestUserHooks(t *testing.T) {
 	t.Run("BeforeUserCreated", func(t *testing.T) {
 		httpReq := httptest.NewRequest("GET", "http://localhost/test", nil)
 		user := &models.User{}
-		req := NewBeforeUserCreatedRequest(httpReq, user)
-		res := new(BeforeUserCreatedResponse)
+		req := NewBeforeUserCreatedInput(httpReq, user)
+		res := new(BeforeUserCreatedOutput)
 
 		t.Run("BeforeUserCreatedSuccess", func(t *testing.T) {
 			cfg := e2e.Must(e2e.Config())
@@ -550,8 +550,8 @@ func TestUserHooks(t *testing.T) {
 	t.Run("AfterUserCreated", func(t *testing.T) {
 		httpReq := httptest.NewRequest("GET", "http://localhost/test", nil)
 		user := &models.User{}
-		req := NewAfterUserCreatedRequest(httpReq, user)
-		res := new(AfterUserCreatedResponse)
+		req := NewAfterUserCreatedInput(httpReq, user)
+		res := new(AfterUserCreatedOutput)
 
 		t.Run("AfterUserCreatedSuccess", func(t *testing.T) {
 			cfg := e2e.Must(e2e.Config())
