@@ -163,7 +163,7 @@ func TestDispatch(t *testing.T) {
 		},
 
 		{
-			desc: "fail - limit reader exceeeded",
+			desc: "fail - limit reader exceeded",
 			dr: New(
 				WithResponseLimit(1),
 			),
@@ -178,7 +178,7 @@ func TestDispatch(t *testing.T) {
 		{
 			desc:   "fail - unmarshal error",
 			dr:     New(),
-			errStr: "500: Error unmarshaling JSON output.",
+			errStr: "500: Error unmarshalling JSON output.",
 			hr: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Add("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)

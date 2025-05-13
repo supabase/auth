@@ -344,7 +344,7 @@ func TestHooks(t *testing.T) {
 
 		// fail - invalid input type
 		{
-			desc:   "fail - invalid intput type",
+			desc:   "fail - invalid input type",
 			req:    make(chan int),
 			res:    M{},
 			errStr: "500: Unknown hook type chan int.",

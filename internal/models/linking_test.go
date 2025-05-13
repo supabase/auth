@@ -161,7 +161,7 @@ func (ts *AccountLinkingTestSuite) TestLinkingScenarios() {
 		decision AccountLinkingResult
 	}{
 		{
-			// link decision because the below described identity is in the default linking domain but uses "other-provider" instead of "provder"
+			// link decision because the below described identity is in the default linking domain but uses "other-provider" instead of "provider"
 			desc: "same email address",
 			email: provider.Email{
 				Email:    "test@example.com",

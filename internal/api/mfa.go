@@ -117,7 +117,7 @@ func (w *WebAuthnParams) ToConfig() (*webauthn.WebAuthn, error) {
 	}
 
 	wconfig := &webauthn.Config{
-		// DisplayName is optional in spec but required to be non-empty in libary, we use the RPID as a placeholder.
+		// DisplayName is optional in spec but required to be non-empty in library, we use the RPID as a placeholder.
 		RPDisplayName: w.RPID,
 		RPID:          w.RPID,
 		RPOrigins:     validOrigins,

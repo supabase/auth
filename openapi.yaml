@@ -1117,7 +1117,7 @@ paths:
           headers:
             Content-Disposition:
               description: >
-                Present if `download=true`, which triggers the browser to show a donwload dialog.
+                Present if `download=true`, which triggers the browser to show a download dialog.
               schema:
                 type: string
                 example: attachment; filename="metadata.xml"
@@ -1814,7 +1814,7 @@ paths:
             Service is not healthy: infrastructure issue. Usually not retriable.
         503:
           description: >
-            Service is not healthy: infrastrucutre issue. Retriable with exponential backoff.
+            Service is not healthy: infrastructure issue. Retriable with exponential backoff.
         504:
           description: >
             Service is not healthy: request timed out. Retriable with exponential backoff.

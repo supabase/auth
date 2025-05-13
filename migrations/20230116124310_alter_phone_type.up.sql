@@ -1,4 +1,4 @@
--- alter phone field column type to accomodate for soft deletion 
+-- alter phone field column type to accommodate for soft deletion
 
 do $$
 begin

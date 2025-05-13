@@ -18,7 +18,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// User respresents a registered user with email/password authentication
+// User represents a registered user with email/password authentication
 type User struct {
 	ID uuid.UUID `json:"id" db:"id"`
 
@@ -439,7 +439,7 @@ func (u *User) ConfirmReauthentication(tx *storage.Connection) error {
 	return nil
 }
 
-// Confirm resets the confimation token and sets the confirm timestamp
+// Confirm resets the confirmation token and sets the confirm timestamp
 func (u *User) Confirm(tx *storage.Connection) error {
 	u.ConfirmationToken = ""
 	now := time.Now()
@@ -462,7 +462,7 @@ func (u *User) Confirm(tx *storage.Connection) error {
 	return nil
 }
 
-// ConfirmPhone resets the confimation token and sets the confirm timestamp
+// ConfirmPhone resets the confirmation token and sets the confirm timestamp
 func (u *User) ConfirmPhone(tx *storage.Connection) error {
 	u.ConfirmationToken = ""
 	now := time.Now()
