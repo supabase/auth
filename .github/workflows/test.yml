@@ -28,12 +28,12 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
       - name: Install Go
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Checkout code
-        uses: actions/checkout@v2
       - name: Check gofmt
         run: |
           set -x
