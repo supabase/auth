@@ -181,6 +181,9 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	var sendEmailChange, sendPhoneConfirmation bool
+	flowType := getFlowFromChallenge(params.CodeChallenge)
+
 	err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		if params.Password != nil {
@@ -223,17 +226,18 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 				}
 
 			} else {
-				flowType := getFlowFromChallenge(params.CodeChallenge)
 				if isPKCEFlow(flowType) {
 					_, terr := generateFlowState(tx, models.EmailChange.String(), models.EmailChange, params.CodeChallengeMethod, params.CodeChallenge, &user.ID)
 					if terr != nil {
 						return terr
 					}
+				}
 
+				if err := validateSentWithinFrequencyLimitEmail(user.EmailChangeSentAt, config.SMTP.MaxFrequency); err != nil {
+					return err
 				}
-				if terr = a.sendEmailChange(r, tx, user, params.Email, flowType); terr != nil {
-					return terr
-				}
+
+				sendEmailChange = true
 			}
 		}
 
@@ -247,9 +251,11 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 					return terr
 				}
 			} else {
-				if _, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneChangeVerification, params.Channel); terr != nil {
-					return terr
+				if err := validateSentWithinFrequencyLimitSMS(user.ReauthenticationSentAt, config.SMTP.MaxFrequency); err != nil {
+					return err
 				}
+
+				sendPhoneConfirmation = true
 			}
 		}
 
@@ -261,6 +267,20 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	if sendEmailChange {
+		// email sending should not hold a database transaction open as latency incurred by SMTP or HTTP hooks can exhaust the database pool
+		if err := a.sendEmailChange(r, db, user, params.Email, flowType); err != nil {
+			return err
+		}
+	}
+
+	if sendPhoneConfirmation {
+		// SMS sending should not hold a database transaction open as latency incurred by SMTP or HTTP hooks can exhaust the database pool
+		if _, err := a.sendPhoneConfirmation(r, db, user, params.Phone, phoneChangeVerification, params.Channel); err != nil {
+			return err
+		}
 	}
 
 	return sendJSON(w, http.StatusOK, user)
