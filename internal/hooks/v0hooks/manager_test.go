@@ -10,8 +10,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/hooks/v0hooks/v0http"
-	"github.com/supabase/auth/internal/hooks/v0hooks/v0pgfunc"
+	"github.com/supabase/auth/internal/hooks/hookshttp"
+	"github.com/supabase/auth/internal/hooks/hookspgfunc"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
 )
@@ -27,8 +27,8 @@ func TestHooks(t *testing.T) {
 
 	globalCfg := helpConfig(t, apiTestConfig)
 	db := helpConn(t, globalCfg)
-	httpDr := v0http.New(v0http.WithTimeout(time.Second / 10))
-	pgfuncDr := v0pgfunc.New(db, v0pgfunc.WithTimeout(time.Second/10))
+	httpDr := hookshttp.New(hookshttp.WithTimeout(time.Second / 10))
+	pgfuncDr := hookspgfunc.New(db, hookspgfunc.WithTimeout(time.Second/10))
 	mr := NewManager(globalCfg, httpDr, pgfuncDr)
 	now := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
 
