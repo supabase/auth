@@ -15,8 +15,6 @@ const (
 	CustomizeAccessToken Name = "customize-access-token"
 	MFAVerification      Name = "mfa-verification"
 	PasswordVerification Name = "password-verification"
-	BeforeUserCreated    Name = "before-user-created"
-	AfterUserCreated     Name = "after-user-created"
 )
 
 // Hook Names
