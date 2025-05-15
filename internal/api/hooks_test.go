@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/hooks/hookserrors"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -70,7 +70,7 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 	testURL := "http://localhost:54321/functions/v1/custom-sms-sender"
 	ts.Config.Hook.SendSMS.URI = testURL
 
-	unsuccessfulResponse := v0hooks.AuthHookError{
+	unsuccessfulResponse := hookserrors.Error{
 		HTTPCode: http.StatusUnprocessableEntity,
 		Message:  "test error",
 	}
@@ -78,12 +78,12 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 	testCases := []struct {
 		description  string
 		expectError  bool
-		mockResponse v0hooks.AuthHookError
+		mockResponse hookserrors.Error
 	}{
 		{
 			description:  "Hook returns success",
 			expectError:  false,
-			mockResponse: v0hooks.AuthHookError{},
+			mockResponse: hookserrors.Error{},
 		},
 		{
 			description:  "Hook returns error",
@@ -102,23 +102,22 @@ func (ts *HooksTestSuite) TestRunHTTPHook() {
 		Post("/").
 		MatchType("json").
 		Reply(http.StatusUnprocessableEntity).
-		JSON(v0hooks.SendSMSOutput{HookError: unsuccessfulResponse})
+		JSON(struct {
+			Error *hookserrors.Error `json:"error,omitempty"`
+		}{Error: &unsuccessfulResponse})
 
 	for _, tc := range testCases {
 		ts.Run(tc.description, func() {
 			req, _ := http.NewRequest("POST", ts.Config.Hook.SendSMS.URI, nil)
-			body, err := ts.API.hooksMgr.RunHTTPHook(req, ts.Config.Hook.SendSMS, &input)
+
+			var output v0hooks.SendSMSOutput
+			err := ts.API.hooksMgr.InvokeHook(ts.API.db, req, &input, &output)
 
 			if !tc.expectError {
 				require.NoError(ts.T(), err)
 			} else {
 				require.Error(ts.T(), err)
-				if body != nil {
-					var output v0hooks.SendSMSOutput
-					require.NoError(ts.T(), json.Unmarshal(body, &output))
-					require.Equal(ts.T(), unsuccessfulResponse.HTTPCode, output.HookError.HTTPCode)
-					require.Equal(ts.T(), unsuccessfulResponse.Message, output.HookError.Message)
-				}
+				require.Equal(ts.T(), output, v0hooks.SendSMSOutput{})
 			}
 		})
 	}
@@ -154,12 +153,9 @@ func (ts *HooksTestSuite) TestShouldRetryWithRetryAfterHeader() {
 	req, err := http.NewRequest("POST", "http://localhost:9998/otp", nil)
 	require.NoError(ts.T(), err)
 
-	body, err := ts.API.hooksMgr.RunHTTPHook(req, ts.Config.Hook.SendSMS, &input)
-	require.NoError(ts.T(), err)
-
 	var output v0hooks.SendSMSOutput
-	err = json.Unmarshal(body, &output)
-	require.NoError(ts.T(), err, "Unmarshal should not fail")
+	err = ts.API.hooksMgr.InvokeHook(ts.API.db, req, &input, &output)
+	require.NoError(ts.T(), err)
 
 	// Ensure that all expected HTTP interactions (mocks) have been called
 	require.True(ts.T(), gock.IsDone(), "Expected all mocks to have been called including retry")
@@ -186,10 +182,10 @@ func (ts *HooksTestSuite) TestShouldReturnErrorForNonJSONContentType() {
 	req, err := http.NewRequest("POST", "http://localhost:9999/otp", nil)
 	require.NoError(ts.T(), err)
 
-	_, err = ts.API.hooksMgr.RunHTTPHook(req, ts.Config.Hook.SendSMS, &input)
+	var output v0hooks.SendSMSOutput
+	err = ts.API.hooksMgr.InvokeHook(ts.API.db, req, &input, &output)
 	require.Error(ts.T(), err, "Expected an error due to wrong content type")
 	require.Contains(ts.T(), err.Error(), "Invalid JSON response.")
-
 	require.True(ts.T(), gock.IsDone(), "Expected all mocks to have been called")
 }
 
