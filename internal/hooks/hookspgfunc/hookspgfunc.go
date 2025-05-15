@@ -8,6 +8,7 @@ import (
 
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/hooks/hookserrors"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -47,12 +48,11 @@ func New(db *storage.Connection, opts ...Option) *Dispatcher {
 
 func (o *Dispatcher) Dispatch(
 	ctx context.Context,
-	cfg conf.ExtensibilityPointConfiguration,
+	cfg *conf.ExtensibilityPointConfiguration,
 	tx *storage.Connection,
-	req any,
-	res any,
+	req, res any,
 ) error {
-	data, err := o.RunPostgresHook(ctx, cfg, tx, req)
+	data, err := o.runPostgresHook(ctx, *cfg, tx, req)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func (o *Dispatcher) Dispatch(
 	return nil
 }
 
-func (o *Dispatcher) RunPostgresHook(
+func (o *Dispatcher) runPostgresHook(
 	ctx context.Context,
 	hookConfig conf.ExtensibilityPointConfiguration,
 	tx *storage.Connection,
@@ -107,6 +107,9 @@ func (o *Dispatcher) RunPostgresHook(
 		if err := db.Transaction(invokeHookFunc); err != nil {
 			return nil, err
 		}
+	}
+	if err := hookserrors.Check(response); err != nil {
+		return nil, err
 	}
 	return response, nil
 }

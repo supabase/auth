@@ -267,7 +267,7 @@ func TestDispatch(t *testing.T) {
 		}
 
 		res := M{}
-		err := dr.Dispatch(testCtx, cfg, tc.req, &res)
+		err := dr.Dispatch(testCtx, &cfg, tc.req, &res)
 		if tc.err != nil {
 			require.Error(t, err)
 			require.Equal(t, tc.err, err)

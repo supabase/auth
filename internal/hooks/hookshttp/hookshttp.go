@@ -82,11 +82,11 @@ func New(opts ...Option) *Dispatcher {
 
 func (o *Dispatcher) Dispatch(
 	ctx context.Context,
-	cfg conf.ExtensibilityPointConfiguration,
+	cfg *conf.ExtensibilityPointConfiguration,
 	req any,
 	res any,
 ) error {
-	data, err := o.RunHTTPHook(ctx, cfg, req)
+	data, err := o.runHTTPHook(ctx, cfg, req)
 	if err != nil {
 		return err
 	}
@@ -99,9 +99,9 @@ func (o *Dispatcher) Dispatch(
 	return nil
 }
 
-func (o *Dispatcher) RunHTTPHook(
+func (o *Dispatcher) runHTTPHook(
 	ctx context.Context,
-	hookConfig conf.ExtensibilityPointConfiguration,
+	hookConfig *conf.ExtensibilityPointConfiguration,
 	input any,
 ) ([]byte, error) {
 	client := http.Client{
