@@ -107,6 +107,38 @@ type AccessTokenClaims struct {
 	IsAnonymous                   bool                   `json:"is_anonymous"`
 }
 
+type BeforeUserCreatedInput struct {
+	User *models.User `json:"user"`
+}
+
+type BeforeUserCreatedOutput struct {
+	Something string `json:"something"`
+}
+
+func (mf *BeforeUserCreatedOutput) IsError() bool {
+	return false
+}
+
+func (mf *BeforeUserCreatedOutput) Error() string {
+	return ""
+}
+
+type AfterUserCreatedInput struct {
+	User *models.User `json:"user"`
+}
+
+type AfterUserCreatedOutput struct {
+	Something string `json:"something"`
+}
+
+func (mf *AfterUserCreatedOutput) IsError() bool {
+	return false
+}
+
+func (mf *AfterUserCreatedOutput) Error() string {
+	return ""
+}
+
 type MFAVerificationAttemptInput struct {
 	UserID     uuid.UUID `json:"user_id"`
 	FactorID   uuid.UUID `json:"factor_id"`
