@@ -36,6 +36,33 @@ func NewManager(
 	}
 }
 
+func (o *Manager) Enabled(name Name) bool {
+	if cfg, ok := configByName(&o.config.Hook, name); ok {
+		return cfg.Enabled
+	}
+	return false
+}
+
+func configByName(
+	cfg *conf.HookConfiguration,
+	name Name,
+) (*conf.ExtensibilityPointConfiguration, bool) {
+	switch name {
+	case SendSMS:
+		return &cfg.SendSMS, true
+	case SendEmail:
+		return &cfg.SendEmail, true
+	case CustomizeAccessToken:
+		return &cfg.CustomAccessToken, true
+	case MFAVerification:
+		return &cfg.MFAVerificationAttempt, true
+	case PasswordVerification:
+		return &cfg.PasswordVerificationAttempt, true
+	default:
+		return nil, false
+	}
+}
+
 func (o *Manager) InvokeHook(
 	conn *storage.Connection,
 	r *http.Request,

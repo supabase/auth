@@ -414,3 +414,65 @@ func TestHooks(t *testing.T) {
 		require.Equal(t, tc.exp, tc.res)
 	}
 }
+
+func TestConfig(t *testing.T) {
+	globalCfg := &conf.GlobalConfiguration{
+		Hook: conf.HookConfiguration{
+			SendSMS: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(SendSMS),
+			},
+			SendEmail: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(SendEmail),
+			},
+			CustomAccessToken: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(CustomizeAccessToken),
+			},
+			MFAVerificationAttempt: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(MFAVerification),
+			},
+			PasswordVerificationAttempt: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(PasswordVerification),
+			},
+		},
+	}
+	cfg := &globalCfg.Hook
+
+	mr := new(Manager)
+	mr.config = globalCfg
+
+	tests := []struct {
+		cfg  *conf.HookConfiguration
+		name Name
+		exp  *conf.ExtensibilityPointConfiguration
+		ok   bool
+	}{
+		{},
+		{cfg: cfg, ok: true,
+			name: SendSMS, exp: &cfg.SendSMS},
+		{cfg: cfg, ok: true,
+			name: SendEmail, exp: &cfg.SendEmail},
+		{cfg: cfg, ok: true,
+			name: CustomizeAccessToken, exp: &cfg.CustomAccessToken},
+		{cfg: cfg, ok: true,
+			name: MFAVerification, exp: &cfg.MFAVerificationAttempt},
+		{cfg: cfg, ok: true,
+			name: PasswordVerification, exp: &cfg.PasswordVerificationAttempt},
+	}
+	for idx, test := range tests {
+		t.Logf("test #%v - exp ok %v with cfg %v from name %v",
+			idx, test.ok, test.exp, test.name)
+
+		require.Equal(t, false, mr.Enabled(test.name))
+
+		got, ok := configByName(test.cfg, test.name)
+		require.Equal(t, test.ok, ok)
+		require.Equal(t, test.exp, got)
+
+		if got == nil {
+			continue
+		}
+
+		got.Enabled = true
+		require.Equal(t, true, mr.Enabled(test.name))
+	}
+}
