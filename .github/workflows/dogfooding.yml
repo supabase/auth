@@ -5,10 +5,8 @@ on:
     types: [submitted, edited]
 
   pull_request:
-    types:
-      - opened
-    branches:
-      - '*'
+
+  push:
 
 permissions:
   contents: read

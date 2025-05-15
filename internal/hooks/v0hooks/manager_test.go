@@ -10,10 +10,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/hooks/v0hooks/v0http"
-	"github.com/supabase/auth/internal/hooks/v0hooks/v0pgfunc"
-	"github.com/supabase/auth/internal/storage"
-	"github.com/supabase/auth/internal/storage/test"
+	"github.com/supabase/auth/internal/e2e"
+	"github.com/supabase/auth/internal/hooks/hookshttp"
+	"github.com/supabase/auth/internal/hooks/hookspgfunc"
 )
 
 type M = map[string]any
@@ -25,10 +24,10 @@ func TestHooks(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	globalCfg := helpConfig(t, apiTestConfig)
-	db := helpConn(t, globalCfg)
-	httpDr := v0http.New(v0http.WithTimeout(time.Second / 10))
-	pgfuncDr := v0pgfunc.New(db, v0pgfunc.WithTimeout(time.Second/10))
+	globalCfg := e2e.Must(e2e.Config())
+	db := e2e.Must(e2e.Conn(globalCfg))
+	httpDr := hookshttp.New(hookshttp.WithTimeout(time.Second / 10))
+	pgfuncDr := hookspgfunc.New(db, hookspgfunc.WithTimeout(time.Second/10))
 	mr := NewManager(globalCfg, httpDr, pgfuncDr)
 	now := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
 
@@ -484,28 +483,4 @@ func TestHooks(t *testing.T) {
 			_ = h.IsError()
 		}
 	}
-}
-
-const (
-	apiTestConfig = "../../../hack/test.env"
-)
-
-func helpConfig(t testing.TB, configPath string) *conf.GlobalConfiguration {
-	t.Helper()
-
-	config, err := conf.LoadGlobal(configPath)
-	if err != nil {
-		t.Fatalf("error loading config %q; got %v", configPath, err)
-	}
-	return config
-}
-
-func helpConn(t testing.TB, config *conf.GlobalConfiguration) *storage.Connection {
-	t.Helper()
-
-	conn, err := test.SetupDBConnection(config)
-	if err != nil {
-		t.Fatalf("error setting up db connection: %v", err)
-	}
-	return conn
 }
