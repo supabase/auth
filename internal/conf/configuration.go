@@ -640,6 +640,9 @@ type HookConfiguration struct {
 	CustomAccessToken           ExtensibilityPointConfiguration `json:"custom_access_token" split_words:"true"`
 	SendEmail                   ExtensibilityPointConfiguration `json:"send_email" split_words:"true"`
 	SendSMS                     ExtensibilityPointConfiguration `json:"send_sms" split_words:"true"`
+
+	BeforeUserCreated ExtensibilityPointConfiguration `json:"before_user_created" split_words:"true"`
+	AfterUserCreated  ExtensibilityPointConfiguration `json:"after_user_created" split_words:"true"`
 }
 
 type HTTPHookSecrets []string
@@ -671,6 +674,8 @@ func (h *HookConfiguration) Validate() error {
 		h.CustomAccessToken,
 		h.SendSMS,
 		h.SendEmail,
+		h.BeforeUserCreated,
+		h.AfterUserCreated,
 	}
 	for _, point := range points {
 		if err := point.ValidateExtensibilityPoint(); err != nil {
@@ -884,6 +889,18 @@ func populateGlobal(config *GlobalConfiguration) error {
 
 	if config.Hook.CustomAccessToken.Enabled {
 		if err := config.Hook.CustomAccessToken.PopulateExtensibilityPoint(); err != nil {
+			return err
+		}
+	}
+
+	if config.Hook.BeforeUserCreated.Enabled {
+		if err := config.Hook.BeforeUserCreated.PopulateExtensibilityPoint(); err != nil {
+			return err
+		}
+	}
+
+	if config.Hook.AfterUserCreated.Enabled {
+		if err := config.Hook.AfterUserCreated.PopulateExtensibilityPoint(); err != nil {
 			return err
 		}
 	}
