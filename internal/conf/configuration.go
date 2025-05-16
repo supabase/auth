@@ -321,6 +321,7 @@ type ProviderConfiguration struct {
 	Bitbucket               OAuthProviderConfiguration     `json:"bitbucket"`
 	Discord                 OAuthProviderConfiguration     `json:"discord"`
 	Facebook                OAuthProviderConfiguration     `json:"facebook"`
+	Snapchat                OAuthProviderConfiguration     `json:"snapchat"`
 	Figma                   OAuthProviderConfiguration     `json:"figma"`
 	Fly                     OAuthProviderConfiguration     `json:"fly"`
 	Github                  OAuthProviderConfiguration     `json:"github"`
