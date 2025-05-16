@@ -1,10 +1,14 @@
 package v0hooks
 
 import (
+	"net/http"
+	"time"
+
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 type Name string
@@ -15,12 +19,75 @@ const (
 	CustomizeAccessToken Name = "customize-access-token"
 	MFAVerification      Name = "mfa-verification"
 	PasswordVerification Name = "password-verification"
+	BeforeUserCreated    Name = "before-user-created"
+	AfterUserCreated     Name = "after-user-created"
 )
 
-// Hook Names
 const (
 	HookRejection = "reject"
 )
+
+const (
+	DefaultMFAHookRejectionMessage      = "Further MFA verification attempts will be rejected."
+	DefaultPasswordHookRejectionMessage = "Further password verification attempts will be rejected."
+)
+
+type Metadata struct {
+	UUID uuid.UUID `json:"uuid"`
+	Time time.Time `json:"time"`
+
+	// Hook name
+	Name Name `json:"name,omitempty"`
+
+	// IP Address of the request, if present
+	IPAddress string `json:"ip_address,omitempty"`
+}
+
+func NewMetadata(r *http.Request, name Name) *Metadata {
+	return &Metadata{
+		UUID:      uuid.Must(uuid.NewV4()),
+		Time:      time.Now(),
+		IPAddress: utilities.GetIPAddress(r),
+		Name:      name,
+	}
+}
+
+type BeforeUserCreatedInput struct {
+	Header *Metadata    `json:"header"`
+	User   *models.User `json:"user"`
+}
+
+func NewBeforeUserCreatedInput(
+	r *http.Request,
+	user *models.User,
+) *BeforeUserCreatedInput {
+	return &BeforeUserCreatedInput{
+		Header: NewMetadata(r, BeforeUserCreated),
+		User:   user,
+	}
+}
+
+type BeforeUserCreatedOutput struct {
+	Decision string `json:"decision"`
+	Message  string `json:"message"`
+}
+
+type AfterUserCreatedInput struct {
+	Header *Metadata    `json:"header"`
+	User   *models.User `json:"user"`
+}
+
+func NewAfterUserCreatedInput(
+	r *http.Request,
+	user *models.User,
+) *AfterUserCreatedInput {
+	return &AfterUserCreatedInput{
+		Header: NewMetadata(r, AfterUserCreated),
+		User:   user,
+	}
+}
+
+type AfterUserCreatedOutput struct{}
 
 // TODO(joel): Move this to phone package
 type SMS struct {
@@ -90,8 +157,3 @@ type SendEmailInput struct {
 
 type SendEmailOutput struct {
 }
-
-const (
-	DefaultMFAHookRejectionMessage      = "Further MFA verification attempts will be rejected."
-	DefaultPasswordHookRejectionMessage = "Further password verification attempts will be rejected."
-)

@@ -58,9 +58,31 @@ func configByName(
 		return &cfg.MFAVerificationAttempt, true
 	case PasswordVerification:
 		return &cfg.PasswordVerificationAttempt, true
+	case BeforeUserCreated:
+		return &cfg.BeforeUserCreated, true
+	case AfterUserCreated:
+		return &cfg.AfterUserCreated, true
 	default:
 		return nil, false
 	}
+}
+
+func (o *Manager) BeforeUserCreated(
+	ctx context.Context,
+	tx *storage.Connection,
+	req *BeforeUserCreatedInput,
+	res *BeforeUserCreatedOutput,
+) error {
+	return o.dispatch(ctx, &o.config.Hook.BeforeUserCreated, tx, req, res)
+}
+
+func (o *Manager) AfterUserCreated(
+	ctx context.Context,
+	tx *storage.Connection,
+	req *AfterUserCreatedInput,
+	res *AfterUserCreatedOutput,
+) error {
+	return o.dispatch(ctx, &o.config.Hook.AfterUserCreated, tx, req, res)
 }
 
 func (o *Manager) InvokeHook(

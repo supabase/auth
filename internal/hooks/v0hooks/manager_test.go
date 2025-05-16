@@ -13,6 +13,7 @@ import (
 	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
+	"github.com/supabase/auth/internal/models"
 )
 
 type M = map[string]any
@@ -31,9 +32,13 @@ func TestHooks(t *testing.T) {
 	mr := NewManager(globalCfg, httpDr, pgfuncDr)
 	now := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
 
+	httpReq := httptest.NewRequestWithContext(
+		ctx, "GET", "http://localhost/test", nil)
+
 	type testCase struct {
 		desc   string
 		setup  func()
+		run    func(*testCase, *Manager) error
 		sql    string
 		req    any
 		res    any
@@ -216,6 +221,122 @@ func TestHooks(t *testing.T) {
 						return jsonb_build_object('claims', claims);
 					end;
 				$$ language plpgsql;`,
+		},
+
+		{
+			desc: "pass - before_user_created",
+			setup: func() {
+				globalCfg.Hook.BeforeUserCreated =
+					conf.ExtensibilityPointConfiguration{
+						URI: `pg-functions://postgres/auth/` +
+							`v0hooks_test_before_user_created`,
+						HookName: `"auth"."v0hooks_test_before_user_created"`,
+					}
+			},
+			run: func(tc *testCase, mr *Manager) error {
+				return mr.BeforeUserCreated(
+					ctx, db,
+					tc.req.(*BeforeUserCreatedInput),
+					tc.res.(*BeforeUserCreatedOutput),
+				)
+			},
+			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
+			res: &BeforeUserCreatedOutput{},
+			exp: &BeforeUserCreatedOutput{},
+			sql: `
+				create or replace function
+					v0hooks_test_before_user_created(input jsonb)
+				returns json as $$
+				begin
+					return '{}'::jsonb;
+				end; $$ language plpgsql;`,
+		},
+
+		{
+			desc: "pass - before_user_created reject",
+			setup: func() {
+				globalCfg.Hook.BeforeUserCreated =
+					conf.ExtensibilityPointConfiguration{
+						URI: `pg-functions://postgres/auth/` +
+							`v0hooks_test_before_user_created_reject`,
+						HookName: `"auth"."v0hooks_test_before_user_created_reject"`,
+					}
+			},
+			run: func(tc *testCase, mr *Manager) error {
+				return mr.BeforeUserCreated(
+					ctx, db,
+					tc.req.(*BeforeUserCreatedInput),
+					tc.res.(*BeforeUserCreatedOutput),
+				)
+			},
+			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
+			res: &BeforeUserCreatedOutput{},
+			exp: &BeforeUserCreatedOutput{Decision: "reject"},
+			sql: `
+				create or replace function
+					v0hooks_test_before_user_created_reject(input jsonb)
+				returns json as $$
+				begin
+					return '{"decision": "reject"}'::jsonb;
+				end; $$ language plpgsql;`,
+		},
+
+		{
+			desc: "pass - before_user_created reject with message",
+			setup: func() {
+				globalCfg.Hook.BeforeUserCreated =
+					conf.ExtensibilityPointConfiguration{
+						URI: `pg-functions://postgres/auth/` +
+							`v0hooks_test_before_user_created_reject_msg`,
+						HookName: `"auth"."v0hooks_test_before_user_created_reject_msg"`,
+					}
+			},
+			run: func(tc *testCase, mr *Manager) error {
+				return mr.BeforeUserCreated(
+					ctx, db,
+					tc.req.(*BeforeUserCreatedInput),
+					tc.res.(*BeforeUserCreatedOutput),
+				)
+			},
+			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
+			res: &BeforeUserCreatedOutput{},
+			exp: &BeforeUserCreatedOutput{Decision: "reject", Message: "test case"},
+			sql: `
+				create or replace function
+					v0hooks_test_before_user_created_reject_msg(input jsonb)
+				returns json as $$
+				begin
+					return '{"decision": "reject", "message": "test case"}'::jsonb;
+				end; $$ language plpgsql;`,
+		},
+
+		{
+			desc: "pass - after_user_created",
+			setup: func() {
+				globalCfg.Hook.AfterUserCreated =
+					conf.ExtensibilityPointConfiguration{
+						URI: `pg-functions://postgres/auth/` +
+							`v0hooks_test_after_user_created`,
+						HookName: `"auth"."v0hooks_test_after_user_created"`,
+					}
+			},
+			run: func(tc *testCase, mr *Manager) error {
+				return mr.AfterUserCreated(
+					ctx, db,
+					tc.req.(*AfterUserCreatedInput),
+					tc.res.(*AfterUserCreatedOutput),
+				)
+			},
+			req: NewAfterUserCreatedInput(httpReq, &models.User{}),
+			res: &AfterUserCreatedOutput{},
+			exp: &AfterUserCreatedOutput{},
+			sql: `
+				create or replace function
+					v0hooks_test_after_user_created(input jsonb)
+				returns json as $$
+				begin
+					return '{}'::jsonb;
+				end; $$ language plpgsql;`,
 		},
 
 		// fail
@@ -404,7 +525,12 @@ func TestHooks(t *testing.T) {
 		}
 
 		htr := httptest.NewRequestWithContext(ctx, "POST", "/api", nil)
-		err := mr.InvokeHook(db, htr, tc.req, tc.res)
+		var err error
+		if tc.run == nil {
+			err = mr.InvokeHook(db, htr, tc.req, tc.res)
+		} else {
+			err = tc.run(&tc, mr)
+		}
 		if tc.errStr != "" {
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tc.errStr)
@@ -433,6 +559,12 @@ func TestConfig(t *testing.T) {
 			PasswordVerificationAttempt: conf.ExtensibilityPointConfiguration{
 				URI: "http:localhost/" + string(PasswordVerification),
 			},
+			BeforeUserCreated: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(BeforeUserCreated),
+			},
+			AfterUserCreated: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(AfterUserCreated),
+			},
 		},
 	}
 	cfg := &globalCfg.Hook
@@ -457,6 +589,10 @@ func TestConfig(t *testing.T) {
 			name: MFAVerification, exp: &cfg.MFAVerificationAttempt},
 		{cfg: cfg, ok: true,
 			name: PasswordVerification, exp: &cfg.PasswordVerificationAttempt},
+		{cfg: cfg, ok: true,
+			name: BeforeUserCreated, exp: &cfg.BeforeUserCreated},
+		{cfg: cfg, ok: true,
+			name: AfterUserCreated, exp: &cfg.AfterUserCreated},
 	}
 	for idx, test := range tests {
 		t.Logf("test #%v - exp ok %v with cfg %v from name %v",
