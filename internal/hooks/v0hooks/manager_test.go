@@ -38,7 +38,6 @@ func TestHooks(t *testing.T) {
 	type testCase struct {
 		desc   string
 		setup  func()
-		run    func(*testCase, *Manager) error
 		sql    string
 		req    any
 		res    any
@@ -233,13 +232,6 @@ func TestHooks(t *testing.T) {
 						HookName: `"auth"."v0hooks_test_before_user_created"`,
 					}
 			},
-			run: func(tc *testCase, mr *Manager) error {
-				return mr.BeforeUserCreated(
-					ctx, db,
-					tc.req.(*BeforeUserCreatedInput),
-					tc.res.(*BeforeUserCreatedOutput),
-				)
-			},
 			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
 			res: &BeforeUserCreatedOutput{},
 			exp: &BeforeUserCreatedOutput{},
@@ -261,13 +253,6 @@ func TestHooks(t *testing.T) {
 							`v0hooks_test_before_user_created_reject`,
 						HookName: `"auth"."v0hooks_test_before_user_created_reject"`,
 					}
-			},
-			run: func(tc *testCase, mr *Manager) error {
-				return mr.BeforeUserCreated(
-					ctx, db,
-					tc.req.(*BeforeUserCreatedInput),
-					tc.res.(*BeforeUserCreatedOutput),
-				)
 			},
 			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
 			res: &BeforeUserCreatedOutput{},
@@ -291,13 +276,6 @@ func TestHooks(t *testing.T) {
 						HookName: `"auth"."v0hooks_test_before_user_created_reject_msg"`,
 					}
 			},
-			run: func(tc *testCase, mr *Manager) error {
-				return mr.BeforeUserCreated(
-					ctx, db,
-					tc.req.(*BeforeUserCreatedInput),
-					tc.res.(*BeforeUserCreatedOutput),
-				)
-			},
 			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
 			res: &BeforeUserCreatedOutput{},
 			exp: &BeforeUserCreatedOutput{Decision: "reject", Message: "test case"},
@@ -319,13 +297,6 @@ func TestHooks(t *testing.T) {
 							`v0hooks_test_after_user_created`,
 						HookName: `"auth"."v0hooks_test_after_user_created"`,
 					}
-			},
-			run: func(tc *testCase, mr *Manager) error {
-				return mr.AfterUserCreated(
-					ctx, db,
-					tc.req.(*AfterUserCreatedInput),
-					tc.res.(*AfterUserCreatedOutput),
-				)
 			},
 			req: NewAfterUserCreatedInput(httpReq, &models.User{}),
 			res: &AfterUserCreatedOutput{},
@@ -437,6 +408,18 @@ func TestHooks(t *testing.T) {
 			res:    M{},
 			errStr: "500: output should be *hooks.PasswordVerificationAttemptOutput",
 		},
+		{
+			desc:   "fail - before_user_created - invalid output type",
+			req:    &BeforeUserCreatedInput{},
+			res:    M{},
+			errStr: "500: output should be *hooks.BeforeUserCreatedOutput",
+		},
+		{
+			desc:   "fail - after_user_created - invalid output type",
+			req:    &AfterUserCreatedInput{},
+			res:    M{},
+			errStr: "500: output should be *hooks.AfterUserCreatedOutput",
+		},
 
 		// fail - invalid query
 		{
@@ -525,12 +508,7 @@ func TestHooks(t *testing.T) {
 		}
 
 		htr := httptest.NewRequestWithContext(ctx, "POST", "/api", nil)
-		var err error
-		if tc.run == nil {
-			err = mr.InvokeHook(db, htr, tc.req, tc.res)
-		} else {
-			err = tc.run(&tc, mr)
-		}
+		err := mr.InvokeHook(db, htr, tc.req, tc.res)
 		if tc.errStr != "" {
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tc.errStr)

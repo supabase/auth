@@ -67,24 +67,6 @@ func configByName(
 	}
 }
 
-func (o *Manager) BeforeUserCreated(
-	ctx context.Context,
-	tx *storage.Connection,
-	req *BeforeUserCreatedInput,
-	res *BeforeUserCreatedOutput,
-) error {
-	return o.dispatch(ctx, &o.config.Hook.BeforeUserCreated, tx, req, res)
-}
-
-func (o *Manager) AfterUserCreated(
-	ctx context.Context,
-	tx *storage.Connection,
-	req *AfterUserCreatedInput,
-	res *AfterUserCreatedOutput,
-) error {
-	return o.dispatch(ctx, &o.config.Hook.AfterUserCreated, tx, req, res)
-}
-
 func (o *Manager) InvokeHook(
 	conn *storage.Connection,
 	r *http.Request,
@@ -147,6 +129,23 @@ func (o *Manager) invokeHook(
 		}
 		return o.dispatch(
 			r.Context(), &o.config.Hook.CustomAccessToken, conn, input, output)
+
+	case *BeforeUserCreatedInput:
+		if _, ok := output.(*BeforeUserCreatedOutput); !ok {
+			return apierrors.NewInternalServerError(
+				"output should be *hooks.BeforeUserCreatedOutput")
+		}
+		return o.dispatch(
+			r.Context(), &o.config.Hook.BeforeUserCreated, conn, input, output)
+
+	case *AfterUserCreatedInput:
+		_, ok := output.(*AfterUserCreatedOutput)
+		if !ok {
+			return apierrors.NewInternalServerError(
+				"output should be *hooks.AfterUserCreatedOutput")
+		}
+		return o.dispatch(
+			r.Context(), &o.config.Hook.AfterUserCreated, conn, input, output)
 	}
 }
 
