@@ -90,11 +90,17 @@ func Do(
 	if err != nil {
 		return err
 	}
-	if err := json.Unmarshal(data, res); err != nil {
-		return err
+	if len(data) > 0 {
+		if err := json.Unmarshal(data, res); err != nil {
+			return err
+		}
 	}
 	return nil
 }
+
+const responseLimit = 1e6
+
+var defaultClient = http.DefaultClient
 
 func do(
 	ctx context.Context,
@@ -113,7 +119,7 @@ func do(
 	h.Add("Content-Type", "application/json")
 	h.Add("Accept", "application/json")
 
-	httpRes, err := http.DefaultClient.Do(httpReq)
+	httpRes, err := defaultClient.Do(httpReq)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +130,7 @@ func do(
 		return nil, nil
 
 	case sc >= 400:
-		data, err := io.ReadAll(io.LimitReader(httpRes.Body, 1e8))
+		data, err := io.ReadAll(io.LimitReader(httpRes.Body, responseLimit))
 		if err != nil {
 			return nil, err
 		}
@@ -142,7 +148,7 @@ func do(
 		return nil, err
 
 	default:
-		data, err := io.ReadAll(io.LimitReader(httpRes.Body, 1e8))
+		data, err := io.ReadAll(io.LimitReader(httpRes.Body, responseLimit))
 		if err != nil {
 			return nil, err
 		}

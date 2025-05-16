@@ -13,6 +13,7 @@ import (
 	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
+	"github.com/supabase/auth/internal/models"
 )
 
 type M = map[string]any
@@ -30,6 +31,9 @@ func TestHooks(t *testing.T) {
 	pgfuncDr := hookspgfunc.New(db, hookspgfunc.WithTimeout(time.Second/10))
 	mr := NewManager(globalCfg, httpDr, pgfuncDr)
 	now := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	httpReq := httptest.NewRequestWithContext(
+		ctx, "GET", "http://localhost/test", nil)
 
 	type testCase struct {
 		desc   string
@@ -218,6 +222,94 @@ func TestHooks(t *testing.T) {
 				$$ language plpgsql;`,
 		},
 
+		{
+			desc: "pass - before_user_created",
+			setup: func() {
+				globalCfg.Hook.BeforeUserCreated =
+					conf.ExtensibilityPointConfiguration{
+						URI: `pg-functions://postgres/auth/` +
+							`v0hooks_test_before_user_created`,
+						HookName: `"auth"."v0hooks_test_before_user_created"`,
+					}
+			},
+			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
+			res: &BeforeUserCreatedOutput{},
+			exp: &BeforeUserCreatedOutput{},
+			sql: `
+				create or replace function
+					v0hooks_test_before_user_created(input jsonb)
+				returns json as $$
+				begin
+					return '{}'::jsonb;
+				end; $$ language plpgsql;`,
+		},
+
+		{
+			desc: "pass - before_user_created reject",
+			setup: func() {
+				globalCfg.Hook.BeforeUserCreated =
+					conf.ExtensibilityPointConfiguration{
+						URI: `pg-functions://postgres/auth/` +
+							`v0hooks_test_before_user_created_reject`,
+						HookName: `"auth"."v0hooks_test_before_user_created_reject"`,
+					}
+			},
+			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
+			res: &BeforeUserCreatedOutput{},
+			exp: &BeforeUserCreatedOutput{Decision: "reject"},
+			sql: `
+				create or replace function
+					v0hooks_test_before_user_created_reject(input jsonb)
+				returns json as $$
+				begin
+					return '{"decision": "reject"}'::jsonb;
+				end; $$ language plpgsql;`,
+		},
+
+		{
+			desc: "pass - before_user_created reject with message",
+			setup: func() {
+				globalCfg.Hook.BeforeUserCreated =
+					conf.ExtensibilityPointConfiguration{
+						URI: `pg-functions://postgres/auth/` +
+							`v0hooks_test_before_user_created_reject_msg`,
+						HookName: `"auth"."v0hooks_test_before_user_created_reject_msg"`,
+					}
+			},
+			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
+			res: &BeforeUserCreatedOutput{},
+			exp: &BeforeUserCreatedOutput{Decision: "reject", Message: "test case"},
+			sql: `
+				create or replace function
+					v0hooks_test_before_user_created_reject_msg(input jsonb)
+				returns json as $$
+				begin
+					return '{"decision": "reject", "message": "test case"}'::jsonb;
+				end; $$ language plpgsql;`,
+		},
+
+		{
+			desc: "pass - after_user_created",
+			setup: func() {
+				globalCfg.Hook.AfterUserCreated =
+					conf.ExtensibilityPointConfiguration{
+						URI: `pg-functions://postgres/auth/` +
+							`v0hooks_test_after_user_created`,
+						HookName: `"auth"."v0hooks_test_after_user_created"`,
+					}
+			},
+			req: NewAfterUserCreatedInput(httpReq, &models.User{}),
+			res: &AfterUserCreatedOutput{},
+			exp: &AfterUserCreatedOutput{},
+			sql: `
+				create or replace function
+					v0hooks_test_after_user_created(input jsonb)
+				returns json as $$
+				begin
+					return '{}'::jsonb;
+				end; $$ language plpgsql;`,
+		},
+
 		// fail
 		{
 			desc: "fail - customize_access_token - error propagation",
@@ -315,6 +407,18 @@ func TestHooks(t *testing.T) {
 			req:    &PasswordVerificationAttemptInput{},
 			res:    M{},
 			errStr: "500: output should be *hooks.PasswordVerificationAttemptOutput",
+		},
+		{
+			desc:   "fail - before_user_created - invalid output type",
+			req:    &BeforeUserCreatedInput{},
+			res:    M{},
+			errStr: "500: output should be *hooks.BeforeUserCreatedOutput",
+		},
+		{
+			desc:   "fail - after_user_created - invalid output type",
+			req:    &AfterUserCreatedInput{},
+			res:    M{},
+			errStr: "500: output should be *hooks.AfterUserCreatedOutput",
 		},
 
 		// fail - invalid query
@@ -433,6 +537,12 @@ func TestConfig(t *testing.T) {
 			PasswordVerificationAttempt: conf.ExtensibilityPointConfiguration{
 				URI: "http:localhost/" + string(PasswordVerification),
 			},
+			BeforeUserCreated: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(BeforeUserCreated),
+			},
+			AfterUserCreated: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(AfterUserCreated),
+			},
 		},
 	}
 	cfg := &globalCfg.Hook
@@ -457,6 +567,10 @@ func TestConfig(t *testing.T) {
 			name: MFAVerification, exp: &cfg.MFAVerificationAttempt},
 		{cfg: cfg, ok: true,
 			name: PasswordVerification, exp: &cfg.PasswordVerificationAttempt},
+		{cfg: cfg, ok: true,
+			name: BeforeUserCreated, exp: &cfg.BeforeUserCreated},
+		{cfg: cfg, ok: true,
+			name: AfterUserCreated, exp: &cfg.AfterUserCreated},
 	}
 	for idx, test := range tests {
 		t.Logf("test #%v - exp ok %v with cfg %v from name %v",

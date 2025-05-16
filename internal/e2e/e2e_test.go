@@ -94,4 +94,27 @@ func TestUtils(t *testing.T) {
 			t.Fatal("exp non-nil err")
 		}
 	}()
+
+	// block init from main()
+	func() {
+		restore := isTesting
+		defer func() {
+			isTesting = restore
+		}()
+		isTesting = func() bool { return false }
+
+		var errStr string
+		func() {
+			defer func() {
+				errStr = recover().(string)
+			}()
+
+			initPackage()
+		}()
+
+		exp := "package e2e may not be used in a main package"
+		if errStr != exp {
+			t.Fatalf("exp %v; got %v", exp, errStr)
+		}
+	}()
 }

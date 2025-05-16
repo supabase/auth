@@ -16,8 +16,14 @@ var (
 	configPath  string
 )
 
+var isTesting func() bool = testing.Testing
+
 func init() {
-	if testing.Testing() {
+	initPackage()
+}
+
+func initPackage() {
+	if isTesting() {
 		_, thisFile, _, _ := runtime.Caller(0)
 		projectRoot = filepath.Join(filepath.Dir(thisFile), "../..")
 		configPath = filepath.Join(GetProjectRoot(), "hack", "test.env")

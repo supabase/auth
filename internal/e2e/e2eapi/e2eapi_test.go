@@ -2,8 +2,12 @@ package e2eapi
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -116,4 +120,56 @@ func TestDo(t *testing.T) {
 		}
 		require.ErrorContains(t, err, "unsupported protocol")
 	}
+
+	func() {
+		hr := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		})
+
+		ts := httptest.NewServer(hr)
+		defer ts.Close()
+
+		err := Do(ctx, http.MethodPost, ts.URL, nil, nil)
+		if err != nil {
+			t.Fatalf("exp nil err; got %v", err)
+		}
+	}()
+
+	for _, statusCode := range []int{http.StatusBadRequest, http.StatusOK} {
+		func() {
+			sentinel := errors.New("sentinel")
+			rtFn := roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+				res, err := http.DefaultClient.Do(req)
+				if err != nil {
+					return nil, err
+				}
+				res.Body = io.NopCloser(iotest.ErrReader(sentinel))
+				return res, nil
+			})
+
+			prev := defaultClient
+			defer func() {
+				defaultClient = prev
+			}()
+			defaultClient = new(http.Client)
+			defaultClient.Transport = rtFn
+
+			hr := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(statusCode)
+			})
+
+			ts := httptest.NewServer(hr)
+			defer ts.Close()
+
+			err := Do(ctx, http.MethodPost, ts.URL, nil, nil)
+			require.Error(t, err)
+			require.Equal(t, sentinel, err)
+		}()
+	}
+}
+
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }

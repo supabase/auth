@@ -58,6 +58,10 @@ func configByName(
 		return &cfg.MFAVerificationAttempt, true
 	case PasswordVerification:
 		return &cfg.PasswordVerificationAttempt, true
+	case BeforeUserCreated:
+		return &cfg.BeforeUserCreated, true
+	case AfterUserCreated:
+		return &cfg.AfterUserCreated, true
 	default:
 		return nil, false
 	}
@@ -125,6 +129,23 @@ func (o *Manager) invokeHook(
 		}
 		return o.dispatch(
 			r.Context(), &o.config.Hook.CustomAccessToken, conn, input, output)
+
+	case *BeforeUserCreatedInput:
+		if _, ok := output.(*BeforeUserCreatedOutput); !ok {
+			return apierrors.NewInternalServerError(
+				"output should be *hooks.BeforeUserCreatedOutput")
+		}
+		return o.dispatch(
+			r.Context(), &o.config.Hook.BeforeUserCreated, conn, input, output)
+
+	case *AfterUserCreatedInput:
+		_, ok := output.(*AfterUserCreatedOutput)
+		if !ok {
+			return apierrors.NewInternalServerError(
+				"output should be *hooks.AfterUserCreatedOutput")
+		}
+		return o.dispatch(
+			r.Context(), &o.config.Hook.AfterUserCreated, conn, input, output)
 	}
 }
 
