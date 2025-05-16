@@ -90,35 +90,54 @@ func (ts *Web3TestSuite) TestHappyPath_FullMessage() {
 		ts.API.overrideTime = nil
 	}()
 
-	ts.API.overrideTime = func() time.Time {
-		t, _ := time.Parse(time.RFC3339, "2025-03-29T00:09:59Z")
-		return t
+	examples := []struct {
+		now       string
+		message   string
+		signature string
+	}{
+		{
+			now:       "2025-03-29T00:09:59Z",
+			message:   "supabase.com wants you to sign in with your Solana account:\n2EZEiBdw47VHT6SpZSW9VnuSvBe7DxuYHBTxj19gxvv8\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00Z\nExpiration Time: 2025-03-29T00:10:00Z\nNot Before: 2025-03-29T00:00:00Z",
+			signature: "aiKn+PAoB1OoXxS8H34HrB456YD4sKAVjeTjsxgkaQy3bkdV51WBTmUUE9lBU9kuXr0hTLI+1aTn5TFRbIF8CA==",
+		},
+		{
+			now:       "2025-05-16T15:01:59Z",
+			message:   "localhost:5173 wants you to sign in with your Solana account:\n4UPcfLX6rHuunkDiCnrVdN2BxnaKUAT1m2KCrzaAAct6\n\nSign in on localhost\n\nURI: http://localhost:5173/\nVersion: 1\nIssued At: 2025-05-16T14:52:03.613Z",
+			signature: "RT2JCFpZQtPwGONApGZn1dZnxOBB3zJZHAQPr+cOaI+eQ4ecw/N6zJ6TNw8a+g8n6Xm/Ky1TVZRuWHSxMU1jDg==",
+		},
 	}
 
-	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"chain":     "solana",
-		"message":   "supabase.com wants you to sign in with your Solana account:\n2EZEiBdw47VHT6SpZSW9VnuSvBe7DxuYHBTxj19gxvv8\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00Z\nExpiration Time: 2025-03-29T00:10:00Z\nNot Before: 2025-03-29T00:00:00Z",
-		"signature": "aiKn+PAoB1OoXxS8H34HrB456YD4sKAVjeTjsxgkaQy3bkdV51WBTmUUE9lBU9kuXr0hTLI+1aTn5TFRbIF8CA==",
-	}))
+	for _, example := range examples {
+		ts.API.overrideTime = func() time.Time {
+			t, _ := time.Parse(time.RFC3339, example.now)
+			return t
+		}
 
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=web3", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"chain":     "solana",
+			"message":   example.message,
+			"signature": example.signature,
+		}))
 
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=web3", &buffer)
+		req.Header.Set("Content-Type", "application/json")
 
-	assert.Equal(ts.T(), http.StatusOK, w.Code)
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
 
-	var firstResult struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
+		assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+		var firstResult struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		}
+
+		assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
+
+		assert.NotEmpty(ts.T(), firstResult.AccessToken)
+		assert.NotEmpty(ts.T(), firstResult.RefreshToken)
 	}
-
-	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
-
-	assert.NotEmpty(ts.T(), firstResult.AccessToken)
-	assert.NotEmpty(ts.T(), firstResult.RefreshToken)
 }
 
 func (ts *Web3TestSuite) TestHappyPath_MinimalMessage() {
@@ -190,7 +209,7 @@ func (ts *Web3TestSuite) TestValidationRules_URINotHTTPSButIsHTTP() {
 	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
 
 	assert.Equal(ts.T(), firstResult.Error, "invalid_grant")
-	assert.Equal(ts.T(), firstResult.ErrorDescription, "Signed Solana message is using URI which uses HTTP and hostname is not localhost, only HTTPS is allowed")
+	assert.Equal(ts.T(), firstResult.ErrorDescription, "Signed Solana message is using URI which does not use HTTPS")
 }
 
 func (ts *Web3TestSuite) TestValidationRules_URINotAllowed() {

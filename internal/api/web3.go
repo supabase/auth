@@ -68,19 +68,15 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 		return apierrors.NewOAuthError("invalid_grant", "Signature does not match address in message")
 	}
 
-	if parsedMessage.URI.Scheme != "https" {
-		if parsedMessage.URI.Scheme == "http" && parsedMessage.URI.Hostname() != "localhost" {
-			return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using URI which uses HTTP and hostname is not localhost, only HTTPS is allowed")
-		} else {
-			return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using URI which does not use HTTPS")
-		}
+	if parsedMessage.URI.Scheme != "https" && parsedMessage.URI.Hostname() != "localhost" {
+		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using URI which does not use HTTPS")
 	}
 
 	if !utilities.IsRedirectURLValid(config, parsedMessage.URI.String()) {
 		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using URI which is not allowed on this server, message was signed for another app")
 	}
 
-	if parsedMessage.URI.Host != parsedMessage.Domain || !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain+"/") {
+	if parsedMessage.URI.Hostname() != "localhost" && (parsedMessage.URI.Host != parsedMessage.Domain || !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain+"/")) {
 		return apierrors.NewOAuthError("invalid_grant", "Signed Solana message is using a Domain that does not match the one in URI which is not allowed on this server")
 	}
 
