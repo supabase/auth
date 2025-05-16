@@ -53,8 +53,8 @@ func NewMetadata(r *http.Request, name Name) *Metadata {
 }
 
 type BeforeUserCreatedInput struct {
-	Header *Metadata    `json:"header"`
-	User   *models.User `json:"user"`
+	Metadata *Metadata    `json:"metadata"`
+	User     *models.User `json:"user"`
 }
 
 func NewBeforeUserCreatedInput(
@@ -62,8 +62,8 @@ func NewBeforeUserCreatedInput(
 	user *models.User,
 ) *BeforeUserCreatedInput {
 	return &BeforeUserCreatedInput{
-		Header: NewMetadata(r, BeforeUserCreated),
-		User:   user,
+		Metadata: NewMetadata(r, BeforeUserCreated),
+		User:     user,
 	}
 }
 
@@ -73,8 +73,8 @@ type BeforeUserCreatedOutput struct {
 }
 
 type AfterUserCreatedInput struct {
-	Header *Metadata    `json:"header"`
-	User   *models.User `json:"user"`
+	Metadata *Metadata    `json:"metadata"`
+	User     *models.User `json:"user"`
 }
 
 func NewAfterUserCreatedInput(
@@ -82,8 +82,8 @@ func NewAfterUserCreatedInput(
 	user *models.User,
 ) *AfterUserCreatedInput {
 	return &AfterUserCreatedInput{
-		Header: NewMetadata(r, AfterUserCreated),
-		User:   user,
+		Metadata: NewMetadata(r, AfterUserCreated),
+		User:     user,
 	}
 }
 
