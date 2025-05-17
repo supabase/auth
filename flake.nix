@@ -170,11 +170,6 @@
               mkdir -p /etc/auth.d
               mkdir -p /etc/gotrue
 
-              # Create gotrue user if it doesn't exist
-              if ! id "gotrue" &>/dev/null; then
-                useradd -r -s /bin/false gotrue
-              fi
-
               # Set proper ownership
               chown -R gotrue:gotrue /opt/gotrue
               chown -R gotrue:gotrue /etc/auth.d
@@ -185,7 +180,7 @@
               chmod 775 /etc/auth.d
               chmod 775 /etc/gotrue
 
-              # Copy the binary
+              # Copy the binary to the correct location
               cp ${auth-service}/bin/supabase-auth /opt/gotrue/gotrue
               chown gotrue:gotrue /opt/gotrue/gotrue
               chmod 755 /opt/gotrue/gotrue
@@ -194,15 +189,26 @@
               cp $out/lib/systemd/system/gotrue.service /etc/systemd/system/
               chmod 644 /etc/systemd/system/gotrue.service
 
-              # Copy the environment file
-              cp $out/etc/auth.env /etc/gotrue.generated.env
-              chown gotrue:gotrue /etc/gotrue.generated.env
-              chmod 600 /etc/gotrue.generated.env
+              # Copy the environment file to the correct location
+              cp $out/etc/auth.env /etc/auth.d/20_generated.env
+              chown gotrue:gotrue /etc/auth.d/20_generated.env
+              chmod 600 /etc/auth.d/20_generated.env
 
-              # Create symlinks for easy access
-              ln -sf $out/bin/manage-auth /usr/local/bin/gotrue-manage
-              ln -sf $out/share/gotrue/gotrue.service /usr/local/share/gotrue/gotrue.service
-              ln -sf $out/bin/activate /usr/local/bin/auth-activate
+              # Create symlinks for easy access from nix profile
+              mkdir -p /usr/local/bin
+              mkdir -p /usr/local/share/gotrue
+
+              # Create symlinks to the nix profile locations
+              ln -sf "\$NIX_PROFILE/bin/manage-auth" /usr/local/bin/gotrue-manage
+              ln -sf "\$NIX_PROFILE/share/gotrue/gotrue.service" /usr/local/share/gotrue/gotrue.service
+              ln -sf "\$NIX_PROFILE/bin/activate" /usr/local/bin/auth-activate
+              ln -sf "\$NIX_PROFILE/bin/gotrue" /usr/local/bin/gotrue
+
+              # Allow UFW connections to GoTrue metrics exporter if UFW is installed
+              if command -v ufw >/dev/null 2>&1; then
+                ufw allow 9122/tcp comment "GoTrue metrics exporter"
+                echo "Added UFW rule for GoTrue metrics exporter"
+              fi
 
               # Reload systemd
               systemctl daemon-reload
@@ -213,12 +219,20 @@
 
               echo "Gotrue service has been activated and started"
               echo "You can manage the service using: gotrue-manage {start|stop|restart|status}"
+              echo "The following commands are available:"
+              echo "  gotrue-manage - Manage the Gotrue service"
+              echo "  auth-activate - Run this activation script again"
+              echo "  gotrue - The auth service binary"
               EOF
               chmod +x $out/bin/activate
 
               # Create symlinks to the systemd unit files for easy access
               mkdir -p $out/share/gotrue
               ln -s $out/lib/systemd/system/gotrue.service $out/share/gotrue/gotrue.service
+
+              # Copy the auth binary to the package's bin directory
+              cp ${auth-service}/bin/supabase-auth $out/bin/gotrue
+              chmod +x $out/bin/gotrue
             '';
 
             installPhase = "true";
