@@ -303,7 +303,7 @@ func (a *API) sendConfirmation(r *http.Request, tx *storage.Connection, u *model
 	maxFrequency := config.SMTP.MaxFrequency
 	otpLength := config.Mailer.OtpLength
 
-	if err = validateSentWithinFrequencyLimit(u.ConfirmationSentAt, maxFrequency); err != nil {
+	if err = validateSentWithinFrequencyLimitEmail(u.ConfirmationSentAt, maxFrequency); err != nil {
 		return err
 	}
 	oldToken := u.ConfirmationToken
@@ -370,7 +370,7 @@ func (a *API) sendPasswordRecovery(r *http.Request, tx *storage.Connection, u *m
 	config := a.config
 	otpLength := config.Mailer.OtpLength
 
-	if err := validateSentWithinFrequencyLimit(u.RecoverySentAt, config.SMTP.MaxFrequency); err != nil {
+	if err := validateSentWithinFrequencyLimitEmail(u.RecoverySentAt, config.SMTP.MaxFrequency); err != nil {
 		return err
 	}
 
@@ -407,7 +407,7 @@ func (a *API) sendReauthenticationOtp(r *http.Request, tx *storage.Connection, u
 	maxFrequency := config.SMTP.MaxFrequency
 	otpLength := config.Mailer.OtpLength
 
-	if err := validateSentWithinFrequencyLimit(u.ReauthenticationSentAt, maxFrequency); err != nil {
+	if err := validateSentWithinFrequencyLimitEmail(u.ReauthenticationSentAt, maxFrequency); err != nil {
 		return err
 	}
 
@@ -445,7 +445,7 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 
 	// since Magic Link is just a recovery with a different template and behaviour
 	// around new users we will reuse the recovery db timer to prevent potential abuse
-	if err := validateSentWithinFrequencyLimit(u.RecoverySentAt, config.SMTP.MaxFrequency); err != nil {
+	if err := validateSentWithinFrequencyLimitEmail(u.RecoverySentAt, config.SMTP.MaxFrequency); err != nil {
 		return err
 	}
 
@@ -482,7 +482,7 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 	config := a.config
 	otpLength := config.Mailer.OtpLength
 
-	if err := validateSentWithinFrequencyLimit(u.EmailChangeSentAt, config.SMTP.MaxFrequency); err != nil {
+	if err := validateSentWithinFrequencyLimitEmail(u.EmailChangeSentAt, config.SMTP.MaxFrequency); err != nil {
 		return err
 	}
 
@@ -553,9 +553,16 @@ func (a *API) validateEmail(email string) (string, error) {
 	return strings.ToLower(email), nil
 }
 
-func validateSentWithinFrequencyLimit(sentAt *time.Time, frequency time.Duration) error {
+func validateSentWithinFrequencyLimitEmail(sentAt *time.Time, frequency time.Duration) error {
 	if sentAt != nil && sentAt.Add(frequency).After(time.Now()) {
 		return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, generateFrequencyLimitErrorMessage(sentAt, frequency))
+	}
+	return nil
+}
+
+func validateSentWithinFrequencyLimitSMS(sentAt *time.Time, frequency time.Duration) error {
+	if sentAt != nil && sentAt.Add(frequency).After(time.Now()) {
+		return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(sentAt, frequency))
 	}
 	return nil
 }

@@ -70,8 +70,8 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 
 	// intentionally keeping this before the test OTP, so that the behavior
 	// of regular and test OTPs is similar
-	if sentAt != nil && !sentAt.Add(config.Sms.MaxFrequency).Before(time.Now()) {
-		return "", apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, generateFrequencyLimitErrorMessage(sentAt, config.Sms.MaxFrequency))
+	if err := validateSentWithinFrequencyLimitSMS(sentAt, config.Sms.MaxFrequency); err != nil {
+		return "", err
 	}
 
 	now := time.Now()
