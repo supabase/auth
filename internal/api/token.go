@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
@@ -369,6 +371,9 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 		if err != nil {
 			return "", 0, err
 		}
+		if err := validateTokenClaims(output.Claims); err != nil {
+			return "", 0, err
+		}
 		gotrueClaims = jwt.MapClaims(output.Claims)
 	}
 
@@ -376,7 +381,6 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 	if err != nil {
 		return "", 0, err
 	}
-
 	return signed, expiresAt.Unix(), nil
 }
 
@@ -491,3 +495,86 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 		User:         user,
 	}, nil
 }
+
+var schemaLoader = gojsonschema.NewStringLoader(MinimumViableTokenSchema)
+
+func validateTokenClaims(outputClaims map[string]interface{}) error {
+	documentLoader := gojsonschema.NewGoLoader(outputClaims)
+	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+	if err != nil {
+		return err
+	}
+
+	if !result.Valid() {
+		var errorMessages string
+
+		for _, desc := range result.Errors() {
+			errorMessages += fmt.Sprintf("- %s\n", desc)
+			fmt.Printf("- %s\n", desc)
+		}
+		return fmt.Errorf(
+			"output claims do not conform to the expected schema: \n%s", errorMessages)
+
+	}
+
+	return nil
+}
+
+// #nosec
+const MinimumViableTokenSchema = `{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "aud": {
+      "type": ["string", "array"]
+    },
+    "exp": {
+      "type": "integer"
+    },
+    "jti": {
+      "type": "string"
+    },
+    "iat": {
+      "type": "integer"
+    },
+    "iss": {
+      "type": "string"
+    },
+    "nbf": {
+      "type": "integer"
+    },
+    "sub": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "app_metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "user_metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "role": {
+      "type": "string"
+    },
+    "aal": {
+      "type": "string"
+    },
+    "amr": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "session_id": {
+      "type": "string"
+    }
+  },
+  "required": ["aud", "exp", "iat", "sub", "email", "phone", "role", "aal", "session_id", "is_anonymous"]
+}`

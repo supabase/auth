@@ -10,7 +10,9 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/hooks"
+	"github.com/supabase/auth/internal/hooks/hookshttp"
+	"github.com/supabase/auth/internal/hooks/hookspgfunc"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
@@ -33,7 +35,7 @@ type API struct {
 	config  *conf.GlobalConfiguration
 	version string
 
-	hooksMgr   *hooks.Manager
+	hooksMgr   *v0hooks.Manager
 	hibpClient *hibp.PwnedClient
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
@@ -87,7 +89,9 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.limiterOpts = NewLimiterOptions(globalConfig)
 	}
 	if api.hooksMgr == nil {
-		api.hooksMgr = hooks.NewManager(db, globalConfig)
+		httpDr := hookshttp.New()
+		pgfuncDr := hookspgfunc.New(db)
+		api.hooksMgr = v0hooks.NewManager(globalConfig, httpDr, pgfuncDr)
 	}
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{

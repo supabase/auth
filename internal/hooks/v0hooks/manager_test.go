@@ -13,6 +13,7 @@ import (
 	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
+	"github.com/supabase/auth/internal/models"
 )
 
 type M = map[string]any
@@ -31,28 +32,8 @@ func TestHooks(t *testing.T) {
 	mr := NewManager(globalCfg, httpDr, pgfuncDr)
 	now := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
 
-	// cover RunHTTPHook
-	{
-		globalCfg.Hook.SendSMS =
-			conf.ExtensibilityPointConfiguration{
-				URI: `http://0.0.0.0:12345`,
-			}
-
-		req := &SendSMSInput{}
-		htr := httptest.NewRequestWithContext(ctx, "POST", "/api", nil)
-		_, err := mr.RunHTTPHook(htr, globalCfg.Hook.SendSMS, req)
-		if err == nil {
-			t.Fatal("exp non-nil err")
-		}
-	}
-
-	// Cover auth hook errors single method
-	{
-		ae := &AuthHookError{Message: "test"}
-		if exp, got := "test", ae.Error(); exp != got {
-			t.Fatalf("exp %v; got %v", exp, got)
-		}
-	}
+	httpReq := httptest.NewRequestWithContext(
+		ctx, "GET", "http://localhost/test", nil)
 
 	type testCase struct {
 		desc   string
@@ -77,7 +58,7 @@ func TestHooks(t *testing.T) {
 			req:    &SendSMSInput{},
 			res:    &SendSMSOutput{},
 			exp:    &SendSMSOutput{},
-			errStr: "500: Error running hook URI: http://0.0.0.0:12345",
+			errStr: "422: Failed to reach hook within maximum time of 0.100000 seconds",
 		},
 
 		{
@@ -241,62 +222,92 @@ func TestHooks(t *testing.T) {
 				$$ language plpgsql;`,
 		},
 
-		// fail - missing required claims
 		{
-			desc: "fail - customize_access_token - missing required claims",
+			desc: "pass - before_user_created",
 			setup: func() {
-				globalCfg.Hook.CustomAccessToken =
+				globalCfg.Hook.BeforeUserCreated =
 					conf.ExtensibilityPointConfiguration{
 						URI: `pg-functions://postgres/auth/` +
-							`v0hooks_test_customize_access_token_fail_missing`,
-						HookName: `"auth"."v0hooks_test_customize_access_token_fail_missing"`,
+							`v0hooks_test_before_user_created`,
+						HookName: `"auth"."v0hooks_test_before_user_created"`,
 					}
 			},
-			req: &CustomAccessTokenInput{
-				Claims: &AccessTokenClaims{
-					RegisteredClaims: jwt.RegisteredClaims{
-						Audience:  []string{"myaudience"},
-						ExpiresAt: jwt.NewNumericDate(now),
-						IssuedAt:  jwt.NewNumericDate(now),
-						Subject:   "mysubject",
-					},
-					Email:                       "valid.email@supabase.co",
-					AuthenticatorAssuranceLevel: "aal1",
-					SessionId:                   "sid",
-					Phone:                       "1234567890",
-					AppMetaData:                 M{"appmeta": "val2"},
-					Role:                        "myrole",
-				},
-			},
-			res: &CustomAccessTokenOutput{},
-			exp: &CustomAccessTokenOutput{
-				Claims: M{
-					"aud":          []interface{}{"myaudience"},
-					"email":        "valid.email@supabase.co",
-					"exp":          1.7040672e+09,
-					"iat":          1.7040672e+09,
-					"sub":          "mysubject",
-					"aal":          "aal1",
-					"session_id":   "sid",
-					"is_anonymous": false,
-					"phone":        "1234567890",
-					"app_metadata": M{"appmeta": "val2"},
-					"custom_claim": "custom_value",
-					"role":         "myrole",
-				},
-			},
+			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
+			res: &BeforeUserCreatedOutput{},
+			exp: &BeforeUserCreatedOutput{},
 			sql: `
 				create or replace function
-					v0hooks_test_customize_access_token_fail_missing(input jsonb)
-				 returns json as $$
-				 	declare
-						claims jsonb;
-					begin
-						claims := input->'claims' || '{"custom_claim": "custom_value"}'::jsonb;
-						return jsonb_build_object('claims', claims);
-					end;
-				$$ language plpgsql;`,
-			errStr: "500: output claims do not conform to the expected schema",
+					v0hooks_test_before_user_created(input jsonb)
+				returns json as $$
+				begin
+					return '{}'::jsonb;
+				end; $$ language plpgsql;`,
+		},
+
+		{
+			desc: "pass - before_user_created reject",
+			setup: func() {
+				globalCfg.Hook.BeforeUserCreated =
+					conf.ExtensibilityPointConfiguration{
+						URI: `pg-functions://postgres/auth/` +
+							`v0hooks_test_before_user_created_reject`,
+						HookName: `"auth"."v0hooks_test_before_user_created_reject"`,
+					}
+			},
+			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
+			res: &BeforeUserCreatedOutput{},
+			exp: &BeforeUserCreatedOutput{Decision: "reject"},
+			sql: `
+				create or replace function
+					v0hooks_test_before_user_created_reject(input jsonb)
+				returns json as $$
+				begin
+					return '{"decision": "reject"}'::jsonb;
+				end; $$ language plpgsql;`,
+		},
+
+		{
+			desc: "pass - before_user_created reject with message",
+			setup: func() {
+				globalCfg.Hook.BeforeUserCreated =
+					conf.ExtensibilityPointConfiguration{
+						URI: `pg-functions://postgres/auth/` +
+							`v0hooks_test_before_user_created_reject_msg`,
+						HookName: `"auth"."v0hooks_test_before_user_created_reject_msg"`,
+					}
+			},
+			req: NewBeforeUserCreatedInput(httpReq, &models.User{}),
+			res: &BeforeUserCreatedOutput{},
+			exp: &BeforeUserCreatedOutput{Decision: "reject", Message: "test case"},
+			sql: `
+				create or replace function
+					v0hooks_test_before_user_created_reject_msg(input jsonb)
+				returns json as $$
+				begin
+					return '{"decision": "reject", "message": "test case"}'::jsonb;
+				end; $$ language plpgsql;`,
+		},
+
+		{
+			desc: "pass - after_user_created",
+			setup: func() {
+				globalCfg.Hook.AfterUserCreated =
+					conf.ExtensibilityPointConfiguration{
+						URI: `pg-functions://postgres/auth/` +
+							`v0hooks_test_after_user_created`,
+						HookName: `"auth"."v0hooks_test_after_user_created"`,
+					}
+			},
+			req: NewAfterUserCreatedInput(httpReq, &models.User{}),
+			res: &AfterUserCreatedOutput{},
+			exp: &AfterUserCreatedOutput{},
+			sql: `
+				create or replace function
+					v0hooks_test_after_user_created(input jsonb)
+				returns json as $$
+				begin
+					return '{}'::jsonb;
+				end; $$ language plpgsql;`,
 		},
 
 		// fail
@@ -310,13 +321,8 @@ func TestHooks(t *testing.T) {
 						HookName: `"auth"."v0hooks_test_customize_access_token_failure"`,
 					}
 			},
-			req: &CustomAccessTokenInput{},
-			res: &CustomAccessTokenOutput{},
-			exp: &CustomAccessTokenOutput{
-				HookError: AuthHookError{
-					Message: "failed hook",
-				},
-			},
+			req:    &CustomAccessTokenInput{},
+			res:    &CustomAccessTokenOutput{},
 			errStr: "500: failed hook",
 			sql: `
 				create or replace function
@@ -324,6 +330,28 @@ func TestHooks(t *testing.T) {
 				returns json as $$
 				begin
 					return '{"error": {"message": "failed hook"}}'::jsonb;
+				end; $$ language plpgsql;`,
+		},
+
+		{
+			desc: "fail - customize_access_token - error propagation http code",
+			setup: func() {
+				globalCfg.Hook.CustomAccessToken =
+					conf.ExtensibilityPointConfiguration{
+						URI: `pg-functions://postgres/auth/` +
+							`v0hooks_test_customize_access_token_failure`,
+						HookName: `"auth"."v0hooks_test_customize_access_token_failure"`,
+					}
+			},
+			req:    &CustomAccessTokenInput{},
+			res:    &CustomAccessTokenOutput{},
+			errStr: "403: auth failure",
+			sql: `
+				create or replace function
+					v0hooks_test_customize_access_token_failure(input jsonb)
+				returns json as $$
+				begin
+					return '{"error": {"message": "auth failure", "http_code": 403}}'::jsonb;
 				end; $$ language plpgsql;`,
 		},
 
@@ -379,6 +407,18 @@ func TestHooks(t *testing.T) {
 			req:    &PasswordVerificationAttemptInput{},
 			res:    M{},
 			errStr: "500: output should be *hooks.PasswordVerificationAttemptOutput",
+		},
+		{
+			desc:   "fail - before_user_created - invalid output type",
+			req:    &BeforeUserCreatedInput{},
+			res:    M{},
+			errStr: "500: output should be *hooks.BeforeUserCreatedOutput",
+		},
+		{
+			desc:   "fail - after_user_created - invalid output type",
+			req:    &AfterUserCreatedInput{},
+			res:    M{},
+			errStr: "500: output should be *hooks.AfterUserCreatedOutput",
 		},
 
 		// fail - invalid query
@@ -476,11 +516,77 @@ func TestHooks(t *testing.T) {
 		}
 		require.NoError(t, err)
 		require.Equal(t, tc.exp, tc.res)
+	}
+}
 
-		if h, ok := tc.res.(HookOutput); ok {
-			_ = h.Error()
-			_ = h.GetHookError()
-			_ = h.IsError()
+func TestConfig(t *testing.T) {
+	globalCfg := &conf.GlobalConfiguration{
+		Hook: conf.HookConfiguration{
+			SendSMS: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(SendSMS),
+			},
+			SendEmail: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(SendEmail),
+			},
+			CustomAccessToken: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(CustomizeAccessToken),
+			},
+			MFAVerificationAttempt: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(MFAVerification),
+			},
+			PasswordVerificationAttempt: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(PasswordVerification),
+			},
+			BeforeUserCreated: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(BeforeUserCreated),
+			},
+			AfterUserCreated: conf.ExtensibilityPointConfiguration{
+				URI: "http:localhost/" + string(AfterUserCreated),
+			},
+		},
+	}
+	cfg := &globalCfg.Hook
+
+	mr := new(Manager)
+	mr.config = globalCfg
+
+	tests := []struct {
+		cfg  *conf.HookConfiguration
+		name Name
+		exp  *conf.ExtensibilityPointConfiguration
+		ok   bool
+	}{
+		{},
+		{cfg: cfg, ok: true,
+			name: SendSMS, exp: &cfg.SendSMS},
+		{cfg: cfg, ok: true,
+			name: SendEmail, exp: &cfg.SendEmail},
+		{cfg: cfg, ok: true,
+			name: CustomizeAccessToken, exp: &cfg.CustomAccessToken},
+		{cfg: cfg, ok: true,
+			name: MFAVerification, exp: &cfg.MFAVerificationAttempt},
+		{cfg: cfg, ok: true,
+			name: PasswordVerification, exp: &cfg.PasswordVerificationAttempt},
+		{cfg: cfg, ok: true,
+			name: BeforeUserCreated, exp: &cfg.BeforeUserCreated},
+		{cfg: cfg, ok: true,
+			name: AfterUserCreated, exp: &cfg.AfterUserCreated},
+	}
+	for idx, test := range tests {
+		t.Logf("test #%v - exp ok %v with cfg %v from name %v",
+			idx, test.ok, test.exp, test.name)
+
+		require.Equal(t, false, mr.Enabled(test.name))
+
+		got, ok := configByName(test.cfg, test.name)
+		require.Equal(t, test.ok, ok)
+		require.Equal(t, test.exp, got)
+
+		if got == nil {
+			continue
 		}
+
+		got.Enabled = true
+		require.Equal(t, true, mr.Enabled(test.name))
 	}
 }

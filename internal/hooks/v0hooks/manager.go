@@ -1,13 +1,14 @@
 package v0hooks
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
@@ -18,9 +19,9 @@ import (
 )
 
 type Manager struct {
-	config   *conf.GlobalConfiguration
-	v0http   *hookshttp.Dispatcher
-	v0pgfunc *hookspgfunc.Dispatcher
+	config *conf.GlobalConfiguration
+	http   *hookshttp.Dispatcher
+	pgfunc *hookspgfunc.Dispatcher
 }
 
 func NewManager(
@@ -29,9 +30,40 @@ func NewManager(
 	pgfuncDr *hookspgfunc.Dispatcher,
 ) *Manager {
 	return &Manager{
-		config:   config,
-		v0http:   httpDr,
-		v0pgfunc: pgfuncDr,
+		config: config,
+		http:   httpDr,
+		pgfunc: pgfuncDr,
+	}
+}
+
+func (o *Manager) Enabled(name Name) bool {
+	if cfg, ok := configByName(&o.config.Hook, name); ok {
+		return cfg.Enabled
+	}
+	return false
+}
+
+func configByName(
+	cfg *conf.HookConfiguration,
+	name Name,
+) (*conf.ExtensibilityPointConfiguration, bool) {
+	switch name {
+	case SendSMS:
+		return &cfg.SendSMS, true
+	case SendEmail:
+		return &cfg.SendEmail, true
+	case CustomizeAccessToken:
+		return &cfg.CustomAccessToken, true
+	case MFAVerification:
+		return &cfg.MFAVerificationAttempt, true
+	case PasswordVerification:
+		return &cfg.PasswordVerificationAttempt, true
+	case BeforeUserCreated:
+		return &cfg.BeforeUserCreated, true
+	case AfterUserCreated:
+		return &cfg.AfterUserCreated, true
+	default:
+		return nil, false
 	}
 }
 
@@ -43,14 +75,6 @@ func (o *Manager) InvokeHook(
 	return o.invokeHook(conn, r, input, output)
 }
 
-func (o *Manager) RunHTTPHook(
-	r *http.Request,
-	hookConfig conf.ExtensibilityPointConfiguration,
-	input any,
-) ([]byte, error) {
-	return o.v0http.RunHTTPHook(r.Context(), hookConfig, input)
-}
-
 // invokeHook invokes the hook code. conn can be nil, in which case a new
 // transaction is opened. If calling invokeHook within a transaction, always
 // pass the current transaction, as pool-exhaustion deadlocks are very easy to
@@ -60,103 +84,88 @@ func (o *Manager) invokeHook(
 	r *http.Request,
 	input, output any,
 ) error {
-	var err error
 	switch input.(type) {
 	default:
 		return apierrors.NewInternalServerError(
 			"Unknown hook type %T.", input)
 
 	case *SendSMSInput:
-		hookOutput, ok := output.(*SendSMSOutput)
-		if !ok {
+		if _, ok := output.(*SendSMSOutput); !ok {
 			return apierrors.NewInternalServerError(
 				"output should be *hooks.SendSMSOutput")
 		}
-		if err = o.runHook(r, conn, o.config.Hook.SendSMS, input, hookOutput); err != nil {
-			return err
-		}
-		return checkError(hookOutput)
+		return o.dispatch(
+			r.Context(), &o.config.Hook.SendSMS, conn, input, output)
 
 	case *SendEmailInput:
-		hookOutput, ok := output.(*SendEmailOutput)
-		if !ok {
+		if _, ok := output.(*SendEmailOutput); !ok {
 			return apierrors.NewInternalServerError(
 				"output should be *hooks.SendEmailOutput")
 		}
-		if err := o.runHook(r, conn, o.config.Hook.SendEmail, input, hookOutput); err != nil {
-			return err
-		}
-		return checkError(hookOutput)
+		return o.dispatch(
+			r.Context(), &o.config.Hook.SendEmail, conn, input, output)
 
 	case *MFAVerificationAttemptInput:
-		hookOutput, ok := output.(*MFAVerificationAttemptOutput)
-		if !ok {
+		if _, ok := output.(*MFAVerificationAttemptOutput); !ok {
 			return apierrors.NewInternalServerError(
 				"output should be *hooks.MFAVerificationAttemptOutput")
 		}
-		if err := o.runHook(r, conn, o.config.Hook.MFAVerificationAttempt, input, hookOutput); err != nil {
-			return err
-		}
-		return checkError(hookOutput)
+		return o.dispatch(
+			r.Context(), &o.config.Hook.MFAVerificationAttempt, conn, input, output)
 
 	case *PasswordVerificationAttemptInput:
-		hookOutput, ok := output.(*PasswordVerificationAttemptOutput)
-		if !ok {
+		if _, ok := output.(*PasswordVerificationAttemptOutput); !ok {
 			return apierrors.NewInternalServerError(
 				"output should be *hooks.PasswordVerificationAttemptOutput")
 		}
-		if err := o.runHook(r, conn, o.config.Hook.PasswordVerificationAttempt, input, hookOutput); err != nil {
-			return err
-		}
-		return checkError(hookOutput)
+		return o.dispatch(
+			r.Context(), &o.config.Hook.PasswordVerificationAttempt, conn, input, output)
 
 	case *CustomAccessTokenInput:
-		hookOutput, ok := output.(*CustomAccessTokenOutput)
+		_, ok := output.(*CustomAccessTokenOutput)
 		if !ok {
 			return apierrors.NewInternalServerError(
 				"output should be *hooks.CustomAccessTokenOutput")
 		}
-		if err := o.runHook(r, conn, o.config.Hook.CustomAccessToken, input, hookOutput); err != nil {
-			return err
-		}
-		if err := checkError(hookOutput); err != nil {
-			return err
-		}
-		if err := validateTokenClaims(hookOutput.Claims); err != nil {
-			httpCode := hookOutput.HookError.HTTPCode
+		return o.dispatch(
+			r.Context(), &o.config.Hook.CustomAccessToken, conn, input, output)
 
-			if httpCode == 0 {
-				httpCode = http.StatusInternalServerError
-			}
-			httpError := &apierrors.HTTPError{
-				HTTPStatus: httpCode,
-				Message:    err.Error(),
-			}
-			return httpError
+	case *BeforeUserCreatedInput:
+		if _, ok := output.(*BeforeUserCreatedOutput); !ok {
+			return apierrors.NewInternalServerError(
+				"output should be *hooks.BeforeUserCreatedOutput")
 		}
-		return nil
+		return o.dispatch(
+			r.Context(), &o.config.Hook.BeforeUserCreated, conn, input, output)
+
+	case *AfterUserCreatedInput:
+		_, ok := output.(*AfterUserCreatedOutput)
+		if !ok {
+			return apierrors.NewInternalServerError(
+				"output should be *hooks.AfterUserCreatedOutput")
+		}
+		return o.dispatch(
+			r.Context(), &o.config.Hook.AfterUserCreated, conn, input, output)
 	}
 }
 
-func (o *Manager) runHook(
-	r *http.Request,
+func (o *Manager) dispatch(
+	ctx context.Context,
+	hookConfig *conf.ExtensibilityPointConfiguration,
 	conn *storage.Connection,
-	hookConfig conf.ExtensibilityPointConfiguration,
 	input, output any,
 ) error {
-	ctx := r.Context()
-
-	logEntry := observability.GetLogEntry(r)
+	logEntry := observability.GetLogEntryFromContext(ctx)
 	hookStart := time.Now()
 
 	var err error
 	switch {
 	case strings.HasPrefix(hookConfig.URI, "http:") ||
 		strings.HasPrefix(hookConfig.URI, "https:"):
-		err = o.v0http.Dispatch(ctx, hookConfig, input, output)
+		err = o.http.Dispatch(ctx, hookConfig, input, output)
 
 	case strings.HasPrefix(hookConfig.URI, "pg-functions:"):
-		err = o.v0pgfunc.Dispatch(ctx, hookConfig, conn, input, output)
+		err = o.pgfunc.Dispatch(ctx, hookConfig, conn, input, output)
 
 	default:
 		return fmt.Errorf(
@@ -174,6 +183,10 @@ func (o *Manager) runHook(
 			"duration": duration.Microseconds(),
 		}).WithError(err).Warn("Hook errored out")
 
+		e := new(apierrors.HTTPError)
+		if errors.As(err, &e) {
+			return e
+		}
 		return apierrors.NewInternalServerError(
 			"Error running hook URI: %v", hookConfig.URI).WithInternalError(err)
 	}
@@ -184,51 +197,6 @@ func (o *Manager) runHook(
 		"success":  true,
 		"duration": duration.Microseconds(),
 	}).WithError(err).Info("Hook ran successfully")
-
-	return nil
-}
-
-func checkError(
-	hookOutput HookOutput,
-) error {
-	if hookOutput.IsError() {
-		he := hookOutput.GetHookError()
-		httpCode := he.HTTPCode
-
-		if httpCode == 0 {
-			httpCode = http.StatusInternalServerError
-		}
-
-		httpError := &apierrors.HTTPError{
-			HTTPStatus: httpCode,
-			Message:    he.Message,
-		}
-		return httpError.WithInternalError(&he)
-	}
-	return nil
-}
-
-func validateTokenClaims(outputClaims map[string]interface{}) error {
-	schemaLoader := gojsonschema.NewStringLoader(MinimumViableTokenSchema)
-
-	documentLoader := gojsonschema.NewGoLoader(outputClaims)
-
-	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
-	if err != nil {
-		return err
-	}
-
-	if !result.Valid() {
-		var errorMessages string
-
-		for _, desc := range result.Errors() {
-			errorMessages += fmt.Sprintf("- %s\n", desc)
-			fmt.Printf("- %s\n", desc)
-		}
-		return fmt.Errorf(
-			"output claims do not conform to the expected schema: \n%s", errorMessages)
-
-	}
 
 	return nil
 }
