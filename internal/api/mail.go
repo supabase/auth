@@ -478,7 +478,7 @@ func (a *API) sendMagicLink(r *http.Request, tx *storage.Connection, u *models.U
 }
 
 // sendEmailChange sends out an email change token to the new email.
-func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models.User, email string, flowType models.FlowType) error {
+func (a *API) sendEmailChange(r *http.Request, db *storage.Connection, u *models.User, email string, flowType models.FlowType) error {
 	config := a.config
 	otpLength := config.Mailer.OtpLength
 
@@ -503,7 +503,7 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 	u.EmailChangeConfirmStatus = zeroConfirmation
 	now := time.Now()
 
-	if err := a.sendEmail(r, tx, u, mail.EmailChangeVerification, otpCurrent, otpNew, u.EmailChangeTokenNew); err != nil {
+	if err := a.sendEmail(r, db, u, mail.EmailChangeVerification, otpCurrent, otpNew, u.EmailChangeTokenNew); err != nil {
 		if errors.Is(err, EmailRateLimitExceeded) {
 			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
 		} else if herr, ok := err.(*HTTPError); ok {
@@ -512,31 +512,33 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 		return apierrors.NewInternalServerError("Error sending email change email").WithInternalError(err)
 	}
 
-	u.EmailChangeSentAt = &now
-	if err := tx.UpdateOnly(
-		u,
-		"email_change_token_current",
-		"email_change_token_new",
-		"email_change",
-		"email_change_sent_at",
-		"email_change_confirm_status",
-	); err != nil {
-		return apierrors.NewInternalServerError("Error sending email change email").WithInternalError(errors.Wrap(err, "Database error updating user for email change"))
-	}
-
-	if u.EmailChangeTokenCurrent != "" {
-		if err := models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent); err != nil {
-			return apierrors.NewInternalServerError("Error sending email change email").WithInternalError(errors.Wrap(err, "Database error creating email change token current"))
+	return db.Transaction(func(tx *storage.Connection) error {
+		u.EmailChangeSentAt = &now
+		if err := tx.UpdateOnly(
+			u,
+			"email_change_token_current",
+			"email_change_token_new",
+			"email_change",
+			"email_change_sent_at",
+			"email_change_confirm_status",
+		); err != nil {
+			return apierrors.NewInternalServerError("Error sending email change email").WithInternalError(errors.Wrap(err, "Database error updating user for email change"))
 		}
-	}
 
-	if u.EmailChangeTokenNew != "" {
-		if err := models.CreateOneTimeToken(tx, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew); err != nil {
-			return apierrors.NewInternalServerError("Error sending email change email").WithInternalError(errors.Wrap(err, "Database error creating email change token new"))
+		if u.EmailChangeTokenCurrent != "" {
+			if err := models.CreateOneTimeToken(tx, u.ID, u.GetEmail(), u.EmailChangeTokenCurrent, models.EmailChangeTokenCurrent); err != nil {
+				return apierrors.NewInternalServerError("Error sending email change email").WithInternalError(errors.Wrap(err, "Database error creating email change token current"))
+			}
 		}
-	}
 
-	return nil
+		if u.EmailChangeTokenNew != "" {
+			if err := models.CreateOneTimeToken(tx, u.ID, u.EmailChange, u.EmailChangeTokenNew, models.EmailChangeTokenNew); err != nil {
+				return apierrors.NewInternalServerError("Error sending email change email").WithInternalError(errors.Wrap(err, "Database error creating email change token new"))
+			}
+		}
+
+		return nil
+	})
 }
 
 func (a *API) validateEmail(email string) (string, error) {
@@ -586,7 +588,7 @@ func (a *API) checkEmailAddressAuthorization(email string) bool {
 	return true
 }
 
-func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, emailActionType, otp, otpNew, tokenHashWithPrefix string) error {
+func (a *API) sendEmail(r *http.Request, db *storage.Connection, u *models.User, emailActionType, otp, otpNew, tokenHashWithPrefix string) error {
 	ctx := r.Context()
 	config := a.config
 	referrerURL := utilities.GetReferrer(r, config)
@@ -657,7 +659,7 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			EmailData: emailData,
 		}
 		output := v0hooks.SendEmailOutput{}
-		return a.hooksMgr.InvokeHook(tx, r, &input, &output)
+		return a.hooksMgr.InvokeHook(db, r, &input, &output)
 	}
 
 	mr := a.Mailer()
