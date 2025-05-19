@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.173.0](https://github.com/supabase/auth/compare/v2.172.1...v2.173.0) (2025-05-17)
+
+
+### Features
+
+* add support packages for end-to-end testing ([#2021](https://github.com/supabase/auth/issues/2021)) ([269ddfe](https://github.com/supabase/auth/commit/269ddfe18718ae74535f7227eb75f67667275140))
+
+
+### Bug Fixes
+
+* add `supafast` tarball for upgrading auth via supabase-admin-api ([#2009](https://github.com/supabase/auth/issues/2009)) ([9b55785](https://github.com/supabase/auth/commit/9b557855a3ab80ee93ab95159055a444bff53f01))
+* allow HTTP with localhost in solana ([#2027](https://github.com/supabase/auth/issues/2027)) ([3ee02f0](https://github.com/supabase/auth/commit/3ee02f085df206dcd3e6fa79f2d583148ebc52b8))
+* fix `supafast` tarball generation ([#2011](https://github.com/supabase/auth/issues/2011)) ([88bb2c0](https://github.com/supabase/auth/commit/88bb2c0638863f94f9f0d7f4ca88ba04929dfd55))
+
 ## [2.172.1](https://github.com/supabase/auth/compare/v2.172.0...v2.172.1) (2025-05-05)
 
 
