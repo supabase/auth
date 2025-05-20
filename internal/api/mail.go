@@ -17,6 +17,7 @@ import (
 	"github.com/sethvargo/go-password/password"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/api/taskafter"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -650,37 +651,42 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			EmailData: emailData,
 		}
 		output := v0hooks.SendEmailOutput{}
-		return a.hooksMgr.InvokeHook(tx, r, &input, &output)
+
+		return taskafter.Queue(ctx, func() error {
+			return a.hooksMgr.InvokeHook(tx, r, &input, &output)
+		})
 	}
 
-	mr := a.Mailer()
-	var err error
-	switch emailActionType {
-	case mail.SignupVerification:
-		err = mr.ConfirmationMail(r, u, otp, referrerURL, externalURL)
-	case mail.MagicLinkVerification:
-		err = mr.MagicLinkMail(r, u, otp, referrerURL, externalURL)
-	case mail.ReauthenticationVerification:
-		err = mr.ReauthenticateMail(r, u, otp)
-	case mail.RecoveryVerification:
-		err = mr.RecoveryMail(r, u, otp, referrerURL, externalURL)
-	case mail.InviteVerification:
-		err = mr.InviteMail(r, u, otp, referrerURL, externalURL)
-	case mail.EmailChangeVerification:
-		err = mr.EmailChangeMail(r, u, otpNew, otp, referrerURL, externalURL)
-	default:
-		err = errors.New("invalid email action type")
-	}
+	return taskafter.Queue(ctx, func() error {
+		mr := a.Mailer()
+		var err error
+		switch emailActionType {
+		case mail.SignupVerification:
+			err = mr.ConfirmationMail(r, u, otp, referrerURL, externalURL)
+		case mail.MagicLinkVerification:
+			err = mr.MagicLinkMail(r, u, otp, referrerURL, externalURL)
+		case mail.ReauthenticationVerification:
+			err = mr.ReauthenticateMail(r, u, otp)
+		case mail.RecoveryVerification:
+			err = mr.RecoveryMail(r, u, otp, referrerURL, externalURL)
+		case mail.InviteVerification:
+			err = mr.InviteMail(r, u, otp, referrerURL, externalURL)
+		case mail.EmailChangeVerification:
+			err = mr.EmailChangeMail(r, u, otpNew, otp, referrerURL, externalURL)
+		default:
+			err = errors.New("invalid email action type")
+		}
 
-	switch {
-	case errors.Is(err, mail.ErrInvalidEmailAddress),
-		errors.Is(err, mail.ErrInvalidEmailFormat),
-		errors.Is(err, mail.ErrInvalidEmailDNS):
-		return apierrors.NewBadRequestError(
-			apierrors.ErrorCodeEmailAddressInvalid,
-			"Email address %q is invalid",
-			u.GetEmail())
-	default:
-		return err
-	}
+		switch {
+		case errors.Is(err, mail.ErrInvalidEmailAddress),
+			errors.Is(err, mail.ErrInvalidEmailFormat),
+			errors.Is(err, mail.ErrInvalidEmailDNS):
+			return apierrors.NewBadRequestError(
+				apierrors.ErrorCodeEmailAddressInvalid,
+				"Email address %q is invalid",
+				u.GetEmail())
+		default:
+			return err
+		}
+	})
 }
