@@ -4,11 +4,13 @@ package taskafter
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"sync"
 
+	pkgerrors "github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/observability"
 )
@@ -36,10 +38,35 @@ type state struct {
 	done  bool
 	queue []*task
 	seen  map[string]bool
+	res   *response
+}
+
+type response struct {
+	w      http.ResponseWriter
+	status int
+	obj    any
 }
 
 func newState() *state {
-	return &state{seen: make(map[string]bool)}
+	return &state{
+		seen: make(map[string]bool),
+	}
+}
+
+func (o *state) respond() error {
+	if o.res == nil {
+		return nil
+	}
+
+	o.res.w.Header().Set("Content-Type", "application/json")
+	b, err := json.Marshal(o.res.obj)
+	if err != nil {
+		msg := fmt.Sprintf("Error encoding json response: %v", o.res.obj)
+		return pkgerrors.Wrap(err, msg)
+	}
+	o.res.w.WriteHeader(o.res.status)
+	_, err = o.res.w.Write(b)
+	return err
 }
 
 func (o *state) fire() error {
@@ -58,6 +85,9 @@ func (o *state) fire() error {
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%v: %w", tr.name, err))
 		}
+	}
+	if err := o.respond(); err != nil {
+		errs = append(errs, err)
 	}
 	return errors.Join(errs...)
 }
@@ -116,6 +146,28 @@ func Once(ctx context.Context, name string, taskFn func() error) error {
 // return an error if Fire has already been called.
 func Queue(ctx context.Context, taskFn func() error) error {
 	return add(ctx, "", taskFn)
+}
+
+// SendJSON sets the response to be sent at the end of Fire().
+func SendJSON(
+	ctx context.Context,
+	w http.ResponseWriter,
+	status int,
+	obj interface{},
+) error {
+	st := from(ctx)
+	if st == nil {
+		return errCtx
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	st.res = &response{
+		w:      w,
+		status: status,
+		obj:    obj,
+	}
+	return nil
 }
 
 func add(ctx context.Context, name string, taskFn func() error) error {
