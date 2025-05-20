@@ -494,28 +494,28 @@ func TestHooks(t *testing.T) {
 		},
 	}
 
-	for idx, tc := range cases {
-		t.Logf("test #%v - %v", idx, tc.desc)
+	for _, tc := range cases {
+		t.Run(string(tc.desc), func(t *testing.T) {
 
-		sql := tc.sql
-		if sql != "" {
-			if err := db.RawQuery(sql).Exec(); err != nil {
-				t.Fatalf("exp nil err; got %v", err)
+			sql := tc.sql
+			if sql != "" {
+				err := db.RawQuery(sql).Exec()
+				require.NoError(t, err)
 			}
-		}
-		if tc.setup != nil {
-			tc.setup()
-		}
+			if tc.setup != nil {
+				tc.setup()
+			}
 
-		htr := httptest.NewRequestWithContext(ctx, "POST", "/api", nil)
-		err := mr.InvokeHook(db, htr, tc.req, tc.res)
-		if tc.errStr != "" {
-			require.Error(t, err)
-			require.Contains(t, err.Error(), tc.errStr)
-			continue
-		}
-		require.NoError(t, err)
-		require.Equal(t, tc.exp, tc.res)
+			htr := httptest.NewRequestWithContext(ctx, "POST", "/api", nil)
+			err := mr.InvokeHook(db, htr, tc.req, tc.res)
+			if tc.errStr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.errStr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.exp, tc.res)
+		})
 	}
 }
 
@@ -572,21 +572,20 @@ func TestConfig(t *testing.T) {
 		{cfg: cfg, ok: true,
 			name: AfterUserCreated, exp: &cfg.AfterUserCreated},
 	}
-	for idx, test := range tests {
-		t.Logf("test #%v - exp ok %v with cfg %v from name %v",
-			idx, test.ok, test.exp, test.name)
+	for _, test := range tests {
+		t.Run(string(test.name), func(t *testing.T) {
+			require.Equal(t, false, mr.Enabled(test.name))
 
-		require.Equal(t, false, mr.Enabled(test.name))
+			got, ok := configByName(test.cfg, test.name)
+			require.Equal(t, test.ok, ok)
+			require.Equal(t, test.exp, got)
 
-		got, ok := configByName(test.cfg, test.name)
-		require.Equal(t, test.ok, ok)
-		require.Equal(t, test.exp, got)
+			if got == nil {
+				return
+			}
 
-		if got == nil {
-			continue
-		}
-
-		got.Enabled = true
-		require.Equal(t, true, mr.Enabled(test.name))
+			got.Enabled = true
+			require.Equal(t, true, mr.Enabled(test.name))
+		})
 	}
 }

@@ -34,12 +34,8 @@ func TestUtils(t *testing.T) {
 			configPath = "abc"
 
 			globalCfg, err := Config()
-			if err == nil {
-				t.Fatal("exp non-nil err")
-			}
-			if globalCfg != nil {
-				t.Fatal("exp nil conn")
-			}
+			require.Error(t, err)
+			require.Nil(t, globalCfg)
 		}
 	}()
 
@@ -49,9 +45,7 @@ func TestUtils(t *testing.T) {
 		{
 			globalCfg := Must(Config())
 			conn := Must(Conn(globalCfg))
-			if conn == nil {
-				t.Fatal("exp non-nil conn")
-			}
+			require.NotNil(t, conn)
 		}
 
 		// negative
@@ -60,12 +54,8 @@ func TestUtils(t *testing.T) {
 			globalCfg.DB.Driver = ""
 			globalCfg.DB.URL = "invalid"
 			conn, err := Conn(globalCfg)
-			if err == nil {
-				t.Fatal("exp non-nil err")
-			}
-			if conn != nil {
-				t.Fatal("exp nil conn")
-			}
+			require.Error(t, err)
+			require.Nil(t, conn)
 		}
 
 	}()
@@ -89,10 +79,7 @@ func TestUtils(t *testing.T) {
 				panic(errors.New("globalCfg != nil"))
 			}
 		}()
-
-		if err == nil {
-			t.Fatal("exp non-nil err")
-		}
+		require.Error(t, err)
 	}()
 
 	// block init from main()
@@ -113,8 +100,6 @@ func TestUtils(t *testing.T) {
 		}()
 
 		exp := "package e2e may not be used in a main package"
-		if errStr != exp {
-			t.Fatalf("exp %v; got %v", exp, errStr)
-		}
+		require.Equal(t, exp, errStr)
 	}()
 }

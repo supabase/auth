@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api/apierrors"
 )
 
@@ -36,95 +37,52 @@ func TestFromBytes(t *testing.T) {
 			ok:   true, exp: &Error{HTTPCode: 403, Message: "failed"},
 		},
 	}
-	for idx, tc := range cases {
-		t.Logf("test #%v - exp Check(%v) = (%#v, %v)", idx, tc.from, tc.exp, tc.ok)
-
-		e, ok := fromBytes([]byte(tc.from))
-		if exp, got := tc.ok, ok; exp != got {
-			t.Fatalf("exp %v; got %v", exp, got)
-		}
-		if !tc.ok {
-			if e != nil {
-				t.Fatalf("exp nil; got %v", e)
+	for _, tc := range cases {
+		t.Run(string(tc.from), func(t *testing.T) {
+			e, ok := fromBytes([]byte(tc.from))
+			require.Equal(t, tc.ok, ok)
+			if !tc.ok {
+				require.Nil(t, e)
+				return
 			}
-			continue
-		}
-		if exp, got := tc.exp.HTTPCode, e.HTTPCode; exp != got {
-			t.Fatalf("exp HTTPCode %v; got %v", exp, got)
-		}
-		if exp, got := tc.exp.Message, e.Message; exp != got {
-			t.Fatalf("exp Message %q; got %q", exp, got)
-		}
+			require.Equal(t, tc.exp.HTTPCode, e.HTTPCode)
+			require.Equal(t, tc.exp.Message, e.Message)
 
-		err := (error)(e)
-		if exp, got := tc.exp.Message, err.Error(); exp != got {
-			t.Fatalf("exp Error() %q; got %q", exp, got)
-		}
+			require.NotNil(t, e)
+			err := (error)(e)
+			require.Equal(t, tc.exp.Message, err.Error())
+		})
 	}
 }
 
 func TestCheck(t *testing.T) {
-	{
-		if err := Check([]byte(`invalidjson`)); err != nil {
-			t.Fatalf("exp nil err; got %v", err)
-		}
-		if err := Check([]byte(`{"error": nil}`)); err != nil {
-			t.Fatalf("exp nil err; got %v", err)
-		}
-		if err := Check([]byte(`{"error": {"message": "failed"}}`)); err == nil {
-			t.Fatal("exp non-nil err")
-		}
+	require.NoError(t, Check([]byte(`invalidjson`)))
+	require.NoError(t, Check([]byte(`{"error": nil}`)))
+	require.Error(t, Check([]byte(`{"error": {"message": "failed"}}`)))
+	require.NoError(t, check(nil))
+	require.NoError(t, check(&Error{Message: ""}))
+	require.Error(t, check(&Error{Message: "failed"}))
 
-		{
-			data := `{"error": {"message": "failed", "http_code": 403}}`
-			err := Check([]byte(data))
-			if err == nil {
-				t.Fatal("exp non-nil err")
-			}
+	data := `{"error": {"message": "failed", "http_code": 403}}`
+	err := Check([]byte(data))
+	require.Error(t, err)
 
-			e, ok := err.(*apierrors.HTTPError)
-			if !ok {
-				t.Fatal("exp error to be http.Error")
-			}
-			if exp, got := e.HTTPStatus, 403; exp != got {
-				t.Fatalf("exp HTTPCode %v; got %v", exp, got)
-			}
-			if exp, got := e.Message, "failed"; exp != got {
-				t.Fatalf("exp Message %q; got %q", exp, got)
-			}
-		}
-	}
-
-	{
-		if err := check(nil); err != nil {
-			t.Fatalf("exp nil err; got %v", err)
-		}
-		if err := check(&Error{Message: ""}); err != nil {
-			t.Fatalf("exp nil err; got %v", err)
-		}
-		if err := check(&Error{Message: "failed"}); err == nil {
-			t.Fatal("exp non-nil err")
-		}
-	}
+	e, ok := err.(*apierrors.HTTPError)
+	require.True(t, ok)
+	require.Equal(t, 403, e.HTTPStatus)
+	require.Equal(t, "failed", e.Message)
 }
 
 func TestAs(t *testing.T) {
-
 	{
 		err := &Error{
 			Message:  "failed",
 			HTTPCode: 403,
 		}
-		e := new(apierrors.HTTPError)
-		if !errors.As(err, &e) {
-			t.Fatal("exp errors.As to return true")
-		}
-		if exp, got := e.HTTPStatus, 403; exp != got {
-			t.Fatalf("exp HTTPCode %v; got %v", exp, got)
-		}
-		if exp, got := e.Message, "failed"; exp != got {
-			t.Fatalf("exp Message %q; got %q", exp, got)
-		}
+		e := new(Error)
+		require.True(t, err.As(&e))
+		require.Equal(t, 403, e.HTTPCode)
+		require.Equal(t, "failed", e.Message)
 	}
 
 	{
@@ -133,15 +91,9 @@ func TestAs(t *testing.T) {
 			HTTPCode: 403,
 		}
 		e := new(Error)
-		if !errors.As(err, &e) {
-			t.Fatal("exp errors.As to return true")
-		}
-		if exp, got := e.HTTPCode, 403; exp != got {
-			t.Fatalf("exp HTTPCode %v; got %v", exp, got)
-		}
-		if exp, got := e.Message, "failed"; exp != got {
-			t.Fatalf("exp Message %q; got %q", exp, got)
-		}
+		require.True(t, err.As(e))
+		require.Equal(t, 403, e.HTTPCode)
+		require.Equal(t, "failed", e.Message)
 	}
 
 	{
@@ -150,32 +102,9 @@ func TestAs(t *testing.T) {
 			HTTPCode: 403,
 		}
 		e := new(apierrors.HTTPError)
-		if !err.As(&e) {
-			t.Fatal("exp errors.As to return true")
-		}
-		if exp, got := e.HTTPStatus, 403; exp != got {
-			t.Fatalf("exp HTTPCode %v; got %v", exp, got)
-		}
-		if exp, got := e.Message, "failed"; exp != got {
-			t.Fatalf("exp Message %q; got %q", exp, got)
-		}
-	}
-
-	{
-		err := &Error{
-			Message:  "failed",
-			HTTPCode: 403,
-		}
-		e := new(Error)
-		if !err.As(&e) {
-			t.Fatal("exp errors.As to return true")
-		}
-		if exp, got := e.HTTPCode, 403; exp != got {
-			t.Fatalf("exp HTTPCode %v; got %v", exp, got)
-		}
-		if exp, got := e.Message, "failed"; exp != got {
-			t.Fatalf("exp Message %q; got %q", exp, got)
-		}
+		require.True(t, err.As(&e))
+		require.Equal(t, 403, e.HTTPStatus)
+		require.Equal(t, "failed", e.Message)
 	}
 
 	{
@@ -184,72 +113,43 @@ func TestAs(t *testing.T) {
 			HTTPCode: 403,
 		}
 		e := new(apierrors.HTTPError)
-		if !err.As(e) {
-			t.Fatal("exp errors.As to return true")
-		}
-		if exp, got := e.HTTPStatus, 403; exp != got {
-			t.Fatalf("exp HTTPCode %v; got %v", exp, got)
-		}
-		if exp, got := e.Message, "failed"; exp != got {
-			t.Fatalf("exp Message %q; got %q", exp, got)
-		}
+		require.True(t, err.As(e))
+		require.Equal(t, 403, e.HTTPStatus)
+		require.Equal(t, "failed", e.Message)
 	}
 
-	{
-		err := &Error{
-			Message:  "failed",
-			HTTPCode: 403,
+	t.Run("Negative", func(t *testing.T) {
+		{
+			err := errors.New("sentinel")
+			e := new(Error)
+			require.False(t, errors.As(err, &e))
 		}
-		e := new(Error)
-		if !err.As(e) {
-			t.Fatal("exp errors.As to return true")
-		}
-		if exp, got := e.HTTPCode, 403; exp != got {
-			t.Fatalf("exp HTTPCode %v; got %v", exp, got)
-		}
-		if exp, got := e.Message, "failed"; exp != got {
-			t.Fatalf("exp Message %q; got %q", exp, got)
-		}
-	}
 
-	{
-		err := errors.New("sentinel")
-		e := new(Error)
-		if errors.As(err, &e) {
-			t.Fatal("exp errors.As to return false")
+		{
+			err := &Error{
+				Message:  "failed",
+				HTTPCode: 403,
+			}
+			e := (*Error)(nil)
+			require.False(t, err.As(&e))
 		}
-	}
 
-	{
-		err := &Error{
-			Message:  "failed",
-			HTTPCode: 403,
+		{
+			err := &Error{
+				Message:  "failed",
+				HTTPCode: 403,
+			}
+			e := (*apierrors.HTTPError)(nil)
+			require.False(t, err.As(&e))
 		}
-		e := (*Error)(nil)
-		if err.As(&e) {
-			t.Fatal("exp errors.As to return false")
-		}
-	}
 
-	{
-		err := &Error{
-			Message:  "failed",
-			HTTPCode: 403,
+		{
+			err := &Error{
+				Message:  "failed",
+				HTTPCode: 403,
+			}
+			e := (*error)(nil)
+			require.False(t, err.As(&e))
 		}
-		e := (*apierrors.HTTPError)(nil)
-		if err.As(&e) {
-			t.Fatal("exp errors.As to return false")
-		}
-	}
-
-	{
-		err := &Error{
-			Message:  "failed",
-			HTTPCode: 403,
-		}
-		e := (*error)(nil)
-		if err.As(&e) {
-			t.Fatal("exp errors.As to return false")
-		}
-	}
+	})
 }

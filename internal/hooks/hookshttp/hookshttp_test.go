@@ -238,48 +238,49 @@ func TestDispatch(t *testing.T) {
 		)
 	}
 
-	for idx, tc := range cases {
-		t.Logf("test #%v - %v", idx, tc.desc)
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
 
-		testCtx := tc.ctx
-		if testCtx == nil {
-			testCtx = ctx
-		}
+			testCtx := tc.ctx
+			if testCtx == nil {
+				testCtx = ctx
+			}
 
-		dr := tc.dr
-		if dr == nil {
-			dr = New(
-				WithTimeout(time.Second/10),
-				WithRetries(3),
-				WithBackoff(time.Second/50),
-			)
-		}
+			dr := tc.dr
+			if dr == nil {
+				dr = New(
+					WithTimeout(time.Second/10),
+					WithRetries(3),
+					WithBackoff(time.Second/50),
+				)
+			}
 
-		hr := tc.hr
-		if hr == nil {
-			hr = &mockHandler{}
-		}
-		ah.Store(hr)
+			hr := tc.hr
+			if hr == nil {
+				hr = &mockHandler{}
+			}
+			ah.Store(hr)
 
-		cfg := tc.cfg
-		if cfg.URI == "" {
-			cfg.URI = ts.URL
-		}
+			cfg := tc.cfg
+			if cfg.URI == "" {
+				cfg.URI = ts.URL
+			}
 
-		res := M{}
-		err := dr.Dispatch(testCtx, &cfg, tc.req, &res)
-		if tc.err != nil {
-			require.Error(t, err)
-			require.Equal(t, tc.err, err)
-			continue
-		}
-		if tc.errStr != "" {
-			require.Error(t, err)
-			require.Contains(t, err.Error(), tc.errStr)
-			continue
-		}
-		require.NoError(t, err)
-		require.Equal(t, tc.exp, res)
+			res := M{}
+			err := dr.Dispatch(testCtx, &cfg, tc.req, &res)
+			if tc.err != nil {
+				require.Error(t, err)
+				require.Equal(t, tc.err, err)
+				return
+			}
+			if tc.errStr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.errStr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.exp, res)
+		})
 	}
 }
 
