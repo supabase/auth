@@ -9,6 +9,7 @@ import (
 	"testing/iotest"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
 )
@@ -16,37 +17,24 @@ import (
 func TestInstance(t *testing.T) {
 	{
 		globalCfg, err := conf.LoadGlobal("../../../hack/test.env")
-		if err != nil {
-			t.Fatalf("exp nil err; got %v", err)
-		}
+		require.NoError(t, err)
+
 		globalCfg.DB.Driver = ""
 		globalCfg.DB.URL = "invalid"
 
 		inst, err := New(globalCfg)
-		if err == nil {
-			t.Fatal("exp non-nil err")
-		}
-		if inst != nil {
-			t.Fatal("exp nil *Instance")
-		}
+		require.Error(t, err)
+		require.Nil(t, inst)
 	}
 
 	{
 		globalCfg, err := conf.LoadGlobal("../../../hack/test.env")
-		if err != nil {
-			t.Fatalf("exp nil err; got %v", err)
-		}
+		require.NoError(t, err)
 
 		inst, err := New(globalCfg)
-		if err != nil {
-			t.Fatalf("exp nil err; got %v", err)
-		}
-		if inst == nil {
-			t.Fatal("exp non-nil *Instance")
-		}
-		if err := inst.Close(); err != nil {
-			t.Fatalf("exp nil err from Close; got %v", err)
-		}
+		require.NoError(t, err)
+		require.NotNil(t, inst)
+		require.NoError(t, inst.Close())
 	}
 }
 
@@ -58,9 +46,7 @@ func TestHook(t *testing.T) {
 
 	{
 		calls := hook.GetCalls()
-		if exp, got := 0, len(calls); exp != got {
-			t.Fatalf("exp %v; got %v", exp, got)
-		}
+		require.Equal(t, 0, len(calls))
 
 		u := "http://localhost"
 		rdr := strings.NewReader("12345")
@@ -70,18 +56,13 @@ func TestHook(t *testing.T) {
 		hook.ServeHTTP(res, req)
 
 		calls = hook.GetCalls()
-		if exp, got := 1, len(calls); exp != got {
-			t.Fatalf("exp %v; got %v", exp, got)
-		}
+		require.Equal(t, 1, len(calls))
 		call := calls[0]
 
 		var got int
-		if err := call.Unmarshal(&got); err != nil {
-			t.Fatalf("exp nil err; got %v", err)
-		}
-		if exp := 12345; exp != got {
-			t.Fatalf("exp %v; got %v", exp, got)
-		}
+		err := call.Unmarshal(&got)
+		require.NoError(t, err)
+		require.Equal(t, 12345, got)
 	}
 
 	{
@@ -138,9 +119,7 @@ func TestHookRecorder(t *testing.T) {
 
 		{
 			calls := test.hook.GetCalls()
-			if exp, got := 0, len(calls); exp != got {
-				t.Fatalf("exp %v; got %v", exp, got)
-			}
+			require.Equal(t, 0, len(calls))
 		}
 
 		u := "http://localhost/hooks/" + string(test.name)
@@ -151,23 +130,16 @@ func TestHookRecorder(t *testing.T) {
 
 		{
 			calls := test.hook.GetCalls()
-			if exp, got := 1, len(calls); exp != got {
-				t.Fatalf("exp %v; got %v", exp, got)
-			}
+			require.Equal(t, 1, len(calls))
 			call := calls[0]
 
 			test.hook.ClearCalls()
-			if exp, got := 0, len(test.hook.GetCalls()); exp != got {
-				t.Fatalf("exp %v; got %v", exp, got)
-			}
+			require.Equal(t, 0, len(test.hook.GetCalls()))
 
 			var got int
-			if err := call.Unmarshal(&got); err != nil {
-				t.Fatalf("exp nil err; got %v", err)
-			}
-			if exp := 12345; exp != got {
-				t.Fatalf("exp %v; got %v", exp, got)
-			}
+			err := call.Unmarshal(&got)
+			require.NoError(t, err)
+			require.Equal(t, 12345, got)
 		}
 	}
 
@@ -179,8 +151,6 @@ func TestHookRecorder(t *testing.T) {
 		res := httptest.NewRecorder()
 		hookRec.ServeHTTP(res, req)
 
-		if exp, got := 404, res.Result().StatusCode; exp != got {
-			t.Fatalf("exp %v; got %v", exp, got)
-		}
+		require.Equal(t, 404, res.Result().StatusCode)
 	}
 }

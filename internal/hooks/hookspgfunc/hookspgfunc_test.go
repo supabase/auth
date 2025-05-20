@@ -216,44 +216,43 @@ func TestDispatch(t *testing.T) {
 		},
 	}
 
-	for idx, tc := range cases {
-		t.Logf("test #%v - %v", idx, tc.desc)
-
-		testCtx := tc.ctx
-		if testCtx == nil {
-			testCtx = ctx
-		}
-
-		dr := tc.dr
-		if dr == nil {
-			dr = New(
-				db,
-				WithTimeout(time.Second*2),
-			)
-		}
-
-		sql := tc.sql
-		if sql != "" {
-			if err := db.RawQuery(sql).Exec(); err != nil {
-				t.Fatalf("exp nil err; got %v", err)
+	for _, tc := range cases {
+		t.Run(tc.desc, func(t *testing.T) {
+			testCtx := tc.ctx
+			if testCtx == nil {
+				testCtx = ctx
 			}
-		}
 
-		tx := tc.tx
-		cfg := tc.cfg
-		res := M{}
-		err := dr.Dispatch(testCtx, &cfg, tx, tc.req, &res)
-		if tc.err != nil {
-			require.Error(t, err)
-			require.Equal(t, tc.err, err)
-			continue
-		}
-		if tc.errStr != "" {
-			require.Error(t, err)
-			require.Contains(t, err.Error(), tc.errStr)
-			continue
-		}
-		require.NoError(t, err)
-		require.Equal(t, tc.exp, res)
+			dr := tc.dr
+			if dr == nil {
+				dr = New(
+					db,
+					WithTimeout(time.Second*2),
+				)
+			}
+
+			sql := tc.sql
+			if sql != "" {
+				err := db.RawQuery(sql).Exec()
+				require.NoError(t, err)
+			}
+
+			tx := tc.tx
+			cfg := tc.cfg
+			res := M{}
+			err := dr.Dispatch(testCtx, &cfg, tx, tc.req, &res)
+			if tc.err != nil {
+				require.Error(t, err)
+				require.Equal(t, tc.err, err)
+				return
+			}
+			if tc.errStr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.errStr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.exp, res)
+		})
 	}
 }
