@@ -326,7 +326,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			return nil, terr
 		}
 
-		if user, terr = a.signupNewUser(tx, user); terr != nil {
+		if user, terr = a.signupNewUser(r, tx, user); terr != nil {
 			return nil, terr
 		}
 

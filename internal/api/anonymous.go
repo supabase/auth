@@ -37,7 +37,7 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		newUser, terr = a.signupNewUser(tx, newUser)
+		newUser, terr = a.signupNewUser(r, tx, newUser)
 		if terr != nil {
 			return terr
 		}
