@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api"
 	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/dump"
 	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/e2e/e2eapi"
 	"github.com/supabase/auth/internal/e2e/e2ehooks"
@@ -194,7 +193,6 @@ func TestE2EHooks(t *testing.T) {
 
 					err = json.NewDecoder(httpRes.Body).Decode(res)
 					require.NoError(t, err)
-					dump.Dump(res)
 
 					runBeforeUserCreated(t, &res.User)
 				})
