@@ -69,6 +69,7 @@ func NewHook(name v0hooks.Name) *Hook {
 		name: name,
 	}
 	switch name {
+	//exhaustive:ignore
 	case v0hooks.CustomizeAccessToken:
 		// This hooks returns the exact claims given.
 		hr := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
