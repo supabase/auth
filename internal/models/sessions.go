@@ -71,22 +71,6 @@ type AMREntry struct {
 	Provider  string `json:"provider,omitempty"`
 }
 
-type sortAMREntries struct {
-	Array []AMREntry
-}
-
-func (s sortAMREntries) Len() int {
-	return len(s.Array)
-}
-
-func (s sortAMREntries) Less(i, j int) bool {
-	return s.Array[i].Timestamp < s.Array[j].Timestamp
-}
-
-func (s sortAMREntries) Swap(i, j int) {
-	s.Array[j], s.Array[i] = s.Array[i], s.Array[j]
-}
-
 type Session struct {
 	ID     uuid.UUID `json:"-" db:"id"`
 	UserID uuid.UUID `json:"user_id" db:"user_id"`
@@ -328,40 +312,26 @@ func (s *Session) CalculateAALAndAMR(user *User) (aal AuthenticatorAssuranceLeve
 		if claim.IsAAL2Claim() {
 			aal = AAL2
 		}
-		amr = append(amr, AMREntry{Method: claim.GetAuthenticationMethod(), Timestamp: claim.UpdatedAt.Unix()})
+		entry := AMREntry{Method: claim.GetAuthenticationMethod(), Timestamp: claim.UpdatedAt.Unix()}
+		if entry.Method == SSOSAML.String() {
+			// SSO users should only have one identity since they are excluded from account linking
+			// These checks act as a safeguard in the event future changes break this assumption.
+			identities := user.Identities
+			if len(identities) == 1 {
+				identity := identities[0]
+				if identity.IsForSSOProvider() {
+					entry.Provider = strings.TrimPrefix(identity.Provider, "sso:")
+				}
+			}
+		}
+		amr = append(amr, entry)
+
 	}
 
 	// makes sure that the AMR claims are always ordered most-recent first
-
-	// sort in ascending order
-	sort.Sort(sortAMREntries{
-		Array: amr,
+	sort.Slice(amr, func(i, j int) bool {
+		return amr[i].Timestamp > amr[j].Timestamp
 	})
-
-	// now reverse for descending order
-	_ = sort.Reverse(sortAMREntries{
-		Array: amr,
-	})
-
-	lastIndex := len(amr) - 1
-
-	if lastIndex > -1 && amr[lastIndex].Method == SSOSAML.String() {
-		// initial AMR claim is from sso/saml, we need to add information
-		// about the provider that was used for the authentication
-		identities := user.Identities
-
-		if len(identities) == 1 {
-			identity := identities[0]
-
-			if identity.IsForSSOProvider() {
-				amr[lastIndex].Provider = strings.TrimPrefix(identity.Provider, "sso:")
-			}
-		}
-
-		// otherwise we can't identify that this user account has only
-		// one SSO identity, so we are not encoding the provider at
-		// this time
-	}
 
 	return aal, amr, nil
 }
