@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.174.0](https://github.com/supabase/auth/compare/v2.173.0...v2.174.0) (2025-05-23)
+
+
+### Features
+
+* hooks round 2 - remove indirection and simplify error handling ([#2025](https://github.com/supabase/auth/issues/2025)) ([26e23f0](https://github.com/supabase/auth/commit/26e23f05acd1e1a959c3e04764a569ea0364d947))
+* hooks round 4 - update tests to use require package ([#2030](https://github.com/supabase/auth/issues/2030)) ([aaf93df](https://github.com/supabase/auth/commit/aaf93df50ebfb489c6335e2c1b846dc5cee18767))
+
+
+### Bug Fixes
+
+* amr claim should contain provider_id for sso method ([#2033](https://github.com/supabase/auth/issues/2033)) ([33741e1](https://github.com/supabase/auth/commit/33741e18d2e0adb691e650355337924f9ccfd91f))
+
 ## [2.173.0](https://github.com/supabase/auth/compare/v2.172.1...v2.173.0) (2025-05-17)
 
 
