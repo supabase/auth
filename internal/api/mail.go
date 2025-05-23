@@ -93,15 +93,11 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
 
 	var (
-		triggerSignupHook      bool
-		signupVerificationUser *models.User
-		inviteVerificationUser *models.User
+		signupUser *models.User
+		inviteUser *models.User
 	)
-	switch params.Type {
-	case mail.SignupVerification:
-		if user != nil {
-			break
-		}
+	switch {
+	case params.Type == mail.SignupVerification && user == nil:
 		signupParams := &SignupParams{
 			Email:    params.Email,
 			Password: params.Password,
@@ -109,23 +105,20 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			Provider: "email",
 			Aud:      aud,
 		}
+
 		if err := a.validateSignupParams(ctx, signupParams); err != nil {
 			return err
 		}
 
-		signupVerificationUser, err = signupParams.ToUserModel(false)
+		signupUser, err = signupParams.ToUserModel(false /* <- isSSOUser */)
 		if err != nil {
 			return err
 		}
-		triggerSignupHook = true
+		if err := a.triggerBeforeUserCreated(r, db, signupUser); err != nil {
+			return err
+		}
 
-	case mail.InviteVerification:
-		if user == nil {
-			break
-		}
-		if user.IsConfirmed() {
-			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
-		}
+	case params.Type == mail.InviteVerification && user == nil:
 		signupParams := &SignupParams{
 			Email:    params.Email,
 			Data:     params.Data,
@@ -133,15 +126,11 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			Aud:      aud,
 		}
 
-		inviteVerificationUser, err = signupParams.ToUserModel(false)
+		inviteUser, err = signupParams.ToUserModel(false /* <- isSSOUser */)
 		if err != nil {
 			return err
 		}
-		triggerSignupHook = true
-
-	}
-	if triggerSignupHook {
-		if err := a.triggerBeforeUserCreated(r, db, user); err != nil {
+		if err := a.triggerBeforeUserCreated(r, db, inviteUser); err != nil {
 			return err
 		}
 	}
@@ -167,8 +156,12 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 		case mail.InviteVerification:
-			if user == nil {
-				user, terr = a.signupNewUser(tx, inviteVerificationUser)
+			if user != nil {
+				if user.IsConfirmed() {
+					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
+				}
+			} else {
+				user, terr = a.signupNewUser(tx, inviteUser)
 				if terr != nil {
 					return terr
 				}
@@ -181,7 +174,6 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				}
 				user.Identities = []models.Identity{*identity}
 			}
-
 			if terr = models.NewAuditLogEntry(r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
 				"user_id":    user.ID,
 				"user_email": user.Email,
@@ -214,7 +206,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				// password here to generate a new user, use
 				// signupUser which is a model generated from
 				// SignupParams above
-				user, terr = a.signupNewUser(tx, signupVerificationUser)
+				user, terr = a.signupNewUser(tx, signupUser)
 				if terr != nil {
 					return terr
 				}

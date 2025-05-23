@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/dump"
 	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/e2e/e2eapi"
 	"github.com/supabase/auth/internal/e2e/e2ehooks"
@@ -26,6 +28,8 @@ func TestE2EHooks(t *testing.T) {
 	defer cancel()
 
 	globalCfg := e2e.Must(e2e.Config())
+	globalCfg.External.AnonymousUsers.Enabled = true
+
 	inst, err := e2ehooks.New(globalCfg)
 	require.NoError(t, err)
 	defer inst.Close()
@@ -35,26 +39,7 @@ func TestE2EHooks(t *testing.T) {
 
 	var currentUser *models.User
 
-	// Basic tests for Before/After User Created hooks
-	t.Run("UserHooks", func(t *testing.T) {
-
-		// Signup a user
-		var signupUser *models.User
-		email := "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
-		t.Run("Signup", func(t *testing.T) {
-			req := &api.SignupParams{
-				Email:    email,
-				Password: "password",
-			}
-			res := new(models.User)
-			err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, res)
-			require.NoError(t, err)
-
-			signupUser = res
-
-			require.Equal(t, email, signupUser.Email.String())
-		})
-
+	runBeforeUserCreated := func(t *testing.T, expUser *models.User) {
 		t.Run("BeforeUserCreated", func(t *testing.T) {
 			calls := hookRec.BeforeUserCreated.GetCalls()
 			require.Equal(t, 1, len(calls))
@@ -63,25 +48,157 @@ func TestE2EHooks(t *testing.T) {
 			hookReq := &v0hooks.BeforeUserCreatedInput{}
 			err := call.Unmarshal(hookReq)
 			require.NoError(t, err)
+			require.Equal(t, v0hooks.BeforeUserCreated, hookReq.Metadata.Name)
 
 			u := hookReq.User
-			require.Equal(t, signupUser.ID, u.ID)
-			require.Equal(t, signupUser.Aud, u.Aud)
-			require.Equal(t, signupUser.Email, u.Email)
-			require.Equal(t, signupUser.AppMetaData, u.AppMetaData)
+			require.Equal(t, expUser.ID, u.ID)
+			require.Equal(t, expUser.Aud, u.Aud)
+			require.Equal(t, expUser.Email, u.Email)
+			require.Equal(t, expUser.AppMetaData, u.AppMetaData)
 
 			require.True(t, u.CreatedAt.IsZero())
 			require.True(t, u.UpdatedAt.IsZero())
 
-			err = signupUser.Confirm(inst.Conn)
+			err = expUser.Confirm(inst.Conn)
 			require.NoError(t, err)
 
-			latest, err := models.FindUserByID(inst.Conn, signupUser.ID)
+			latest, err := models.FindUserByID(inst.Conn, expUser.ID)
 			require.NoError(t, err)
 
 			// Assign currentUser for next tests.
 			currentUser = latest
 			require.NotNil(t, currentUser)
+		})
+	}
+
+	// Basic tests for user hooks
+	t.Run("UserHooks", func(t *testing.T) {
+
+		t.Run("Signup", func(t *testing.T) {
+			defer hookRec.BeforeUserCreated.ClearCalls()
+
+			email := "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+			req := &api.SignupParams{
+				Email:    email,
+				Password: "password",
+			}
+			res := new(models.User)
+			err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, res)
+			require.NoError(t, err)
+			require.Equal(t, email, res.Email.String())
+
+			runBeforeUserCreated(t, res)
+		})
+
+		t.Run("SignupAnonymously", func(t *testing.T) {
+			defer hookRec.BeforeUserCreated.ClearCalls()
+
+			req := &api.SignupParams{}
+			res := new(api.AccessTokenResponse)
+			err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, res)
+			require.NoError(t, err)
+
+			runBeforeUserCreated(t, res.User)
+		})
+
+		t.Run("ExternalCallback", func(t *testing.T) {
+			defer hookRec.BeforeUserCreated.ClearCalls()
+
+			req := &api.SignupParams{}
+			res := new(api.AccessTokenResponse)
+			err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, res)
+			require.NoError(t, err)
+
+			runBeforeUserCreated(t, res.User)
+		})
+
+		t.Run("AdminEndpoints", func(t *testing.T) {
+			t.Run("Invite", func(t *testing.T) {
+				defer hookRec.BeforeUserCreated.ClearCalls()
+
+				email := "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+				req := &api.InviteParams{
+					Email: email,
+				}
+				res := new(models.User)
+
+				body := new(bytes.Buffer)
+				err := json.NewEncoder(body).Encode(req)
+				require.NoError(t, err)
+
+				httpReq, err := http.NewRequestWithContext(
+					ctx, "POST", "/invite", body)
+				require.NoError(t, err)
+
+				httpRes, err := inst.DoAdmin(httpReq)
+				require.NoError(t, err)
+
+				err = json.NewDecoder(httpRes.Body).Decode(res)
+				require.NoError(t, err)
+
+				runBeforeUserCreated(t, res)
+			})
+
+			t.Run("AdminGenerateLink", func(t *testing.T) {
+
+				t.Run("SignupVerification", func(t *testing.T) {
+					defer hookRec.BeforeUserCreated.ClearCalls()
+
+					email := "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+					req := &api.GenerateLinkParams{
+						Type:     "signup",
+						Email:    email,
+						Password: "pass1234",
+					}
+					res := new(api.GenerateLinkResponse)
+
+					body := new(bytes.Buffer)
+					err := json.NewEncoder(body).Encode(req)
+					require.NoError(t, err)
+
+					httpReq, err := http.NewRequestWithContext(
+						ctx, "POST", "/admin/generate_link", body)
+					require.NoError(t, err)
+
+					httpRes, err := inst.DoAdmin(httpReq)
+					require.NoError(t, err)
+					require.Equal(t, 200, httpRes.StatusCode)
+
+					err = json.NewDecoder(httpRes.Body).Decode(res)
+					require.NoError(t, err)
+
+					runBeforeUserCreated(t, &res.User)
+				})
+
+				t.Run("InviteVerification", func(t *testing.T) {
+					defer hookRec.BeforeUserCreated.ClearCalls()
+
+					email := "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+					req := &api.GenerateLinkParams{
+						Type:  "invite",
+						Email: email,
+					}
+					res := new(api.GenerateLinkResponse)
+
+					body := new(bytes.Buffer)
+					err := json.NewEncoder(body).Encode(req)
+					require.NoError(t, err)
+
+					httpReq, err := http.NewRequestWithContext(
+						ctx, "POST", "/admin/generate_link", body)
+					require.NoError(t, err)
+
+					httpRes, err := inst.DoAdmin(httpReq)
+					require.NoError(t, err)
+					require.Equal(t, 200, httpRes.StatusCode)
+
+					err = json.NewDecoder(httpRes.Body).Decode(res)
+					require.NoError(t, err)
+					dump.Dump(res)
+
+					runBeforeUserCreated(t, &res.User)
+				})
+			})
 		})
 	})
 

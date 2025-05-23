@@ -68,7 +68,27 @@ func NewHook(name v0hooks.Name) *Hook {
 	o := &Hook{
 		name: name,
 	}
-	o.SetHandler(HandleSuccess())
+	switch name {
+	case v0hooks.CustomizeAccessToken:
+		// This hooks returns the exact claims given.
+		hr := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("content-type", "application/json")
+			w.WriteHeader(http.StatusOK)
+
+			var v any
+			if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			if err := json.NewEncoder(w).Encode(&v); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		})
+		o.SetHandler(hr)
+
+	default:
+		o.SetHandler(HandleSuccess())
+	}
+
 	return o
 }
 
