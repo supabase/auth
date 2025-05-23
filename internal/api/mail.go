@@ -92,8 +92,16 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 
 	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
 
-	var signupUser *models.User
-	if params.Type == mail.SignupVerification && user == nil {
+	var (
+		triggerSignupHook      bool
+		signupVerificationUser *models.User
+		inviteVerificationUser *models.User
+	)
+	switch params.Type {
+	case mail.SignupVerification:
+		if user != nil {
+			break
+		}
 		signupParams := &SignupParams{
 			Email:    params.Email,
 			Password: params.Password,
@@ -101,13 +109,39 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			Provider: "email",
 			Aud:      aud,
 		}
-
 		if err := a.validateSignupParams(ctx, signupParams); err != nil {
 			return err
 		}
 
-		signupUser, err = signupParams.ToUserModel(false /* <- isSSOUser */)
+		signupVerificationUser, err = signupParams.ToUserModel(false)
 		if err != nil {
+			return err
+		}
+		triggerSignupHook = true
+
+	case mail.InviteVerification:
+		if user == nil {
+			break
+		}
+		if user.IsConfirmed() {
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
+		}
+		signupParams := &SignupParams{
+			Email:    params.Email,
+			Data:     params.Data,
+			Provider: "email",
+			Aud:      aud,
+		}
+
+		inviteVerificationUser, err = signupParams.ToUserModel(false)
+		if err != nil {
+			return err
+		}
+		triggerSignupHook = true
+
+	}
+	if triggerSignupHook {
+		if err := a.triggerBeforeUserCreated(r, db, user); err != nil {
 			return err
 		}
 	}
@@ -133,27 +167,8 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				return terr
 			}
 		case mail.InviteVerification:
-			if user != nil {
-				if user.IsConfirmed() {
-					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
-				}
-			} else {
-				signupParams := &SignupParams{
-					Email:    params.Email,
-					Data:     params.Data,
-					Provider: "email",
-					Aud:      aud,
-				}
-
-				// because params above sets no password, this
-				// method is not computationally hard so it can
-				// be used within a database transaction
-				user, terr = signupParams.ToUserModel(false /* <- isSSOUser */)
-				if terr != nil {
-					return terr
-				}
-
-				user, terr = a.signupNewUser(tx, user)
+			if user == nil {
+				user, terr = a.signupNewUser(tx, inviteVerificationUser)
 				if terr != nil {
 					return terr
 				}
@@ -166,6 +181,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				}
 				user.Identities = []models.Identity{*identity}
 			}
+
 			if terr = models.NewAuditLogEntry(r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
 				"user_id":    user.ID,
 				"user_email": user.Email,
@@ -198,7 +214,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				// password here to generate a new user, use
 				// signupUser which is a model generated from
 				// SignupParams above
-				user, terr = a.signupNewUser(tx, signupUser)
+				user, terr = a.signupNewUser(tx, signupVerificationUser)
 				if terr != nil {
 					return terr
 				}

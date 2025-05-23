@@ -172,7 +172,6 @@ func TestDo(t *testing.T) {
 				err := Do(ctx, http.MethodPost, ts.URL, nil, nil)
 				require.Error(t, err)
 				require.Equal(t, sentinel, err)
-
 			})
 		}
 	})
