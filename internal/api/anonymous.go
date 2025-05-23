@@ -30,6 +30,9 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	if err := a.triggerBeforeUserCreated(r, db, newUser); err != nil {
+		return err
+	}
 
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)

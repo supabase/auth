@@ -203,15 +203,24 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	}
 
+	targetUser := getTargetUser(ctx)
+	inviteToken := getInviteToken(ctx)
+	if targetUser == nil && inviteToken == "" {
+		if err := a.triggerBeforeUserCreatedExternal(
+			r, db, userData, providerType); err != nil {
+			return err
+		}
+	}
+
 	var user *models.User
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if targetUser := getTargetUser(ctx); targetUser != nil {
+		if targetUser != nil {
 			if user, terr = a.linkIdentityToUser(r, ctx, tx, userData, providerType); terr != nil {
 				return terr
 			}
-		} else if inviteToken := getInviteToken(ctx); inviteToken != "" {
+		} else if inviteToken != "" {
 			if user, terr = a.processInvite(r, tx, userData, inviteToken, providerType); terr != nil {
 				return terr
 			}
@@ -334,6 +343,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			return nil, terr
 		}
 		user.Identities = append(user.Identities, *identity)
+
 	case models.AccountExists:
 		user = decision.User
 		identity = decision.Identities[0]

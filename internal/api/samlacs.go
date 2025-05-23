@@ -281,12 +281,18 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	providerType := "sso:" + ssoProvider.ID.String()
+	if err := a.triggerBeforeUserCreatedExternal(
+		r, db, &userProvidedData, providerType); err != nil {
+		return err
+	}
+
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error
 		var user *models.User
 
 		// accounts potentially created via SAML can contain non-unique email addresses in the auth.users table
-		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, "sso:"+ssoProvider.ID.String()); terr != nil {
+		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, providerType); terr != nil {
 			return terr
 		}
 		if flowState != nil {
