@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -79,6 +80,13 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 
 	session = ts.AddClaimAndReloadSession(session, TOTPSignIn)
 
+	identity, err := NewIdentity(u, "sso:95d4a792-4a2a-4523-ae63-bae0631de554", map[string]interface{}{
+		"sub": u.GetEmail(),
+	})
+	require.NoError(ts.T(), err)
+	require.NoError(ts.T(), ts.db.Create(identity))
+	u.Identities = append(u.Identities, *identity)
+
 	session = ts.AddClaimAndReloadSession(session, SSOSAML)
 
 	aal, amr, err := session.CalculateAALAndAMR(u)
@@ -97,7 +105,7 @@ func (ts *SessionsTestSuite) TestCalculateAALAndAMR() {
 
 	for _, claim := range amr {
 		if claim.Method == SSOSAML.String() {
-			require.NotNil(ts.T(), claim.Provider)
+			require.Equal(ts.T(), strings.TrimPrefix(identity.Provider, "sso:"), claim.Provider)
 		}
 	}
 	require.True(ts.T(), found)
