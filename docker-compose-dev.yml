@@ -13,7 +13,7 @@ services:
     environment:
       - GOTRUE_DB_MIGRATIONS_PATH=/go/src/github.com/supabase/auth/migrations
     volumes:
-      - ./:/go/src/github.com/supabase/auth
+      - ./:/go/src/github.com/supabase/auth:Z
     command: CompileDaemon --build="make build" --directory=/go/src/github.com/supabase/auth --recursive=true -pattern="(.+\.go|.+\.env)" -exclude=auth -exclude=auth-arm64 -exclude=.env --command="/go/src/github.com/supabase/auth/auth -c=.env.docker"
   postgres:
     build:
@@ -23,7 +23,7 @@ services:
     ports:
       - '5432:5432'
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data:Z
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=root
