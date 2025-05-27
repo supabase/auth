@@ -38,6 +38,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 	}
 
+	userWasSignedUp := true
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if user != nil {
 			if user.IsConfirmed() {
@@ -71,6 +72,7 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 				return err
 			}
 			user.Identities = []models.Identity{*identity}
+			userWasSignedUp = true
 		}
 
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
@@ -87,6 +89,12 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	if userWasSignedUp {
+		if err := a.triggerAfterUserCreated(user.ID); err != nil {
+			return err
+		}
 	}
 
 	return sendJSON(w, http.StatusOK, user)
