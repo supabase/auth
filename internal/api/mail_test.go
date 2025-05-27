@@ -255,3 +255,64 @@ func (ts *MailTestSuite) setURIAllowListMap(uris ...string) {
 		ts.Config.URIAllowListMap[uri] = g
 	}
 }
+
+func (ts *MailTestSuite) TestGenerateLinkWithEnforcePasswordCheck() {
+	claims := &AccessTokenClaims{
+		Role: "supabase_admin",
+	}
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString([]byte(ts.Config.JWT.Secret))
+	require.NoError(ts.T(), err, "Error generating admin jwt")
+
+	ts.setURIAllowListMap("http://localhost:8000/**")
+
+	originalMinLength := ts.Config.Password.MinLength
+	ts.Config.Password.MinLength = 20
+
+	weakPassword := "short"
+
+	customDomainUrl, err := url.ParseRequestURI("https://example.gotrue.com")
+	require.NoError(ts.T(), err)
+
+	originalHosts := ts.API.config.Mailer.ExternalHosts
+	ts.API.config.Mailer.ExternalHosts = []string{
+		"example.gotrue.com",
+	}
+
+	ts.Run("Generate signup link without enforce should succeed", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(GenerateLinkParams{
+			Email:                "non-existent-user@example.com",
+			Password:             weakPassword,
+			Type:                 "signup",
+			EnforcePasswordCheck: false,
+		}))
+
+		req := httptest.NewRequest(http.MethodPost, customDomainUrl.String()+"/admin/generate_link", &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusOK, w.Code)
+		// ...
+	})
+
+	ts.Run("Generate signup link with enforce should fail", func() {
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(GenerateLinkParams{
+			Email:                "non-existent1-user@example.com",
+			Password:             weakPassword,
+			Type:                 "signup",
+			EnforcePasswordCheck: true, 
+		}))
+
+		req := httptest.NewRequest(http.MethodPost, customDomainUrl.String()+"/admin/generate_link", &buffer)
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		require.Equal(ts.T(), http.StatusUnprocessableEntity, w.Code)
+	})
+
+	ts.Config.Password.MinLength = originalMinLength
+	ts.API.config.Mailer.ExternalHosts = originalHosts
+}
