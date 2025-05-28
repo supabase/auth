@@ -38,7 +38,8 @@ func TestE2EHooks(t *testing.T) {
 
 	var currentUser *models.User
 
-	runBeforeUserCreated := func(t *testing.T, expUser *models.User) {
+	runBeforeUserCreated := func(t *testing.T, expUser *models.User) *models.User {
+		var latest *models.User
 		t.Run("BeforeUserCreated", func(t *testing.T) {
 			calls := hookRec.BeforeUserCreated.GetCalls()
 			require.Equal(t, 1, len(calls))
@@ -61,13 +62,11 @@ func TestE2EHooks(t *testing.T) {
 			err = expUser.Confirm(inst.Conn)
 			require.NoError(t, err)
 
-			latest, err := models.FindUserByID(inst.Conn, expUser.ID)
+			latest, err = models.FindUserByID(inst.Conn, expUser.ID)
 			require.NoError(t, err)
-
-			// Assign currentUser for next tests.
-			currentUser = latest
-			require.NotNil(t, currentUser)
+			require.NotNil(t, latest)
 		})
+		return latest
 	}
 
 	// Basic tests for user hooks
@@ -86,7 +85,7 @@ func TestE2EHooks(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, email, res.Email.String())
 
-			runBeforeUserCreated(t, res)
+			currentUser = runBeforeUserCreated(t, res)
 		})
 
 		t.Run("SignupAnonymously", func(t *testing.T) {
@@ -202,6 +201,8 @@ func TestE2EHooks(t *testing.T) {
 
 	// Basic tests for CustomizeAccessToken
 	t.Run("CustomizeAccessToken", func(t *testing.T) {
+		defer hookRec.CustomizeAccessToken.ClearCalls()
+
 		require.NotNil(t, currentUser)
 
 		type M = map[string]any
@@ -290,6 +291,8 @@ func TestE2EHooks(t *testing.T) {
 
 		for _, tc := range cases {
 			t.Run(string(tc.desc), func(t *testing.T) {
+				defer hookRec.CustomizeAccessToken.ClearCalls()
+
 				var claimsIn, claimsOut M
 				hr := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.Header().Add("content-type", "application/json")
