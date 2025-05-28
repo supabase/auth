@@ -36,8 +36,6 @@ func TestE2EHooks(t *testing.T) {
 	apiSrv := inst.APIServer
 	hookRec := inst.HookRecorder
 
-	var currentUser *models.User
-
 	runBeforeUserCreated := func(t *testing.T, expUser *models.User) *models.User {
 		var latest *models.User
 		t.Run("BeforeUserCreated", func(t *testing.T) {
@@ -85,7 +83,7 @@ func TestE2EHooks(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, email, res.Email.String())
 
-			currentUser = runBeforeUserCreated(t, res)
+			runBeforeUserCreated(t, res)
 		})
 
 		t.Run("SignupAnonymously", func(t *testing.T) {
@@ -203,6 +201,22 @@ func TestE2EHooks(t *testing.T) {
 	t.Run("CustomizeAccessToken", func(t *testing.T) {
 		defer hookRec.CustomizeAccessToken.ClearCalls()
 
+		var currentUser *models.User
+		t.Run("CreateUserForHookTests", func(t *testing.T) {
+			defer hookRec.BeforeUserCreated.ClearCalls()
+
+			email := "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+			req := &api.SignupParams{
+				Email:    email,
+				Password: "password",
+			}
+			res := new(models.User)
+			err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, res)
+			require.NoError(t, err)
+			require.Equal(t, email, res.Email.String())
+
+			currentUser = runBeforeUserCreated(t, res)
+		})
 		require.NotNil(t, currentUser)
 
 		type M = map[string]any
@@ -253,9 +267,32 @@ func TestE2EHooks(t *testing.T) {
 			)
 		}{
 			{
-				desc:   `empty claims`,
+				desc:   `claims empty`,
 				from:   func(in M) M { return M{"claims": M{}} },
-				errStr: "500: error generating jwt token",
+				errStr: "500: output claims do not conform to the expected schema",
+			},
+
+			{
+				desc:   `claims nil`,
+				from:   func(in M) M { return M{"claims": nil} },
+				errStr: "500: output claims do not conform to the expected schema",
+			},
+
+			{
+				desc:   `claims field missing`,
+				from:   func(in M) M { return M{} },
+				errStr: "500: output claims do not conform to the expected schema",
+			},
+
+			{
+				desc: `claims are top level`,
+				from: func(in M) M {
+					return M{
+						"myclaim":     "aaa",
+						"other_claim": "bbb",
+					}
+				},
+				errStr: "500: output claims do not conform to the expected schema",
 			},
 
 			{
