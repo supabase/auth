@@ -201,10 +201,9 @@ func TestE2EHooks(t *testing.T) {
 	t.Run("CustomizeAccessToken", func(t *testing.T) {
 		defer hookRec.CustomizeAccessToken.ClearCalls()
 
+		// setup user to test with
 		var currentUser *models.User
-		t.Run("CreateUserForHookTests", func(t *testing.T) {
-			defer hookRec.BeforeUserCreated.ClearCalls()
-
+		{
 			email := "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
 			req := &api.SignupParams{
 				Email:    email,
@@ -216,8 +215,9 @@ func TestE2EHooks(t *testing.T) {
 			require.Equal(t, email, res.Email.String())
 
 			currentUser = runBeforeUserCreated(t, res)
-		})
-		require.NotNil(t, currentUser)
+			require.NotNil(t, currentUser)
+			hookRec.CustomizeAccessToken.ClearCalls()
+		}
 
 		type M = map[string]any
 
@@ -267,31 +267,31 @@ func TestE2EHooks(t *testing.T) {
 			)
 		}{
 			{
-				desc:   `claims empty`,
-				from:   func(in M) M { return M{"claims": M{}} },
-				errStr: "500: output claims do not conform to the expected schema",
-			},
-
-			{
-				desc:   `claims nil`,
-				from:   func(in M) M { return M{"claims": nil} },
-				errStr: "500: output claims do not conform to the expected schema",
-			},
-
-			{
 				desc:   `claims field missing`,
 				from:   func(in M) M { return M{} },
-				errStr: "500: output claims do not conform to the expected schema",
+				errStr: "500: output claims field is missing",
 			},
 
 			{
-				desc: `claims are top level`,
+				desc: `claims field missing with top level keys`,
 				from: func(in M) M {
 					return M{
 						"myclaim":     "aaa",
 						"other_claim": "bbb",
 					}
 				},
+				errStr: "500: output claims field is missing",
+			},
+
+			{
+				desc:   `claims field nil`,
+				from:   func(in M) M { return M{"claims": nil} },
+				errStr: "500: output claims do not conform to the expected schema",
+			},
+
+			{
+				desc:   `claims field empty`,
+				from:   func(in M) M { return M{"claims": M{}} },
 				errStr: "500: output claims do not conform to the expected schema",
 			},
 

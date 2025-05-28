@@ -1,11 +1,13 @@
 package v0hooks
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/utilities"
@@ -139,7 +141,37 @@ type CustomAccessTokenInput struct {
 }
 
 type CustomAccessTokenOutput struct {
-	Claims map[string]interface{} `json:"claims"`
+	Claims map[string]any `json:"claims"`
+}
+
+func (o *CustomAccessTokenOutput) UnmarshalJSON(b []byte) error {
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return err
+	}
+
+	// First check if the claims field is missing
+	if _, ok := m["claims"]; !ok {
+		httpError := &apierrors.HTTPError{
+			HTTPStatus: http.StatusInternalServerError,
+			Message:    "output claims field is missing",
+		}
+		return httpError
+	}
+
+	// This check allows us to skip an additional unmarshal for valid inputs
+	if v, ok := m["claims"].(map[string]any); ok {
+		o.Claims = v
+		return nil
+	}
+
+	// The Claims field is not a map[string]any so we unmarshal again just
+	// to get the correct error type.
+	type raw CustomAccessTokenOutput
+	if err := json.Unmarshal(b, (*raw)(o)); err != nil {
+		return err
+	}
+	return nil
 }
 
 type SendSMSInput struct {
