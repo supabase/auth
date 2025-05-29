@@ -450,7 +450,6 @@ func TestE2EHooks(t *testing.T) {
 			require.Equal(t, true, hookReq["valid"])
 		})
 	})
-
 	// Basic tests for CustomizeAccessToken
 	t.Run("CustomizeAccessToken", func(t *testing.T) {
 		defer hookRec.CustomizeAccessToken.ClearCalls()
@@ -597,8 +596,13 @@ func TestE2EHooks(t *testing.T) {
 
 				hookRec.CustomizeAccessToken.ClearCalls()
 				hookRec.CustomizeAccessToken.SetHandler(hr)
+				req := &api.PasswordGrantParams{
+					Email:    string(currentUser.Email),
+					Password: "password",
+				}
 
-				res := getAccessToken(t, string(currentUser.Email), "password")
+				res := new(api.AccessTokenResponse)
+				err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/token?grant_type=password", req, res)
 
 				// always verify the hook request before checking response
 				{
