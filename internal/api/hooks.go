@@ -20,9 +20,8 @@ func (a *API) triggerBeforeUserCreated(
 	if !a.hooksMgr.Enabled(v0hooks.BeforeUserCreated) {
 		return nil
 	}
-	if conn.TX != nil {
-		// TODO(cstockton): remove this
-		panic("unable to trigger hooks during transaction")
+	if err := checkTX(conn); err != nil {
+		return err
 	}
 
 	req := v0hooks.NewBeforeUserCreatedInput(r, user)
@@ -39,9 +38,8 @@ func (a *API) triggerBeforeUserCreatedExternal(
 	if !a.hooksMgr.Enabled(v0hooks.BeforeUserCreated) {
 		return nil
 	}
-	if conn.TX != nil {
-		// TODO(cstockton): remove this
-		panic("unable to trigger hooks during transaction")
+	if err := checkTX(conn); err != nil {
+		return err
 	}
 
 	ctx := r.Context()
@@ -96,4 +94,12 @@ func (a *API) triggerBeforeUserCreatedExternal(
 		return err
 	}
 	return a.triggerBeforeUserCreated(r, conn, user)
+}
+
+func checkTX(conn *storage.Connection) error {
+	if conn.TX != nil {
+		return apierrors.NewInternalServerError(
+			"unable to trigger hooks during transaction")
+	}
+	return nil
 }
