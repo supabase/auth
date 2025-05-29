@@ -101,6 +101,14 @@ func (o *Instance) Do(
 	return o.APIClient.Do(req)
 }
 
+func (o *Instance) DoAuth(
+	req *http.Request,
+	jwt string,
+) (*http.Response, error) {
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", jwt))
+	return o.Do(req)
+}
+
 func (o *Instance) DoAdmin(
 	req *http.Request,
 ) (*http.Response, error) {

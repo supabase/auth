@@ -5,13 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/pquerna/otp/totp"
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api"
 	"github.com/supabase/auth/internal/conf"
@@ -22,12 +25,32 @@ import (
 	"github.com/supabase/auth/internal/models"
 )
 
+type M = map[string]any
+
+func genEmail() string {
+	return "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+}
+
+func genPhone() string {
+	var sb strings.Builder
+	sb.WriteString("1")
+	for i := 0; i < 9; i++ {
+		sb.WriteString(fmt.Sprintf("%d", rand.Intn(9)))
+	}
+	phone := sb.String()
+	return phone
+}
+
 func TestE2EHooks(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
 	globalCfg := e2e.Must(e2e.Config())
 	globalCfg.External.AnonymousUsers.Enabled = true
+	globalCfg.External.Phone.Enabled = true
+	globalCfg.MFA.Phone.EnrollEnabled = true
+	globalCfg.MFA.TOTP.EnrollEnabled = true
+	globalCfg.MFA.Phone.VerifyEnabled = true
 
 	inst, err := e2ehooks.New(globalCfg)
 	require.NoError(t, err)
@@ -39,6 +62,8 @@ func TestE2EHooks(t *testing.T) {
 	runBeforeUserCreated := func(t *testing.T, expUser *models.User) *models.User {
 		var latest *models.User
 		t.Run("BeforeUserCreated", func(t *testing.T) {
+			defer hookRec.BeforeUserCreated.ClearCalls()
+
 			calls := hookRec.BeforeUserCreated.GetCalls()
 			require.Equal(t, 1, len(calls))
 			call := calls[0]
@@ -67,13 +92,28 @@ func TestE2EHooks(t *testing.T) {
 		return latest
 	}
 
+	getAccessToken := func(
+		t *testing.T,
+		email, pass string,
+	) *api.AccessTokenResponse {
+		req := &api.PasswordGrantParams{
+			Email:    email,
+			Password: pass,
+		}
+
+		res := new(api.AccessTokenResponse)
+		err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/token?grant_type=password", req, res)
+		require.NoError(t, err)
+		return res
+	}
+
 	// Basic tests for user hooks
 	t.Run("UserHooks", func(t *testing.T) {
 
-		t.Run("Signup", func(t *testing.T) {
+		t.Run("SignupEmail", func(t *testing.T) {
 			defer hookRec.BeforeUserCreated.ClearCalls()
 
-			email := "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+			email := genEmail()
 			req := &api.SignupParams{
 				Email:    email,
 				Password: "password",
@@ -82,6 +122,22 @@ func TestE2EHooks(t *testing.T) {
 			err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, res)
 			require.NoError(t, err)
 			require.Equal(t, email, res.Email.String())
+
+			runBeforeUserCreated(t, res)
+		})
+
+		t.Run("SignupPhone", func(t *testing.T) {
+			defer hookRec.BeforeUserCreated.ClearCalls()
+
+			phone := genPhone()
+			req := &api.SignupParams{
+				Phone:    phone,
+				Password: "password",
+			}
+			res := new(models.User)
+			err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, res)
+			require.NoError(t, err)
+			require.Equal(t, phone, res.Phone.String())
 
 			runBeforeUserCreated(t, res)
 		})
@@ -112,7 +168,7 @@ func TestE2EHooks(t *testing.T) {
 			t.Run("Invite", func(t *testing.T) {
 				defer hookRec.BeforeUserCreated.ClearCalls()
 
-				email := "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+				email := genEmail()
 				req := &api.InviteParams{
 					Email: email,
 				}
@@ -140,7 +196,7 @@ func TestE2EHooks(t *testing.T) {
 				t.Run("SignupVerification", func(t *testing.T) {
 					defer hookRec.BeforeUserCreated.ClearCalls()
 
-					email := "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+					email := genEmail()
 					req := &api.GenerateLinkParams{
 						Type:     "signup",
 						Email:    email,
@@ -169,7 +225,7 @@ func TestE2EHooks(t *testing.T) {
 				t.Run("InviteVerification", func(t *testing.T) {
 					defer hookRec.BeforeUserCreated.ClearCalls()
 
-					email := "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+					email := genEmail()
 					req := &api.GenerateLinkParams{
 						Type:  "invite",
 						Email: email,
@@ -197,6 +253,203 @@ func TestE2EHooks(t *testing.T) {
 		})
 	})
 
+	t.Run("MFAVerificationAttempt", func(t *testing.T) {
+		defer hookRec.MFAVerification.ClearCalls()
+
+		type flowResult struct {
+			factorRes          *api.EnrollFactorResponse
+			challengeRes       *api.ChallengeFactorResponse
+			mfaUser            *models.User
+			mfaUserAccessToken *api.AccessTokenResponse
+		}
+
+		runMFAFlow := func(t *testing.T) *flowResult {
+			factorRes := new(api.EnrollFactorResponse)
+			challengeRes := new(api.ChallengeFactorResponse)
+			mfaUser := new(models.User)
+			mfaUserAccessToken := new(api.AccessTokenResponse)
+
+			t.Run("MFAFlow", func(t *testing.T) {
+				t.Run("Signup", func(t *testing.T) {
+					email := genEmail()
+					const password = "password"
+					req := &api.SignupParams{
+						Email:    email,
+						Password: password,
+					}
+					err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, mfaUser)
+					require.NoError(t, err)
+					require.Equal(t, email, mfaUser.Email.String())
+
+					mfaUser = runBeforeUserCreated(t, mfaUser)
+					mfaUserAccessToken = getAccessToken(t, string(mfaUser.Email), password)
+
+					phone := genPhone()
+					domain := strings.Split(email, "@")[1]
+
+					// enroll factor
+					t.Run("MFAEnroll", func(t *testing.T) {
+						req := &api.EnrollFactorParams{
+							FriendlyName: "totp_" + email,
+							Phone:        phone,
+							Issuer:       domain,
+							FactorType:   models.TOTP,
+						}
+
+						body := new(bytes.Buffer)
+						err = json.NewEncoder(body).Encode(req)
+						require.NoError(t, err)
+
+						httpReq, err := http.NewRequestWithContext(
+							ctx, "POST", "/factors/", body)
+						require.NoError(t, err)
+
+						httpRes, err := inst.DoAuth(httpReq, mfaUserAccessToken.Token)
+						require.NoError(t, err)
+						require.Equal(t, 200, httpRes.StatusCode)
+
+						err = json.NewDecoder(httpRes.Body).Decode(factorRes)
+						require.NoError(t, err)
+					})
+
+					// challenge factor
+					t.Run("MFAChallenge", func(t *testing.T) {
+						req := &models.Factor{
+							ID: factorRes.ID,
+						}
+
+						body := new(bytes.Buffer)
+						err = json.NewEncoder(body).Encode(req)
+						require.NoError(t, err)
+
+						url := fmt.Sprintf("/factors/%v/challenge", factorRes.ID)
+						httpReq, err := http.NewRequestWithContext(
+							ctx, "POST", url, body)
+						require.NoError(t, err)
+
+						httpRes, err := inst.DoAuth(httpReq, mfaUserAccessToken.Token)
+						require.NoError(t, err)
+						require.Equal(t, 200, httpRes.StatusCode)
+
+						err = json.NewDecoder(httpRes.Body).Decode(challengeRes)
+						require.NoError(t, err)
+					})
+				})
+			})
+			return &flowResult{
+				factorRes:          factorRes,
+				challengeRes:       challengeRes,
+				mfaUser:            mfaUser,
+				mfaUserAccessToken: mfaUserAccessToken,
+			}
+		}
+
+		t.Run("MFAVerifySuccess", func(t *testing.T) {
+			defer hookRec.MFAVerification.ClearCalls()
+
+			flowRes := runMFAFlow(t)
+			verifyRes := new(api.AccessTokenResponse)
+
+			mfaCode, err := totp.GenerateCode(flowRes.factorRes.TOTP.Secret, time.Now().UTC())
+			require.NoError(t, err)
+
+			req := &api.VerifyFactorParams{
+				ChallengeID: flowRes.challengeRes.ID,
+				Code:        mfaCode,
+			}
+
+			body := new(bytes.Buffer)
+			err = json.NewEncoder(body).Encode(req)
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("/factors/%v/verify", flowRes.factorRes.ID)
+			httpReq, err := http.NewRequestWithContext(
+				ctx, "POST", url, body)
+			require.NoError(t, err)
+
+			httpRes, err := inst.DoAuth(httpReq, flowRes.mfaUserAccessToken.Token)
+			require.NoError(t, err)
+			require.Equal(t, 200, httpRes.StatusCode)
+
+			// verify the mfa was accepted
+			err = json.NewDecoder(httpRes.Body).Decode(verifyRes)
+			require.NoError(t, err)
+			require.NotEmpty(t, verifyRes.Token)
+
+			calls := hookRec.MFAVerification.GetCalls()
+			require.Equal(t, 1, len(calls))
+			call := calls[0]
+
+			hookReq := M{}
+			err = call.Unmarshal(&hookReq)
+			require.NoError(t, err)
+
+			// verify hook request
+			require.Equal(t, flowRes.factorRes.ID.String(), hookReq["factor_id"])
+			require.Equal(t, flowRes.factorRes.Type, hookReq["factor_type"])
+			require.Equal(t, flowRes.mfaUser.ID.String(), hookReq["user_id"])
+			require.Equal(t, true, hookReq["valid"])
+		})
+
+		t.Run("MFAVerifyFailure", func(t *testing.T) {
+			defer hookRec.MFAVerification.ClearCalls()
+
+			const errorMsg = "sentinel error message"
+			{
+				hr := e2ehooks.HandleJSON(M{
+					"decision": "reject",
+					"message":  errorMsg,
+				})
+				hookRec.MFAVerification.SetHandler(hr)
+			}
+
+			flowRes := runMFAFlow(t)
+			errorRes := new(api.HTTPError)
+
+			mfaCode, err := totp.GenerateCode(flowRes.factorRes.TOTP.Secret, time.Now().UTC())
+			require.NoError(t, err)
+
+			req := &api.VerifyFactorParams{
+				ChallengeID: flowRes.challengeRes.ID,
+				Code:        mfaCode,
+			}
+
+			body := new(bytes.Buffer)
+			err = json.NewEncoder(body).Encode(req)
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("/factors/%v/verify", flowRes.factorRes.ID)
+			httpReq, err := http.NewRequestWithContext(
+				ctx, "POST", url, body)
+			require.NoError(t, err)
+
+			httpRes, err := inst.DoAuth(httpReq, flowRes.mfaUserAccessToken.Token)
+			require.NoError(t, err)
+			require.Equal(t, 403, httpRes.StatusCode)
+
+			// verify the mfa rejection
+			err = json.NewDecoder(httpRes.Body).Decode(errorRes)
+			require.NoError(t, err)
+			require.Equal(t, 403, errorRes.HTTPStatus)
+			require.Equal(t, "mfa_verification_rejected", errorRes.ErrorCode)
+			require.Equal(t, errorMsg, errorRes.Message)
+
+			calls := hookRec.MFAVerification.GetCalls()
+			require.Equal(t, 1, len(calls))
+			call := calls[0]
+
+			hookReq := M{}
+			err = call.Unmarshal(&hookReq)
+			require.NoError(t, err)
+
+			// verify hook request
+			require.Equal(t, flowRes.factorRes.ID.String(), hookReq["factor_id"])
+			require.Equal(t, flowRes.factorRes.Type, hookReq["factor_type"])
+			require.Equal(t, flowRes.mfaUser.ID.String(), hookReq["user_id"])
+			require.Equal(t, true, hookReq["valid"])
+		})
+	})
+
 	// Basic tests for CustomizeAccessToken
 	t.Run("CustomizeAccessToken", func(t *testing.T) {
 		defer hookRec.CustomizeAccessToken.ClearCalls()
@@ -204,7 +457,7 @@ func TestE2EHooks(t *testing.T) {
 		// setup user to test with
 		var currentUser *models.User
 		{
-			email := "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+			email := genEmail()
 			req := &api.SignupParams{
 				Email:    email,
 				Password: "password",
@@ -218,8 +471,6 @@ func TestE2EHooks(t *testing.T) {
 			require.NotNil(t, currentUser)
 			hookRec.CustomizeAccessToken.ClearCalls()
 		}
-
-		type M = map[string]any
 
 		copyMap := func(t *testing.T, m M) (out M) {
 			b, err := json.Marshal(m)
@@ -345,13 +596,8 @@ func TestE2EHooks(t *testing.T) {
 
 				hookRec.CustomizeAccessToken.ClearCalls()
 				hookRec.CustomizeAccessToken.SetHandler(hr)
-				req := &api.PasswordGrantParams{
-					Email:    string(currentUser.Email),
-					Password: "password",
-				}
 
-				res := new(api.AccessTokenResponse)
-				err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/token?grant_type=password", req, res)
+				res := getAccessToken(t, string(currentUser.Email), "password")
 
 				// always verify the hook request before checking response
 				{
