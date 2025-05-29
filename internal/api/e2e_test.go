@@ -35,6 +35,7 @@ func genPhone() string {
 	var sb strings.Builder
 	sb.WriteString("1")
 	for i := 0; i < 9; i++ {
+		// #nosec G404
 		sb.WriteString(fmt.Sprintf("%d", rand.Intn(9)))
 	}
 	phone := sb.String()
