@@ -102,8 +102,9 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 		return apierrors.NewOAuthError("invalid_grant", "Solana message was issued too far in the future")
 	}
 
+	const providerType = "web3"
 	providerId := strings.Join([]string{
-		"web3",
+		providerType,
 		params.Chain,
 		parsedMessage.Address,
 	}, ":")
@@ -126,14 +127,18 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
 
+	if err := a.triggerBeforeUserCreatedExternal(r, db, &userData, providerType); err != nil {
+		return err
+	}
+
 	err = db.Transaction(func(tx *storage.Connection) error {
-		user, terr := a.createAccountFromExternalIdentity(tx, r, &userData, "web3")
+		user, terr := a.createAccountFromExternalIdentity(tx, r, &userData, providerType)
 		if terr != nil {
 			return terr
 		}
 
 		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
-			"provider": "web3",
+			"provider": providerType,
 			"chain":    params.Chain,
 			"network":  parsedMessage.ChainID,
 			"address":  parsedMessage.Address,

@@ -3,6 +3,7 @@ package hookspgfunc
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -58,6 +59,10 @@ func (o *Dispatcher) Dispatch(
 	}
 	if data != nil {
 		if err := json.Unmarshal(data, res); err != nil {
+			e := new(apierrors.HTTPError)
+			if errors.As(err, &e) {
+				return e
+			}
 			return apierrors.NewInternalServerError(
 				"Error unmarshaling JSON output.").WithInternalError(err)
 		}

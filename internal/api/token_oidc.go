@@ -224,6 +224,10 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	grantParams.FillGrantParams(r)
 
+	if err := a.triggerBeforeUserCreatedExternal(r, db, userData, providerType); err != nil {
+		return err
+	}
+
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		var user *models.User
 		var terr error

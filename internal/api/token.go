@@ -510,13 +510,17 @@ func validateTokenClaims(outputClaims map[string]interface{}) error {
 
 		for _, desc := range result.Errors() {
 			errorMessages += fmt.Sprintf("- %s\n", desc)
-			fmt.Printf("- %s\n", desc)
 		}
-		return fmt.Errorf(
+		err = fmt.Errorf(
 			"output claims do not conform to the expected schema: \n%s", errorMessages)
-
 	}
-
+	if err != nil {
+		httpError := &apierrors.HTTPError{
+			HTTPStatus: http.StatusInternalServerError,
+			Message:    err.Error(),
+		}
+		return httpError
+	}
 	return nil
 }
 

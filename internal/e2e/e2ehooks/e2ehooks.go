@@ -50,9 +50,16 @@ func New(globalCfg *conf.GlobalConfiguration) (*Instance, error) {
 }
 
 func HandleSuccess() http.Handler {
+	return HandleJSON(map[string]any{})
+}
+
+func HandleJSON(m map[string]any) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("content-type", "application/json")
-		_, _ = io.WriteString(w, "{}")
+
+		if err := json.NewEncoder(w).Encode(&m); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 }
 
@@ -68,7 +75,41 @@ func NewHook(name v0hooks.Name) *Hook {
 	o := &Hook{
 		name: name,
 	}
-	o.SetHandler(HandleSuccess())
+
+	//exhaustive:ignore
+	switch name {
+	case v0hooks.CustomizeAccessToken:
+		// This hooks returns the exact claims given.
+		hr := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("content-type", "application/json")
+			w.WriteHeader(http.StatusOK)
+
+			var v any
+			if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			if err := json.NewEncoder(w).Encode(&v); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+		})
+		o.SetHandler(hr)
+
+	case v0hooks.MFAVerification:
+		hr := HandleJSON(map[string]any{
+			"decision": "continue",
+		})
+		o.SetHandler(hr)
+
+	case v0hooks.PasswordVerification:
+		hr := HandleJSON(map[string]any{
+			"decision": "continue",
+		})
+		o.SetHandler(hr)
+
+	default:
+		o.SetHandler(HandleSuccess())
+	}
+
 	return o
 }
 
