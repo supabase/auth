@@ -167,8 +167,10 @@ func (ts *AuthTestSuite) TestMaybeLoadUserOrSession() {
 	s, err := models.NewSession(u.ID, nil)
 	require.NoError(ts.T(), err)
 	require.NoError(ts.T(), ts.API.db.Create(s))
-
 	require.NoError(ts.T(), ts.API.db.Load(s))
+
+	s.CreatedAt = s.CreatedAt.UTC()
+	s.UpdatedAt = s.UpdatedAt.UTC()
 
 	cases := []struct {
 		Desc            string

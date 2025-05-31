@@ -16,6 +16,22 @@ Before using the containers, you will need to make sure an `.env.docker` file ex
 
 The following are some basic commands. A full and up to date list of commands can be found in the project's `Makefile` or by running `make help`.
 
+> **Note:**  
+> To run `docker-test`, you must update the configuration to connect to the PostgreSQL container using its Docker service name (`postgres`) instead of `localhost`.  
+>  
+> Update the following files accordingly:
+>
+> - In `hack/test.env`, set:
+>   ```env
+>   DATABASE_URL=postgres://supabase_auth_admin:root@postgres:5432/postgres
+>   ```
+>
+> - In `hack/migrate.sh`, set:
+>   ```bash
+>   GOTRUE_DB_DATABASE_URL="postgres://supabase_auth_admin:root@postgres:5432/$DB_ENV"
+>   ```
+
+
 ### Starting the containers
 
 Start the containers as described above in an attached state with log output.
@@ -47,6 +63,7 @@ Fully rebuild the containers without using any cached layers.
 ```bash
 make docker-build
 ```
+
 
 ## Setup and Tooling
 
