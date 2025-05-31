@@ -31,7 +31,6 @@ The following are some basic commands. A full and up to date list of commands ca
 >   GOTRUE_DB_DATABASE_URL="postgres://supabase_auth_admin:root@postgres:5432/$DB_ENV"
 >   ```
 
-
 ### Starting the containers
 
 Start the containers as described above in an attached state with log output.
@@ -63,7 +62,6 @@ Fully rebuild the containers without using any cached layers.
 ```bash
 make docker-build
 ```
-
 
 ## Setup and Tooling
 
