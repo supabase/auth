@@ -18,23 +18,31 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/api"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/e2e"
 	"github.com/supabase/auth/internal/e2e/e2eapi"
 	"github.com/supabase/auth/internal/e2e/e2ehooks"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
+	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/models"
 )
 
+const defaultPassword = "password"
+
 type M = map[string]any
 
-func genEmail() string {
-	return "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+func genEmail(suffixes ...string) string {
+	uuid := uuid.Must(uuid.NewV4()).String()
+	parts := []string{"e2e_test", uuid}
+	parts = append(parts, suffixes...)
+	name := strings.Join(parts, "_")
+	return name + "@localhost"
 }
 
 func genPhone() string {
 	var sb strings.Builder
 	sb.WriteString("1")
-	for i := 0; i < 9; i++ {
+	for range 9 {
 		// #nosec G404
 		sb.WriteString(fmt.Sprintf("%d", rand.Intn(9)))
 	}
@@ -42,132 +50,207 @@ func genPhone() string {
 	return phone
 }
 
+func runVerifyBeforeUserCreatedHook(
+	t *testing.T,
+	inst *e2ehooks.Instance,
+	expUser *models.User,
+) *models.User {
+	var latest *models.User
+	t.Run("VerifyBeforeUserCreatedHook", func(t *testing.T) {
+		defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
+
+		calls := inst.HookRecorder.BeforeUserCreated.GetCalls()
+		require.Equal(t, 1, len(calls))
+		call := calls[0]
+
+		hookReq := &v0hooks.BeforeUserCreatedInput{}
+		err := call.Unmarshal(hookReq)
+		require.NoError(t, err)
+		require.Equal(t, v0hooks.BeforeUserCreated, hookReq.Metadata.Name)
+
+		u := hookReq.User
+		require.Equal(t, expUser.ID, u.ID)
+		require.Equal(t, expUser.Aud, u.Aud)
+		require.Equal(t, expUser.Email, u.Email)
+		require.Equal(t, expUser.AppMetaData, u.AppMetaData)
+
+		require.True(t, u.CreatedAt.IsZero())
+		require.True(t, u.UpdatedAt.IsZero())
+
+		err = expUser.Confirm(inst.Conn)
+		require.NoError(t, err)
+
+		latest, err = models.FindUserByID(inst.Conn, expUser.ID)
+		require.NoError(t, err)
+		require.NotNil(t, latest)
+	})
+	return latest
+}
+
+func getAccessToken(
+	ctx context.Context,
+	t *testing.T,
+	inst *e2ehooks.Instance,
+	email, pass string,
+) *api.AccessTokenResponse {
+	req := &api.PasswordGrantParams{
+		Email:    email,
+		Password: pass,
+	}
+
+	res := new(api.AccessTokenResponse)
+	err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/token?grant_type=password", req, res)
+	require.NoError(t, err)
+	return res
+}
+func signupAndConfirm(
+	ctx context.Context,
+	t *testing.T,
+	inst *e2ehooks.Instance,
+) *models.User {
+	defer inst.HookRecorder.SendEmail.ClearCalls()
+
+	// signup user
+	email := genEmail()
+	req := &api.SignupParams{
+		Email:    email,
+		Password: defaultPassword,
+	}
+	expUser := new(models.User)
+	err := e2eapi.Do(
+		ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, expUser)
+	require.NoError(t, err)
+	require.Equal(t, email, expUser.Email.String())
+
+	// load the hook call
+	calls := inst.HookRecorder.SendEmail.GetCalls()
+	require.Equal(t, 1, len(calls))
+	call := calls[0]
+
+	hookReq := &v0hooks.SendEmailInput{}
+	err = call.Unmarshal(hookReq)
+	require.NoError(t, err)
+
+	// verify that the latest user from find user matches OTP
+	otpHash := crypto.GenerateTokenHash(
+		expUser.GetEmail(), hookReq.EmailData.Token)
+	require.NotEmpty(t, hookReq.EmailData.Token)
+	require.Equal(t, otpHash, hookReq.EmailData.TokenHash)
+
+	// hook user matches the signup user
+	require.Equal(t, expUser.ID, hookReq.User.ID)
+	require.Equal(t, expUser.ID, hookReq.User.ID)
+	require.Equal(t, expUser.Aud, hookReq.User.Aud)
+	require.Equal(t, expUser.Email, hookReq.User.Email)
+	require.Equal(t, expUser.AppMetaData, hookReq.User.AppMetaData)
+
+	// otp matches the user id and email
+	ott, err := models.FindOneTimeToken(
+		inst.Conn,
+		hookReq.EmailData.TokenHash,
+		models.ConfirmationToken)
+	require.NoError(t, err)
+	require.Equal(t, expUser.ID.String(), ott.UserID.String())
+	require.Equal(t, expUser.Email.String(), ott.RelatesTo)
+
+	// OTP token user matches our signup user
+	hookUser, err := models.FindUserByConfirmationToken(
+		inst.Conn, hookReq.EmailData.TokenHash)
+	require.NoError(t, err)
+	require.Equal(t, expUser.ID, hookUser.ID)
+	require.Equal(t, expUser.Email, hookUser.Email)
+
+	// construct email data we expect, except for OTP
+	expData := mailer.EmailData{
+		// note: we already validated token by generating token hash
+		Token: hookReq.EmailData.Token,
+
+		TokenHash:       ott.TokenHash,
+		RedirectTo:      inst.Config.SiteURL,
+		EmailActionType: mailer.SignupVerification,
+		SiteURL:         inst.Config.API.ExternalURL,
+		TokenNew:        "",
+		TokenHashNew:    "",
+	}
+	require.Equal(t, expData, hookReq.EmailData)
+
+	// Verify this user
+	err = hookUser.Confirm(inst.Conn)
+	require.NoError(t, err)
+
+	return hookUser
+}
+
 func TestE2EHooks(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 	defer cancel()
 
-	globalCfg := e2e.Must(e2e.Config())
-	globalCfg.External.AnonymousUsers.Enabled = true
-	globalCfg.External.Phone.Enabled = true
-	globalCfg.MFA.Phone.EnrollEnabled = true
-	globalCfg.MFA.TOTP.EnrollEnabled = true
-	globalCfg.MFA.Phone.VerifyEnabled = true
-
-	inst, err := e2ehooks.New(globalCfg)
-	require.NoError(t, err)
-	defer inst.Close()
-
-	apiSrv := inst.APIServer
-	hookRec := inst.HookRecorder
-
-	runBeforeUserCreated := func(t *testing.T, expUser *models.User) *models.User {
-		var latest *models.User
-		t.Run("BeforeUserCreated", func(t *testing.T) {
-			defer hookRec.BeforeUserCreated.ClearCalls()
-
-			calls := hookRec.BeforeUserCreated.GetCalls()
-			require.Equal(t, 1, len(calls))
-			call := calls[0]
-
-			hookReq := &v0hooks.BeforeUserCreatedInput{}
-			err := call.Unmarshal(hookReq)
-			require.NoError(t, err)
-			require.Equal(t, v0hooks.BeforeUserCreated, hookReq.Metadata.Name)
-
-			u := hookReq.User
-			require.Equal(t, expUser.ID, u.ID)
-			require.Equal(t, expUser.Aud, u.Aud)
-			require.Equal(t, expUser.Email, u.Email)
-			require.Equal(t, expUser.AppMetaData, u.AppMetaData)
-
-			require.True(t, u.CreatedAt.IsZero())
-			require.True(t, u.UpdatedAt.IsZero())
-
-			err = expUser.Confirm(inst.Conn)
-			require.NoError(t, err)
-
-			latest, err = models.FindUserByID(inst.Conn, expUser.ID)
-			require.NoError(t, err)
-			require.NotNil(t, latest)
-		})
-		return latest
-	}
-
-	getAccessToken := func(
-		t *testing.T,
-		email, pass string,
-	) *api.AccessTokenResponse {
-		req := &api.PasswordGrantParams{
-			Email:    email,
-			Password: pass,
-		}
-
-		res := new(api.AccessTokenResponse)
-		err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/token?grant_type=password", req, res)
-		require.NoError(t, err)
-		return res
-	}
-
-	// Basic tests for user hooks
 	t.Run("UserHooks", func(t *testing.T) {
+		globalCfg := e2e.Must(e2e.Config())
+		globalCfg.External.AnonymousUsers.Enabled = true
+		globalCfg.External.Phone.Enabled = true
+
+		inst, err := e2ehooks.New(globalCfg)
+		require.NoError(t, err)
+		defer inst.Close()
 
 		t.Run("SignupEmail", func(t *testing.T) {
-			defer hookRec.BeforeUserCreated.ClearCalls()
+			defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
 
 			email := genEmail()
 			req := &api.SignupParams{
 				Email:    email,
-				Password: "password",
+				Password: defaultPassword,
 			}
 			res := new(models.User)
-			err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, res)
+			err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, res)
 			require.NoError(t, err)
 			require.Equal(t, email, res.Email.String())
 
-			runBeforeUserCreated(t, res)
+			runVerifyBeforeUserCreatedHook(t, inst, res)
 		})
 
 		t.Run("SignupPhone", func(t *testing.T) {
-			defer hookRec.BeforeUserCreated.ClearCalls()
+			defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
 
 			phone := genPhone()
 			req := &api.SignupParams{
 				Phone:    phone,
-				Password: "password",
+				Password: defaultPassword,
 			}
 			res := new(models.User)
-			err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, res)
+			err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, res)
 			require.NoError(t, err)
 			require.Equal(t, phone, res.Phone.String())
 
-			runBeforeUserCreated(t, res)
+			runVerifyBeforeUserCreatedHook(t, inst, res)
 		})
 
 		t.Run("SignupAnonymously", func(t *testing.T) {
-			defer hookRec.BeforeUserCreated.ClearCalls()
+			defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
 
 			req := &api.SignupParams{}
 			res := new(api.AccessTokenResponse)
-			err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, res)
+			err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, res)
 			require.NoError(t, err)
 
-			runBeforeUserCreated(t, res.User)
+			runVerifyBeforeUserCreatedHook(t, inst, res.User)
 		})
 
 		t.Run("ExternalCallback", func(t *testing.T) {
-			defer hookRec.BeforeUserCreated.ClearCalls()
+			defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
 
 			req := &api.SignupParams{}
 			res := new(api.AccessTokenResponse)
-			err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, res)
+			err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, res)
 			require.NoError(t, err)
 
-			runBeforeUserCreated(t, res.User)
+			runVerifyBeforeUserCreatedHook(t, inst, res.User)
 		})
 
 		t.Run("AdminEndpoints", func(t *testing.T) {
 			t.Run("Invite", func(t *testing.T) {
-				defer hookRec.BeforeUserCreated.ClearCalls()
+				defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
 
 				email := genEmail()
 				req := &api.InviteParams{
@@ -189,13 +272,13 @@ func TestE2EHooks(t *testing.T) {
 				err = json.NewDecoder(httpRes.Body).Decode(res)
 				require.NoError(t, err)
 
-				runBeforeUserCreated(t, res)
+				runVerifyBeforeUserCreatedHook(t, inst, res)
 			})
 
 			t.Run("AdminGenerateLink", func(t *testing.T) {
 
 				t.Run("SignupVerification", func(t *testing.T) {
-					defer hookRec.BeforeUserCreated.ClearCalls()
+					defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
 
 					email := genEmail()
 					req := &api.GenerateLinkParams{
@@ -220,11 +303,11 @@ func TestE2EHooks(t *testing.T) {
 					err = json.NewDecoder(httpRes.Body).Decode(res)
 					require.NoError(t, err)
 
-					runBeforeUserCreated(t, &res.User)
+					runVerifyBeforeUserCreatedHook(t, inst, &res.User)
 				})
 
 				t.Run("InviteVerification", func(t *testing.T) {
-					defer hookRec.BeforeUserCreated.ClearCalls()
+					defer inst.HookRecorder.BeforeUserCreated.ClearCalls()
 
 					email := genEmail()
 					req := &api.GenerateLinkParams{
@@ -248,14 +331,21 @@ func TestE2EHooks(t *testing.T) {
 					err = json.NewDecoder(httpRes.Body).Decode(res)
 					require.NoError(t, err)
 
-					runBeforeUserCreated(t, &res.User)
+					runVerifyBeforeUserCreatedHook(t, inst, &res.User)
 				})
 			})
 		})
 	})
 
 	t.Run("MFAVerificationAttempt", func(t *testing.T) {
-		defer hookRec.MFAVerification.ClearCalls()
+		globalCfg := e2e.Must(e2e.Config())
+		globalCfg.MFA.TOTP.EnrollEnabled = true
+		globalCfg.MFA.Phone.EnrollEnabled = true
+		globalCfg.MFA.Phone.VerifyEnabled = true
+
+		inst, err := e2ehooks.New(globalCfg)
+		require.NoError(t, err)
+		defer inst.Close()
 
 		type flowResult struct {
 			factorRes          *api.EnrollFactorResponse
@@ -273,17 +363,18 @@ func TestE2EHooks(t *testing.T) {
 			t.Run("MFAFlow", func(t *testing.T) {
 				t.Run("Signup", func(t *testing.T) {
 					email := genEmail()
-					const password = "password"
 					req := &api.SignupParams{
 						Email:    email,
-						Password: password,
+						Password: defaultPassword,
 					}
-					err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, mfaUser)
+					err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, mfaUser)
 					require.NoError(t, err)
 					require.Equal(t, email, mfaUser.Email.String())
 
-					mfaUser = runBeforeUserCreated(t, mfaUser)
-					mfaUserAccessToken = getAccessToken(t, string(mfaUser.Email), password)
+					mfaUser = runVerifyBeforeUserCreatedHook(t, inst, mfaUser)
+					require.NotNil(t, mfaUser)
+					mfaUserAccessToken = getAccessToken(
+						ctx, t, inst, string(mfaUser.Email), defaultPassword)
 
 					phone := genPhone()
 					domain := strings.Split(email, "@")[1]
@@ -346,7 +437,7 @@ func TestE2EHooks(t *testing.T) {
 		}
 
 		t.Run("MFAVerifySuccess", func(t *testing.T) {
-			defer hookRec.MFAVerification.ClearCalls()
+			defer inst.HookRecorder.MFAVerification.ClearCalls()
 
 			flowRes := runMFAFlow(t)
 			verifyRes := new(api.AccessTokenResponse)
@@ -377,7 +468,7 @@ func TestE2EHooks(t *testing.T) {
 			require.NoError(t, err)
 			require.NotEmpty(t, verifyRes.Token)
 
-			calls := hookRec.MFAVerification.GetCalls()
+			calls := inst.HookRecorder.MFAVerification.GetCalls()
 			require.Equal(t, 1, len(calls))
 			call := calls[0]
 
@@ -393,7 +484,7 @@ func TestE2EHooks(t *testing.T) {
 		})
 
 		t.Run("MFAVerifyFailure", func(t *testing.T) {
-			defer hookRec.MFAVerification.ClearCalls()
+			defer inst.HookRecorder.MFAVerification.ClearCalls()
 
 			const errorMsg = "sentinel error message"
 			{
@@ -401,7 +492,7 @@ func TestE2EHooks(t *testing.T) {
 					"decision": "reject",
 					"message":  errorMsg,
 				})
-				hookRec.MFAVerification.SetHandler(hr)
+				inst.HookRecorder.MFAVerification.SetHandler(hr)
 			}
 
 			flowRes := runMFAFlow(t)
@@ -435,7 +526,7 @@ func TestE2EHooks(t *testing.T) {
 			require.Equal(t, "mfa_verification_rejected", errorRes.ErrorCode)
 			require.Equal(t, errorMsg, errorRes.Message)
 
-			calls := hookRec.MFAVerification.GetCalls()
+			calls := inst.HookRecorder.MFAVerification.GetCalls()
 			require.Equal(t, 1, len(calls))
 			call := calls[0]
 
@@ -450,9 +541,12 @@ func TestE2EHooks(t *testing.T) {
 			require.Equal(t, true, hookReq["valid"])
 		})
 	})
-	// Basic tests for CustomizeAccessToken
+
 	t.Run("CustomizeAccessToken", func(t *testing.T) {
-		defer hookRec.CustomizeAccessToken.ClearCalls()
+		globalCfg := e2e.Must(e2e.Config())
+		inst, err := e2ehooks.New(globalCfg)
+		require.NoError(t, err)
+		defer inst.Close()
 
 		// setup user to test with
 		var currentUser *models.User
@@ -460,16 +554,16 @@ func TestE2EHooks(t *testing.T) {
 			email := genEmail()
 			req := &api.SignupParams{
 				Email:    email,
-				Password: "password",
+				Password: defaultPassword,
 			}
 			res := new(models.User)
-			err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/signup", req, res)
+			err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, res)
 			require.NoError(t, err)
 			require.Equal(t, email, res.Email.String())
 
-			currentUser = runBeforeUserCreated(t, res)
+			currentUser = runVerifyBeforeUserCreatedHook(t, inst, res)
 			require.NotNil(t, currentUser)
-			hookRec.CustomizeAccessToken.ClearCalls()
+			inst.HookRecorder.CustomizeAccessToken.ClearCalls()
 		}
 
 		copyMap := func(t *testing.T, m M) (out M) {
@@ -579,7 +673,7 @@ func TestE2EHooks(t *testing.T) {
 
 		for _, tc := range cases {
 			t.Run(string(tc.desc), func(t *testing.T) {
-				defer hookRec.CustomizeAccessToken.ClearCalls()
+				defer inst.HookRecorder.CustomizeAccessToken.ClearCalls()
 
 				var claimsIn, claimsOut M
 				hr := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -594,19 +688,19 @@ func TestE2EHooks(t *testing.T) {
 					require.NoError(t, err)
 				})
 
-				hookRec.CustomizeAccessToken.ClearCalls()
-				hookRec.CustomizeAccessToken.SetHandler(hr)
+				inst.HookRecorder.CustomizeAccessToken.ClearCalls()
+				inst.HookRecorder.CustomizeAccessToken.SetHandler(hr)
 				req := &api.PasswordGrantParams{
 					Email:    string(currentUser.Email),
-					Password: "password",
+					Password: defaultPassword,
 				}
 
 				res := new(api.AccessTokenResponse)
-				err := e2eapi.Do(ctx, http.MethodPost, apiSrv.URL+"/token?grant_type=password", req, res)
+				err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/token?grant_type=password", req, res)
 
 				// always verify the hook request before checking response
 				{
-					calls := hookRec.CustomizeAccessToken.GetCalls()
+					calls := inst.HookRecorder.CustomizeAccessToken.GetCalls()
 					require.Equal(t, 1, len(calls))
 					call := calls[0]
 
@@ -660,5 +754,419 @@ func TestE2EHooks(t *testing.T) {
 				}
 			})
 		}
+	})
+
+	t.Run("SendEmail", func(t *testing.T) {
+		t.Run("Confirmation", func(t *testing.T) {
+			globalCfg := e2e.Must(e2e.Config())
+			inst, err := e2ehooks.New(globalCfg)
+			require.NoError(t, err)
+			defer inst.Close()
+
+			signupAndConfirm(ctx, t, inst)
+		})
+
+		t.Run("SecureEmailChange=Enabled", func(t *testing.T) {
+			globalCfg := e2e.Must(e2e.Config())
+			globalCfg.External.AnonymousUsers.Enabled = true
+			globalCfg.Mailer.SecureEmailChangeEnabled = true
+
+			t.Run("EmailChange", func(t *testing.T) {
+				inst, err := e2ehooks.New(globalCfg)
+				require.NoError(t, err)
+				defer inst.Close()
+
+				// test requires this flag
+				require.True(t, inst.Config.Mailer.SecureEmailChangeEnabled)
+
+				signupUser := signupAndConfirm(ctx, t, inst)
+				currentUser := signupUser
+
+				// get access token
+				currentAccessToken := getAccessToken(
+					ctx, t, inst, string(currentUser.Email), defaultPassword)
+
+				// update email
+				curEmail := signupUser.Email.String()
+				newEmail := genEmail("new-email")
+				{
+					req := &api.UserUpdateParams{
+						Email: newEmail,
+					}
+					res := new(models.User)
+
+					body := new(bytes.Buffer)
+					err = json.NewEncoder(body).Encode(req)
+					require.NoError(t, err)
+
+					httpReq, err := http.NewRequestWithContext(
+						ctx, "PUT", "/user", body)
+					require.NoError(t, err)
+
+					httpRes, err := inst.DoAuth(httpReq, currentAccessToken.Token)
+					require.NoError(t, err)
+					require.Equal(t, 200, httpRes.StatusCode)
+
+					err = json.NewDecoder(httpRes.Body).Decode(res)
+					require.NoError(t, err)
+
+					currentUser = res
+				}
+
+				// verify email change is set
+				require.Equal(t, curEmail, currentUser.Email.String())
+				require.Equal(t, newEmail, currentUser.EmailChange)
+
+				// load the hook call
+				calls := inst.HookRecorder.SendEmail.GetCalls()
+				require.Equal(t, 1, len(calls))
+				call := calls[0]
+
+				hookReq := &v0hooks.SendEmailInput{}
+				err = call.Unmarshal(hookReq)
+				require.NoError(t, err)
+
+				// hook user matches the signup user
+				require.Equal(t, signupUser.ID, hookReq.User.ID)
+				require.Equal(t, signupUser.Aud, hookReq.User.Aud)
+				require.Equal(t, signupUser.Email, hookReq.User.Email)
+				require.Equal(t, signupUser.AppMetaData, hookReq.User.AppMetaData)
+
+				// should have old and new token for email change with secure
+				// email change flag enabled
+				require.NotEmpty(t, hookReq.EmailData.Token)
+				require.NotEmpty(t, hookReq.EmailData.TokenNew)
+
+				// verify new and prev emails
+				require.Equal(t, curEmail, hookReq.User.Email.String())
+				require.Equal(t, newEmail, hookReq.User.EmailChange)
+
+				// verify otps
+				curOtpHash := crypto.GenerateTokenHash(
+					curEmail, hookReq.EmailData.Token)
+				newOtpHash := crypto.GenerateTokenHash(
+					newEmail, hookReq.EmailData.TokenNew)
+
+				// The hashes are switched incorrectly in the current code, i.e.:
+				//
+				// 	EmailData.TokenHashNew = Hash(CurEmail, EmailData.Token)
+				// 	EmailData.TokenHash    = Hash(NewEmail, EmailData.TokenNew)
+				//
+				// This check locks this behavior in to keep BC with existing hooks
+				require.Equal(t, newOtpHash, hookReq.EmailData.TokenHash)
+				require.Equal(t, curOtpHash, hookReq.EmailData.TokenHashNew)
+
+				// hook user matches the signup user
+				require.Equal(t, signupUser.ID, hookReq.User.ID)
+				require.Equal(t, signupUser.ID, hookReq.User.ID)
+				require.Equal(t, signupUser.Aud, hookReq.User.Aud)
+				require.Equal(t, signupUser.Email, hookReq.User.Email)
+				require.Equal(t, signupUser.AppMetaData, hookReq.User.AppMetaData)
+
+				// verify there is an ott generated
+				ott, err := models.FindOneTimeToken(
+					inst.Conn,
+					hookReq.EmailData.TokenHash,
+					models.EmailChangeTokenNew)
+				require.NoError(t, err)
+				require.Equal(t, signupUser.ID.String(), ott.UserID.String())
+				require.Equal(t, newEmail, ott.RelatesTo)
+
+				// verify the EmailData
+				require.Equal(t, mailer.EmailChangeVerification, hookReq.EmailData.EmailActionType)
+				require.Equal(t, inst.Config.SiteURL, hookReq.EmailData.RedirectTo)
+				require.Equal(t, inst.Config.API.ExternalURL, hookReq.EmailData.SiteURL)
+			})
+
+			t.Run("EmailChangeAnonymous", func(t *testing.T) {
+				inst, err := e2ehooks.New(globalCfg)
+				require.NoError(t, err)
+				defer inst.Close()
+
+				// test requires this flag
+				require.True(t, inst.Config.Mailer.SecureEmailChangeEnabled)
+
+				// signup anon
+				var accessToken *api.AccessTokenResponse
+				{
+					req := &api.SignupParams{}
+					res := new(api.AccessTokenResponse)
+					err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, res)
+					require.NoError(t, err)
+					accessToken = res
+				}
+
+				// update email
+				signupUser := accessToken.User
+				currentUser := signupUser
+				newEmail := genEmail("new")
+				{
+					pass := defaultPassword
+					req := &api.UserUpdateParams{
+						Email:    newEmail,
+						Password: &pass,
+					}
+					res := new(models.User)
+
+					body := new(bytes.Buffer)
+					err = json.NewEncoder(body).Encode(req)
+					require.NoError(t, err)
+
+					httpReq, err := http.NewRequestWithContext(
+						ctx, "PUT", "/user", body)
+					require.NoError(t, err)
+
+					httpRes, err := inst.DoAuth(httpReq, accessToken.Token)
+					require.NoError(t, err)
+					require.Equal(t, 200, httpRes.StatusCode)
+
+					err = json.NewDecoder(httpRes.Body).Decode(res)
+					require.NoError(t, err)
+
+					currentUser = res
+				}
+
+				// verify current & new email fields
+				require.Equal(t, "", currentUser.Email.String())
+				require.Equal(t, newEmail, currentUser.EmailChange)
+
+				// load the hook call
+				calls := inst.HookRecorder.SendEmail.GetCalls()
+				require.Equal(t, 1, len(calls))
+				call := calls[0]
+
+				hookReq := &v0hooks.SendEmailInput{}
+				err = call.Unmarshal(hookReq)
+				require.NoError(t, err)
+
+				// verify there is an ott generated
+				ott, err := models.FindOneTimeToken(
+					inst.Conn,
+					hookReq.EmailData.TokenHash,
+					models.EmailChangeTokenNew)
+				require.NoError(t, err)
+				require.Equal(t, signupUser.ID.String(), ott.UserID.String())
+				require.Equal(t, newEmail, ott.RelatesTo)
+
+				// hook user matches the signup user
+				require.Equal(t, signupUser.ID, hookReq.User.ID)
+				require.Equal(t, signupUser.Aud, hookReq.User.Aud)
+				require.Equal(t, signupUser.Email, hookReq.User.Email)
+				require.Equal(t, signupUser.AppMetaData, hookReq.User.AppMetaData)
+
+				// verify the new_email field in hook req
+				require.Equal(t, newEmail, hookReq.User.EmailChange)
+
+				// verify the EmailData
+				require.Equal(t, mailer.EmailChangeVerification, hookReq.EmailData.EmailActionType)
+				require.Equal(t, inst.Config.SiteURL, hookReq.EmailData.RedirectTo)
+				require.Equal(t, inst.Config.API.ExternalURL, hookReq.EmailData.SiteURL)
+
+				// BUG(cstockton): verify the bug (token new)
+				require.Empty(t, hookReq.EmailData.Token)
+				require.Empty(t, hookReq.EmailData.TokenNew)
+				require.Empty(t, hookReq.EmailData.TokenHashNew)
+			})
+		})
+
+		t.Run("SecureEmailChange=Disabled", func(t *testing.T) {
+			globalCfg := e2e.Must(e2e.Config())
+			globalCfg.External.AnonymousUsers.Enabled = true
+			globalCfg.Mailer.SecureEmailChangeEnabled = false
+
+			t.Run("EmailChange", func(t *testing.T) {
+				inst, err := e2ehooks.New(globalCfg)
+				require.NoError(t, err)
+				defer inst.Close()
+
+				// test requires this flag
+				require.False(t, inst.Config.Mailer.SecureEmailChangeEnabled)
+
+				signupUser := signupAndConfirm(ctx, t, inst)
+				currentUser := signupUser
+
+				// get access token
+				currentAccessToken := getAccessToken(
+					ctx, t, inst, string(currentUser.Email), defaultPassword)
+
+				// update email
+				curEmail := signupUser.Email.String()
+				newEmail := genEmail("new-email")
+				{
+					req := &api.UserUpdateParams{
+						Email: newEmail,
+					}
+					res := new(models.User)
+
+					body := new(bytes.Buffer)
+					err = json.NewEncoder(body).Encode(req)
+					require.NoError(t, err)
+
+					httpReq, err := http.NewRequestWithContext(
+						ctx, "PUT", "/user", body)
+					require.NoError(t, err)
+
+					httpRes, err := inst.DoAuth(httpReq, currentAccessToken.Token)
+					require.NoError(t, err)
+					require.Equal(t, 200, httpRes.StatusCode)
+
+					err = json.NewDecoder(httpRes.Body).Decode(res)
+					require.NoError(t, err)
+
+					currentUser = res
+				}
+
+				// verify email change is set
+				require.Equal(t, curEmail, currentUser.Email.String())
+				require.Equal(t, newEmail, currentUser.EmailChange)
+
+				// load the hook call
+				calls := inst.HookRecorder.SendEmail.GetCalls()
+				require.Equal(t, 1, len(calls))
+				call := calls[0]
+
+				hookReq := &v0hooks.SendEmailInput{}
+				err = call.Unmarshal(hookReq)
+				require.NoError(t, err)
+
+				// hook user matches the signup user
+				require.Equal(t, signupUser.ID, hookReq.User.ID)
+				require.Equal(t, signupUser.Aud, hookReq.User.Aud)
+				require.Equal(t, signupUser.Email, hookReq.User.Email)
+				require.Equal(t, signupUser.AppMetaData, hookReq.User.AppMetaData)
+
+				// should have old and new token for email change with secure
+				// email change flag enabled
+				require.NotEmpty(t, hookReq.EmailData.Token)
+				require.Empty(t, hookReq.EmailData.TokenNew)
+				require.Empty(t, hookReq.EmailData.TokenHashNew)
+
+				// verify new and prev emails
+				require.Equal(t, curEmail, hookReq.User.Email.String())
+				require.Equal(t, newEmail, hookReq.User.EmailChange)
+
+				// verify otps
+				newOtpHash := crypto.GenerateTokenHash(
+					newEmail, hookReq.EmailData.Token)
+
+				// The new email is stored on fields without _new suffix.
+				//
+				// 	EmailData.TokenHash = Hash(NewEmail, EmailData.TokenNew)
+				//
+				// This check locks this behavior in to keep BC with existing hooks
+				require.Equal(t, newOtpHash, hookReq.EmailData.TokenHash)
+
+				// hook user matches the signup user
+				require.Equal(t, signupUser.ID, hookReq.User.ID)
+				require.Equal(t, signupUser.ID, hookReq.User.ID)
+				require.Equal(t, signupUser.Aud, hookReq.User.Aud)
+				require.Equal(t, signupUser.Email, hookReq.User.Email)
+				require.Equal(t, signupUser.AppMetaData, hookReq.User.AppMetaData)
+
+				// verify there is an ott generated
+				ott, err := models.FindOneTimeToken(
+					inst.Conn,
+					hookReq.EmailData.TokenHash,
+					models.EmailChangeTokenNew)
+				require.NoError(t, err)
+				require.Equal(t, signupUser.ID.String(), ott.UserID.String())
+				require.Equal(t, newEmail, ott.RelatesTo)
+
+				// verify the EmailData
+				require.Equal(t, mailer.EmailChangeVerification, hookReq.EmailData.EmailActionType)
+				require.Equal(t, inst.Config.SiteURL, hookReq.EmailData.RedirectTo)
+				require.Equal(t, inst.Config.API.ExternalURL, hookReq.EmailData.SiteURL)
+			})
+
+			t.Run("EmailChangeAnonymous", func(t *testing.T) {
+				inst, err := e2ehooks.New(globalCfg)
+				require.NoError(t, err)
+				defer inst.Close()
+
+				// test requires this flag
+				require.False(t, inst.Config.Mailer.SecureEmailChangeEnabled)
+
+				// signup anon
+				var accessToken *api.AccessTokenResponse
+				{
+					req := &api.SignupParams{}
+					res := new(api.AccessTokenResponse)
+					err := e2eapi.Do(ctx, http.MethodPost, inst.APIServer.URL+"/signup", req, res)
+					require.NoError(t, err)
+					accessToken = res
+				}
+
+				// update email
+				signupUser := accessToken.User
+				currentUser := signupUser
+				newEmail := genEmail("new")
+				{
+					pass := defaultPassword
+					req := &api.UserUpdateParams{
+						Email:    newEmail,
+						Password: &pass,
+					}
+					res := new(models.User)
+
+					body := new(bytes.Buffer)
+					err = json.NewEncoder(body).Encode(req)
+					require.NoError(t, err)
+
+					httpReq, err := http.NewRequestWithContext(
+						ctx, "PUT", "/user", body)
+					require.NoError(t, err)
+
+					httpRes, err := inst.DoAuth(httpReq, accessToken.Token)
+					require.NoError(t, err)
+					require.Equal(t, 200, httpRes.StatusCode)
+
+					err = json.NewDecoder(httpRes.Body).Decode(res)
+					require.NoError(t, err)
+
+					currentUser = res
+				}
+
+				// verify current & new email fields
+				require.Equal(t, "", currentUser.Email.String())
+				require.Equal(t, newEmail, currentUser.EmailChange)
+
+				// load the hook call
+				calls := inst.HookRecorder.SendEmail.GetCalls()
+				require.Equal(t, 1, len(calls))
+				call := calls[0]
+
+				hookReq := &v0hooks.SendEmailInput{}
+				err = call.Unmarshal(hookReq)
+				require.NoError(t, err)
+
+				// verify there is an ott generated
+				ott, err := models.FindOneTimeToken(
+					inst.Conn,
+					hookReq.EmailData.TokenHash,
+					models.EmailChangeTokenNew)
+				require.NoError(t, err)
+				require.Equal(t, signupUser.ID.String(), ott.UserID.String())
+				require.Equal(t, newEmail, ott.RelatesTo)
+
+				// hook user matches the signup user
+				require.Equal(t, signupUser.ID, hookReq.User.ID)
+				require.Equal(t, signupUser.Aud, hookReq.User.Aud)
+				require.Equal(t, signupUser.Email, hookReq.User.Email)
+				require.Equal(t, signupUser.AppMetaData, hookReq.User.AppMetaData)
+
+				// verify the new_email field in hook req
+				require.Equal(t, newEmail, hookReq.User.EmailChange)
+
+				// verify the EmailData
+				require.Equal(t, mailer.EmailChangeVerification, hookReq.EmailData.EmailActionType)
+				require.Equal(t, inst.Config.SiteURL, hookReq.EmailData.RedirectTo)
+				require.Equal(t, inst.Config.API.ExternalURL, hookReq.EmailData.SiteURL)
+
+				// BUG(cstockton): verify the bug (token new)
+				require.Empty(t, hookReq.EmailData.Token)
+				require.Empty(t, hookReq.EmailData.TokenNew)
+				require.Empty(t, hookReq.EmailData.TokenHashNew)
+			})
+		})
 	})
 }
