@@ -92,8 +92,12 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 
 	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
 
-	var signupUser *models.User
-	if params.Type == mail.SignupVerification && user == nil {
+	var (
+		signupUser *models.User
+		inviteUser *models.User
+	)
+	switch {
+	case params.Type == mail.SignupVerification && user == nil:
 		signupParams := &SignupParams{
 			Email:    params.Email,
 			Password: params.Password,
@@ -108,6 +112,25 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 
 		signupUser, err = signupParams.ToUserModel(false /* <- isSSOUser */)
 		if err != nil {
+			return err
+		}
+		if err := a.triggerBeforeUserCreated(r, db, signupUser); err != nil {
+			return err
+		}
+
+	case params.Type == mail.InviteVerification && user == nil:
+		signupParams := &SignupParams{
+			Email:    params.Email,
+			Data:     params.Data,
+			Provider: "email",
+			Aud:      aud,
+		}
+
+		inviteUser, err = signupParams.ToUserModel(false /* <- isSSOUser */)
+		if err != nil {
+			return err
+		}
+		if err := a.triggerBeforeUserCreated(r, db, inviteUser); err != nil {
 			return err
 		}
 	}
@@ -138,22 +161,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 				}
 			} else {
-				signupParams := &SignupParams{
-					Email:    params.Email,
-					Data:     params.Data,
-					Provider: "email",
-					Aud:      aud,
-				}
-
-				// because params above sets no password, this
-				// method is not computationally hard so it can
-				// be used within a database transaction
-				user, terr = signupParams.ToUserModel(false /* <- isSSOUser */)
-				if terr != nil {
-					return terr
-				}
-
-				user, terr = a.signupNewUser(tx, user)
+				user, terr = a.signupNewUser(tx, inviteUser)
 				if terr != nil {
 					return terr
 				}

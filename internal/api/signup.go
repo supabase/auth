@@ -183,6 +183,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
+		if err := a.triggerBeforeUserCreated(r, db, signupUser); err != nil {
+			return err
+		}
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {

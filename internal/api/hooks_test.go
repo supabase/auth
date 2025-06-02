@@ -47,6 +47,19 @@ func TestHooks(t *testing.T) {
 	defer api.db.Close()
 
 	suite.Run(t, ts)
+
+	t.Run("CheckTX", func(t *testing.T) {
+		require.NoError(t, checkTX(api.db))
+
+		err := api.db.Transaction(func(tx *storage.Connection) error {
+			require.Error(t, checkTX(tx))
+
+			err := checkTX(tx)
+			require.Error(t, err)
+			return nil
+		})
+		require.NoError(t, err)
+	})
 }
 
 func (ts *HooksTestSuite) SetupTest() {

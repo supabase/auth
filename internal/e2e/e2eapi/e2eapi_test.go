@@ -1,7 +1,9 @@
 package e2eapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -29,7 +31,7 @@ func TestInstance(t *testing.T) {
 			require.NoError(t, err)
 			defer inst.Close()
 
-			email := "e2etesthooks_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+			email := "e2eapitest_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
 			req := &api.SignupParams{
 				Email:    email,
 				Password: "password",
@@ -40,6 +42,50 @@ func TestInstance(t *testing.T) {
 			require.Equal(t, email, res.Email.String())
 		})
 
+		t.Run("DoAdmin", func(t *testing.T) {
+			globalCfg := e2e.Must(e2e.Config())
+			inst, err := New(globalCfg)
+			require.NoError(t, err)
+			defer inst.Close()
+
+			email := "e2eapitest_" + uuid.Must(uuid.NewV4()).String() + "@localhost"
+			req := &api.InviteParams{
+				Email: email,
+			}
+			res := new(models.User)
+
+			body := new(bytes.Buffer)
+			err = json.NewEncoder(body).Encode(req)
+			require.NoError(t, err)
+
+			httpReq, err := http.NewRequestWithContext(
+				ctx, "POST", "/invite", body)
+			require.NoError(t, err)
+
+			httpRes, err := inst.DoAdmin(httpReq)
+			require.NoError(t, err)
+
+			err = json.NewDecoder(httpRes.Body).Decode(res)
+			require.NoError(t, err)
+			require.Equal(t, email, res.Email.String())
+		})
+
+		t.Run("DoAdminFailure", func(t *testing.T) {
+			globalCfg := e2e.Must(e2e.Config())
+			inst, err := New(globalCfg)
+			require.NoError(t, err)
+			defer inst.Close()
+
+			httpReq, err := http.NewRequestWithContext(
+				ctx, "POST", "/invite", nil)
+			require.NoError(t, err)
+
+			httpRes, err := inst.doAdmin(httpReq, new(int))
+			require.Error(t, err)
+			require.Nil(t, httpRes)
+
+		})
+
 		t.Run("Failure", func(t *testing.T) {
 			globalCfg := e2e.Must(e2e.Config())
 			globalCfg.DB.Driver = ""
@@ -48,6 +94,17 @@ func TestInstance(t *testing.T) {
 			inst, err := New(globalCfg)
 			require.Error(t, err)
 			require.Nil(t, inst)
+		})
+
+		t.Run("InitURLFailure", func(t *testing.T) {
+			globalCfg := e2e.Must(e2e.Config())
+			inst, err := New(globalCfg)
+			require.NoError(t, err)
+			defer inst.Close()
+
+			inst.APIServer.URL = "\x01"
+			err = inst.initURL()
+			require.Error(t, err)
 		})
 	})
 }
@@ -172,7 +229,6 @@ func TestDo(t *testing.T) {
 				err := Do(ctx, http.MethodPost, ts.URL, nil, nil)
 				require.Error(t, err)
 				require.Equal(t, sentinel, err)
-
 			})
 		}
 	})

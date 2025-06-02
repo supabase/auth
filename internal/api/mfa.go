@@ -631,9 +631,10 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 
 	if config.Hook.MFAVerificationAttempt.Enabled {
 		input := v0hooks.MFAVerificationAttemptInput{
-			UserID:   user.ID,
-			FactorID: factor.ID,
-			Valid:    valid,
+			UserID:     user.ID,
+			FactorID:   factor.ID,
+			FactorType: factor.FactorType,
+			Valid:      valid,
 		}
 
 		output := v0hooks.MFAVerificationAttemptOutput{}

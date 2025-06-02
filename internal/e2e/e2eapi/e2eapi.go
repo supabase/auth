@@ -9,7 +9,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/supabase/auth/internal/api"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
@@ -22,6 +24,8 @@ type Instance struct {
 	Config    *conf.GlobalConfiguration
 	Conn      *storage.Connection
 	APIServer *httptest.Server
+	APIClient *http.Client
+	apiURL    *url.URL
 
 	closers []func()
 }
@@ -30,9 +34,16 @@ func New(globalCfg *conf.GlobalConfiguration) (*Instance, error) {
 	o := new(Instance)
 	o.Config = globalCfg
 
-	conn, err := test.SetupDBConnection(globalCfg)
+	if err := o.init(); err != nil {
+		return nil, err
+	}
+	return o, nil
+}
+
+func (o *Instance) init() error {
+	conn, err := test.SetupDBConnection(o.Config)
 	if err != nil {
-		return nil, fmt.Errorf("error setting up db connection: %w", err)
+		return fmt.Errorf("error setting up db connection: %w", err)
 	}
 	o.addCloser(func() {
 		if conn.Store != nil {
@@ -46,12 +57,24 @@ func New(globalCfg *conf.GlobalConfiguration) (*Instance, error) {
 		apiVer = "1"
 	}
 
-	a := api.NewAPIWithVersion(globalCfg, conn, apiVer)
+	a := api.NewAPIWithVersion(o.Config, conn, apiVer)
 	apiSrv := httptest.NewServer(a)
 	o.addCloser(apiSrv)
 	o.APIServer = apiSrv
+	o.APIClient = apiSrv.Client()
 
-	return o, nil
+	return o.initURL()
+}
+
+func (o *Instance) initURL() error {
+	u, err := url.Parse(o.APIServer.URL)
+	if err != nil {
+		defer o.Close()
+
+		return err
+	}
+	o.apiURL = u
+	return nil
 }
 
 func (o *Instance) Close() error {
@@ -68,6 +91,48 @@ func (o *Instance) addCloser(v any) {
 	case interface{ Close() }:
 		o.closers = append(o.closers, func() { T.Close() })
 	}
+}
+
+func (o *Instance) Do(
+	req *http.Request,
+) (*http.Response, error) {
+	req.URL = o.apiURL.ResolveReference(req.URL)
+
+	return o.APIClient.Do(req)
+}
+
+func (o *Instance) DoAuth(
+	req *http.Request,
+	jwt string,
+) (*http.Response, error) {
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", jwt))
+	return o.Do(req)
+}
+
+func (o *Instance) DoAdmin(
+	req *http.Request,
+) (*http.Response, error) {
+	return o.doAdmin(req, []byte(o.Config.JWT.Secret))
+}
+
+func (o *Instance) doAdmin(
+	req *http.Request,
+	key any,
+) (*http.Response, error) {
+	tok := jwt.NewWithClaims(
+		jwt.SigningMethodHS256,
+		&api.AccessTokenClaims{
+			Role: "supabase_admin",
+		},
+	)
+
+	adminJwt, err := tok.SignedString(key)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", adminJwt))
+
+	return o.Do(req)
 }
 
 func Do(
