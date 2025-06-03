@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.175.0](https://github.com/supabase/auth/compare/v2.174.0...v2.175.0) (2025-06-03)
+
+
+### Features
+
+* hooks round 5 (Option 2) - add before-user-created hook ([#2034](https://github.com/supabase/auth/issues/2034)) ([b53f6b0](https://github.com/supabase/auth/commit/b53f6b0d0e056bf3e84884847ab4608ffc9efd61))
+
+
+### Bug Fixes
+
+* email-sendhook - bug in email change verification ([#2044](https://github.com/supabase/auth/issues/2044)) ([be20654](https://github.com/supabase/auth/commit/be20654ec3af21b93a8d7482a5673b5c8c60ac8a))
+
 ## [2.174.0](https://github.com/supabase/auth/compare/v2.173.0...v2.174.0) (2025-05-23)
 
 
