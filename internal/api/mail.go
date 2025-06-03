@@ -639,6 +639,22 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	if config.Hook.SendEmail.Enabled {
 		// When secure email change is disabled, we place the token for the new email on emailData.Token
 		if emailActionType == mail.EmailChangeVerification && !config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
+
+			// BUG(cstockton): This introduced a bug which mismatched the token
+			// and hash fields, such that:
+			//
+			// 	EmailData.TokenHashNew = Hash(CurEmail, EmailData.Token)
+			// 	EmailData.TokenHash    = Hash(NewEmail, EmailData.TokenNew)
+			//
+			// Specifically with email changes we should look to fix this
+			// behavior in a BC way to maintain that:
+			//
+			//   Token      Always contains the Token for user.email
+			//   TokenHash  Always contains the Hash for user.email
+			//
+			//   Token      Always contains the Token for user.email_new
+			//   TokenHash  Always contains the Hash for user.email_new
+			//
 			otp = otpNew
 		}
 
@@ -649,9 +665,17 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			SiteURL:         externalURL.String(),
 			TokenHash:       tokenHashWithPrefix,
 		}
-		if emailActionType == mail.EmailChangeVerification && config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
-			emailData.TokenNew = otpNew
-			emailData.TokenHashNew = u.EmailChangeTokenCurrent
+		if emailActionType == mail.EmailChangeVerification {
+			if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
+				emailData.TokenNew = otpNew
+				emailData.TokenHashNew = u.EmailChangeTokenCurrent
+			} else if emailData.Token == "" && u.EmailChange != "" {
+
+				// BUG(cstockton): This matches the current behavior but is not
+				// intuitive and should be changed in a future release. See the
+				// comment above for more details.
+				emailData.Token = otpNew
+			}
 		}
 		input := v0hooks.SendEmailInput{
 			User:      u,
