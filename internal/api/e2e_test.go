@@ -957,15 +957,28 @@ func TestE2EHooks(t *testing.T) {
 				// verify the new_email field in hook req
 				require.Equal(t, newEmail, hookReq.User.EmailChange)
 
+				// BUG(cstockton): verify the token is moved TokenNew -> Token
+				require.NotEmpty(t, hookReq.EmailData.Token)
+
+				// BUG(cstockton): verify that token new is empty like before
+				require.Empty(t, hookReq.EmailData.TokenNew)
+				require.Empty(t, hookReq.EmailData.TokenHashNew)
+
+				// verify otps
+				newOtpHash := crypto.GenerateTokenHash(
+					newEmail, hookReq.EmailData.Token)
+
+				// The new email is stored on fields without _new suffix.
+				//
+				// 	EmailData.TokenHash = Hash(NewEmail, EmailData.TokenNew)
+				//
+				// This check locks this behavior in to keep BC with existing hooks
+				require.Equal(t, newOtpHash, hookReq.EmailData.TokenHash)
+
 				// verify the EmailData
 				require.Equal(t, mailer.EmailChangeVerification, hookReq.EmailData.EmailActionType)
 				require.Equal(t, inst.Config.SiteURL, hookReq.EmailData.RedirectTo)
 				require.Equal(t, inst.Config.API.ExternalURL, hookReq.EmailData.SiteURL)
-
-				// BUG(cstockton): verify the bug (token new)
-				require.Empty(t, hookReq.EmailData.Token)
-				require.Empty(t, hookReq.EmailData.TokenNew)
-				require.Empty(t, hookReq.EmailData.TokenHashNew)
 			})
 		})
 
@@ -1157,15 +1170,28 @@ func TestE2EHooks(t *testing.T) {
 				// verify the new_email field in hook req
 				require.Equal(t, newEmail, hookReq.User.EmailChange)
 
+				// BUG(cstockton): verify the token is moved TokenNew -> Token
+				require.NotEmpty(t, hookReq.EmailData.Token)
+
+				// BUG(cstockton): verify that token new is empty like before
+				require.Empty(t, hookReq.EmailData.TokenNew)
+				require.Empty(t, hookReq.EmailData.TokenHashNew)
+
+				// verify otps
+				newOtpHash := crypto.GenerateTokenHash(
+					newEmail, hookReq.EmailData.Token)
+
+				// The new email is stored on fields without _new suffix.
+				//
+				// 	EmailData.TokenHash = Hash(NewEmail, EmailData.TokenNew)
+				//
+				// This check locks this behavior in to keep BC with existing hooks
+				require.Equal(t, newOtpHash, hookReq.EmailData.TokenHash)
+
 				// verify the EmailData
 				require.Equal(t, mailer.EmailChangeVerification, hookReq.EmailData.EmailActionType)
 				require.Equal(t, inst.Config.SiteURL, hookReq.EmailData.RedirectTo)
 				require.Equal(t, inst.Config.API.ExternalURL, hookReq.EmailData.SiteURL)
-
-				// BUG(cstockton): verify the bug (token new)
-				require.Empty(t, hookReq.EmailData.Token)
-				require.Empty(t, hookReq.EmailData.TokenNew)
-				require.Empty(t, hookReq.EmailData.TokenHashNew)
 			})
 		})
 	})

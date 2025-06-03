@@ -639,6 +639,7 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	if config.Hook.SendEmail.Enabled {
 		// When secure email change is disabled, we place the token for the new email on emailData.Token
 		if emailActionType == mail.EmailChangeVerification && !config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
+			// BUG(cstockton): I view this as a bug, see e2e_test.go
 			otp = otpNew
 		}
 
@@ -649,9 +650,19 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 			SiteURL:         externalURL.String(),
 			TokenHash:       tokenHashWithPrefix,
 		}
-		if emailActionType == mail.EmailChangeVerification && config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
-			emailData.TokenNew = otpNew
-			emailData.TokenHashNew = u.EmailChangeTokenCurrent
+		if emailActionType == mail.EmailChangeVerification {
+			if config.Mailer.SecureEmailChangeEnabled && u.GetEmail() != "" {
+				emailData.TokenNew = otpNew
+				emailData.TokenHashNew = u.EmailChangeTokenCurrent
+			} else if emailData.Token == "" && u.EmailChange != "" {
+
+				// BUG(cstockton): I am fixing this bug in a way that is
+				// consistent with what I view to be the current bug. I believe
+				// for email changes token_new and token_hash_new should always
+				// contain the values for the users new_email field. This should
+				// be fixed in the future in a way that doesn't break BC.
+				emailData.Token = otpNew
+			}
 		}
 		input := v0hooks.SendEmailInput{
 			User:      u,
