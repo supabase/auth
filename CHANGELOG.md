@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.176.0](https://github.com/supabase/auth/compare/v2.175.0...v2.176.0) (2025-06-05)
+
+
+### Features
+
+* Add custom claims from Keycloak user token ([#1917](https://github.com/supabase/auth/issues/1917)) ([1365aaa](https://github.com/supabase/auth/commit/1365aaa45569fc9e7c3497e744e0e80cf237d617))
+
 ## [2.175.0](https://github.com/supabase/auth/compare/v2.174.0...v2.175.0) (2025-06-03)
 
 
