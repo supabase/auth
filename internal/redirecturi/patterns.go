@@ -139,7 +139,16 @@ func CategorizePattern(pattern string) (RedirectPattern, error) {
 	// Domain-only pattern (no scheme, no path)
 	if !strings.Contains(pattern, "/") {
 		rp.Type = PatternTypeDomainOnly
-		// Domain-only patterns default to HTTPS (configure explicit URLs for other schemes)
+
+		// Special handling for localhost - allow both HTTP and HTTPS, any port, any path
+		if isLocalhostDomain(pattern) {
+			// Match both HTTP and HTTPS schemes with any port and path
+			g, _ := glob.Compile("{http,https}://"+pattern+"**", '.')
+			rp.GlobPattern = g
+			return rp, nil
+		}
+
+		// Regular domain-only patterns default to HTTPS (configure explicit URLs for other schemes)
 		// Use {,/**} to match both with and without paths
 		g, _ := glob.Compile("https://"+pattern+"{,/**}", '.')
 		rp.GlobPattern = g
@@ -147,4 +156,9 @@ func CategorizePattern(pattern string) (RedirectPattern, error) {
 	}
 
 	return rp, errors.New("invalid pattern format")
+}
+
+// isLocalhostDomain checks if a domain is localhost-like
+func isLocalhostDomain(domain string) bool {
+	return domain == "localhost" || domain == "127.0.0.1" || domain == "::1"
 }

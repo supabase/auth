@@ -680,6 +680,36 @@ func TestIsValidRedirectURL(t *testing.T) {
 			expected:    true,
 		},
 
+		// Localhost configuration
+		{
+			name:        "Localhost - allow without http scheme",
+			config:      mustConfig("localhost"),
+			redirectURL: "http://localhost",
+			siteURL:     "",
+			expected:    true,
+		},
+		{
+			name:        "Localhost - allow without https scheme",
+			config:      mustConfig("localhost"),
+			redirectURL: "https://localhost",
+			siteURL:     "",
+			expected:    true,
+		},
+		{
+			name:        "Localhost - allow without scheme different port",
+			config:      mustConfig("localhost"),
+			redirectURL: "http://localhost:3000",
+			siteURL:     "",
+			expected:    true,
+		},
+		{
+			name:        "Localhost - allow without scheme different port & path",
+			config:      mustConfig("localhost"),
+			redirectURL: "http://localhost:3000/callback",
+			siteURL:     "",
+			expected:    true,
+		},
+
 		// Localhost HTTP explicit configuration
 		{
 			name:        "Localhost HTTP - explicitly configured",
