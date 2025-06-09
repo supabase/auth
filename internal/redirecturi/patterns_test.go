@@ -213,6 +213,12 @@ func TestCategorizePattern(t *testing.T) {
 					// Should match scheme with any host/path
 					schemePrefix := tt.pattern
 					assert.True(t, result.GlobPattern.Match(schemePrefix+"host/path"))
+				case PatternTypeExact:
+					// Should match exactly
+					assert.True(t, result.GlobPattern.Match(tt.pattern))
+				case PatternTypeWildcard:
+					// Wildcard patterns should be tested individually based on their content
+					// Skip generic validation here as each wildcard has specific matching rules
 				}
 			}
 		})
