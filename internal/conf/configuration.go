@@ -19,7 +19,6 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/supabase/auth/internal/redirecturi"
 	"gopkg.in/gomail.v2"
 )
 
@@ -268,7 +267,6 @@ type GlobalConfiguration struct {
 	SiteURL         string   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList    []string `json:"uri_allow_list" split_words:"true"`
 	URIAllowListMap map[string]glob.Glob
-	RedirectConfig  *redirecturi.RedirectConfig
 	Password        PasswordConfiguration    `json:"password"`
 	JWT             JWTConfiguration         `json:"jwt"`
 	Mailer          MailerConfiguration      `json:"mailer"`
@@ -1037,20 +1035,10 @@ func (config *GlobalConfiguration) ApplyDefaults() error {
 
 	if config.URIAllowList != nil {
 		config.URIAllowListMap = make(map[string]glob.Glob)
-		var patterns []redirecturi.RedirectPattern
-
 		for _, uri := range config.URIAllowList {
 			g := glob.MustCompile(uri, '.', '/')
 			config.URIAllowListMap[uri] = g
-
-			pattern, err := redirecturi.CategorizePattern(uri)
-			if err != nil {
-				continue // Skip invalid patterns
-			}
-			patterns = append(patterns, pattern)
 		}
-
-		config.RedirectConfig = redirecturi.NewRedirectConfig(patterns)
 	}
 
 	if config.Password.MinLength < defaultMinPasswordLength {
