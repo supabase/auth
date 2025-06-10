@@ -64,7 +64,7 @@ func CategorizePattern(pattern string) (RedirectPattern, error) {
 
 	pattern = strings.TrimSpace(pattern)
 	if pattern == "" {
-		return rp, errors.New("pattern cannot be empty")
+		return rp, errors.New("redirecturi: pattern cannot be empty")
 	}
 
 	// Check if contains wildcard
@@ -81,18 +81,18 @@ func CategorizePattern(pattern string) (RedirectPattern, error) {
 				restOfUri := parts[1]
 				// Check if wildcard is in scheme - not allowed
 				if strings.Contains(scheme, "*") {
-					return rp, errors.New("invalid scheme in wildcard pattern")
+					return rp, errors.New("redirecturi: invalid scheme in wildcard pattern")
 				}
 
 				// Let url package validate the scheme part
 				testURL := scheme + "://example.com"
 				if _, err := url.Parse(testURL); err != nil {
-					return rp, fmt.Errorf("invalid scheme in wildcard pattern: %w", err)
+					return rp, fmt.Errorf("redirecturi: invalid scheme in wildcard pattern: %w", err)
 				}
 
 				// Check if wildcard is in path (not allowed)
 				if strings.Contains(restOfUri, "/") && strings.Contains(restOfUri[strings.Index(restOfUri, "/"):], "*") {
-					return rp, errors.New("wildcards are not allowed in URL paths")
+					return rp, errors.New("redirecturi: wildcards are not allowed in URL paths")
 				}
 			}
 			globPattern = pattern
@@ -104,7 +104,7 @@ func CategorizePattern(pattern string) (RedirectPattern, error) {
 		// Compile the glob pattern
 		g, err := glob.Compile(globPattern, '.')
 		if err != nil {
-			return rp, fmt.Errorf("failed to compile glob pattern: %w", err)
+			return rp, fmt.Errorf("redirecturi: failed to compile glob pattern: %w", err)
 		}
 		rp.GlobPattern = g
 		return rp, nil
@@ -115,7 +115,7 @@ func CategorizePattern(pattern string) (RedirectPattern, error) {
 		scheme := strings.TrimSuffix(pattern, "://")
 		// Use url package to validate the scheme
 		if _, err := url.Parse(scheme + "://example.com"); err != nil {
-			return rp, fmt.Errorf("invalid scheme pattern: %w", err)
+			return rp, fmt.Errorf("redirecturi: invalid scheme pattern: %w", err)
 		}
 		rp.Type = PatternTypeSchemeOnly
 		// Use ** to match across all path components
@@ -127,7 +127,7 @@ func CategorizePattern(pattern string) (RedirectPattern, error) {
 	// Try to parse as URL to validate
 	if strings.Contains(pattern, "://") {
 		if _, err := url.Parse(pattern); err != nil {
-			return rp, fmt.Errorf("invalid URL pattern: %w", err)
+			return rp, fmt.Errorf("redirecturi: invalid URL pattern: %w", err)
 		}
 		rp.Type = PatternTypeExact
 		// Exact URLs match only the exact URL specified
@@ -155,7 +155,7 @@ func CategorizePattern(pattern string) (RedirectPattern, error) {
 		return rp, nil
 	}
 
-	return rp, errors.New("invalid pattern format")
+	return rp, errors.New("redirecturi: invalid pattern format")
 }
 
 // isLocalhostDomain checks if a domain is localhost-like
