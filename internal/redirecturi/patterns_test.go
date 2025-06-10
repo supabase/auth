@@ -164,6 +164,18 @@ func TestCategorizePattern(t *testing.T) {
 			errContains: "wildcards are not allowed in URL paths",
 		},
 		{
+			name:        "Wildcard in query parameter",
+			pattern:     "https://example.com/callback?param=*",
+			expectError: true,
+			errContains: "wildcards are not allowed in query parameters",
+		},
+		{
+			name:        "Wildcard in fragment",
+			pattern:     "https://example.com/callback#section*",
+			expectError: true,
+			errContains: "wildcards are not allowed in URL fragments",
+		},
+		{
 			name:        "Invalid URL",
 			pattern:     "https://[invalid",
 			expectError: true,
@@ -173,7 +185,7 @@ func TestCategorizePattern(t *testing.T) {
 			name:        "Invalid scheme in wildcard",
 			pattern:     "ht*tp://example.com",
 			expectError: true,
-			errContains: "invalid scheme in wildcard pattern",
+			errContains: "invalid URL pattern", // URL parsing will fail first
 		},
 		{
 			name:        "Invalid scheme only pattern",
@@ -777,4 +789,114 @@ func TestRunShadowModeTest(t *testing.T) {
 	assert.NotPanics(t, func() {
 		RunShadowModeTest(nil, "https://example.com/callback", "https://site.com", true)
 	})
+}
+
+func TestExactURLGlobEscaping(t *testing.T) {
+	tests := []struct {
+		name         string
+		configURL    string
+		redirectURL  string
+		shouldMatch  bool
+		description  string
+	}{
+		{
+			name:         "Question mark in query parameter",
+			configURL:    "https://example.com/callback?foo",
+			redirectURL:  "https://example.com/callback?foo",
+			shouldMatch:  true,
+			description:  "Exact match with query parameter",
+		},
+		{
+			name:         "Question mark should not match slash",
+			configURL:    "https://example.com/callback?foo",
+			redirectURL:  "https://example.com/callback/foo",
+			shouldMatch:  false,
+			description:  "Question mark should not act as wildcard",
+		},
+		{
+			name:         "Brackets in query parameter",
+			configURL:    "https://example.com/callback?array[0]=value",
+			redirectURL:  "https://example.com/callback?array[0]=value",
+			shouldMatch:  true,
+			description:  "Exact match with brackets",
+		},
+		{
+			name:         "Brackets should not match ranges",
+			configURL:    "https://example.com/callback?array[0]=value",
+			redirectURL:  "https://example.com/callback?array0=value",
+			shouldMatch:  false,
+			description:  "Brackets should not act as character class",
+		},
+		{
+			name:         "Braces in query parameter",
+			configURL:    "https://example.com/callback?json={\"key\":\"value\"}",
+			redirectURL:  "https://example.com/callback?json={\"key\":\"value\"}",
+			shouldMatch:  true,
+			description:  "Exact match with braces",
+		},
+		{
+			name:         "Backslash in path",
+			configURL:    "https://example.com/path\\with\\backslash",
+			redirectURL:  "https://example.com/path\\with\\backslash",
+			shouldMatch:  true,
+			description:  "Exact match with backslashes",
+		},
+		{
+			name:         "Multiple special characters",
+			configURL:    "https://example.com/callback?a=val&b=?&c=[1]&d={x}",
+			redirectURL:  "https://example.com/callback?a=val&b=?&c=[1]&d={x}",
+			shouldMatch:  true,
+			description:  "Exact match with multiple special chars",
+		},
+		{
+			name:         "Special characters should not act as wildcards",
+			configURL:    "https://example.com/callback?a=val&b=?",
+			redirectURL:  "https://example.com/callback?a=xyz&b=z",
+			shouldMatch:  false,
+			description:  "Special chars should be literal",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := mustConfig(tt.configURL)
+			result := IsValidRedirectURL(config, tt.redirectURL, "")
+			assert.Equal(t, tt.shouldMatch, result, tt.description)
+		})
+	}
+}
+
+func TestEscapeGlobPattern(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{
+			input:    "https://example.com/callback",
+			expected: "https://example.com/callback",
+		},
+		{
+			input:    "https://example.com/callback?foo",
+			expected: "https://example.com/callback\\?foo",
+		},
+		{
+			input:    "https://example.com/array[0]={value}",
+			expected: "https://example.com/array\\[0\\]=\\{value\\}",
+		},
+		{
+			input:    "https://example.com/path\\with\\backslash",
+			expected: "https://example.com/path\\\\with\\\\backslash",
+		},
+		{
+			input:    "*?[]{}", 
+			expected: "\\*\\?\\[\\]\\{\\}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := escapeGlobPattern(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

@@ -67,50 +67,7 @@ func CategorizePattern(pattern string) (RedirectPattern, error) {
 		return rp, errors.New("redirecturi: pattern cannot be empty")
 	}
 
-	// Check if contains wildcard
-	if strings.Contains(pattern, "*") {
-		rp.Type = PatternTypeWildcard
-
-		var globPattern string
-
-		// Use Go's url package to validate wildcard patterns
-		if strings.Contains(pattern, "://") {
-			parts := strings.SplitN(pattern, "://", 2)
-			if len(parts) == 2 {
-				scheme := parts[0]
-				restOfUri := parts[1]
-				// Check if wildcard is in scheme - not allowed
-				if strings.Contains(scheme, "*") {
-					return rp, errors.New("redirecturi: invalid scheme in wildcard pattern")
-				}
-
-				// Let url package validate the scheme part
-				testURL := scheme + "://example.com"
-				if _, err := url.Parse(testURL); err != nil {
-					return rp, fmt.Errorf("redirecturi: invalid scheme in wildcard pattern: %w", err)
-				}
-
-				// Check if wildcard is in path (not allowed)
-				if strings.Contains(restOfUri, "/") && strings.Contains(restOfUri[strings.Index(restOfUri, "/"):], "*") {
-					return rp, errors.New("redirecturi: wildcards are not allowed in URL paths")
-				}
-			}
-			globPattern = pattern
-		} else {
-			// Domain-only wildcard pattern - add HTTPS prefix and path matching
-			globPattern = "https://" + pattern + "{,/**}"
-		}
-
-		// Compile the glob pattern
-		g, err := glob.Compile(globPattern, '.')
-		if err != nil {
-			return rp, fmt.Errorf("redirecturi: failed to compile glob pattern: %w", err)
-		}
-		rp.GlobPattern = g
-		return rp, nil
-	}
-
-	// Check if it's scheme-only (e.g., "myapp://")
+	// Check if it's scheme-only first (e.g., "myapp://")
 	if strings.HasSuffix(pattern, "://") {
 		scheme := strings.TrimSuffix(pattern, "://")
 		// Use url package to validate the scheme
@@ -126,15 +83,72 @@ func CategorizePattern(pattern string) (RedirectPattern, error) {
 
 	// Try to parse as URL to validate
 	if strings.Contains(pattern, "://") {
-		if _, err := url.Parse(pattern); err != nil {
+		parsed, err := url.Parse(pattern)
+		if err != nil {
 			return rp, fmt.Errorf("redirecturi: invalid URL pattern: %w", err)
 		}
+		
+		// Check if contains wildcard in hostname only (not in query/fragment)
+		if strings.Contains(parsed.Host, "*") {
+			// This is a wildcard pattern
+			rp.Type = PatternTypeWildcard
+			
+			// Check if wildcard is in scheme - not allowed
+			if strings.Contains(parsed.Scheme, "*") {
+				return rp, errors.New("redirecturi: invalid scheme in wildcard pattern")
+			}
+			
+			// Check if wildcard is in path (not allowed)
+			if strings.Contains(parsed.Path, "*") {
+				return rp, errors.New("redirecturi: wildcards are not allowed in URL paths")
+			}
+			
+			// Compile the glob pattern
+			g, err := glob.Compile(pattern, '.')
+			if err != nil {
+				return rp, fmt.Errorf("redirecturi: failed to compile glob pattern: %w", err)
+			}
+			rp.GlobPattern = g
+			return rp, nil
+		}
+		
+		// Check for wildcards anywhere except hostname (not allowed for exact URLs)
+		if strings.Contains(parsed.Path, "*") {
+			return rp, errors.New("redirecturi: wildcards are not allowed in URL paths")
+		}
+		if parsed.RawQuery != "" && strings.Contains(parsed.RawQuery, "*") {
+			return rp, errors.New("redirecturi: wildcards are not allowed in query parameters")
+		}
+		if parsed.Fragment != "" && strings.Contains(parsed.Fragment, "*") {
+			return rp, errors.New("redirecturi: wildcards are not allowed in URL fragments")
+		}
+		
+		// No wildcard in hostname, this is an exact URL
 		rp.Type = PatternTypeExact
-		// Exact URLs match only the exact URL specified
-		g, _ := glob.Compile(pattern, '.')
+		// For exact URLs, we need to escape glob special characters to ensure literal matching
+		// This prevents '?' and '*' in URLs from being interpreted as wildcards
+		escapedPattern := escapeGlobPattern(pattern)
+		g, _ := glob.Compile(escapedPattern, '.')
 		rp.GlobPattern = g
 		return rp, nil
 	}
+	
+	// Check if contains wildcard (for non-URL patterns like domain-only)
+	if strings.Contains(pattern, "*") {
+		rp.Type = PatternTypeWildcard
+		
+		// Domain-only wildcard pattern - add HTTPS prefix and path matching
+		globPattern := "https://" + pattern + "{,/**}"
+		
+		// Compile the glob pattern
+		g, err := glob.Compile(globPattern, '.')
+		if err != nil {
+			return rp, fmt.Errorf("redirecturi: failed to compile glob pattern: %w", err)
+		}
+		rp.GlobPattern = g
+		return rp, nil
+	}
+
 
 	// Domain-only pattern (no scheme, no path)
 	if !strings.Contains(pattern, "/") {
@@ -161,4 +175,21 @@ func CategorizePattern(pattern string) (RedirectPattern, error) {
 // isLocalhostDomain checks if a domain is localhost-like
 func isLocalhostDomain(domain string) bool {
 	return domain == "localhost" || domain == "127.0.0.1" || domain == "::1"
+}
+
+// escapeGlobPattern escapes special glob characters to ensure literal matching
+func escapeGlobPattern(pattern string) string {
+	// Escape characters that have special meaning in glob patterns
+	// This ensures exact URL patterns match literally
+	// Note: We must escape backslashes first to avoid double-escaping
+	replacer := strings.NewReplacer(
+		"\\", "\\\\",
+		"*", "\\*",
+		"?", "\\?",
+		"[", "\\[",
+		"]", "\\]",
+		"{", "\\{",
+		"}", "\\}",
+	)
+	return replacer.Replace(pattern)
 }
