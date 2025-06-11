@@ -127,7 +127,12 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
 	}
 
-	oidcProvider, err := oidc.NewProvider(ctx, issuer)
+	oidcCtx := ctx
+	if providerType == "apple" {
+		oidcCtx = oidc.InsecureIssuerURLContext(ctx, issuer)
+	}
+
+	oidcProvider, err := oidc.NewProvider(oidcCtx, issuer)
 	if err != nil {
 		return nil, false, "", nil, err
 	}
