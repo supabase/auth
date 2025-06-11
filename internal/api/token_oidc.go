@@ -34,10 +34,22 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 	var acceptableClientIDs []string
 
 	switch true {
-	case p.Provider == "apple" || p.Issuer == provider.IssuerApple:
+	case p.Provider == "apple" || provider.IsAppleIssuer(p.Issuer):
 		cfg = &config.External.Apple
 		providerType = "apple"
-		issuer = provider.IssuerApple
+		issuer = p.Issuer
+		if issuer == "" {
+			detectedIssuer, err := provider.DetectAppleIDTokenIssuer(ctx, p.IdToken)
+			if err != nil {
+				return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Apple provider").WithInternalError(err)
+			}
+
+			if provider.IsAppleIssuer(detectedIssuer) {
+				issuer = detectedIssuer
+			} else {
+				return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Apple ID token issuer")
+			}
+		}
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Apple.ClientID...)
 
 		if config.External.IosBundleId != "" {
