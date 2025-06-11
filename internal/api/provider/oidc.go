@@ -55,8 +55,6 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 	switch token.Issuer {
 	case IssuerGoogle:
 		token, data, err = parseGoogleIDToken(token)
-	case IssuerApple:
-		token, data, err = parseAppleIDToken(token)
 	case IssuerLinkedin:
 		token, data, err = parseLinkedinIDToken(token)
 	case IssuerKakao:
@@ -66,6 +64,8 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 	default:
 		if IsAzureIssuer(token.Issuer) {
 			token, data, err = parseAzureIDToken(token)
+		} else if IsAppleIssuer(token.Issuer) {
+			token, data, err = parseAppleIDToken(token)
 		} else {
 			token, data, err = parseGenericIDToken(token)
 		}
