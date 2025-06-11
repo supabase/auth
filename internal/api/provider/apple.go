@@ -97,11 +97,6 @@ func NewAppleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration) 
 		logrus.Warn("Apple OAuth provider has URL config set which is ignored (check GOTRUE_EXTERNAL_APPLE_URL)")
 	}
 
-	oidcProvider, err := oidc.NewProvider(ctx, DefaultAppleIssuer)
-	if err != nil {
-		return nil, err
-	}
-
 	return &AppleProvider{
 		Config: &oauth2.Config{
 			ClientID:     ext.ClientID[0],
@@ -113,7 +108,6 @@ func NewAppleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration) 
 			},
 			RedirectURL: ext.RedirectURI,
 		},
-		oidc: oidcProvider,
 	}, nil
 }
 
@@ -147,7 +141,16 @@ func (p AppleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 		return &UserProvidedData{}, nil
 	}
 
-	_, data, err := ParseIDToken(ctx, p.oidc, &oidc.Config{
+	issuer, err := DetectAppleIDTokenIssuer(ctx, idToken.(string))
+	if err != nil {
+		return nil, err
+	}
+	provider, err := oidc.NewProvider(ctx, issuer)
+	if err != nil {
+		return nil, err
+	}
+
+	_, data, err := ParseIDToken(ctx, provider, &oidc.Config{
 		ClientID: p.ClientID,
 	}, idToken.(string), ParseIDTokenOptions{
 		AccessToken: tok.AccessToken,
