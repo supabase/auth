@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.176.0](https://github.com/supabase/auth/compare/v2.175.0...v2.176.0) (2025-06-11)
+
+
+### Features
+
+* Add custom claims from Keycloak user token ([#1917](https://github.com/supabase/auth/issues/1917)) ([1365aaa](https://github.com/supabase/auth/commit/1365aaa45569fc9e7c3497e744e0e80cf237d617))
+
+
+### Bug Fixes
+
+* accept ID tokens from all `account.apple.com` and `appleid.apple.com` ([#2050](https://github.com/supabase/auth/issues/2050)) ([82aa167](https://github.com/supabase/auth/commit/82aa167cae01658b5319914f3412d78876955106))
+
 ## [2.175.0](https://github.com/supabase/auth/compare/v2.174.0...v2.175.0) (2025-06-03)
 
 
