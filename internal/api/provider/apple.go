@@ -148,7 +148,8 @@ func (p AppleProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Use
 	}
 
 	_, data, err := ParseIDToken(ctx, p.oidc, &oidc.Config{
-		ClientID: p.ClientID,
+		ClientID:        p.ClientID,
+		SkipIssuerCheck: true,
 	}, idToken.(string), ParseIDTokenOptions{
 		AccessToken: tok.AccessToken,
 	})

@@ -160,7 +160,16 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return err
 	}
 
-	idToken, userData, err := provider.ParseIDToken(ctx, oidcProvider, nil, params.IdToken, provider.ParseIDTokenOptions{
+	var oidcConfig *oidc.Config
+
+	if providerType == "apple" {
+		oidcConfig = &oidc.Config{
+			SkipClientIDCheck: true,
+			SkipIssuerCheck:   true,
+		}
+	}
+
+	idToken, userData, err := provider.ParseIDToken(ctx, oidcProvider, oidcConfig, params.IdToken, provider.ParseIDTokenOptions{
 		SkipAccessTokenCheck: params.AccessToken == "",
 		AccessToken:          params.AccessToken,
 	})
