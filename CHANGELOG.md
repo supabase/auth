@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.176.1](https://github.com/supabase/auth/compare/v2.176.0...v2.176.1) (2025-06-11)
+
+
+### Bug Fixes
+
+* new `odic.Provider` for apple with insecure issuer url context ([#2055](https://github.com/supabase/auth/issues/2055)) ([23d69f1](https://github.com/supabase/auth/commit/23d69f1c450b4a24a262cb25112e68408857a3b2))
+* skip apple oidc issuer check ([#2053](https://github.com/supabase/auth/issues/2053)) ([1c6f18e](https://github.com/supabase/auth/commit/1c6f18e6e573ae1da6875f51d8613992ced057a2))
+
 ## [2.176.0](https://github.com/supabase/auth/compare/v2.175.0...v2.176.0) (2025-06-11)
 
 
