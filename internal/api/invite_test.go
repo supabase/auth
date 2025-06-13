@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid"
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -99,6 +100,57 @@ func (ts *InviteTestSuite) TestInvite() {
 
 	ts.API.handler.ServeHTTP(w, req)
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
+func (ts *InviteTestSuite) TestInviteExists() {
+	// To allow us to send signup and invite request in succession
+	ts.Config.SMTP.MaxFrequency = 200
+
+	email := uuid.Must(uuid.NewV4()).String() + "@example.com"
+
+	{
+		// Request body
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email": email,
+			"data": map[string]interface{}{
+				"a": 1,
+			},
+		}))
+
+		// Setup request
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/invite", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+		// Setup response recorder
+		w := httptest.NewRecorder()
+
+		ts.API.handler.ServeHTTP(w, req)
+		assert.Equal(ts.T(), http.StatusOK, w.Code)
+	}
+
+	{
+		// Request body
+		var buffer bytes.Buffer
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"email": email,
+			"data": map[string]interface{}{
+				"a": 1,
+			},
+		}))
+
+		// Setup request
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/invite", &buffer)
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ts.token))
+
+		// Setup response recorder
+		w := httptest.NewRecorder()
+
+		ts.API.handler.ServeHTTP(w, req)
+		assert.Equal(ts.T(), http.StatusOK, w.Code)
+	}
 }
 
 func (ts *InviteTestSuite) TestInviteAfterSignupShouldNotReturnSensitiveFields() {

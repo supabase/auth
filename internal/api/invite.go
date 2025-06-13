@@ -37,38 +37,50 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 	if err != nil && !models.IsNotFoundError(err) {
 		return apierrors.NewInternalServerError("Database error finding user").WithInternalError(err)
 	}
-	if user != nil && user.IsConfirmed() {
-		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
-	}
 
-	signupParams := SignupParams{
-		Email:    params.Email,
-		Data:     params.Data,
-		Aud:      aud,
-		Provider: "email",
-	}
+	isCreate := user == nil
+	isConfirmed := user != nil && user.IsConfirmed()
 
-	user, err = signupParams.ToUserModel(false /* <- isSSOUser */)
-	if err != nil {
-		return err
-	}
-	if err := a.triggerBeforeUserCreated(r, db, user); err != nil {
-		return err
+	if isCreate {
+		signupParams := SignupParams{
+			Email:    params.Email,
+			Data:     params.Data,
+			Aud:      aud,
+			Provider: "email",
+		}
+
+		// because params above sets no password, this method
+		// is not computationally hard so it can be used within
+		// a database transaction
+		user, err = signupParams.ToUserModel(false /* <- isSSOUser */)
+		if err != nil {
+			return err
+		}
+
+		if err := a.triggerBeforeUserCreated(r, db, user); err != nil {
+			return err
+		}
 	}
 
 	err = db.Transaction(func(tx *storage.Connection) error {
-		user, err = a.signupNewUser(tx, user)
-		if err != nil {
-			return err
+		if !isCreate {
+			if isConfirmed {
+				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
+			}
+		} else {
+			user, err = a.signupNewUser(tx, user)
+			if err != nil {
+				return err
+			}
+			identity, err := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
+				Subject: user.ID.String(),
+				Email:   user.GetEmail(),
+			}))
+			if err != nil {
+				return err
+			}
+			user.Identities = []models.Identity{*identity}
 		}
-		identity, err := a.createNewIdentity(tx, user, "email", structs.Map(provider.Claims{
-			Subject: user.ID.String(),
-			Email:   user.GetEmail(),
-		}))
-		if err != nil {
-			return err
-		}
-		user.Identities = []models.Identity{*identity}
 
 		if terr := models.NewAuditLogEntry(r, tx, adminUser, models.UserInvitedAction, "", map[string]interface{}{
 			"user_id":    user.ID,
