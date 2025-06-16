@@ -61,6 +61,9 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 		token, data, err = parseKakaoIDToken(token)
 	case IssuerVercelMarketplace:
 		token, data, err = parseVercelMarketplaceIDToken(token)
+	case IssuerFacebook:
+		// Handle only Facebook Limited Login JWT, NOT Facebook Access Token
+		token, data, err = parseFacebookIDToken(token)
 	default:
 		if IsAzureIssuer(token.Issuer) {
 			token, data, err = parseAzureIDToken(token)
@@ -116,6 +119,44 @@ func parseGoogleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, 
 		data.Metadata.CustomClaims = map[string]any{
 			"hd": claims.HostedDomain,
 		}
+	}
+
+	return token, &data, nil
+}
+
+// FacebookIDTokenClaims represents the claims in a Facebook Limited Login ID token
+type FacebookIDTokenClaims struct {
+	jwt.RegisteredClaims
+	Email   string `json:"email"`
+	Name    string `json:"name"`
+	Picture string `json:"picture"`
+	Nonce   string `json:"nonce,omitempty"`
+}
+
+func parseFacebookIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
+	var claims FacebookIDTokenClaims
+	if err := token.Claims(&claims); err != nil {
+		return nil, nil, err
+	}
+
+	var data UserProvidedData
+
+	if claims.Email != "" {
+		data.Emails = append(data.Emails, Email{
+			Email:    claims.Email,
+			Verified: true, // Facebook Limited Login emails are always verified
+			Primary:  true,
+		})
+	}
+
+	data.Metadata = &Claims{
+		Issuer:        token.Issuer,
+		Subject:       token.Subject,
+		Name:          claims.Name,
+		Picture:       claims.Picture,
+		ProviderId:    token.Subject,
+		Email:         claims.Email,
+		EmailVerified: claims.Email != "",
 	}
 
 	return token, &data, nil
