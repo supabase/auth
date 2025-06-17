@@ -322,7 +322,9 @@ func (a *API) signupVerify(r *http.Request, ctx context.Context, conn *storage.C
 			}
 		}
 
-		if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
+		if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+			"provider": EmailProvider,
+		}); terr != nil {
 			return terr
 		}
 
@@ -357,7 +359,9 @@ func (a *API) recoverVerify(r *http.Request, conn *storage.Connection, user *mod
 			return terr
 		}
 		if !user.IsConfirmed() {
-			if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
+			if terr = models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+				"provider": EmailProvider,
+			}); terr != nil {
 				return terr
 			}
 
@@ -383,7 +387,9 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 	err := conn.Transaction(func(tx *storage.Connection) error {
 
 		if params.Type == smsVerification {
-			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", nil); terr != nil {
+			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+				"provider": PhoneProvider,
+			}); terr != nil {
 				return terr
 			}
 			if terr := user.ConfirmPhone(tx); terr != nil {
