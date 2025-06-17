@@ -9,6 +9,7 @@ import (
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/taskafter"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
@@ -137,6 +138,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		cleanup := models.NewCleanup(globalConfig)
 		r.UseBypass(api.databaseCleanup(cleanup))
 	}
+
+	r.UseBypass(taskafter.Middleware)
 
 	r.Get("/health", api.HealthCheck)
 	r.Get("/.well-known/jwks.json", api.Jwks)
