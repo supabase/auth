@@ -111,9 +111,11 @@ jobs:
             local hash_cmd=$2
             echo "### ${hash_type}" >> checksums.txt
             for file in auth-v$RELEASE_VERSION*.tar.gz; do
-              echo "\`$file\`:\n\`\`\`" >> checksums.txt
+              echo "\`$file\`:" >> checksums.txt
+              echo "\`\`\`" >> checksums.txt
               $hash_cmd "$file" | awk '{print $1}' >> checksums.txt
-              echo "\`\`\`\n" >> checksums.txt
+              echo "\`\`\`" >> checksums.txt
+              echo "" >> checksums.txt
             done
           }
 
@@ -132,11 +134,18 @@ jobs:
             PR_NUMBER='${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }}'
             CHECKSUM_CONTENT=$(cat checksums.txt)
 
+            RELEASE_NOTES=$(cat <<EOF
+This is a release candidate. See release-please PR #$PR_NUMBER for context.
+
+$CHECKSUM_CONTENT
+EOF
+            )
+            
             GH_TOKEN='${{ github.token }}' gh release \
               create $RELEASE_NAME \
               --title "v$RELEASE_VERSION" \
               --prerelease \
-              -n "This is a release candidate. See release-please PR #$PR_NUMBER for context.\n\n$CHECKSUM_CONTENT"
+              -n "$RELEASE_NOTES"
 
             GH_TOKEN='${{ github.token }}' gh pr comment "$PR_NUMBER" \
               -b "Release candidate [v$RELEASE_VERSION](https://github.com/supabase/gotrue/releases/tag/$RELEASE_NAME) published."
@@ -164,7 +173,12 @@ jobs:
           # Append checksums to existing release notes
           EXISTING_NOTES=$(GH_TOKEN='${{ github.token }}' gh release view $RELEASE_NAME --json body -q .body)
           CHECKSUM_CONTENT=$(cat checksums.txt)
-          FULL_NOTES="${EXISTING_NOTES}\n\n${CHECKSUM_CONTENT}"
+          FULL_NOTES=$(cat <<EOF
+$EXISTING_NOTES
+
+$CHECKSUM_CONTENT
+EOF
+          )
           GH_TOKEN='${{ github.token }}' gh release edit $RELEASE_NAME -n "$FULL_NOTES"
 
           GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz ./auth-v$RELEASE_VERSION.supafast-arm64.tar.gz
