@@ -461,6 +461,7 @@ func (a *API) adminUserCreate(w http.ResponseWriter, r *http.Request) error {
 			"user_id":    user.ID,
 			"user_email": user.Email,
 			"user_phone": user.Phone,
+			"provider":   providers[0], // complying with the user.AppMetaData["provider"] field as above
 		}); terr != nil {
 			return terr
 		}
