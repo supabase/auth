@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.176.2](https://github.com/supabase/auth/compare/v2.176.1...v2.176.2) (2025-06-16)
+
+
+### Bug Fixes
+
+* invites should send another email when user exists ([#2058](https://github.com/supabase/auth/issues/2058)) ([96469bd](https://github.com/supabase/auth/commit/96469bd01b9c37f938aabdb0434a054a111cf963))
+
 ## [2.176.1](https://github.com/supabase/auth/compare/v2.176.0...v2.176.1) (2025-06-11)
 
 
