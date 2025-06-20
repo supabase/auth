@@ -91,7 +91,7 @@ require (
 	github.com/crewjam/saml v0.4.14
 	github.com/fatih/structs v1.1.0
 	github.com/fsnotify/fsnotify v1.7.0
-	github.com/go-chi/chi/v5 v5.0.12
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-webauthn/webauthn v0.11.1
 	github.com/gobuffalo/pop/v6 v6.1.1
 	github.com/golang-jwt/jwt/v5 v5.2.2
