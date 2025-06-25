@@ -916,7 +916,7 @@ func populateGlobal(config *GlobalConfiguration) error {
 	if config.Sms.Provider != "" {
 		SMSTemplate := config.Sms.Template
 		if SMSTemplate == "" {
-			SMSTemplate = "Your code is {{ .Code }}"
+			SMSTemplate =  "Your code is:\\n{{ .Code }}\\nDo not share this code."
 		}
 		template, err := template.New("").Parse(SMSTemplate)
 		if err != nil {
@@ -928,7 +928,7 @@ func populateGlobal(config *GlobalConfiguration) error {
 	if config.MFA.Phone.EnrollEnabled || config.MFA.Phone.VerifyEnabled {
 		smsTemplate := config.MFA.Phone.Template
 		if smsTemplate == "" {
-			smsTemplate = "Your code is {{ .Code }}"
+			smsTemplate =  "Your code is:\\n{{ .Code }}\\nDo not share this code."
 		}
 		template, err := template.New("").Parse(smsTemplate)
 		if err != nil {
