@@ -1,5 +1,5 @@
 do $$ begin
-  create type one_time_token_type as enum (
+  create type {{ index .Options "Namespace" }}.one_time_token_type as enum (
     'confirmation_token',
     'reauthentication_token',
     'recovery_token',
@@ -16,7 +16,7 @@ do $$ begin
   create table if not exists {{ index .Options "Namespace" }}.one_time_tokens (
     id uuid primary key,
     user_id uuid not null references {{ index .Options "Namespace" }}.users on delete cascade,
-    token_type one_time_token_type not null,
+    token_type {{ index .Options "Namespace" }}.one_time_token_type not null,
     token_hash text not null,
     relates_to text not null,
     created_at timestamp without time zone not null default now(),
