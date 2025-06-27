@@ -134,12 +134,7 @@ jobs:
             PR_NUMBER='${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).number }}'
             CHECKSUM_CONTENT=$(cat checksums.txt)
 
-            RELEASE_NOTES=$(cat <<EOF
-This is a release candidate. See release-please PR #$PR_NUMBER for context.
-
-$CHECKSUM_CONTENT
-EOF
-            )
+            RELEASE_NOTES=$(printf "This is a release candidate. See release-please PR #%s for context.\n\n%s\n" "$PR_NUMBER" "$CHECKSUM_CONTENT")
             
             GH_TOKEN='${{ github.token }}' gh release \
               create $RELEASE_NAME \
@@ -173,12 +168,7 @@ EOF
           # Append checksums to existing release notes
           EXISTING_NOTES=$(GH_TOKEN='${{ github.token }}' gh release view $RELEASE_NAME --json body -q .body)
           CHECKSUM_CONTENT=$(cat checksums.txt)
-          FULL_NOTES=$(cat <<EOF
-$EXISTING_NOTES
-
-$CHECKSUM_CONTENT
-EOF
-          )
+          FULL_NOTES=$(printf "%s\n\n%s\n" "$EXISTING_NOTES" "$CHECKSUM_CONTENT")
           GH_TOKEN='${{ github.token }}' gh release edit $RELEASE_NAME -n "$FULL_NOTES"
 
           GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz ./auth-v$RELEASE_VERSION.supafast-arm64.tar.gz
