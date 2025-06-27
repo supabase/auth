@@ -46,15 +46,36 @@ func IsSAMLMetadataStale(idpMetadata *saml.EntityDescriptor, samlProvider models
 
 func (a *API) SamlAcs(w http.ResponseWriter, r *http.Request) error {
 	if err := a.handleSamlAcs(w, r); err != nil {
-		u, uerr := url.Parse(a.config.SiteURL)
-		if uerr != nil {
-			return apierrors.NewInternalServerError("site url is improperly formattted").WithInternalError(err)
-		}
+		redirectTo := ""
+		relayStateValue := r.FormValue("RelayState")
+		relayStateUUID := uuid.FromStringOrNil(relayStateValue)
+		if relayStateUUID != uuid.Nil {
+            // Try to load from DB
+            db := a.db.WithContext(r.Context())
+            relayState, findErr := models.FindSAMLRelayStateByID(db, relayStateUUID)
+            if findErr == nil {
+                redirectTo = relayState.RedirectTo
+            }
+        } else if relayStateValue != "" {
+            // Might be a URL
+            redirectTo = relayStateValue
+        }
 
-		q := getErrorQueryString(err, utilities.GetRequestID(r.Context()), observability.GetLogEntry(r).Entry, u.Query())
-		u.RawQuery = q.Encode()
-		http.Redirect(w, r, u.String(), http.StatusSeeOther)
-	}
+        // Validate redirectTo
+        if !utilities.IsRedirectURLValid(a.config, redirectTo) {
+            redirectTo = a.config.SiteURL
+        }
+
+        u, uerr := url.Parse(redirectTo)
+        if uerr != nil {
+            u, _ = url.Parse(a.config.SiteURL)
+        }
+
+        // Add error info to query string
+        q := getErrorQueryString(err, utilities.GetRequestID(r.Context()), observability.GetLogEntry(r).Entry, u.Query())
+        u.RawQuery = q.Encode()
+        http.Redirect(w, r, u.String(), http.StatusSeeOther)
+    }
 	return nil
 }
 
