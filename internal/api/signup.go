@@ -247,9 +247,9 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 						return terr
 					}
 				}
-				if terr = a.sendConfirmation(r, tx, user, flowType); terr != nil {
-					return terr
-				}
+				if terr = a.sendConfirmationWithExpiry(r, tx, user, flowType, config.SignupTokenExpiry); terr != nil {
+    return terr
+}
 			}
 		} else if params.Provider == "phone" && !user.IsPhoneConfirmed() {
 			if config.Sms.Autoconfirm {
