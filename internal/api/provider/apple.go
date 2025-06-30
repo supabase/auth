@@ -15,8 +15,8 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const DefaultAppleIssuer = "https://account.apple.com"
-const OtherAppleIssuer = "https://appleid.apple.com"
+const DefaultAppleIssuer = "https://appleid.apple.com"
+const OtherAppleIssuer = "https://account.apple.com"
 
 func IsAppleIssuer(issuer string) bool {
 	return issuer == DefaultAppleIssuer || issuer == OtherAppleIssuer
