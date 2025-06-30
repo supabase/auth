@@ -241,7 +241,6 @@ type PasswordConfiguration struct {
 
 	HIBP HIBPConfiguration `json:"hibp"`
 }
-
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
 	API           APIConfiguration
@@ -263,6 +262,9 @@ type GlobalConfiguration struct {
 	RateLimitAnonymousUsers float64 `split_words:"true" default:"30"`
 	RateLimitOtp            float64 `split_words:"true" default:"30"`
 	RateLimitWeb3           float64 `split_words:"true" default:"30"`
+
+
+	SignupTokenExpiry time.Duration `envconfig:"SIGNUP_TOKEN_EXPIRY" default:"3600s"`
 
 	SiteURL         string   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList    []string `json:"uri_allow_list" split_words:"true"`
@@ -297,7 +299,6 @@ func (c *CORSConfiguration) AllAllowedHeaders(defaults []string) []string {
 		if !set[header] {
 			result = append(result, header)
 		}
-
 		set[header] = true
 	}
 

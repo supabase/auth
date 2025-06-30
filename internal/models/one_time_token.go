@@ -98,7 +98,6 @@ type OneTimeTokenNotFoundError struct {
 func (e OneTimeTokenNotFoundError) Error() string {
 	return "One-time token not found"
 }
-
 type OneTimeToken struct {
 	ID uuid.UUID `json:"id" db:"id"`
 
@@ -110,6 +109,9 @@ type OneTimeToken struct {
 
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+
+	Token     string    `json:"token" db:"-"`       // Not stored in DB
+	ExpiresAt time.Time `json:"expires_at" db:"-"`  // Not stored in DB
 }
 
 func (OneTimeToken) TableName() string {
@@ -283,4 +285,24 @@ func FindUserForEmailChange(tx *storage.Connection, email, token, aud string, se
 		}
 	}
 	return FindUserByEmailChangeNewAndAudience(tx, email, token, aud)
+}
+
+func NewSignupToken(tx *storage.Connection, user *User, expiry time.Duration) (*OneTimeToken, error) {
+	token := GenerateSecureToken(64)
+
+	hashedToken, err := HashToken(token)
+	if err != nil {
+		return nil, err
+	}
+
+	err = CreateOneTimeToken(tx, user.ID, user.Email, hashedToken, ConfirmationToken)
+	if err != nil {
+		return nil, err
+	}
+
+	return &OneTimeToken{
+		Token:     token,
+		TokenHash: hashedToken,
+		ExpiresAt: time.Now().Add(expiry),
+	}, nil
 }

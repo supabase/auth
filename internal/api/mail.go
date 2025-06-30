@@ -716,3 +716,27 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		return err
 	}
 }
+
+
+func (a *API) sendConfirmationWithExpiry(r *http.Request, tx *storage.Connection, user *models.User, flowType string, expiry time.Duration) error {
+	linkType := models.EmailSignup
+	if user.InvitedAt != nil {
+		linkType = models.InviteUser
+	}
+
+	referrer := getReferrer(r)
+
+	var token *models.Token
+	var terr error
+	if token, terr = models.NewSignupToken(tx, user, expiry); terr != nil {
+		return apierrors.NewInternalServerError("Error creating confirmation token").WithInternalError(terr)
+	}
+
+	err := a.mailer.SendConfirmationEmail(user, token, referrer, linkType)
+	if err != nil {
+		return apierrors.NewInternalServerError("Error sending confirmation mail").WithInternalError(err)
+	}
+
+	return nil
+}
+
