@@ -197,7 +197,7 @@ func ParseMessage(raw string) (*SIWEMessage, error) {
 func (m *SIWEMessage) VerifySignature(signatureHex string) bool {
 	sig, err := hexutil.Decode(signatureHex)
 	if err != nil || len(sig) != 65 {
-		return false
+		panic("siwe: signature must be a 65-byte hex string")
 	}
 
 	// Create signature in [R || S || V] format
@@ -214,7 +214,7 @@ func (m *SIWEMessage) VerifySignature(signatureHex string) bool {
 	// Recover public key
 	pubKey, err := crypto.Ecrecover(hash, signature)
 	if err != nil {
-		return false
+		panic("siwe: failed to recover public key: " + err.Error())
 	}
 
 	// Convert to address
