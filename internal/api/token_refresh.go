@@ -211,12 +211,12 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				}
 			}
 
-			if terr = models.NewAuditLogEntry(r, tx, user, models.TokenRefreshedAction, "", nil); terr != nil {
+			if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.TokenRefreshedAction, "", nil); terr != nil {
 				return terr
 			}
 
 			if issuedToken == nil {
-				newToken, terr := models.GrantRefreshTokenSwap(r, tx, user, token)
+				newToken, terr := models.GrantRefreshTokenSwap(config.AuditLog, r, tx, user, token)
 				if terr != nil {
 					return terr
 				}

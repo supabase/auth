@@ -8,6 +8,7 @@ import (
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
@@ -59,11 +60,11 @@ func GrantAuthenticatedUser(tx *storage.Connection, user *User, params GrantPara
 }
 
 // GrantRefreshTokenSwap swaps a refresh token for a new one, revoking the provided token.
-func GrantRefreshTokenSwap(r *http.Request, tx *storage.Connection, user *User, token *RefreshToken) (*RefreshToken, error) {
+func GrantRefreshTokenSwap(config conf.AuditLogConfiguration, r *http.Request, tx *storage.Connection, user *User, token *RefreshToken) (*RefreshToken, error) {
 	var newToken *RefreshToken
 	err := tx.Transaction(func(rtx *storage.Connection) error {
 		var terr error
-		if terr = NewAuditLogEntry(r, tx, user, TokenRevokedAction, "", nil); terr != nil {
+		if terr = NewAuditLogEntry(config, r, tx, user, TokenRevokedAction, "", nil); terr != nil {
 			return errors.Wrap(terr, "error creating audit log entry")
 		}
 

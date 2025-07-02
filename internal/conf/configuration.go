@@ -242,6 +242,10 @@ type PasswordConfiguration struct {
 	HIBP HIBPConfiguration `json:"hibp"`
 }
 
+type AuditLogConfiguration struct {
+	DisablePostgres bool `split_words:"true" default:"false"`
+}
+
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
 	API           APIConfiguration
@@ -253,6 +257,7 @@ type GlobalConfiguration struct {
 	Tracing       TracingConfig
 	Metrics       MetricsConfig
 	SMTP          SMTPConfiguration
+	AuditLog      AuditLogConfiguration
 
 	RateLimitHeader         string  `split_words:"true"`
 	RateLimitEmailSent      Rate    `split_words:"true" default:"30"`
