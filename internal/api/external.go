@@ -504,16 +504,26 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request) (context.C
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
 		if kid, ok := token.Header["kid"]; ok {
 			if kidStr, ok := kid.(string); ok {
-				return conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				key, err := conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				if err != nil {
+					return nil, err
+				}
+
+				if key != nil {
+					return key, nil
+				}
+
+				// otherwise try to use fallback
 			}
 		}
 		if alg, ok := token.Header["alg"]; ok {
 			if alg == jwt.SigningMethodHS256.Name {
-				// preserve backward compatibility for cases where the kid is not set
+				// preserve backward compatibility for cases where the kid is not set or potentially invalid but the key can be decoded with the secret
 				return []byte(config.JWT.Secret), nil
 			}
 		}
-		return nil, fmt.Errorf("missing kid")
+
+		return nil, fmt.Errorf("unrecognized JWT kid %v for algorithm %v", token.Header["kid"], token.Header["alg"])
 	})
 	if err != nil {
 		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state").WithInternalError(err)
