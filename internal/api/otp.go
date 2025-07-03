@@ -186,7 +186,7 @@ func (a *API) SmsOtp(w http.ResponseWriter, r *http.Request) error {
 
 	messageID := ""
 	err = db.Transaction(func(tx *storage.Connection) error {
-		if err := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", map[string]interface{}{
+		if err := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserRecoveryRequestedAction, "", map[string]interface{}{
 			"channel": params.Channel,
 		}); err != nil {
 			return err

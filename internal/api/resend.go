@@ -64,6 +64,7 @@ func (p *ResendConfirmationParams) Validate(a *API) error {
 // Recover sends a recovery email
 func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	config := a.config
 	db := a.db.WithContext(ctx)
 	params := &ResendConfirmationParams{}
 	if err := retrieveRequestParams(r, params); err != nil {
@@ -117,13 +118,13 @@ func (a *API) Resend(w http.ResponseWriter, r *http.Request) error {
 	err = db.Transaction(func(tx *storage.Connection) error {
 		switch params.Type {
 		case mail.SignupVerification:
-			if terr := models.NewAuditLogEntry(r, tx, user, models.UserConfirmationRequestedAction, "", nil); terr != nil {
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserConfirmationRequestedAction, "", nil); terr != nil {
 				return terr
 			}
 			// PKCE not implemented yet
 			return a.sendConfirmation(r, tx, user, models.ImplicitFlow)
 		case smsVerification:
-			if terr := models.NewAuditLogEntry(r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserRecoveryRequestedAction, "", nil); terr != nil {
 				return terr
 			}
 			mID, terr := a.sendPhoneConfirmation(r, tx, user, params.Phone, phoneConfirmationOtp, sms_provider.SMSProvider)

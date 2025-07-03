@@ -15,6 +15,7 @@ import (
 
 func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	config := a.config
 
 	claims := getClaims(ctx)
 	if claims == nil {
@@ -49,7 +50,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = a.db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(r, tx, user, models.IdentityUnlinkAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityUnlinkAction, "", map[string]interface{}{
 			"identity_id": identityToBeDeleted.ID,
 			"provider":    identityToBeDeleted.Provider,
 			"provider_id": identityToBeDeleted.ProviderID,
