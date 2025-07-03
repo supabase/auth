@@ -22,6 +22,13 @@ type Web3TestSuite struct {
 	Config *conf.GlobalConfiguration
 }
 
+type ChainType string
+
+const (
+	ChainSolana   ChainType = "solana"
+	ChainEthereum ChainType = "ethereum"
+)
+
 func TestWeb3(t *testing.T) {
 	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
@@ -35,7 +42,7 @@ func TestWeb3(t *testing.T) {
 	suite.Run(t, ts)
 }
 
-func (ts *Web3TestSuite) TestNonSolana() {
+func (ts *Web3TestSuite) TestUnsupportedChain() {
 	var buffer bytes.Buffer
 	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
 		"chain": "blockchain",
@@ -60,29 +67,34 @@ func (ts *Web3TestSuite) TestNonSolana() {
 func (ts *Web3TestSuite) TestDisabled() {
 	defer func() {
 		ts.Config.External.Web3Solana.Enabled = true
+		ts.Config.External.Web3Ethereum.Enabled = true
 	}()
 
 	ts.Config.External.Web3Solana.Enabled = false
+	ts.Config.External.Web3Ethereum.Enabled = false
 
 	var buffer bytes.Buffer
-	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-		"chain": "solana",
-	}))
 
-	req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=web3", &buffer)
-	req.Header.Set("Content-Type", "application/json")
+	for _, chain := range []ChainType{ChainSolana, ChainEthereum} {
+		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
+			"chain": chain,
+		}))
 
-	w := httptest.NewRecorder()
-	ts.API.handler.ServeHTTP(w, req)
+		req := httptest.NewRequest(http.MethodPost, "http://localhost/token?grant_type=web3", &buffer)
+		req.Header.Set("Content-Type", "application/json")
 
-	var firstResult struct {
-		ErrorCode string `json:"error_code"`
-		Message   string `json:"msg"`
+		w := httptest.NewRecorder()
+		ts.API.handler.ServeHTTP(w, req)
+
+		var firstResult struct {
+			ErrorCode string `json:"error_code"`
+			Message   string `json:"msg"`
+		}
+
+		assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
+		assert.Equal(ts.T(), apierrors.ErrorCodeWeb3ProviderDisabled, firstResult.ErrorCode)
+		assert.Equal(ts.T(), "Web3 provider is disabled", firstResult.Message)
 	}
-
-	assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
-	assert.Equal(ts.T(), apierrors.ErrorCodeWeb3ProviderDisabled, firstResult.ErrorCode)
-	assert.Equal(ts.T(), "Web3 provider is disabled", firstResult.Message)
 }
 
 func (ts *Web3TestSuite) TestHappyPath_FullMessage() {
@@ -92,18 +104,33 @@ func (ts *Web3TestSuite) TestHappyPath_FullMessage() {
 
 	examples := []struct {
 		now       string
+		chain     ChainType
 		message   string
 		signature string
 	}{
 		{
 			now:       "2025-03-29T00:09:59Z",
+			chain:     ChainSolana,
 			message:   "supabase.com wants you to sign in with your Solana account:\n2EZEiBdw47VHT6SpZSW9VnuSvBe7DxuYHBTxj19gxvv8\n\nStatement\n\nURI: https://supabase.com/\nVersion: 1\nIssued At: 2025-03-29T00:00:00Z\nExpiration Time: 2025-03-29T00:10:00Z\nNot Before: 2025-03-29T00:00:00Z",
 			signature: "aiKn+PAoB1OoXxS8H34HrB456YD4sKAVjeTjsxgkaQy3bkdV51WBTmUUE9lBU9kuXr0hTLI+1aTn5TFRbIF8CA==",
 		},
 		{
 			now:       "2025-05-16T15:01:59Z",
+			chain:     ChainSolana,
 			message:   "localhost:5173 wants you to sign in with your Solana account:\n4UPcfLX6rHuunkDiCnrVdN2BxnaKUAT1m2KCrzaAAct6\n\nSign in on localhost\n\nURI: http://localhost:5173/\nVersion: 1\nIssued At: 2025-05-16T14:52:03.613Z",
 			signature: "RT2JCFpZQtPwGONApGZn1dZnxOBB3zJZHAQPr+cOaI+eQ4ecw/N6zJ6TNw8a+g8n6Xm/Ky1TVZRuWHSxMU1jDg==",
+		},
+		{
+			now:       "2025-05-16T15:01:59Z",
+			chain:     ChainEthereum,
+			message:   "example.com wants you to sign in with your Ethereum account:\n0x196a28d05bA75C8dC35B0F6e71DD622D1aC82b7E\n\nSign in to Example App\n\nURI: https://example.com\nVersion: 1\nChain ID: 1\nNonce: 12345678\nIssued At: 2025-01-01T00:00:00.000Z",
+			signature: "0xee337880f195524c156b8cc5f425ffcedb9d94638a91fa41ba72e26d93f04c9d1c7bca7020071c34ef7527ed6389ee24b59de79deab4e9e8251e6ca1e195a56a1b",
+		},
+		{
+			now:       "2025-01-01T00:00:00Z",
+			chain:     ChainEthereum,
+			message:   "example.com wants you to sign in with your Ethereum account:\n0x196a28d05bA75C8dC35B0F6e71DD622D1aC82b7E\n\nURI: https://example.com\nVersion: 1\nChain ID: 1\nNonce: 12345678\nIssued At: 2025-01-01T00:00:00.000Z",
+			signature: "0x0851224c203d08ced345bc99e66ac531eafbbb54eff94f7297b54ec19a0db7e879c4d246d45e0e13c9c2801db1f71f283c373b8c10cc0a91fe6418220a0aa5391b",
 		},
 	}
 
@@ -115,7 +142,7 @@ func (ts *Web3TestSuite) TestHappyPath_FullMessage() {
 
 		var buffer bytes.Buffer
 		require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(map[string]interface{}{
-			"chain":     "solana",
+			"chain":     example.chain,
 			"message":   example.message,
 			"signature": example.signature,
 		}))
