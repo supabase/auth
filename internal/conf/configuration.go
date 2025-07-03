@@ -257,7 +257,7 @@ type GlobalConfiguration struct {
 	Tracing       TracingConfig
 	Metrics       MetricsConfig
 	SMTP          SMTPConfiguration
-	AuditLog      AuditLogConfiguration
+	AuditLog      AuditLogConfiguration `split_words:"true"`
 
 	RateLimitHeader         string  `split_words:"true"`
 	RateLimitEmailSent      Rate    `split_words:"true" default:"30"`
