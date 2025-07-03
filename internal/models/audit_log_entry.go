@@ -107,26 +107,27 @@ func NewAuditLogEntry(config conf.AuditLogConfiguration, r *http.Request, tx *st
 		"action":         action,
 		"log_type":       ActionLogTypeMap[action],
 	}
-	l := AuditLogEntry{
-		ID:        id,
-		Payload:   JSONMap(payload),
-		IPAddress: ipAddress,
+
+	if name, ok := actor.UserMetaData["full_name"]; ok {
+		payload["actor_name"] = name
+	}
+
+	if traits != nil {
+		payload["traits"] = traits
 	}
 
 	observability.LogEntrySetFields(r, logrus.Fields{
 		"auth_event": logrus.Fields(payload),
 	})
 
-	if name, ok := actor.UserMetaData["full_name"]; ok {
-		l.Payload["actor_name"] = name
-	}
-
-	if traits != nil {
-		l.Payload["traits"] = traits
-	}
-
 	if config.DisablePostgres {
 		return nil
+	}
+
+	l := AuditLogEntry{
+		ID:        id,
+		Payload:   JSONMap(payload),
+		IPAddress: ipAddress,
 	}
 
 	if err := tx.Create(&l); err != nil {
