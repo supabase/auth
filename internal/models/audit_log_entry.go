@@ -117,16 +117,16 @@ func NewAuditLogEntry(config conf.AuditLogConfiguration, r *http.Request, tx *st
 		"auth_event": logrus.Fields(payload),
 	})
 
-	if config.DisablePostgres {
-		return nil
-	}
-
 	if name, ok := actor.UserMetaData["full_name"]; ok {
 		l.Payload["actor_name"] = name
 	}
 
 	if traits != nil {
 		l.Payload["traits"] = traits
+	}
+
+	if config.DisablePostgres {
+		return nil
 	}
 
 	if err := tx.Create(&l); err != nil {
