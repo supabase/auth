@@ -92,10 +92,6 @@ func (AuditLogEntry) TableName() string {
 }
 
 func NewAuditLogEntry(config conf.AuditLogConfiguration, r *http.Request, tx *storage.Connection, actor *User, action AuditAction, ipAddress string, traits map[string]interface{}) error {
-	if config.DisablePostgres {
-		return nil
-	}
-
 	id := uuid.Must(uuid.NewV4())
 
 	username := actor.GetEmail()
@@ -120,6 +116,10 @@ func NewAuditLogEntry(config conf.AuditLogConfiguration, r *http.Request, tx *st
 	observability.LogEntrySetFields(r, logrus.Fields{
 		"auth_event": logrus.Fields(payload),
 	})
+
+	if config.DisablePostgres {
+		return nil
+	}
 
 	if name, ok := actor.UserMetaData["full_name"]; ok {
 		l.Payload["actor_name"] = name
