@@ -722,7 +722,10 @@ func (a *API) verifyTOTPFactor(w http.ResponseWriter, r *http.Request, params *V
 	if err != nil {
 		return err
 	}
-	metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
+
+	metering.RecordLogin(metering.LoginTypeMFA, user.ID, &metering.LoginData{
+		Provider: metering.ProviderMFATOTP,
+	})
 
 	return sendJSON(w, http.StatusOK, token)
 
@@ -850,7 +853,10 @@ func (a *API) verifyPhoneFactor(w http.ResponseWriter, r *http.Request, params *
 	if err != nil {
 		return err
 	}
-	metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
+
+	metering.RecordLogin(metering.LoginTypeMFA, user.ID, &metering.LoginData{
+		Provider: metering.ProviderMFAPhone,
+	})
 
 	return sendJSON(w, http.StatusOK, token)
 }
@@ -950,7 +956,10 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 	if err != nil {
 		return err
 	}
-	metering.RecordLogin(string(models.MFACodeLoginAction), user.ID)
+
+	metering.RecordLogin(metering.LoginTypeMFA, user.ID, &metering.LoginData{
+		Provider: metering.ProviderMFAWebAuthn,
+	})
 
 	return sendJSON(w, http.StatusOK, token)
 }

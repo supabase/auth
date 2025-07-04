@@ -243,7 +243,9 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 
 	token.WeakPassword = weakPasswordError
 
-	metering.RecordLogin("password", user.ID)
+	metering.RecordLogin(metering.LoginTypePassword, user.ID, &metering.LoginData{
+		Provider: provider,
+	})
 	return sendJSON(w, http.StatusOK, token)
 }
 
@@ -318,6 +320,9 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 
+	metering.RecordLogin(metering.LoginTypePKCE, user.ID, &metering.LoginData{
+		Provider: flowState.ProviderType,
+	})
 	return sendJSON(w, http.StatusOK, token)
 }
 

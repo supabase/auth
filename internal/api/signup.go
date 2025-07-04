@@ -322,7 +322,13 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		metering.RecordLogin("password", user.ID)
+		metering.RecordLogin(metering.LoginTypePassword, user.ID, &metering.LoginData{
+			Provider: params.Provider,
+			// add extra context to indicate this is immediate login right after signup
+			Extra: map[string]interface{}{
+				"immediate_login_after_signup": true,
+			},
+		})
 		return sendJSON(w, http.StatusOK, token)
 	}
 	if user.HasBeenInvited() {

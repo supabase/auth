@@ -8,6 +8,7 @@ import (
 
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
@@ -166,6 +167,17 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 			return apierrors.NewOAuthError("server_error", "Internal Server Error").WithInternalError(err)
 		}
 	}
+
+	// Record login for analytics with Web3 context
+	metering.RecordLogin(metering.LoginTypeWeb3, token.User.ID, &metering.LoginData{
+		Web3: &metering.Web3Data{
+			Chain:   params.Chain,
+			Network: parsedMessage.ChainID,
+			Address: parsedMessage.Address,
+			Domain:  parsedMessage.Domain,
+			URI:     parsedMessage.URI.String(),
+		},
+	})
 
 	return sendJSON(w, http.StatusOK, token)
 }
