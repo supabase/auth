@@ -16,6 +16,7 @@ import (
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/crypto"
 	mail "github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -211,6 +212,9 @@ func (a *API) verifyGet(w http.ResponseWriter, r *http.Request, params *VerifyPa
 		q := url.Values{}
 		q.Set("type", params.Type)
 		rurl = token.AsRedirectURL(rurl, q)
+
+		metering.RecordLogin(metering.LoginTypeImplicit, token.User.ID, nil)
+
 	} else if isPKCEFlow(flowType) {
 		rurl, err = a.prepPKCERedirectURL(rurl, authCode)
 		if err != nil {
@@ -292,6 +296,16 @@ func (a *API) verifyPost(w http.ResponseWriter, r *http.Request, params *VerifyP
 			"code": strconv.Itoa(http.StatusOK),
 		})
 	}
+
+	// Record login for analytics - determine provider based on verification type
+	provider := metering.ProviderEmail // default
+	if params.Type == smsVerification || params.Type == phoneChangeVerification {
+		provider = metering.ProviderPhone
+	}
+	metering.RecordLogin(metering.LoginTypeOTP, user.ID, &metering.LoginData{
+		Provider: provider,
+	})
+
 	return sendJSON(w, http.StatusOK, token)
 }
 

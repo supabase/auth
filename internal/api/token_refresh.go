@@ -276,7 +276,7 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 				return err
 			}
 		}
-		metering.RecordLogin("token", user.ID)
+		metering.RecordLogin(metering.LoginTypeToken, user.ID, nil)
 		return sendJSON(w, http.StatusOK, newTokenResponse)
 	}
 

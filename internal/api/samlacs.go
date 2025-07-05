@@ -14,6 +14,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -328,6 +329,14 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		return nil
 
 	}
+
+	// Record login for analytics - only when token is issued (not during pkce authorize)
+	if token != nil {
+		metering.RecordLogin(metering.LoginTypeSSO, token.User.ID, &metering.LoginData{
+			Provider: metering.ProviderSAML,
+		})
+	}
+
 	http.Redirect(w, r, token.AsRedirectURL(redirectTo, url.Values{}), http.StatusFound)
 
 	return nil

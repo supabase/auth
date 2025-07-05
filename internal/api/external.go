@@ -15,6 +15,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -250,6 +251,13 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	if err != nil {
 		return err
+	}
+
+	// Record login for analytics - only when token is issued (not during pkce authorize)
+	if token != nil {
+		metering.RecordLogin(metering.LoginTypeOAuth, user.ID, &metering.LoginData{
+			Provider: providerType,
+		})
 	}
 
 	rurl := a.getExternalRedirectURL(r)
