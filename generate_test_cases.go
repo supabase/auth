@@ -5,22 +5,27 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"os"
+	"strings"
 
+	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
 func main() {
+	// Check if message is provided as argument
+	if len(os.Args) < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: go run generate_test_cases.go \"Your message here\"")
+		os.Exit(1)
+	}
+
 	// Generate a new private key
 	privateKey, err := crypto.GenerateKey()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Get the private key hex for documentation
-	privateKeyBytes := crypto.FromECDSA(privateKey)
-	privateKeyHex := hex.EncodeToString(privateKeyBytes)
-
-	// Get the address
+	// get the address
 	publicKey := privateKey.Public()
 	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	if !ok {
@@ -28,61 +33,24 @@ func main() {
 	}
 	address := crypto.PubkeyToAddress(*publicKeyECDSA)
 
-	// Create test SIWE messages
-	messages := []string{
-		fmt.Sprintf(`example.com wants you to sign in with your Ethereum account:
-%s
+	// Get the message from command line
+	// Replace literal \n with actual newlines
+	messageTemplate := strings.ReplaceAll(os.Args[1], "\\n", "\n")
+	message := fmt.Sprintf(messageTemplate, address.Hex())
 
-Sign in to Example App
+	// Hash the message with Ethereum prefix using the same method as accounts.TextHash
+	hash := accounts.TextHash([]byte(message))
 
-URI: https://example.com
-Version: 1
-Chain ID: 1
-Nonce: 12345678
-Issued At: 2025-01-01T00:00:00.000Z`, address.Hex()),
-
-		fmt.Sprintf(`example.com wants you to sign in with your Ethereum account:
-%s
-
-URI: https://example.com
-Version: 1
-Chain ID: 1
-Nonce: 12345678
-Issued At: 2025-01-01T00:00:00.000Z`, address.Hex()),
+	// Sign the hash
+	signature, err := crypto.Sign(hash, privateKey)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	fmt.Printf("// Generated with private key: 0x%s\n", privateKeyHex)
-	fmt.Println("// Generated test data:")
-	fmt.Println("positiveExamples := []struct {")
-	fmt.Println("    message   string")
-	fmt.Println("    signature string")
-	fmt.Println("}{")
+	// Transform V from 0/1 to 27/28
+	signature[64] += 27
 
-	for i, message := range messages {
-		// Hash the message with Ethereum prefix
-		hash := crypto.Keccak256Hash(
-			[]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d", len(message))),
-			[]byte(message),
-		)
-
-		// Sign the hash
-		signature, err := crypto.Sign(hash.Bytes(), privateKey)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// Transform V from 0/1 to 27/28
-		signature[64] += 27
-
-		fmt.Printf("    {\n")
-		fmt.Printf("        message: `%s`,\n", message)
-		fmt.Printf("        signature: \"0x%s\",\n", hex.EncodeToString(signature))
-		fmt.Printf("    },\n")
-
-		if i == 0 {
-			fmt.Printf("    // Address: %s\n", address.Hex())
-		}
-	}
-
-	fmt.Println("}")
+	// Output as {message, signature} format - escape the message for JSON
+	escapedMessage := strings.ReplaceAll(message, "\n", "\\n")
+	fmt.Printf("{message: \"%s\",\nsignature: \"0x%s\"}\n", escapedMessage, hex.EncodeToString(signature))
 }

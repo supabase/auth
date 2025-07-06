@@ -120,9 +120,6 @@ func ParseMessage(raw string) (*SIWEMessage, error) {
 			msg.URI = *uri
 
 		case "Version":
-			if value != "1" {
-				return nil, errUnsupportedVersion(value)
-			}
 			msg.Version = value
 
 		case "Chain ID":
@@ -169,7 +166,7 @@ func ParseMessage(raw string) (*SIWEMessage, error) {
 					return nil, ErrInvalidNotBefore
 				}
 			}
-			if !msg.ExpirationTime.IsZero() {
+			if msg.ExpirationTime != nil && !msg.ExpirationTime.IsZero() {
 				if ts.After(*msg.ExpirationTime) {
 					return nil, ErrNotBeforeAfterExpiration
 				}
@@ -181,6 +178,10 @@ func ParseMessage(raw string) (*SIWEMessage, error) {
 			// This is supposed to be a pchar (RFC 3986) but generally we'll keep it as any str for now
 			msg.RequestID = &value
 		}
+	}
+
+	if msg.Version != "1" {
+		return nil, errUnsupportedVersion(msg.Version)
 	}
 
 	if msg.IssuedAt.IsZero() {

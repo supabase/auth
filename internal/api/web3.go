@@ -230,11 +230,11 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 
 	now := a.Now()
 
-	if !parsedMessage.NotBefore.IsZero() && now.Before(*parsedMessage.NotBefore) {
+	if parsedMessage.NotBefore != nil && !parsedMessage.NotBefore.IsZero() && now.Before(*parsedMessage.NotBefore) {
 		return apierrors.NewOAuthError("invalid_grant", "Signed Ethereum message becomes valid in the future")
 	}
 
-	if !parsedMessage.ExpirationTime.IsZero() && now.After(*parsedMessage.ExpirationTime) {
+	if parsedMessage.NotBefore != nil && parsedMessage.ExpirationTime != nil && !parsedMessage.ExpirationTime.IsZero() && now.After(*parsedMessage.ExpirationTime) {
 		return apierrors.NewOAuthError("invalid_grant", "Signed Ethereum message is expired")
 	}
 
