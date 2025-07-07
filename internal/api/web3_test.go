@@ -45,10 +45,18 @@ func TestWeb3(t *testing.T) {
 	suite.Run(t, ts)
 }
 
-func ChainErrSprintF(errStr string, chain ChainType) string {
-	// replace and capitalize the chain name in the error
+// FormatChainMessage formats a message with chain name.
+//
+// @param format string - Format string with one %s placeholder
+// @param chain ChainType - The blockchain type
+// @return string - Formatted message
+//
+// Example:
+//
+//	FormatChainMessage("Error on %s", ChainSolana) // "Error on Solana"
+func ChainMessagef(format string, chain ChainType) string {
 	chainStr := cases.Title(language.English).String(string(chain))
-	return fmt.Sprintf(errStr, chainStr)
+	return fmt.Sprintf(format, chainStr)
 }
 
 func (ts *Web3TestSuite) TestUnsupportedChain() {
@@ -279,7 +287,7 @@ func (ts *Web3TestSuite) TestValidationRules_URINotHTTPSButIsHTTP() {
 		assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
 
 		assert.Equal(ts.T(), firstResult.Error, "invalid_grant")
-		assert.Equal(ts.T(), firstResult.ErrorDescription, ChainErrSprintF("Signed %s message is using URI which does not use HTTPS", example.chain))
+		assert.Equal(ts.T(), firstResult.ErrorDescription, ChainMessagef("Signed %s message is using URI which does not use HTTPS", example.chain))
 	}
 
 }
@@ -335,7 +343,7 @@ func (ts *Web3TestSuite) TestValidationRules_URINotAllowed() {
 		assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
 
 		assert.Equal(ts.T(), "invalid_grant", firstResult.Error)
-		assert.Equal(ts.T(), ChainErrSprintF("Signed %s message is using URI which is not allowed on this server, message was signed for another app", example.chain), firstResult.ErrorDescription)
+		assert.Equal(ts.T(), ChainMessagef("Signed %s message is using URI which is not allowed on this server, message was signed for another app", example.chain), firstResult.ErrorDescription)
 	}
 
 }
@@ -391,7 +399,7 @@ func (ts *Web3TestSuite) TestValidationRules_URINotHTTPS() {
 		assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
 
 		assert.Equal(ts.T(), "invalid_grant", firstResult.Error)
-		assert.Equal(ts.T(), ChainErrSprintF("Signed %s message is using URI which does not use HTTPS", example.chain), firstResult.ErrorDescription)
+		assert.Equal(ts.T(), ChainMessagef("Signed %s message is using URI which does not use HTTPS", example.chain), firstResult.ErrorDescription)
 	}
 
 }
@@ -447,7 +455,7 @@ func (ts *Web3TestSuite) TestValidationRules_InvalidDomain() {
 		assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
 
 		assert.Equal(ts.T(), "invalid_grant", firstResult.Error)
-		assert.Equal(ts.T(), ChainErrSprintF("Signed %s message is using a Domain that does not match the one in URI which is not allowed on this server", example.chain), firstResult.ErrorDescription)
+		assert.Equal(ts.T(), ChainMessagef("Signed %s message is using a Domain that does not match the one in URI which is not allowed on this server", example.chain), firstResult.ErrorDescription)
 	}
 }
 
@@ -502,7 +510,7 @@ func (ts *Web3TestSuite) TestValidationRules_MismatchedDomainAndURIHostname() {
 		assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
 
 		assert.Equal(ts.T(), "invalid_grant", firstResult.Error)
-		assert.Equal(ts.T(), ChainErrSprintF("Signed %s message is using a Domain that does not match the one in URI which is not allowed on this server", example.chain), firstResult.ErrorDescription)
+		assert.Equal(ts.T(), ChainMessagef("Signed %s message is using a Domain that does not match the one in URI which is not allowed on this server", example.chain), firstResult.ErrorDescription)
 	}
 }
 
@@ -557,7 +565,7 @@ func (ts *Web3TestSuite) TestValidationRules_ValidatedBeforeNotBefore() {
 		assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
 
 		assert.Equal(ts.T(), "invalid_grant", firstResult.Error)
-		assert.Equal(ts.T(), ChainErrSprintF("Signed %s message becomes valid in the future", example.chain), firstResult.ErrorDescription)
+		assert.Equal(ts.T(), ChainMessagef("Signed %s message becomes valid in the future", example.chain), firstResult.ErrorDescription)
 	}
 }
 
@@ -611,7 +619,7 @@ func (ts *Web3TestSuite) TestValidationRules_Expired() {
 		assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
 
 		assert.Equal(ts.T(), "invalid_grant", firstResult.Error)
-		assert.Equal(ts.T(), ChainErrSprintF("Signed %s message is expired", example.chain), firstResult.ErrorDescription)
+		assert.Equal(ts.T(), ChainMessagef("Signed %s message is expired", example.chain), firstResult.ErrorDescription)
 	}
 }
 
@@ -664,7 +672,7 @@ func (ts *Web3TestSuite) TestValidationRules_Future() {
 		assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
 
 		assert.Equal(ts.T(), "invalid_grant", firstResult.Error)
-		assert.Equal(ts.T(), ChainErrSprintF("%s message was issued too far in the future", example.chain), firstResult.ErrorDescription)
+		assert.Equal(ts.T(), ChainMessagef("%s message was issued too far in the future", example.chain), firstResult.ErrorDescription)
 	}
 }
 
@@ -721,7 +729,7 @@ func (ts *Web3TestSuite) TestValidationRules_IssedTooLongAgo() {
 		assert.NoError(ts.T(), json.NewDecoder(w.Result().Body).Decode(&firstResult))
 
 		assert.Equal(ts.T(), "invalid_grant", firstResult.Error)
-		assert.Equal(ts.T(), ChainErrSprintF("%s message was issued too long ago", example.chain), firstResult.ErrorDescription)
+		assert.Equal(ts.T(), ChainMessagef("%s message was issued too long ago", example.chain), firstResult.ErrorDescription)
 	}
 }
 

@@ -153,9 +153,6 @@ func ParseMessage(raw string) (*SIWEMessage, error) {
 					return nil, ErrInvalidExpirationTime
 				}
 			}
-			if msg.IssuedAt.After(ts) {
-				return nil, ErrIssuedAfterExpiration
-			}
 			msg.ExpirationTime = &ts
 
 		case "Not Before":
@@ -164,11 +161,6 @@ func ParseMessage(raw string) (*SIWEMessage, error) {
 				ts, err = time.Parse(time.RFC3339Nano, value)
 				if err != nil {
 					return nil, ErrInvalidNotBefore
-				}
-			}
-			if msg.ExpirationTime != nil && !msg.ExpirationTime.IsZero() {
-				if ts.After(*msg.ExpirationTime) {
-					return nil, ErrNotBeforeAfterExpiration
 				}
 			}
 
@@ -190,6 +182,18 @@ func ParseMessage(raw string) (*SIWEMessage, error) {
 
 	if msg.URI.String() == "" {
 		return nil, ErrMissingURI
+	}
+
+	if msg.ExpirationTime != nil && !msg.IssuedAt.IsZero() {
+		if msg.IssuedAt.After(*msg.ExpirationTime) {
+			return nil, ErrIssuedAfterExpiration
+		}
+	}
+
+	if msg.NotBefore != nil && msg.ExpirationTime != nil {
+		if msg.NotBefore.After(*msg.ExpirationTime) {
+			return nil, ErrNotBeforeAfterExpiration
+		}
 	}
 
 	return msg, nil
