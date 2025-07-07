@@ -2,8 +2,6 @@ package siws
 
 import (
 	"crypto/ed25519"
-	"errors"
-	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
@@ -37,23 +35,23 @@ var addressPattern = regexp.MustCompile("^[a-zA-Z0-9]{32,44}$")
 func ParseMessage(raw string) (*SIWSMessage, error) {
 	lines := strings.Split(raw, "\n")
 	if len(lines) < 6 {
-		return nil, errors.New("siws: message needs at least 6 lines")
+		return nil, ErrMessageTooShort
 	}
 
 	// Parse first line exactly
 	header := lines[0]
 	if !strings.HasSuffix(header, headerSuffix) {
-		return nil, fmt.Errorf("siws: message first line does not end in %q", headerSuffix)
+		return nil, ErrInvalidHeader
 	}
 
 	domain := strings.TrimSpace(strings.TrimSuffix(header, headerSuffix))
 	if !IsValidDomain(domain) {
-		return nil, errors.New("siws: domain in first line of message is not valid")
+		return nil, ErrInvalidDomain
 	}
 
 	address := strings.TrimSpace(lines[1])
 	if !addressPattern.MatchString(address) {
-		return nil, errors.New("siws: wallet address is not in base58 format")
+		return nil, ErrInvalidAddress
 	}
 
 	msg := &SIWSMessage{
@@ -63,7 +61,7 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 	}
 
 	if lines[2] != "" {
-		return nil, errors.New("siws: third line must be empty")
+		return nil, ErrThirdLineNotEmpty
 	}
 
 	startIndex := 3
@@ -82,7 +80,7 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 
 				resourceURL, err := url.ParseRequestURI(resource)
 				if err != nil {
-					return nil, fmt.Errorf("siws: Resource at position %d has invalid URI", len(msg.Resources))
+					return nil, errInvalidResource(len(msg.Resources))
 				}
 
 				msg.Resources = append(msg.Resources, resourceURL)
@@ -103,7 +101,7 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 
 		key, value, found := strings.Cut(line, ":")
 		if !found {
-			return nil, fmt.Errorf("siws: encountered unparsable line at index %d", i)
+			return nil, errUnparsableLine(i)
 		}
 
 		value = strings.TrimSpace(value)
@@ -112,7 +110,7 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 		case "URI":
 			uri, err := url.ParseRequestURI(value)
 			if err != nil {
-				return nil, errors.New("siws: URI is not valid")
+				return nil, ErrInvalidURI
 			}
 
 			msg.URI = uri
@@ -131,7 +129,7 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 			if err != nil {
 				ts, err = time.Parse(time.RFC3339Nano, value)
 				if err != nil {
-					return nil, errors.New("siws: Issued At is not a valid ISO8601 timestamp")
+					return nil, ErrInvalidIssuedAt
 				}
 			}
 			msg.IssuedAt = ts
@@ -141,7 +139,7 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 			if err != nil {
 				ts, err = time.Parse(time.RFC3339Nano, value)
 				if err != nil {
-					return nil, errors.New("siws: Expiration Time is not a valid ISO8601 timestamp")
+					return nil, ErrInvalidExpirationTime
 				}
 			}
 			msg.ExpirationTime = ts
@@ -151,7 +149,7 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 			if err != nil {
 				ts, err = time.Parse(time.RFC3339Nano, value)
 				if err != nil {
-					return nil, errors.New("siws: Not Before is not a valid ISO8601 timestamp")
+					return nil, ErrInvalidNotBefore
 				}
 			}
 			msg.NotBefore = ts
@@ -162,30 +160,30 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 	}
 
 	if msg.Version != "1" {
-		return nil, fmt.Errorf("siws: Version value is not supported, expected 1 got %q", msg.Version)
+		return nil, errUnsupportedVersion(msg.Version)
 	}
 
 	if msg.IssuedAt.IsZero() {
-		return nil, errors.New("siws: Issued At is not specified")
+		return nil, ErrMissingIssuedAt
 	}
 
 	if msg.URI == nil {
-		return nil, errors.New("siws: URI is not specified")
+		return nil, ErrMissingURI
 	}
 
 	if msg.ChainID != "" && !IsValidSolanaNetwork(msg.ChainID) {
-		return nil, errors.New("siws: Chain ID is not valid")
+		return nil, ErrInvalidChainID
 	}
 
 	if !msg.IssuedAt.IsZero() && !msg.ExpirationTime.IsZero() {
 		if msg.IssuedAt.After(msg.ExpirationTime) {
-			return nil, errors.New("siws: Issued At is after Expiration Time")
+			return nil, ErrIssuedAfterExpiration
 		}
 	}
 
 	if !msg.NotBefore.IsZero() && !msg.ExpirationTime.IsZero() {
 		if msg.NotBefore.After(msg.ExpirationTime) {
-			return nil, errors.New("siws: Not Before is after Expiration Time")
+			return nil, ErrNotBeforeAfterExpiration
 		}
 	}
 
