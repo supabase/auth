@@ -100,28 +100,12 @@ func TestParseMessage(t *testing.T) {
 		signature string
 	}{
 		{
-			message: `example.com wants you to sign in with your Ethereum account:
-0x196a28d05bA75C8dC35B0F6e71DD622D1aC82b7E
-
-Sign in to Example App
-
-URI: https://example.com
-Version: 1
-Chain ID: 1
-Nonce: 12345678
-Issued At: 2025-01-01T00:00:00.000Z`,
+			message:   "example.com wants you to sign in with your Ethereum account:\n0x196a28d05bA75C8dC35B0F6e71DD622D1aC82b7E\n\nSign in to Example App\n\nURI: https://example.com\nVersion: 1\nChain ID: 1\nNonce: 12345678\nIssued At: 2025-01-01T00:00:00.000Z",
 			signature: "0xee337880f195524c156b8cc5f425ffcedb9d94638a91fa41ba72e26d93f04c9d1c7bca7020071c34ef7527ed6389ee24b59de79deab4e9e8251e6ca1e195a56a1b",
 		},
 		// Address: 0x196a28d05bA75C8dC35B0F6e71DD622D1aC82b7E
 		{
-			message: `example.com wants you to sign in with your Ethereum account:
-0x196a28d05bA75C8dC35B0F6e71DD622D1aC82b7E
-
-URI: https://example.com
-Version: 1
-Chain ID: 1
-Nonce: 12345678
-Issued At: 2025-01-01T00:00:00.000Z`,
+			message:   "example.com wants you to sign in with your Ethereum account:\n0x196a28d05bA75C8dC35B0F6e71DD622D1aC82b7E\n\nURI: https://example.com\nVersion: 1\nChain ID: 1\nNonce: 12345678\nIssued At: 2025-01-01T00:00:00.000Z",
 			signature: "0x0851224c203d08ced345bc99e66ac531eafbbb54eff94f7297b54ec19a0db7e879c4d246d45e0e13c9c2801db1f71f283c373b8c10cc0a91fe6418220a0aa5391b",
 		},
 	}
