@@ -75,8 +75,8 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 		line := strings.TrimSpace(lines[i])
 
 		if inResources {
-			if strings.HasPrefix(line, "- ") {
-				resource := strings.TrimSpace(strings.TrimPrefix(line, "- "))
+			if after, ok := strings.CutPrefix(line, "- "); ok {
+				resource := strings.TrimSpace(after)
 
 				resourceURL, err := url.ParseRequestURI(resource)
 				if err != nil {
@@ -119,6 +119,9 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 			msg.Version = value
 
 		case "Chain ID":
+			if value != "" && !IsValidSolanaNetwork(value) {
+				return nil, ErrInvalidChainID
+			}
 			msg.ChainID = value
 
 		case "Nonce":
@@ -169,10 +172,6 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 
 	if msg.URI == nil {
 		return nil, ErrMissingURI
-	}
-
-	if msg.ChainID != "" && !IsValidSolanaNetwork(msg.ChainID) {
-		return nil, ErrInvalidChainID
 	}
 
 	if !msg.IssuedAt.IsZero() && !msg.ExpirationTime.IsZero() {
