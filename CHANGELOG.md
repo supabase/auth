@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.177.0](https://github.com/supabase/auth/compare/v2.176.1...v2.177.0) (2025-07-05)
+
+
+### Features
+
+* add option to disable writing to `audit_log_entries` ([#2073](https://github.com/supabase/auth/issues/2073)) ([80758dd](https://github.com/supabase/auth/commit/80758dd880b82e9b96d7185d9d0a0850b8c6f19d))
+* add snapchat provider ([#2071](https://github.com/supabase/auth/issues/2071)) ([fca8ea4](https://github.com/supabase/auth/commit/fca8ea4a701eafb587438a159e19f5488c82a178))
+* enhance login analytics ([#2078](https://github.com/supabase/auth/issues/2078)) ([1aed4a2](https://github.com/supabase/auth/commit/1aed4a27fdc54d9c4d01f17d49dcaadb25400f18))
+* fallback to jwt secret if alg is `HS256` and the `kid` is not recognized ([#2072](https://github.com/supabase/auth/issues/2072)) ([8fa99bd](https://github.com/supabase/auth/commit/8fa99bd6cab91c0bf093fdcdb912054113ea66ba))
+* ignore `aud` claim from admin jwt (`service_role` never had one) ([#2070](https://github.com/supabase/auth/issues/2070)) ([57eddcb](https://github.com/supabase/auth/commit/57eddcb45ce97004c26f6d65351447d7dc654162))
+
+
+### Bug Fixes
+
+* add missing provider info to signedup audit logs ([#2061](https://github.com/supabase/auth/issues/2061)) ([c6e0cbe](https://github.com/supabase/auth/commit/c6e0cbefe5b609ac3362c23d0f7cb9d9bb04abc9))
+* **auditlog:** keep writing to logs even postgres is disabled ([#2076](https://github.com/supabase/auth/issues/2076)) ([b89bc32](https://github.com/supabase/auth/commit/b89bc32de5adc9d458e7f95ad9b08a99604c70d8))
+* do not log fatal when http server successfully closes ([#2065](https://github.com/supabase/auth/issues/2065)) ([1f7de6c](https://github.com/supabase/auth/commit/1f7de6c65f31ef0bbb80899369989b13ab5a517f))
+* invites should send another email when user exists ([#2058](https://github.com/supabase/auth/issues/2058)) ([96469bd](https://github.com/supabase/auth/commit/96469bd01b9c37f938aabdb0434a054a111cf963))
+* use `appleid.apple.com` as default issuer ([#2068](https://github.com/supabase/auth/issues/2068)) ([963a781](https://github.com/supabase/auth/commit/963a781ee525ef893ec545583e7d385c02995518))
+* use `split_words` config option for `AuditLog` ([#2075](https://github.com/supabase/auth/issues/2075)) ([7ecb234](https://github.com/supabase/auth/commit/7ecb234c3d66459c92ba16fd69ed7eb933c4b8a7))
+
 ## [2.176.1](https://github.com/supabase/auth/compare/v2.176.0...v2.176.1) (2025-06-11)
 
 
