@@ -94,11 +94,16 @@ paths:
                 value:
                   auth_code: 009e5066-fc11-4eca-8c8c-6fd82aa263f2
                   code_verifier: ktPNXpR65N6JtgzQA8_5HHtH6PBSAahMNoLKRzQEa0Tzgl.vdV~b6lPk004XOd.4lR0inCde.NoQx5K63xPfzL8o7tJAjXncnhw5Niv9ycQ.QRV9JG.y3VapqbgLfIrJ
-              grant_type=web3:
+              web3_solana:
                 value:
                   message: "example.com wants you to sign in with your Solana account:\n0x1234...5678\n\nSign in with Solana\n\nURI: https://example.com\nVersion: 1\nNonce: abc123def456\nIssued At: 2023-09-19T12:00:00Z"
                   signature: "base64_encoded_signature_string"
                   chain: "solana"
+              web3_ethereum:
+                value:
+                  message: "example.com wants you to sign in with your Ethereum account:\n0x1234567890123456789012345678901234567890\n\nSign in with Ethereum\n\nURI: https://example.com\nVersion: 1\nIssued At: 2023-09-19T12:00:00Z"
+                  signature: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1b"
+                  chain: "ethereum"
             schema:
               type: object
               description: |-
@@ -147,15 +152,19 @@ paths:
                 message:
                   type: string
                   description: |
-                    Signed message for Web3 authentication following the Sign in with Solana standard. Must include: `Issued At`, `URI`, `Version`.
+                    Signed message for Web3 authentication following the Sign in with Solana (SIWS) or Sign in with Ethereum (SIWE) standard. Must include: `Issued At`, `URI`, `Version`.
                 signature:
                   type: string
-                  description: The signature of the message for Web3 authentication encoded as Base64 or Base64-URL.
+                  description: |
+                    The signature of the message for Web3 authentication. 
+                    For Solana: Base64 or Base64-URL encoded. 
+                    For Ethereum: hexadecimal string with 0x prefix.
                 chain:
                   type: string
                   description: What blockchain is the Web3 message and signature for.
                   enum:
                     - solana
+                    - ethereum
                   example: solana
       responses:
         200:
