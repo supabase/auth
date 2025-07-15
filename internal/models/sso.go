@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"math"
 	"reflect"
 	"strings"
 	"time"
@@ -16,7 +17,8 @@ import (
 )
 
 type SSOProvider struct {
-	ID uuid.UUID `db:"id" json:"id"`
+	ID         uuid.UUID `db:"id" json:"id"`
+	ResourceID *string   `db:"resource_id" json:"resource_id,omitempty"`
 
 	SAMLProvider SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
 	SSODomains   []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
@@ -199,6 +201,19 @@ func FindSSOProviderByID(tx *storage.Connection, id uuid.UUID) (*SSOProvider, er
 
 		return nil, errors.Wrap(err, "error finding SAML SSO provider by ID")
 	}
+	return &ssoProvider, nil
+}
+
+func FindSSOProviderByResourceID(tx *storage.Connection, id string) (*SSOProvider, error) {
+	var ssoProvider SSOProvider
+
+	if err := tx.Eager().Q().Where("resource_id = ?", id).First(&ssoProvider); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, SSOProviderNotFoundError{}
+		}
+
+		return nil, errors.Wrap(err, "error finding SAML SSO provider by Resource ID")
+	}
 
 	return &ssoProvider, nil
 }
@@ -233,7 +248,7 @@ func FindSSOProviderByDomain(tx *storage.Connection, domain string) (*SSOProvide
 	return &ssoProvider, nil
 }
 
-func FindAllSAMLProviders(tx *storage.Connection) ([]SSOProvider, error) {
+func FindAllSSOProviders(tx *storage.Connection) ([]SSOProvider, error) {
 	var providers []SSOProvider
 
 	if err := tx.Eager().All(&providers); err != nil {
@@ -245,6 +260,48 @@ func FindAllSAMLProviders(tx *storage.Connection) ([]SSOProvider, error) {
 	}
 
 	return providers, nil
+}
+
+// FindSSOProviderByFilter finds SSO Providers with the matching filter.
+func FindSSOProviderByFilter(
+	tx *storage.Connection,
+	pageParams *Pagination,
+	sortParams *SortParams,
+	filter map[string]string,
+) ([]*SSOProvider, error) {
+	ssoProviders := []*SSOProvider{}
+	q := tx.Eager().Q()
+
+	// allow listing resources by prefix
+	if v, ok := filter["resource_id_prefix"]; ok {
+		q = q.Where("resource_id LIKE ?%", v)
+	}
+
+	if sortParams != nil && len(sortParams.Fields) > 0 {
+		for _, field := range sortParams.Fields {
+			q = q.Order(field.Name + " " + string(field.Dir))
+		}
+	}
+
+	var err error
+	if pageParams != nil {
+		page := uint64ToInt(pageParams.Page, 0)
+		perPage := uint64ToInt(pageParams.PerPage, 50)
+
+		err = q.Paginate(page, int(perPage)).All(&ssoProviders)
+		pageParams.Count = uint64(q.Paginator.TotalEntriesSize)
+	} else {
+		err = q.All(&ssoProviders)
+	}
+
+	return ssoProviders, err
+}
+
+func uint64ToInt(v uint64, def int) int {
+	if v > 0 && v < math.MaxInt {
+		def = int(v)
+	}
+	return def
 }
 
 func FindSAMLRelayStateByID(tx *storage.Connection, id uuid.UUID) (*SAMLRelayState, error) {

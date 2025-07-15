@@ -19,22 +19,31 @@ import (
 	"github.com/supabase/auth/internal/utilities"
 )
 
-// loadSSOProvider looks for an idp_id parameter in the URL route and loads the SSO provider
-// with that ID (or resource ID) and adds it to the context.
+// loadSSOProvider looks for an idp_id or resource_id parameter in the URL route
+// and loads the SSO provider into the the context.
 func (a *API) loadSSOProvider(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	idpParam := chi.URLParam(r, "idp_id")
-
-	idpID, err := uuid.FromString(idpParam)
-	if err != nil {
-		// idpParam is not UUIDv4
-		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "SSO Identity Provider not found")
+	var (
+		provider *models.SSOProvider
+		err      error
+	)
+	switch {
+	case chi.URLParam(r, "idp_id") != "":
+		idpParam := chi.URLParam(r, "idp_id")
+		idpID, idpErr := uuid.FromString(idpParam)
+		if idpErr != nil {
+			return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "SSO Identity Provider not found")
+		}
+		provider, err = models.FindSSOProviderByID(db, idpID)
+	case chi.URLParam(r, "resource_id") != "":
+		resourceID := chi.URLParam(r, "resource_id")
+		provider, err = models.FindSSOProviderByResourceID(db, resourceID)
+	default:
+		err = apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "SSO Identity Provider not found")
 	}
 
-	// idpParam is a UUIDv4
-	provider, err := models.FindSSOProviderByID(db, idpID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "SSO Identity Provider not found")
@@ -44,7 +53,6 @@ func (a *API) loadSSOProvider(w http.ResponseWriter, r *http.Request) (context.C
 	}
 
 	observability.LogEntrySetField(r, "sso_provider_id", provider.ID.String())
-
 	return withSSOProvider(r.Context(), provider), nil
 }
 
@@ -54,7 +62,7 @@ func (a *API) adminSSOProvidersList(w http.ResponseWriter, r *http.Request) erro
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	providers, err := models.FindAllSAMLProviders(db)
+	providers, err := models.FindAllSSOProviders(db)
 	if err != nil {
 		return err
 	}
@@ -77,6 +85,7 @@ type CreateSSOProviderParams struct {
 	Domains          []string                    `json:"domains"`
 	AttributeMapping models.SAMLAttributeMapping `json:"attribute_mapping"`
 	NameIDFormat     string                      `json:"name_id_format"`
+	ResourceID       *string                     `json:"resource_id,omitempty"`
 }
 
 func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
@@ -230,6 +239,9 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 		},
 	}
 
+	if params.ResourceID != nil {
+		provider.ResourceID = params.ResourceID
+	}
 	if params.MetadataURL != "" {
 		provider.SAMLProvider.MetadataURL = &params.MetadataURL
 	}
@@ -371,6 +383,20 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 			provider.SAMLProvider.NameIDFormat = nil
 		} else {
 			provider.SAMLProvider.NameIDFormat = &params.NameIDFormat
+		}
+	}
+
+	if params.ResourceID != nil {
+		resourceID := *params.ResourceID
+		switch {
+		case resourceID == "" && provider.ResourceID != nil:
+			provider.ResourceID = nil
+			modified = true
+		case resourceID != "" &&
+			(provider.ResourceID == nil ||
+				*provider.ResourceID != resourceID):
+			provider.ResourceID = &resourceID
+			modified = true
 		}
 	}
 
