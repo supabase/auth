@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
-	"math"
 	"reflect"
 	"strings"
 	"time"
@@ -262,46 +261,26 @@ func FindAllSSOProviders(tx *storage.Connection) ([]SSOProvider, error) {
 	return providers, nil
 }
 
-// FindSSOProviderByFilter finds SSO Providers with the matching filter.
-func FindSSOProviderByFilter(
+// FindAllSSOProvidersByFilter finds SSO Providers with the matching filter.
+func FindAllSSOProvidersByFilter(
 	tx *storage.Connection,
-	pageParams *Pagination,
-	sortParams *SortParams,
 	filter map[string]string,
 ) ([]*SSOProvider, error) {
 	ssoProviders := []*SSOProvider{}
+
 	q := tx.Eager().Q()
-
-	// allow listing resources by prefix
-	if v, ok := filter["resource_id_prefix"]; ok {
-		q = q.Where("resource_id LIKE ?%", v)
+	if v, ok := filter["resource_id"]; ok {
+		q = q.Where("resource_id = ?", v)
+	} else if v, ok := filter["resource_id_prefix"]; ok {
+		q = q.Where("resource_id LIKE ?", v+"%")
 	}
-
-	if sortParams != nil && len(sortParams.Fields) > 0 {
-		for _, field := range sortParams.Fields {
-			q = q.Order(field.Name + " " + string(field.Dir))
+	if err := q.All(&ssoProviders); err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, nil
 		}
+		return nil, errors.Wrap(err, "error loading all SAML SSO providers")
 	}
-
-	var err error
-	if pageParams != nil {
-		page := uint64ToInt(pageParams.Page, 0)
-		perPage := uint64ToInt(pageParams.PerPage, 50)
-
-		err = q.Paginate(page, int(perPage)).All(&ssoProviders)
-		pageParams.Count = uint64(q.Paginator.TotalEntriesSize)
-	} else {
-		err = q.All(&ssoProviders)
-	}
-
-	return ssoProviders, err
-}
-
-func uint64ToInt(v uint64, def int) int {
-	if v > 0 && v < math.MaxInt {
-		def = int(v)
-	}
-	return def
+	return ssoProviders, nil
 }
 
 func FindSAMLRelayStateByID(tx *storage.Connection, id uuid.UUID) (*SAMLRelayState, error) {

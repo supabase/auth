@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -221,9 +222,14 @@ func TestE2EAdmin(t *testing.T) {
 				return out
 			}
 
-			listProviders := func(t *testing.T) map[string]*models.SSOProvider {
+			listProvidersWithFilter := func(
+				t *testing.T,
+				filter url.Values,
+			) map[string]*models.SSOProvider {
+				url := "/admin/sso/providers?" + filter.Encode()
+
 				httpReq, err := http.NewRequestWithContext(
-					ctx, "GET", "/admin/sso/providers", nil)
+					ctx, "GET", url, nil)
 				require.NoError(t, err)
 
 				httpRes, err := inst.DoAdmin(httpReq)
@@ -237,6 +243,10 @@ func TestE2EAdmin(t *testing.T) {
 				prMap := listToMap(res.Items)
 				checkProviderMap(t, prMap)
 				return prMap
+			}
+
+			listProviders := func(t *testing.T) map[string]*models.SSOProvider {
+				return listProvidersWithFilter(t, nil)
 			}
 
 			getProvider := func(
@@ -344,7 +354,6 @@ func TestE2EAdmin(t *testing.T) {
 					equalProviderParams(t, req, res)
 				})
 				return
-
 			}
 
 			t.Run("ByProviderID", func(t *testing.T) {
@@ -405,75 +414,104 @@ func TestE2EAdmin(t *testing.T) {
 			t.Run("ByResourceID", func(t *testing.T) {
 				const label = "by-resource-id"
 
-				resourceID := label + ":default"
-				createReq := &api.CreateSSOProviderParams{
-					Type:        "saml",
-					ResourceID:  &resourceID,
-					MetadataURL: "",
-					MetadataXML: getTestMetadata(label),
-					Domains: []string{
-						label + ".local",
-					},
-					AttributeMapping: models.SAMLAttributeMapping{
-						Keys: getTestAttributes(),
-					},
-					NameIDFormat: string(saml.EmailAddressNameIDFormat),
+				currentProviderMap := make(map[string]*models.SSOProvider)
+				suffixes := []string{"live", "testing"}
+				for _, suffix := range suffixes {
+					t.Run("WithSuffix/"+suffix, func(t *testing.T) {
+						resourceID := label + ":" + suffix
+						createReq := &api.CreateSSOProviderParams{
+							Type:        "saml",
+							ResourceID:  &resourceID,
+							MetadataURL: "",
+							MetadataXML: getTestMetadata(label + "-" + suffix),
+							Domains: []string{
+								label + "-" + suffix + ".local",
+							},
+							AttributeMapping: models.SAMLAttributeMapping{
+								Keys: getTestAttributes(),
+							},
+							NameIDFormat: string(saml.EmailAddressNameIDFormat),
+						}
+
+						createRes := createProvider(t, createReq)
+						equalProviderParams(t, createReq, createRes)
+
+						resourceSeg := "providers/resource_" + resourceID
+						getRes := getProvider(t, resourceSeg)
+						equalProvider(t, createRes, getRes)
+
+						{
+							updateReq := &api.CreateSSOProviderParams{
+								Domains: []string{
+									label + "-" + suffix + ".local",
+									label + "-" + suffix + "-new.local",
+								},
+							}
+							updateRes := updateProvider(t, resourceSeg, updateReq)
+							getRes = getProvider(t, resourceSeg)
+							equalProvider(t, updateRes, getRes)
+
+							currentProviderMap[getRes.ID.String()] = getRes
+						}
+					})
 				}
-				createRes := createProvider(t, createReq)
-				equalProviderParams(t, createReq, createRes)
 
-				resourceSeg := "resources/" + resourceID
-				getRes := getProvider(t, resourceSeg)
-				equalProvider(t, createRes, getRes)
+				t.Run("ListByFilter", func(t *testing.T) {
 
-				{
-					updateReq := &api.CreateSSOProviderParams{
-						Domains: []string{
-							label + ".local",
-							label + "-new.local",
-						},
+					t.Run("NoFilter", func(t *testing.T) {
+						prMap := listProviders(t)
+						equalProviderMaps(t, currentProviderMap, prMap)
+					})
+
+					t.Run("WithResourceID", func(t *testing.T) {
+						for _, pr := range currentProviderMap {
+							q := make(url.Values)
+							q.Add("resource_id", *pr.ResourceID)
+
+							prMap := listProvidersWithFilter(t, q)
+							require.Len(t, prMap, 1)
+
+							got, ok := prMap[pr.ID.String()]
+							require.True(t, ok)
+							require.NotNil(t, got)
+
+							equalProvider(t, pr, got)
+						}
+					})
+
+					t.Run("WithResourceIDPrefix", func(t *testing.T) {
+						q := make(url.Values)
+						q.Add("resource_id_prefix", label+":")
+
+						prMap := listProvidersWithFilter(t, q)
+						require.Len(t, prMap, 2)
+
+						for _, pr := range currentProviderMap {
+							got, ok := prMap[pr.ID.String()]
+							require.True(t, ok)
+							require.NotNil(t, got)
+
+							equalProvider(t, pr, got)
+						}
+					})
+				})
+
+				t.Run("Delete", func(t *testing.T) {
+					for _, pr := range currentProviderMap {
+						resourceSeg := "providers/resource_" + *pr.ResourceID
+						deleteRes := deleteProvider(t, resourceSeg)
+						equalProvider(t, pr, deleteRes)
+
+						url := "/admin/sso/" + resourceSeg
+						httpReq, err := http.NewRequestWithContext(
+							ctx, "GET", url, nil)
+						require.NoError(t, err)
+
+						httpRes, err := inst.DoAdmin(httpReq)
+						require.NoError(t, err)
+						require.Equal(t, 404, httpRes.StatusCode)
 					}
-					updateRes := updateProvider(t, resourceSeg, updateReq)
-					getRes = getProvider(t, resourceSeg)
-					equalProvider(t, updateRes, getRes)
-				}
-
-				var lastProvider *models.SSOProvider
-				{
-					resourceID = label + ":testing"
-					updateReq := &api.CreateSSOProviderParams{
-						ResourceID: &resourceID,
-					}
-					updateRes := updateProvider(t, resourceSeg, updateReq)
-
-					resourceSeg = "resources/" + resourceID
-					getRes = getProvider(t, resourceSeg)
-					equalProvider(t, updateRes, getRes)
-
-					lastProvider = getRes
-				}
-
-				{
-					currentProviderMap := map[string]*models.SSOProvider{
-						lastProvider.ID.String(): lastProvider,
-					}
-					prMap := listProviders(t)
-					equalProviderMaps(t, currentProviderMap, prMap)
-				}
-
-				{
-					deleteRes := deleteProvider(t, resourceSeg)
-					equalProvider(t, lastProvider, deleteRes)
-
-					url := "/admin/sso/" + resourceSeg
-					httpReq, err := http.NewRequestWithContext(
-						ctx, "GET", url, nil)
-					require.NoError(t, err)
-
-					httpRes, err := inst.DoAdmin(httpReq)
-					require.NoError(t, err)
-					require.Equal(t, 404, httpRes.StatusCode)
-				}
+				})
 			})
 		})
 	})

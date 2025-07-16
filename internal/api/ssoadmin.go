@@ -19,8 +19,9 @@ import (
 	"github.com/supabase/auth/internal/utilities"
 )
 
-// loadSSOProvider looks for an idp_id or resource_id parameter in the URL route
-// and loads the SSO provider into the the context.
+// loadSSOProvider looks for an idp_id and first checks it for a "resource_"
+// prefix, if present the provider is loaded by resource_id. Otherwise the
+// provider is loaded by id.
 func (a *API) loadSSOProvider(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
@@ -29,19 +30,19 @@ func (a *API) loadSSOProvider(w http.ResponseWriter, r *http.Request) (context.C
 		provider *models.SSOProvider
 		err      error
 	)
+
+	const resourcePrefix = "resource_"
+	idpParam := chi.URLParam(r, "idp_id")
 	switch {
-	case chi.URLParam(r, "idp_id") != "":
-		idpParam := chi.URLParam(r, "idp_id")
+	case strings.HasPrefix(idpParam, resourcePrefix):
+		resourceID := strings.TrimPrefix(idpParam, resourcePrefix)
+		provider, err = models.FindSSOProviderByResourceID(db, resourceID)
+	default:
 		idpID, idpErr := uuid.FromString(idpParam)
 		if idpErr != nil {
 			return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "SSO Identity Provider not found")
 		}
 		provider, err = models.FindSSOProviderByID(db, idpID)
-	case chi.URLParam(r, "resource_id") != "":
-		resourceID := chi.URLParam(r, "resource_id")
-		provider, err = models.FindSSOProviderByResourceID(db, resourceID)
-	default:
-		err = apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "SSO Identity Provider not found")
 	}
 
 	if err != nil {
@@ -56,13 +57,24 @@ func (a *API) loadSSOProvider(w http.ResponseWriter, r *http.Request) (context.C
 	return withSSOProvider(r.Context(), provider), nil
 }
 
-// adminSSOProvidersList lists all SAML SSO Identity Providers in the system. Does
+// adminSSOProvidersList lists all SSO Identity Providers in the system. Does
 // not deal with pagination at this time.
 func (a *API) adminSSOProvidersList(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	providers, err := models.FindAllSSOProviders(db)
+	filter := make(map[string]string)
+	for _, filterCol := range []string{
+		// see: FindAllSSOProvidersByFilter in internal/models/sso.go
+		"resource_id",
+		"resource_id_prefix",
+	} {
+		if filterVal := r.URL.Query().Get(filterCol); filterVal != "" {
+			filter[filterCol] = filterVal
+		}
+	}
+
+	providers, err := models.FindAllSSOProvidersByFilter(db, filter)
 	if err != nil {
 		return err
 	}

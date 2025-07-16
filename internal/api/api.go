@@ -292,15 +292,6 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 						r.Delete("/", api.adminSSOProvidersDelete)
 					})
 				})
-				r.Route("/resources", func(r *router) {
-					r.Route("/{resource_id}", func(r *router) {
-						r.Use(api.loadSSOProvider)
-
-						r.Get("/", api.adminSSOProvidersGet)
-						r.Put("/", api.adminSSOProvidersUpdate)
-						r.Delete("/", api.adminSSOProvidersDelete)
-					})
-				})
 			})
 		})
 	})
