@@ -198,6 +198,7 @@ func ParseMessage(raw string) (*SIWEMessage, error) {
 
 	return msg, nil
 }
+
 // VerifySignature validates that the signature was created by the private key
 // corresponding to the address in the message. This performs ECDSA recovery
 // which is computationally expensive, so it should be called only after
