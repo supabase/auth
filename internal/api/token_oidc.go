@@ -78,6 +78,8 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 
 	case p.Provider == "facebook" || p.Issuer == provider.IssuerFacebook:
 		cfg = &config.External.Facebook
+		// Facebook (Limited Login) nonce check is not supported
+		cfg.SkipNonceCheck = true
 		providerType = "facebook"
 		issuer = provider.IssuerFacebook
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Facebook.ClientID...)
