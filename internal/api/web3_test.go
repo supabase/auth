@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gobwas/glob"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -35,6 +36,16 @@ const (
 func TestWeb3(t *testing.T) {
 	api, config, err := setupAPIForTest()
 	require.NoError(t, err)
+
+	// Add https://supabase.com (without trailing slash) to allow list
+	config.URIAllowList = append(config.URIAllowList, "https://supabase.com")
+	
+	// Update the URIAllowListMap with the new entry
+	if config.URIAllowListMap == nil {
+		config.URIAllowListMap = make(map[string]glob.Glob)
+	}
+	g := glob.MustCompile("https://supabase.com", '.', '/')
+	config.URIAllowListMap["https://supabase.com"] = g
 
 	ts := &Web3TestSuite{
 		API:    api,
