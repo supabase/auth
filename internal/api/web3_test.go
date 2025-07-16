@@ -39,7 +39,7 @@ func TestWeb3(t *testing.T) {
 
 	// Add https://supabase.com (without trailing slash) to allow list
 	config.URIAllowList = append(config.URIAllowList, "https://supabase.com")
-	
+
 	// Update the URIAllowListMap with the new entry
 	if config.URIAllowListMap == nil {
 		config.URIAllowListMap = make(map[string]glob.Glob)
