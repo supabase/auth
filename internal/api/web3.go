@@ -285,7 +285,7 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 			return terr
 		}
 
-		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": providerType,
 			"chain":    params.Chain,
 			"network":  parsedMessage.ChainID,
