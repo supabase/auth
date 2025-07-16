@@ -198,7 +198,15 @@ func ParseMessage(raw string) (*SIWEMessage, error) {
 
 	return msg, nil
 }
-
+// VerifySignature validates that the signature was created by the private key
+// corresponding to the address in the message. This performs ECDSA recovery
+// which is computationally expensive, so it should be called only after
+// ParseMessage has validated the message structure.
+//
+// The signature must be a 65-byte hex string in the format: 0x{R}{S}{V}
+// where R and S are 32 bytes each and V is 1 byte.
+//
+// Returns true if the recovered address matches the message address (case-insensitive).
 func (m *SIWEMessage) VerifySignature(signatureHex string) bool {
 	sig, err := hexutil.Decode(signatureHex)
 	if err != nil || len(sig) != 65 {
