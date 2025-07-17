@@ -11,6 +11,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
+	"github.com/supabase/auth/internal/api/taskafter"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
@@ -297,7 +298,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return err
 			}
-			return sendJSON(w, http.StatusOK, sanitizedUser)
+			return taskafter.SendJSON(ctx, w, http.StatusOK, sanitizedUser)
 		}
 		return err
 	}
