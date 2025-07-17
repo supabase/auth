@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.178.0](https://github.com/supabase/auth/compare/v2.177.0...v2.178.0) (2025-07-17)
+
+
+### Features
+
+* skip nonce check for Facebook Limited Login auth ([#2082](https://github.com/supabase/auth/issues/2082)) ([f1b15ff](https://github.com/supabase/auth/commit/f1b15ffdb9b1f1af873a147fdb5d039382becb2e))
+
 ## [2.177.0](https://github.com/supabase/auth/compare/v2.176.1...v2.177.0) (2025-07-05)
 
 
