@@ -16,14 +16,18 @@ import (
 )
 
 type SSOProvider struct {
-	ID         uuid.UUID `db:"id" json:"id"`
-	ResourceID *string   `db:"resource_id" json:"resource_id,omitempty"`
-
+	ID           uuid.UUID    `db:"id" json:"id"`
+	ResourceID   *string      `db:"resource_id" json:"resource_id,omitempty"`
+	Disabled     *bool        `db:"disabled" json:"disabled"`
 	SAMLProvider SAMLProvider `has_one:"saml_providers" fk_id:"sso_provider_id" json:"saml,omitempty"`
 	SSODomains   []SSODomain  `has_many:"sso_domains" fk_id:"sso_provider_id" json:"domains"`
 
 	CreatedAt time.Time `db:"created_at" json:"created_at"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
+}
+
+func (p SSOProvider) IsEnabled() bool {
+	return p.Disabled == nil || !*p.Disabled
 }
 
 func (p SSOProvider) TableName() string {

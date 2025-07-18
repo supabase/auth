@@ -97,7 +97,9 @@ type CreateSSOProviderParams struct {
 	Domains          []string                    `json:"domains"`
 	AttributeMapping models.SAMLAttributeMapping `json:"attribute_mapping"`
 	NameIDFormat     string                      `json:"name_id_format"`
-	ResourceID       *string                     `json:"resource_id,omitempty"`
+
+	ResourceID *string `json:"resource_id,omitempty"`
+	Disabled   *bool   `json:"disabled,omitempty"`
 }
 
 func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
@@ -244,6 +246,7 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 	}
 
 	provider := &models.SSOProvider{
+
 		// TODO handle Name, Description, Attribute Mapping
 		SAMLProvider: models.SAMLProvider{
 			EntityID:    metadata.EntityID,
@@ -254,10 +257,12 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 	if params.ResourceID != nil {
 		provider.ResourceID = params.ResourceID
 	}
+	if params.Disabled != nil {
+		provider.Disabled = params.Disabled
+	}
 	if params.MetadataURL != "" {
 		provider.SAMLProvider.MetadataURL = &params.MetadataURL
 	}
-
 	if params.NameIDFormat != "" {
 		provider.SAMLProvider.NameIDFormat = &params.NameIDFormat
 	}
@@ -408,6 +413,14 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 			(provider.ResourceID == nil ||
 				*provider.ResourceID != resourceID):
 			provider.ResourceID = &resourceID
+			modified = true
+		}
+	}
+
+	if params.Disabled != nil {
+		disabled := *params.Disabled
+		if provider.Disabled == nil || *provider.Disabled != disabled {
+			provider.Disabled = &disabled
 			modified = true
 		}
 	}

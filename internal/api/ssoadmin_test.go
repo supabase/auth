@@ -435,12 +435,16 @@ func TestE2EAdmin(t *testing.T) {
 
 						createRes := createProvider(t, createReq)
 						equalProviderParams(t, createReq, createRes)
+						require.Nil(t, createRes.Disabled)
+						require.True(t, createRes.IsEnabled())
 
 						resourceSeg := "providers/resource_" + resourceID
 						getRes := getProvider(t, resourceSeg)
 						equalProvider(t, createRes, getRes)
+						require.Nil(t, getRes.Disabled)
+						require.True(t, getRes.IsEnabled())
 
-						{
+						t.Run("AddDomain", func(t *testing.T) {
 							updateReq := &api.CreateSSOProviderParams{
 								Domains: []string{
 									label + "-" + suffix + ".local",
@@ -448,11 +452,54 @@ func TestE2EAdmin(t *testing.T) {
 								},
 							}
 							updateRes := updateProvider(t, resourceSeg, updateReq)
+							require.Nil(t, updateRes.Disabled)
+							require.True(t, updateRes.IsEnabled())
+
 							getRes = getProvider(t, resourceSeg)
 							equalProvider(t, updateRes, getRes)
+							require.Nil(t, getRes.Disabled)
+							require.True(t, getRes.IsEnabled())
 
 							currentProviderMap[getRes.ID.String()] = getRes
-						}
+						})
+
+						disabled := true
+						t.Run("DisabledFlag/true", func(t *testing.T) {
+							updateReq := &api.CreateSSOProviderParams{
+								Disabled: &disabled,
+							}
+							updateRes := updateProvider(t, resourceSeg, updateReq)
+							require.NotNil(t, updateRes.Disabled)
+							require.True(t, *updateRes.Disabled)
+							require.False(t, updateRes.IsEnabled())
+
+							getRes = getProvider(t, resourceSeg)
+							equalProvider(t, updateRes, getRes)
+							require.NotNil(t, getRes.Disabled)
+							require.True(t, *getRes.Disabled)
+							require.False(t, getRes.IsEnabled())
+
+							currentProviderMap[getRes.ID.String()] = getRes
+						})
+
+						disabled = false
+						t.Run("DisabledFlag/false", func(t *testing.T) {
+							updateReq := &api.CreateSSOProviderParams{
+								Disabled: &disabled,
+							}
+							updateRes := updateProvider(t, resourceSeg, updateReq)
+							require.NotNil(t, updateRes.Disabled)
+							require.False(t, *updateRes.Disabled)
+							require.True(t, updateRes.IsEnabled())
+
+							getRes = getProvider(t, resourceSeg)
+							equalProvider(t, updateRes, getRes)
+							require.NotNil(t, getRes.Disabled)
+							require.False(t, *getRes.Disabled)
+							require.True(t, getRes.IsEnabled())
+
+							currentProviderMap[getRes.ID.String()] = getRes
+						})
 					})
 				}
 
