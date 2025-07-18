@@ -103,6 +103,12 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 			return apierrors.NewInternalServerError("Unable to find SSO Provider from SAML RelayState")
 		}
 
+		if !ssoProvider.IsEnabled() {
+			return apierrors.NewNotFoundError(
+				apierrors.ErrorCodeSSOProviderDisabled,
+				"SSO Provider assigned for this domain is currently disabled")
+		}
+
 		initiatedBy = "sp"
 		entityId = ssoProvider.SAMLProvider.EntityID
 		redirectTo = relayState.RedirectTo
@@ -154,6 +160,12 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewNotFoundError(apierrors.ErrorCodeSAMLIdPNotFound, "A SAML connection has not been established with this Identity Provider")
 	} else if err != nil {
 		return err
+	}
+
+	if !ssoProvider.IsEnabled() {
+		return apierrors.NewNotFoundError(
+			apierrors.ErrorCodeSSOProviderDisabled,
+			"SSO Provider assigned for this domain is currently disabled")
 	}
 
 	idpMetadata, err := ssoProvider.SAMLProvider.EntityDescriptor()

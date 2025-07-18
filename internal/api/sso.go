@@ -52,6 +52,30 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 	if hasProviderID, err = params.validate(); err != nil {
 		return err
 	}
+
+	var ssoProvider *models.SSOProvider
+	if hasProviderID {
+		ssoProvider, err = models.FindSSOProviderByID(db, params.ProviderID)
+		if models.IsNotFoundError(err) {
+			return apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "No such SSO provider")
+		} else if err != nil {
+			return apierrors.NewInternalServerError("Unable to find SSO provider by ID").WithInternalError(err)
+		}
+	} else {
+		ssoProvider, err = models.FindSSOProviderByDomain(db, params.Domain)
+		if models.IsNotFoundError(err) {
+			return apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "No SSO provider assigned for this domain")
+		} else if err != nil {
+			return apierrors.NewInternalServerError("Unable to find SSO provider by domain").WithInternalError(err)
+		}
+	}
+
+	if !ssoProvider.IsEnabled() {
+		return apierrors.NewNotFoundError(
+			apierrors.ErrorCodeSSOProviderDisabled,
+			"SSO Provider is currently disabled")
+	}
+
 	codeChallengeMethod := params.CodeChallengeMethod
 	codeChallenge := params.CodeChallenge
 
@@ -67,24 +91,6 @@ func (a *API) SingleSignOn(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		flowStateID = &flowState.ID
-	}
-
-	var ssoProvider *models.SSOProvider
-
-	if hasProviderID {
-		ssoProvider, err = models.FindSSOProviderByID(db, params.ProviderID)
-		if models.IsNotFoundError(err) {
-			return apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "No such SSO provider")
-		} else if err != nil {
-			return apierrors.NewInternalServerError("Unable to find SSO provider by ID").WithInternalError(err)
-		}
-	} else {
-		ssoProvider, err = models.FindSSOProviderByDomain(db, params.Domain)
-		if models.IsNotFoundError(err) {
-			return apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "No SSO provider assigned for this domain")
-		} else if err != nil {
-			return apierrors.NewInternalServerError("Unable to find SSO provider by domain").WithInternalError(err)
-		}
 	}
 
 	entityDescriptor, err := ssoProvider.SAMLProvider.EntityDescriptor()
