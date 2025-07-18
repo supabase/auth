@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/json"
+	"net/url"
 	"reflect"
 	"strings"
 	"time"
@@ -265,17 +266,22 @@ func FindAllSSOProviders(tx *storage.Connection) ([]SSOProvider, error) {
 	return providers, nil
 }
 
+const (
+	resourceIDFilter       = "resource_id"
+	resourceIDPrefixFilter = "resource_id_prefix"
+)
+
 // FindAllSSOProvidersByFilter finds SSO Providers with the matching filter.
 func FindAllSSOProvidersByFilter(
 	tx *storage.Connection,
-	filter map[string]string,
+	queryValues url.Values,
 ) ([]*SSOProvider, error) {
 	ssoProviders := []*SSOProvider{}
 
 	q := tx.Eager().Q()
-	if v, ok := filter["resource_id"]; ok {
+	if v := queryValues.Get(resourceIDFilter); v != "" {
 		q = q.Where("resource_id = ?", v)
-	} else if v, ok := filter["resource_id_prefix"]; ok {
+	} else if v := queryValues.Get(resourceIDPrefixFilter); v != "" {
 		q = q.Where("resource_id LIKE ?", v+"%")
 	}
 	if err := q.All(&ssoProviders); err != nil {

@@ -246,7 +246,14 @@ func TestE2EAdmin(t *testing.T) {
 			}
 
 			listProviders := func(t *testing.T) map[string]*models.SSOProvider {
-				return listProvidersWithFilter(t, nil)
+				prMap := listProvidersWithFilter(t, nil)
+				for k, pr := range prMap {
+					keys := pr.SAMLProvider.AttributeMapping.Keys
+					if _, ok := keys["TestE2EAdmin"]; !ok {
+						delete(prMap, k)
+					}
+				}
+				return prMap
 			}
 
 			getProvider := func(

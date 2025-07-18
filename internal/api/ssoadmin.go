@@ -63,18 +63,7 @@ func (a *API) adminSSOProvidersList(w http.ResponseWriter, r *http.Request) erro
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	filter := make(map[string]string)
-	for _, filterCol := range []string{
-		// see: FindAllSSOProvidersByFilter in internal/models/sso.go
-		"resource_id",
-		"resource_id_prefix",
-	} {
-		if filterVal := r.URL.Query().Get(filterCol); filterVal != "" {
-			filter[filterCol] = filterVal
-		}
-	}
-
-	providers, err := models.FindAllSSOProvidersByFilter(db, filter)
+	providers, err := models.FindAllSSOProvidersByFilter(db, r.URL.Query())
 	if err != nil {
 		return err
 	}
