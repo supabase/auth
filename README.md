@@ -2,6 +2,15 @@
 
 [![Coverage Status](https://coveralls.io/repos/github/supabase/auth/badge.svg?branch=master)](https://coveralls.io/github/supabase/auth?branch=master)
 
+## Cepro Docker build NOTE
+
+Build for Linux (amd64) and Mac (arm64):
+```sh
+docker buildx create --name multiarch --driver docker-container --use
+docker buildx inspect --bootstrap
+docker buildx build --platform linux/amd64,linux/arm64 -t ghcr.io/cepro/supabase-auth:v2.177.0 --push .
+```
+
 Auth is a user management and authentication server written in Go that powers
 [Supabase](https://supabase.com)'s features such as:
 
