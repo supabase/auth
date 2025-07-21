@@ -19,22 +19,32 @@ import (
 	"github.com/supabase/auth/internal/utilities"
 )
 
-// loadSSOProvider looks for an idp_id parameter in the URL route and loads the SSO provider
-// with that ID (or resource ID) and adds it to the context.
+// loadSSOProvider looks for an idp_id and first checks it for a "resource_"
+// prefix, if present the provider is loaded by resource_id. Otherwise the
+// provider is loaded by id.
 func (a *API) loadSSOProvider(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	idpParam := chi.URLParam(r, "idp_id")
+	var (
+		provider *models.SSOProvider
+		err      error
+	)
 
-	idpID, err := uuid.FromString(idpParam)
-	if err != nil {
-		// idpParam is not UUIDv4
-		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "SSO Identity Provider not found")
+	const resourcePrefix = "resource_"
+	idpParam := chi.URLParam(r, "idp_id")
+	switch {
+	case strings.HasPrefix(idpParam, resourcePrefix):
+		resourceID := strings.TrimPrefix(idpParam, resourcePrefix)
+		provider, err = models.FindSSOProviderByResourceID(db, resourceID)
+	default:
+		idpID, idpErr := uuid.FromString(idpParam)
+		if idpErr != nil {
+			return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "SSO Identity Provider not found")
+		}
+		provider, err = models.FindSSOProviderByID(db, idpID)
 	}
 
-	// idpParam is a UUIDv4
-	provider, err := models.FindSSOProviderByID(db, idpID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeSSOProviderNotFound, "SSO Identity Provider not found")
@@ -44,17 +54,16 @@ func (a *API) loadSSOProvider(w http.ResponseWriter, r *http.Request) (context.C
 	}
 
 	observability.LogEntrySetField(r, "sso_provider_id", provider.ID.String())
-
 	return withSSOProvider(r.Context(), provider), nil
 }
 
-// adminSSOProvidersList lists all SAML SSO Identity Providers in the system. Does
+// adminSSOProvidersList lists all SSO Identity Providers in the system. Does
 // not deal with pagination at this time.
 func (a *API) adminSSOProvidersList(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := a.db.WithContext(ctx)
 
-	providers, err := models.FindAllSAMLProviders(db)
+	providers, err := models.FindAllSSOProvidersByFilter(db, r.URL.Query())
 	if err != nil {
 		return err
 	}
@@ -77,6 +86,9 @@ type CreateSSOProviderParams struct {
 	Domains          []string                    `json:"domains"`
 	AttributeMapping models.SAMLAttributeMapping `json:"attribute_mapping"`
 	NameIDFormat     string                      `json:"name_id_format"`
+
+	ResourceID *string `json:"resource_id,omitempty"`
+	Disabled   *bool   `json:"disabled,omitempty"`
 }
 
 func (p *CreateSSOProviderParams) validate(forUpdate bool) error {
@@ -223,6 +235,7 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 	}
 
 	provider := &models.SSOProvider{
+
 		// TODO handle Name, Description, Attribute Mapping
 		SAMLProvider: models.SAMLProvider{
 			EntityID:    metadata.EntityID,
@@ -230,10 +243,15 @@ func (a *API) adminSSOProvidersCreate(w http.ResponseWriter, r *http.Request) er
 		},
 	}
 
+	if params.ResourceID != nil {
+		provider.ResourceID = params.ResourceID
+	}
+	if params.Disabled != nil {
+		provider.Disabled = params.Disabled
+	}
 	if params.MetadataURL != "" {
 		provider.SAMLProvider.MetadataURL = &params.MetadataURL
 	}
-
 	if params.NameIDFormat != "" {
 		provider.SAMLProvider.NameIDFormat = &params.NameIDFormat
 	}
@@ -371,6 +389,28 @@ func (a *API) adminSSOProvidersUpdate(w http.ResponseWriter, r *http.Request) er
 			provider.SAMLProvider.NameIDFormat = nil
 		} else {
 			provider.SAMLProvider.NameIDFormat = &params.NameIDFormat
+		}
+	}
+
+	if params.ResourceID != nil {
+		resourceID := *params.ResourceID
+		switch {
+		case resourceID == "" && provider.ResourceID != nil:
+			provider.ResourceID = nil
+			modified = true
+		case resourceID != "" &&
+			(provider.ResourceID == nil ||
+				*provider.ResourceID != resourceID):
+			provider.ResourceID = &resourceID
+			modified = true
+		}
+	}
+
+	if params.Disabled != nil {
+		disabled := *params.Disabled
+		if provider.Disabled == nil || *provider.Disabled != disabled {
+			provider.Disabled = &disabled
+			modified = true
 		}
 	}
 
