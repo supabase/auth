@@ -56,11 +56,6 @@ func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 			DefaultExpirationTTL: time.Hour,
 		}).SetBurst(30)
 
-	o.User = tollbooth.NewLimiter(gc.RateLimitOtp/(60*5),
-		&limiter.ExpirableOptions{
-			DefaultExpirationTTL: time.Hour,
-		}).SetBurst(30)
-
 	o.FactorVerify = tollbooth.NewLimiter(gc.MFA.RateLimitChallengeAndVerify/60,
 		&limiter.ExpirableOptions{
 			DefaultExpirationTTL: time.Minute,
@@ -81,11 +76,6 @@ func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 			DefaultExpirationTTL: time.Hour,
 		}).SetBurst(30)
 
-	o.Signups = tollbooth.NewLimiter(gc.RateLimitOtp/(60*5),
-		&limiter.ExpirableOptions{
-			DefaultExpirationTTL: time.Hour,
-		}).SetBurst(30)
-
 	o.Web3 = tollbooth.NewLimiter(gc.RateLimitWeb3/(60*5),
 		&limiter.ExpirableOptions{
 			DefaultExpirationTTL: time.Hour,
@@ -96,6 +86,8 @@ func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 	o.Resend = newLimiterPer5mOver1h(gc.RateLimitOtp)
 	o.MagicLink = newLimiterPer5mOver1h(gc.RateLimitOtp)
 	o.Otp = newLimiterPer5mOver1h(gc.RateLimitOtp)
+	o.User = newLimiterPer5mOver1h(gc.RateLimitOtp)
+	o.Signups = newLimiterPer5mOver1h(gc.RateLimitOtp)
 	return o
 }
 
