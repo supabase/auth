@@ -354,10 +354,16 @@ type ProviderConfiguration struct {
 	AllowedIdTokenIssuers   []string                       `json:"allowed_id_token_issuers" split_words:"true"`
 	FlowStateExpiryDuration time.Duration                  `json:"flow_state_expiry_duration" split_words:"true"`
 
-	Web3Solana SolanaConfiguration `json:"web3_solana" split_words:"true"`
+	Web3Solana   SolanaConfiguration   `json:"web3_solana" split_words:"true"`
+	Web3Ethereum EthereumConfiguration `json:"web3_ethereum" split_words:"true"`
 }
 
 type SolanaConfiguration struct {
+	Enabled                 bool          `json:"enabled,omitempty" split_words:"true"`
+	MaximumValidityDuration time.Duration `json:"maximum_validity_duration,omitempty" default:"10m" split_words:"true"`
+}
+
+type EthereumConfiguration struct {
 	Enabled                 bool          `json:"enabled,omitempty" split_words:"true"`
 	MaximumValidityDuration time.Duration `json:"maximum_validity_duration,omitempty" default:"10m" split_words:"true"`
 }
