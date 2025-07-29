@@ -147,6 +147,19 @@ func (ts *Web3TestSuite) TestHappyPath_FullMessage() {
 			message:   "localhost:5173 wants you to sign in with your Solana account:\n4UPcfLX6rHuunkDiCnrVdN2BxnaKUAT1m2KCrzaAAct6\n\nSign in on localhost\n\nURI: http://localhost:5173/\nVersion: 1\nIssued At: 2025-05-16T14:52:03.613Z",
 			signature: "RT2JCFpZQtPwGONApGZn1dZnxOBB3zJZHAQPr+cOaI+eQ4ecw/N6zJ6TNw8a+g8n6Xm/Ky1TVZRuWHSxMU1jDg==",
 		},
+		// the following two Solana messages are signed via Ledger device according to https://docs.anza.xyz/proposals/off-chain-message-signing, which differs slightly from the non-Ledger signing above
+		{
+			now:       "2025-07-29T22:30:52.235Z",
+			chain:     ChainSolana,
+			message:   "supabase.com wants you to sign in with your Solana account:\nEqzxWVyBpLD34SV9w1FFpPPvbfrfAXdiDVg1cyHTR1Rv\n\nI confirm ownership of this wallet\n\nVersion: 1\nURI: https://supabase.com/\nIssued At: 2025-07-29T22:29:52.235Z",
+			signature: "9slc0BBJw16TzWYs4/op8na3vt9E0CKt0FL5pqhzTDxvqF/txpbdo+ULDCeSzrDE/uJWmpMQw+hF0rkDj4Q0Bw==",
+		},
+		{
+			now:       "2025-07-29T22:36:10.473Z",
+			chain:     ChainSolana,
+			message:   "localhost:5173 wants you to sign in with your Solana account:\nEqzxWVyBpLD34SV9w1FFpPPvbfrfAXdiDVg1cyHTR1Rv\n\nI confirm ownership of this wallet\n\nVersion: 1\nURI: http://localhost:5173/\nIssued At: 2025-07-29T22:35:10.473Z",
+			signature: "28d9ntDE8iPkxPvzg7A+8/6QFSq8FoPIdV4O5Or6nMDRFrEip/UJKIlLlKXM/SKUeLZmnTcc+V7Y6qnQymUDDg==",
+		},
 		{
 			now:       "2025-03-29T00:09:59Z",
 			chain:     ChainEthereum,
