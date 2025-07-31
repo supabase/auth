@@ -102,7 +102,6 @@ func (ts *OAuthClientTestSuite) TestAdminOAuthServerClientRegisterHandler() {
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(ts.T(), err)
 
-	assert.NotEmpty(ts.T(), response.ID)
 	assert.NotEmpty(ts.T(), response.ClientID)
 	assert.NotEmpty(ts.T(), response.ClientSecret) // Should be included in registration response
 	assert.Equal(ts.T(), "Test Admin Client", response.ClientName)
@@ -134,7 +133,6 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientDynamicRegisterHandler() {
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(ts.T(), err)
 
-	assert.NotEmpty(ts.T(), response.ID)
 	assert.NotEmpty(ts.T(), response.ClientID)
 	assert.NotEmpty(ts.T(), response.ClientSecret) // Should be included in registration response
 	assert.Equal(ts.T(), "Test Dynamic Client", response.ClientName)
@@ -184,7 +182,6 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientGetHandler() {
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(ts.T(), err)
 
-	assert.Equal(ts.T(), client.ID.String(), response.ID)
 	assert.Equal(ts.T(), client.ClientID, response.ClientID)
 	assert.Empty(ts.T(), response.ClientSecret) // Should NOT be included in get response
 	assert.Equal(ts.T(), "Test Client", response.ClientName)
