@@ -32,6 +32,8 @@ type AccessTokenClaims struct {
 	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
 	IsAnonymous                   bool                   `json:"is_anonymous"`
+	// TODO(cemalkilic) : client_id claim will be added later
+	// ClientId                      string                 `json:"client_id,omitempty"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response

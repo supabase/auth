@@ -3,11 +3,10 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 
-	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/security"
@@ -16,14 +15,7 @@ import (
 )
 
 func sendJSON(w http.ResponseWriter, status int, obj interface{}) error {
-	w.Header().Set("Content-Type", "application/json")
-	b, err := json.Marshal(obj)
-	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("Error encoding json response: %v", obj))
-	}
-	w.WriteHeader(status)
-	_, err = w.Write(b)
-	return err
+	return shared.SendJSON(w, status, obj)
 }
 
 func isAdmin(u *models.User, config *conf.GlobalConfiguration) bool {

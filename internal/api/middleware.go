@@ -14,6 +14,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/oauthserver"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/security"
@@ -79,6 +80,41 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	return func(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 		return req.Context(), a.performRateLimiting(lmt, req)
 	}
+}
+
+// oauthClientAuth optionally authenticates an OAuth client as middleware
+// This doesn't fail if no client credentials are provided, but validates them if present
+func (a *API) oauthClientAuth(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	ctx := r.Context()
+
+	clientID, clientSecret, err := oauthserver.ExtractClientCredentials(r)
+	if err != nil {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials: "+err.Error())
+	}
+
+	// If no client credentials provided, continue without client authentication
+	if clientID == "" {
+		return ctx, nil
+	}
+
+	// Validate client credentials
+	db := a.db.WithContext(ctx)
+	client, err := models.FindOAuthServerClientByClientID(db, clientID)
+	if err != nil {
+		if models.IsNotFoundError(err) {
+			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials")
+		}
+		return nil, apierrors.NewInternalServerError("Error validating client credentials").WithInternalError(err)
+	}
+
+	// Validate client secret
+	if !oauthserver.ValidateClientSecret(clientSecret, client.ClientSecretHash) {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials")
+	}
+
+	// Add authenticated client to context
+	ctx = oauthserver.WithOAuthServerClient(ctx, client)
+	return ctx, nil
 }
 
 func (a *API) requireAdminCredentials(w http.ResponseWriter, req *http.Request) (context.Context, error) {
