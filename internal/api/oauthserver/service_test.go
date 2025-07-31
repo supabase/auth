@@ -117,11 +117,11 @@ func (ts *OAuthServiceTestSuite) TestClientAuthentication() {
 	client, secret := ts.createTestOAuthClient()
 
 	// Test valid client credentials
-	valid := ValidateClientSecret(secret, client.ClientSecretHash.String())
+	valid := ValidateClientSecret(secret, client.ClientSecretHash)
 	assert.True(ts.T(), valid)
 
 	// Test invalid client credentials
-	invalid := ValidateClientSecret("wrong-secret", client.ClientSecretHash.String())
+	invalid := ValidateClientSecret("wrong-secret", client.ClientSecretHash)
 	assert.False(ts.T(), invalid)
 }
 
