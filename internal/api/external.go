@@ -596,6 +596,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewGoogleProvider(ctx, config.External.Google, scopes)
 	case "kakao":
 		return provider.NewKakaoProvider(config.External.Kakao, scopes)
+	case "naver":
+		return provider.NewNaverProvider(config.External.Naver, scopes)
 	case "keycloak":
 		return provider.NewKeycloakProvider(config.External.Keycloak, scopes)
 	case "linkedin":
