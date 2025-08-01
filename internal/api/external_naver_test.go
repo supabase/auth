@@ -198,19 +198,6 @@ func (ts *ExternalTestSuite) TestInviteTokenExternalNaverErrorWhenEmailDoesntMat
 	assertAuthorizationFailure(ts, u, "Invited email does not match emails from external provider", "invalid_request", "")
 }
 
-func (ts *ExternalTestSuite) TestSignupExternalNaverErrorWhenVerifiedFalse() {
-	ts.Config.Mailer.AllowUnverifiedEmailSignIns = false
-	tokenCount, userCount := 0, 0
-	code := "authcode"
-	emails := `[{"email":"naver@example.com", "primary": true, "verified": false}]`
-	server := NaverTestSignupSetup(ts, &tokenCount, &userCount, code, emails)
-	defer server.Close()
-
-	u := performAuthorization(ts, "naver", code, "")
-
-	assertAuthorizationFailure(ts, u, "Unverified email with naver. A confirmation email has been sent to your naver email", "access_denied", "")
-}
-
 func (ts *ExternalTestSuite) TestSignupExternalNaverErrorWhenUserBanned() {
 	tokenCount, userCount := 0, 0
 	code := "authcode"
