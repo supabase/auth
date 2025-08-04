@@ -194,14 +194,14 @@ func (ts *OAuthServiceTestSuite) TestValidationEdgeCases() {
 
 	// Test client name too long
 	params = &OAuthServerClientRegisterParams{
-		ClientName:       string(make([]byte, 256)), // Too long
+		ClientName:       string(make([]byte, 1025)), // Too long
 		RedirectURIs:     []string{"https://example.com/callback"},
 		RegistrationType: "dynamic",
 	}
 
 	_, _, err = ts.Server.registerOAuthServerClient(ctx, params)
 	assert.Error(ts.T(), err)
-	assert.Contains(ts.T(), err.Error(), "client_name cannot exceed 255 characters")
+	assert.Contains(ts.T(), err.Error(), "client_name cannot exceed 1024 characters")
 
 	// Test invalid client URI
 	params = &OAuthServerClientRegisterParams{
