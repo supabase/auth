@@ -15,22 +15,24 @@ func (c contextKey) String() string {
 }
 
 const (
-	tokenKey                = contextKey("jwt")
-	inviteTokenKey          = contextKey("invite_token")
-	signatureKey            = contextKey("signature")
-	externalProviderTypeKey = contextKey("external_provider_type")
-	userKey                 = contextKey("user")
-	targetUserKey           = contextKey("target_user")
-	factorKey               = contextKey("factor")
-	sessionKey              = contextKey("session")
-	externalReferrerKey     = contextKey("external_referrer")
-	functionHooksKey        = contextKey("function_hooks")
-	adminUserKey            = contextKey("admin_user")
-	oauthTokenKey           = contextKey("oauth_token") // for OAuth1.0, also known as request token
-	oauthVerifierKey        = contextKey("oauth_verifier")
-	ssoProviderKey          = contextKey("sso_provider")
-	externalHostKey         = contextKey("external_host")
-	flowStateKey            = contextKey("flow_state_id")
+	externalProviderTypeKey         = contextKey("external_provider_type")
+	externalProviderAllowNoEmailKey = contextKey("external_provider_allow_no_email")
+
+	tokenKey            = contextKey("jwt")
+	inviteTokenKey      = contextKey("invite_token")
+	signatureKey        = contextKey("signature")
+	userKey             = contextKey("user")
+	targetUserKey       = contextKey("target_user")
+	factorKey           = contextKey("factor")
+	sessionKey          = contextKey("session")
+	externalReferrerKey = contextKey("external_referrer")
+	functionHooksKey    = contextKey("function_hooks")
+	adminUserKey        = contextKey("admin_user")
+	oauthTokenKey       = contextKey("oauth_token") // for OAuth1.0, also known as request token
+	oauthVerifierKey    = contextKey("oauth_verifier")
+	ssoProviderKey      = contextKey("sso_provider")
+	externalHostKey     = contextKey("external_host")
+	flowStateKey        = contextKey("flow_state_id")
 )
 
 // withToken adds the JWT token to the context.
@@ -152,18 +154,26 @@ func getInviteToken(ctx context.Context) string {
 }
 
 // withExternalProviderType adds the provided request ID to the context.
-func withExternalProviderType(ctx context.Context, id string) context.Context {
-	return context.WithValue(ctx, externalProviderTypeKey, id)
+func withExternalProviderType(ctx context.Context, id string, allowNoEmail bool) context.Context {
+	return context.WithValue(context.WithValue(ctx, externalProviderTypeKey, id), externalProviderAllowNoEmailKey, allowNoEmail)
 }
 
-// getExternalProviderType reads the request ID from the context.
-func getExternalProviderType(ctx context.Context) string {
-	obj := ctx.Value(externalProviderTypeKey)
-	if obj == nil {
-		return ""
+// getExternalProviderType returns the provider type and whether user data without email address should be allowed.
+func getExternalProviderType(ctx context.Context) (string, bool) {
+	idValue := ctx.Value(externalProviderTypeKey)
+	allowNoEmailValue := ctx.Value(externalProviderAllowNoEmailKey)
+
+	id, okID := idValue.(string)
+	if !okID {
+		return "", false
 	}
 
-	return obj.(string)
+	allowNoEmail, okAllowNoEmail := allowNoEmailValue.(bool)
+	if !okAllowNoEmail {
+		return "", false
+	}
+
+	return id, allowNoEmail
 }
 
 func withExternalReferrer(ctx context.Context, token string) context.Context {

@@ -26,7 +26,7 @@ type IdTokenGrantParams struct {
 	Issuer      string `json:"issuer"`
 }
 
-func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, bool, string, []string, error) {
+func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, bool, string, []string, bool, error) {
 	log := observability.GetLogEntry(r).Entry
 
 	var cfg *conf.OAuthProviderConfiguration
@@ -42,13 +42,13 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		if issuer == "" {
 			detectedIssuer, err := provider.DetectAppleIDTokenIssuer(ctx, p.IdToken)
 			if err != nil {
-				return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Apple provider").WithInternalError(err)
+				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Apple provider").WithInternalError(err)
 			}
 
 			if provider.IsAppleIssuer(detectedIssuer) {
 				issuer = detectedIssuer
 			} else {
-				return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Apple ID token issuer")
+				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Apple ID token issuer")
 			}
 		}
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Apple.ClientID...)
@@ -68,7 +68,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		if issuer == "" || !provider.IsAzureIssuer(issuer) {
 			detectedIssuer, err := provider.DetectAzureIDTokenIssuer(ctx, p.IdToken)
 			if err != nil {
-				return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
+				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
 			}
 			issuer = detectedIssuer
 		}
@@ -102,6 +102,12 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		issuer = provider.IssuerVercelMarketplace
 		acceptableClientIDs = append(acceptableClientIDs, config.External.VercelMarketplace.ClientID...)
 
+	case p.Provider == "snapchat" || p.Issuer == provider.IssuerSnapchat:
+		cfg = &config.External.Snapchat
+		providerType = "snapchat"
+		issuer = provider.IssuerSnapchat
+		acceptableClientIDs = append(acceptableClientIDs, config.External.Snapchat.ClientID...)
+
 	default:
 		log.WithField("issuer", p.Issuer).WithField("client_id", p.ClientID).Warn("Use of POST /token with arbitrary issuer and client_id is deprecated for security reasons. Please switch to using the API with provider only!")
 
@@ -117,7 +123,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		}
 
 		if !allowed {
-			return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Custom OIDC provider %q not allowed", p.Provider))
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Custom OIDC provider %q not allowed", p.Provider))
 		}
 
 		cfg = &conf.OAuthProviderConfiguration{
@@ -127,7 +133,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 	}
 
 	if !cfg.Enabled {
-		return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
+		return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
 	}
 
 	oidcCtx := ctx
@@ -135,12 +141,29 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		oidcCtx = oidc.InsecureIssuerURLContext(ctx, issuer)
 	}
 
-	oidcProvider, err := oidc.NewProvider(oidcCtx, issuer)
-	if err != nil {
-		return nil, false, "", nil, err
+	var oidcProvider *oidc.Provider
+	var err error
+
+	if providerType == "snapchat" {
+		// TODO: Remove this once Snapchat confirm discovery URL
+		snapProviderConfig := oidc.ProviderConfig{
+			IssuerURL:   "https://accounts.snapchat.com/accounts/oauth2/token",
+			AuthURL:     "https://accounts.snapchat.com/accounts/oauth2/auth",
+			TokenURL:    "https://accounts.snapchat.com/accounts/oauth2/token",
+			UserInfoURL: "https://accounts.snapchat.com/accounts/oauth2/userinfo",
+			JWKSURL:     "https://accounts.snapchat.com/oauth2/.well-known/jwks.json",
+			Algorithms:  []string{"ES256"},
+		}
+
+		oidcProvider = snapProviderConfig.NewProvider(oidcCtx)
+	} else {
+		oidcProvider, err = oidc.NewProvider(oidcCtx, issuer)
+		if err != nil {
+			return nil, false, "", nil, cfg.AllowNoEmail, err
+		}
 	}
 
-	return oidcProvider, cfg.SkipNonceCheck, providerType, acceptableClientIDs, nil
+	return oidcProvider, cfg.SkipNonceCheck, providerType, acceptableClientIDs, cfg.AllowNoEmail, nil
 }
 
 // IdTokenGrant implements the id_token grant type flow
@@ -163,7 +186,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return apierrors.NewOAuthError("invalid request", "provider or client_id and issuer required")
 	}
 
-	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, err := params.getProvider(ctx, config, r)
+	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, allowNoEmail, err := params.getProvider(ctx, config, r)
 	if err != nil {
 		return err
 	}
@@ -261,7 +284,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		var user *models.User
 		var terr error
 
-		user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType)
+		user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, allowNoEmail)
 		if terr != nil {
 			return terr
 		}
