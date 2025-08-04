@@ -31,6 +31,7 @@ type ExternalProviderClaims struct {
 	Referrer        string `json:"referrer,omitempty"`
 	FlowStateID     string `json:"flow_state_id"`
 	LinkingTargetID string `json:"linking_target_id,omitempty"`
+	AllowNoEmail    bool   `json:"allow_no_email,omitempty"`
 }
 
 // ExternalProviderRedirect redirects the request to the oauth provider
@@ -55,7 +56,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	codeChallenge := query.Get("code_challenge")
 	codeChallengeMethod := query.Get("code_challenge_method")
 
-	p, err := a.Provider(ctx, providerType, scopes)
+	p, pConfig, err := a.Provider(ctx, providerType, scopes)
 	if err != nil {
 		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
@@ -96,10 +97,11 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 			SiteURL:    config.SiteURL,
 			InstanceID: uuid.Nil.String(),
 		},
-		Provider:    providerType,
-		InviteToken: inviteToken,
-		Referrer:    redirectURL,
-		FlowStateID: flowStateID,
+		Provider:     providerType,
+		InviteToken:  inviteToken,
+		Referrer:     redirectURL,
+		FlowStateID:  flowStateID,
+		AllowNoEmail: pConfig.AllowNoEmail,
 	}
 
 	if linkingTargetUser != nil {
@@ -144,7 +146,7 @@ func (a *API) ExternalProviderCallback(w http.ResponseWriter, r *http.Request) e
 
 func (a *API) handleOAuthCallback(r *http.Request) (*OAuthProviderData, error) {
 	ctx := r.Context()
-	providerType := getExternalProviderType(ctx)
+	providerType, _ := getExternalProviderType(ctx)
 
 	var oAuthResponseData *OAuthProviderData
 	var err error
@@ -168,16 +170,18 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
 
-	providerType := getExternalProviderType(ctx)
+	providerType, allowNoEmail := getExternalProviderType(ctx)
 	data, err := a.handleOAuthCallback(r)
 	if err != nil {
 		return err
 	}
 
 	userData := data.userData
-	if len(userData.Emails) <= 0 {
+
+	if len(userData.Emails) == 0 && !allowNoEmail {
 		return apierrors.NewInternalServerError("Error getting user email from external provider")
 	}
+
 	userData.Metadata.EmailVerified = false
 	for _, email := range userData.Emails {
 		if email.Primary {
@@ -226,7 +230,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				return terr
 			}
 		} else {
-			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType); terr != nil {
+			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, allowNoEmail); terr != nil {
 				return terr
 			}
 		}
@@ -285,7 +289,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
-func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string) (*models.User, error) {
+func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string, allowNoEmail bool) (*models.User, error) {
 	ctx := r.Context()
 	aud := a.requestAud(ctx, r)
 	config := a.config
@@ -378,10 +382,13 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
-	// TODO(hf): Expand this boolean with all providers that may not have emails (like X/Twitter, Discord).
-	hasEmails := providerType != "web3" // intentionally not using len(userData.Emails) != 0 for better backward compatibility control
+	hasEmails := providerType != "web3" && !(allowNoEmail && len(userData.Emails) == 0)
 
 	if hasEmails && !user.IsConfirmed() {
+		if len(userData.Emails) == 0 && decision.CandidateEmail.Email == "" {
+			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailAddressNotProvided, fmt.Sprintf("An email address is required to create an account or sign in with %v, please set up an email address for your profile in %v and try again", providerType, providerType))
+		}
+
 		// The user may have other unconfirmed email + password
 		// combination, phone or oauth identities. These identities
 		// need to be removed when a new oauth identity is being added
@@ -400,10 +407,6 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 				return nil, apierrors.NewInternalServerError("Error updating user").WithInternalError(terr)
 			}
 		} else {
-			// Some providers, like web3 don't have email data.
-			// Treat these as if a confirmation email has been
-			// sent, although the user will be created without an
-			// email address.
 			emailConfirmationSent := false
 			if decision.CandidateEmail.Email != "" {
 				if terr = a.sendConfirmation(r, tx, user, models.ImplicitFlow); terr != nil {
@@ -411,11 +414,13 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 				}
 				emailConfirmationSent = true
 			}
+
 			if !config.Mailer.AllowUnverifiedEmailSignIns {
 				if emailConfirmationSent {
 					return nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType)))
 				}
-				return nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType)))
+
+				return nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. Verify the email with %v and try to sign in again", providerType, providerType)))
 			}
 		}
 	} else {
@@ -564,67 +569,97 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request) (context.C
 		}
 		ctx = withTargetUser(ctx, u)
 	}
-	ctx = withExternalProviderType(ctx, claims.Provider)
+	ctx = withExternalProviderType(ctx, claims.Provider, claims.AllowNoEmail)
 	return withSignature(ctx, state), nil
 }
 
 // Provider returns a Provider interface for the given name.
-func (a *API) Provider(ctx context.Context, name string, scopes string) (provider.Provider, error) {
+func (a *API) Provider(ctx context.Context, name string, scopes string) (provider.Provider, conf.OAuthProviderConfiguration, error) {
 	config := a.config
 	name = strings.ToLower(name)
 
+	var err error
+	var p provider.Provider
+	var pConfig conf.OAuthProviderConfiguration
+
 	switch name {
 	case "apple":
-		return provider.NewAppleProvider(ctx, config.External.Apple)
+		pConfig = config.External.Apple
+		p, err = provider.NewAppleProvider(ctx, pConfig)
 	case "azure":
-		return provider.NewAzureProvider(config.External.Azure, scopes)
+		pConfig = config.External.Azure
+		p, err = provider.NewAzureProvider(pConfig, scopes)
 	case "bitbucket":
-		return provider.NewBitbucketProvider(config.External.Bitbucket)
+		pConfig = config.External.Bitbucket
+		p, err = provider.NewBitbucketProvider(pConfig)
 	case "discord":
-		return provider.NewDiscordProvider(config.External.Discord, scopes)
+		pConfig = config.External.Discord
+		p, err = provider.NewDiscordProvider(pConfig, scopes)
 	case "facebook":
-		return provider.NewFacebookProvider(config.External.Facebook, scopes)
+		pConfig = config.External.Facebook
+		p, err = provider.NewFacebookProvider(pConfig, scopes)
 	case "figma":
-		return provider.NewFigmaProvider(config.External.Figma, scopes)
+		pConfig = config.External.Figma
+		p, err = provider.NewFigmaProvider(pConfig, scopes)
 	case "fly":
-		return provider.NewFlyProvider(config.External.Fly, scopes)
+		pConfig = config.External.Fly
+		p, err = provider.NewFlyProvider(pConfig, scopes)
 	case "github":
-		return provider.NewGithubProvider(config.External.Github, scopes)
+		pConfig = config.External.Github
+		p, err = provider.NewGithubProvider(pConfig, scopes)
 	case "gitlab":
-		return provider.NewGitlabProvider(config.External.Gitlab, scopes)
+		pConfig = config.External.Gitlab
+		p, err = provider.NewGitlabProvider(pConfig, scopes)
 	case "google":
-		return provider.NewGoogleProvider(ctx, config.External.Google, scopes)
+		pConfig = config.External.Google
+		p, err = provider.NewGoogleProvider(ctx, pConfig, scopes)
 	case "kakao":
-		return provider.NewKakaoProvider(config.External.Kakao, scopes)
+		pConfig = config.External.Kakao
+		p, err = provider.NewKakaoProvider(pConfig, scopes)
 	case "keycloak":
-		return provider.NewKeycloakProvider(config.External.Keycloak, scopes)
+		pConfig = config.External.Keycloak
+		p, err = provider.NewKeycloakProvider(pConfig, scopes)
 	case "linkedin":
-		return provider.NewLinkedinProvider(config.External.Linkedin, scopes)
+		pConfig = config.External.Linkedin
+		p, err = provider.NewLinkedinProvider(pConfig, scopes)
 	case "linkedin_oidc":
-		return provider.NewLinkedinOIDCProvider(config.External.LinkedinOIDC, scopes)
+		pConfig = config.External.LinkedinOIDC
+		p, err = provider.NewLinkedinOIDCProvider(pConfig, scopes)
 	case "notion":
-		return provider.NewNotionProvider(config.External.Notion)
+		pConfig = config.External.Notion
+		p, err = provider.NewNotionProvider(pConfig)
 	case "snapchat":
-		return provider.NewSnapchatProvider(config.External.Snapchat, scopes)
+		pConfig = config.External.Snapchat
+		p, err = provider.NewSnapchatProvider(pConfig, scopes)
 	case "spotify":
-		return provider.NewSpotifyProvider(config.External.Spotify, scopes)
+		pConfig = config.External.Spotify
+		p, err = provider.NewSpotifyProvider(pConfig, scopes)
 	case "slack":
-		return provider.NewSlackProvider(config.External.Slack, scopes)
+		pConfig = config.External.Slack
+		p, err = provider.NewSlackProvider(pConfig, scopes)
 	case "slack_oidc":
-		return provider.NewSlackOIDCProvider(config.External.SlackOIDC, scopes)
+		pConfig = config.External.SlackOIDC
+		p, err = provider.NewSlackOIDCProvider(pConfig, scopes)
 	case "twitch":
-		return provider.NewTwitchProvider(config.External.Twitch, scopes)
+		pConfig = config.External.Twitch
+		p, err = provider.NewTwitchProvider(pConfig, scopes)
 	case "twitter":
-		return provider.NewTwitterProvider(config.External.Twitter, scopes)
+		pConfig = config.External.Twitter
+		p, err = provider.NewTwitterProvider(pConfig, scopes)
 	case "vercel_marketplace":
-		return provider.NewVercelMarketplaceProvider(config.External.VercelMarketplace, scopes)
+		pConfig = config.External.VercelMarketplace
+		p, err = provider.NewVercelMarketplaceProvider(pConfig, scopes)
 	case "workos":
-		return provider.NewWorkOSProvider(config.External.WorkOS)
+		pConfig = config.External.WorkOS
+		p, err = provider.NewWorkOSProvider(pConfig)
 	case "zoom":
-		return provider.NewZoomProvider(config.External.Zoom)
+		pConfig = config.External.Zoom
+		p, err = provider.NewZoomProvider(pConfig)
 	default:
-		return nil, fmt.Errorf("Provider %s could not be found", name)
+		return nil, pConfig, fmt.Errorf("Provider %s could not be found", name)
 	}
+
+	return p, pConfig, err
 }
 
 func redirectErrors(handler apiHandler, w http.ResponseWriter, r *http.Request, u *url.URL) {

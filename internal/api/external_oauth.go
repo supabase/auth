@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/utilities"
 )
@@ -69,7 +70,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthCallback, "OAuth callback with missing authorization code missing")
 	}
 
-	oAuthProvider, err := a.OAuthProvider(ctx, providerType)
+	oAuthProvider, _, err := a.OAuthProvider(ctx, providerType)
 	if err != nil {
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthProviderNotSupported, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
@@ -111,7 +112,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 }
 
 func (a *API) oAuth1Callback(ctx context.Context, providerType string) (*OAuthProviderData, error) {
-	oAuthProvider, err := a.OAuthProvider(ctx, providerType)
+	oAuthProvider, _, err := a.OAuthProvider(ctx, providerType)
 	if err != nil {
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthProviderNotSupported, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
@@ -141,16 +142,16 @@ func (a *API) oAuth1Callback(ctx context.Context, providerType string) (*OAuthPr
 }
 
 // OAuthProvider returns the corresponding oauth provider as an OAuthProvider interface
-func (a *API) OAuthProvider(ctx context.Context, name string) (provider.OAuthProvider, error) {
-	providerCandidate, err := a.Provider(ctx, name, "")
+func (a *API) OAuthProvider(ctx context.Context, name string) (provider.OAuthProvider, conf.OAuthProviderConfiguration, error) {
+	providerCandidate, pConfig, err := a.Provider(ctx, name, "")
 	if err != nil {
-		return nil, err
+		return nil, pConfig, err
 	}
 
 	switch p := providerCandidate.(type) {
 	case provider.OAuthProvider:
-		return p, nil
+		return p, pConfig, nil
 	default:
-		return nil, fmt.Errorf("Provider %v cannot be used for OAuth", name)
+		return nil, pConfig, fmt.Errorf("Provider %v cannot be used for OAuth", name)
 	}
 }
