@@ -51,8 +51,8 @@ func (p *OAuthServerClientRegisterParams) validate() error {
 		}
 	}
 
-	if len(p.ClientName) > 255 {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "client_name cannot exceed 255 characters")
+	if len(p.ClientName) > 1024 {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "client_name cannot exceed 1024 characters")
 	}
 
 	if p.ClientURI != "" {

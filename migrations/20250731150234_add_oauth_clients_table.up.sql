@@ -1,19 +1,29 @@
+-- Create enums for OAuth client fields
+do $$ begin
+    create type oauth_registration_type as enum('dynamic', 'manual');
+exception
+    when duplicate_object then null;
+end $$;
+
 -- Create oauth_clients table for OAuth client management
 create table if not exists {{ index .Options "Namespace" }}.oauth_clients (
     id uuid not null,
-    client_id varchar(255) not null,
+    client_id text not null,
     client_secret_hash text not null,
-    registration_type varchar(20) not null check (registration_type in ('dynamic', 'manual')),
+    registration_type oauth_registration_type not null,
     redirect_uris text not null,
-    grant_types text not null default 'authorization_code,refresh_token' check (grant_types ~ '^(authorization_code|refresh_token)(,(authorization_code|refresh_token))*$'),
-    client_name varchar(255) null,
+    grant_types text not null,
+    client_name text null,
     client_uri text null,
     logo_uri text null,
-    created_at timestamptz default now(),
-    updated_at timestamptz default now(),
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
     deleted_at timestamptz null,
     constraint oauth_clients_pkey primary key (id),
-    constraint oauth_clients_client_id_key unique (client_id)
+    constraint oauth_clients_client_id_key unique (client_id),
+    constraint oauth_clients_client_name_length check (char_length(client_name) <= 1024),
+    constraint oauth_clients_client_uri_length check (char_length(client_uri) <= 2048),
+    constraint oauth_clients_logo_uri_length check (char_length(logo_uri) <= 2048)
 );
 
 comment on table {{ index .Options "Namespace" }}.oauth_clients is 'Auth: Stores OAuth client application registrations for OAuth 2.1 flows.';

@@ -167,7 +167,7 @@ func (s *Server) OAuthServerClientList(w http.ResponseWriter, r *http.Request) e
 	db := s.db.WithContext(ctx)
 
 	var clients []models.OAuthServerClient
-	if err := db.Q().Where("deleted_at IS NULL").Order("created_at desc").All(&clients); err != nil {
+	if err := db.Q().Where("deleted_at is null").Order("created_at desc").All(&clients); err != nil {
 		return apierrors.NewInternalServerError("Error listing OAuth clients").WithInternalError(err)
 	}
 

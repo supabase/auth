@@ -2,7 +2,7 @@ package oauthserver
 
 import (
 	"encoding/base64"
-	"fmt"
+	"errors"
 	"net/http"
 	"strings"
 )
@@ -16,13 +16,13 @@ func ExtractClientCredentials(r *http.Request) (clientID, clientSecret string, e
 		encoded := strings.TrimPrefix(authHeader, "Basic ")
 		decoded, err := base64.StdEncoding.DecodeString(encoded)
 		if err != nil {
-			return "", "", fmt.Errorf("invalid basic auth encoding")
+			return "", "", errors.New("invalid basic auth encoding")
 		}
 
 		credentials := string(decoded)
 		parts := strings.SplitN(credentials, ":", 2)
 		if len(parts) != 2 {
-			return "", "", fmt.Errorf("invalid basic auth format")
+			return "", "", errors.New("invalid basic auth format")
 		}
 
 		return parts[0], parts[1], nil
@@ -30,7 +30,7 @@ func ExtractClientCredentials(r *http.Request) (clientID, clientSecret string, e
 
 	// Fall back to form parameters
 	if err := r.ParseForm(); err != nil {
-		return "", "", fmt.Errorf("failed to parse form")
+		return "", "", errors.New("failed to parse form")
 	}
 
 	clientID = r.FormValue("client_id")
@@ -43,7 +43,7 @@ func ExtractClientCredentials(r *http.Request) (clientID, clientSecret string, e
 
 	// If only one is provided, it's an error
 	if clientID == "" || clientSecret == "" {
-		return "", "", fmt.Errorf("both client_id and client_secret must be provided")
+		return "", "", errors.New("both client_id and client_secret must be provided")
 	}
 
 	return clientID, clientSecret, nil

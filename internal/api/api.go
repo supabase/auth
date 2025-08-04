@@ -301,7 +301,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				})
 			})
 
-			// Admin only oauth client management endpints
+			// Admin only oauth client management endpoints
 			r.Route("/oauth", func(r *router) {
 				r.Route("/clients", func(r *router) {
 					// Manual client registration
