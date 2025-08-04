@@ -141,29 +141,12 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		oidcCtx = oidc.InsecureIssuerURLContext(ctx, issuer)
 	}
 
-	var oidcProvider *oidc.Provider
-	var err error
-
-	if providerType == "snapchat" {
-		// TODO: Remove this once Snapchat confirm discovery URL
-		snapProviderConfig := oidc.ProviderConfig{
-			IssuerURL:   "https://accounts.snapchat.com/accounts/oauth2/token",
-			AuthURL:     "https://accounts.snapchat.com/accounts/oauth2/auth",
-			TokenURL:    "https://accounts.snapchat.com/accounts/oauth2/token",
-			UserInfoURL: "https://accounts.snapchat.com/accounts/oauth2/userinfo",
-			JWKSURL:     "https://accounts.snapchat.com/oauth2/.well-known/jwks.json",
-			Algorithms:  []string{"ES256"},
-		}
-
-		oidcProvider = snapProviderConfig.NewProvider(oidcCtx)
-	} else {
-		oidcProvider, err = oidc.NewProvider(oidcCtx, issuer)
-		if err != nil {
-			return nil, false, "", nil, cfg.AllowNoEmail, err
-		}
+	oidcProvider, err := oidc.NewProvider(oidcCtx, issuer)
+	if err != nil {
+		return nil, false, "", nil, cfg.EmailOptional, err
 	}
 
-	return oidcProvider, cfg.SkipNonceCheck, providerType, acceptableClientIDs, cfg.AllowNoEmail, nil
+	return oidcProvider, cfg.SkipNonceCheck, providerType, acceptableClientIDs, cfg.EmailOptional, nil
 }
 
 // IdTokenGrant implements the id_token grant type flow

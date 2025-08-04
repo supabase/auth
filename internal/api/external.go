@@ -31,7 +31,7 @@ type ExternalProviderClaims struct {
 	Referrer        string `json:"referrer,omitempty"`
 	FlowStateID     string `json:"flow_state_id"`
 	LinkingTargetID string `json:"linking_target_id,omitempty"`
-	AllowNoEmail    bool   `json:"allow_no_email,omitempty"`
+	EmailOptional   bool   `json:"email_optional,omitempty"`
 }
 
 // ExternalProviderRedirect redirects the request to the oauth provider
@@ -97,11 +97,11 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 			SiteURL:    config.SiteURL,
 			InstanceID: uuid.Nil.String(),
 		},
-		Provider:     providerType,
-		InviteToken:  inviteToken,
-		Referrer:     redirectURL,
-		FlowStateID:  flowStateID,
-		AllowNoEmail: pConfig.AllowNoEmail,
+		Provider:      providerType,
+		InviteToken:   inviteToken,
+		Referrer:      redirectURL,
+		FlowStateID:   flowStateID,
+		EmailOptional: pConfig.EmailOptional,
 	}
 
 	if linkingTargetUser != nil {
@@ -569,7 +569,7 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request) (context.C
 		}
 		ctx = withTargetUser(ctx, u)
 	}
-	ctx = withExternalProviderType(ctx, claims.Provider, claims.AllowNoEmail)
+	ctx = withExternalProviderType(ctx, claims.Provider, claims.EmailOptional)
 	return withSignature(ctx, state), nil
 }
 
