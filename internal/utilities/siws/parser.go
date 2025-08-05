@@ -204,7 +204,8 @@ func (m *SIWSMessage) VerifySignature(signature []byte) bool {
 	var buffer bytes.Buffer
 
 	// Write 16-byte prefix
-	buffer.Write([]byte{0xff, 's', 'o', 'l', 'a', 'n', 'a', ' ', 'o', 'f', 'f', 'c', 'h', 'a', 'i', 'n'})
+	buffer.WriteByte(0xff)
+	buffer.WriteString("solana offchain")
 
 	// Write single-byte fields
 	buffer.WriteByte(0x00) // version
