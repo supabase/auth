@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"encoding/binary"
+	"math"
 	"net/url"
 	"regexp"
 	"strings"
@@ -222,7 +223,14 @@ func (m *SIWSMessage) VerifySignature(signature []byte) bool {
 	buffer.Write(pubKey)
 
 	// Write message length (2 bytes, little endian)
-	binary.Write(&buffer, binary.LittleEndian, uint16(len(raw)))
+	var rawMsgLen = len(raw)
+	if rawMsgLen > math.MaxUint16 {
+		return false
+	}
+
+	if err := binary.Write(&buffer, binary.LittleEndian, uint16(rawMsgLen)); err != nil {
+		return false
+	}
 
 	// Write message
 	buffer.Write(raw)
