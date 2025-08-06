@@ -15,6 +15,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -252,6 +253,13 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 		return err
 	}
 
+	// Record login for analytics - only when token is issued (not during pkce authorize)
+	if token != nil {
+		metering.RecordLogin(metering.LoginTypeOAuth, user.ID, &metering.LoginData{
+			Provider: providerType,
+		})
+	}
+
 	rurl := a.getExternalRedirectURL(r)
 	if flowState != nil {
 		// This means that the callback is using PKCE
@@ -382,7 +390,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			return nil, apierrors.NewInternalServerError("Error updating user").WithInternalError(terr)
 		}
 		if decision.CandidateEmail.Verified || config.Mailer.Autoconfirm {
-			if terr := models.NewAuditLogEntry(r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
+			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserSignedUpAction, "", map[string]interface{}{
 				"provider": providerType,
 			}); terr != nil {
 				return nil, terr
@@ -411,7 +419,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			}
 		}
 	} else {
-		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": providerType,
 		}); terr != nil {
 			return nil, terr
@@ -422,6 +430,8 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 }
 
 func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *provider.UserProvidedData, inviteToken, providerType string) (*models.User, error) {
+	config := a.config
+
 	user, err := models.FindUserByConfirmationToken(tx, inviteToken)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -464,7 +474,7 @@ func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *p
 		return nil, apierrors.NewInternalServerError("Database error updating user").WithInternalError(err)
 	}
 
-	if err := models.NewAuditLogEntry(r, tx, user, models.InviteAcceptedAction, "", map[string]interface{}{
+	if err := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.InviteAcceptedAction, "", map[string]interface{}{
 		"provider": providerType,
 	}); err != nil {
 		return nil, err
@@ -504,16 +514,26 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request) (context.C
 	_, err := p.ParseWithClaims(state, &claims, func(token *jwt.Token) (interface{}, error) {
 		if kid, ok := token.Header["kid"]; ok {
 			if kidStr, ok := kid.(string); ok {
-				return conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				key, err := conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				if err != nil {
+					return nil, err
+				}
+
+				if key != nil {
+					return key, nil
+				}
+
+				// otherwise try to use fallback
 			}
 		}
 		if alg, ok := token.Header["alg"]; ok {
 			if alg == jwt.SigningMethodHS256.Name {
-				// preserve backward compatibility for cases where the kid is not set
+				// preserve backward compatibility for cases where the kid is not set or potentially invalid but the key can be decoded with the secret
 				return []byte(config.JWT.Secret), nil
 			}
 		}
-		return nil, fmt.Errorf("missing kid")
+
+		return nil, fmt.Errorf("unrecognized JWT kid %v for algorithm %v", token.Header["kid"], token.Header["alg"])
 	})
 	if err != nil {
 		return ctx, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state").WithInternalError(err)
@@ -584,6 +604,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewLinkedinOIDCProvider(config.External.LinkedinOIDC, scopes)
 	case "notion":
 		return provider.NewNotionProvider(config.External.Notion)
+	case "snapchat":
+		return provider.NewSnapchatProvider(config.External.Snapchat, scopes)
 	case "spotify":
 		return provider.NewSpotifyProvider(config.External.Spotify, scopes)
 	case "slack":

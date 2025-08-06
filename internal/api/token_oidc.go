@@ -10,6 +10,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -34,10 +35,22 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 	var acceptableClientIDs []string
 
 	switch true {
-	case p.Provider == "apple" || p.Issuer == provider.IssuerApple:
+	case p.Provider == "apple" || provider.IsAppleIssuer(p.Issuer):
 		cfg = &config.External.Apple
 		providerType = "apple"
-		issuer = provider.IssuerApple
+		issuer = p.Issuer
+		if issuer == "" {
+			detectedIssuer, err := provider.DetectAppleIDTokenIssuer(ctx, p.IdToken)
+			if err != nil {
+				return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Apple provider").WithInternalError(err)
+			}
+
+			if provider.IsAppleIssuer(detectedIssuer) {
+				issuer = detectedIssuer
+			} else {
+				return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Apple ID token issuer")
+			}
+		}
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Apple.ClientID...)
 
 		if config.External.IosBundleId != "" {
@@ -65,6 +78,8 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 
 	case p.Provider == "facebook" || p.Issuer == provider.IssuerFacebook:
 		cfg = &config.External.Facebook
+		// Facebook (Limited Login) nonce check is not supported
+		cfg.SkipNonceCheck = true
 		providerType = "facebook"
 		issuer = provider.IssuerFacebook
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Facebook.ClientID...)
@@ -115,7 +130,12 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
 	}
 
-	oidcProvider, err := oidc.NewProvider(ctx, issuer)
+	oidcCtx := ctx
+	if providerType == "apple" {
+		oidcCtx = oidc.InsecureIssuerURLContext(ctx, issuer)
+	}
+
+	oidcProvider, err := oidc.NewProvider(oidcCtx, issuer)
 	if err != nil {
 		return nil, false, "", nil, err
 	}
@@ -148,7 +168,16 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return err
 	}
 
-	idToken, userData, err := provider.ParseIDToken(ctx, oidcProvider, nil, params.IdToken, provider.ParseIDTokenOptions{
+	var oidcConfig *oidc.Config
+
+	if providerType == "apple" {
+		oidcConfig = &oidc.Config{
+			SkipClientIDCheck: true,
+			SkipIssuerCheck:   true,
+		}
+	}
+
+	idToken, userData, err := provider.ParseIDToken(ctx, oidcProvider, oidcConfig, params.IdToken, provider.ParseIDTokenOptions{
 		SkipAccessTokenCheck: params.AccessToken == "",
 		AccessToken:          params.AccessToken,
 	})
@@ -253,6 +282,10 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			return apierrors.NewOAuthError("server_error", "Internal Server Error").WithInternalError(err)
 		}
 	}
+
+	metering.RecordLogin(metering.LoginTypeOIDC, token.User.ID, &metering.LoginData{
+		Provider: providerType,
+	})
 
 	return sendJSON(w, http.StatusOK, token)
 }

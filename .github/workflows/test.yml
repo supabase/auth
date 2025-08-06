@@ -12,9 +12,6 @@ permissions:
 
 jobs:
   test:
-    strategy:
-      matrix:
-        go-version: [1.23.7]
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -31,12 +28,12 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
       - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
-      - name: Checkout code
-        uses: actions/checkout@v2
+          go-version-file: go.mod
       - name: Check gofmt
         run: |
           set -x

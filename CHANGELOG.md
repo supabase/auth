@@ -1,5 +1,57 @@
 # Changelog
 
+## [2.178.0](https://github.com/supabase/auth/compare/v2.177.0...v2.178.0) (2025-08-05)
+
+
+### Features
+
+* add sign in with ethereum ([#2069](https://github.com/supabase/auth/issues/2069)) ([079b242](https://github.com/supabase/auth/commit/079b2427b8ed312880b60e89cc79b716fe9ae73d))
+* add support for managing SSO providers by resource_id ([#2081](https://github.com/supabase/auth/issues/2081)) ([5ca4489](https://github.com/supabase/auth/commit/5ca44893964d3b12a24ea26302b23f4976f768a0))
+* log all audit events separately to prevent missing events ([#2086](https://github.com/supabase/auth/issues/2086)) ([3b666f5](https://github.com/supabase/auth/commit/3b666f51f56db778848730d74ac140f02b0cb522))
+* skip nonce check for Facebook Limited Login auth ([#2082](https://github.com/supabase/auth/issues/2082)) ([f1b15ff](https://github.com/supabase/auth/commit/f1b15ffdb9b1f1af873a147fdb5d039382becb2e))
+* support ledger solana offchain message signing ([#2093](https://github.com/supabase/auth/issues/2093)) ([4c94443](https://github.com/supabase/auth/commit/4c944431558aaca3c945c472dc5a27077f6dfa75))
+
+## [2.177.0](https://github.com/supabase/auth/compare/v2.176.1...v2.177.0) (2025-07-05)
+
+
+### Features
+
+* add option to disable writing to `audit_log_entries` ([#2073](https://github.com/supabase/auth/issues/2073)) ([80758dd](https://github.com/supabase/auth/commit/80758dd880b82e9b96d7185d9d0a0850b8c6f19d))
+* add snapchat provider ([#2071](https://github.com/supabase/auth/issues/2071)) ([fca8ea4](https://github.com/supabase/auth/commit/fca8ea4a701eafb587438a159e19f5488c82a178))
+* enhance login analytics ([#2078](https://github.com/supabase/auth/issues/2078)) ([1aed4a2](https://github.com/supabase/auth/commit/1aed4a27fdc54d9c4d01f17d49dcaadb25400f18))
+* fallback to jwt secret if alg is `HS256` and the `kid` is not recognized ([#2072](https://github.com/supabase/auth/issues/2072)) ([8fa99bd](https://github.com/supabase/auth/commit/8fa99bd6cab91c0bf093fdcdb912054113ea66ba))
+* ignore `aud` claim from admin jwt (`service_role` never had one) ([#2070](https://github.com/supabase/auth/issues/2070)) ([57eddcb](https://github.com/supabase/auth/commit/57eddcb45ce97004c26f6d65351447d7dc654162))
+
+
+### Bug Fixes
+
+* add missing provider info to signedup audit logs ([#2061](https://github.com/supabase/auth/issues/2061)) ([c6e0cbe](https://github.com/supabase/auth/commit/c6e0cbefe5b609ac3362c23d0f7cb9d9bb04abc9))
+* **auditlog:** keep writing to logs even postgres is disabled ([#2076](https://github.com/supabase/auth/issues/2076)) ([b89bc32](https://github.com/supabase/auth/commit/b89bc32de5adc9d458e7f95ad9b08a99604c70d8))
+* do not log fatal when http server successfully closes ([#2065](https://github.com/supabase/auth/issues/2065)) ([1f7de6c](https://github.com/supabase/auth/commit/1f7de6c65f31ef0bbb80899369989b13ab5a517f))
+* invites should send another email when user exists ([#2058](https://github.com/supabase/auth/issues/2058)) ([96469bd](https://github.com/supabase/auth/commit/96469bd01b9c37f938aabdb0434a054a111cf963))
+* use `appleid.apple.com` as default issuer ([#2068](https://github.com/supabase/auth/issues/2068)) ([963a781](https://github.com/supabase/auth/commit/963a781ee525ef893ec545583e7d385c02995518))
+* use `split_words` config option for `AuditLog` ([#2075](https://github.com/supabase/auth/issues/2075)) ([7ecb234](https://github.com/supabase/auth/commit/7ecb234c3d66459c92ba16fd69ed7eb933c4b8a7))
+
+## [2.176.1](https://github.com/supabase/auth/compare/v2.176.0...v2.176.1) (2025-06-11)
+
+
+### Bug Fixes
+
+* new `odic.Provider` for apple with insecure issuer url context ([#2055](https://github.com/supabase/auth/issues/2055)) ([23d69f1](https://github.com/supabase/auth/commit/23d69f1c450b4a24a262cb25112e68408857a3b2))
+* skip apple oidc issuer check ([#2053](https://github.com/supabase/auth/issues/2053)) ([1c6f18e](https://github.com/supabase/auth/commit/1c6f18e6e573ae1da6875f51d8613992ced057a2))
+
+## [2.176.0](https://github.com/supabase/auth/compare/v2.175.0...v2.176.0) (2025-06-11)
+
+
+### Features
+
+* Add custom claims from Keycloak user token ([#1917](https://github.com/supabase/auth/issues/1917)) ([1365aaa](https://github.com/supabase/auth/commit/1365aaa45569fc9e7c3497e744e0e80cf237d617))
+
+
+### Bug Fixes
+
+* accept ID tokens from all `account.apple.com` and `appleid.apple.com` ([#2050](https://github.com/supabase/auth/issues/2050)) ([82aa167](https://github.com/supabase/auth/commit/82aa167cae01658b5319914f3412d78876955106))
+
 ## [2.175.0](https://github.com/supabase/auth/compare/v2.174.0...v2.175.0) (2025-06-03)
 
 

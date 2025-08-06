@@ -225,7 +225,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		if terr = models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+		if terr = models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": provider,
 		}); terr != nil {
 			return terr
@@ -243,12 +243,15 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 
 	token.WeakPassword = weakPasswordError
 
-	metering.RecordLogin("password", user.ID)
+	metering.RecordLogin(metering.LoginTypePassword, user.ID, &metering.LoginData{
+		Provider: provider,
+	})
 	return sendJSON(w, http.StatusOK, token)
 }
 
 func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	db := a.db.WithContext(ctx)
+	config := a.config
 	var grantParams models.GrantParams
 
 	// There is a slight problem with this as it will pick-up the
@@ -292,7 +295,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		if err != nil {
 			return err
 		}
-		if terr := models.NewAuditLogEntry(r, tx, user, models.LoginAction, "", map[string]interface{}{
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider_type": flowState.ProviderType,
 		}); terr != nil {
 			return terr
@@ -317,6 +320,9 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 
+	metering.RecordLogin(metering.LoginTypePKCE, user.ID, &metering.LoginData{
+		Provider: flowState.ProviderType,
+	})
 	return sendJSON(w, http.StatusOK, token)
 }
 
@@ -460,7 +466,7 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return err
 		}
 		// Swap to ensure current token is the latest one
-		refreshToken, terr = models.GrantRefreshTokenSwap(r, tx, user, currentToken)
+		refreshToken, terr = models.GrantRefreshTokenSwap(config.AuditLog, r, tx, user, currentToken)
 		if terr != nil {
 			return terr
 		}

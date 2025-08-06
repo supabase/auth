@@ -227,6 +227,7 @@ To see the current settings, make a request to `http://localhost:9999/settings` 
     "gitlab": false,
     "google": false,
     "facebook": false,
+    "snapchat": false,
     "spotify": false,
     "slack": false,
     "slack_oidc": false,

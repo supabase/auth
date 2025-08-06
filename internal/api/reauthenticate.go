@@ -16,6 +16,7 @@ const InvalidNonceMessage = "Nonce has expired or is invalid"
 // Reauthenticate sends a reauthentication otp to either the user's email or phone
 func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
+	config := a.config
 	db := a.db.WithContext(ctx)
 
 	user := getUser(ctx)
@@ -37,7 +38,7 @@ func (a *API) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 
 	messageID := ""
 	err := db.Transaction(func(tx *storage.Connection) error {
-		if terr := models.NewAuditLogEntry(r, tx, user, models.UserReauthenticateAction, "", nil); terr != nil {
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserReauthenticateAction, "", nil); terr != nil {
 			return terr
 		}
 		if email != "" {

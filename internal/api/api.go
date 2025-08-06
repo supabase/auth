@@ -293,7 +293,6 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 					})
 				})
 			})
-
 		})
 	})
 

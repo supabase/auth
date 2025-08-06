@@ -123,7 +123,10 @@ func serve(ctx context.Context) {
 	if err != nil {
 		log.WithError(err).Fatal("http server listen failed")
 	}
-	if err := httpSrv.Serve(listener); err != nil {
+	err = httpSrv.Serve(listener)
+	if err == http.ErrServerClosed {
+		log.Info("http server closed")
+	} else if err != nil {
 		log.WithError(err).Fatal("http server serve failed")
 	}
 }

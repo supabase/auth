@@ -77,7 +77,15 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request) (context.Context, e
 	token, err := p.ParseWithClaims(bearer, &AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if kid, ok := token.Header["kid"]; ok {
 			if kidStr, ok := kid.(string); ok {
-				return conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				key, err := conf.FindPublicKeyByKid(kidStr, &config.JWT)
+				if err != nil {
+					return nil, err
+				}
+				if key != nil {
+					return key, nil
+				}
+
+				// otherwise try to use fallback
 			}
 		}
 		if alg, ok := token.Header["alg"]; ok {
@@ -86,7 +94,8 @@ func (a *API) parseJWTClaims(bearer string, r *http.Request) (context.Context, e
 				return []byte(config.JWT.Secret), nil
 			}
 		}
-		return nil, fmt.Errorf("missing kid")
+
+		return nil, fmt.Errorf("unrecognized JWT kid %v for algorithm %v", token.Header["kid"], token.Header["alg"])
 	})
 	if err != nil {
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "invalid JWT: unable to parse or verify signature, %v", err).WithInternalError(err)

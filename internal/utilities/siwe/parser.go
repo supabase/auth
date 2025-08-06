@@ -1,41 +1,41 @@
-package siws
+package siwe
 
 import (
-	"bytes"
-	"crypto/ed25519"
-	"encoding/binary"
-	"math"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/btcsuite/btcutil/base58"
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
-// SIWSMessage is the final structured form of a parsed SIWS message.
-type SIWSMessage struct {
+// SIWEMessage is the final structured form of a parsed SIWE message.
+// REF: https://eips.ethereum.org/EIPS/eip-4361
+type SIWEMessage struct {
 	Raw string
 
 	Domain         string
 	Address        string
-	Statement      string
-	URI            *url.URL
+	Statement      *string
+	URI            url.URL
 	Version        string
+	ChainID        string
 	Nonce          string
 	IssuedAt       time.Time
-	ChainID        string
-	NotBefore      time.Time
-	RequestID      string
-	ExpirationTime time.Time
+	ExpirationTime *time.Time
+	NotBefore      *time.Time
+	RequestID      *string
 	Resources      []*url.URL
 }
 
-const headerSuffix = " wants you to sign in with your Solana account:"
+const headerSuffix = " wants you to sign in with your Ethereum account:"
 
-var addressPattern = regexp.MustCompile("^[a-zA-Z0-9]{32,44}$")
+var addressPattern = regexp.MustCompile("^0x[a-fA-F0-9]{40}$")
 
-func ParseMessage(raw string) (*SIWSMessage, error) {
+func ParseMessage(raw string) (*SIWEMessage, error) {
 	lines := strings.Split(raw, "\n")
 	if len(lines) < 6 {
 		return nil, ErrMessageTooShort
@@ -57,7 +57,7 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 		return nil, ErrInvalidAddress
 	}
 
-	msg := &SIWSMessage{
+	msg := &SIWEMessage{
 		Raw:     raw,
 		Domain:  domain,
 		Address: address,
@@ -69,12 +69,14 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 
 	startIndex := 3
 	if lines[3] != "" && lines[4] == "" {
-		msg.Statement = lines[3]
+		statement := lines[3]
+		msg.Statement = &statement
 		startIndex = 5
 	}
 
 	inResources := false
-	for i := startIndex; i < len(lines); i += 1 {
+	for i := startIndex; i < len(lines); i++ {
+
 		line := strings.TrimSpace(lines[i])
 
 		if inResources {
@@ -115,19 +117,19 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 			if err != nil {
 				return nil, ErrInvalidURI
 			}
-
-			msg.URI = uri
+			msg.URI = *uri
 
 		case "Version":
 			msg.Version = value
 
 		case "Chain ID":
-			if value != "" && !IsValidSolanaNetwork(value) {
+			if value == "" || !isValidEthereumNetwork(value) {
 				return nil, ErrInvalidChainID
 			}
 			msg.ChainID = value
 
 		case "Nonce":
+			// this is supposed to be REQUIRED >8 chr alphanum but we'll leave it for now for gotrue's nonce impl
 			msg.Nonce = value
 
 		case "Issued At":
@@ -137,6 +139,9 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 				if err != nil {
 					return nil, ErrInvalidIssuedAt
 				}
+			}
+			if ts.IsZero() {
+				return nil, ErrMissingIssuedAt
 			}
 			msg.IssuedAt = ts
 
@@ -148,7 +153,7 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 					return nil, ErrInvalidExpirationTime
 				}
 			}
-			msg.ExpirationTime = ts
+			msg.ExpirationTime = &ts
 
 		case "Not Before":
 			ts, err := time.Parse(time.RFC3339, value)
@@ -158,10 +163,12 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 					return nil, ErrInvalidNotBefore
 				}
 			}
-			msg.NotBefore = ts
+
+			msg.NotBefore = &ts
 
 		case "Request ID":
-			msg.RequestID = value
+			// This is supposed to be a pchar (RFC 3986) but generally we'll keep it as any str for now
+			msg.RequestID = &value
 		}
 	}
 
@@ -173,18 +180,18 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 		return nil, ErrMissingIssuedAt
 	}
 
-	if msg.URI == nil {
+	if msg.URI.String() == "" {
 		return nil, ErrMissingURI
 	}
 
-	if !msg.IssuedAt.IsZero() && !msg.ExpirationTime.IsZero() {
-		if msg.IssuedAt.After(msg.ExpirationTime) {
+	if msg.ExpirationTime != nil && !msg.IssuedAt.IsZero() {
+		if msg.IssuedAt.After(*msg.ExpirationTime) {
 			return nil, ErrIssuedAfterExpiration
 		}
 	}
 
-	if !msg.NotBefore.IsZero() && !msg.ExpirationTime.IsZero() {
-		if msg.NotBefore.After(msg.ExpirationTime) {
+	if msg.NotBefore != nil && msg.ExpirationTime != nil {
+		if msg.NotBefore.After(*msg.ExpirationTime) {
 			return nil, ErrNotBeforeAfterExpiration
 		}
 	}
@@ -192,48 +199,40 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 	return msg, nil
 }
 
-func (m *SIWSMessage) VerifySignature(signature []byte) bool {
-	pubKey := base58.Decode(m.Address)
-	raw := []byte(m.Raw)
-
-	// try to verify just the signed message (in accordance with https://github.com/phantom/sign-in-with-solana
-	if ed25519.Verify(pubKey, raw, signature) {
-		return true
+// VerifySignature validates that the signature was created by the private key
+// corresponding to the address in the message. This performs ECDSA recovery
+// which is computationally expensive, so it should be called only after
+// ParseMessage has validated the message structure.
+//
+// The signature must be a 65-byte hex string in the format: 0x{R}{S}{V}
+// where R and S are 32 bytes each and V is 1 byte.
+//
+// Returns true if the recovered address matches the message address (case-insensitive).
+func (m *SIWEMessage) VerifySignature(signatureHex string) bool {
+	sig, err := hexutil.Decode(signatureHex)
+	if err != nil || len(sig) != 65 {
+		panic("siwe: signature must be a 65-byte hex string")
 	}
 
-	// if that didn't work, try to verify the signed message as if it was signed via Ledger (https://docs.anza.xyz/proposals/off-chain-message-signing)
-	var buffer bytes.Buffer
+	// Create signature in [R || S || V] format
+	signature := make([]byte, 65)
+	copy(signature, sig)
 
-	// Write 16-byte prefix
-	buffer.WriteByte(0xff)
-	buffer.WriteString("solana offchain")
-
-	// Write single-byte fields
-	buffer.WriteByte(0x00) // version
-
-	// Write domain, padded/truncated to 32 bytes
-	domain := make([]byte, 32)
-	copy(domain, m.Domain)
-	buffer.Write(domain)
-
-	buffer.WriteByte(0x00) // message format = ascii
-	buffer.WriteByte(0x01) // signer num = 1
-
-	// Write pubkey
-	buffer.Write(pubKey)
-
-	// Write message length (2 bytes, little endian)
-	var rawMsgLen = len(raw)
-	if rawMsgLen > math.MaxUint16 {
-		return false
+	// Normalize V if needed
+	if signature[64] >= 27 {
+		signature[64] -= 27
 	}
 
-	if err := binary.Write(&buffer, binary.LittleEndian, uint16(rawMsgLen)); err != nil {
-		return false
+	hash := accounts.TextHash([]byte(m.Raw))
+
+	// Recover public key
+	pubKey, err := crypto.Ecrecover(hash, signature)
+	if err != nil {
+		panic("siwe: failed to recover public key: " + err.Error())
 	}
 
-	// Write message
-	buffer.Write(raw)
+	// Convert to address
+	recoveredAddr := common.BytesToAddress(crypto.Keccak256(pubKey[1:])[12:])
 
-	return ed25519.Verify(pubKey, buffer.Bytes(), signature)
+	return strings.EqualFold(recoveredAddr.Hex(), m.Address)
 }
