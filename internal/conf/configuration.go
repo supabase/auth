@@ -72,7 +72,11 @@ type OAuthProviderConfiguration struct {
 
 // OAuthServerConfiguration holds OAuth server configuration
 type OAuthServerConfiguration struct {
-	AllowDynamicRegistration bool `json:"allow_dynamic_registration" split_words:"true"`
+	AllowDynamicRegistration bool          `json:"allow_dynamic_registration" split_words:"true"`
+	AuthorizationURL         string        `json:"authorization_url" split_words:"true"`
+	AuthorizationTimeout     time.Duration `json:"authorization_timeout" split_words:"true" default:"5m"`
+	// Placeholder for now, for (near) future extensibility
+	DefaultScope string `json:"default_scope" split_words:"true" default:"email"`
 }
 
 type AnonymousProviderConfiguration struct {

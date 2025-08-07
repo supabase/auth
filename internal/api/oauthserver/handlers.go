@@ -80,7 +80,7 @@ func (s *Server) LoadOAuthServerClient(w http.ResponseWriter, r *http.Request) (
 	client, err := s.getOAuthServerClient(ctx, clientID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
-			return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeUserNotFound, "OAuth client not found")
+			return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeOAuthClientNotFound, "OAuth client not found")
 		}
 		return nil, apierrors.NewInternalServerError("Error loading OAuth client").WithInternalError(err)
 	}
