@@ -17,20 +17,21 @@ type LimiterOptions struct {
 	Email ratelimit.Limiter
 	Phone ratelimit.Limiter
 
-	Signups          *limiter.Limiter
-	AnonymousSignIns *limiter.Limiter
-	Recover          *limiter.Limiter
-	Resend           *limiter.Limiter
-	MagicLink        *limiter.Limiter
-	Otp              *limiter.Limiter
-	Token            *limiter.Limiter
-	Verify           *limiter.Limiter
-	User             *limiter.Limiter
-	FactorVerify     *limiter.Limiter
-	FactorChallenge  *limiter.Limiter
-	SSO              *limiter.Limiter
-	SAMLAssertion    *limiter.Limiter
-	Web3             *limiter.Limiter
+	Signups             *limiter.Limiter
+	AnonymousSignIns    *limiter.Limiter
+	Recover             *limiter.Limiter
+	Resend              *limiter.Limiter
+	MagicLink           *limiter.Limiter
+	Otp                 *limiter.Limiter
+	Token               *limiter.Limiter
+	Verify              *limiter.Limiter
+	User                *limiter.Limiter
+	FactorVerify        *limiter.Limiter
+	FactorChallenge     *limiter.Limiter
+	SSO                 *limiter.Limiter
+	SAMLAssertion       *limiter.Limiter
+	Web3                *limiter.Limiter
+	OAuthClientRegister *limiter.Limiter
 }
 
 func (lo *LimiterOptions) apply(a *API) { a.limiterOpts = lo }
@@ -96,6 +97,9 @@ func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 	o.Resend = newLimiterPer5mOver1h(gc.RateLimitOtp)
 	o.MagicLink = newLimiterPer5mOver1h(gc.RateLimitOtp)
 	o.Otp = newLimiterPer5mOver1h(gc.RateLimitOtp)
+
+	o.OAuthClientRegister = newLimiterPer5mOver1h(gc.RateLimitOAuthDynamicClientRegister)
+
 	return o
 }
 

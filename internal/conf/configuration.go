@@ -70,6 +70,11 @@ type OAuthProviderConfiguration struct {
 	SkipNonceCheck bool `json:"skip_nonce_check" split_words:"true"`
 }
 
+// OAuthServerConfiguration holds OAuth server configuration
+type OAuthServerConfiguration struct {
+	AllowDynamicRegistration bool `json:"allow_dynamic_registration" split_words:"true"`
+}
+
 type AnonymousProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"false"`
 }
@@ -253,23 +258,25 @@ type GlobalConfiguration struct {
 	API           APIConfiguration
 	DB            DBConfiguration
 	External      ProviderConfiguration
-	Logging       LoggingConfig  `envconfig:"LOG"`
-	Profiler      ProfilerConfig `envconfig:"PROFILER"`
-	OperatorToken string         `split_words:"true" required:"false"`
+	OAuthServer   OAuthServerConfiguration `envconfig:"OAUTH_SERVER"`
+	Logging       LoggingConfig            `envconfig:"LOG"`
+	Profiler      ProfilerConfig           `envconfig:"PROFILER"`
+	OperatorToken string                   `split_words:"true" required:"false"`
 	Tracing       TracingConfig
 	Metrics       MetricsConfig
 	SMTP          SMTPConfiguration
 	AuditLog      AuditLogConfiguration `split_words:"true"`
 
-	RateLimitHeader         string  `split_words:"true"`
-	RateLimitEmailSent      Rate    `split_words:"true" default:"30"`
-	RateLimitSmsSent        Rate    `split_words:"true" default:"30"`
-	RateLimitVerify         float64 `split_words:"true" default:"30"`
-	RateLimitTokenRefresh   float64 `split_words:"true" default:"150"`
-	RateLimitSso            float64 `split_words:"true" default:"30"`
-	RateLimitAnonymousUsers float64 `split_words:"true" default:"30"`
-	RateLimitOtp            float64 `split_words:"true" default:"30"`
-	RateLimitWeb3           float64 `split_words:"true" default:"30"`
+	RateLimitHeader                     string  `split_words:"true"`
+	RateLimitEmailSent                  Rate    `split_words:"true" default:"30"`
+	RateLimitSmsSent                    Rate    `split_words:"true" default:"30"`
+	RateLimitVerify                     float64 `split_words:"true" default:"30"`
+	RateLimitTokenRefresh               float64 `split_words:"true" default:"150"`
+	RateLimitSso                        float64 `split_words:"true" default:"30"`
+	RateLimitAnonymousUsers             float64 `split_words:"true" default:"30"`
+	RateLimitOtp                        float64 `split_words:"true" default:"30"`
+	RateLimitWeb3                       float64 `split_words:"true" default:"30"`
+	RateLimitOAuthDynamicClientRegister float64 `split_words:"true" default:"10"`
 
 	SiteURL         string   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList    []string `json:"uri_allow_list" split_words:"true"`
