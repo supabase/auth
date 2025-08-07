@@ -91,7 +91,7 @@ func (ts *ExternalTestSuite) TestSignupExternalSnapchatDisableSignupErrorWhenNoU
 func (ts *ExternalTestSuite) TestSignupExternalSnapchatDisableSignupSuccessWithExistingUser() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("snapchatTestId", "", "Snapchat Test", "http://example.com/bitmoji", "")
+	ts.createUserWithIdentity("snapchat", "snapchatTestId", "", "Snapchat Test", "http://example.com/bitmoji", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
