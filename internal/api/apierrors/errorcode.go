@@ -95,4 +95,5 @@ const (
 	ErrorCodeEmailAddressInvalid       ErrorCode = "email_address_invalid"
 	ErrorCodeWeb3ProviderDisabled      ErrorCode = "web3_provider_disabled"
 	ErrorCodeWeb3UnsupportedChain      ErrorCode = "web3_unsupported_chain"
+	ErrorCodeEmailAddressNotProvided   ErrorCode = "email_address_not_provided"
 )

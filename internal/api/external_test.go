@@ -169,7 +169,17 @@ func assertAuthorizationSuccess(ts *ExternalTestSuite, u *url.URL, tokenCount in
 	}
 
 	// ensure user has been created with metadata
-	user, err := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
+	var user *models.User
+	if email != "" {
+		user, err = models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud)
+	} else {
+		identity := &models.Identity{}
+		err = ts.API.db.Q().Where("provider_id = ?", providerId).First(identity)
+		ts.Require().NoError(err)
+
+		user, err = models.FindUserByID(ts.API.db, identity.UserID)
+	}
+
 	ts.Require().NoError(err)
 	ts.Equal(providerId, user.UserMetaData["provider_id"])
 	ts.Equal(name, user.UserMetaData["full_name"])
