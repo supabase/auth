@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.179.0](https://github.com/supabase/auth/compare/v2.178.0...v2.179.0) (2025-08-07)
+
+
+### Features
+
+* add oauth2 client support ([#2098](https://github.com/supabase/auth/issues/2098)) ([8fae015](https://github.com/supabase/auth/commit/8fae01581d122bba95a3742dc212284f9a21dc4d))
+
 ## [2.178.0](https://github.com/supabase/auth/compare/v2.177.0...v2.178.0) (2025-08-05)
 
 
