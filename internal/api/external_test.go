@@ -70,6 +70,46 @@ func (ts *ExternalTestSuite) createUser(providerId string, email string, name st
 	return u, err
 }
 
+func (ts *ExternalTestSuite) createUserWithIdentity(providerType, providerId string, email string, name string, avatar string, confirmationToken string) (*models.User, error) {
+	// Cleanup existing user, if they already exist
+	if u, _ := models.FindUserByEmailAndAudience(ts.API.db, email, ts.Config.JWT.Aud); u != nil {
+		require.NoError(ts.T(), ts.API.db.Destroy(u), "Error deleting user")
+	}
+
+	userData := map[string]interface{}{"provider_id": providerId, "full_name": name}
+	if avatar != "" {
+		userData["avatar_url"] = avatar
+	}
+	u, err := models.NewUser("", email, "test", ts.Config.JWT.Aud, userData)
+
+	if confirmationToken != "" {
+		u.ConfirmationToken = confirmationToken
+	}
+	ts.Require().NoError(err, "Error making new user")
+	ts.Require().NoError(ts.API.db.Create(u), "Error creating user")
+
+	if confirmationToken != "" {
+		ts.Require().NoError(models.CreateOneTimeToken(ts.API.db, u.ID, email, u.ConfirmationToken, models.ConfirmationToken), "Error creating one-time confirmation/invite token")
+	}
+
+	if email != "" {
+		i, err := models.NewIdentity(u, "email", map[string]interface{}{
+			"sub":   u.ID.String(),
+			"email": email,
+		})
+		ts.Require().NoError(err)
+		ts.Require().NoError(ts.API.db.Create(i), "Error creating identity")
+	}
+
+	i, err := models.NewIdentity(u, providerType, map[string]interface{}{
+		"sub": providerId,
+	})
+	ts.Require().NoError(err)
+	ts.Require().NoError(ts.API.db.Create(i), "Error creating identity")
+
+	return u, err
+}
+
 func performAuthorizationRequest(ts *ExternalTestSuite, provider string, inviteToken string) *httptest.ResponseRecorder {
 	authorizeURL := "http://localhost/authorize?provider=" + provider
 	if inviteToken != "" {
