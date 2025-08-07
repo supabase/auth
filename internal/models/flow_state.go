@@ -12,7 +12,6 @@ import (
 	"github.com/gofrs/uuid"
 )
 
-
 type FlowState struct {
 	ID                   uuid.UUID  `json:"id" db:"id"`
 	UserID               *uuid.UUID `json:"user_id,omitempty" db:"user_id"`
