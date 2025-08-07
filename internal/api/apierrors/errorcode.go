@@ -97,4 +97,7 @@ const (
 	ErrorCodeWeb3UnsupportedChain                   ErrorCode = "web3_unsupported_chain"
 	ErrorCodeOAuthDynamicClientRegistrationDisabled ErrorCode = "oauth_dynamic_client_registration_disabled"
 	ErrorCodeEmailAddressNotProvided                ErrorCode = "email_address_not_provided"
+
+	ErrorCodeOAuthClientNotFound        ErrorCode = "oauth_client_not_found"
+	ErrorCodeOAuthAuthorizationNotFound ErrorCode = "oauth_authorization_not_found"
 )
