@@ -612,6 +612,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewSlackProvider(config.External.Slack, scopes)
 	case "slack_oidc":
 		return provider.NewSlackOIDCProvider(config.External.SlackOIDC, scopes)
+	case "tiktok":
+		return provider.NewTikTokProvider(config.External.TikTok, scopes)
 	case "twitch":
 		return provider.NewTwitchProvider(config.External.Twitch, scopes)
 	case "twitter":
