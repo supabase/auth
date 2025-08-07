@@ -185,6 +185,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Get("/settings", api.Settings)
 
+		// `/authorize` to initiate OAuth2 authorization flow with the external providers
+		// where Supabase Auth is an OAuth2 Client
 		r.Get("/authorize", api.ExternalProviderRedirect)
 
 		r.With(api.requireAdminCredentials).Post("/invite", api.Invite)
@@ -345,6 +347,12 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		r.Route("/oauth", func(r *router) {
 			r.With(api.limitHandler(api.limiterOpts.OAuthClientRegister)).
 				Post("/clients/register", api.oauthServer.OAuthServerClientDynamicRegister)
+
+			// OAuth 2.1 Authorization endpoints
+			// `/authorize` to initiate OAuth2 authorization code flow where Supabase Auth is the OAuth2 provider
+			r.Get("/authorize", api.oauthServer.OAuthServerAuthorize)
+			r.With(api.requireAuthentication).Get("/authorizations/{authorization_id}", api.oauthServer.OAuthServerGetAuthorization)
+			r.With(api.requireAuthentication).Post("/authorizations/{authorization_id}/consent", api.oauthServer.OAuthServerConsent)
 		})
 	})
 
