@@ -5,6 +5,7 @@ import (
 	"net/url"
 
 	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -19,7 +20,6 @@ const (
 	inviteTokenKey          = contextKey("invite_token")
 	signatureKey            = contextKey("signature")
 	externalProviderTypeKey = contextKey("external_provider_type")
-	userKey                 = contextKey("user")
 	targetUserKey           = contextKey("target_user")
 	factorKey               = contextKey("factor")
 	sessionKey              = contextKey("session")
@@ -58,7 +58,7 @@ func getClaims(ctx context.Context) *AccessTokenClaims {
 
 // withUser adds the user to the context.
 func withUser(ctx context.Context, u *models.User) context.Context {
-	return context.WithValue(ctx, userKey, u)
+	return shared.WithUser(ctx, u)
 }
 
 // withTargetUser adds the target user for linking to the context.
@@ -73,14 +73,7 @@ func withFactor(ctx context.Context, f *models.Factor) context.Context {
 
 // getUser reads the user from the context.
 func getUser(ctx context.Context) *models.User {
-	if ctx == nil {
-		return nil
-	}
-	obj := ctx.Value(userKey)
-	if obj == nil {
-		return nil
-	}
-	return obj.(*models.User)
+	return shared.GetUser(ctx)
 }
 
 // getTargetUser reads the user from the context.
