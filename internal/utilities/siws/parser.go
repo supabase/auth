@@ -1,7 +1,10 @@
 package siws
 
 import (
+	"bytes"
 	"crypto/ed25519"
+	"encoding/binary"
+	"math"
 	"net/url"
 	"regexp"
 	"strings"
@@ -191,6 +194,46 @@ func ParseMessage(raw string) (*SIWSMessage, error) {
 
 func (m *SIWSMessage) VerifySignature(signature []byte) bool {
 	pubKey := base58.Decode(m.Address)
+	raw := []byte(m.Raw)
 
-	return ed25519.Verify(pubKey, []byte(m.Raw), signature)
+	// try to verify just the signed message (in accordance with https://github.com/phantom/sign-in-with-solana
+	if ed25519.Verify(pubKey, raw, signature) {
+		return true
+	}
+
+	// if that didn't work, try to verify the signed message as if it was signed via Ledger (https://docs.anza.xyz/proposals/off-chain-message-signing)
+	var buffer bytes.Buffer
+
+	// Write 16-byte prefix
+	buffer.WriteByte(0xff)
+	buffer.WriteString("solana offchain")
+
+	// Write single-byte fields
+	buffer.WriteByte(0x00) // version
+
+	// Write domain, padded/truncated to 32 bytes
+	domain := make([]byte, 32)
+	copy(domain, m.Domain)
+	buffer.Write(domain)
+
+	buffer.WriteByte(0x00) // message format = ascii
+	buffer.WriteByte(0x01) // signer num = 1
+
+	// Write pubkey
+	buffer.Write(pubKey)
+
+	// Write message length (2 bytes, little endian)
+	var rawMsgLen = len(raw)
+	if rawMsgLen > math.MaxUint16 {
+		return false
+	}
+
+	if err := binary.Write(&buffer, binary.LittleEndian, uint16(rawMsgLen)); err != nil {
+		return false
+	}
+
+	// Write message
+	buffer.Write(raw)
+
+	return ed25519.Verify(pubKey, buffer.Bytes(), signature)
 }
