@@ -2,8 +2,6 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/url"
 	"strings"
 
@@ -120,9 +118,6 @@ func parseSnapchatIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData
 	if err := token.Claims(&data.Metadata); err != nil {
 		return nil, nil, err
 	}
-
-	m, _ := json.Marshal(data.Metadata)
-	fmt.Printf("@@@@@@@@@@@@ %s\n", m)
 
 	if data.Metadata.Email != "" {
 		data.Emails = append(data.Emails, Email{
