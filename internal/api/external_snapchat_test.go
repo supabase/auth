@@ -103,39 +103,4 @@ func (ts *ExternalTestSuite) TestSignupExternalSnapchatDisableSignupSuccessWithE
 	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "", "Snapchat Test", "snapchatTestId", "http://example.com/bitmoji")
 }
 
-func (ts *ExternalTestSuite) TestInviteTokenExternalSnapchatSuccessWhenMatchingToken() {
-	// name and avatar should be populated from Snapchat API
-	// Use the same email that the provider will generate - converted to lowercase
-	ts.createUser("snapchatTestId", "", "", "", "invite_token")
-
-	tokenCount, userCount := 0, 0
-	code := "authcode"
-	server := SnapchatTestSignupSetup(ts, &tokenCount, &userCount, code, snapchatUser)
-	defer server.Close()
-
-	u := performAuthorization(ts, "snapchat", code, "invite_token")
-
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "", "Snapchat Test", "snapchatTestId", "http://example.com/bitmoji")
-}
-
-func (ts *ExternalTestSuite) TestInviteTokenExternalSnapchatErrorWhenNoMatchingToken() {
-	tokenCount, userCount := 0, 0
-	code := "authcode"
-	server := SnapchatTestSignupSetup(ts, &tokenCount, &userCount, code, snapchatUser)
-	defer server.Close()
-
-	w := performAuthorizationRequest(ts, "snapchat", "invite_token")
-	ts.Require().Equal(http.StatusNotFound, w.Code)
-}
-
-func (ts *ExternalTestSuite) TestInviteTokenExternalSnapchatErrorWhenWrongToken() {
-	ts.createUser("snapchatTestId", "", "", "", "invite_token")
-
-	tokenCount, userCount := 0, 0
-	code := "authcode"
-	server := SnapchatTestSignupSetup(ts, &tokenCount, &userCount, code, snapchatUser)
-	defer server.Close()
-
-	w := performAuthorizationRequest(ts, "snapchat", "wrong_token")
-	ts.Require().Equal(http.StatusNotFound, w.Code)
-}
+// Snapchat may not send email address so Invite Token flow can't apply.
