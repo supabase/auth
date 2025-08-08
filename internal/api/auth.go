@@ -34,6 +34,15 @@ func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (con
 	return ctx, err
 }
 
+// loadAuthentication is similar to requireAuthentication, but it only loads the user authentication if there is an Authorization header. If there is none, it does nothing. If there is one but has invalid claims, it rejects.
+func (a *API) loadAuthentication(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+	if value := r.Header.Get("Authorization"); value != "" {
+		return a.requireAuthentication(w, r)
+	}
+
+	return r.Context(), nil
+}
+
 func (a *API) requireNotAnonymous(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 	claims := getClaims(ctx)
@@ -64,7 +73,7 @@ func (a *API) extractBearerToken(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	matches := bearerRegexp.FindStringSubmatch(authHeader)
 	if len(matches) != 2 {
-		return "", apierrors.NewHTTPError(http.StatusUnauthorized, apierrors.ErrorCodeNoAuthorization, "This endpoint requires a Bearer token")
+		return "", apierrors.NewHTTPError(http.StatusUnauthorized, apierrors.ErrorCodeNoAuthorization, "This endpoint requires a valid Bearer token")
 	}
 
 	return matches[1], nil
