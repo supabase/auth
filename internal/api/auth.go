@@ -34,10 +34,20 @@ func (a *API) requireAuthentication(w http.ResponseWriter, r *http.Request) (con
 	return ctx, err
 }
 
-// loadAuthentication is similar to requireAuthentication, but it only loads the user authentication if there is an Authorization header. If there is none, it does nothing. If there is one but has invalid claims, it rejects.
+// loadAuthentication is similar to requireAuthentication, but it only loads
+// the user authentication if there is an Authorization header and (for
+// backward compatibility) if there is a query param grant_type == id_token. If
+// there is none, it does nothing. If there is one but has invalid claims, it
+// rejects.
 func (a *API) loadAuthentication(w http.ResponseWriter, r *http.Request) (context.Context, error) {
-	if value := r.Header.Get("Authorization"); value != "" {
-		return a.requireAuthentication(w, r)
+	if !strings.HasSuffix(r.URL.Path, "/token") || r.URL.Query().Get("grant_type") == "id_token" {
+		// We don't know if client libraries _never_ send a JWT on any
+		// `/token` endpoint. They likely don't but to keep backward
+		// compatibility this only applies for the id_token grant.
+
+		if value := r.Header.Get("Authorization"); value != "" {
+			return a.requireAuthentication(w, r)
+		}
 	}
 
 	return r.Context(), nil
