@@ -18,12 +18,13 @@ import (
 
 // IdTokenGrantParams are the parameters the IdTokenGrant method accepts
 type IdTokenGrantParams struct {
-	IdToken     string `json:"id_token"`
-	AccessToken string `json:"access_token"`
-	Nonce       string `json:"nonce"`
-	Provider    string `json:"provider"`
-	ClientID    string `json:"client_id"`
-	Issuer      string `json:"issuer"`
+	IdToken      string `json:"id_token"`
+	AccessToken  string `json:"access_token"`
+	Nonce        string `json:"nonce"`
+	Provider     string `json:"provider"`
+	ClientID     string `json:"client_id"`
+	Issuer       string `json:"issuer"`
+	LinkIdentity bool   `json:"link_identity"`
 }
 
 func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, bool, string, []string, error) {
@@ -163,6 +164,20 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return apierrors.NewOAuthError("invalid request", "provider or client_id and issuer required")
 	}
 
+	if params.LinkIdentity {
+		// this API endpoint uses loadAuthentication which will set the
+		// calling user on the context if and only if the Authorization
+		// header was passed, which is required for LinkIdentity
+
+		targetUser := getUser(ctx)
+		if targetUser == nil {
+			return apierrors.NewOAuthError("invalid request", "Linking requires a valid user authentication")
+		}
+
+		// set it so linkIdentityToUser works below
+		ctx = withTargetUser(ctx, targetUser)
+	}
+
 	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, err := params.getProvider(ctx, config, r)
 	if err != nil {
 		return err
@@ -253,15 +268,21 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 
 	grantParams.FillGrantParams(r)
 
-	if err := a.triggerBeforeUserCreatedExternal(r, db, userData, providerType); err != nil {
-		return err
+	if !params.LinkIdentity {
+		if err := a.triggerBeforeUserCreatedExternal(r, db, userData, providerType); err != nil {
+			return err
+		}
 	}
 
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		var user *models.User
 		var terr error
 
-		user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType)
+		if params.LinkIdentity {
+			user, terr = a.linkIdentityToUser(r, ctx, tx, userData, providerType)
+		} else {
+			user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType)
+		}
 		if terr != nil {
 			return terr
 		}
