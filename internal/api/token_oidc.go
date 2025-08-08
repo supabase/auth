@@ -169,7 +169,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return apierrors.NewOAuthError("invalid request", "provider or client_id and issuer required")
 	}
 
-	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, allowNoEmail, err := params.getProvider(ctx, config, r)
+	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, emailOptional, err := params.getProvider(ctx, config, r)
 	if err != nil {
 		return err
 	}
@@ -267,7 +267,7 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		var user *models.User
 		var terr error
 
-		user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, allowNoEmail)
+		user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, emailOptional)
 		if terr != nil {
 			return terr
 		}
