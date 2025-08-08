@@ -382,10 +382,10 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
-	hasEmails := providerType != "web3" && !(allowNoEmail && len(userData.Emails) == 0)
+	hasEmails := providerType != "web3" && !(allowNoEmail && decision.CandidateEmail.Email == "")
 
 	if hasEmails && !user.IsConfirmed() {
-		if len(userData.Emails) == 0 && decision.CandidateEmail.Email == "" {
+		if decision.CandidateEmail.Email == "" && decision.Decision == models.CreateAccount {
 			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailAddressNotProvided, fmt.Sprintf("An email address is required to create an account or sign in with %v, please set up an email address for your profile in %v and try again", providerType, providerType))
 		}
 
