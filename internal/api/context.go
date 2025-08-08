@@ -15,8 +15,8 @@ func (c contextKey) String() string {
 }
 
 const (
-	externalProviderTypeKey         = contextKey("external_provider_type")
-	externalProviderAllowNoEmailKey = contextKey("external_provider_allow_no_email")
+	externalProviderTypeKey          = contextKey("external_provider_type")
+	externalProviderEmailOptionalKey = contextKey("external_provider_allow_no_email")
 
 	tokenKey            = contextKey("jwt")
 	inviteTokenKey      = contextKey("invite_token")
@@ -154,26 +154,26 @@ func getInviteToken(ctx context.Context) string {
 }
 
 // withExternalProviderType adds the provided request ID to the context.
-func withExternalProviderType(ctx context.Context, id string, allowNoEmail bool) context.Context {
-	return context.WithValue(context.WithValue(ctx, externalProviderTypeKey, id), externalProviderAllowNoEmailKey, allowNoEmail)
+func withExternalProviderType(ctx context.Context, id string, emailOptional bool) context.Context {
+	return context.WithValue(context.WithValue(ctx, externalProviderTypeKey, id), externalProviderEmailOptionalKey, emailOptional)
 }
 
 // getExternalProviderType returns the provider type and whether user data without email address should be allowed.
 func getExternalProviderType(ctx context.Context) (string, bool) {
 	idValue := ctx.Value(externalProviderTypeKey)
-	allowNoEmailValue := ctx.Value(externalProviderAllowNoEmailKey)
+	emailOptionalValue := ctx.Value(externalProviderEmailOptionalKey)
 
 	id, okID := idValue.(string)
 	if !okID {
 		return "", false
 	}
 
-	allowNoEmail, okAllowNoEmail := allowNoEmailValue.(bool)
-	if !okAllowNoEmail {
+	emailOptional, okEmailOptional := emailOptionalValue.(bool)
+	if !okEmailOptional {
 		return "", false
 	}
 
-	return id, allowNoEmail
+	return id, emailOptional
 }
 
 func withExternalReferrer(ctx context.Context, token string) context.Context {

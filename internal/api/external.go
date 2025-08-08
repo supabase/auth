@@ -170,7 +170,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
 
-	providerType, allowNoEmail := getExternalProviderType(ctx)
+	providerType, emailOptional := getExternalProviderType(ctx)
 	data, err := a.handleOAuthCallback(r)
 	if err != nil {
 		return err
@@ -178,7 +178,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 	userData := data.userData
 
-	if len(userData.Emails) == 0 && !allowNoEmail {
+	if len(userData.Emails) == 0 && !emailOptional {
 		return apierrors.NewInternalServerError("Error getting user email from external provider")
 	}
 
@@ -230,7 +230,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				return terr
 			}
 		} else {
-			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, allowNoEmail); terr != nil {
+			if user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, emailOptional); terr != nil {
 				return terr
 			}
 		}
@@ -289,7 +289,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	return nil
 }
 
-func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string, allowNoEmail bool) (*models.User, error) {
+func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.Request, userData *provider.UserProvidedData, providerType string, emailOptional bool) (*models.User, error) {
 	ctx := r.Context()
 	aud := a.requestAud(ctx, r)
 	config := a.config
@@ -382,13 +382,9 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 		return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeUserBanned, "User is banned")
 	}
 
-	hasEmails := providerType != "web3" && !(allowNoEmail && decision.CandidateEmail.Email == "")
+	hasEmails := providerType != "web3" && !(emailOptional && decision.CandidateEmail.Email == "")
 
 	if hasEmails && !user.IsConfirmed() {
-		if decision.CandidateEmail.Email == "" && decision.Decision == models.CreateAccount {
-			return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailAddressNotProvided, fmt.Sprintf("An email address is required to create an account or sign in with %v, please set up an email address for your profile in %v and try again", providerType, providerType))
-		}
-
 		// The user may have other unconfirmed email + password
 		// combination, phone or oauth identities. These identities
 		// need to be removed when a new oauth identity is being added
@@ -420,7 +416,7 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 					return nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. A confirmation email has been sent to your %v email", providerType, providerType)))
 				}
 
-				return nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. Verify the email with %v and try to sign in again", providerType, providerType)))
+				return nil, storage.NewCommitWithError(apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeProviderEmailNeedsVerification, fmt.Sprintf("Unverified email with %v. Verify the email with %v in order to sign in", providerType, providerType)))
 			}
 		}
 	} else {
