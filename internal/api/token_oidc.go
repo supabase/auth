@@ -169,6 +169,10 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	if params.LinkIdentity {
+		if r.Header.Get("Authorization") == "" {
+			return apierrors.NewOAuthError("invalid request", "Linking requires a valid user access token in Authorization")
+		}
+
 		requireAuthCtx, err := a.requireAuthentication(w, r)
 		if err != nil {
 			return err
