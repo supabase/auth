@@ -169,11 +169,12 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 	}
 
 	if params.LinkIdentity {
-		// this API endpoint uses loadAuthentication which will set the
-		// calling user on the context if and only if the Authorization
-		// header was passed, which is required for LinkIdentity
+		requireAuthCtx, err := a.requireAuthentication(w, r)
+		if err != nil {
+			return err
+		}
 
-		targetUser := getUser(ctx)
+		targetUser := getUser(requireAuthCtx)
 		if targetUser == nil {
 			return apierrors.NewOAuthError("invalid request", "Linking requires a valid user authentication")
 		}
