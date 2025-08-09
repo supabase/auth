@@ -27,7 +27,7 @@ dev-deps: ## Install developer dependencies
 	@go install github.com/gobuffalo/pop/soda@latest
 	@go install github.com/securego/gosec/v2/cmd/gosec@latest
 	@go install honnef.co/go/tools/cmd/staticcheck@latest
-	@go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
+	@go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
 	@go install github.com/nishanths/exhaustive/cmd/exhaustive@latest
 
 deps: ## Install dependencies.
