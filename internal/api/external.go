@@ -620,6 +620,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewVercelMarketplaceProvider(config.External.VercelMarketplace, scopes)
 	case "workos":
 		return provider.NewWorkOSProvider(config.External.WorkOS)
+	case "zitadel":
+		return provider.NewZitadelProvider(config.External.Zitadel, scopes)
 	case "zoom":
 		return provider.NewZoomProvider(config.External.Zoom)
 	default:
