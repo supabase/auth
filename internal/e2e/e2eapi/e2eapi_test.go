@@ -139,7 +139,7 @@ func TestDo(t *testing.T) {
 		res := make(chan string)
 		err := Do(ctx, http.MethodGet, inst.APIServer.URL+"/user", nil, &res)
 		require.Error(t, err)
-		require.ErrorContains(t, err, "401: This endpoint requires a Bearer token")
+		require.ErrorContains(t, err, "401: This endpoint requires a valid Bearer token")
 	})
 
 	// Covers http.NewRequestWithContext
