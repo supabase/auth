@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	snapchatUser = `{"data":{"me":{"externalId":"snapchatTestId","displayName":"Snapchat Test","bitmoji":{"avatar":"http://example.com/bitmoji"}}}}`
+	snapchatUser = `{"data":{"me":{"email":"snapchattestid@snapchat.id","externalId":"snapchatTestId","displayName":"Snapchat Test","bitmoji":{"avatar":"http://example.com/bitmoji"}}}}`
 )
 
 func (ts *ExternalTestSuite) TestSignupExternalSnapchat() {
