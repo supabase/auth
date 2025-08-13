@@ -29,23 +29,23 @@ type AuthorizeParams struct {
 // AuthorizationDetailsResponse represents the response for getting authorization details
 type AuthorizationDetailsResponse struct {
 	AuthorizationID string                `json:"authorization_id"`
-	Client          ClientDetailsResponse `json:"client"`
-	User            UserDetailsResponse   `json:"user"`
-	Scope           string                `json:"scope"`
+	Client          ClientDetailsResponse `json:"client,omitempty"`
+	User            UserDetailsResponse   `json:"user,omitempty"`
+	Scope           string                `json:"scope,omitempty"`
 }
 
 // ClientDetailsResponse represents client details in authorization response
 type ClientDetailsResponse struct {
 	ClientID   string `json:"client_id"`
-	ClientName string `json:"client_name"`
-	ClientURI  string `json:"client_uri"`
-	LogoURI    string `json:"logo_uri"`
+	ClientName string `json:"client_name,omitempty"`
+	ClientURI  string `json:"client_uri,omitempty"`
+	LogoURI    string `json:"logo_uri,omitempty"`
 }
 
 // UserDetailsResponse represents user details in authorization response
 type UserDetailsResponse struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
+	ID    string `json:"id,omitempty"`
+	Email string `json:"email,omitempty"`
 }
 
 // ConsentRequest represents a consent decision request
@@ -55,7 +55,7 @@ type ConsentRequest struct {
 
 // ConsentResponse represents the response after processing consent
 type ConsentResponse struct {
-	RedirectURL string `json:"redirect_url"`
+	RedirectURL string `json:"redirect_url,omitempty"`
 }
 
 type OAuthServerConsentAction string

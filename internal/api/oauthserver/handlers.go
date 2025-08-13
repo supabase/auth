@@ -18,23 +18,23 @@ type OAuthServerClientResponse struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret,omitempty"` // only returned on registration
 
-	RedirectURIs            []string `json:"redirect_uris"`
-	TokenEndpointAuthMethod []string `json:"token_endpoint_auth_method"`
-	GrantTypes              []string `json:"grant_types"`
-	ResponseTypes           []string `json:"response_types"`
+	RedirectURIs            []string `json:"redirect_uris,omitempty"`
+	TokenEndpointAuthMethod []string `json:"token_endpoint_auth_method,omitempty"`
+	GrantTypes              []string `json:"grant_types,omitempty"`
+	ResponseTypes           []string `json:"response_types,omitempty"`
 	ClientName              string   `json:"client_name,omitempty"`
 	ClientURI               string   `json:"client_uri,omitempty"`
 	LogoURI                 string   `json:"logo_uri,omitempty"`
 
 	// Metadata fields
-	RegistrationType string    `json:"registration_type"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	RegistrationType string    `json:"registration_type,omitempty"`
+	CreatedAt        time.Time `json:"created_at,omitempty"`
+	UpdatedAt        time.Time `json:"updated_at,omitempty"`
 }
 
 // OAuthServerClientListResponse represents the response for listing OAuth clients
 type OAuthServerClientListResponse struct {
-	Clients []OAuthServerClientResponse `json:"clients"`
+	Clients []OAuthServerClientResponse `json:"clients,omitempty"`
 }
 
 // oauthServerClientToResponse converts a model to response format
