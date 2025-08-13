@@ -13,6 +13,7 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // AuthorizeParams represents the parameters for an OAuth authorization request
@@ -182,9 +183,9 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 		AuthorizationID: authorization.AuthorizationID,
 		Client: ClientDetailsResponse{
 			ClientID:   authorization.Client.ClientID,
-			ClientName: authorization.Client.ClientName.String(),
-			ClientURI:  authorization.Client.ClientURI.String(),
-			LogoURI:    authorization.Client.LogoURI.String(),
+			ClientName: utilities.StringValue(authorization.Client.ClientName),
+			ClientURI:  utilities.StringValue(authorization.Client.ClientURI),
+			LogoURI:    utilities.StringValue(authorization.Client.LogoURI),
 		},
 		User: UserDetailsResponse{
 			ID:    user.ID.String(),
@@ -461,9 +462,11 @@ func (s *Server) autoApproveAndRedirect(w http.ResponseWriter, r *http.Request, 
 func (s *Server) buildSuccessRedirectURL(authorization *models.OAuthServerAuthorization) string {
 	u, _ := url.Parse(authorization.RedirectURI)
 	q := u.Query()
-	q.Set("code", authorization.AuthorizationCode.String())
-	if authorization.State.String() != "" {
-		q.Set("state", authorization.State.String())
+	if authorization.AuthorizationCode != nil {
+		q.Set("code", *authorization.AuthorizationCode)
+	}
+	if authorization.State != nil && *authorization.State != "" {
+		q.Set("state", *authorization.State)
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
@@ -474,8 +477,8 @@ func (s *Server) buildErrorRedirectURL(authorization *models.OAuthServerAuthoriz
 	q := u.Query()
 	q.Set("error", errorCode)
 	q.Set("error_description", errorDescription)
-	if authorization.State.String() != "" {
-		q.Set("state", authorization.State.String())
+	if authorization.State != nil && *authorization.State != "" {
+		q.Set("state", *authorization.State)
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
