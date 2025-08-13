@@ -22,9 +22,9 @@ type OAuthServerClient struct {
 
 	RedirectURIs string             `json:"-" db:"redirect_uris"`
 	GrantTypes   string             `json:"grant_types" db:"grant_types"`
-	ClientName   storage.NullString `json:"client_name" db:"client_name"`
-	ClientURI    storage.NullString `json:"client_uri" db:"client_uri"`
-	LogoURI      storage.NullString `json:"logo_uri" db:"logo_uri"`
+	ClientName   *string `json:"client_name,omitempty" db:"client_name"`
+	ClientURI    *string `json:"client_uri,omitempty" db:"client_uri"`
+	LogoURI      *string `json:"logo_uri,omitempty" db:"logo_uri"`
 	CreatedAt    time.Time          `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time          `json:"updated_at" db:"updated_at"`
 	DeletedAt    *time.Time         `json:"deleted_at,omitempty" db:"deleted_at"`

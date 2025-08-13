@@ -11,6 +11,7 @@ import (
 	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // OAuthServerClientResponse represents the response format for OAuth client operations
@@ -47,9 +48,9 @@ func oauthServerClientToResponse(client *models.OAuthServerClient, includeSecret
 		TokenEndpointAuthMethod: []string{"client_secret_basic", "client_secret_post"}, // Both methods are supported
 		GrantTypes:              client.GetGrantTypes(),
 		ResponseTypes:           []string{"code"}, // Always "code" in OAuth 2.1
-		ClientName:              client.ClientName.String(),
-		ClientURI:               client.ClientURI.String(),
-		LogoURI:                 client.LogoURI.String(),
+		ClientName:              utilities.StringValue(client.ClientName),
+		ClientURI:               utilities.StringValue(client.ClientURI),
+		LogoURI:                 utilities.StringValue(client.LogoURI),
 
 		// Metadata fields
 		RegistrationType: client.RegistrationType,

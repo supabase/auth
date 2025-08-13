@@ -45,12 +45,12 @@ type OAuthServerAuthorization struct {
 	UserID              *uuid.UUID                     `json:"user_id" db:"user_id"`
 	RedirectURI         string                         `json:"redirect_uri" db:"redirect_uri"`
 	Scope               string                         `json:"scope" db:"scope"`
-	State               storage.NullString             `json:"state" db:"state"`
-	CodeChallenge       storage.NullString             `json:"code_challenge" db:"code_challenge"`
-	CodeChallengeMethod storage.NullString             `json:"code_challenge_method" db:"code_challenge_method"`
+	State               *string             `json:"state,omitempty" db:"state"`
+	CodeChallenge       *string             `json:"code_challenge,omitempty" db:"code_challenge"`
+	CodeChallengeMethod *string             `json:"code_challenge_method,omitempty" db:"code_challenge_method"`
 	ResponseType        OAuthServerResponseType        `json:"response_type" db:"response_type"`
 	Status              OAuthServerAuthorizationStatus `json:"status" db:"status"`
-	AuthorizationCode   storage.NullString             `json:"-" db:"authorization_code"`
+	AuthorizationCode   *string             `json:"-" db:"authorization_code"`
 	CreatedAt           time.Time                      `json:"created_at" db:"created_at"`
 	ExpiresAt           time.Time                      `json:"expires_at" db:"expires_at"`
 	ApprovedAt          *time.Time                     `json:"approved_at" db:"approved_at"`
@@ -86,13 +86,13 @@ func NewOAuthServerAuthorization(clientID, redirectURI, scope, state, codeChalle
 	}
 
 	if state != "" {
-		auth.State = storage.NullString(state)
+		auth.State = &state
 	}
 	if codeChallenge != "" {
-		auth.CodeChallenge = storage.NullString(codeChallenge)
+		auth.CodeChallenge = &codeChallenge
 	}
 	if codeChallengeMethod != "" {
-		auth.CodeChallengeMethod = storage.NullString(codeChallengeMethod)
+		auth.CodeChallengeMethod = &codeChallengeMethod
 	}
 
 	return auth
@@ -116,12 +116,12 @@ func (auth *OAuthServerAuthorization) GetScopeList() []string {
 
 // GenerateAuthorizationCode generates a new authorization code if not already set
 func (auth *OAuthServerAuthorization) GenerateAuthorizationCode() string {
-	if auth.AuthorizationCode.String() != "" {
-		return auth.AuthorizationCode.String()
+	if auth.AuthorizationCode != nil && *auth.AuthorizationCode != "" {
+		return *auth.AuthorizationCode
 	}
 
 	code := uuid.Must(uuid.NewV4()).String()
-	auth.AuthorizationCode = storage.NullString(code)
+	auth.AuthorizationCode = &code
 	return code
 }
 
@@ -188,7 +188,7 @@ func (auth *OAuthServerAuthorization) Validate() error {
 
 // VerifyPKCE verifies the PKCE code verifier against the stored challenge
 func (auth *OAuthServerAuthorization) VerifyPKCE(codeVerifier string) error {
-	if auth.CodeChallenge.String() == "" {
+	if auth.CodeChallenge == nil || *auth.CodeChallenge == "" {
 		// No PKCE challenge stored, verification passes
 		return nil
 	}
@@ -198,7 +198,11 @@ func (auth *OAuthServerAuthorization) VerifyPKCE(codeVerifier string) error {
 	}
 
 	// Use the shared PKCE verification function
-	return security.VerifyPKCEChallenge(auth.CodeChallenge.String(), auth.CodeChallengeMethod.String(), codeVerifier)
+	var codeChallengeMethod string
+	if auth.CodeChallengeMethod != nil {
+		codeChallengeMethod = *auth.CodeChallengeMethod
+	}
+	return security.VerifyPKCEChallenge(*auth.CodeChallenge, codeChallengeMethod, codeVerifier)
 }
 
 // Query functions for OAuth authorizations
