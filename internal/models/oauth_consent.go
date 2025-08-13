@@ -169,21 +169,13 @@ func UpsertOAuthServerConsent(tx *storage.Connection, consent *OAuthServerConsen
 // RevokeOAuthServerConsentsByClient revokes all consents for a specific client
 func RevokeOAuthServerConsentsByClient(tx *storage.Connection, clientID string) error {
 	now := time.Now()
-	query := `
-		UPDATE ` + (&OAuthServerConsent{}).TableName() + ` 
-		SET revoked_at = ? 
-		WHERE client_id = ? AND revoked_at IS NULL
-	`
+	query := "UPDATE " + (&OAuthServerConsent{}).TableName() + " SET revoked_at = ? WHERE client_id = ? AND revoked_at IS NULL"
 	return tx.RawQuery(query, now, clientID).Exec()
 }
 
 // RevokeOAuthServerConsentsByUser revokes all consents for a specific user
 func RevokeOAuthServerConsentsByUser(tx *storage.Connection, userID uuid.UUID) error {
 	now := time.Now()
-	query := `
-		UPDATE ` + (&OAuthServerConsent{}).TableName() + ` 
-		SET revoked_at = ? 
-		WHERE user_id = ? AND revoked_at IS NULL
-	`
+	query := "UPDATE " + (&OAuthServerConsent{}).TableName() + " SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL"
 	return tx.RawQuery(query, now, userID).Exec()
 }

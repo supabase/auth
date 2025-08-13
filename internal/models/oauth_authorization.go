@@ -262,11 +262,7 @@ func CreateOAuthServerAuthorization(tx *storage.Connection, auth *OAuthServerAut
 
 // CleanupExpiredOAuthServerAuthorizations marks expired authorizations as expired
 func CleanupExpiredOAuthServerAuthorizations(tx *storage.Connection) error {
-	query := `
-		UPDATE ` + (&OAuthServerAuthorization{}).TableName() + ` 
-		SET status = ? 
-		WHERE status = ? AND expires_at < now()
-	`
+	query := "UPDATE " + (&OAuthServerAuthorization{}).TableName() + " SET status = ? WHERE status = ? AND expires_at < now()"
 	return tx.RawQuery(query, OAuthServerAuthorizationExpired, OAuthServerAuthorizationPending).Exec()
 }
 
