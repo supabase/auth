@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gofrs/uuid"
@@ -92,7 +93,10 @@ func NewOAuthServerAuthorization(clientID, redirectURI, scope, state, codeChalle
 		auth.CodeChallenge = &codeChallenge
 	}
 	if codeChallengeMethod != "" {
-		auth.CodeChallengeMethod = &codeChallengeMethod
+		// Normalize code challenge method to lowercase for database storage
+		// Database enum expects 's256' and 'plain' (lowercase)
+		normalizedMethod := strings.ToLower(codeChallengeMethod)
+		auth.CodeChallengeMethod = &normalizedMethod
 	}
 
 	return auth

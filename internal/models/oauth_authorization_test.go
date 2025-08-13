@@ -27,11 +27,42 @@ func TestNewOAuthServerAuthorization(t *testing.T) {
 	assert.Equal(t, scope, auth.Scope)
 	assert.Equal(t, state, *auth.State)
 	assert.Equal(t, codeChallenge, *auth.CodeChallenge)
-	assert.Equal(t, codeChallengeMethod, *auth.CodeChallengeMethod)
+	assert.Equal(t, "s256", *auth.CodeChallengeMethod) // Should be normalized to lowercase
 	assert.Equal(t, OAuthServerResponseTypeCode, auth.ResponseType)
 	assert.Equal(t, OAuthServerAuthorizationPending, auth.Status)
 	assert.True(t, auth.ExpiresAt.After(auth.CreatedAt))
 	assert.Nil(t, auth.ApprovedAt)
+}
+
+func TestNewOAuthServerAuthorization_CodeChallengeMethodNormalization(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"uppercase S256", "S256", "s256"},
+		{"lowercase s256", "s256", "s256"},
+		{"mixed case S256", "s256", "s256"},
+		{"uppercase PLAIN", "PLAIN", "plain"},
+		{"lowercase plain", "plain", "plain"},
+		{"mixed case Plain", "Plain", "plain"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			auth := NewOAuthServerAuthorization(
+				"client-id", 
+				"https://example.com/callback", 
+				"openid", 
+				"state", 
+				"challenge", 
+				tc.input,
+			)
+			
+			assert.Equal(t, tc.expected, *auth.CodeChallengeMethod, 
+				"Expected code_challenge_method to be normalized to %s, got %s", tc.expected, *auth.CodeChallengeMethod)
+		})
+	}
 }
 
 func TestOAuthServerAuthorization_IsExpired(t *testing.T) {
