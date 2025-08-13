@@ -8,6 +8,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/crypto"
+	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -197,7 +198,7 @@ func (auth *OAuthServerAuthorization) VerifyPKCE(codeVerifier string) error {
 	}
 
 	// Use the shared PKCE verification function
-	return VerifyPKCEChallenge(auth.CodeChallenge.String(), auth.CodeChallengeMethod.String(), codeVerifier)
+	return security.VerifyPKCEChallenge(auth.CodeChallenge.String(), auth.CodeChallengeMethod.String(), codeVerifier)
 }
 
 // Query functions for OAuth authorizations

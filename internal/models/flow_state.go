@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/storage"
 
 	"github.com/gofrs/uuid"
@@ -128,7 +129,7 @@ func FindFlowStateByUserID(tx *storage.Connection, id string, authenticationMeth
 }
 
 func (f *FlowState) VerifyPKCE(codeVerifier string) error {
-	return VerifyPKCEChallenge(f.CodeChallenge, f.CodeChallengeMethod, codeVerifier)
+	return security.VerifyPKCEChallenge(f.CodeChallenge, f.CodeChallengeMethod, codeVerifier)
 }
 
 func (f *FlowState) IsExpired(expiryDuration time.Duration) bool {
