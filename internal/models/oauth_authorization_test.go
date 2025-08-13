@@ -25,9 +25,9 @@ func TestNewOAuthServerAuthorization(t *testing.T) {
 	assert.Nil(t, auth.UserID)
 	assert.Equal(t, redirectURI, auth.RedirectURI)
 	assert.Equal(t, scope, auth.Scope)
-	assert.Equal(t, state, auth.State.String())
-	assert.Equal(t, codeChallenge, auth.CodeChallenge.String())
-	assert.Equal(t, codeChallengeMethod, auth.CodeChallengeMethod.String())
+	assert.Equal(t, state, *auth.State)
+	assert.Equal(t, codeChallenge, *auth.CodeChallenge)
+	assert.Equal(t, codeChallengeMethod, *auth.CodeChallengeMethod)
 	assert.Equal(t, OAuthServerResponseTypeCode, auth.ResponseType)
 	assert.Equal(t, OAuthServerAuthorizationPending, auth.Status)
 	assert.True(t, auth.ExpiresAt.After(auth.CreatedAt))
@@ -52,7 +52,7 @@ func TestOAuthServerAuthorization_GenerateAuthorizationCode(t *testing.T) {
 	// First call should generate a code
 	code1 := auth.GenerateAuthorizationCode()
 	assert.NotEmpty(t, code1)
-	assert.Equal(t, code1, auth.AuthorizationCode.String())
+	assert.Equal(t, code1, *auth.AuthorizationCode)
 
 	// Second call should return the same code
 	code2 := auth.GenerateAuthorizationCode()
@@ -148,7 +148,7 @@ func TestOAuthServerAuthorization_ApproveSuccess(t *testing.T) {
 	assert.Equal(t, OAuthServerAuthorizationApproved, auth.Status)
 	assert.NotNil(t, auth.ApprovedAt)
 	assert.True(t, auth.ApprovedAt.After(beforeTime))
-	assert.NotEmpty(t, auth.AuthorizationCode.String())
+	assert.NotEmpty(t, *auth.AuthorizationCode)
 }
 
 func TestOAuthServerAuthorization_Deny(t *testing.T) {

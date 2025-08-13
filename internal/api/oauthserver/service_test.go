@@ -86,7 +86,7 @@ func (ts *OAuthServiceTestSuite) TestOAuthServerClientServiceMethods() {
 	require.NoError(ts.T(), err)
 	require.NotNil(ts.T(), client)
 	require.NotEmpty(ts.T(), secret)
-	assert.Equal(ts.T(), "Test Client", client.ClientName.String())
+	assert.Equal(ts.T(), "Test Client", *client.ClientName)
 	assert.Equal(ts.T(), "dynamic", client.RegistrationType)
 
 	// Test getOAuthServerClient
