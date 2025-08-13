@@ -107,15 +107,13 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 	observability.LogEntrySetField(r, "authorization_id", authorization.AuthorizationID)
 	observability.LogEntrySetField(r, "client_id", authorization.ClientID)
 
-	// Redirect to configured authorization URL with authorization_id
-	// TODO(cemal): should this be really a different config or something set on the config.SiteURL?
-	if config.OAuthServer.AuthorizationURL == "" {
-		return apierrors.NewInternalServerError("oauth authorization URL not configured")
+	// Redirect to authorization path with authorization_id
+	if config.OAuthServer.AuthorizationPath == "" {
+		return apierrors.NewInternalServerError("oauth authorization path not configured")
 	}
 
-	redirectURL := fmt.Sprintf("%s?authorization_id=%s",
-		config.OAuthServer.AuthorizationURL,
-		authorization.AuthorizationID)
+	baseURL := s.buildAuthorizationURL(config.SiteURL, config.OAuthServer.AuthorizationPath)
+	redirectURL := fmt.Sprintf("%s?authorization_id=%s", baseURL, authorization.AuthorizationID)
 
 	http.Redirect(w, r, redirectURL, http.StatusFound)
 	return nil
@@ -481,4 +479,17 @@ func (s *Server) buildErrorRedirectURL(authorization *models.OAuthServerAuthoriz
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+// buildAuthorizationURL safely joins a base URL with a path, handling slashes correctly
+func (s *Server) buildAuthorizationURL(baseURL, pathToJoin string) string {
+	// Trim trailing slash from baseURL
+	baseURL = strings.TrimRight(baseURL, "/")
+	
+	// Ensure pathToJoin starts with a slash
+	if !strings.HasPrefix(pathToJoin, "/") {
+		pathToJoin = "/" + pathToJoin
+	}
+	
+	return baseURL + pathToJoin
 }
