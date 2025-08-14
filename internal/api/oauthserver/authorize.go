@@ -161,6 +161,11 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 	ctx := r.Context()
 	db := s.db.WithContext(ctx)
 
+	// Validate request origin - the request must come from the site URL as we redirected there at the first place
+	if err := s.validateRequestOrigin(r); err != nil {
+		return err
+	}
+
 	// Get authenticated user
 	user := shared.GetUser(ctx)
 	if user == nil {
@@ -240,6 +245,11 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 func (s *Server) OAuthServerConsent(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := s.db.WithContext(ctx)
+
+	// Validate request origin - the request must come from the site URL as we redirected there at the first place
+	if err := s.validateRequestOrigin(r); err != nil {
+		return err
+	}
 
 	// Get authenticated user
 	user := shared.GetUser(ctx)
@@ -344,6 +354,21 @@ func (s *Server) OAuthServerConsent(w http.ResponseWriter, r *http.Request) erro
 }
 
 // Helper functions
+
+// validateRequestOrigin checks if the request is coming from an authorized origin
+func (s *Server) validateRequestOrigin(r *http.Request) error {
+	// Check referer header
+	referer := r.Referer()
+	if referer == "" {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "request must originate from authorized domain")
+	}
+
+	if !utilities.IsRedirectURLValid(s.config, referer) {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "unauthorized request origin")
+	}
+
+	return nil
+}
 
 // validateAndFindAuthorization validates the authorization_id parameter and finds the authorization,
 // performing all necessary checks (existence, expiration, status)
