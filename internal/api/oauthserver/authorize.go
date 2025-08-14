@@ -438,7 +438,7 @@ func (s *Server) validateRemainingAuthorizeParams(params *AuthorizeParams) error
 
 	// OAuth 2.1 only supports "code" response type
 	if params.ResponseType != models.OAuthServerResponseTypeCode.String() {
-		return errors.New("Only response_type=code is supported")
+		return errors.New("only response_type=code is supported")
 	}
 
 	// PKCE validation
