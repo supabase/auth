@@ -2,6 +2,7 @@ package oauthserver
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -66,19 +67,38 @@ const (
 	OAuthServerConsentActionDeny    OAuthServerConsentAction = "deny"
 )
 
+// OAuth2 error codes per RFC 6749
+const (
+	oAuth2ErrorInvalidRequest = "invalid_request"
+	oAuth2ErrorServerError    = "server_error"
+	oAuth2ErrorAccessDenied   = "access_denied"
+)
+
 // OAuthServerAuthorize handles GET /oauth/authorize
 func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := s.db.WithContext(ctx)
 	config := s.config
 
-	// Validate OAuth2 authorize parameters
-	params, err := s.validateAuthorizeParams(r)
+	query := r.URL.Query()
+
+	params := &AuthorizeParams{
+		ClientID:            query.Get("client_id"),
+		RedirectURI:         query.Get("redirect_uri"),
+		ResponseType:        query.Get("response_type"),
+		Scope:               query.Get("scope"),
+		State:               query.Get("state"),
+		CodeChallenge:       query.Get("code_challenge"),
+		CodeChallengeMethod: query.Get("code_challenge_method"),
+	}
+
+	// validate basic required parameters (client_id, redirect_uri)
+	// this errors wont be redirected, just returned in the json
+	params, err := s.validateBasicAuthorizeParams(params)
 	if err != nil {
 		return err
 	}
 
-	// Validate client exists and redirect_uri matches
 	client, err := s.getOAuthServerClient(ctx, params.ClientID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
@@ -87,8 +107,18 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 		return apierrors.NewInternalServerError("error validating client").WithInternalError(err)
 	}
 
+	// validate redirect_uri matches client's registered URIs
 	if !s.isValidRedirectURI(client, params.RedirectURI) {
+		// Invalid redirect_uri should NOT redirect per OAuth2 spec since we can't trust it
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid redirect_uri")
+	}
+
+	// From this point on, we have valid client + redirect_uri + all params, so we can redirect errors
+	// validate all other parameters - now we can redirect errors
+	if err := s.validateRemainingAuthorizeParams(params); err != nil {
+		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorInvalidRequest, err.Error(), params.State)
+		http.Redirect(w, r, errorRedirectURL, http.StatusFound)
+		return nil
 	}
 
 	// Store authorization request in database (without user initially)
@@ -102,7 +132,10 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 	)
 
 	if err := models.CreateOAuthServerAuthorization(db, authorization); err != nil {
-		return apierrors.NewInternalServerError("error creating authorization").WithInternalError(err)
+		// Error creating authorization - redirect with server_error
+		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorServerError, "error creating authorization", params.State)
+		http.Redirect(w, r, errorRedirectURL, http.StatusFound)
+		return nil
 	}
 
 	observability.LogEntrySetField(r, "authorization_id", authorization.AuthorizationID)
@@ -110,7 +143,10 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 
 	// Redirect to authorization path with authorization_id
 	if config.OAuthServer.AuthorizationPath == "" {
-		return apierrors.NewInternalServerError("oauth authorization path not configured")
+		// OAuth authorization path not configured - redirect with server_error
+		errorRedirectURL := s.buildErrorRedirectURL(params.RedirectURI, oAuth2ErrorServerError, "oauth authorization path not configured", params.State)
+		http.Redirect(w, r, errorRedirectURL, http.StatusFound)
+		return nil
 	}
 
 	baseURL := s.buildAuthorizationURL(config.SiteURL, config.OAuthServer.AuthorizationPath)
@@ -283,7 +319,11 @@ func (s *Server) OAuthServerConsent(w http.ResponseWriter, r *http.Request) erro
 
 			// Build error redirect URL
 			// Errors are being returned to the client in the redirect url per OAuth2 spec
-			redirectURL = s.buildErrorRedirectURL(authorization, "access_denied", "User denied the request")
+			var state string
+			if authorization.State != nil {
+				state = *authorization.State
+			}
+			redirectURL = s.buildErrorRedirectURL(authorization.RedirectURI, oAuth2ErrorAccessDenied, "User denied the request", state)
 
 			observability.LogEntrySetField(r, "oauth_consent_action", string(OAuthServerConsentActionDeny))
 		}
@@ -350,20 +390,8 @@ func (s *Server) validateAuthorizationOwnership(r *http.Request, authorization *
 	return nil
 }
 
-func (s *Server) validateAuthorizeParams(r *http.Request) (*AuthorizeParams, error) {
-	query := r.URL.Query()
-
-	params := &AuthorizeParams{
-		ClientID:            query.Get("client_id"),
-		RedirectURI:         query.Get("redirect_uri"),
-		ResponseType:        query.Get("response_type"),
-		Scope:               query.Get("scope"),
-		State:               query.Get("state"),
-		CodeChallenge:       query.Get("code_challenge"),
-		CodeChallengeMethod: query.Get("code_challenge_method"),
-	}
-
-	// Required parameters
+// validateBasicAuthorizeParams validates only client_id and redirect_uri (needed before we can redirect errors)
+func (s *Server) validateBasicAuthorizeParams(params *AuthorizeParams) (*AuthorizeParams, error) {
 	if params.ClientID == "" {
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "client_id is required")
 	}
@@ -371,7 +399,11 @@ func (s *Server) validateAuthorizeParams(r *http.Request) (*AuthorizeParams, err
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "redirect_uri is required")
 	}
 
-	// Default values
+	return params, nil
+}
+
+// validateRemainingAuthorizeParams validates all other parameters (can redirect errors since we have valid client + redirect_uri)
+func (s *Server) validateRemainingAuthorizeParams(params *AuthorizeParams) error {
 	if params.ResponseType == "" {
 		params.ResponseType = models.OAuthServerResponseTypeCode.String()
 	}
@@ -381,34 +413,32 @@ func (s *Server) validateAuthorizeParams(r *http.Request) (*AuthorizeParams, err
 
 	// OAuth 2.1 only supports "code" response type
 	if params.ResponseType != models.OAuthServerResponseTypeCode.String() {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Only response_type=code is supported")
+		return errors.New("Only response_type=code is supported")
 	}
 
 	// PKCE validation
 	if err := s.validatePKCEParams(params.CodeChallengeMethod, params.CodeChallenge); err != nil {
-		return nil, err
+		return err
 	}
 
-	return params, nil
+	return nil
 }
 
 func (s *Server) validatePKCEParams(codeChallengeMethod, codeChallenge string) error {
 	// PKCE is mandatory for the authorization code flow OAuth2.1
 	// Both code_challenge and code_challenge_method must be provided together
 	if codeChallenge == "" || codeChallengeMethod == "" {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "PKCE flow requires both code_challenge and code_challenge_method")
+		return errors.New("PKCE flow requires both code_challenge and code_challenge_method")
 	}
 
 	// Validate code challenge method (case-insensitive)
 	if strings.ToLower(codeChallengeMethod) != "s256" && strings.ToLower(codeChallengeMethod) != "plain" {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed,
-			"code_challenge_method must be 'S256' or 'plain'")
+		return errors.New("code_challenge_method must be 'S256' or 'plain'")
 	}
 
 	// Validate code challenge format and length (per OAuth2 spec)
 	if len(codeChallenge) < 43 || len(codeChallenge) > 128 {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed,
-			"code_challenge must be between 43 and 128 characters")
+		return errors.New("code_challenge must be between 43 and 128 characters")
 	}
 
 	return nil
@@ -472,13 +502,14 @@ func (s *Server) buildSuccessRedirectURL(authorization *models.OAuthServerAuthor
 	return u.String()
 }
 
-func (s *Server) buildErrorRedirectURL(authorization *models.OAuthServerAuthorization, errorCode, errorDescription string) string {
-	u, _ := url.Parse(authorization.RedirectURI)
+// buildErrorRedirectURL builds an error redirect URL with the given parameters
+func (s *Server) buildErrorRedirectURL(redirectURI, errorCode, errorDescription, state string) string {
+	u, _ := url.Parse(redirectURI)
 	q := u.Query()
 	q.Set("error", errorCode)
 	q.Set("error_description", errorDescription)
-	if authorization.State != nil && *authorization.State != "" {
-		q.Set("state", *authorization.State)
+	if state != "" {
+		q.Set("state", state)
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
@@ -488,11 +519,11 @@ func (s *Server) buildErrorRedirectURL(authorization *models.OAuthServerAuthoriz
 func (s *Server) buildAuthorizationURL(baseURL, pathToJoin string) string {
 	// Trim trailing slash from baseURL
 	baseURL = strings.TrimRight(baseURL, "/")
-	
+
 	// Ensure pathToJoin starts with a slash
 	if !strings.HasPrefix(pathToJoin, "/") {
 		pathToJoin = "/" + pathToJoin
 	}
-	
+
 	return baseURL + pathToJoin
 }
