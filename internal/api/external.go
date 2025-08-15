@@ -618,6 +618,8 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 		return provider.NewTwitterProvider(config.External.Twitter, scopes)
 	case "vercel_marketplace":
 		return provider.NewVercelMarketplaceProvider(config.External.VercelMarketplace, scopes)
+	case "wechat":
+		return provider.NewWechatProvider(config.External.Wechat)
 	case "workos":
 		return provider.NewWorkOSProvider(config.External.WorkOS)
 	case "zoom":
