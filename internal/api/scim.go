@@ -80,7 +80,7 @@ func (a *API) SCIMSchemas(w http.ResponseWriter, r *http.Request) error {
 func (a *API) SCIMUsersList(w http.ResponseWriter, r *http.Request) error {
     ctx := r.Context()
     db := a.db.WithContext(ctx)
-    aud := a.requestAud(ctx, r)
+    aud := a.scimAudience()
 
     // SCIM pagination uses 1-based startIndex
     startIndex, _ := strconv.Atoi(r.URL.Query().Get("startIndex"))
@@ -173,6 +173,9 @@ func (a *API) SCIMUsersGet(w http.ResponseWriter, r *http.Request) error {
     if err != nil {
         return a.scimNotFound()
     }
+    if u.Aud != a.scimAudience() {
+        return a.scimNotFound()
+    }
     return scimSendJSON(w, http.StatusOK, a.toSCIMUser(u))
 }
 
@@ -186,7 +189,7 @@ func (a *API) SCIMUsersCreate(w http.ResponseWriter, r *http.Request) error {
         return err
     }
 
-    aud := a.requestAud(ctx, r)
+    aud := a.scimAudience()
     email := getString(body, "userName")
     if email == "" {
         // fallback from emails[0].value
@@ -249,6 +252,7 @@ func (a *API) SCIMUsersPatch(w http.ResponseWriter, r *http.Request) error {
     if err != nil { return a.scimNotFound() }
     user, err := models.FindUserByID(db, userID)
     if err != nil { return a.scimNotFound() }
+    if user.Aud != a.scimAudience() { return a.scimNotFound() }
 
     var body map[string]any
     if err := json.NewDecoder(r.Body).Decode(&body); err != nil { return err }
@@ -304,6 +308,7 @@ func (a *API) SCIMUsersDelete(w http.ResponseWriter, r *http.Request) error {
     if err != nil { return a.scimNotFound() }
     user, err := models.FindUserByID(db, userID)
     if err != nil { return a.scimNotFound() }
+    if user.Aud != a.scimAudience() { return a.scimNotFound() }
 
     if a.config.SCIM.BanOnDeactivate {
         // ban long-term
@@ -385,6 +390,15 @@ func getString(m map[string]any, k string) string {
         if s, ok := v.(string); ok { return s }
     }
     return ""
+}
+
+// scimAudience returns a single audience context for SCIM operations.
+// SCIM tokens are operator-level and should not be able to enumerate across audiences.
+func (a *API) scimAudience() string {
+    if a.config.SCIM.DefaultAudience != "" {
+        return a.config.SCIM.DefaultAudience
+    }
+    return a.config.JWT.Aud
 }
 
 
