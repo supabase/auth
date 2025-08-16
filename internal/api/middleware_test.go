@@ -509,3 +509,54 @@ func (ts *MiddlewareTestSuite) TestDatabaseCleanup() {
 	}
 	mockCleanup.AssertNumberOfCalls(ts.T(), "Clean", 1)
 }
+
+func TestRequireSCIMEnabled(t *testing.T) {
+    api := &API{config: &conf.GlobalConfiguration{}}
+    // disabled
+    req := httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
+    w := httptest.NewRecorder()
+    _, err := api.requireSCIMEnabled(w, req)
+    require.Error(t, err)
+
+    // enabled
+    api.config.SCIM.Enabled = true
+    _, err = api.requireSCIMEnabled(w, req)
+    require.NoError(t, err)
+}
+
+func TestRequireSCIMAuth_BearerAndBasic(t *testing.T) {
+    api := &API{config: &conf.GlobalConfiguration{}}
+    api.config.SCIM.Enabled = true
+
+    // Bearer token success
+    api.config.SCIM.Tokens = []string{"tok"}
+    req := httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
+    req.Header.Set("Authorization", "Bearer tok")
+    w := httptest.NewRecorder()
+    _, err := api.requireSCIMAuth(w, req)
+    require.NoError(t, err)
+
+    // Bearer token failure
+    req = httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
+    req.Header.Set("Authorization", "Bearer wrong")
+    w = httptest.NewRecorder()
+    _, err = api.requireSCIMAuth(w, req)
+    require.Error(t, err)
+
+    // Basic success
+    api.config.SCIM.Tokens = nil
+    api.config.SCIM.BasicUser = "u"
+    api.config.SCIM.BasicPassword = "p"
+    req = httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
+    req.SetBasicAuth("u", "p")
+    w = httptest.NewRecorder()
+    _, err = api.requireSCIMAuth(w, req)
+    require.NoError(t, err)
+
+    // Basic failure
+    req = httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
+    req.SetBasicAuth("u", "wrong")
+    w = httptest.NewRecorder()
+    _, err = api.requireSCIMAuth(w, req)
+    require.Error(t, err)
+}
