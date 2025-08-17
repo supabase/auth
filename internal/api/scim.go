@@ -361,14 +361,6 @@ func (a *API) scimNotFound() error { return apiNoopError{} }
 type apiNoopError struct{}
 func (apiNoopError) Error() string { return "noop" }
 
-func writeSCIMError(w http.ResponseWriter, status int, detail string) error {
-    return scimSendJSON(w, status, map[string]any{
-        "schemas": []string{"urn:ietf:params:scim:api:messages:2.0:Error"},
-        "detail":  detail,
-        "status":  strconv.Itoa(status),
-    })
-}
-
 func scimSendJSON(w http.ResponseWriter, status int, obj any) error {
     w.Header().Set("Content-Type", "application/scim+json")
     b, err := json.Marshal(obj)
