@@ -119,6 +119,12 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 		if terr := tx.Q().Eager().Where("email = any (?) and is_sso_user = false", verifiedEmails).All(&similarUsers); terr != nil {
 			return AccountLinkingResult{}, terr
 		}
+	} else {
+		// For SSO providers, we want to link to existing non-SSO accounts
+		// but avoid conflicts with other SSO accounts (which have is_sso_user = true)
+		if terr := tx.Q().Eager().Where("email = any (?) and is_sso_user = false", verifiedEmails).All(&similarUsers); terr != nil {
+			return AccountLinkingResult{}, terr
+		}
 	}
 
 	// Need to check if the new identity should be assigned to an
