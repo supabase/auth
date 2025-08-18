@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -64,6 +63,8 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 	case IssuerFacebook:
 		// Handle only Facebook Limited Login JWT, NOT Facebook Access Token
 		token, data, err = parseFacebookIDToken(token)
+	case IssuerSnapchat:
+		token, data, err = parseSnapchatIDToken(token)
 	default:
 		if IsAzureIssuer(token.Issuer) {
 			token, data, err = parseAzureIDToken(token)
@@ -448,10 +449,6 @@ func parseGenericIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData,
 			Verified: data.Metadata.EmailVerified,
 			Primary:  true,
 		})
-	}
-
-	if len(data.Emails) <= 0 {
-		return nil, nil, fmt.Errorf("provider: Generic OIDC ID token from issuer %q must contain an email address", token.Issuer)
 	}
 
 	return token, &data, nil

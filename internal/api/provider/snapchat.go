@@ -5,11 +5,12 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/supabase/auth/internal/conf"
 	"golang.org/x/oauth2"
 )
 
-const IssuerSnapchat = "https://accounts.snapchat.com"
+const IssuerSnapchat = "https://accounts.snapchat.com/accounts/oauth2/token"
 
 const (
 	defaultSnapchatAuthBase  = "accounts.snapchat.com"
@@ -93,12 +94,7 @@ func (p snapchatProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 
 	data := &UserProvidedData{}
 
-	// Snapchat doesn't provide email by default, additional scopes needed
-	data.Emails = []Email{{
-		Email:    strings.ToLower(u.Data.Me.ExternalID) + "@snapchat.id", // TODO: Create a pseudo-email using the external ID
-		Verified: true,
-		Primary:  true,
-	}}
+	// Snapchat doesn't provide email address!
 
 	data.Metadata = &Claims{
 		Issuer:  IssuerSnapchat,
@@ -114,4 +110,24 @@ func (p snapchatProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 	}
 
 	return data, nil
+}
+
+func parseSnapchatIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
+	var data UserProvidedData
+
+	if err := token.Claims(&data.Metadata); err != nil {
+		return nil, nil, err
+	}
+
+	if data.Metadata.Email != "" {
+		data.Emails = append(data.Emails, Email{
+			Email:    data.Metadata.Email,
+			Verified: true,
+			Primary:  true,
+		})
+
+		data.Metadata.EmailVerified = true
+	}
+
+	return token, &data, nil
 }
