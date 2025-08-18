@@ -127,13 +127,6 @@ func parseSnapchatIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData
 		})
 
 		data.Metadata.EmailVerified = true
-	} else {
-		data.Emails = append(data.Emails, Email{
-			// TODO(hf): Remove this once Supabase allowed to receive email address from developer accounts
-			Email:    data.Metadata.Subject + "@snapchat.id",
-			Verified: true,
-			Primary:  true,
-		})
 	}
 
 	return token, &data, nil
