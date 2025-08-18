@@ -139,6 +139,13 @@ func (a *API) SCIMUsersList(w http.ResponseWriter, r *http.Request) error {
         return scimSendJSON(w, http.StatusOK, resp)
     }
 
+    // Ensure page and count are non-negative before converting to uint64
+    if page < 0 {
+        page = 1
+    }
+    if count < 0 {
+        count = 50
+    }
     pageParams := &models.Pagination{Page: uint64(page), PerPage: uint64(count)}
     users, err := models.FindUsersInAudience(db, aud, pageParams, nil, "")
     if err != nil {
