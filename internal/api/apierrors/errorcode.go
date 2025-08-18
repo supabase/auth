@@ -90,11 +90,11 @@ const (
 	ErrorCodeMFAWebAuthnVerifyDisabled         ErrorCode = "mfa_webauthn_verify_not_enabled"
 	ErrorCodeMFAVerifiedFactorExists           ErrorCode = "mfa_verified_factor_exists"
 	//#nosec G101 -- Not a secret value.
-	ErrorCodeInvalidCredentials        ErrorCode = "invalid_credentials"
-	ErrorCodeEmailAddressNotAuthorized ErrorCode = "email_address_not_authorized"
-	ErrorCodeEmailAddressInvalid       ErrorCode = "email_address_invalid"
-	ErrorCodeWeb3ProviderDisabled      ErrorCode = "web3_provider_disabled"
-	ErrorCodeWeb3UnsupportedChain      ErrorCode = "web3_unsupported_chain"
+	ErrorCodeInvalidCredentials                     ErrorCode = "invalid_credentials"
+	ErrorCodeEmailAddressNotAuthorized              ErrorCode = "email_address_not_authorized"
+	ErrorCodeEmailAddressInvalid                    ErrorCode = "email_address_invalid"
+	ErrorCodeWeb3ProviderDisabled                   ErrorCode = "web3_provider_disabled"
+	ErrorCodeWeb3UnsupportedChain                   ErrorCode = "web3_unsupported_chain"
 	ErrorCodeOAuthDynamicClientRegistrationDisabled ErrorCode = "oauth_dynamic_client_registration_disabled"
-	ErrorCodeEmailAddressNotProvided   ErrorCode = "email_address_not_provided"
+	ErrorCodeEmailAddressNotProvided                ErrorCode = "email_address_not_provided"
 )
