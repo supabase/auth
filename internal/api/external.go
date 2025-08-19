@@ -334,10 +334,17 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 			Data:     identityData,
 		}
 
-		isSSOUser := false
-		if strings.HasPrefix(decision.LinkingDomain, "sso:") {
-			isSSOUser = true
-		}
+		// This is a little bit of a hack. Let me explain: When
+		// is_sso_user == true, it allows there to be different user
+		// rows with the same email address. Initially it was added to
+		// support SSO accounts, but at this point renaming the column
+		// or adding a new one requires re-indexing the table which is
+		// expensive and introduces a potentially unnecessary API
+		// surface change. It therefore set to true for other linking
+		// domains, not just SSO ones. This enables different linking
+		// domains to co-exist, such as when using
+		// GOTRUE_EXPERIMENTAL_PROVIDERS_WITH_OWN_LINKING_DOMAIN="provider_a,provider_b".
+		isSSOUser := decision.LinkingDomain != "default"
 
 		// because params above sets no password, this method is not
 		// computationally hard so it can be used within a database

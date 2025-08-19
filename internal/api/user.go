@@ -115,6 +115,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	// TODO: Check if a user is SSO via rows in identities table, not via this flag.
 	if user.IsSSOUser {
 		updatingForbiddenFields := false
 
