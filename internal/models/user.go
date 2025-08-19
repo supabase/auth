@@ -734,7 +734,7 @@ func IsDuplicatedEmail(tx *storage.Connection, email, aud string, currentUser *U
 	userIDs := make(map[string]uuid.UUID)
 	for _, identity := range identities {
 		if _, ok := userIDs[identity.UserID.String()]; !ok {
-			if GetAccountLinkingDomain(identity.ProviderID, ownDomainProviders) == "default" {
+			if GetAccountLinkingDomain(identity.Provider, ownDomainProviders) == "default" {
 				userIDs[identity.UserID.String()] = identity.UserID
 			}
 		}
