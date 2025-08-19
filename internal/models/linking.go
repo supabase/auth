@@ -93,7 +93,7 @@ func DetermineAccountLinking(tx *storage.Connection, config *conf.GlobalConfigur
 	// or link to an existing one
 	if len(verifiedEmails) == 0 {
 		// if there are no verified emails, we always decide to create a new account
-		user, terr := IsDuplicatedEmail(tx, candidateEmail.Email, aud, nil)
+		user, terr := IsDuplicatedEmail(tx, candidateEmail.Email, aud, nil, config.Experimental.ProvidersWithOwnLinkingDomain)
 		if terr != nil {
 			return AccountLinkingResult{}, terr
 		}

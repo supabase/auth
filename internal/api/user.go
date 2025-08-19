@@ -130,7 +130,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Email != "" && user.GetEmail() != params.Email {
-		if duplicateUser, err := models.IsDuplicatedEmail(db, params.Email, aud, user); err != nil {
+		if duplicateUser, err := models.IsDuplicatedEmail(db, params.Email, aud, user, config.Experimental.ProvidersWithOwnLinkingDomain); err != nil {
 			return apierrors.NewInternalServerError("Database error checking email").WithInternalError(err)
 		} else if duplicateUser != nil {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
