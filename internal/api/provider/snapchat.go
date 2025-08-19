@@ -31,6 +31,7 @@ type snapchatUser struct {
 			Bitmoji     struct {
 				Avatar string `json:"avatar"`
 			} `json:"bitmoji"`
+			Email string `json:"email"`
 		} `json:"me"`
 	} `json:"data"`
 }
@@ -94,7 +95,13 @@ func (p snapchatProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 
 	data := &UserProvidedData{}
 
-	// Snapchat doesn't provide email address!
+	if u.Data.Me.Email != "" {
+		data.Emails = []Email{{
+			Email:    u.Data.Me.Email,
+			Verified: true,
+			Primary:  true,
+		}}
+	}
 
 	data.Metadata = &Claims{
 		Issuer:  IssuerSnapchat,
