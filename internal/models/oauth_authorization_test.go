@@ -16,8 +16,9 @@ func TestNewOAuthServerAuthorization(t *testing.T) {
 	state := "random-state"
 	codeChallenge := "test-challenge"
 	codeChallengeMethod := "S256"
+	resource := "https://api.example.com/"
 
-	auth := NewOAuthServerAuthorization(clientID, redirectURI, scope, state, codeChallenge, codeChallengeMethod)
+	auth := NewOAuthServerAuthorization(clientID, redirectURI, scope, state, resource, codeChallenge, codeChallengeMethod)
 
 	assert.NotEmpty(t, auth.ID)
 	assert.NotEmpty(t, auth.AuthorizationID)
@@ -26,6 +27,7 @@ func TestNewOAuthServerAuthorization(t *testing.T) {
 	assert.Equal(t, redirectURI, auth.RedirectURI)
 	assert.Equal(t, scope, auth.Scope)
 	assert.Equal(t, state, *auth.State)
+	assert.Equal(t, resource, *auth.Resource)
 	assert.Equal(t, codeChallenge, *auth.CodeChallenge)
 	assert.Equal(t, "s256", *auth.CodeChallengeMethod) // Should be normalized to lowercase
 	assert.Equal(t, OAuthServerResponseTypeCode, auth.ResponseType)
@@ -51,15 +53,16 @@ func TestNewOAuthServerAuthorization_CodeChallengeMethodNormalization(t *testing
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			auth := NewOAuthServerAuthorization(
-				"client-id", 
-				"https://example.com/callback", 
-				"openid", 
-				"state", 
-				"challenge", 
+				"client-id",
+				"https://example.com/callback",
+				"openid",
+				"state",
+				"",
+				"challenge",
 				tc.input,
 			)
-			
-			assert.Equal(t, tc.expected, *auth.CodeChallengeMethod, 
+
+			assert.Equal(t, tc.expected, *auth.CodeChallengeMethod,
 				"Expected code_challenge_method to be normalized to %s, got %s", tc.expected, *auth.CodeChallengeMethod)
 		})
 	}
