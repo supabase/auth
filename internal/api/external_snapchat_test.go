@@ -72,7 +72,7 @@ func (ts *ExternalTestSuite) TestSignupExternalSnapchat_AuthorizationCode() {
 
 	u := performAuthorization(ts, "snapchat", code, "")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "snapchattestid@snapchat.id", "Snapchat Test", "snapchatTestId", "http://example.com/bitmoji")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "", "Snapchat Test", "snapchatTestId", "http://example.com/bitmoji")
 }
 
 func (ts *ExternalTestSuite) TestSignupExternalSnapchatDisableSignupErrorWhenNoUser() {
@@ -91,7 +91,7 @@ func (ts *ExternalTestSuite) TestSignupExternalSnapchatDisableSignupErrorWhenNoU
 func (ts *ExternalTestSuite) TestSignupExternalSnapchatDisableSignupSuccessWithExistingUser() {
 	ts.Config.DisableSignup = true
 
-	ts.createUser("snapchatTestId", "snapchattestid@snapchat.id", "Snapchat Test", "http://example.com/bitmoji", "")
+	ts.createUserWithIdentity("snapchat", "snapchatTestId", "", "Snapchat Test", "http://example.com/bitmoji", "")
 
 	tokenCount, userCount := 0, 0
 	code := "authcode"
@@ -100,42 +100,7 @@ func (ts *ExternalTestSuite) TestSignupExternalSnapchatDisableSignupSuccessWithE
 
 	u := performAuthorization(ts, "snapchat", code, "")
 
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "snapchattestid@snapchat.id", "Snapchat Test", "snapchatTestId", "http://example.com/bitmoji")
+	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "", "Snapchat Test", "snapchatTestId", "http://example.com/bitmoji")
 }
 
-func (ts *ExternalTestSuite) TestInviteTokenExternalSnapchatSuccessWhenMatchingToken() {
-	// name and avatar should be populated from Snapchat API
-	// Use the same email that the provider will generate - converted to lowercase
-	ts.createUser("snapchatTestId", "snapchattestid@snapchat.id", "", "", "invite_token")
-
-	tokenCount, userCount := 0, 0
-	code := "authcode"
-	server := SnapchatTestSignupSetup(ts, &tokenCount, &userCount, code, snapchatUser)
-	defer server.Close()
-
-	u := performAuthorization(ts, "snapchat", code, "invite_token")
-
-	assertAuthorizationSuccess(ts, u, tokenCount, userCount, "snapchattestid@snapchat.id", "Snapchat Test", "snapchatTestId", "http://example.com/bitmoji")
-}
-
-func (ts *ExternalTestSuite) TestInviteTokenExternalSnapchatErrorWhenNoMatchingToken() {
-	tokenCount, userCount := 0, 0
-	code := "authcode"
-	server := SnapchatTestSignupSetup(ts, &tokenCount, &userCount, code, snapchatUser)
-	defer server.Close()
-
-	w := performAuthorizationRequest(ts, "snapchat", "invite_token")
-	ts.Require().Equal(http.StatusNotFound, w.Code)
-}
-
-func (ts *ExternalTestSuite) TestInviteTokenExternalSnapchatErrorWhenWrongToken() {
-	ts.createUser("snapchatTestId", "", "", "", "invite_token")
-
-	tokenCount, userCount := 0, 0
-	code := "authcode"
-	server := SnapchatTestSignupSetup(ts, &tokenCount, &userCount, code, snapchatUser)
-	defer server.Close()
-
-	w := performAuthorizationRequest(ts, "snapchat", "wrong_token")
-	ts.Require().Equal(http.StatusNotFound, w.Code)
-}
+// Snapchat may not send email address so Invite Token flow can't apply.
