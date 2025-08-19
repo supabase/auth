@@ -5,6 +5,7 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"encoding/base64"
+	"encoding/json"
 	"math/big"
 	"testing"
 	"time"
@@ -186,5 +187,129 @@ func TestAzureIDTokenClaimsIsEmailVerified(t *testing.T) {
 		if example.IsEmailVerified() {
 			t.Errorf("negative example %v reports positive result", i)
 		}
+	}
+}
+
+func TestAudienceUnmarshalJSON(t *testing.T) {
+	tests := []struct {
+		name     string
+		json     string
+		expected audience
+		wantErr  bool
+	}{
+		{
+			name:     "string audience",
+			json:     `"client-id-123"`,
+			expected: audience{"client-id-123"},
+			wantErr:  false,
+		},
+		{
+			name:     "array audience with single element",
+			json:     `["client-id-123"]`,
+			expected: audience{"client-id-123"},
+			wantErr:  false,
+		},
+		{
+			name:     "array audience with multiple elements",
+			json:     `["client-id-123", "client-id-456", "client-id-789"]`,
+			expected: audience{"client-id-123", "client-id-456", "client-id-789"},
+			wantErr:  false,
+		},
+		{
+			name:     "empty array",
+			json:     `[]`,
+			expected: audience{},
+			wantErr:  false,
+		},
+		{
+			name:    "invalid JSON",
+			json:    `{invalid}`,
+			wantErr: true,
+		},
+		{
+			name:     "null value",
+			json:     `null`,
+			expected: audience{""},
+			wantErr:  false,
+		},
+		{
+			name:    "number value",
+			json:    `123`,
+			wantErr: true,
+		},
+		{
+			name:    "boolean value",
+			json:    `true`,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var aud audience
+			err := json.Unmarshal([]byte(tt.json), &aud)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, aud)
+		})
+	}
+}
+
+func TestClaimsAudienceUnmarshal(t *testing.T) {
+	tests := []struct {
+		name     string
+		json     string
+		expected audience
+		wantErr  bool
+	}{
+		{
+			name: "claims with string audience",
+			json: `{
+				"iss": "https://example.com",
+				"sub": "user123",
+				"aud": "client-id-123"
+			}`,
+			expected: audience{"client-id-123"},
+			wantErr:  false,
+		},
+		{
+			name: "claims with array audience",
+			json: `{
+				"iss": "https://example.com", 
+				"sub": "user123",
+				"aud": ["client-id-123", "client-id-456"]
+			}`,
+			expected: audience{"client-id-123", "client-id-456"},
+			wantErr:  false,
+		},
+		{
+			name: "claims with missing audience",
+			json: `{
+				"iss": "https://example.com",
+				"sub": "user123"
+			}`,
+			expected: audience(nil),
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var claims Claims
+			err := json.Unmarshal([]byte(tt.json), &claims)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tt.expected, claims.Aud)
+		})
 	}
 }
