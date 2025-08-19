@@ -293,6 +293,42 @@ func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (cont
 	return ctx, nil
 }
 
+// requireSCIMEnabled ensures SCIM is enabled
+func (a *API) requireSCIMEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+    ctx := req.Context()
+    if !a.config.SCIM.Enabled {
+        return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeValidationFailed, "SCIM is disabled")
+    }
+    return ctx, nil
+}
+
+// requireSCIMAuth authenticates SCIM requests via Bearer token or Basic auth
+func (a *API) requireSCIMAuth(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+    ctx := req.Context()
+    cfg := a.config.SCIM
+
+    // Bearer token
+    authz := req.Header.Get("Authorization")
+    if m := bearerRegexp.FindStringSubmatch(authz); len(m) == 2 {
+        token := m[1]
+        for _, t := range cfg.Tokens {
+            if t != "" && t == token {
+                return ctx, nil
+            }
+        }
+    }
+
+    // Basic auth
+    user, pass, ok := req.BasicAuth()
+    if ok && cfg.BasicUser != "" && cfg.BasicPassword != "" {
+        if user == cfg.BasicUser && pass == cfg.BasicPassword {
+            return ctx, nil
+        }
+    }
+
+    return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeInvalidCredentials, "Invalid SCIM credentials")
+}
+
 func (a *API) requireManualLinkingEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.Security.ManualLinkingEnabled {
