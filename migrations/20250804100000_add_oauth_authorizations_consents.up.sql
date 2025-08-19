@@ -22,6 +22,7 @@ create table if not exists {{ index .Options "Namespace" }}.oauth_authorizations
     redirect_uri text not null,
     scope text not null,
     state text null,
+    resource text null,
     code_challenge text null,
     code_challenge_method {{ index .Options "Namespace" }}.code_challenge_method null,
     response_type {{ index .Options "Namespace" }}.oauth_response_type not null default 'code',
@@ -41,6 +42,7 @@ create table if not exists {{ index .Options "Namespace" }}.oauth_authorizations
     constraint oauth_authorizations_redirect_uri_length check (char_length(redirect_uri) <= 2048),
     constraint oauth_authorizations_scope_length check (char_length(scope) <= 4096),
     constraint oauth_authorizations_state_length check (char_length(state) <= 4096),
+    constraint oauth_authorizations_resource_length check (char_length(resource) <= 2048),
     constraint oauth_authorizations_code_challenge_length check (char_length(code_challenge) <= 128),
     constraint oauth_authorizations_authorization_code_length check (char_length(authorization_code) <= 255),
     constraint oauth_authorizations_expires_at_future check (expires_at > created_at)

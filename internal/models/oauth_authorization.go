@@ -46,12 +46,13 @@ type OAuthServerAuthorization struct {
 	UserID              *uuid.UUID                     `json:"user_id" db:"user_id"`
 	RedirectURI         string                         `json:"redirect_uri" db:"redirect_uri"`
 	Scope               string                         `json:"scope" db:"scope"`
-	State               *string             `json:"state,omitempty" db:"state"`
-	CodeChallenge       *string             `json:"code_challenge,omitempty" db:"code_challenge"`
-	CodeChallengeMethod *string             `json:"code_challenge_method,omitempty" db:"code_challenge_method"`
+	State               *string                        `json:"state,omitempty" db:"state"`
+	Resource            *string                        `json:"resource,omitempty" db:"resource"`
+	CodeChallenge       *string                        `json:"code_challenge,omitempty" db:"code_challenge"`
+	CodeChallengeMethod *string                        `json:"code_challenge_method,omitempty" db:"code_challenge_method"`
 	ResponseType        OAuthServerResponseType        `json:"response_type" db:"response_type"`
 	Status              OAuthServerAuthorizationStatus `json:"status" db:"status"`
-	AuthorizationCode   *string             `json:"-" db:"authorization_code"`
+	AuthorizationCode   *string                        `json:"-" db:"authorization_code"`
 	CreatedAt           time.Time                      `json:"created_at" db:"created_at"`
 	ExpiresAt           time.Time                      `json:"expires_at" db:"expires_at"`
 	ApprovedAt          *time.Time                     `json:"approved_at" db:"approved_at"`
@@ -66,7 +67,7 @@ func (OAuthServerAuthorization) TableName() string {
 }
 
 // NewOAuthServerAuthorization creates a new OAuth server authorization request without user (for initial flow)
-func NewOAuthServerAuthorization(clientID, redirectURI, scope, state, codeChallenge, codeChallengeMethod string) *OAuthServerAuthorization {
+func NewOAuthServerAuthorization(clientID, redirectURI, scope, state, resource, codeChallenge, codeChallengeMethod string) *OAuthServerAuthorization {
 	id := uuid.Must(uuid.NewV4())
 	authorizationID := crypto.SecureAlphanumeric(32) // Generate random ID for frontend
 
@@ -88,6 +89,9 @@ func NewOAuthServerAuthorization(clientID, redirectURI, scope, state, codeChalle
 
 	if state != "" {
 		auth.State = &state
+	}
+	if resource != "" {
+		auth.Resource = &resource
 	}
 	if codeChallenge != "" {
 		auth.CodeChallenge = &codeChallenge
