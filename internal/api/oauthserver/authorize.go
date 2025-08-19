@@ -19,11 +19,14 @@ import (
 
 // AuthorizeParams represents the parameters for an OAuth authorization request
 type AuthorizeParams struct {
-	ClientID            string `json:"client_id"`
-	RedirectURI         string `json:"redirect_uri"`
-	ResponseType        string `json:"response_type"`
-	Scope               string `json:"scope"`
-	State               string `json:"state"`
+	ClientID     string `json:"client_id"`
+	RedirectURI  string `json:"redirect_uri"`
+	ResponseType string `json:"response_type"`
+	Scope        string `json:"scope"`
+	State        string `json:"state"`
+
+	// Resource Resource Indicator per RFC8707
+	Resource            string `json:"resource"`
 	CodeChallenge       string `json:"code_challenge"`
 	CodeChallengeMethod string `json:"code_challenge_method"`
 }
@@ -88,6 +91,7 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 		ResponseType:        query.Get("response_type"),
 		Scope:               query.Get("scope"),
 		State:               query.Get("state"),
+		Resource:            query.Get("resource"),
 		CodeChallenge:       query.Get("code_challenge"),
 		CodeChallengeMethod: query.Get("code_challenge_method"),
 	}
@@ -127,6 +131,7 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 		params.RedirectURI,
 		params.Scope,
 		params.State,
+		params.Resource,
 		params.CodeChallenge,
 		params.CodeChallengeMethod,
 	)
@@ -441,6 +446,11 @@ func (s *Server) validateRemainingAuthorizeParams(params *AuthorizeParams) error
 		return errors.New("only response_type=code is supported")
 	}
 
+	// Resource parameter validation (per RFC 8707)
+	if err := s.validateResourceParam(params.Resource); err != nil {
+		return err
+	}
+
 	// PKCE validation
 	if err := s.validatePKCEParams(params.CodeChallengeMethod, params.CodeChallenge); err != nil {
 		return err
@@ -464,6 +474,37 @@ func (s *Server) validatePKCEParams(codeChallengeMethod, codeChallenge string) e
 	// Validate code challenge format and length (per OAuth2 spec)
 	if len(codeChallenge) < 43 || len(codeChallenge) > 128 {
 		return errors.New("code_challenge must be between 43 and 128 characters")
+	}
+
+	return nil
+}
+
+// validateResourceParam validates the resource parameter per RFC 8707
+func (s *Server) validateResourceParam(resource string) error {
+	// Resource parameter is optional
+	if resource == "" {
+		return nil
+	}
+
+	// Parse URL to validate it's an absolute URI
+	parsedURL, err := url.Parse(resource)
+	if err != nil {
+		return errors.New("resource must be a valid URI")
+	}
+
+	// Must be an absolute URI (have scheme)
+	if !parsedURL.IsAbs() {
+		return errors.New("resource must be an absolute URI")
+	}
+
+	// Must not include a fragment component
+	if parsedURL.Fragment != "" {
+		return errors.New("resource must not include a fragment component")
+	}
+
+	// Should not include a query component
+	if parsedURL.RawQuery != "" {
+		return errors.New("resource must not include a query component")
 	}
 
 	return nil
