@@ -27,13 +27,29 @@ func init() {
 	}
 }
 
+type audience []string
+
+func (a *audience) UnmarshalJSON(b []byte) error {
+	var s string
+	if json.Unmarshal(b, &s) == nil {
+		*a = audience{s}
+		return nil
+	}
+	var auds []string
+	if err := json.Unmarshal(b, &auds); err != nil {
+		return err
+	}
+	*a = auds
+	return nil
+}
+
 type Claims struct {
 	// Reserved claims
-	Issuer  string  `json:"iss,omitempty" structs:"iss,omitempty"`
-	Subject string  `json:"sub,omitempty" structs:"sub,omitempty"`
-	Aud     string  `json:"aud,omitempty" structs:"aud,omitempty"`
-	Iat     float64 `json:"iat,omitempty" structs:"iat,omitempty"`
-	Exp     float64 `json:"exp,omitempty" structs:"exp,omitempty"`
+	Issuer  string   `json:"iss,omitempty" structs:"iss,omitempty"`
+	Subject string   `json:"sub,omitempty" structs:"sub,omitempty"`
+	Aud     audience `json:"aud,omitempty" structs:"aud,omitempty"`
+	Iat     float64  `json:"iat,omitempty" structs:"iat,omitempty"`
+	Exp     float64  `json:"exp,omitempty" structs:"exp,omitempty"`
 
 	// Default profile claims
 	Name              string `json:"name,omitempty" structs:"name,omitempty"`
