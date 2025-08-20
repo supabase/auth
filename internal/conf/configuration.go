@@ -254,6 +254,13 @@ type AuditLogConfiguration struct {
 	DisablePostgres bool `split_words:"true" default:"false"`
 }
 
+type ExperimentalConfiguration struct {
+	// Names of providers (e.g. "google") which have their own identity
+	// linking domain, meaning that the ones listed here _will not
+	// participate_ in email similarity linking with other accounts.
+	ProvidersWithOwnLinkingDomain []string `split_words:"true"`
+}
+
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
 	API           APIConfiguration
@@ -293,6 +300,8 @@ type GlobalConfiguration struct {
 	MFA             MFAConfiguration         `json:"MFA"`
 	SAML            SAMLConfiguration        `json:"saml"`
 	CORS            CORSConfiguration        `json:"cors"`
+
+	Experimental ExperimentalConfiguration `json:"experimental"`
 }
 
 type CORSConfiguration struct {
