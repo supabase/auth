@@ -3,6 +3,7 @@ package oauthserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -181,5 +182,52 @@ func (s *Server) OAuthServerClientList(w http.ResponseWriter, r *http.Request) e
 		Clients: responses,
 	}
 
+	return shared.SendJSON(w, http.StatusOK, response)
+}
+
+// OAuthServerMetadataResponse represents the OAuth 2.1 Authorization Server Metadata per RFC 8414
+type OAuthServerMetadataResponse struct {
+	Issuer                            string   `json:"issuer"`
+	AuthorizationEndpoint             string   `json:"authorization_endpoint"`
+	TokenEndpoint                     string   `json:"token_endpoint"`
+	JWKSetURI                         string   `json:"jwks_uri"`
+	RegistrationEndpoint              string   `json:"registration_endpoint,omitempty"`
+	ResponseTypesSupported            []string `json:"response_types_supported"`
+	ResponseModesSupported            []string `json:"response_modes_supported"`
+	GrantTypesSupported               []string `json:"grant_types_supported"`
+	TokenEndpointAuthMethodsSupported []string `json:"token_endpoint_auth_methods_supported"`
+	CodeChallengeMethodsSupported     []string `json:"code_challenge_methods_supported"`
+
+	// TODO(cemal) :: Append the scopes supported when scope management is clarified!
+	// ScopesSupported                   []string `json:"scopes_supported"`
+}
+
+// OAuthServerMetadata handles GET /.well-known/oauth-authorization-server
+func (s *Server) OAuthServerMetadata(w http.ResponseWriter, r *http.Request) error {
+	issuer := s.config.JWT.Issuer
+
+	// TODO(cemal) :: Remove this check when we have the config validation in place
+	if issuer == "" {
+		return apierrors.NewInternalServerError("Issuer is not set")
+	}
+
+	response := OAuthServerMetadataResponse{
+		Issuer:                            issuer,
+		AuthorizationEndpoint:             fmt.Sprintf("%s/oauth/authorize", issuer),
+		TokenEndpoint:                     fmt.Sprintf("%s/oauth/token", issuer),
+		JWKSetURI:                         fmt.Sprintf("%s/.well-known/jwks.json", issuer),
+		ResponseTypesSupported:            []string{"code"},
+		ResponseModesSupported:            []string{"query"},
+		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
+		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post"},
+		CodeChallengeMethodsSupported:     []string{"S256", "plain"},
+	}
+
+	// Include registration endpoint if dynamic registration is enabled
+	if s.config.OAuthServer.AllowDynamicRegistration {
+		response.RegistrationEndpoint = fmt.Sprintf("%s/oauth/clients/register", issuer)
+	}
+
+	// TODO: Cache response for 10 minutes, but consider dynamic registration toggle changes
 	return shared.SendJSON(w, http.StatusOK, response)
 }
