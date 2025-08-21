@@ -87,7 +87,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		db:      db,
 		version: version,
 	}
-	
+
 	// Only initialize OAuth server if enabled
 	if globalConfig.OAuthServer.Enabled {
 		api.oauthServer = oauthserver.NewServer(globalConfig, db)
@@ -151,6 +151,10 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 	r.Get("/health", api.HealthCheck)
 	r.Get("/.well-known/jwks.json", api.Jwks)
+
+	if globalConfig.OAuthServer.Enabled {
+		r.Get("/.well-known/oauth-authorization-server", api.oauthServer.OAuthServerMetadata)
+	}
 
 	r.Route("/callback", func(r *router) {
 		r.Use(api.isValidExternalHost)
