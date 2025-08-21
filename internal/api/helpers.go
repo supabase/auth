@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"slices"
 
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/shared"
@@ -34,7 +35,7 @@ func (a *API) requestAud(ctx context.Context, r *http.Request) string {
 
 	// ignore the JWT's aud claim if the role is admin
 	// this is because anon, service_role never had an aud claim to begin with
-	if claims != nil && !isStringInSlice(claims.Role, config.JWT.AdminRoles) {
+	if claims != nil && !slices.Contains(config.JWT.AdminRoles, claims.Role) {
 		aud, _ := claims.GetAudience()
 		if len(aud) != 0 && aud[0] != "" {
 			return aud[0]
@@ -43,15 +44,6 @@ func (a *API) requestAud(ctx context.Context, r *http.Request) string {
 
 	// Finally, return the default if none of the above methods are successful
 	return config.JWT.Aud
-}
-
-func isStringInSlice(checkValue string, list []string) bool {
-	for _, val := range list {
-		if val == checkValue {
-			return true
-		}
-	}
-	return false
 }
 
 type RequestParams interface {
