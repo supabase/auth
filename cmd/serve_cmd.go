@@ -14,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/supabase/auth/internal/api"
+	"github.com/supabase/auth/internal/api/worker"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/reloader"
 	"github.com/supabase/auth/internal/storage"
@@ -53,12 +54,42 @@ func serve(ctx context.Context) {
 	opts := []api.Option{
 		api.NewLimiterOptions(config),
 	}
-	a := api.NewAPIWithVersion(config, db, utilities.Version, opts...)
-	ah := reloader.NewAtomicHandler(a)
-	logrus.WithField("version", a.Version()).Infof("GoTrue API started on: %s", addr)
 
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	defer baseCancel()
+
+	var wg sync.WaitGroup
+	defer wg.Wait() // Do not return to caller until this goroutine is done.
+
+	if config.Worker.Enabled {
+		wrkLog := logrus.WithField("component", "workers")
+		wrk := worker.New(config, wrkLog)
+		opts = append(opts, &api.MailerOptions{
+			MailerClientFunc: wrk.GetMailerFunc,
+		})
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			var err error
+			defer func() {
+				logFn := wrkLog.Info
+				if err != nil {
+					logFn = wrkLog.WithError(err).Error
+				}
+				logFn("worker is exiting")
+			}()
+
+			// Work takes base context so it does not exit until the http server
+			// has shutdown.
+			err = wrk.Work(baseCtx)
+		}()
+	}
+
+	a := api.NewAPIWithVersion(config, db, utilities.Version, opts...)
+	ah := reloader.NewAtomicHandler(a)
+	logrus.WithField("version", a.Version()).Infof("GoTrue API started on: %s", addr)
 
 	httpSrv := &http.Server{
 		Addr:              addr,
@@ -69,9 +100,6 @@ func serve(ctx context.Context) {
 		},
 	}
 	log := logrus.WithField("component", "api")
-
-	var wg sync.WaitGroup
-	defer wg.Wait() // Do not return to caller until this goroutine is done.
 
 	if watchDir != "" {
 		wg.Add(1)
@@ -98,7 +126,10 @@ func serve(ctx context.Context) {
 
 		<-ctx.Done()
 
-		defer baseCancel() // close baseContext
+		// This must be done after httpSrv exits, otherwise you may potentially
+		// have 1 or more inflight http requests blocked until the shutdownCtx
+		// is canceled.
+		defer baseCancel()
 
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Minute)
 		defer shutdownCancel()

@@ -6,12 +6,19 @@ import (
 	"github.com/didip/tollbooth/v5"
 	"github.com/didip/tollbooth/v5/limiter"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/ratelimit"
 )
 
 type Option interface {
 	apply(*API)
 }
+
+type MailerOptions struct {
+	MailerClientFunc func() mailer.MailClient
+}
+
+func (mo *MailerOptions) apply(a *API) { a.mailerClientFunc = mo.MailerClientFunc }
 
 type LimiterOptions struct {
 	Email ratelimit.Limiter

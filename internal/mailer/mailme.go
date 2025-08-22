@@ -25,18 +25,17 @@ const TemplateExpiration = 10 * time.Second
 
 // MailmeMailer lets MailMe send templated mails
 type MailmeMailer struct {
-	From           string
-	Host           string
-	Port           int
-	User           string
-	Pass           string
-	BaseURL        string
-	LocalName      string
-	FuncMap        template.FuncMap
-	cache          *TemplateCache
-	Logger         logrus.FieldLogger
-	MailLogging    bool
-	EmailValidator *EmailValidator
+	From        string
+	Host        string
+	Port        int
+	User        string
+	Pass        string
+	BaseURL     string
+	LocalName   string
+	FuncMap     template.FuncMap
+	cache       *TemplateCache
+	Logger      logrus.FieldLogger
+	MailLogging bool
 }
 
 // Mail sends a templated mail. It will try to load the template from a URL, and
@@ -56,12 +55,6 @@ func (m *MailmeMailer) Mail(
 			templates: map[string]*MailTemplate{},
 			funcMap:   m.FuncMap,
 			logger:    m.Logger,
-		}
-	}
-
-	if m.EmailValidator != nil {
-		if err := m.EmailValidator.Validate(ctx, to); err != nil {
-			return err
 		}
 	}
 
