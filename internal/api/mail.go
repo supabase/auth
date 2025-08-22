@@ -594,10 +594,18 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	externalURL := getExternalHost(ctx)
 
 	if emailActionType != mail.EmailChangeVerification {
-		if u.GetEmail() != "" && !a.checkEmailAddressAuthorization(u.GetEmail()) {
+		if u.GetEmail() == "" {
+			return apierrors.NewInternalServerError("Unable to send email to a user with an empty email address")
+		}
+
+		if !a.checkEmailAddressAuthorization(u.GetEmail()) {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeEmailAddressNotAuthorized, "Email address %q cannot be used as it is not authorized", u.GetEmail())
 		}
 	} else {
+		if u.EmailChange == "" {
+			return apierrors.NewInternalServerError("Unable to change email address of user to an empty value")
+		}
+
 		// first check that the user can update their address to the
 		// new one in u.EmailChange
 		if u.EmailChange != "" && !a.checkEmailAddressAuthorization(u.EmailChange) {
