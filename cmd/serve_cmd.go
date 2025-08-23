@@ -78,7 +78,7 @@ func serve(ctx context.Context) {
 				if err != nil {
 					logFn = wrkLog.WithError(err).Error
 				}
-				logFn("worker is exiting")
+				logFn("background task worker is exiting")
 			}()
 
 			// Work takes base context so it does not exit until the http server

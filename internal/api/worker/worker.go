@@ -11,7 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/mailer"
-	"github.com/supabase/auth/internal/observability"
+	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -28,38 +28,15 @@ type Task interface {
 type job struct {
 	task      Task
 	createdAt time.Time
-	logEntry  *logrus.Entry
+	requestID string
 }
 
 func newJob(ctx context.Context, task Task) *job {
-	le := observability.GetLogEntryFromContext(ctx).Entry
 	return &job{
 		task:      task,
-		logEntry:  le,
+		requestID: utilities.GetRequestID(ctx),
 		createdAt: time.Now(),
 	}
-}
-
-func (o *job) result(err error) {
-
-	// TODO(cstockton): Carrying the log entry from the request gives the
-	// ability to correlate failed tasks with a request. The downside is that
-	// the log entry is fairly heavy, as large as the "auth_event" task done
-	// at the end of the request. This could have a measurable impact on log
-	// volume.
-	duration := time.Since(o.createdAt)
-	le := o.logEntry.WithFields(logrus.Fields{
-		"action":    "worker_task",
-		"task_type": o.task.Type(),
-		"success":   err == nil,
-		"duration":  duration,
-	})
-
-	logFn := le.Infof
-	if err != nil {
-		logFn = le.WithError(err).Errorf
-	}
-	logFn("worker task complete for: %v", o.task.Type())
 }
 
 // Worker is a simple background work for async tasks. It has an internal
@@ -157,8 +134,9 @@ func (o *Worker) worker(ws *workerState, workerNum int) error {
 			return nil
 
 		case job := <-o.jobCh:
-			le.Infof("%v received task type %v", pfx, job.task.Type())
-			o.dispatch(ws, job)
+			log := le.WithField("request_id", job.requestID)
+			log.Infof("%v received task type %v", pfx, job.task.Type())
+			o.dispatch(ws, job, log)
 		}
 	}
 }
@@ -168,16 +146,34 @@ func unknownTaskError(task Task) error {
 }
 
 // dispatch will send a job to an appropriate handler.
-func (o *Worker) dispatch(ws *workerState, job *job) {
+func (o *Worker) dispatch(ws *workerState, job *job, log *logrus.Entry) {
+	var err error
+	defer func() { o.result(job, log, err) }()
+
 	switch task := job.task.(type) {
 	case *MailerTask:
-		var err error
-		defer func() { job.result(err) }()
-
 		err = o.mailerHandler.Handle(ws.workCtx, task)
 	default:
-		panic(unknownTaskError(task))
+		err = unknownTaskError(task)
+		panic(err)
 	}
+}
+
+func (o *Worker) result(job *job, log *logrus.Entry, err error) {
+	typ := job.task.Type()
+	duration := time.Since(job.createdAt)
+	le := log.WithFields(logrus.Fields{
+		"action":    "worker_task",
+		"task_type": typ,
+		"success":   err == nil,
+		"duration":  duration,
+	})
+
+	logFn := le.Infof
+	if err != nil {
+		logFn = le.WithError(err).Errorf
+	}
+	logFn("worker task complete for: %v", typ)
 }
 
 // Enqueue will attempt to send a task to the internal job queue for up to

@@ -67,7 +67,6 @@ func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
 		SiteURL: globalConfig.SiteURL,
 		Config:  globalConfig,
 		Mailer:  mailClient,
-		// EmailValidator: newEmailValidator(globalConfig.Mailer),
 	}
 }
 
