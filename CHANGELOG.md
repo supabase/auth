@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.178.0](https://github.com/supabase/auth/compare/v2.177.0...v2.178.0) (2025-08-05)
+
+
+### Features
+
+* add sign in with ethereum ([#2069](https://github.com/supabase/auth/issues/2069)) ([079b242](https://github.com/supabase/auth/commit/079b2427b8ed312880b60e89cc79b716fe9ae73d))
+* add support for managing SSO providers by resource_id ([#2081](https://github.com/supabase/auth/issues/2081)) ([5ca4489](https://github.com/supabase/auth/commit/5ca44893964d3b12a24ea26302b23f4976f768a0))
+* log all audit events separately to prevent missing events ([#2086](https://github.com/supabase/auth/issues/2086)) ([3b666f5](https://github.com/supabase/auth/commit/3b666f51f56db778848730d74ac140f02b0cb522))
+* skip nonce check for Facebook Limited Login auth ([#2082](https://github.com/supabase/auth/issues/2082)) ([f1b15ff](https://github.com/supabase/auth/commit/f1b15ffdb9b1f1af873a147fdb5d039382becb2e))
+* support ledger solana offchain message signing ([#2093](https://github.com/supabase/auth/issues/2093)) ([4c94443](https://github.com/supabase/auth/commit/4c944431558aaca3c945c472dc5a27077f6dfa75))
+
 ## [2.177.0](https://github.com/supabase/auth/compare/v2.176.1...v2.177.0) (2025-07-05)
 
 

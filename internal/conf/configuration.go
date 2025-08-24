@@ -59,15 +59,21 @@ func (t *Time) UnmarshalText(text []byte) error {
 
 // OAuthProviderConfiguration holds all config related to external account providers.
 type OAuthProviderConfiguration struct {
-	ClientID    []string `json:"client_id" split_words:"true"`
-	Secret      string   `json:"secret"`
-	RedirectURI string   `json:"redirect_uri" split_words:"true"`
-	URL         string   `json:"url"`
-	ApiURL      string   `json:"api_url" split_words:"true"`
-	Enabled     bool     `json:"enabled"`
+	ClientID      []string `json:"client_id" split_words:"true"`
+	Secret        string   `json:"secret"`
+	RedirectURI   string   `json:"redirect_uri" split_words:"true"`
+	URL           string   `json:"url"`
+	ApiURL        string   `json:"api_url" split_words:"true"`
+	Enabled       bool     `json:"enabled"`
+	EmailOptional bool     `json:"email_optional" split_words:"true"`
 	// SkipNonceCheck bypasses nonce verification during OIDC token validation.
 	// Note: Nonce verification helps prevent replay attacks; only disable when necessary.
 	SkipNonceCheck bool `json:"skip_nonce_check" split_words:"true"`
+}
+
+// OAuthServerConfiguration holds OAuth server configuration
+type OAuthServerConfiguration struct {
+	AllowDynamicRegistration bool `json:"allow_dynamic_registration" split_words:"true"`
 }
 
 type AnonymousProviderConfiguration struct {
@@ -248,28 +254,37 @@ type AuditLogConfiguration struct {
 	DisablePostgres bool `split_words:"true" default:"false"`
 }
 
+type ExperimentalConfiguration struct {
+	// Names of providers (e.g. "google") which have their own identity
+	// linking domain, meaning that the ones listed here _will not
+	// participate_ in email similarity linking with other accounts.
+	ProvidersWithOwnLinkingDomain []string `split_words:"true"`
+}
+
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
 	API           APIConfiguration
 	DB            DBConfiguration
 	External      ProviderConfiguration
-	Logging       LoggingConfig  `envconfig:"LOG"`
-	Profiler      ProfilerConfig `envconfig:"PROFILER"`
-	OperatorToken string         `split_words:"true" required:"false"`
+	OAuthServer   OAuthServerConfiguration `envconfig:"OAUTH_SERVER"`
+	Logging       LoggingConfig            `envconfig:"LOG"`
+	Profiler      ProfilerConfig           `envconfig:"PROFILER"`
+	OperatorToken string                   `split_words:"true" required:"false"`
 	Tracing       TracingConfig
 	Metrics       MetricsConfig
 	SMTP          SMTPConfiguration
 	AuditLog      AuditLogConfiguration `split_words:"true"`
 
-	RateLimitHeader         string  `split_words:"true"`
-	RateLimitEmailSent      Rate    `split_words:"true" default:"30"`
-	RateLimitSmsSent        Rate    `split_words:"true" default:"30"`
-	RateLimitVerify         float64 `split_words:"true" default:"30"`
-	RateLimitTokenRefresh   float64 `split_words:"true" default:"150"`
-	RateLimitSso            float64 `split_words:"true" default:"30"`
-	RateLimitAnonymousUsers float64 `split_words:"true" default:"30"`
-	RateLimitOtp            float64 `split_words:"true" default:"30"`
-	RateLimitWeb3           float64 `split_words:"true" default:"30"`
+	RateLimitHeader                     string  `split_words:"true"`
+	RateLimitEmailSent                  Rate    `split_words:"true" default:"30"`
+	RateLimitSmsSent                    Rate    `split_words:"true" default:"30"`
+	RateLimitVerify                     float64 `split_words:"true" default:"30"`
+	RateLimitTokenRefresh               float64 `split_words:"true" default:"150"`
+	RateLimitSso                        float64 `split_words:"true" default:"30"`
+	RateLimitAnonymousUsers             float64 `split_words:"true" default:"30"`
+	RateLimitOtp                        float64 `split_words:"true" default:"30"`
+	RateLimitWeb3                       float64 `split_words:"true" default:"30"`
+	RateLimitOAuthDynamicClientRegister float64 `split_words:"true" default:"10"`
 
 	SiteURL         string   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList    []string `json:"uri_allow_list" split_words:"true"`
@@ -285,6 +300,8 @@ type GlobalConfiguration struct {
 	MFA             MFAConfiguration         `json:"MFA"`
 	SAML            SAMLConfiguration        `json:"saml"`
 	CORS            CORSConfiguration        `json:"cors"`
+
+	Experimental ExperimentalConfiguration `json:"experimental"`
 }
 
 type CORSConfiguration struct {
@@ -354,10 +371,16 @@ type ProviderConfiguration struct {
 	AllowedIdTokenIssuers   []string                       `json:"allowed_id_token_issuers" split_words:"true"`
 	FlowStateExpiryDuration time.Duration                  `json:"flow_state_expiry_duration" split_words:"true"`
 
-	Web3Solana SolanaConfiguration `json:"web3_solana" split_words:"true"`
+	Web3Solana   SolanaConfiguration   `json:"web3_solana" split_words:"true"`
+	Web3Ethereum EthereumConfiguration `json:"web3_ethereum" split_words:"true"`
 }
 
 type SolanaConfiguration struct {
+	Enabled                 bool          `json:"enabled,omitempty" split_words:"true"`
+	MaximumValidityDuration time.Duration `json:"maximum_validity_duration,omitempty" default:"10m" split_words:"true"`
+}
+
+type EthereumConfiguration struct {
 	Enabled                 bool          `json:"enabled,omitempty" split_words:"true"`
 	MaximumValidityDuration time.Duration `json:"maximum_validity_duration,omitempty" default:"10m" split_words:"true"`
 }

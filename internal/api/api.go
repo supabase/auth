@@ -9,6 +9,7 @@ import (
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/oauthserver"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
@@ -35,8 +36,9 @@ type API struct {
 	config  *conf.GlobalConfiguration
 	version string
 
-	hooksMgr   *v0hooks.Manager
-	hibpClient *hibp.PwnedClient
+	hooksMgr    *v0hooks.Manager
+	hibpClient  *hibp.PwnedClient
+	oauthServer *oauthserver.Server
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
@@ -80,7 +82,12 @@ func (a *API) deprecationNotices() {
 
 // NewAPIWithVersion creates a new REST API using the specified version
 func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string, opt ...Option) *API {
-	api := &API{config: globalConfig, db: db, version: version}
+	api := &API{
+		config:      globalConfig,
+		db:          db,
+		version:     version,
+		oauthServer: oauthserver.NewServer(globalConfig, db),
+	}
 
 	for _, o := range opt {
 		o.apply(api)
@@ -197,7 +204,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			With(api.verifyCaptcha).Post("/otp", api.Otp)
 
 		// rate limiting applied in handler
-		r.With(api.verifyCaptcha).Post("/token", api.Token)
+		r.With(api.verifyCaptcha).With(api.oauthClientAuth).Post("/token", api.Token)
 
 		r.With(api.limitHandler(api.limiterOpts.Verify)).Route("/verify", func(r *router) {
 			r.Get("/", api.Verify)
@@ -293,6 +300,28 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 					})
 				})
 			})
+
+			// Admin only oauth client management endpoints
+			r.Route("/oauth", func(r *router) {
+				r.Route("/clients", func(r *router) {
+					// Manual client registration
+					r.Post("/", api.oauthServer.AdminOAuthServerClientRegister)
+
+					r.Get("/", api.oauthServer.OAuthServerClientList)
+
+					r.Route("/{client_id}", func(r *router) {
+						r.Use(api.oauthServer.LoadOAuthServerClient)
+						r.Get("/", api.oauthServer.OAuthServerClientGet)
+						r.Delete("/", api.oauthServer.OAuthServerClientDelete)
+					})
+				})
+			})
+		})
+
+		// OAuth Dynamic Client Registration endpoint (public, rate limited)
+		r.Route("/oauth", func(r *router) {
+			r.With(api.limitHandler(api.limiterOpts.OAuthClientRegister)).
+				Post("/clients/register", api.oauthServer.OAuthServerClientDynamicRegister)
 		})
 	})
 
