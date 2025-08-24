@@ -185,12 +185,12 @@ func (o *Dispatcher) runHTTPHook(
 		defer rsp.Body.Close()
 
 		switch rsp.StatusCode {
-		case http.StatusOK, http.StatusNoContent, http.StatusAccepted:
+		case http.StatusNoContent:
+			return nil, nil
+
+		case http.StatusOK, http.StatusAccepted:
 			contentType := rsp.Header.Get("Content-Type")
 			if contentType == "" {
-				if rsp.StatusCode == http.StatusNoContent {
-					return nil, nil
-				}
 				return nil, apierrors.NewBadRequestError(
 					apierrors.ErrorCodeHookPayloadInvalidContentType,
 					"Invalid Content-Type: Missing Content-Type header")
