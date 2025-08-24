@@ -91,7 +91,7 @@ func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 	o.Signups = newLimiterPer5mOver1h(gc.RateLimitOtp)
 	o.OAuthClientRegister = newLimiterPer5mOver1h(gc.RateLimitOAuthDynamicClientRegister)
 
-  return o
+	return o
 }
 
 func newLimiterPer5mOver1h(rate float64) *limiter.Limiter {
