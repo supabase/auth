@@ -13,6 +13,7 @@ import (
 	"strings"
 	"text/template"
 	"time"
+	"strings"
 
 	"github.com/gobwas/glob"
 	"github.com/golang-jwt/jwt/v5"
@@ -945,7 +946,10 @@ func populateGlobal(config *GlobalConfiguration) error {
 	}
 
 	if config.Sms.Provider != "" {
-		SMSTemplate := config.Sms.Template
+		SMSTemplate := strings.ReplaceAll(config.Sms.Template, "\\n", "\n")
+		
+		
+		
 		if SMSTemplate == "" {
 			SMSTemplate = "Your code is {{ .Code }}"
 		}
@@ -957,7 +961,7 @@ func populateGlobal(config *GlobalConfiguration) error {
 	}
 
 	if config.MFA.Phone.EnrollEnabled || config.MFA.Phone.VerifyEnabled {
-		smsTemplate := config.MFA.Phone.Template
+		strings.ReplaceAll(config.MFA.Phone.Template, "\\n", "\n")
 		if smsTemplate == "" {
 			smsTemplate = "Your code is {{ .Code }}"
 		}
