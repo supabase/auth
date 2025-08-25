@@ -274,6 +274,7 @@ type GlobalConfiguration struct {
 	Metrics       MetricsConfig
 	SMTP          SMTPConfiguration
 	AuditLog      AuditLogConfiguration `split_words:"true"`
+	Worker        WorkerConfiguration   `split_words:"true"`
 
 	RateLimitHeader                     string  `split_words:"true"`
 	RateLimitEmailSent                  Rate    `split_words:"true" default:"30"`
@@ -1159,6 +1160,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Sessions,
 		&c.Hook,
 		&c.JWT.Keys,
+		&c.Worker,
 	}
 
 	for _, validatable := range validatables {

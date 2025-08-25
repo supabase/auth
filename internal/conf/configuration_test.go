@@ -3,6 +3,7 @@ package conf
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -57,6 +58,39 @@ func TestGlobal(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, float64(10), gc.RateLimitEmailSent.Events)
 		assert.Equal(t, time.Hour, gc.RateLimitEmailSent.OverTime)
+	}
+
+	{
+		gc, err := LoadGlobal("")
+		require.NoError(t, err)
+		assert.Equal(t, false, gc.Worker.Enabled)
+		assert.Equal(t, 32, gc.Worker.CountPerCPU)
+		assert.Equal(t, time.Duration(time.Second*10), gc.Worker.ShutdownDuration)
+
+		os.Setenv("GOTRUE_WORKER_ENABLED", "true")
+		os.Setenv("GOTRUE_WORKER_COUNT_PER_CPU", "8")
+		os.Setenv("GOTRUE_WORKER_SHUTDOWN_DURATION", "30s")
+		gc, err = LoadGlobal("")
+		require.NoError(t, err)
+		assert.Equal(t, true, gc.Worker.Enabled)
+		assert.Equal(t, 8, gc.Worker.CountPerCPU)
+		assert.Equal(t, time.Duration(time.Second*30), gc.Worker.ShutdownDuration)
+
+		os.Setenv("GOTRUE_WORKER_COUNT_PER_CPU", "-1")
+		os.Setenv("GOTRUE_WORKER_SHUTDOWN_DURATION", "30s")
+		gc, err = LoadGlobal("")
+		require.NoError(t, err)
+		assert.Equal(t, true, gc.Worker.Enabled)
+		assert.Equal(t, 1, gc.Worker.CountPerCPU)
+		assert.Equal(t, time.Duration(time.Second*30), gc.Worker.ShutdownDuration)
+
+		os.Setenv("GOTRUE_WORKER_COUNT_PER_CPU", fmt.Sprint(workerMaxCountPerCPU*2))
+		os.Setenv("GOTRUE_WORKER_SHUTDOWN_DURATION", "30s")
+		gc, err = LoadGlobal("")
+		require.NoError(t, err)
+		assert.Equal(t, true, gc.Worker.Enabled)
+		assert.Equal(t, workerMaxCountPerCPU, gc.Worker.CountPerCPU)
+		assert.Equal(t, time.Duration(time.Second*30), gc.Worker.ShutdownDuration)
 	}
 
 	{
