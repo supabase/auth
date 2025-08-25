@@ -946,6 +946,9 @@ func populateGlobal(config *GlobalConfiguration) error {
 
 	if config.Sms.Provider != "" {
 		SMSTemplate := config.Sms.Template
+		
+		
+		
 		if SMSTemplate == "" {
 			SMSTemplate = "Your code is {{ .Code }}"
 		}
