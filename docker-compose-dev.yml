@@ -1,7 +1,5 @@
-version: "3.9"
 services:
   auth:
-    container_name: auth
     depends_on:
       - postgres
     build:
@@ -19,7 +17,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.postgres.dev
-    container_name: auth_postgres
     ports:
       - '5432:5432'
     volumes:

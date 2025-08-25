@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/gofrs/uuid"
@@ -51,7 +52,7 @@ func (a *API) requireAdmin(ctx context.Context) (context.Context, error) {
 
 	adminRoles := a.config.JWT.AdminRoles
 
-	if isStringInSlice(claims.Role, adminRoles) {
+	if slices.Contains(adminRoles, claims.Role) {
 		// successful authentication
 		return withAdminUser(ctx, &models.User{Role: claims.Role, Email: storage.NullString(claims.Role)}), nil
 	}

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/supabase/auth/internal/api/apierrors"
@@ -112,14 +113,11 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		log.WithField("issuer", p.Issuer).WithField("client_id", p.ClientID).Warn("Use of POST /token with arbitrary issuer and client_id is deprecated for security reasons. Please switch to using the API with provider only!")
 
 		allowed := false
-		for _, allowedIssuer := range config.External.AllowedIdTokenIssuers {
-			if p.Issuer == allowedIssuer {
-				allowed = true
-				providerType = allowedIssuer
-				acceptableClientIDs = []string{p.ClientID}
-				issuer = allowedIssuer
-				break
-			}
+		if slices.Contains(config.External.AllowedIdTokenIssuers, p.Issuer) {
+			allowed = true
+			providerType = p.Issuer
+			acceptableClientIDs = []string{p.ClientID}
+			issuer = p.Issuer
 		}
 
 		if !allowed {
@@ -213,14 +211,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			continue
 		}
 
-		for _, aud := range idToken.Audience {
-			if aud == clientID {
-				correctAudience = true
-				break
-			}
-		}
-
-		if correctAudience {
+		if slices.Contains(idToken.Audience, clientID) {
+			correctAudience = true
 			break
 		}
 	}

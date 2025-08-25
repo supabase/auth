@@ -86,7 +86,7 @@ func (p snapchatProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*
 
 	// Add the GraphQL query parameter
 	query := url.Values{}
-	query.Add("query", "{me { externalId displayName bitmoji { avatar id } } }")
+	query.Add("query", "{me { externalId displayName bitmoji { avatar id } email } }")
 	baseURL.RawQuery = query.Encode()
 
 	if err := makeRequest(ctx, tok, p.Config, baseURL.String(), &u); err != nil {

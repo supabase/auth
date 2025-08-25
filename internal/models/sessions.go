@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -174,10 +175,8 @@ func (s *Session) DetermineTag(tags []string) string {
 		return tags[0]
 	}
 
-	for _, t := range tags {
-		if t == tag {
-			return tag
-		}
+	if slices.Contains(tags, tag) {
+		return tag
 	}
 
 	return tags[0]
