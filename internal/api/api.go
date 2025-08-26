@@ -108,7 +108,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	if api.tokenService == nil {
 		api.tokenService = tokens.NewService(globalConfig, api.hooksMgr)
 	}
-	
+
 	// Connect token service to API's time function (supports test overrides)
 	api.tokenService.SetTimeFunc(api.Now)
 
