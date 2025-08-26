@@ -96,11 +96,6 @@ jobs:
           mv auth-arm64 auth
           tar -czvf auth-v$RELEASE_VERSION-arm64.tar.gz auth gotrue migrations/
 
-          # Create a "supafast" tarball that can be used by supabase-admin-api to upgrade Auth quickly
-          rm gotrue
-          mv auth gotrue
-          tar -czvf auth-v$RELEASE_VERSION.supafast-arm64.tar.gz gotrue migrations/
-
       - name: Generate checksums
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         run: |
@@ -123,6 +118,25 @@ jobs:
           echo "## Checksums" > checksums.txt
           generate_checksums "SHA1" "sha1sum"
           generate_checksums "SHA256" "sha256sum"
+
+
+      - name: GitHub OIDC Auth
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
+        uses: aws-actions/configure-aws-credentials@v4.1.0
+        with:
+          aws-region: ap-southeast-1
+          role-to-assume: arn:aws:iam::${{ secrets.SHARED_SERVICES_AWS_ACCOUNT_ID }}:role/supabase-github-oidc-role
+          role-session-name: shared-services-jump
+
+      - name: Assume destination role
+        uses: aws-actions/configure-aws-credentials@v4.1.0
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
+        with:
+          aws-region: ap-southeast-1
+          role-to-assume: arn:aws:iam::${{ secrets.SHARED_SERVICES_AWS_ACCOUNT_ID }}:role/supabase-admin-agent-artifacts-role-50bb8f7
+          role-skip-session-tagging: true
+          role-session-name: upload-assets
+          role-chaining: true
 
       - name: Upload release artifacts
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
@@ -171,7 +185,10 @@ jobs:
           FULL_NOTES=$(printf "%s\n\n%s\n" "$EXISTING_NOTES" "$CHECKSUM_CONTENT")
           GH_TOKEN='${{ github.token }}' gh release edit $RELEASE_NAME -n "$FULL_NOTES"
 
-          GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz ./auth-v$RELEASE_VERSION.supafast-arm64.tar.gz
+          GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz
+
+          aws s3 cp ./auth-v$RELEASE_VERSION-arm64.tar.gz s3://supabase-internal-artifacts/auth/$RELEASE_VERSION/
+          aws s3 cp ./auth-v$RELEASE_VERSION-x86.tar.gz s3://supabase-internal-artifacts/auth/$RELEASE_VERSION/
 
   publish:
     needs:
