@@ -14,12 +14,12 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
-	"github.com/supabase/auth/internal/tokens"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/tokens"
 	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
