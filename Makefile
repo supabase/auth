@@ -23,6 +23,10 @@ build: deps ## Build the binary.
 	CGO_ENABLED=0 go build $(FLAGS)
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o auth-arm64
 
+build-strip: deps ## Build a stripped binary.
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
+		$(FLAGS) -ldflags "-s -w" -o auth-arm64-strip
+
 dev-deps: ## Install developer dependencies
 	@go install github.com/gobuffalo/pop/soda@latest
 	@go install github.com/securego/gosec/v2/cmd/gosec@latest

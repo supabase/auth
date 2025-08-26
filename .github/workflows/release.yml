@@ -90,11 +90,13 @@ jobs:
           set -ex
 
           RELEASE_VERSION=$RELEASE_VERSION make deps
-          RELEASE_VERSION=$RELEASE_VERSION make all
+          RELEASE_VERSION=$RELEASE_VERSION make all build-strip
           ln -s auth gotrue
           tar -czvf auth-v$RELEASE_VERSION-x86.tar.gz auth gotrue migrations/
           mv auth-arm64 auth
           tar -czvf auth-v$RELEASE_VERSION-arm64.tar.gz auth gotrue migrations/
+          mv auth-arm64 auth
+          tar -cf - auth gotrue migrations/ | xz -T0 -9e -C crc64 > auth-v$RELEASE_VERSION-arm64.tar.xz
 
       - name: Generate checksums
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
@@ -105,7 +107,7 @@ jobs:
             local hash_type=$1
             local hash_cmd=$2
             echo "### ${hash_type}" >> checksums.txt
-            for file in auth-v$RELEASE_VERSION*.tar.gz; do
+            for file in auth-v$RELEASE_VERSION*.tar.{gz,xz}; do
               echo "\`$file\`:" >> checksums.txt
               echo "\`\`\`" >> checksums.txt
               $hash_cmd "$file" | awk '{print $1}' >> checksums.txt
@@ -187,8 +189,11 @@ jobs:
 
           GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz
 
+          GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.xz ./auth-v$RELEASE_VERSION-arm64.tar.xz
+
           aws s3 cp ./auth-v$RELEASE_VERSION-arm64.tar.gz s3://supabase-internal-artifacts/auth/$RELEASE_VERSION/
           aws s3 cp ./auth-v$RELEASE_VERSION-x86.tar.gz s3://supabase-internal-artifacts/auth/$RELEASE_VERSION/
+          aws s3 cp ./auth-v$RELEASE_VERSION-x86.tar.xz s3://supabase-internal-artifacts/auth/$RELEASE_VERSION/
 
   publish:
     needs:
