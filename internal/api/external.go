@@ -14,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/tokens"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/metering"
 	"github.com/supabase/auth/internal/models"
@@ -109,7 +110,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		claims.LinkingTargetID = linkingTargetUser.ID.String()
 	}
 
-	tokenString, err := signJwt(&config.JWT, claims)
+	tokenString, err := tokens.SignJWT(&config.JWT, claims)
 	if err != nil {
 		return "", apierrors.NewInternalServerError("Error creating state").WithInternalError(err)
 	}
