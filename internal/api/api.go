@@ -104,8 +104,13 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.hooksMgr = v0hooks.NewManager(globalConfig, httpDr, pgfuncDr)
 	}
 
-	// Initialize token service
-	api.tokenService = tokens.NewService(globalConfig, api.hooksMgr)
+	// Initialize token service if not provided via options
+	if api.tokenService == nil {
+		api.tokenService = tokens.NewService(globalConfig, api.hooksMgr)
+	}
+	
+	// Connect token service to API's time function (supports test overrides)
+	api.tokenService.SetTimeFunc(api.Now)
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{

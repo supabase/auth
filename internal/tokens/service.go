@@ -72,6 +72,7 @@ type HookManager interface {
 type Service struct {
 	config      *conf.GlobalConfiguration
 	hookManager HookManager
+	now         func() time.Time
 }
 
 // NewService creates a new token service
@@ -83,6 +84,14 @@ func NewService(config *conf.GlobalConfiguration, hookManager HookManager) *Serv
 	return &Service{
 		config:      config,
 		hookManager: hookManager,
+		now:         time.Now, // Default to system time
+	}
+}
+
+// SetTimeFunc allows overriding the time function (only for testing!!)
+func (s *Service) SetTimeFunc(timeFunc func() time.Time) {
+	if timeFunc != nil {
+		s.now = timeFunc
 	}
 }
 
@@ -100,7 +109,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 	// Instead of waiting at the database level, they're waiting at the API
 	// level instead and retry to refresh the locked row every 10-30
 	// milliseconds.
-	retryStart := time.Now()
+	retryStart := s.now()
 	retry := true
 
 	for retry && time.Since(retryStart).Seconds() < retryLoopDuration {
@@ -258,7 +267,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 					reuseUntil := token.UpdatedAt.Add(
 						time.Second * time.Duration(config.Security.RefreshTokenReuseInterval))
 
-					if time.Now().After(reuseUntil) {
+					if s.now().After(reuseUntil) {
 						// not OK to reuse this token
 						if config.Security.RefreshTokenRotationEnabled {
 							// Revoke all tokens in token family
@@ -294,7 +303,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 				return apierrors.NewInternalServerError("error generating jwt token").WithInternalError(terr)
 			}
 
-			refreshedAt := time.Now()
+			refreshedAt := s.now()
 			session.RefreshedAt = &refreshedAt
 
 			userAgent := r.Header.Get("User-Agent")
@@ -360,7 +369,7 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, u
 		return "", 0, terr
 	}
 
-	issuedAt := time.Now().UTC()
+	issuedAt := s.now().UTC()
 	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
 
 	claims := &v0hooks.AccessTokenClaims{
@@ -413,7 +422,7 @@ func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, u
 func (s *Service) IssueRefreshToken(r *http.Request, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*AccessTokenResponse, error) {
 	config := s.config
 
-	now := time.Now()
+	now := s.now()
 	user.LastSignInAt = &now
 
 	var tokenString string
