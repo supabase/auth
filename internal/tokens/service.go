@@ -435,6 +435,10 @@ func (s *Service) IssueRefreshToken(r *http.Request, conn *storage.Connection, u
 
 		tokenString, expiresAt, terr = s.GenerateAccessToken(r, tx, user, refreshToken.SessionId, authenticationMethod)
 		if terr != nil {
+			// Account for Hook Error
+			if httpErr, ok := terr.(*apierrors.HTTPError); ok {
+				return httpErr
+			}
 			return apierrors.NewInternalServerError("error generating jwt token").WithInternalError(terr)
 		}
 		return nil
