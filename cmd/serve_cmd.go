@@ -53,12 +53,16 @@ func serve(ctx context.Context) {
 	opts := []api.Option{
 		api.NewLimiterOptions(config),
 	}
-	a := api.NewAPIWithVersion(config, db, utilities.Version, opts...)
-	ah := reloader.NewAtomicHandler(a)
-	logrus.WithField("version", a.Version()).Infof("GoTrue API started on: %s", addr)
 
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	defer baseCancel()
+
+	var wg sync.WaitGroup
+	defer wg.Wait() // Do not return to caller until this goroutine is done.
+
+	a := api.NewAPIWithVersion(config, db, utilities.Version, opts...)
+	ah := reloader.NewAtomicHandler(a)
+	logrus.WithField("version", a.Version()).Infof("GoTrue API started on: %s", addr)
 
 	httpSrv := &http.Server{
 		Addr:              addr,
@@ -69,9 +73,6 @@ func serve(ctx context.Context) {
 		},
 	}
 	log := logrus.WithField("component", "api")
-
-	var wg sync.WaitGroup
-	defer wg.Wait() // Do not return to caller until this goroutine is done.
 
 	if watchDir != "" {
 		wg.Add(1)
@@ -98,7 +99,10 @@ func serve(ctx context.Context) {
 
 		<-ctx.Done()
 
-		defer baseCancel() // close baseContext
+		// This must be done after httpSrv exits, otherwise you may potentially
+		// have 1 or more inflight http requests blocked until the shutdownCtx
+		// is canceled.
+		defer baseCancel()
 
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Minute)
 		defer shutdownCancel()

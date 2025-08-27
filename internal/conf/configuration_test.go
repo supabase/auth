@@ -60,6 +60,17 @@ func TestGlobal(t *testing.T) {
 	}
 
 	{
+		gc, err := LoadGlobal("")
+		require.NoError(t, err)
+		assert.Equal(t, false, gc.Mailer.EmailBackgroundSending)
+
+		os.Setenv("GOTRUE_MAILER_EMAIL_BACKGROUND_SENDING", "true")
+		gc, err = LoadGlobal("")
+		require.NoError(t, err)
+		assert.Equal(t, true, gc.Mailer.EmailBackgroundSending)
+	}
+
+	{
 		hdrs := gc.Mailer.GetEmailValidationServiceHeaders()
 		assert.Equal(t, 1, len(hdrs["apikey"]))
 		assert.Equal(t, "test", hdrs["apikey"][0])

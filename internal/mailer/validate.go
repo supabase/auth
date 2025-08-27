@@ -93,6 +93,10 @@ func newEmailValidator(mc conf.MailerConfiguration) *EmailValidator {
 	}
 }
 
+func (ev *EmailValidator) isEnabled() bool {
+	return ev.isExtendedEnabled() || ev.isServiceEnabled()
+}
+
 func (ev *EmailValidator) isExtendedEnabled() bool { return ev.extended }
 func (ev *EmailValidator) isServiceEnabled() bool  { return ev.serviceURL != "" }
 
@@ -105,7 +109,7 @@ func (ev *EmailValidator) isServiceEnabled() bool  { return ev.serviceURL != "" 
 // When serviceURL AND serviceKey are non-empty strings it uses the remote
 // service to determine if the email is valid.
 func (ev *EmailValidator) Validate(ctx context.Context, email string) error {
-	if !ev.isExtendedEnabled() && !ev.isServiceEnabled() {
+	if !ev.isEnabled() {
 		return nil
 	}
 

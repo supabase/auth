@@ -445,6 +445,7 @@ type MailerConfiguration struct {
 	ExternalHosts []string `json:"external_hosts" split_words:"true"`
 
 	// EXPERIMENTAL: May be removed in a future release.
+	EmailBackgroundSending        bool   `json:"email_background_sending" split_words:"true" default:"false"`
 	EmailValidationExtended       bool   `json:"email_validation_extended" split_words:"true" default:"false"`
 	EmailValidationServiceURL     string `json:"email_validation_service_url" split_words:"true"`
 	EmailValidationServiceHeaders string `json:"email_validation_service_headers" split_words:"true"`
