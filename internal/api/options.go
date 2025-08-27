@@ -7,6 +7,7 @@ import (
 	"github.com/didip/tollbooth/v5/limiter"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/ratelimit"
+	"github.com/supabase/auth/internal/tokens"
 )
 
 type Option interface {
@@ -35,6 +36,19 @@ type LimiterOptions struct {
 }
 
 func (lo *LimiterOptions) apply(a *API) { a.limiterOpts = lo }
+
+// TokenServiceOption allows injecting a custom token service
+type TokenServiceOption struct {
+	service *tokens.Service
+}
+
+func WithTokenService(service *tokens.Service) *TokenServiceOption {
+	return &TokenServiceOption{service: service}
+}
+
+func (tso *TokenServiceOption) apply(a *API) {
+	a.tokenService = tso.service
+}
 
 func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 	o := &LimiterOptions{}
