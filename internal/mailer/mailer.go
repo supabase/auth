@@ -83,9 +83,9 @@ func NewMailerWithClient(
 	mailClient MailClient,
 ) Mailer {
 	return &TemplateMailer{
-		SiteURL: globalConfig.SiteURL,
-		Config:  globalConfig,
-		Mailer:  mailClient,
+		SiteURL:    globalConfig.SiteURL,
+		Config:     globalConfig,
+		MailClient: mailClient,
 	}
 }
 
