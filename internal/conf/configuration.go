@@ -274,7 +274,6 @@ type GlobalConfiguration struct {
 	Metrics       MetricsConfig
 	SMTP          SMTPConfiguration
 	AuditLog      AuditLogConfiguration `split_words:"true"`
-	Worker        WorkerConfiguration   `split_words:"true"`
 
 	RateLimitHeader                     string  `split_words:"true"`
 	RateLimitEmailSent                  Rate    `split_words:"true" default:"30"`
@@ -446,6 +445,7 @@ type MailerConfiguration struct {
 	ExternalHosts []string `json:"external_hosts" split_words:"true"`
 
 	// EXPERIMENTAL: May be removed in a future release.
+	EmailBackgroundSending        bool   `json:"email_background_sending" split_words:"true" default:"false"`
 	EmailValidationExtended       bool   `json:"email_validation_extended" split_words:"true" default:"false"`
 	EmailValidationServiceURL     string `json:"email_validation_service_url" split_words:"true"`
 	EmailValidationServiceHeaders string `json:"email_validation_service_headers" split_words:"true"`
@@ -1160,7 +1160,6 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Sessions,
 		&c.Hook,
 		&c.JWT.Keys,
-		&c.Worker,
 	}
 
 	for _, validatable := range validatables {

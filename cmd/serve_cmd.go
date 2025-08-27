@@ -14,7 +14,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/supabase/auth/internal/api"
-	"github.com/supabase/auth/internal/api/worker"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/reloader"
 	"github.com/supabase/auth/internal/storage"
@@ -60,32 +59,6 @@ func serve(ctx context.Context) {
 
 	var wg sync.WaitGroup
 	defer wg.Wait() // Do not return to caller until this goroutine is done.
-
-	if config.Worker.Enabled {
-		wrkLog := logrus.WithField("component", "workers")
-		wrk := worker.New(config, wrkLog)
-		opts = append(opts, &api.MailerOptions{
-			MailerClientFunc: wrk.GetMailerFunc,
-		})
-
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			var err error
-			defer func() {
-				logFn := wrkLog.Info
-				if err != nil {
-					logFn = wrkLog.WithError(err).Error
-				}
-				logFn("background task worker is exiting")
-			}()
-
-			// Work takes base context so it does not exit until the http server
-			// has shutdown.
-			err = wrk.Work(baseCtx)
-		}()
-	}
 
 	a := api.NewAPIWithVersion(config, db, utilities.Version, opts...)
 	ah := reloader.NewAtomicHandler(a)

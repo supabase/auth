@@ -9,6 +9,7 @@ import (
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/apitask"
 	"github.com/supabase/auth/internal/api/oauthserver"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
@@ -149,6 +150,10 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	if globalConfig.DB.CleanupEnabled {
 		cleanup := models.NewCleanup(globalConfig)
 		r.UseBypass(api.databaseCleanup(cleanup))
+	}
+
+	if globalConfig.Mailer.EmailBackgroundSending {
+		r.UseBypass(apitask.Middleware)
 	}
 
 	r.Get("/health", api.HealthCheck)
