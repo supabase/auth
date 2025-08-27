@@ -137,7 +137,7 @@ jobs:
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         with:
           aws-region: ap-southeast-1
-          role-to-assume: arn:aws:iam::${{ secrets.SHARED_SERVICES_AWS_ACCOUNT_ID }}:role/supabase-auth-artifacts-role-936f98a
+          role-to-assume: arn:aws:iam::${{ secrets.SHARED_SERVICES_AWS_ACCOUNT_ID }}:role/supabase-auth-artifacts-role-7656c95
           role-skip-session-tagging: true
           role-session-name: upload-assets
           role-chaining: true
