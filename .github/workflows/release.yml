@@ -90,16 +90,15 @@ jobs:
           set -ex
 
           RELEASE_VERSION=$RELEASE_VERSION make deps
-          RELEASE_VERSION=$RELEASE_VERSION make all
+          RELEASE_VERSION=$RELEASE_VERSION make all build-strip
+
           ln -s auth gotrue
           tar -czvf auth-v$RELEASE_VERSION-x86.tar.gz auth gotrue migrations/
           mv auth-arm64 auth
           tar -czvf auth-v$RELEASE_VERSION-arm64.tar.gz auth gotrue migrations/
 
-          # Create a "supafast" tarball that can be used by supabase-admin-api to upgrade Auth quickly
-          rm gotrue
-          mv auth gotrue
-          tar -czvf auth-v$RELEASE_VERSION.supafast-arm64.tar.gz gotrue migrations/
+          mv auth-arm64-strip auth
+          tar -cf - auth gotrue migrations/ | xz -T0 -9e -C crc64 > auth-v$RELEASE_VERSION-arm64.tar.xz
 
       - name: Generate checksums
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
@@ -110,7 +109,7 @@ jobs:
             local hash_type=$1
             local hash_cmd=$2
             echo "### ${hash_type}" >> checksums.txt
-            for file in auth-v$RELEASE_VERSION*.tar.gz; do
+            for file in auth-v$RELEASE_VERSION*.tar.{gz,xz}; do
               echo "\`$file\`:" >> checksums.txt
               echo "\`\`\`" >> checksums.txt
               $hash_cmd "$file" | awk '{print $1}' >> checksums.txt
@@ -124,6 +123,24 @@ jobs:
           generate_checksums "SHA1" "sha1sum"
           generate_checksums "SHA256" "sha256sum"
 
+      - name: GitHub OIDC Auth
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
+        uses: aws-actions/configure-aws-credentials@v4.1.0
+        with:
+          aws-region: ap-southeast-1
+          role-to-assume: arn:aws:iam::${{ secrets.SHARED_SERVICES_AWS_ACCOUNT_ID }}:role/supabase-github-oidc-role
+          role-session-name: shared-services-jump
+
+      - name: Assume destination role
+        uses: aws-actions/configure-aws-credentials@v4.1.0
+        if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
+        with:
+          aws-region: ap-southeast-1
+          role-to-assume: arn:aws:iam::${{ secrets.SHARED_SERVICES_AWS_ACCOUNT_ID }}:role/supabase-auth-artifacts-role-936f98a
+          role-skip-session-tagging: true
+          role-session-name: upload-assets
+          role-chaining: true
+
       - name: Upload release artifacts
         if: ${{ steps.release.outputs.release_created == 'true' || steps.release.outputs.prs_created == 'true' }}
         run: |
@@ -135,7 +152,7 @@ jobs:
             CHECKSUM_CONTENT=$(cat checksums.txt)
 
             RELEASE_NOTES=$(printf "This is a release candidate. See release-please PR #%s for context.\n\n%s\n" "$PR_NUMBER" "$CHECKSUM_CONTENT")
-            
+
             GH_TOKEN='${{ github.token }}' gh release \
               create $RELEASE_NAME \
               --title "v$RELEASE_VERSION" \
@@ -171,7 +188,9 @@ jobs:
           FULL_NOTES=$(printf "%s\n\n%s\n" "$EXISTING_NOTES" "$CHECKSUM_CONTENT")
           GH_TOKEN='${{ github.token }}' gh release edit $RELEASE_NAME -n "$FULL_NOTES"
 
-          GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz ./auth-v$RELEASE_VERSION.supafast-arm64.tar.gz
+          GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.xz
+
+          aws s3 cp ./auth-v$RELEASE_VERSION-arm64.tar.xz s3://supabase-internal-artifacts/auth/$RELEASE_VERSION/
 
   publish:
     needs:
