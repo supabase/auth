@@ -191,6 +191,7 @@ jobs:
 
           GH_TOKEN='${{ github.token }}' gh release upload $RELEASE_NAME ./auth-v$RELEASE_VERSION-x86.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.gz ./auth-v$RELEASE_VERSION-arm64.tar.xz
 
+          # Upload to Supabase internal bucket
           aws s3 cp ./auth-v$RELEASE_VERSION-arm64.tar.xz s3://supabase-internal-artifacts/auth/$RELEASE_VERSION/
 
   publish:
