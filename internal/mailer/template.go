@@ -36,9 +36,9 @@ type MailClient interface {
 
 // TemplateMailer will send mail and use templates from the site for easy mail styling
 type TemplateMailer struct {
-	SiteURL string
-	Config  *conf.GlobalConfiguration
-	Mailer  MailClient
+	SiteURL    string
+	Config     *conf.GlobalConfiguration
+	MailClient MailClient
 }
 
 func encodeRedirectURL(referrerURL string) string {
@@ -157,7 +157,7 @@ func (m *TemplateMailer) InviteMail(r *http.Request, user *models.User, otp, ref
 		"RedirectTo":      referrerURL,
 	}
 
-	return m.Mailer.Mail(
+	return m.MailClient.Mail(
 		r.Context(),
 		user.GetEmail(),
 		withDefault(m.Config.Mailer.Subjects.Invite, "You have been invited"),
@@ -190,7 +190,7 @@ func (m *TemplateMailer) ConfirmationMail(r *http.Request, user *models.User, ot
 		"RedirectTo":      referrerURL,
 	}
 
-	return m.Mailer.Mail(
+	return m.MailClient.Mail(
 		r.Context(),
 		user.GetEmail(),
 		withDefault(m.Config.Mailer.Subjects.Confirmation, "Confirm Your Email"),
@@ -211,7 +211,7 @@ func (m *TemplateMailer) ReauthenticateMail(r *http.Request, user *models.User, 
 		"Data":    user.UserMetaData,
 	}
 
-	return m.Mailer.Mail(
+	return m.MailClient.Mail(
 		r.Context(),
 		user.GetEmail(),
 		withDefault(m.Config.Mailer.Subjects.Reauthentication, "Confirm reauthentication"),
@@ -281,7 +281,7 @@ func (m *TemplateMailer) EmailChangeMail(r *http.Request, user *models.User, otp
 				"Data":            user.UserMetaData,
 				"RedirectTo":      referrerURL,
 			}
-			errors <- m.Mailer.Mail(
+			errors <- m.MailClient.Mail(
 				ctx,
 				address,
 				withDefault(m.Config.Mailer.Subjects.EmailChange, "Confirm Email Change"),
@@ -323,7 +323,7 @@ func (m *TemplateMailer) RecoveryMail(r *http.Request, user *models.User, otp, r
 		"RedirectTo":      referrerURL,
 	}
 
-	return m.Mailer.Mail(
+	return m.MailClient.Mail(
 		r.Context(),
 		user.GetEmail(),
 		withDefault(m.Config.Mailer.Subjects.Recovery, "Reset Your Password"),
@@ -356,7 +356,7 @@ func (m *TemplateMailer) MagicLinkMail(r *http.Request, user *models.User, otp, 
 		"RedirectTo":      referrerURL,
 	}
 
-	return m.Mailer.Mail(
+	return m.MailClient.Mail(
 		r.Context(),
 		user.GetEmail(),
 		withDefault(m.Config.Mailer.Subjects.MagicLink, "Your Magic Link"),

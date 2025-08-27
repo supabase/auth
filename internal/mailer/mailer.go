@@ -1,6 +1,7 @@
 package mailer
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -39,34 +40,81 @@ type EmailData struct {
 
 // NewMailer returns a new gotrue mailer
 func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
-	from := globalConfig.SMTP.FromAddress()
-	u, _ := url.ParseRequestURI(globalConfig.API.ExternalURL)
+	mailClient := NewMailClient(globalConfig)
+	return &TemplateMailer{
+		SiteURL:    globalConfig.SiteURL,
+		Config:     globalConfig,
+		MailClient: mailClient,
+	}
+}
 
-	var mailClient MailClient
+type emailValidatorMailClient struct {
+	ev *EmailValidator
+	mc MailClient
+}
+
+// Mail implements mailer.MailClient interface by calling validate before
+// passing the mail request to the next MailClient.
+func (o *emailValidatorMailClient) Mail(
+	ctx context.Context,
+	to string,
+	subjectTemplate string,
+	templateURL string,
+	defaultTemplate string,
+	templateData map[string]any,
+	headers map[string][]string,
+	typ string,
+) error {
+	if err := o.ev.Validate(ctx, to); err != nil {
+		return err
+	}
+	return o.mc.Mail(
+		ctx,
+		to,
+		subjectTemplate,
+		templateURL,
+		defaultTemplate,
+		templateData,
+		headers,
+		typ,
+	)
+}
+
+// NewMailerWithClient returns a new Mailer that will use the given MailClient.
+func NewMailerWithClient(
+	globalConfig *conf.GlobalConfiguration,
+	mailClient MailClient,
+) Mailer {
+	ev := newEmailValidator(globalConfig.Mailer)
+	mr := &emailValidatorMailClient{ev: ev, mc: mailClient}
+	return &TemplateMailer{
+		SiteURL:    globalConfig.SiteURL,
+		Config:     globalConfig,
+		MailClient: mr,
+	}
+}
+
+// NewMailClient returns a new MailClient based on the given configuration.
+func NewMailClient(globalConfig *conf.GlobalConfiguration) MailClient {
 	if globalConfig.SMTP.Host == "" {
 		logrus.Infof("Noop mail client being used for %v", globalConfig.SiteURL)
-		mailClient = &noopMailClient{
-			EmailValidator: newEmailValidator(globalConfig.Mailer),
-		}
-	} else {
-		mailClient = &MailmeMailer{
-			Host:           globalConfig.SMTP.Host,
-			Port:           globalConfig.SMTP.Port,
-			User:           globalConfig.SMTP.User,
-			Pass:           globalConfig.SMTP.Pass,
-			LocalName:      u.Hostname(),
-			From:           from,
-			BaseURL:        globalConfig.SiteURL,
-			Logger:         logrus.StandardLogger(),
-			MailLogging:    globalConfig.SMTP.LoggingEnabled,
+		return &noopMailClient{
 			EmailValidator: newEmailValidator(globalConfig.Mailer),
 		}
 	}
 
-	return &TemplateMailer{
-		SiteURL: globalConfig.SiteURL,
-		Config:  globalConfig,
-		Mailer:  mailClient,
+	from := globalConfig.SMTP.FromAddress()
+	u, _ := url.ParseRequestURI(globalConfig.API.ExternalURL)
+	return &MailmeMailer{
+		Host:        globalConfig.SMTP.Host,
+		Port:        globalConfig.SMTP.Port,
+		User:        globalConfig.SMTP.User,
+		Pass:        globalConfig.SMTP.Pass,
+		LocalName:   u.Hostname(),
+		From:        from,
+		BaseURL:     globalConfig.SiteURL,
+		Logger:      logrus.StandardLogger(),
+		MailLogging: globalConfig.SMTP.LoggingEnabled,
 	}
 }
 
