@@ -1,3 +1,5 @@
+// Package apitask provides a background execution context for background work
+// that limits the execution time to the current request.
 package apitask
 
 import (
