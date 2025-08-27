@@ -19,6 +19,7 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/tokens"
 	"github.com/supabase/auth/internal/utilities"
 	"github.com/supabase/hibp"
 )
@@ -41,6 +42,7 @@ type API struct {
 	hibpClient       *hibp.PwnedClient
 	oauthServer      *oauthserver.Server
 	mailerClientFunc func() mailer.MailClient
+	tokenService *tokens.Service
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
@@ -50,6 +52,7 @@ type API struct {
 
 func (a *API) GetConfig() *conf.GlobalConfiguration { return a.config }
 func (a *API) GetDB() *storage.Connection           { return a.db }
+func (a *API) GetTokenService() *tokens.Service     { return a.tokenService }
 
 func (a *API) Version() string {
 	return a.version
@@ -107,6 +110,15 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		pgfuncDr := hookspgfunc.New(db)
 		api.hooksMgr = v0hooks.NewManager(globalConfig, httpDr, pgfuncDr)
 	}
+
+	// Initialize token service if not provided via options
+	if api.tokenService == nil {
+		api.tokenService = tokens.NewService(globalConfig, api.hooksMgr)
+	}
+
+	// Connect token service to API's time function (supports test overrides)
+	api.tokenService.SetTimeFunc(api.Now)
+
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
 			// all HIBP API requests should finish quickly to avoid

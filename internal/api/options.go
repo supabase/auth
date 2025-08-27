@@ -8,6 +8,7 @@ import (
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/ratelimit"
+	"github.com/supabase/auth/internal/tokens"
 )
 
 type Option interface {
@@ -43,6 +44,19 @@ type LimiterOptions struct {
 
 func (lo *LimiterOptions) apply(a *API) { a.limiterOpts = lo }
 
+// TokenServiceOption allows injecting a custom token service
+type TokenServiceOption struct {
+	service *tokens.Service
+}
+
+func WithTokenService(service *tokens.Service) *TokenServiceOption {
+	return &TokenServiceOption{service: service}
+}
+
+func (tso *TokenServiceOption) apply(a *API) {
+	a.tokenService = tso.service
+}
+
 func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 	o := &LimiterOptions{}
 
@@ -60,11 +74,6 @@ func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 		}).SetBurst(30)
 
 	o.Verify = tollbooth.NewLimiter(gc.RateLimitVerify/(60*5),
-		&limiter.ExpirableOptions{
-			DefaultExpirationTTL: time.Hour,
-		}).SetBurst(30)
-
-	o.User = tollbooth.NewLimiter(gc.RateLimitOtp/(60*5),
 		&limiter.ExpirableOptions{
 			DefaultExpirationTTL: time.Hour,
 		}).SetBurst(30)
@@ -89,11 +98,6 @@ func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 			DefaultExpirationTTL: time.Hour,
 		}).SetBurst(30)
 
-	o.Signups = tollbooth.NewLimiter(gc.RateLimitOtp/(60*5),
-		&limiter.ExpirableOptions{
-			DefaultExpirationTTL: time.Hour,
-		}).SetBurst(30)
-
 	o.Web3 = tollbooth.NewLimiter(gc.RateLimitWeb3/(60*5),
 		&limiter.ExpirableOptions{
 			DefaultExpirationTTL: time.Hour,
@@ -104,7 +108,8 @@ func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 	o.Resend = newLimiterPer5mOver1h(gc.RateLimitOtp)
 	o.MagicLink = newLimiterPer5mOver1h(gc.RateLimitOtp)
 	o.Otp = newLimiterPer5mOver1h(gc.RateLimitOtp)
-
+	o.User = newLimiterPer5mOver1h(gc.RateLimitOtp)
+	o.Signups = newLimiterPer5mOver1h(gc.RateLimitOtp)
 	o.OAuthClientRegister = newLimiterPer5mOver1h(gc.RateLimitOAuthDynamicClientRegister)
 
 	return o
