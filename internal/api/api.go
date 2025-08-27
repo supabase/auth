@@ -42,7 +42,7 @@ type API struct {
 	hibpClient       *hibp.PwnedClient
 	oauthServer      *oauthserver.Server
 	mailerClientFunc func() mailer.MailClient
-	tokenService *tokens.Service
+	tokenService     *tokens.Service
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
