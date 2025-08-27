@@ -15,10 +15,6 @@ import (
 // ErrTask is the base of all errors originating from apitasks.
 var ErrTask = errors.New("apitask")
 
-var (
-	cfgWorkerLogging = true
-)
-
 // Middleware wraps next with an http.Handler which adds apitasks handling
 // to the request context and waits for all tasks to exit before returning.
 func Middleware(next http.Handler) http.Handler {
