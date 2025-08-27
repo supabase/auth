@@ -19,6 +19,7 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/tokens"
 	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/oauth2"
 )
@@ -109,7 +110,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		claims.LinkingTargetID = linkingTargetUser.ID.String()
 	}
 
-	tokenString, err := signJwt(&config.JWT, claims)
+	tokenString, err := tokens.SignJWT(&config.JWT, claims)
 	if err != nil {
 		return "", apierrors.NewInternalServerError("Error creating state").WithInternalError(err)
 	}
