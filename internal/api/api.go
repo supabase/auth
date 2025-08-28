@@ -38,11 +38,10 @@ type API struct {
 	config  *conf.GlobalConfiguration
 	version string
 
-	hooksMgr         *v0hooks.Manager
-	hibpClient       *hibp.PwnedClient
-	oauthServer      *oauthserver.Server
-	mailerClientFunc func() mailer.MailClient
-	tokenService     *tokens.Service
+	hooksMgr     *v0hooks.Manager
+	hibpClient   *hibp.PwnedClient
+	oauthServer  *oauthserver.Server
+	tokenService *tokens.Service
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
@@ -99,11 +98,6 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	}
 	if api.limiterOpts == nil {
 		api.limiterOpts = NewLimiterOptions(globalConfig)
-	}
-	if api.mailerClientFunc == nil {
-		api.mailerClientFunc = func() mailer.MailClient {
-			return mailer.NewMailClient(globalConfig)
-		}
 	}
 	if api.hooksMgr == nil {
 		httpDr := hookshttp.New()
@@ -376,8 +370,7 @@ func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) error {
 
 // Mailer returns NewMailer with the current tenant config
 func (a *API) Mailer() mailer.Mailer {
-	config := a.config
-	return mailer.NewMailerWithClient(config, a.mailerClientFunc())
+	return newMailer(a.config)
 }
 
 // ServeHTTP implements the http.Handler interface by passing the request along

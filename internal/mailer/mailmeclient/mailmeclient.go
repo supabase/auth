@@ -1,4 +1,6 @@
-package mailer
+// Package mailmeclient provides an implementation of mailer.Client that uses
+// gopkg.in/gomail.v2 to send via SMTP.
+package mailmeclient
 
 import (
 	"bytes"
@@ -8,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -15,16 +18,17 @@ import (
 	"gopkg.in/gomail.v2"
 
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/conf"
 )
 
-// TemplateRetries is the amount of time MailMe will try to fetch a URL before giving up
-const TemplateRetries = 3
+// templateRetries is the amount of time MailMe will try to fetch a URL before giving up
+const templateRetries = 3
 
-// TemplateExpiration is the time period that the template will be cached for
-const TemplateExpiration = 10 * time.Second
+// templateExpiration is the time period that the template will be cached for
+const templateExpiration = 10 * time.Second
 
-// MailmeMailer lets MailMe send templated mails
-type MailmeMailer struct {
+// Client lets MailMe send templated mails
+type Client struct {
 	From        string
 	Host        string
 	Port        int
@@ -33,26 +37,44 @@ type MailmeMailer struct {
 	BaseURL     string
 	LocalName   string
 	FuncMap     template.FuncMap
-	cache       *TemplateCache
 	Logger      logrus.FieldLogger
 	MailLogging bool
+
+	cache *templateCache
+}
+
+// New returns a new *Mailer based on the given configuration.
+func New(globalConfig *conf.GlobalConfiguration) *Client {
+	from := globalConfig.SMTP.FromAddress()
+	u, _ := url.ParseRequestURI(globalConfig.API.ExternalURL)
+	return &Client{
+		Host:        globalConfig.SMTP.Host,
+		Port:        globalConfig.SMTP.Port,
+		User:        globalConfig.SMTP.User,
+		Pass:        globalConfig.SMTP.Pass,
+		LocalName:   u.Hostname(),
+		From:        from,
+		BaseURL:     globalConfig.SiteURL,
+		Logger:      logrus.StandardLogger(),
+		MailLogging: globalConfig.SMTP.LoggingEnabled,
+	}
 }
 
 // Mail sends a templated mail. It will try to load the template from a URL, and
 // otherwise fall back to the default
-func (m *MailmeMailer) Mail(
+func (m *Client) Mail(
 	ctx context.Context,
 	to, subjectTemplate, templateURL, defaultTemplate string,
-	templateData map[string]interface{},
+	templateData map[string]any,
 	headers map[string][]string,
 	typ string,
 ) error {
 	if m.FuncMap == nil {
-		m.FuncMap = map[string]interface{}{}
+		m.FuncMap = map[string]any{}
 	}
 	if m.cache == nil {
-		m.cache = &TemplateCache{
-			templates: map[string]*MailTemplate{},
+		m.cache = &templateCache{
+			templates: map[string]*mailTemplate{},
 			funcMap:   m.FuncMap,
 			logger:    m.Logger,
 		}
@@ -69,7 +91,7 @@ func (m *MailmeMailer) Mail(
 		return err
 	}
 
-	body, err := m.MailBody(templateURL, defaultTemplate, templateData)
+	body, err := m.mailBody(templateURL, defaultTemplate, templateData)
 	if err != nil {
 		return err
 	}
@@ -109,37 +131,37 @@ func (m *MailmeMailer) Mail(
 	return nil
 }
 
-type MailTemplate struct {
+type mailTemplate struct {
 	tmp       *template.Template
 	expiresAt time.Time
 }
 
-type TemplateCache struct {
-	templates map[string]*MailTemplate
+type templateCache struct {
+	templates map[string]*mailTemplate
 	mutex     sync.Mutex
 	funcMap   template.FuncMap
 	logger    logrus.FieldLogger
 }
 
-func (t *TemplateCache) Get(url string) (*template.Template, error) {
+func (t *templateCache) Get(url string) (*template.Template, error) {
 	cached, ok := t.templates[url]
 	if ok && (cached.expiresAt.Before(time.Now())) {
 		return cached.tmp, nil
 	}
-	data, err := t.fetchTemplate(url, TemplateRetries)
+	data, err := t.fetchTemplate(url, templateRetries)
 	if err != nil {
 		return nil, err
 	}
-	return t.Set(url, data, TemplateExpiration)
+	return t.Set(url, data, templateExpiration)
 }
 
-func (t *TemplateCache) Set(key, value string, expirationTime time.Duration) (*template.Template, error) {
+func (t *templateCache) Set(key, value string, expirationTime time.Duration) (*template.Template, error) {
 	parsed, err := template.New(key).Funcs(t.funcMap).Parse(value)
 	if err != nil {
 		return nil, err
 	}
 
-	cached := &MailTemplate{
+	cached := &mailTemplate{
 		tmp:       parsed,
 		expiresAt: time.Now().Add(expirationTime),
 	}
@@ -149,7 +171,7 @@ func (t *TemplateCache) Set(key, value string, expirationTime time.Duration) (*t
 	return parsed, nil
 }
 
-func (t *TemplateCache) fetchTemplate(url string, triesLeft int) (string, error) {
+func (t *templateCache) fetchTemplate(url string, triesLeft int) (string, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -178,12 +200,12 @@ func (t *TemplateCache) fetchTemplate(url string, triesLeft int) (string, error)
 	return "", errors.New("mailer: unable to fetch mail template")
 }
 
-func (m *MailmeMailer) MailBody(url string, defaultTemplate string, data map[string]interface{}) (string, error) {
+func (m *Client) mailBody(url string, defaultTemplate string, data map[string]any) (string, error) {
 	if m.FuncMap == nil {
-		m.FuncMap = map[string]interface{}{}
+		m.FuncMap = map[string]any{}
 	}
 	if m.cache == nil {
-		m.cache = &TemplateCache{templates: map[string]*MailTemplate{}, funcMap: m.FuncMap}
+		m.cache = &templateCache{templates: map[string]*mailTemplate{}, funcMap: m.FuncMap}
 	}
 
 	var temp *template.Template

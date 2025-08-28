@@ -4,10 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"github.com/supabase/auth/internal/conf"
-	"github.com/supabase/auth/internal/e2e"
-	"github.com/supabase/auth/internal/mailer"
 )
 
 func TestNewLimiterOptions(t *testing.T) {
@@ -30,18 +27,4 @@ func TestNewLimiterOptions(t *testing.T) {
 	assert.NotNil(t, rl.FactorChallenge)
 	assert.NotNil(t, rl.SSO)
 	assert.NotNil(t, rl.SAMLAssertion)
-}
-
-func TestMailerOptions(t *testing.T) {
-	globalCfg := e2e.Must(e2e.Config())
-	conn := e2e.Must(e2e.Conn(globalCfg))
-
-	sentinelMailer := mailer.NewMailClient(globalCfg)
-	mailerOpts := &MailerOptions{MailerClientFunc: func() mailer.MailClient {
-		return sentinelMailer
-	}}
-	a := NewAPIWithVersion(globalCfg, conn, apiTestVersion, mailerOpts)
-
-	got := a.mailerClientFunc()
-	require.Equal(t, sentinelMailer, got)
 }

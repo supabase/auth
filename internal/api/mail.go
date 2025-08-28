@@ -6,8 +6,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
+	"github.com/supabase/auth/internal/mailer"
 	mail "github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/mailer/mailmeclient"
+	"github.com/supabase/auth/internal/mailer/noopclient"
+	"github.com/supabase/auth/internal/mailer/taskclient"
+	"github.com/supabase/auth/internal/mailer/templatemailer"
+	"github.com/supabase/auth/internal/mailer/validateclient"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
@@ -22,6 +30,26 @@ import (
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
 )
+
+// newMailer returns a new gotrue mailer
+func newMailer(globalConfig *conf.GlobalConfiguration) *templatemailer.TemplateMailer {
+	var mc mailer.Client
+	if globalConfig.SMTP.Host == "" {
+		logrus.Infof("Noop mail client being used for %v", globalConfig.SiteURL)
+		mc = noopclient.New()
+	} else {
+		mc = mailmeclient.New(globalConfig)
+	}
+
+	// Wrap client with validation first
+	mc = validateclient.New(globalConfig, mc)
+
+	// Then background tasks
+	mc = taskclient.New(globalConfig, mc)
+
+	// Finally the template mailer
+	return templatemailer.New(globalConfig, mc)
+}
 
 var (
 	EmailRateLimitExceeded error = errors.New("email rate limit exceeded")
@@ -705,9 +733,9 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	}
 
 	switch {
-	case errors.Is(err, mail.ErrInvalidEmailAddress),
-		errors.Is(err, mail.ErrInvalidEmailFormat),
-		errors.Is(err, mail.ErrInvalidEmailDNS):
+	case errors.Is(err, validateclient.ErrInvalidEmailAddress),
+		errors.Is(err, validateclient.ErrInvalidEmailFormat),
+		errors.Is(err, validateclient.ErrInvalidEmailDNS):
 		return apierrors.NewBadRequestError(
 			apierrors.ErrorCodeEmailAddressInvalid,
 			"Email address %q is invalid",

@@ -1,4 +1,6 @@
-package mailer
+// Package noopclient provides an implementation of mailer.Client that simply
+// does nothing.
+package noopclient
 
 import (
 	"context"
@@ -6,15 +8,18 @@ import (
 	"time"
 )
 
-type noopMailClient struct {
-	EmailValidator *EmailValidator
-	Delay          time.Duration
+type Client struct {
+	Delay time.Duration
 }
 
-func (m *noopMailClient) Mail(
+func New() *Client {
+	return &Client{}
+}
+
+func (m *Client) Mail(
 	ctx context.Context,
 	to, subjectTemplate, templateURL, defaultTemplate string,
-	templateData map[string]interface{},
+	templateData map[string]any,
 	headers map[string][]string,
 	typ string,
 ) error {
@@ -27,12 +32,6 @@ func (m *noopMailClient) Mail(
 		case <-time.After(m.Delay):
 		case <-ctx.Done():
 			return ctx.Err()
-		}
-	}
-
-	if m.EmailValidator != nil {
-		if err := m.EmailValidator.Validate(ctx, to); err != nil {
-			return err
 		}
 	}
 	return nil
