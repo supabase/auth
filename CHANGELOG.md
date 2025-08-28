@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.179.0](https://github.com/supabase/auth/compare/v2.178.0...v2.179.0) (2025-08-28)
+
+
+### Features
+
+* add oauth2 client support ([#2098](https://github.com/supabase/auth/issues/2098)) ([8fae015](https://github.com/supabase/auth/commit/8fae01581d122bba95a3742dc212284f9a21dc4d))
+* experimental own linking domains per provider ([#2119](https://github.com/supabase/auth/issues/2119)) ([747bf3b](https://github.com/supabase/auth/commit/747bf3b15fd9e371c9330e75fe2e5de8b89ce14d))
+* fetch email from snapchat oauth provider if available for consistency ([#2110](https://github.com/supabase/auth/issues/2110)) ([7507822](https://github.com/supabase/auth/commit/750782246e736093131ba2eb1015fc73083d99ab))
+* implement link identity with oidc / native sign in ([#2108](https://github.com/supabase/auth/issues/2108)) ([5f0ec87](https://github.com/supabase/auth/commit/5f0ec8709231c57b57aa06160e18bc9e52ec9002))
+* implements email-less accounts with oauth ([#2105](https://github.com/supabase/auth/issues/2105)) ([9a61dae](https://github.com/supabase/auth/commit/9a61dae788311a086ce8e72b52c21e031857adf7))
+* introduce request-scoped background tasks & async mail sending ([#2126](https://github.com/supabase/auth/issues/2126)) ([2c8ea61](https://github.com/supabase/auth/commit/2c8ea6113ae7381106ed7c67d7a45f7ef87195c7))
+* refactor mailer client wiring and add validation wrapper ([#2130](https://github.com/supabase/auth/issues/2130)) ([68c40a6](https://github.com/supabase/auth/commit/68c40a6a494029d8d704b14abbe85171a7dc8d12))
+* support multiple `aud` for the external providers ([#2117](https://github.com/supabase/auth/issues/2117)) ([ca5792e](https://github.com/supabase/auth/commit/ca5792e41a48f20a395646015c28ce272355bf63))
+* use `slices.Contains` instead of for loops ([#2111](https://github.com/supabase/auth/issues/2111)) ([9f22682](https://github.com/supabase/auth/commit/9f2268263118713d3390ce4617ccf21bc2c031eb))
+
+
+### Bug Fixes
+
+* add `id-token` permission to ci ([#2143](https://github.com/supabase/auth/issues/2143)) ([79209c0](https://github.com/supabase/auth/commit/79209c0e35afa82ec8822a343108d6a690e14229))
+* add missing param ([#2125](https://github.com/supabase/auth/issues/2125)) ([c0b75f6](https://github.com/supabase/auth/commit/c0b75f66229410e6e5fbc7cd1ae9066cec54c5d7))
+* change s3 artifact upload role ([#2145](https://github.com/supabase/auth/issues/2145)) ([767e371](https://github.com/supabase/auth/commit/767e37131aa01bf6cb27dbc62b2928e7cc701893))
+* remove requirement of empty content-type on 204 ([#2128](https://github.com/supabase/auth/issues/2128)) ([ecc97e0](https://github.com/supabase/auth/commit/ecc97e0fac7cb1bd736ef6db435a0a5fb224e954))
+* run release-please again ([#2144](https://github.com/supabase/auth/issues/2144)) ([2560f14](https://github.com/supabase/auth/commit/2560f14ef6ee35f84b7c592290647e0d1c8a3932))
+* stripped binary now includes version ([#2147](https://github.com/supabase/auth/issues/2147)) ([609f169](https://github.com/supabase/auth/commit/609f169f505a1f5750fbbf5e9d477cfb4d879eff))
+* update copyright year in LICENSE ([#2142](https://github.com/supabase/auth/issues/2142)) ([67fe0b0](https://github.com/supabase/auth/commit/67fe0b0230b147048dc2b9f546df72af5b3bc362))
+
 ## [2.178.0](https://github.com/supabase/auth/compare/v2.177.0...v2.178.0) (2025-08-05)
 
 
