@@ -9,7 +9,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
-	"github.com/supabase/auth/internal/mailer"
 	mail "github.com/supabase/auth/internal/mailer"
 	"github.com/supabase/auth/internal/mailer/mailmeclient"
 	"github.com/supabase/auth/internal/mailer/noopclient"
@@ -33,7 +32,7 @@ import (
 
 // newMailer returns a new gotrue mailer
 func newMailer(globalConfig *conf.GlobalConfiguration) *templatemailer.TemplateMailer {
-	var mc mailer.Client
+	var mc mail.Client
 	if globalConfig.SMTP.Host == "" {
 		logrus.Infof("Noop mail client being used for %v", globalConfig.SiteURL)
 		mc = noopclient.New()
