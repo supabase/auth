@@ -1,10 +1,13 @@
 .PHONY: all build deps dev-deps image migrate test vet sec format unused
 CHECK_FILES?=./...
 
-FLAGS=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=`git describe --tags`" -buildvcs=false
 ifdef RELEASE_VERSION
-	FLAGS=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=v$(RELEASE_VERSION)" -buildvcs=false
+	VERSION=v$(RELEASE_VERSION)
+else
+	VERSION=$(shell git describe --tags)
 endif
+
+FLAGS=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=$(VERSION)" -buildvcs=false
 
 ifneq ($(shell docker compose version 2>/dev/null),)
   DOCKER_COMPOSE=docker compose
@@ -23,7 +26,10 @@ build: deps ## Build the binary.
 	CGO_ENABLED=0 go build $(FLAGS)
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o auth-arm64
 
-build-strip: deps ## Build a stripped binary.
+build-strip: deps ## Build a stripped binary, for which the version file needs to be rewritten.
+	echo "package utilities" > internal/utilities/version.go
+	echo "const Version = \"$(VERSION)\"" >> internal/utilities/version.go
+
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
 		$(FLAGS) -ldflags "-s -w" -o auth-arm64-strip
 
