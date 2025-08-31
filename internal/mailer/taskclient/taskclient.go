@@ -27,13 +27,11 @@ func New(globalConfig *conf.GlobalConfiguration, mc mailer.Client) mailer.Client
 type Task struct {
 	mc mailer.Client
 
-	To              string              `json:"to"`
-	SubjectTemplate string              `json:"subject_template"`
-	TemplateURL     string              `json:"template_url"`
-	DefaultTemplate string              `json:"default_template"`
-	TemplateData    map[string]any      `json:"template_data"`
-	Headers         map[string][]string `json:"headers"`
-	Typ             string              `json:"typ"`
+	To      string              `json:"to"`
+	Subject string              `json:"subject"`
+	Body    string              `json:"body"`
+	Headers map[string][]string `json:"headers"`
+	Typ     string              `json:"typ"`
 }
 
 // Run implements the Type method of the apitask.Task interface by returning
@@ -46,10 +44,8 @@ func (o *Task) Run(ctx context.Context) error {
 	return o.mc.Mail(
 		ctx,
 		o.To,
-		o.SubjectTemplate,
-		o.TemplateURL,
-		o.DefaultTemplate,
-		o.TemplateData,
+		o.Subject,
+		o.Body,
 		o.Headers,
 		o.Typ)
 }
@@ -63,22 +59,18 @@ type backgroundMailClient struct {
 func (o *backgroundMailClient) Mail(
 	ctx context.Context,
 	to string,
-	subjectTemplate string,
-	templateURL string,
-	defaultTemplate string,
-	templateData map[string]any,
+	subject string,
+	body string,
 	headers map[string][]string,
 	typ string,
 ) error {
 	tk := &Task{
-		mc:              o.mc,
-		To:              to,
-		SubjectTemplate: subjectTemplate,
-		TemplateURL:     templateURL,
-		DefaultTemplate: defaultTemplate,
-		TemplateData:    templateData,
-		Headers:         headers,
-		Typ:             typ,
+		mc:      o.mc,
+		To:      to,
+		Subject: subject,
+		Body:    body,
+		Headers: headers,
+		Typ:     typ,
 	}
 	return apitask.Run(ctx, tk)
 }

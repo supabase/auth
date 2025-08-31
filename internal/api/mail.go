@@ -31,7 +31,7 @@ import (
 )
 
 // newMailer returns a new gotrue mailer
-func newMailer(globalConfig *conf.GlobalConfiguration) *templatemailer.TemplateMailer {
+func newMailer(globalConfig *conf.GlobalConfiguration) *templatemailer.Mailer {
 	var mc mail.Client
 	if globalConfig.SMTP.Host == "" {
 		logrus.Infof("Noop mail client being used for %v", globalConfig.SiteURL)
