@@ -31,14 +31,13 @@ type Mailer interface {
 	GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error)
 }
 
+// TODO(cstockton): Mail(...) -> Mail(Email{...}) ?
 type Client interface {
 	Mail(
 		ctx context.Context,
 		to string,
-		subjectTemplate string,
-		templateURL string,
-		defaultTemplate string,
-		templateData map[string]any,
+		subject string,
+		body string,
 		headers map[string][]string,
 		typ string,
 	) error

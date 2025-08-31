@@ -18,8 +18,9 @@ func New() *Client {
 
 func (m *Client) Mail(
 	ctx context.Context,
-	to, subjectTemplate, templateURL, defaultTemplate string,
-	templateData map[string]any,
+	to string,
+	subject string,
+	body string,
 	headers map[string][]string,
 	typ string,
 ) error {

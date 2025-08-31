@@ -101,10 +101,8 @@ type emailValidatorMailClient struct {
 func (o *emailValidatorMailClient) Mail(
 	ctx context.Context,
 	to string,
-	subjectTemplate string,
-	templateURL string,
-	defaultTemplate string,
-	templateData map[string]any,
+	subject string,
+	body string,
 	headers map[string][]string,
 	typ string,
 ) error {
@@ -114,10 +112,8 @@ func (o *emailValidatorMailClient) Mail(
 	return o.mc.Mail(
 		ctx,
 		to,
-		subjectTemplate,
-		templateURL,
-		defaultTemplate,
-		templateData,
+		subject,
+		body,
 		headers,
 		typ,
 	)
