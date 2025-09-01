@@ -40,11 +40,14 @@ func TestOAuthServerClient(t *testing.T) {
 
 func (ts *OAuthServerClientTestSuite) TestOAuthServerClientValidation() {
 	testClientName := "Test Client"
+	testSecretHash, _ := bcrypt.GenerateFromPassword([]byte("test_secret"), bcrypt.DefaultCost)
 	validClient := &OAuthServerClient{
 		ID:               uuid.Must(uuid.NewV4()),
 		ClientID:         "test_client_id",
 		ClientName:       &testClientName,
 		RegistrationType: "dynamic",
+		ClientType:       OAuthServerClientTypeConfidential,
+		ClientSecretHash: string(testSecretHash),
 		RedirectURIs:     "https://example.com/callback",
 		GrantTypes:       "authorization_code,refresh_token",
 	}
@@ -143,11 +146,14 @@ func (ts *OAuthServerClientTestSuite) TestRedirectURIHelpers() {
 
 func (ts *OAuthServerClientTestSuite) TestCreateOAuthServerClient() {
 	testAppName := "Test Application"
+	testSecretHash, _ := bcrypt.GenerateFromPassword([]byte("test_secret"), bcrypt.DefaultCost)
 	client := &OAuthServerClient{
 		ClientID:         "test_client_create_" + uuid.Must(uuid.NewV4()).String()[:8],
 		ClientName:       &testAppName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "dynamic",
+		ClientType:       OAuthServerClientTypeConfidential,
+		ClientSecretHash: string(testSecretHash),
 		RedirectURIs:     "https://example.com/callback",
 	}
 
@@ -173,11 +179,14 @@ func (ts *OAuthServerClientTestSuite) TestCreateOAuthServerClientValidation() {
 func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByID() {
 	// Create a test client
 	testName := "Find By ID Test"
+	testSecretHash, _ := bcrypt.GenerateFromPassword([]byte("test_secret"), bcrypt.DefaultCost)
 	client := &OAuthServerClient{
 		ClientID:         "test_client_find_by_id_" + uuid.Must(uuid.NewV4()).String()[:8],
 		ClientName:       &testName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "dynamic",
+		ClientType:       OAuthServerClientTypeConfidential,
+		ClientSecretHash: string(testSecretHash),
 		RedirectURIs:     "https://example.com/callback",
 	}
 
@@ -199,11 +208,14 @@ func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByID() {
 func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByClientID() {
 	// Create a test client
 	testName := "Find By Client ID Test"
+	testSecretHash, _ := bcrypt.GenerateFromPassword([]byte("test_secret"), bcrypt.DefaultCost)
 	client := &OAuthServerClient{
 		ClientID:         "test_client_find_by_client_id_" + uuid.Must(uuid.NewV4()).String()[:8],
 		ClientName:       &testName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "manual",
+		ClientType:       OAuthServerClientTypeConfidential,
+		ClientSecretHash: string(testSecretHash),
 		RedirectURIs:     "https://example.com/callback",
 	}
 
@@ -225,11 +237,14 @@ func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByClientID() {
 func (ts *OAuthServerClientTestSuite) TestUpdateOAuthServerClient() {
 	// Create a test client
 	originalName := "Original Name"
+	testSecretHash, _ := bcrypt.GenerateFromPassword([]byte("test_secret"), bcrypt.DefaultCost)
 	client := &OAuthServerClient{
 		ClientID:         "test_client_update_" + uuid.Must(uuid.NewV4()).String()[:8],
 		ClientName:       &originalName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "dynamic",
+		ClientType:       OAuthServerClientTypeConfidential,
+		ClientSecretHash: string(testSecretHash),
 		RedirectURIs:     "https://example.com/callback",
 	}
 
@@ -274,11 +289,14 @@ func (ts *OAuthServerClientTestSuite) TestClientSecretHashing() {
 func (ts *OAuthServerClientTestSuite) TestSoftDelete() {
 	// Create a test client
 	testName := "Soft Delete Test"
+	testSecretHash, _ := bcrypt.GenerateFromPassword([]byte("test_secret"), bcrypt.DefaultCost)
 	client := &OAuthServerClient{
 		ClientID:         "test_client_soft_delete_" + uuid.Must(uuid.NewV4()).String()[:8],
 		ClientName:       &testName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "dynamic",
+		ClientType:       OAuthServerClientTypeConfidential,
+		ClientSecretHash: string(testSecretHash),
 		RedirectURIs:     "https://example.com/callback",
 	}
 
