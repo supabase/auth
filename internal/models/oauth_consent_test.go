@@ -10,7 +10,7 @@ import (
 
 func TestNewOAuthServerConsent(t *testing.T) {
 	userID := uuid.Must(uuid.NewV4())
-	clientID := "test-client-id"
+	clientID := uuid.Must(uuid.NewV4())
 	scopes := []string{"openid", "profile", "email"}
 
 	consent := NewOAuthServerConsent(userID, clientID, scopes)
@@ -38,7 +38,7 @@ func TestOAuthServerConsent_IsRevoked(t *testing.T) {
 func TestOAuthServerConsent_Validate(t *testing.T) {
 	validConsent := &OAuthServerConsent{
 		UserID:    uuid.Must(uuid.NewV4()),
-		ClientID:  "test-client",
+		ClientID:  uuid.Must(uuid.NewV4()),
 		Scopes:    "openid profile",
 		GrantedAt: time.Now(),
 	}
@@ -61,7 +61,7 @@ func TestOAuthServerConsent_Validate(t *testing.T) {
 		},
 		{
 			name:    "missing client_id",
-			modify:  func(c *OAuthServerConsent) { c.ClientID = "" },
+			modify:  func(c *OAuthServerConsent) { c.ClientID = uuid.Nil },
 			wantErr: true,
 			errMsg:  "client_id is required",
 		},

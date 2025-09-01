@@ -127,7 +127,7 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 
 	// Store authorization request in database (without user initially)
 	authorization := models.NewOAuthServerAuthorization(
-		params.ClientID,
+		client.ID, // Use the client's UUID instead of the public client_id string
 		params.RedirectURI,
 		params.Scope,
 		params.State,
@@ -144,7 +144,7 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 	}
 
 	observability.LogEntrySetField(r, "authorization_id", authorization.AuthorizationID)
-	observability.LogEntrySetField(r, "client_id", authorization.ClientID)
+	observability.LogEntrySetField(r, "client_id", client.ClientID)
 
 	// Redirect to authorization path with authorization_id
 	if config.OAuthServer.AuthorizationPath == "" {
@@ -241,7 +241,7 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 	}
 
 	observability.LogEntrySetField(r, "authorization_id", authorization.AuthorizationID)
-	observability.LogEntrySetField(r, "client_id", authorization.ClientID)
+	observability.LogEntrySetField(r, "client_id", authorization.Client.ClientID)
 
 	return shared.SendJSON(w, http.StatusOK, response)
 }

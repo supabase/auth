@@ -42,7 +42,7 @@ func (rt OAuthServerResponseType) String() string {
 type OAuthServerAuthorization struct {
 	ID                  uuid.UUID                      `json:"-" db:"id"`
 	AuthorizationID     string                         `json:"authorization_id" db:"authorization_id"`
-	ClientID            string                         `json:"client_id" db:"client_id"`
+	ClientID            uuid.UUID                      `json:"-" db:"client_id"`
 	UserID              *uuid.UUID                     `json:"user_id" db:"user_id"`
 	RedirectURI         string                         `json:"redirect_uri" db:"redirect_uri"`
 	Scope               string                         `json:"scope" db:"scope"`
@@ -67,7 +67,7 @@ func (OAuthServerAuthorization) TableName() string {
 }
 
 // NewOAuthServerAuthorization creates a new OAuth server authorization request without user (for initial flow)
-func NewOAuthServerAuthorization(clientID, redirectURI, scope, state, resource, codeChallenge, codeChallengeMethod string) *OAuthServerAuthorization {
+func NewOAuthServerAuthorization(clientID uuid.UUID, redirectURI, scope, state, resource, codeChallenge, codeChallengeMethod string) *OAuthServerAuthorization {
 	id := uuid.Must(uuid.NewV4())
 	authorizationID := crypto.SecureAlphanumeric(32) // Generate random ID for frontend
 
@@ -173,7 +173,7 @@ func (auth *OAuthServerAuthorization) MarkExpired(tx *storage.Connection) error 
 
 // Validate performs basic validation on the OAuth authorization
 func (auth *OAuthServerAuthorization) Validate() error {
-	if auth.ClientID == "" {
+	if auth.ClientID == uuid.Nil {
 		return fmt.Errorf("client_id is required")
 	}
 	// UserID can be nil initially for unauthenticated authorization requests
@@ -225,9 +225,9 @@ func FindOAuthServerAuthorizationByID(tx *storage.Connection, authorizationID st
 		return nil, errors.Wrap(err, "error finding OAuth authorization")
 	}
 
-	if auth.ClientID != "" {
+	if auth.ClientID != uuid.Nil {
 		client := &OAuthServerClient{}
-		if err := tx.Q().Where("client_id = ?", auth.ClientID).First(client); err == nil {
+		if err := tx.Q().Where("id = ?", auth.ClientID).First(client); err == nil {
 			auth.Client = client
 		}
 	}
@@ -246,9 +246,9 @@ func FindOAuthServerAuthorizationByCode(tx *storage.Connection, code string) (*O
 	}
 
 	// Load client relationship (always present)
-	if auth.ClientID != "" {
+	if auth.ClientID != uuid.Nil {
 		client := &OAuthServerClient{}
-		if err := tx.Q().Where("client_id = ?", auth.ClientID).First(client); err == nil {
+		if err := tx.Q().Where("id = ?", auth.ClientID).First(client); err == nil {
 			auth.Client = client
 		}
 	}

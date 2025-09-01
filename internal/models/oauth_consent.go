@@ -15,7 +15,7 @@ import (
 type OAuthServerConsent struct {
 	ID        uuid.UUID  `json:"id" db:"id"`
 	UserID    uuid.UUID  `json:"user_id" db:"user_id"`
-	ClientID  string     `json:"client_id" db:"client_id"`
+	ClientID  uuid.UUID  `json:"-" db:"client_id"`
 	Scopes    string     `json:"scopes" db:"scopes"`
 	GrantedAt time.Time  `json:"granted_at" db:"granted_at"`
 	RevokedAt *time.Time `json:"revoked_at" db:"revoked_at"`
@@ -27,7 +27,7 @@ func (OAuthServerConsent) TableName() string {
 }
 
 // NewOAuthConsent creates a new OAuth consent record
-func NewOAuthServerConsent(userID uuid.UUID, clientID string, scopes []string) *OAuthServerConsent {
+func NewOAuthServerConsent(userID uuid.UUID, clientID uuid.UUID, scopes []string) *OAuthServerConsent {
 	return &OAuthServerConsent{
 		ID:        uuid.Must(uuid.NewV4()),
 		UserID:    userID,
@@ -84,7 +84,7 @@ func (consent *OAuthServerConsent) Validate() error {
 	if consent.UserID == uuid.Nil {
 		return fmt.Errorf("user_id is required")
 	}
-	if consent.ClientID == "" {
+	if consent.ClientID == uuid.Nil {
 		return fmt.Errorf("client_id is required")
 	}
 	if strings.TrimSpace(consent.Scopes) == "" {
@@ -100,7 +100,7 @@ func (consent *OAuthServerConsent) Validate() error {
 // Query functions for OAuth consents
 
 // FindOAuthServerConsentByUserAndClient finds an OAuth consent by user and client
-func FindOAuthServerConsentByUserAndClient(tx *storage.Connection, userID uuid.UUID, clientID string) (*OAuthServerConsent, error) {
+func FindOAuthServerConsentByUserAndClient(tx *storage.Connection, userID uuid.UUID, clientID uuid.UUID) (*OAuthServerConsent, error) {
 	consent := &OAuthServerConsent{}
 	if err := tx.Eager().Q().Where("user_id = ? AND client_id = ?", userID, clientID).First(consent); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
@@ -112,7 +112,7 @@ func FindOAuthServerConsentByUserAndClient(tx *storage.Connection, userID uuid.U
 }
 
 // FindActiveOAuthServerConsentByUserAndClient finds an active (non-revoked) OAuth consent
-func FindActiveOAuthServerConsentByUserAndClient(tx *storage.Connection, userID uuid.UUID, clientID string) (*OAuthServerConsent, error) {
+func FindActiveOAuthServerConsentByUserAndClient(tx *storage.Connection, userID uuid.UUID, clientID uuid.UUID) (*OAuthServerConsent, error) {
 	consent := &OAuthServerConsent{}
 	if err := tx.Q().Where("user_id = ? AND client_id = ? AND revoked_at IS NULL", userID, clientID).First(consent); err != nil {
 		if errors.Cause(err) == sql.ErrNoRows {
@@ -167,7 +167,7 @@ func UpsertOAuthServerConsent(tx *storage.Connection, consent *OAuthServerConsen
 }
 
 // RevokeOAuthServerConsentsByClient revokes all consents for a specific client
-func RevokeOAuthServerConsentsByClient(tx *storage.Connection, clientID string) error {
+func RevokeOAuthServerConsentsByClient(tx *storage.Connection, clientID uuid.UUID) error {
 	now := time.Now()
 	query := "UPDATE " + (&OAuthServerConsent{}).TableName() + " SET revoked_at = ? WHERE client_id = ? AND revoked_at IS NULL"
 	return tx.RawQuery(query, now, clientID).Exec()

@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewOAuthServerAuthorization(t *testing.T) {
-	clientID := "test-client-id"
+	clientID := uuid.Must(uuid.NewV4())
 	redirectURI := "https://example.com/callback"
 	scope := "openid profile"
 	state := "random-state"
@@ -53,7 +53,7 @@ func TestNewOAuthServerAuthorization_CodeChallengeMethodNormalization(t *testing
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			auth := NewOAuthServerAuthorization(
-				"client-id",
+				uuid.Must(uuid.NewV4()),
 				"https://example.com/callback",
 				"openid",
 				"state",
@@ -291,8 +291,9 @@ func TestOAuthServerAuthorization_MarkExpiredLogic(t *testing.T) {
 
 func TestOAuthServerAuthorization_Validate(t *testing.T) {
 	userID := uuid.Must(uuid.NewV4())
+	clientID := uuid.Must(uuid.NewV4())
 	validAuth := &OAuthServerAuthorization{
-		ClientID:     "test-client",
+		ClientID:     clientID,
 		UserID:       &userID,
 		RedirectURI:  "https://example.com/callback",
 		Scope:        "openid",
@@ -318,7 +319,7 @@ func TestOAuthServerAuthorization_Validate(t *testing.T) {
 	}{
 		{
 			name:    "missing client_id",
-			modify:  func(a *OAuthServerAuthorization) { a.ClientID = "" },
+			modify:  func(a *OAuthServerAuthorization) { a.ClientID = uuid.Nil },
 			wantErr: true,
 			errMsg:  "client_id is required",
 		},

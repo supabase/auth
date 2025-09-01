@@ -17,7 +17,7 @@ end $$;
 create table if not exists {{ index .Options "Namespace" }}.oauth_authorizations (
     id uuid not null,
     authorization_id text not null,
-    client_id text not null references {{ index .Options "Namespace" }}.oauth_clients(client_id) on delete cascade,
+    client_id uuid not null references {{ index .Options "Namespace" }}.oauth_clients(id) on delete cascade,
     user_id uuid null references {{ index .Options "Namespace" }}.users(id) on delete cascade,
     redirect_uri text not null,
     scope text not null,
@@ -60,7 +60,7 @@ create index if not exists oauth_auth_pending_exp_idx
 create table if not exists {{ index .Options "Namespace" }}.oauth_consents (
     id uuid not null,
     user_id uuid not null references {{ index .Options "Namespace" }}.users(id) on delete cascade,
-    client_id text not null references {{ index .Options "Namespace" }}.oauth_clients(client_id) on delete cascade,
+    client_id uuid not null references {{ index .Options "Namespace" }}.oauth_clients(id) on delete cascade,
     scopes text not null,
     granted_at timestamptz not null default now(),
     revoked_at timestamptz null,
