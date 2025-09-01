@@ -55,3 +55,30 @@ func TestEmailEnabledByDefault(t *testing.T) {
 
 	require.True(t, api.config.External.Email.Enabled)
 }
+
+func TestOAuthServerDisabledByDefault(t *testing.T) {
+	api, _, err := setupAPIForTest()
+	require.NoError(t, err)
+
+	// OAuth server should be disabled by default
+	require.False(t, api.config.OAuthServer.Enabled)
+	
+	// OAuth server instance should not be initialized when disabled
+	require.Nil(t, api.oauthServer)
+}
+
+func TestOAuthServerCanBeEnabled(t *testing.T) {
+	api, _, err := setupAPIForTestWithCallback(func(config *conf.GlobalConfiguration, conn *storage.Connection) {
+		if config != nil {
+			// Enable OAuth server
+			config.OAuthServer.Enabled = true
+		}
+	})
+	require.NoError(t, err)
+
+	// OAuth server should be enabled
+	require.True(t, api.config.OAuthServer.Enabled)
+	
+	// OAuth server instance should be initialized when enabled
+	require.NotNil(t, api.oauthServer)
+}

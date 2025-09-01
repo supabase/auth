@@ -20,7 +20,7 @@ type OAuthServerClientTestSuite struct {
 }
 
 func (ts *OAuthServerClientTestSuite) SetupTest() {
-	TruncateAll(ts.db)
+	_ = TruncateAll(ts.db)
 }
 
 func TestOAuthServerClient(t *testing.T) {
@@ -39,10 +39,11 @@ func TestOAuthServerClient(t *testing.T) {
 }
 
 func (ts *OAuthServerClientTestSuite) TestOAuthServerClientValidation() {
+	testClientName := "Test Client"
 	validClient := &OAuthServerClient{
 		ID:               uuid.Must(uuid.NewV4()),
 		ClientID:         "test_client_id",
-		ClientName:       storage.NullString("Test Client"),
+		ClientName:       &testClientName,
 		RegistrationType: "dynamic",
 		RedirectURIs:     "https://example.com/callback",
 		GrantTypes:       "authorization_code,refresh_token",
@@ -141,9 +142,10 @@ func (ts *OAuthServerClientTestSuite) TestRedirectURIHelpers() {
 }
 
 func (ts *OAuthServerClientTestSuite) TestCreateOAuthServerClient() {
+	testAppName := "Test Application"
 	client := &OAuthServerClient{
 		ClientID:         "test_client_create_" + uuid.Must(uuid.NewV4()).String()[:8],
-		ClientName:       storage.NullString("Test Application"),
+		ClientName:       &testAppName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "dynamic",
 		RedirectURIs:     "https://example.com/callback",
@@ -170,9 +172,10 @@ func (ts *OAuthServerClientTestSuite) TestCreateOAuthServerClientValidation() {
 
 func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByID() {
 	// Create a test client
+	testName := "Find By ID Test"
 	client := &OAuthServerClient{
 		ClientID:         "test_client_find_by_id_" + uuid.Must(uuid.NewV4()).String()[:8],
-		ClientName:       storage.NullString("Find By ID Test"),
+		ClientName:       &testName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "dynamic",
 		RedirectURIs:     "https://example.com/callback",
@@ -185,7 +188,7 @@ func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByID() {
 	foundClient, err := FindOAuthServerClientByID(ts.db, client.ID)
 	require.NoError(ts.T(), err)
 	assert.Equal(ts.T(), client.ClientID, foundClient.ClientID)
-	assert.Equal(ts.T(), client.ClientName.String(), foundClient.ClientName.String())
+	assert.Equal(ts.T(), *client.ClientName, *foundClient.ClientName)
 
 	// Test not found
 	_, err = FindOAuthServerClientByID(ts.db, uuid.Must(uuid.NewV4()))
@@ -195,9 +198,10 @@ func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByID() {
 
 func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByClientID() {
 	// Create a test client
+	testName := "Find By Client ID Test"
 	client := &OAuthServerClient{
 		ClientID:         "test_client_find_by_client_id_" + uuid.Must(uuid.NewV4()).String()[:8],
-		ClientName:       storage.NullString("Find By Client ID Test"),
+		ClientName:       &testName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "manual",
 		RedirectURIs:     "https://example.com/callback",
@@ -210,7 +214,7 @@ func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByClientID() {
 	foundClient, err := FindOAuthServerClientByClientID(ts.db, client.ClientID)
 	require.NoError(ts.T(), err)
 	assert.Equal(ts.T(), client.ID, foundClient.ID)
-	assert.Equal(ts.T(), client.ClientName.String(), foundClient.ClientName.String())
+	assert.Equal(ts.T(), *client.ClientName, *foundClient.ClientName)
 
 	// Test not found
 	_, err = FindOAuthServerClientByClientID(ts.db, "nonexistent_client_id")
@@ -220,9 +224,10 @@ func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByClientID() {
 
 func (ts *OAuthServerClientTestSuite) TestUpdateOAuthServerClient() {
 	// Create a test client
+	originalName := "Original Name"
 	client := &OAuthServerClient{
 		ClientID:         "test_client_update_" + uuid.Must(uuid.NewV4()).String()[:8],
-		ClientName:       storage.NullString("Original Name"),
+		ClientName:       &originalName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "dynamic",
 		RedirectURIs:     "https://example.com/callback",
@@ -233,7 +238,8 @@ func (ts *OAuthServerClientTestSuite) TestUpdateOAuthServerClient() {
 	originalUpdatedAt := client.UpdatedAt
 
 	// Update the client
-	client.ClientName = storage.NullString("Updated Name")
+	updatedName := "Updated Name"
+	client.ClientName = &updatedName
 	// client.Description removed - no longer exists
 	client.SetRedirectURIs([]string{"https://updated.example.com/callback"})
 
@@ -243,7 +249,7 @@ func (ts *OAuthServerClientTestSuite) TestUpdateOAuthServerClient() {
 	// Verify updates
 	updatedClient, err := FindOAuthServerClientByID(ts.db, client.ID)
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), "Updated Name", updatedClient.ClientName.String())
+	assert.Equal(ts.T(), "Updated Name", *updatedClient.ClientName)
 	// assert.Equal(ts.T(), "Updated description", updatedClient.Description.String()) // Description field removed
 	assert.Equal(ts.T(), []string{"https://updated.example.com/callback"}, updatedClient.GetRedirectURIs())
 	assert.True(ts.T(), updatedClient.UpdatedAt.After(originalUpdatedAt))
@@ -267,9 +273,10 @@ func (ts *OAuthServerClientTestSuite) TestClientSecretHashing() {
 
 func (ts *OAuthServerClientTestSuite) TestSoftDelete() {
 	// Create a test client
+	testName := "Soft Delete Test"
 	client := &OAuthServerClient{
 		ClientID:         "test_client_soft_delete_" + uuid.Must(uuid.NewV4()).String()[:8],
-		ClientName:       storage.NullString("Soft Delete Test"),
+		ClientName:       &testName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "dynamic",
 		RedirectURIs:     "https://example.com/callback",
