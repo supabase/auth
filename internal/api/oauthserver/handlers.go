@@ -19,6 +19,7 @@ import (
 type OAuthServerClientResponse struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret,omitempty"` // only returned on registration
+	ClientType   string `json:"client_type"`
 
 	RedirectURIs            []string `json:"redirect_uris,omitempty"`
 	TokenEndpointAuthMethod []string `json:"token_endpoint_auth_method,omitempty"`
@@ -41,12 +42,23 @@ type OAuthServerClientListResponse struct {
 
 // oauthServerClientToResponse converts a model to response format
 func oauthServerClientToResponse(client *models.OAuthServerClient, includeSecret bool) *OAuthServerClientResponse {
+	// Set token endpoint auth methods based on client type
+	var tokenEndpointAuthMethods []string
+	if client.IsPublic() {
+		// Public clients don't use client authentication
+		tokenEndpointAuthMethods = []string{models.TokenEndpointAuthMethodNone}
+	} else {
+		// Confidential clients use client secret authentication
+		tokenEndpointAuthMethods = []string{models.TokenEndpointAuthMethodClientSecretBasic, models.TokenEndpointAuthMethodClientSecretPost}
+	}
+
 	response := &OAuthServerClientResponse{
-		ClientID: client.ClientID,
+		ClientID:   client.ClientID,
+		ClientType: client.ClientType,
 
 		// OAuth 2.1 DCR fields
 		RedirectURIs:            client.GetRedirectURIs(),
-		TokenEndpointAuthMethod: []string{"client_secret_basic", "client_secret_post"}, // Both methods are supported
+		TokenEndpointAuthMethod: tokenEndpointAuthMethods,
 		GrantTypes:              client.GetGrantTypes(),
 		ResponseTypes:           []string{"code"}, // Always "code" in OAuth 2.1
 		ClientName:              utilities.StringValue(client.ClientName),
@@ -59,8 +71,8 @@ func oauthServerClientToResponse(client *models.OAuthServerClient, includeSecret
 		UpdatedAt:        client.UpdatedAt,
 	}
 
-	// Only include client_secret during registration
-	if includeSecret {
+	// Only include client_secret during registration and only for confidential clients
+	if includeSecret && client.IsConfidential() {
 		// Note: This will be filled in by the handler with the plaintext secret
 		response.ClientSecret = ""
 	}
@@ -109,7 +121,9 @@ func (s *Server) AdminOAuthServerClientRegister(w http.ResponseWriter, r *http.R
 	}
 
 	response := oauthServerClientToResponse(client, true)
-	response.ClientSecret = plaintextSecret
+	if client.IsConfidential() {
+		response.ClientSecret = plaintextSecret
+	}
 
 	return shared.SendJSON(w, http.StatusCreated, response)
 }
@@ -136,7 +150,9 @@ func (s *Server) OAuthServerClientDynamicRegister(w http.ResponseWriter, r *http
 	}
 
 	response := oauthServerClientToResponse(client, true)
-	response.ClientSecret = plaintextSecret
+	if client.IsConfidential() {
+		response.ClientSecret = plaintextSecret
+	}
 
 	return shared.SendJSON(w, http.StatusCreated, response)
 }
@@ -219,7 +235,7 @@ func (s *Server) OAuthServerMetadata(w http.ResponseWriter, r *http.Request) err
 		ResponseTypesSupported:            []string{"code"},
 		ResponseModesSupported:            []string{"query"},
 		GrantTypesSupported:               []string{"authorization_code", "refresh_token"},
-		TokenEndpointAuthMethodsSupported: []string{"client_secret_basic", "client_secret_post"},
+		TokenEndpointAuthMethodsSupported: []string{models.TokenEndpointAuthMethodClientSecretBasic, models.TokenEndpointAuthMethodClientSecretPost, models.TokenEndpointAuthMethodNone},
 		CodeChallengeMethodsSupported:     []string{"S256", "plain"},
 	}
 
