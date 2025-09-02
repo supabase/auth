@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -215,18 +216,12 @@ func (a *API) isValidExternalHost(w http.ResponseWriter, req *http.Request) (con
 		protocol := "https"
 
 		if xForwardedHost != "" {
-			for _, host := range config.Mailer.ExternalHosts {
-				if host == xForwardedHost {
-					hostname = host
-					break
-				}
+			if slices.Contains(config.Mailer.ExternalHosts, xForwardedHost) {
+				hostname = xForwardedHost
 			}
 		} else if reqHost != "" {
-			for _, host := range config.Mailer.ExternalHosts {
-				if host == reqHost {
-					hostname = host
-					break
-				}
+			if slices.Contains(config.Mailer.ExternalHosts, reqHost) {
+				hostname = reqHost
 			}
 		}
 

@@ -55,22 +55,22 @@ func TestE2EAdmin(t *testing.T) {
 			}
 			getTestAttributes := func() map[string]models.SAMLAttribute {
 				return map[string]models.SAMLAttribute{
-					"TestE2EAdmin": models.SAMLAttribute{
+					"TestE2EAdmin": {
 						Default: true,
 					},
-					"customAttr": models.SAMLAttribute{
+					"customAttr": {
 						Default: "somevalue",
 					},
-					"email": models.SAMLAttribute{
+					"email": {
 						Name: "user.email",
 					},
-					"first_name": models.SAMLAttribute{
+					"first_name": {
 						Name: "user.firstName",
 					},
-					"last_name": models.SAMLAttribute{
+					"last_name": {
 						Name: "user.lastName",
 					},
-					"user_name": models.SAMLAttribute{
+					"user_name": {
 						Name: "user.login",
 					},
 				}

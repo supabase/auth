@@ -9,6 +9,7 @@ import (
 	"github.com/sebest/xff"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/apitask"
 	"github.com/supabase/auth/internal/api/oauthserver"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/hooks/hookshttp"
@@ -18,6 +19,7 @@ import (
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/tokens"
 	"github.com/supabase/auth/internal/utilities"
 	"github.com/supabase/hibp"
 )
@@ -36,9 +38,11 @@ type API struct {
 	config  *conf.GlobalConfiguration
 	version string
 
-	hooksMgr    *v0hooks.Manager
-	hibpClient  *hibp.PwnedClient
-	oauthServer *oauthserver.Server
+	hooksMgr         *v0hooks.Manager
+	hibpClient       *hibp.PwnedClient
+	oauthServer      *oauthserver.Server
+	mailerClientFunc func() mailer.MailClient
+	tokenService     *tokens.Service
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
@@ -48,6 +52,7 @@ type API struct {
 
 func (a *API) GetConfig() *conf.GlobalConfiguration { return a.config }
 func (a *API) GetDB() *storage.Connection           { return a.db }
+func (a *API) GetTokenService() *tokens.Service     { return a.tokenService }
 
 func (a *API) Version() string {
 	return a.version
@@ -83,10 +88,14 @@ func (a *API) deprecationNotices() {
 // NewAPIWithVersion creates a new REST API using the specified version
 func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string, opt ...Option) *API {
 	api := &API{
-		config:      globalConfig,
-		db:          db,
-		version:     version,
-		oauthServer: oauthserver.NewServer(globalConfig, db),
+		config:  globalConfig,
+		db:      db,
+		version: version,
+	}
+
+	// Only initialize OAuth server if enabled
+	if globalConfig.OAuthServer.Enabled {
+		api.oauthServer = oauthserver.NewServer(globalConfig, db)
 	}
 
 	for _, o := range opt {
@@ -95,11 +104,25 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	if api.limiterOpts == nil {
 		api.limiterOpts = NewLimiterOptions(globalConfig)
 	}
+	if api.mailerClientFunc == nil {
+		api.mailerClientFunc = func() mailer.MailClient {
+			return mailer.NewMailClient(globalConfig)
+		}
+	}
 	if api.hooksMgr == nil {
 		httpDr := hookshttp.New()
 		pgfuncDr := hookspgfunc.New(db)
 		api.hooksMgr = v0hooks.NewManager(globalConfig, httpDr, pgfuncDr)
 	}
+
+	// Initialize token service if not provided via options
+	if api.tokenService == nil {
+		api.tokenService = tokens.NewService(globalConfig, api.hooksMgr)
+	}
+
+	// Connect token service to API's time function (supports test overrides)
+	api.tokenService.SetTimeFunc(api.Now)
+
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
 			// all HIBP API requests should finish quickly to avoid
@@ -145,8 +168,16 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		r.UseBypass(api.databaseCleanup(cleanup))
 	}
 
+	if globalConfig.Mailer.EmailBackgroundSending {
+		r.UseBypass(apitask.Middleware)
+	}
+
 	r.Get("/health", api.HealthCheck)
 	r.Get("/.well-known/jwks.json", api.Jwks)
+
+	if globalConfig.OAuthServer.Enabled {
+		r.Get("/.well-known/oauth-authorization-server", api.oauthServer.OAuthServerMetadata)
+	}
 
 	r.Route("/callback", func(r *router) {
 		r.Use(api.isValidExternalHost)
@@ -162,6 +193,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Get("/settings", api.Settings)
 
+		// `/authorize` to initiate OAuth2 authorization flow with the external providers
+		// where Supabase Auth is an OAuth2 Client
 		r.Get("/authorize", api.ExternalProviderRedirect)
 
 		r.With(api.requireAdminCredentials).Post("/invite", api.Invite)
@@ -303,20 +336,22 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			})
 
 			// Admin only oauth client management endpoints
-			r.Route("/oauth", func(r *router) {
-				r.Route("/clients", func(r *router) {
-					// Manual client registration
-					r.Post("/", api.oauthServer.AdminOAuthServerClientRegister)
+			if globalConfig.OAuthServer.Enabled {
+				r.Route("/oauth", func(r *router) {
+					r.Route("/clients", func(r *router) {
+						// Manual client registration
+						r.Post("/", api.oauthServer.AdminOAuthServerClientRegister)
 
-					r.Get("/", api.oauthServer.OAuthServerClientList)
+						r.Get("/", api.oauthServer.OAuthServerClientList)
 
-					r.Route("/{client_id}", func(r *router) {
-						r.Use(api.oauthServer.LoadOAuthServerClient)
-						r.Get("/", api.oauthServer.OAuthServerClientGet)
-						r.Delete("/", api.oauthServer.OAuthServerClientDelete)
+						r.Route("/{client_id}", func(r *router) {
+							r.Use(api.oauthServer.LoadOAuthServerClient)
+							r.Get("/", api.oauthServer.OAuthServerClientGet)
+							r.Delete("/", api.oauthServer.OAuthServerClientDelete)
+						})
 					})
 				})
-			})
+			}
 		})
 
 		// SCIM v2 endpoints (minimal Users only)
@@ -339,10 +374,18 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		})
 
 		// OAuth Dynamic Client Registration endpoint (public, rate limited)
-		r.Route("/oauth", func(r *router) {
-			r.With(api.limitHandler(api.limiterOpts.OAuthClientRegister)).
-				Post("/clients/register", api.oauthServer.OAuthServerClientDynamicRegister)
-		})
+		if globalConfig.OAuthServer.Enabled {
+			r.Route("/oauth", func(r *router) {
+				r.With(api.limitHandler(api.limiterOpts.OAuthClientRegister)).
+					Post("/clients/register", api.oauthServer.OAuthServerClientDynamicRegister)
+
+				// OAuth 2.1 Authorization endpoints
+				// `/authorize` to initiate OAuth2 authorization code flow where Supabase Auth is the OAuth2 provider
+				r.Get("/authorize", api.oauthServer.OAuthServerAuthorize)
+				r.With(api.requireAuthentication).Get("/authorizations/{authorization_id}", api.oauthServer.OAuthServerGetAuthorization)
+				r.With(api.requireAuthentication).Post("/authorizations/{authorization_id}/consent", api.oauthServer.OAuthServerConsent)
+			})
+		}
 	})
 
 	corsHandler := cors.New(cors.Options{
@@ -374,7 +417,7 @@ func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) error {
 // Mailer returns NewMailer with the current tenant config
 func (a *API) Mailer() mailer.Mailer {
 	config := a.config
-	return mailer.NewMailer(config)
+	return mailer.NewMailerWithClient(config, a.mailerClientFunc())
 }
 
 // ServeHTTP implements the http.Handler interface by passing the request along

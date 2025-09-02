@@ -1,11 +1,13 @@
 package mailer
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
 
 	"github.com/sirupsen/logrus"
+	"github.com/supabase/auth/internal/api/apitask"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 )
@@ -39,34 +41,94 @@ type EmailData struct {
 
 // NewMailer returns a new gotrue mailer
 func NewMailer(globalConfig *conf.GlobalConfiguration) Mailer {
-	from := globalConfig.SMTP.FromAddress()
-	u, _ := url.ParseRequestURI(globalConfig.API.ExternalURL)
+	mc := NewMailClient(globalConfig)
+	return NewMailerWithClient(globalConfig, mc)
+}
 
-	var mailClient MailClient
+type emailValidatorMailClient struct {
+	ev *EmailValidator
+	mc MailClient
+}
+
+// Mail implements mailer.MailClient interface by calling validate before
+// passing the mail request to the next MailClient.
+func (o *emailValidatorMailClient) Mail(
+	ctx context.Context,
+	to string,
+	subjectTemplate string,
+	templateURL string,
+	defaultTemplate string,
+	templateData map[string]any,
+	headers map[string][]string,
+	typ string,
+) error {
+	if err := o.ev.Validate(ctx, to); err != nil {
+		return err
+	}
+	return o.mc.Mail(
+		ctx,
+		to,
+		subjectTemplate,
+		templateURL,
+		defaultTemplate,
+		templateData,
+		headers,
+		typ,
+	)
+}
+
+// NewMailerWithClient returns a new Mailer that will use the given MailClient.
+func NewMailerWithClient(
+	globalConfig *conf.GlobalConfiguration,
+	mailClient MailClient,
+) Mailer {
+	return &TemplateMailer{
+		SiteURL:    globalConfig.SiteURL,
+		Config:     globalConfig,
+		MailClient: mailClient,
+	}
+}
+
+// NewMailClient returns a new MailClient based on the given configuration.
+func NewMailClient(globalConfig *conf.GlobalConfiguration) MailClient {
+	mc := newMailClient(globalConfig)
+
+	// Check if email validation is enabled
+	ev := newEmailValidator(globalConfig.Mailer)
+	if ev.isEnabled() {
+		mc = &emailValidatorMailClient{ev: ev, mc: mc}
+	}
+
+	// Check if background emails are enabled
+	if globalConfig.Mailer.EmailBackgroundSending {
+		mc = &backgroundMailClient{
+			mc: mc,
+		}
+	}
+	return mc
+}
+
+// newMailClient returns a new MailClient based on the given configuration.
+func newMailClient(globalConfig *conf.GlobalConfiguration) MailClient {
 	if globalConfig.SMTP.Host == "" {
 		logrus.Infof("Noop mail client being used for %v", globalConfig.SiteURL)
-		mailClient = &noopMailClient{
-			EmailValidator: newEmailValidator(globalConfig.Mailer),
-		}
-	} else {
-		mailClient = &MailmeMailer{
-			Host:           globalConfig.SMTP.Host,
-			Port:           globalConfig.SMTP.Port,
-			User:           globalConfig.SMTP.User,
-			Pass:           globalConfig.SMTP.Pass,
-			LocalName:      u.Hostname(),
-			From:           from,
-			BaseURL:        globalConfig.SiteURL,
-			Logger:         logrus.StandardLogger(),
-			MailLogging:    globalConfig.SMTP.LoggingEnabled,
+		return &noopMailClient{
 			EmailValidator: newEmailValidator(globalConfig.Mailer),
 		}
 	}
 
-	return &TemplateMailer{
-		SiteURL: globalConfig.SiteURL,
-		Config:  globalConfig,
-		Mailer:  mailClient,
+	from := globalConfig.SMTP.FromAddress()
+	u, _ := url.ParseRequestURI(globalConfig.API.ExternalURL)
+	return &MailmeMailer{
+		Host:        globalConfig.SMTP.Host,
+		Port:        globalConfig.SMTP.Port,
+		User:        globalConfig.SMTP.User,
+		Pass:        globalConfig.SMTP.Pass,
+		LocalName:   u.Hostname(),
+		From:        from,
+		BaseURL:     globalConfig.SiteURL,
+		Logger:      logrus.StandardLogger(),
+		MailLogging: globalConfig.SMTP.LoggingEnabled,
 	}
 }
 
@@ -90,4 +152,64 @@ func getPath(filepath string, params *EmailParams) (*url.URL, error) {
 		path.RawQuery = fmt.Sprintf("token=%s&type=%s&redirect_to=%s", url.QueryEscape(params.Token), url.QueryEscape(params.Type), encodeRedirectURL(params.RedirectTo))
 	}
 	return path, nil
+}
+
+// Task holds a mail pending delivery by the Handler.
+type Task struct {
+	mc MailClient
+
+	To              string              `json:"to"`
+	SubjectTemplate string              `json:"subject_template"`
+	TemplateURL     string              `json:"template_url"`
+	DefaultTemplate string              `json:"default_template"`
+	TemplateData    map[string]any      `json:"template_data"`
+	Headers         map[string][]string `json:"headers"`
+	Typ             string              `json:"typ"`
+}
+
+// Run implements the Type method of the apitask.Task interface by returning
+// the "mailer." prefix followed by the mail type.
+func (o *Task) Type() string { return fmt.Sprintf("mailer.%v", o.Typ) }
+
+// Run implements the Run method of the apitask.Task interface by attempting
+// to send the mail using the underying mail client.
+func (o *Task) Run(ctx context.Context) error {
+	return o.mc.Mail(
+		ctx,
+		o.To,
+		o.SubjectTemplate,
+		o.TemplateURL,
+		o.DefaultTemplate,
+		o.TemplateData,
+		o.Headers,
+		o.Typ)
+}
+
+type backgroundMailClient struct {
+	mc MailClient
+}
+
+// Mail implements mailer.MailClient interface by sending the call to the
+// wrapped mail client to the background.
+func (o *backgroundMailClient) Mail(
+	ctx context.Context,
+	to string,
+	subjectTemplate string,
+	templateURL string,
+	defaultTemplate string,
+	templateData map[string]any,
+	headers map[string][]string,
+	typ string,
+) error {
+	tk := &Task{
+		mc:              o.mc,
+		To:              to,
+		SubjectTemplate: subjectTemplate,
+		TemplateURL:     templateURL,
+		DefaultTemplate: defaultTemplate,
+		TemplateData:    templateData,
+		Headers:         headers,
+		Typ:             typ,
+	}
+	return apitask.Run(ctx, tk)
 }

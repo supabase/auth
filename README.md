@@ -43,7 +43,7 @@ Create a `.env.docker` file to store your own custom env vars. See [`example.doc
 
 1. `make build`
 2. `make dev`
-3. `docker ps` should show 2 docker containers (`auth_postgresql` and `gotrue_gotrue`)
+3. `docker ps` should show 2 docker containers (`auth-auth-1` and `auth-postgres-1`)
 4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that auth is running.
 
 ## Running in production

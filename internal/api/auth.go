@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/gofrs/uuid"
@@ -51,7 +52,7 @@ func (a *API) requireAdmin(ctx context.Context) (context.Context, error) {
 
 	adminRoles := a.config.JWT.AdminRoles
 
-	if isStringInSlice(claims.Role, adminRoles) {
+	if slices.Contains(adminRoles, claims.Role) {
 		// successful authentication
 		return withAdminUser(ctx, &models.User{Role: claims.Role, Email: storage.NullString(claims.Role)}), nil
 	}
@@ -63,7 +64,7 @@ func (a *API) extractBearerToken(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
 	matches := bearerRegexp.FindStringSubmatch(authHeader)
 	if len(matches) != 2 {
-		return "", apierrors.NewHTTPError(http.StatusUnauthorized, apierrors.ErrorCodeNoAuthorization, "This endpoint requires a Bearer token")
+		return "", apierrors.NewHTTPError(http.StatusUnauthorized, apierrors.ErrorCodeNoAuthorization, "This endpoint requires a valid Bearer token")
 	}
 
 	return matches[1], nil

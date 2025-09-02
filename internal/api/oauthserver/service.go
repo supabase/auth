@@ -10,7 +10,7 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
+	"github.com/supabase/auth/internal/utilities"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -160,9 +160,9 @@ func (s *Server) registerOAuthServerClient(ctx context.Context, params *OAuthSer
 	client := &models.OAuthServerClient{
 		ClientID:         generateClientID(),
 		RegistrationType: params.RegistrationType,
-		ClientName:       storage.NullString(params.ClientName),
-		ClientURI:        storage.NullString(params.ClientURI),
-		LogoURI:          storage.NullString(params.LogoURI),
+		ClientName:       utilities.StringPtr(params.ClientName),
+		ClientURI:        utilities.StringPtr(params.ClientURI),
+		LogoURI:          utilities.StringPtr(params.LogoURI),
 	}
 
 	client.SetRedirectURIs(params.RedirectURIs)

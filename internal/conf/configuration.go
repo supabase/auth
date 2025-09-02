@@ -59,12 +59,13 @@ func (t *Time) UnmarshalText(text []byte) error {
 
 // OAuthProviderConfiguration holds all config related to external account providers.
 type OAuthProviderConfiguration struct {
-	ClientID    []string `json:"client_id" split_words:"true"`
-	Secret      string   `json:"secret"`
-	RedirectURI string   `json:"redirect_uri" split_words:"true"`
-	URL         string   `json:"url"`
-	ApiURL      string   `json:"api_url" split_words:"true"`
-	Enabled     bool     `json:"enabled"`
+	ClientID      []string `json:"client_id" split_words:"true"`
+	Secret        string   `json:"secret"`
+	RedirectURI   string   `json:"redirect_uri" split_words:"true"`
+	URL           string   `json:"url"`
+	ApiURL        string   `json:"api_url" split_words:"true"`
+	Enabled       bool     `json:"enabled"`
+	EmailOptional bool     `json:"email_optional" split_words:"true"`
 	// SkipNonceCheck bypasses nonce verification during OIDC token validation.
 	// Note: Nonce verification helps prevent replay attacks; only disable when necessary.
 	SkipNonceCheck bool `json:"skip_nonce_check" split_words:"true"`
@@ -72,7 +73,12 @@ type OAuthProviderConfiguration struct {
 
 // OAuthServerConfiguration holds OAuth server configuration
 type OAuthServerConfiguration struct {
-	AllowDynamicRegistration bool `json:"allow_dynamic_registration" split_words:"true"`
+	Enabled                  bool          `json:"enabled" default:"false"`
+	AllowDynamicRegistration bool          `json:"allow_dynamic_registration" split_words:"true"`
+	AuthorizationPath        string        `json:"authorization_path" split_words:"true"`
+	AuthorizationTimeout     time.Duration `json:"authorization_timeout" split_words:"true" default:"5m"`
+	// Placeholder for now, for (near) future extensibility
+	DefaultScope string `json:"default_scope" split_words:"true" default:"email"`
 }
 
 type AnonymousProviderConfiguration struct {
@@ -253,6 +259,13 @@ type AuditLogConfiguration struct {
 	DisablePostgres bool `split_words:"true" default:"false"`
 }
 
+type ExperimentalConfiguration struct {
+	// Names of providers (e.g. "google") which have their own identity
+	// linking domain, meaning that the ones listed here _will not
+	// participate_ in email similarity linking with other accounts.
+	ProvidersWithOwnLinkingDomain []string `split_words:"true"`
+}
+
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
 	API           APIConfiguration
@@ -293,6 +306,7 @@ type GlobalConfiguration struct {
 	SAML            SAMLConfiguration        `json:"saml"`
 	CORS            CORSConfiguration        `json:"cors"`
 	SCIM            SCIMConfiguration        `json:"scim"`
+	Experimental ExperimentalConfiguration `json:"experimental"`
 }
 
 type CORSConfiguration struct {
@@ -449,6 +463,7 @@ type MailerConfiguration struct {
 	ExternalHosts []string `json:"external_hosts" split_words:"true"`
 
 	// EXPERIMENTAL: May be removed in a future release.
+	EmailBackgroundSending        bool   `json:"email_background_sending" split_words:"true" default:"false"`
 	EmailValidationExtended       bool   `json:"email_validation_extended" split_words:"true" default:"false"`
 	EmailValidationServiceURL     string `json:"email_validation_service_url" split_words:"true"`
 	EmailValidationServiceHeaders string `json:"email_validation_service_headers" split_words:"true"`
