@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/supabase/auth/internal/api"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/mailer/templatemailer"
 	"github.com/supabase/auth/internal/reloader"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
@@ -50,8 +51,10 @@ func serve(ctx context.Context) {
 
 	addr := net.JoinHostPort(config.API.Host, config.API.Port)
 
+	mr := templatemailer.FromConfig(config)
 	opts := []api.Option{
 		api.NewLimiterOptions(config),
+		api.WithMailer(mr),
 	}
 
 	baseCtx, baseCancel := context.WithCancel(context.Background())
@@ -74,6 +77,17 @@ func serve(ctx context.Context) {
 	}
 	log := logrus.WithField("component", "api")
 
+	if config.Mailer.TemplateReloadingEnabled {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			if err := mr.Work(ctx); err != nil {
+				log.WithError(err).Error("mailer template reloader is exiting")
+			}
+		}()
+	}
+
 	if watchDir != "" {
 		wg.Add(1)
 		go func() {
@@ -81,6 +95,8 @@ func serve(ctx context.Context) {
 
 			fn := func(latestCfg *conf.GlobalConfiguration) {
 				log.Info("reloading api with new configuration")
+				mr.ReloadConfig(latestCfg)
+
 				latestAPI := api.NewAPIWithVersion(
 					latestCfg, db, utilities.Version, opts...)
 				ah.Store(latestAPI)

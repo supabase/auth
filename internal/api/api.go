@@ -16,6 +16,7 @@ import (
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/mailer/templatemailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -112,7 +113,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.tokenService = tokens.NewService(globalConfig, api.hooksMgr)
 	}
 	if api.mailer == nil {
-		api.mailer = newMailer(globalConfig)
+		api.mailer = templatemailer.FromConfig(globalConfig)
 	}
 
 	// Connect token service to API's time function (supports test overrides)
