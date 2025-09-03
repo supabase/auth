@@ -82,7 +82,7 @@ generate: | check-oapi-codegen
 	go generate ./...
 
 check-oapi-codegen:
-	@command -v exhaustive >/dev/null 2>&1 \
+	@command -v oapi-codegen >/dev/null 2>&1 \
 		|| go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
 
 dev: ## Run the development containers
