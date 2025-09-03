@@ -529,6 +529,9 @@ func (o *Cache) loadEntryBody(
 }
 
 func (m *Cache) fetch(ctx context.Context, cfg *conf.GlobalConfiguration, url string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
