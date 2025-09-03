@@ -239,6 +239,7 @@ func (ts *OAuthServerClientTestSuite) TestUpdateOAuthServerClient() {
 	originalName := "Original Name"
 	testSecretHash, _ := testHashClientSecret("test_secret")
 	client := &OAuthServerClient{
+		ID:               uuid.Must(uuid.NewV4()),
 		ClientName:       &originalName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "dynamic",
