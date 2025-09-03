@@ -13,18 +13,32 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
+// OAuth client type constants
+const (
+	OAuthServerClientTypePublic       = "public"
+	OAuthServerClientTypeConfidential = "confidential"
+)
+
+// OAuth token endpoint authentication method constants
+const (
+	TokenEndpointAuthMethodNone              = "none"
+	TokenEndpointAuthMethodClientSecretBasic = "client_secret_basic"
+	TokenEndpointAuthMethodClientSecretPost  = "client_secret_post"
+)
+
 // OAuthServerClient represents an OAuth client application registered with this OAuth server
 type OAuthServerClient struct {
 	ID               uuid.UUID `json:"-" db:"id"`
 	ClientID         string    `json:"client_id" db:"client_id"`
 	ClientSecretHash string    `json:"-" db:"client_secret_hash"`
 	RegistrationType string    `json:"registration_type" db:"registration_type"`
+	ClientType       string    `json:"client_type" db:"client_type"`
 
 	RedirectURIs string             `json:"-" db:"redirect_uris"`
 	GrantTypes   string             `json:"grant_types" db:"grant_types"`
-	ClientName   storage.NullString `json:"client_name" db:"client_name"`
-	ClientURI    storage.NullString `json:"client_uri" db:"client_uri"`
-	LogoURI      storage.NullString `json:"logo_uri" db:"logo_uri"`
+	ClientName   *string `json:"client_name,omitempty" db:"client_name"`
+	ClientURI    *string `json:"client_uri,omitempty" db:"client_uri"`
+	LogoURI      *string `json:"logo_uri,omitempty" db:"logo_uri"`
 	CreatedAt    time.Time          `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time          `json:"updated_at" db:"updated_at"`
 	DeletedAt    *time.Time         `json:"deleted_at,omitempty" db:"deleted_at"`
@@ -51,8 +65,22 @@ func (c *OAuthServerClient) Validate() error {
 		return fmt.Errorf("registration_type must be 'dynamic' or 'manual'")
 	}
 
+	if c.ClientType != OAuthServerClientTypePublic && c.ClientType != OAuthServerClientTypeConfidential {
+		return fmt.Errorf("client_type must be '%s' or '%s'", OAuthServerClientTypePublic, OAuthServerClientTypeConfidential)
+	}
+
 	if c.RedirectURIs == "" {
 		return fmt.Errorf("at least one redirect_uri is required")
+	}
+
+	// Confidential clients must have a client secret
+	if c.ClientType == OAuthServerClientTypeConfidential && c.ClientSecretHash == "" {
+		return fmt.Errorf("client_secret is required for confidential clients")
+	}
+
+	// Public clients should not have a client secret (enforce PKCE instead)
+	if c.ClientType == OAuthServerClientTypePublic && c.ClientSecretHash != "" {
+		return fmt.Errorf("client_secret is not allowed for public clients, use PKCE instead")
 	}
 
 	return nil
@@ -82,6 +110,16 @@ func (c *OAuthServerClient) GetGrantTypes() []string {
 // SetGrantTypes sets the grant types from a slice
 func (c *OAuthServerClient) SetGrantTypes(types []string) {
 	c.GrantTypes = strings.Join(types, ",")
+}
+
+// IsPublic returns true if the client is a public client
+func (c *OAuthServerClient) IsPublic() bool {
+	return c.ClientType == OAuthServerClientTypePublic
+}
+
+// IsConfidential returns true if the client is a confidential client
+func (c *OAuthServerClient) IsConfidential() bool {
+	return c.ClientType == OAuthServerClientTypeConfidential
 }
 
 // validateRedirectURI validates a single redirect URI according to OAuth 2.1 spec

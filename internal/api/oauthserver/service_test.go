@@ -30,7 +30,8 @@ func TestOAuthService(t *testing.T) {
 	conn, err := test.SetupDBConnection(globalConfig)
 	require.NoError(t, err)
 
-	// Enable OAuth dynamic client registration for tests
+	// Enable OAuth server and dynamic client registration for tests
+	globalConfig.OAuthServer.Enabled = true
 	globalConfig.OAuthServer.AllowDynamicRegistration = true
 
 	server := NewServer(globalConfig, conn)
@@ -49,7 +50,8 @@ func (ts *OAuthServiceTestSuite) SetupTest() {
 	if ts.DB != nil {
 		models.TruncateAll(ts.DB)
 	}
-	// Enable OAuth dynamic client registration for tests
+	// Enable OAuth server and dynamic client registration for tests
+	ts.Config.OAuthServer.Enabled = true
 	ts.Config.OAuthServer.AllowDynamicRegistration = true
 }
 
@@ -86,7 +88,7 @@ func (ts *OAuthServiceTestSuite) TestOAuthServerClientServiceMethods() {
 	require.NoError(ts.T(), err)
 	require.NotNil(ts.T(), client)
 	require.NotEmpty(ts.T(), secret)
-	assert.Equal(ts.T(), "Test Client", client.ClientName.String())
+	assert.Equal(ts.T(), "Test Client", *client.ClientName)
 	assert.Equal(ts.T(), "dynamic", client.RegistrationType)
 
 	// Test getOAuthServerClient

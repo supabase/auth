@@ -41,9 +41,12 @@ func ExtractClientCredentials(r *http.Request) (clientID, clientSecret string, e
 		return "", "", nil
 	}
 
-	// If only one is provided, it's an error
-	if clientID == "" || clientSecret == "" {
-		return "", "", errors.New("both client_id and client_secret must be provided")
+	// For public clients, only client_id is required (client_secret should be empty)
+	// For confidential clients, both client_id and client_secret are required
+	// We'll validate this based on the client type in the calling handler
+	// TODO(cemal) :: this will be validated in detail during the `/token` endpoint implementation
+	if clientID == "" {
+		return "", "", errors.New("client_id is required")
 	}
 
 	return clientID, clientSecret, nil

@@ -33,7 +33,8 @@ func TestOAuthClientHandler(t *testing.T) {
 	conn, err := test.SetupDBConnection(globalConfig)
 	require.NoError(t, err)
 
-	// Enable OAuth dynamic client registration for tests
+	// Enable OAuth server and dynamic client registration for tests
+	globalConfig.OAuthServer.Enabled = true
 	globalConfig.OAuthServer.AllowDynamicRegistration = true
 
 	server := NewServer(globalConfig, conn)
