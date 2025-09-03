@@ -5,7 +5,6 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/models"
-	"golang.org/x/crypto/bcrypt"
 )
 
 func TestInferClientTypeFromAuthMethod(t *testing.T) {
@@ -305,12 +304,12 @@ func TestValidateClientAuthentication(t *testing.T) {
 	}
 
 	// Create a hashed secret for confidential client
-	secretHash, _ := bcrypt.GenerateFromPassword([]byte("test_secret"), bcrypt.DefaultCost)
+	secretHash, _ := hashClientSecret("test_secret")
 	confidentialClient := &models.OAuthServerClient{
 		ID:               uuid.Must(uuid.NewV4()),
 		ClientID:         "confidential_client",
 		ClientType:       models.OAuthServerClientTypeConfidential,
-		ClientSecretHash: string(secretHash),
+		ClientSecretHash: secretHash,
 	}
 
 	tests := []struct {

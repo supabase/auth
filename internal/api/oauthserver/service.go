@@ -2,6 +2,10 @@ package oauthserver
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"slices"
@@ -12,7 +16,6 @@ import (
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/utilities"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // OAuthServerClientRegisterParams contains parameters for registering a new OAuth client
@@ -146,23 +149,29 @@ func generateClientID() string {
 
 // generateClientSecret generates a secure random client secret
 func generateClientSecret() string {
-	// Generate a 64-character secure random secret
-	return crypto.SecureAlphanumeric(64)
-}
-
-// hashClientSecret hashes a client secret using bcrypt
-func hashClientSecret(secret string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to hash client secret")
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		// This should never happen, but fallback to panic for security
+		panic(fmt.Sprintf("failed to generate random bytes for client secret: %v", err))
 	}
-	return string(hash), nil
+	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-// ValidateClientSecret validates a client secret against its hash
-func ValidateClientSecret(secret, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(secret))
-	return err == nil
+// hashClientSecret hashes a client secret using SHA-256
+func hashClientSecret(secret string) (string, error) {
+	sum := sha256.Sum256([]byte(secret))
+	return base64.RawURLEncoding.EncodeToString(sum[:]), nil
+}
+
+// ValidateClientSecret validates a client secret against its hash using constant-time comparison
+func ValidateClientSecret(providedSecret, storedHash string) bool {
+	calc := sha256.Sum256([]byte(providedSecret))
+	stored, err := base64.RawURLEncoding.DecodeString(storedHash)
+	if err != nil {
+		return false
+	}
+
+	return subtle.ConstantTimeCompare(calc[:], stored) == 1
 }
 
 // registerOAuthServerClient creates a new OAuth server client with generated credentials
