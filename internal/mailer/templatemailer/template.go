@@ -220,7 +220,7 @@ func (o *Cache) reloadAt(
 		// skip this check if it's currently set to true, as we want to get a
 		// new template as soon soon as possible.
 		maxAge := cfg.Mailer.TemplateMaxAge - (cfg.Mailer.TemplateMaxAge / 10)
-		if ent.def == false && now.Sub(ent.createdAt) < maxAge {
+		if !ent.def && now.Sub(ent.createdAt) < maxAge {
 			continue
 		}
 
@@ -262,7 +262,6 @@ func (o *Cache) reloadType(
 			}).Infof("mailer: reloaded template type: %v", typ)
 		}
 	}(typ)
-	return
 }
 
 func (o *Cache) getTouchedAt() time.Time {
