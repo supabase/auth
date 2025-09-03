@@ -458,7 +458,7 @@ type MailerConfiguration struct {
 	TemplateMaxAge time.Duration `json:"template_max_age" split_words:"true" default:"10m"`
 
 	// The time between retrying a failed template reload.
-	TemplateRetryIval time.Duration `json:"template_retry_ival" split_words:"true" default:"10s"`
+	TemplateRetryInterval time.Duration `json:"template_retry_interval" split_words:"true" default:"10s"`
 
 	// If true enable background reloading of templates to avoid blocking
 	// IO in requests.

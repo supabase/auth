@@ -14,6 +14,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/supabase/auth/internal/api"
+	"github.com/supabase/auth/internal/api/apiworker"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/mailer/templatemailer"
 	"github.com/supabase/auth/internal/reloader"
@@ -49,24 +50,24 @@ func serve(ctx context.Context) {
 	}
 	defer db.Close()
 
-	addr := net.JoinHostPort(config.API.Host, config.API.Port)
-
-	mr := templatemailer.FromConfig(config)
-	opts := []api.Option{
-		api.NewLimiterOptions(config),
-		api.WithMailer(mr),
-	}
-
 	baseCtx, baseCancel := context.WithCancel(context.Background())
 	defer baseCancel()
 
 	var wg sync.WaitGroup
 	defer wg.Wait() // Do not return to caller until this goroutine is done.
 
-	a := api.NewAPIWithVersion(config, db, utilities.Version, opts...)
-	ah := reloader.NewAtomicHandler(a)
-	logrus.WithField("version", a.Version()).Infof("GoTrue API started on: %s", addr)
+	mrCache := templatemailer.NewCache()
+	limiterOpts := api.NewLimiterOptions(config)
+	initialAPI := api.NewAPIWithVersion(
+		config, db, utilities.Version,
+		limiterOpts,
+		api.WithMailer(templatemailer.FromConfig(config, mrCache)),
+	)
 
+	addr := net.JoinHostPort(config.API.Host, config.API.Port)
+	logrus.WithField("version", initialAPI.Version()).Infof("GoTrue API started on: %s", addr)
+
+	ah := reloader.NewAtomicHandler(initialAPI)
 	httpSrv := &http.Server{
 		Addr:              addr,
 		Handler:           ah,
@@ -77,16 +78,25 @@ func serve(ctx context.Context) {
 	}
 	log := logrus.WithField("component", "api")
 
-	if config.Mailer.TemplateReloadingEnabled {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	wrkLog := logrus.WithField("component", "apiworker")
+	wrk := apiworker.New(config, mrCache, wrkLog)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 
-			if err := mr.Work(ctx); err != nil {
-				log.WithError(err).Error("mailer template reloader is exiting")
+		var err error
+		defer func() {
+			logFn := wrkLog.Info
+			if err != nil {
+				logFn = wrkLog.WithError(err).Error
 			}
+			logFn("background apiworker is exiting")
 		}()
-	}
+
+		// Work exits when ctx is done as in-flight requests do not depend
+		// on it. If they do in the future this should be baseCtx instead.
+		err = wrk.Work(ctx)
+	}()
 
 	if watchDir != "" {
 		wg.Add(1)
@@ -95,10 +105,26 @@ func serve(ctx context.Context) {
 
 			fn := func(latestCfg *conf.GlobalConfiguration) {
 				log.Info("reloading api with new configuration")
-				mr.ReloadConfig(latestCfg)
 
+				// When config is updated we notify the apiworker.
+				wrk.ReloadConfig(latestCfg)
+
+				// Create a new API version with the updated config.
 				latestAPI := api.NewAPIWithVersion(
-					latestCfg, db, utilities.Version, opts...)
+					config, db, utilities.Version,
+
+					// Create a new mailer with existing template cache.
+					api.WithMailer(
+						templatemailer.FromConfig(config, mrCache),
+					),
+
+					// Persist existing rate limiters.
+					//
+					// TODO(cstockton): we should consider updating these, if we
+					// rely on hot config reloads 100% then rate limiter changes
+					// won't be picked up.
+					limiterOpts,
+				)
 				ah.Store(latestAPI)
 			}
 

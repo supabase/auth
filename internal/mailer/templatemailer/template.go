@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -32,21 +31,13 @@ func init() {
 
 // Mailer will send mail and use templates from the site for easy mail styling
 type Mailer struct {
-	mc     mailer.Client
-	tc     *Cache
-	tickCh chan struct{}
-	cfgVal *atomic.Value
-}
-
-type mailerState struct {
-	mc     mailer.Client
-	tc     *Cache
-	tickCh chan struct{}
-	cfgVal *atomic.Value
+	cfg *conf.GlobalConfiguration
+	mc  mailer.Client
+	tc  *Cache
 }
 
 // FromConfig returns a new mailer configured using the global configuration.
-func FromConfig(globalConfig *conf.GlobalConfiguration) *Mailer {
+func FromConfig(globalConfig *conf.GlobalConfiguration, tc *Cache) *Mailer {
 	var mc mailer.Client
 	if globalConfig.SMTP.Host == "" {
 		logrus.Infof("Noop mail client being used for %v", globalConfig.SiteURL)
@@ -62,23 +53,16 @@ func FromConfig(globalConfig *conf.GlobalConfiguration) *Mailer {
 	mc = taskclient.New(globalConfig, mc)
 
 	// Finally the template mailer
-	return newWith(globalConfig, mc)
+	return New(globalConfig, mc, tc)
 }
 
-// newWith will return a *TemplateMailer backed by the given mailer.Client.
-func newWith(globalConfig *conf.GlobalConfiguration, mc mailer.Client) *Mailer {
-	cfgVal := new(atomic.Value)
-	cfgVal.Store(globalConfig)
+// New will return a *TemplateMailer backed by the given mailer.Client.
+func New(globalConfig *conf.GlobalConfiguration, mc mailer.Client, tc *Cache) *Mailer {
 	return &Mailer{
-		mc:     mc,
-		tc:     NewCache(),
-		tickCh: make(chan struct{}, 1),
-		cfgVal: cfgVal,
+		cfg: globalConfig,
+		mc:  mc,
+		tc:  tc,
 	}
-}
-
-func (m *Mailer) getConfig() *conf.GlobalConfiguration {
-	return m.cfgVal.Load().(*conf.GlobalConfiguration)
 }
 
 func (m *Mailer) mail(
@@ -118,45 +102,6 @@ func (m *Mailer) mail(
 		headers,
 		typ,
 	)
-}
-
-func (m *Mailer) ReloadConfig(cfg *conf.GlobalConfiguration) {
-	m.cfgVal.Store(cfg)
-	m.Reload()
-}
-
-func (m *Mailer) Reload() {
-	select {
-	case m.tickCh <- struct{}{}:
-	default:
-	}
-}
-
-// Work will periodically reload the templates in the background as long as the
-// system remains active.
-func (m *Mailer) Work(ctx context.Context) error {
-	cfg := m.getConfig()
-
-	// TODO(cstockton): reload ticker on cfg change
-	ival := max(time.Second, cfg.Mailer.TemplateRetryIval/4)
-	tr := time.NewTicker(ival)
-	defer tr.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-m.tickCh:
-			m.handleTick(ctx)
-		case <-tr.C:
-			m.handleTick(ctx)
-		}
-	}
-}
-
-func (m *Mailer) handleTick(ctx context.Context) {
-	cfg := m.getConfig()
-	m.tc.maybeReload(ctx, cfg)
 }
 
 type tplCacheEntry struct {
@@ -205,12 +150,11 @@ func (ent *tplCacheEntry) execute(
 }
 
 type Cache struct {
-	// cfg *conf.GlobalConfiguration
 	sf  singleflight.Group
 	now func() time.Time
 
-	// Must hold mu for below field access
-	mu sync.Mutex
+	// Must hold rw for below field access
+	rw sync.RWMutex
 	m  map[string]*tplCacheEntry // map[TemplateType]*tplCacheEntry
 	t  time.Time                 // Time of the most recent call to getEntry
 }
@@ -222,7 +166,7 @@ func NewCache() *Cache {
 	}
 }
 
-func (o *Cache) maybeReload(
+func (o *Cache) Reload(
 	ctx context.Context,
 	cfg *conf.GlobalConfiguration,
 ) {
@@ -284,7 +228,7 @@ func (o *Cache) reloadAt(
 		// making the request we make sure we haven't recently checked the template
 		// using our ival configuration knob. This is just a simple way to give
 		// endpoints some breathing room instead of expo backoff with counters.
-		retryIval := cfg.Mailer.TemplateRetryIval
+		retryIval := cfg.Mailer.TemplateRetryInterval
 		if now.Sub(ent.checkedAt) < retryIval {
 			continue
 		}
@@ -322,36 +266,35 @@ func (o *Cache) reloadType(
 }
 
 func (o *Cache) getTouchedAt() time.Time {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	touchedAt := o.t
-	return touchedAt
+	o.rw.RLock()
+	defer o.rw.RUnlock()
+	return o.t
 }
 
 func (o *Cache) setTouchedAt(at time.Time) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
+	o.rw.Lock()
+	defer o.rw.Unlock()
 	o.t = at
 }
 
 func (o *Cache) getEntry(typ string) (*tplCacheEntry, bool) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
+	o.rw.RLock()
+	defer o.rw.RUnlock()
 	v, ok := o.m[typ]
 	return v, ok
 }
 
 func (o *Cache) getEntryAndTouchAt(typ string, at time.Time) (*tplCacheEntry, bool) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
+	o.rw.Lock()
+	defer o.rw.Unlock()
 	o.t = at
 	v, ok := o.m[typ]
 	return v, ok
 }
 
 func (o *Cache) putEntry(typ string, ent *tplCacheEntry) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
+	o.rw.Lock()
+	defer o.rw.Unlock()
 	o.m[typ] = ent
 }
 
@@ -376,7 +319,7 @@ func (o *Cache) get(
 
 	// Entry is expired, we check if the entry is ready for reloading. We do
 	// as much as we can outside of load to prevent synchronization on o.sf.
-	retryIval := cfg.Mailer.TemplateRetryIval
+	retryIval := cfg.Mailer.TemplateRetryInterval
 	if now.Sub(ent.checkedAt) < retryIval {
 		// Entry was checked within maxIval, return it.
 		return ent, nil

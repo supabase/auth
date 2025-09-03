@@ -113,7 +113,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		api.tokenService = tokens.NewService(globalConfig, api.hooksMgr)
 	}
 	if api.mailer == nil {
-		api.mailer = templatemailer.FromConfig(globalConfig)
+		tc := templatemailer.NewCache()
+		api.mailer = templatemailer.FromConfig(globalConfig, tc)
 	}
 
 	// Connect token service to API's time function (supports test overrides)

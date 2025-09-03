@@ -50,15 +50,15 @@ func TestTemplateHeaders(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		mailer := newWith(&conf.GlobalConfiguration{
+		mailer := New(&conf.GlobalConfiguration{
 			SMTP: conf.SMTPConfiguration{
 				Headers: tc.from,
 			},
-		}, nil)
+		}, nil, nil)
 
-		require.NoError(t, mailer.getConfig().SMTP.Validate())
+		require.NoError(t, mailer.cfg.SMTP.Validate())
 
-		hdrs := mailer.Headers(mailer.getConfig(), tc.typ)
+		hdrs := mailer.Headers(mailer.cfg, tc.typ)
 		require.Equal(t, hdrs, tc.exp)
 	}
 }
