@@ -1,4 +1,5 @@
-.PHONY: all build deps dev-deps image migrate test vet sec format unused
+.PHONY: all build deps image migrate test vet sec format unused
+.PHONY: check-exhaustive check-gosec check-oapi-codegen check-staticcheck
 CHECK_FILES?=./...
 
 ifdef RELEASE_VERSION
@@ -33,13 +34,6 @@ build-strip: deps ## Build a stripped binary, for which the version file needs t
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
 		$(FLAGS) -ldflags "-s -w" -o auth-arm64-strip
 
-dev-deps: ## Install developer dependencies
-	@go install github.com/gobuffalo/pop/soda@latest
-	@go install github.com/securego/gosec/v2/cmd/gosec@latest
-	@go install honnef.co/go/tools/cmd/staticcheck@latest
-	@go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
-	@go install github.com/nishanths/exhaustive/cmd/exhaustive@latest
-
 deps: ## Install dependencies.
 	@go mod download
 	@go mod verify
@@ -57,25 +51,39 @@ test: build ## Run tests.
 vet: # Vet the code
 	go vet $(CHECK_FILES)
 
-sec: dev-deps # Check for security vulnerabilities
+sec: check-gosec # Check for security vulnerabilities
 	gosec -quiet -exclude-generated $(CHECK_FILES)
 	gosec -quiet -tests -exclude-generated -exclude=G104 $(CHECK_FILES)
 
-unused: dev-deps # Look for unused code
+check-gosec:
+	@command -v gosec >/dev/null 2>&1 \
+		|| @go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+unused: | check-staticcheck # Look for unused code
 	@echo "Unused code:"
 	staticcheck -checks U1000 $(CHECK_FILES)
-	
 	@echo
-	
 	@echo "Code used only in _test.go (do move it in those files):"
 	staticcheck -checks U1000 -tests=false $(CHECK_FILES)
 
-static: dev-deps
+static: | check-staticcheck check-exhaustive
 	staticcheck ./...
 	exhaustive ./...
 
-generate: dev-deps
+check-staticcheck:
+	@command -v staticcheck >/dev/null 2>&1 \
+		|| @go install honnef.co/go/tools/cmd/staticcheck@latest
+
+check-exhaustive:
+	@command -v exhaustive >/dev/null 2>&1 \
+		|| @go install github.com/nishanths/exhaustive/cmd/exhaustive@latest
+
+generate: | check-oapi-codegen
 	go generate ./...
+
+check-oapi-codegen:
+	@command -v oapi-codegen >/dev/null 2>&1 \
+		|| go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
 
 dev: ## Run the development containers
 	${DOCKER_COMPOSE} -f $(DEV_DOCKER_COMPOSE) up
