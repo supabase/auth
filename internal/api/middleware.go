@@ -108,9 +108,9 @@ func (a *API) oauthClientAuth(w http.ResponseWriter, r *http.Request) (context.C
 		return nil, apierrors.NewInternalServerError("Error validating client credentials").WithInternalError(err)
 	}
 
-	// Validate client secret
-	if !oauthserver.ValidateClientSecret(clientSecret, client.ClientSecretHash) {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials")
+	// Validate authentication using centralized logic
+	if err := oauthserver.ValidateClientAuthentication(client, clientSecret); err != nil {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, err.Error())
 	}
 
 	// Add authenticated client to context
