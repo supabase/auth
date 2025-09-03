@@ -210,7 +210,7 @@ func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByClientID() {
 	testName := "Find By Client ID Test"
 	testSecretHash, _ := testHashClientSecret("test_secret")
 	client := &OAuthServerClient{
-		ClientID:         "test_client_find_by_client_id_" + uuid.Must(uuid.NewV4()).String()[:8],
+		ID:               uuid.Must(uuid.NewV4()),
 		ClientName:       &testName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "manual",
@@ -222,14 +222,14 @@ func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByClientID() {
 	err := CreateOAuthServerClient(ts.db, client)
 	require.NoError(ts.T(), err)
 
-	// Find by client_id
-	foundClient, err := FindOAuthServerClientByClientID(ts.db, client.ClientID)
+	// Find by ID (which is now the client_id)
+	foundClient, err := FindOAuthServerClientByID(ts.db, client.ID)
 	require.NoError(ts.T(), err)
 	assert.Equal(ts.T(), client.ID, foundClient.ID)
 	assert.Equal(ts.T(), *client.ClientName, *foundClient.ClientName)
 
 	// Test not found
-	_, err = FindOAuthServerClientByClientID(ts.db, "nonexistent_client_id")
+	_, err = FindOAuthServerClientByID(ts.db, uuid.Must(uuid.NewV4()))
 	assert.Error(ts.T(), err)
 	assert.True(ts.T(), IsNotFoundError(err))
 }
