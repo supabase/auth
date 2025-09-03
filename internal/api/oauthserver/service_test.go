@@ -92,9 +92,9 @@ func (ts *OAuthServiceTestSuite) TestOAuthServerClientServiceMethods() {
 	assert.Equal(ts.T(), "dynamic", client.RegistrationType)
 
 	// Test getOAuthServerClient
-	retrievedClient, err := ts.Server.getOAuthServerClient(ctx, client.ClientID)
+	retrievedClient, err := ts.Server.getOAuthServerClient(ctx, client.ID)
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), client.ClientID, retrievedClient.ClientID)
+	assert.Equal(ts.T(), client.ID, retrievedClient.ID)
 
 }
 
@@ -133,11 +133,11 @@ func (ts *OAuthServiceTestSuite) TestDeleteOAuthServerClient() {
 
 	// Delete the client
 	ctx := context.Background()
-	err := ts.Server.deleteOAuthServerClient(ctx, client.ClientID)
+	err := ts.Server.deleteOAuthServerClient(ctx, client.ID)
 	require.NoError(ts.T(), err)
 
 	// Verify client was soft-deleted
-	deletedClient, err := ts.Server.getOAuthServerClient(ctx, client.ClientID)
+	deletedClient, err := ts.Server.getOAuthServerClient(ctx, client.ID)
 	assert.Error(ts.T(), err) // it was soft-deleted
 	assert.Nil(ts.T(), deletedClient)
 }

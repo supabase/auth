@@ -13,6 +13,7 @@ import (
 	"time"
 
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/oauthserver"
@@ -98,9 +99,15 @@ func (a *API) oauthClientAuth(w http.ResponseWriter, r *http.Request) (context.C
 		return ctx, nil
 	}
 
+	// Parse client_id as UUID
+	clientUUID, err := uuid.FromString(clientID)
+	if err != nil {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client_id format")
+	}
+
 	// Validate client credentials
 	db := a.db.WithContext(ctx)
-	client, err := models.FindOAuthServerClientByClientID(db, clientID)
+	client, err := models.FindOAuthServerClientByID(db, clientUUID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials")

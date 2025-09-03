@@ -50,7 +50,6 @@ func (ts *OAuthServerClientTestSuite) TestOAuthServerClientValidation() {
 	testSecretHash, _ := testHashClientSecret("test_secret")
 	validClient := &OAuthServerClient{
 		ID:               uuid.Must(uuid.NewV4()),
-		ClientID:         "test_client_id",
 		ClientName:       &testClientName,
 		RegistrationType: "dynamic",
 		ClientType:       OAuthServerClientTypeConfidential,
@@ -63,19 +62,12 @@ func (ts *OAuthServerClientTestSuite) TestOAuthServerClientValidation() {
 	err := validClient.Validate()
 	assert.NoError(ts.T(), err)
 
-	// Test missing client_id
+	// Test missing id
 	invalidClient := *validClient
-	invalidClient.ClientID = ""
+	invalidClient.ID = uuid.Nil
 	err = invalidClient.Validate()
 	assert.Error(ts.T(), err)
-	assert.Contains(ts.T(), err.Error(), "client_id is required")
-
-	// Test missing client_id
-	invalidClient = *validClient
-	invalidClient.ClientID = ""
-	err = invalidClient.Validate()
-	assert.Error(ts.T(), err)
-	assert.Contains(ts.T(), err.Error(), "client_id is required")
+	assert.Contains(ts.T(), err.Error(), "id is required")
 
 	// Test invalid registration type
 	invalidClient = *validClient
@@ -155,7 +147,7 @@ func (ts *OAuthServerClientTestSuite) TestCreateOAuthServerClient() {
 	testAppName := "Test Application"
 	testSecretHash, _ := testHashClientSecret("test_secret")
 	client := &OAuthServerClient{
-		ClientID:         "test_client_create_" + uuid.Must(uuid.NewV4()).String()[:8],
+		ID:               uuid.Must(uuid.NewV4()),
 		ClientName:       &testAppName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "dynamic",
@@ -175,12 +167,13 @@ func (ts *OAuthServerClientTestSuite) TestCreateOAuthServerClient() {
 
 func (ts *OAuthServerClientTestSuite) TestCreateOAuthServerClientValidation() {
 	invalidClient := &OAuthServerClient{
-		ClientID: "", // Missing required field
+		ID: uuid.Must(uuid.NewV4()), // Provide ID so validation gets to other fields
+		// Missing required fields like RegistrationType
 	}
 
 	err := CreateOAuthServerClient(ts.db, invalidClient)
 	assert.Error(ts.T(), err)
-	assert.Contains(ts.T(), err.Error(), "client_id is required")
+	assert.Contains(ts.T(), err.Error(), "registration_type must be 'dynamic' or 'manual'")
 }
 
 func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByID() {
@@ -188,7 +181,7 @@ func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByID() {
 	testName := "Find By ID Test"
 	testSecretHash, _ := testHashClientSecret("test_secret")
 	client := &OAuthServerClient{
-		ClientID:         "test_client_find_by_id_" + uuid.Must(uuid.NewV4()).String()[:8],
+		ID:               uuid.Must(uuid.NewV4()),
 		ClientName:       &testName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "dynamic",
@@ -203,7 +196,7 @@ func (ts *OAuthServerClientTestSuite) TestFindOAuthServerClientByID() {
 	// Find by ID
 	foundClient, err := FindOAuthServerClientByID(ts.db, client.ID)
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), client.ClientID, foundClient.ClientID)
+	assert.Equal(ts.T(), client.ID, foundClient.ID)
 	assert.Equal(ts.T(), *client.ClientName, *foundClient.ClientName)
 
 	// Test not found
@@ -246,7 +239,6 @@ func (ts *OAuthServerClientTestSuite) TestUpdateOAuthServerClient() {
 	originalName := "Original Name"
 	testSecretHash, _ := testHashClientSecret("test_secret")
 	client := &OAuthServerClient{
-		ClientID:         "test_client_update_" + uuid.Must(uuid.NewV4()).String()[:8],
 		ClientName:       &originalName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "dynamic",
@@ -300,7 +292,7 @@ func (ts *OAuthServerClientTestSuite) TestSoftDelete() {
 	testName := "Soft Delete Test"
 	testSecretHash, _ := testHashClientSecret("test_secret")
 	client := &OAuthServerClient{
-		ClientID:         "test_client_soft_delete_" + uuid.Must(uuid.NewV4()).String()[:8],
+		ID:               uuid.Must(uuid.NewV4()),
 		ClientName:       &testName,
 		GrantTypes:       "authorization_code,refresh_token",
 		RegistrationType: "dynamic",
@@ -320,7 +312,7 @@ func (ts *OAuthServerClientTestSuite) TestSoftDelete() {
 	require.NoError(ts.T(), err)
 
 	// Verify client is not found in normal queries (which filter out deleted)
-	_, err = FindOAuthServerClientByClientID(ts.db, client.ClientID)
+	_, err = FindOAuthServerClientByID(ts.db, client.ID)
 	assert.Error(ts.T(), err)
 	assert.True(ts.T(), IsNotFoundError(err))
 }

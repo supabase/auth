@@ -28,8 +28,7 @@ const (
 
 // OAuthServerClient represents an OAuth client application registered with this OAuth server
 type OAuthServerClient struct {
-	ID               uuid.UUID `json:"-" db:"id"`
-	ClientID         string    `json:"client_id" db:"client_id"`
+	ID               uuid.UUID `json:"client_id" db:"id"`
 	ClientSecretHash string    `json:"-" db:"client_secret_hash"`
 	RegistrationType string    `json:"registration_type" db:"registration_type"`
 	ClientType       string    `json:"client_type" db:"client_type"`
@@ -57,8 +56,8 @@ func (c *OAuthServerClient) BeforeSave(tx *pop.Connection) error {
 
 // Validate performs basic validation on the OAuth client
 func (c *OAuthServerClient) Validate() error {
-	if c.ClientID == "" {
-		return fmt.Errorf("client_id is required")
+	if c.ID == uuid.Nil {
+		return fmt.Errorf("id is required")
 	}
 
 	if c.RegistrationType != "dynamic" && c.RegistrationType != "manual" {
@@ -182,26 +181,11 @@ func FindOAuthServerClientByID(tx *storage.Connection, id uuid.UUID) (*OAuthServ
 	return client, nil
 }
 
-// FindOAuthServerClientByClientID finds an OAuth client by client_id
-func FindOAuthServerClientByClientID(tx *storage.Connection, clientID string) (*OAuthServerClient, error) {
-	client := &OAuthServerClient{}
-	if err := tx.Q().Where("client_id = ? AND deleted_at IS NULL", clientID).First(client); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, OAuthServerClientNotFoundError{}
-		}
-		return nil, errors.Wrap(err, "error finding OAuth client")
-	}
-	return client, nil
-}
 
 // CreateOAuthServerClient creates a new OAuth client in the database
 func CreateOAuthServerClient(tx *storage.Connection, client *OAuthServerClient) error {
 	if err := client.Validate(); err != nil {
 		return err
-	}
-
-	if client.ID == uuid.Nil {
-		client.ID = uuid.Must(uuid.NewV4())
 	}
 
 	now := time.Now()

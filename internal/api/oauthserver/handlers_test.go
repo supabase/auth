@@ -167,7 +167,7 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientDynamicRegisterDisabled() {
 func (ts *OAuthClientTestSuite) TestOAuthServerClientGetHandler() {
 	client, _ := ts.createTestOAuthClient()
 
-	req := httptest.NewRequest(http.MethodGet, "/admin/oauth/clients/"+client.ClientID, nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/oauth/clients/"+client.ID.String(), nil)
 
 	ctx := WithOAuthServerClient(req.Context(), client)
 	req = req.WithContext(ctx)
@@ -183,7 +183,7 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientGetHandler() {
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(ts.T(), err)
 
-	assert.Equal(ts.T(), client.ClientID, response.ClientID)
+	assert.Equal(ts.T(), client.ID.String(), response.ClientID)
 	assert.Empty(ts.T(), response.ClientSecret) // Should NOT be included in get response
 	assert.Equal(ts.T(), "Test Client", response.ClientName)
 }
@@ -193,7 +193,7 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientDeleteHandler() {
 	client, _ := ts.createTestOAuthClient()
 
 	// Create HTTP request with client in context
-	req := httptest.NewRequest(http.MethodDelete, "/admin/oauth/clients/"+client.ClientID, nil)
+	req := httptest.NewRequest(http.MethodDelete, "/admin/oauth/clients/"+client.ID.String(), nil)
 
 	// Add client to context (normally done by LoadOAuthServerClient middleware)
 	ctx := WithOAuthServerClient(req.Context(), client)
@@ -208,7 +208,7 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientDeleteHandler() {
 	assert.Empty(ts.T(), w.Body.String())
 
 	// Verify client was soft-deleted
-	deletedClient, err := ts.Server.getOAuthServerClient(context.Background(), client.ClientID)
+	deletedClient, err := ts.Server.getOAuthServerClient(context.Background(), client.ID)
 	assert.Error(ts.T(), err) // it was soft-deleted
 	assert.Nil(ts.T(), deletedClient)
 }
@@ -235,8 +235,8 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientListHandler() {
 
 	// Check that both clients are in the response (order might vary)
 	clientIDs := []string{response.Clients[0].ClientID, response.Clients[1].ClientID}
-	assert.Contains(ts.T(), clientIDs, client1.ClientID)
-	assert.Contains(ts.T(), clientIDs, client2.ClientID)
+	assert.Contains(ts.T(), clientIDs, client1.ID.String())
+	assert.Contains(ts.T(), clientIDs, client2.ID.String())
 
 	// Verify client secrets are not included in list response
 	for _, client := range response.Clients {
