@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
@@ -53,7 +54,7 @@ func oauthServerClientToResponse(client *models.OAuthServerClient, includeSecret
 	}
 
 	response := &OAuthServerClientResponse{
-		ClientID:   client.ClientID,
+		ClientID:   client.ID.String(),
 		ClientType: client.ClientType,
 
 		// OAuth 2.1 DCR fields
@@ -83,13 +84,19 @@ func oauthServerClientToResponse(client *models.OAuthServerClient, includeSecret
 // LoadOAuthServerClient is middleware that loads an OAuth server client from the URL parameter
 func (s *Server) LoadOAuthServerClient(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
-	clientID := chi.URLParam(r, "client_id")
+	clientIDStr := chi.URLParam(r, "client_id")
 
-	if clientID == "" {
+	if clientIDStr == "" {
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "client_id is required")
 	}
 
-	observability.LogEntrySetField(r, "oauth_client_id", clientID)
+	// Parse client_id as UUID
+	clientID, err := uuid.FromString(clientIDStr)
+	if err != nil {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid client_id format")
+	}
+
+	observability.LogEntrySetField(r, "oauth_client_id", clientIDStr)
 
 	client, err := s.getOAuthServerClient(ctx, clientID)
 	if err != nil {
@@ -171,7 +178,7 @@ func (s *Server) OAuthServerClientDelete(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	client := GetOAuthServerClient(ctx)
 
-	if err := s.deleteOAuthServerClient(ctx, client.ClientID); err != nil {
+	if err := s.deleteOAuthServerClient(ctx, client.ID); err != nil {
 		return apierrors.NewInternalServerError("Error deleting OAuth client").WithInternalError(err)
 	}
 

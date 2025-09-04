@@ -11,9 +11,9 @@ import (
 	"slices"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/apierrors"
-	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/utilities"
 )
@@ -141,11 +141,6 @@ func validateRedirectURI(uri string) error {
 	return nil
 }
 
-// generateClientID generates a URL-safe random client ID
-func generateClientID() string {
-	// Generate a 32-character alphanumeric client ID
-	return crypto.SecureAlphanumeric(32)
-}
 
 // generateClientSecret generates a secure random client secret
 func generateClientSecret() string {
@@ -193,7 +188,7 @@ func (s *Server) registerOAuthServerClient(ctx context.Context, params *OAuthSer
 	db := s.db.WithContext(ctx)
 
 	client := &models.OAuthServerClient{
-		ClientID:         generateClientID(),
+		ID:               uuid.Must(uuid.NewV4()),
 		RegistrationType: params.RegistrationType,
 		ClientType:       clientType,
 		ClientName:       utilities.StringPtr(params.ClientName),
@@ -222,11 +217,11 @@ func (s *Server) registerOAuthServerClient(ctx context.Context, params *OAuthSer
 	return client, plaintextSecret, nil
 }
 
-// getOAuthServerClient retrieves an OAuth client by client_id
-func (s *Server) getOAuthServerClient(ctx context.Context, clientID string) (*models.OAuthServerClient, error) {
+// getOAuthServerClient retrieves an OAuth client by ID
+func (s *Server) getOAuthServerClient(ctx context.Context, clientID uuid.UUID) (*models.OAuthServerClient, error) {
 	db := s.db.WithContext(ctx)
 
-	client, err := models.FindOAuthServerClientByClientID(db, clientID)
+	client, err := models.FindOAuthServerClientByID(db, clientID)
 	if err != nil {
 		return nil, err
 	}
@@ -235,10 +230,10 @@ func (s *Server) getOAuthServerClient(ctx context.Context, clientID string) (*mo
 }
 
 // deleteOAuthServerClient soft-deletes an OAuth client
-func (s *Server) deleteOAuthServerClient(ctx context.Context, clientID string) error {
+func (s *Server) deleteOAuthServerClient(ctx context.Context, clientID uuid.UUID) error {
 	db := s.db.WithContext(ctx)
 
-	client, err := models.FindOAuthServerClientByClientID(db, clientID)
+	client, err := models.FindOAuthServerClientByID(db, clientID)
 	if err != nil {
 		return err
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/gofrs/uuid"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
@@ -103,7 +104,13 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 		return err
 	}
 
-	client, err := s.getOAuthServerClient(ctx, params.ClientID)
+	// Parse client_id as UUID
+	clientID, err := uuid.FromString(params.ClientID)
+	if err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthClientNotFound, "invalid client_id format")
+	}
+
+	client, err := s.getOAuthServerClient(ctx, clientID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthClientNotFound, "invalid client_id")
@@ -144,7 +151,7 @@ func (s *Server) OAuthServerAuthorize(w http.ResponseWriter, r *http.Request) er
 	}
 
 	observability.LogEntrySetField(r, "authorization_id", authorization.AuthorizationID)
-	observability.LogEntrySetField(r, "client_id", client.ClientID)
+	observability.LogEntrySetField(r, "client_id", client.ID.String())
 
 	// Redirect to authorization path with authorization_id
 	if config.OAuthServer.AuthorizationPath == "" {
@@ -228,7 +235,7 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 	response := AuthorizationDetailsResponse{
 		AuthorizationID: authorization.AuthorizationID,
 		Client: ClientDetailsResponse{
-			ClientID:   authorization.Client.ClientID,
+			ClientID:   authorization.Client.ID.String(),
 			ClientName: utilities.StringValue(authorization.Client.ClientName),
 			ClientURI:  utilities.StringValue(authorization.Client.ClientURI),
 			LogoURI:    utilities.StringValue(authorization.Client.LogoURI),
@@ -241,7 +248,7 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 	}
 
 	observability.LogEntrySetField(r, "authorization_id", authorization.AuthorizationID)
-	observability.LogEntrySetField(r, "client_id", authorization.Client.ClientID)
+	observability.LogEntrySetField(r, "client_id", authorization.Client.ID.String())
 
 	return shared.SendJSON(w, http.StatusOK, response)
 }
