@@ -224,6 +224,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				return api.Signup(w, r)
 			})
 		})
+
 		r.With(api.limitHandler(api.limiterOpts.Recover)).
 			With(api.verifyCaptcha).With(api.requireEmailProvider).Post("/recover", api.Recover)
 
@@ -351,6 +352,25 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 					})
 				})
 			}
+		})
+
+		// SCIM v2 endpoints (minimal Users only)
+		r.Route("/scim/v2", func(r *router) {
+			r.Use(api.requireSCIMEnabled)
+			r.Use(api.requireSCIMAuth)
+			r.Get("/ServiceProviderConfig", api.SCIMServiceProviderConfig)
+			r.Get("/ResourceTypes", api.SCIMResourceTypes)
+			r.Get("/Schemas", api.SCIMSchemas)
+			r.Route("/Users", func(r *router) {
+				r.Get("/", api.SCIMUsersList)
+				r.Post("/", api.SCIMUsersCreate)
+				r.Route("/{scim_user_id}", func(r *router) {
+					r.Get("/", api.SCIMUsersGet)
+					r.Put("/", api.SCIMUsersReplace)
+					r.Patch("/", api.SCIMUsersPatch)
+					r.Delete("/", api.SCIMUsersDelete)
+				})
+			})
 		})
 
 		// OAuth Dynamic Client Registration endpoint (public, rate limited)
