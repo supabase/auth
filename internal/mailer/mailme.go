@@ -75,16 +75,18 @@ func (m *MailmeMailer) Mail(
 	}
 
 	mail := gomail.NewMessage()
+	
+	mail := gomail.NewMessage()
 	mail.SetHeader("From", m.From)
 	mail.SetHeader("To", to)
 	mail.SetHeader("Subject", subject.String())
-
+	
 	for k, v := range headers {
-		if v != nil {
+		if v != nil && k != "From" { // Skip From header from headers
 			mail.SetHeader(k, v...)
 		}
 	}
-
+	
 	mail.SetBody("text/html", body)
 
 	dial := gomail.NewDialer(m.Host, m.Port, m.User, m.Pass)
