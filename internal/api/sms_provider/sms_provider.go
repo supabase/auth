@@ -34,24 +34,26 @@ type SmsProvider interface {
 }
 
 func GetSmsProvider(config conf.GlobalConfiguration) (SmsProvider, error) {
-	if MockProvider != nil {
-		return MockProvider, nil
-	}
+       if MockProvider != nil {
+	       return MockProvider, nil
+       }
 
-	switch name := config.Sms.Provider; name {
-	case "twilio":
-		return NewTwilioProvider(config.Sms.Twilio)
-	case "messagebird":
-		return NewMessagebirdProvider(config.Sms.Messagebird)
-	case "textlocal":
-		return NewTextlocalProvider(config.Sms.Textlocal)
-	case "vonage":
-		return NewVonageProvider(config.Sms.Vonage)
-	case "twilio_verify":
-		return NewTwilioVerifyProvider(config.Sms.TwilioVerify)
-	default:
-		return nil, fmt.Errorf("sms Provider %s could not be found", name)
-	}
+       switch name := config.Sms.Provider; name {
+       case "twilio":
+	       return NewTwilioProvider(config.Sms.Twilio)
+       case "messagebird":
+	       return NewMessagebirdProvider(config.Sms.Messagebird)
+       case "bird":
+	       return bird.NewBirdProvider(config.Sms.Bird)
+       case "textlocal":
+	       return NewTextlocalProvider(config.Sms.Textlocal)
+       case "vonage":
+	       return NewVonageProvider(config.Sms.Vonage)
+       case "twilio_verify":
+	       return NewTwilioVerifyProvider(config.Sms.TwilioVerify)
+       default:
+	       return nil, fmt.Errorf("sms Provider %s could not be found", name)
+       }
 }
 
 func IsValidMessageChannel(channel string, config *conf.GlobalConfiguration) bool {

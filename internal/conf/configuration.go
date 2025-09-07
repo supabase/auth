@@ -1,3 +1,15 @@
+func (t *BirdProviderConfiguration) Validate() error {
+       if t.AccessKey == "" {
+	       return errors.New("missing Bird access key")
+       }
+       if t.WorkspaceID == "" {
+	       return errors.New("missing Bird workspace ID")
+       }
+       if t.ChannelID == "" {
+	       return errors.New("missing Bird channel ID")
+       }
+       return nil
+}
 package conf
 
 import (
@@ -506,7 +518,6 @@ type PhoneProviderConfiguration struct {
 	Enabled bool `json:"enabled" default:"false"`
 }
 
-type SmsProviderConfiguration struct {
 	Autoconfirm       bool               `json:"autoconfirm"`
 	MaxFrequency      time.Duration      `json:"max_frequency" split_words:"true"`
 	OtpExp            uint               `json:"otp_exp" split_words:"true"`
@@ -520,6 +531,7 @@ type SmsProviderConfiguration struct {
 	Twilio       TwilioProviderConfiguration       `json:"twilio"`
 	TwilioVerify TwilioVerifyProviderConfiguration `json:"twilio_verify" split_words:"true"`
 	Messagebird  MessagebirdProviderConfiguration  `json:"messagebird"`
+	Bird         BirdProviderConfiguration         `json:"bird"`
 	Textlocal    TextlocalProviderConfiguration    `json:"textlocal"`
 	Vonage       VonageProviderConfiguration       `json:"vonage"`
 }
@@ -544,6 +556,13 @@ type TwilioVerifyProviderConfiguration struct {
 	AccountSid        string `json:"account_sid" split_words:"true"`
 	AuthToken         string `json:"auth_token" split_words:"true"`
 	MessageServiceSid string `json:"message_service_sid" split_words:"true"`
+}
+
+
+type BirdProviderConfiguration struct {
+	AccessKey   string `json:"access_key" split_words:"true"`
+	WorkspaceID string `json:"workspace_id" split_words:"true"`
+	ChannelID   string `json:"channel_id" split_words:"true"`
 }
 
 type MessagebirdProviderConfiguration struct {
