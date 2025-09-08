@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/oauthserver"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/security"
@@ -84,9 +85,9 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	}
 }
 
-// oauthClientAuth optionally authenticates an OAuth client as middleware
-// This doesn't fail if no client credentials are provided, but validates them if present
-func (a *API) oauthClientAuth(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+// requireOAuthClientAuth authenticates an OAuth client as middleware
+// Requires client_id to be present and validates client credentials
+func (a *API) requireOAuthClientAuth(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 
 	clientID, clientSecret, err := oauthserver.ExtractClientCredentials(r)
@@ -121,7 +122,7 @@ func (a *API) oauthClientAuth(w http.ResponseWriter, r *http.Request) (context.C
 	}
 
 	// Add authenticated client to context
-	ctx = oauthserver.WithOAuthServerClient(ctx, client)
+	ctx = shared.WithOAuthServerClient(ctx, client)
 	return ctx, nil
 }
 

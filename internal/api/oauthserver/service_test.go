@@ -8,9 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
+	"github.com/supabase/auth/internal/tokens"
 )
 
 const serviceTestConfig = "../../../hack/test.env"
@@ -34,7 +36,11 @@ func TestOAuthService(t *testing.T) {
 	globalConfig.OAuthServer.Enabled = true
 	globalConfig.OAuthServer.AllowDynamicRegistration = true
 
-	server := NewServer(globalConfig, conn)
+	// Create a mock hooks manager for token service
+	hooksMgr := &v0hooks.Manager{} // minimal mock for testing
+	tokenService := tokens.NewService(globalConfig, hooksMgr)
+
+	server := NewServer(globalConfig, conn, tokenService)
 
 	ts := &OAuthServiceTestSuite{
 		Server: server,
