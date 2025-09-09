@@ -409,12 +409,15 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 		return apierrors.NewInternalServerError("error generating sms template").WithInternalError(err)
 	}
 
+	phone := factor.Phone.String()
+
 	if config.Hook.SendSMS.Enabled {
 		input := v0hooks.SendSMSInput{
 			User: user,
 			SMS: v0hooks.SMS{
 				OTP:     otp,
 				SMSType: "mfa",
+				Phone:   phone,
 			},
 		}
 		output := v0hooks.SendSMSOutput{}
@@ -428,7 +431,7 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 			return apierrors.NewInternalServerError("Failed to get SMS provider").WithInternalError(err)
 		}
 		// We omit messageID for now, can consider reinstating if there are requests.
-		if _, err = smsProvider.SendMessage(factor.Phone.String(), message, channel, otp); err != nil {
+		if _, err = smsProvider.SendMessage(phone, message, channel, otp); err != nil {
 			return apierrors.NewInternalServerError("error sending message").WithInternalError(err)
 		}
 	}
