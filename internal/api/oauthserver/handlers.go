@@ -51,7 +51,7 @@ type OAuthServerClientListResponse struct {
 }
 
 // oauthServerClientToResponse converts a model to response format
-func oauthServerClientToResponse(client *models.OAuthServerClient, includeSecret bool) *OAuthServerClientResponse {
+func oauthServerClientToResponse(client *models.OAuthServerClient) *OAuthServerClientResponse {
 	// Set token endpoint auth methods based on client type
 	var tokenEndpointAuthMethods string
 	// TODO(cemal) :: Remove this once we have the token endpoint auth method stored in the database
@@ -80,12 +80,6 @@ func oauthServerClientToResponse(client *models.OAuthServerClient, includeSecret
 		RegistrationType: client.RegistrationType,
 		CreatedAt:        client.CreatedAt,
 		UpdatedAt:        client.UpdatedAt,
-	}
-
-	// Only include client_secret during registration and only for confidential clients
-	if includeSecret && client.IsConfidential() {
-		// Note: This will be filled in by the handler with the plaintext secret
-		response.ClientSecret = ""
 	}
 
 	return response
@@ -137,7 +131,7 @@ func (s *Server) AdminOAuthServerClientRegister(w http.ResponseWriter, r *http.R
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
 	}
 
-	response := oauthServerClientToResponse(client, true)
+	response := oauthServerClientToResponse(client)
 	if client.IsConfidential() {
 		response.ClientSecret = plaintextSecret
 	}
@@ -166,7 +160,7 @@ func (s *Server) OAuthServerClientDynamicRegister(w http.ResponseWriter, r *http
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
 	}
 
-	response := oauthServerClientToResponse(client, true)
+	response := oauthServerClientToResponse(client)
 	if client.IsConfidential() {
 		response.ClientSecret = plaintextSecret
 	}
@@ -179,7 +173,7 @@ func (s *Server) OAuthServerClientGet(w http.ResponseWriter, r *http.Request) er
 	ctx := r.Context()
 	client := shared.GetOAuthServerClient(ctx)
 
-	response := oauthServerClientToResponse(client, false)
+	response := oauthServerClientToResponse(client)
 	return shared.SendJSON(w, http.StatusOK, response)
 }
 
@@ -208,7 +202,7 @@ func (s *Server) OAuthServerClientList(w http.ResponseWriter, r *http.Request) e
 
 	responses := make([]OAuthServerClientResponse, len(clients))
 	for i, client := range clients {
-		responses[i] = *oauthServerClientToResponse(&client, false)
+		responses[i] = *oauthServerClientToResponse(&client)
 	}
 
 	response := OAuthServerClientListResponse{
