@@ -291,7 +291,7 @@ type ReloadingConfiguration struct {
 	// used to configure `systemd reload` support, by default the SIGUSR1 linux
 	// signal number of 10 is used.
 	SignalEnabled bool `json:"signal_enabled" split_words:"true" default:"false"`
-	SignalNumber  uint `json:"signal_number" split_words:"true" default:"10"`
+	SignalNumber  int  `json:"signal_number" split_words:"true" default:"10"`
 
 	// When at least one reloader is enabled this flag determines how much idle
 	// time must pass before triggering a reload. This ensures a single

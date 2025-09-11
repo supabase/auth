@@ -59,7 +59,7 @@ func TestWatchSignals(t *testing.T) {
 		cfg.GracePeriodInterval = time.Second / 100
 		cfg.PollerInterval = time.Second / 100
 		cfg.SignalEnabled = true
-		cfg.SignalNumber = uint(sig)
+		cfg.SignalNumber = int(sig)
 		cfg.NotifyEnabled = true
 		cfg.PollerEnabled = true
 
