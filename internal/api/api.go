@@ -93,11 +93,6 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		version: version,
 	}
 
-	// Only initialize OAuth server if enabled
-	if globalConfig.OAuthServer.Enabled {
-		api.oauthServer = oauthserver.NewServer(globalConfig, db)
-	}
-
 	for _, o := range opt {
 		o.apply(api)
 	}
@@ -122,6 +117,11 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 	// Connect token service to API's time function (supports test overrides)
 	api.tokenService.SetTimeFunc(api.Now)
+
+	// Initialize OAuth server (only if enabled)
+	if globalConfig.OAuthServer.Enabled {
+		api.oauthServer = oauthserver.NewServer(globalConfig, db, api.tokenService)
+	}
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
@@ -237,7 +237,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			With(api.verifyCaptcha).Post("/otp", api.Otp)
 
 		// rate limiting applied in handler
-		r.With(api.verifyCaptcha).With(api.oauthClientAuth).Post("/token", api.Token)
+		r.With(api.verifyCaptcha).Post("/token", api.Token)
 
 		r.With(api.limitHandler(api.limiterOpts.Verify)).Route("/verify", func(r *router) {
 			r.Get("/", api.Verify)
@@ -358,6 +358,9 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			r.Route("/oauth", func(r *router) {
 				r.With(api.limitHandler(api.limiterOpts.OAuthClientRegister)).
 					Post("/clients/register", api.oauthServer.OAuthServerClientDynamicRegister)
+
+				// OAuth Token endpoint (public, with client authentication)
+				r.With(api.requireOAuthClientAuth).Post("/token", api.oauthServer.OAuthToken)
 
 				// OAuth 2.1 Authorization endpoints
 				// `/authorize` to initiate OAuth2 authorization code flow where Supabase Auth is the OAuth2 provider

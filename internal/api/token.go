@@ -287,7 +287,11 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 }
 
 func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, int64, error) {
-	return a.tokenService.GenerateAccessToken(r, tx, user, sessionId, authenticationMethod)
+	return a.tokenService.GenerateAccessToken(r, tx, tokens.GenerateAccessTokenParams{
+		User:                 user,
+		SessionID:            sessionId,
+		AuthenticationMethod: authenticationMethod,
+	})
 }
 
 func (a *API) issueRefreshToken(r *http.Request, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*tokens.AccessTokenResponse, error) {
@@ -335,7 +339,12 @@ func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection,
 			return err
 		}
 
-		tokenString, expiresAt, terr = a.tokenService.GenerateAccessToken(r, tx, user, &session.ID, authenticationMethod)
+		tokenString, expiresAt, terr = a.tokenService.GenerateAccessToken(r, tx, tokens.GenerateAccessTokenParams{
+			User:                 user,
+			SessionID:            &session.ID,
+			AuthenticationMethod: authenticationMethod,
+		})
+
 		if terr != nil {
 			httpErr, ok := terr.(*HTTPError)
 			if ok {

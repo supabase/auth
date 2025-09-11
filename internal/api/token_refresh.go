@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"net/http"
+
+	"github.com/supabase/auth/internal/tokens"
 )
 
 // RefreshTokenGrantParams are the parameters the RefreshTokenGrant method accepts
@@ -17,7 +19,9 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return err
 	}
 
-	tokenResponse, err := a.tokenService.RefreshTokenGrant(ctx, a.db, r, params.RefreshToken)
+	tokenResponse, err := a.tokenService.RefreshTokenGrant(ctx, a.db, r, tokens.RefreshTokenGrantParams{
+		RefreshToken: params.RefreshToken,
+	})
 	if err != nil {
 		return err
 	}

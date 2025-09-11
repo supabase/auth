@@ -29,6 +29,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case OAuthServerClientNotFoundError, *OAuthServerClientNotFoundError:
 		return true
+	case OAuthServerAuthorizationNotFoundError, *OAuthServerAuthorizationNotFoundError:
+		return true
 	}
 	return false
 }

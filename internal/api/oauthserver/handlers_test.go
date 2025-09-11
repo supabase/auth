@@ -11,10 +11,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
+	"github.com/supabase/auth/internal/tokens"
 )
 
 const oauthServerTestConfig = "../../../hack/test.env"
@@ -37,7 +40,11 @@ func TestOAuthClientHandler(t *testing.T) {
 	globalConfig.OAuthServer.Enabled = true
 	globalConfig.OAuthServer.AllowDynamicRegistration = true
 
-	server := NewServer(globalConfig, conn)
+	// Create a mock hooks manager for token service
+	hooksMgr := &v0hooks.Manager{} // minimal mock for testing
+	tokenService := tokens.NewService(globalConfig, hooksMgr)
+
+	server := NewServer(globalConfig, conn, tokenService)
 
 	ts := &OAuthClientTestSuite{
 		Server: server,
@@ -169,7 +176,7 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientGetHandler() {
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/oauth/clients/"+client.ID.String(), nil)
 
-	ctx := WithOAuthServerClient(req.Context(), client)
+	ctx := shared.WithOAuthServerClient(req.Context(), client)
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()
@@ -196,7 +203,7 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientDeleteHandler() {
 	req := httptest.NewRequest(http.MethodDelete, "/admin/oauth/clients/"+client.ID.String(), nil)
 
 	// Add client to context (normally done by LoadOAuthServerClient middleware)
-	ctx := WithOAuthServerClient(req.Context(), client)
+	ctx := shared.WithOAuthServerClient(req.Context(), client)
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()
