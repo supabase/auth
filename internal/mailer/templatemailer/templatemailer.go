@@ -82,8 +82,8 @@ var (
 	}
 )
 
-func (m *Mailer) Headers(messageType string) map[string][]string {
-	originalHeaders := m.cfg.SMTP.NormalizedHeaders()
+func (m *Mailer) Headers(cfg *conf.GlobalConfiguration, messageType string) map[string][]string {
+	originalHeaders := cfg.SMTP.NormalizedHeaders()
 
 	if originalHeaders == nil {
 		return nil
@@ -138,7 +138,7 @@ func (m *Mailer) InviteMail(r *http.Request, user *models.User, otp, referrerURL
 		"Data":            user.UserMetaData,
 		"RedirectTo":      referrerURL,
 	}
-	return m.mail(r.Context(), InviteTemplate, user.GetEmail(), data)
+	return m.mail(r.Context(), m.cfg, InviteTemplate, user.GetEmail(), data)
 }
 
 // ConfirmationMail sends a signup confirmation mail to a new user
@@ -161,7 +161,7 @@ func (m *Mailer) ConfirmationMail(r *http.Request, user *models.User, otp, refer
 		"Data":            user.UserMetaData,
 		"RedirectTo":      referrerURL,
 	}
-	return m.mail(r.Context(), ConfirmationTemplate, user.GetEmail(), data)
+	return m.mail(r.Context(), m.cfg, ConfirmationTemplate, user.GetEmail(), data)
 }
 
 // ReauthenticateMail sends a reauthentication mail to an authenticated user
@@ -172,7 +172,7 @@ func (m *Mailer) ReauthenticateMail(r *http.Request, user *models.User, otp stri
 		"Token":   otp,
 		"Data":    user.UserMetaData,
 	}
-	return m.mail(r.Context(), ReauthenticationTemplate, user.GetEmail(), data)
+	return m.mail(r.Context(), m.cfg, ReauthenticationTemplate, user.GetEmail(), data)
 }
 
 // EmailChangeMail sends an email change confirmation mail to a user
@@ -230,6 +230,7 @@ func (m *Mailer) EmailChangeMail(r *http.Request, user *models.User, otpNew, otp
 			}
 			errors <- m.mail(
 				ctx,
+				m.cfg,
 				EmailChangeTemplate,
 				address,
 				data,
@@ -265,7 +266,7 @@ func (m *Mailer) RecoveryMail(r *http.Request, user *models.User, otp, referrerU
 		"Data":            user.UserMetaData,
 		"RedirectTo":      referrerURL,
 	}
-	return m.mail(r.Context(), RecoveryTemplate, user.GetEmail(), data)
+	return m.mail(r.Context(), m.cfg, RecoveryTemplate, user.GetEmail(), data)
 }
 
 // MagicLinkMail sends a login link mail
@@ -288,7 +289,7 @@ func (m *Mailer) MagicLinkMail(r *http.Request, user *models.User, otp, referrer
 		"Data":            user.UserMetaData,
 		"RedirectTo":      referrerURL,
 	}
-	return m.mail(r.Context(), MagicLinkTemplate, user.GetEmail(), data)
+	return m.mail(r.Context(), m.cfg, MagicLinkTemplate, user.GetEmail(), data)
 }
 
 // GetEmailActionLink returns a magiclink, recovery or invite link based on the actionType passed.

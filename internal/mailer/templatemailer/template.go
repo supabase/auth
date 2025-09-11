@@ -14,6 +14,10 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/mailer/mailmeclient"
+	"github.com/supabase/auth/internal/mailer/noopclient"
+	"github.com/supabase/auth/internal/mailer/taskclient"
+	"github.com/supabase/auth/internal/mailer/validateclient"
 	"github.com/supabase/auth/internal/observability"
 	"golang.org/x/sync/singleflight"
 )
@@ -25,35 +29,50 @@ func init() {
 	}
 }
 
-const (
-	maxTemplateSize = 10_000_000
-	maxTemplateAge  = time.Second * 10
-	maxTemplateIval = maxTemplateAge / 4
-)
-
 // Mailer will send mail and use templates from the site for easy mail styling
 type Mailer struct {
 	cfg *conf.GlobalConfiguration
-	tc  *tplCache
 	mc  mailer.Client
+	tc  *Cache
+}
+
+// FromConfig returns a new mailer configured using the global configuration.
+func FromConfig(globalConfig *conf.GlobalConfiguration, tc *Cache) *Mailer {
+	var mc mailer.Client
+	if globalConfig.SMTP.Host == "" {
+		logrus.Infof("Noop mail client being used for %v", globalConfig.SiteURL)
+		mc = noopclient.New()
+	} else {
+		mc = mailmeclient.New(globalConfig)
+	}
+
+	// Wrap client with validation first
+	mc = validateclient.New(globalConfig, mc)
+
+	// Then background tasks
+	mc = taskclient.New(globalConfig, mc)
+
+	// Finally the template mailer
+	return New(globalConfig, mc, tc)
 }
 
 // New will return a *TemplateMailer backed by the given mailer.Client.
-func New(globalConfig *conf.GlobalConfiguration, mc mailer.Client) *Mailer {
+func New(globalConfig *conf.GlobalConfiguration, mc mailer.Client, tc *Cache) *Mailer {
 	return &Mailer{
 		cfg: globalConfig,
-		tc:  newTplCache(globalConfig),
 		mc:  mc,
+		tc:  tc,
 	}
 }
 
 func (m *Mailer) mail(
 	ctx context.Context,
+	cfg *conf.GlobalConfiguration,
 	tpl string,
 	to string,
 	data map[string]any,
 ) error {
-	if _, ok := lookupEmailContentConfig(&m.cfg.Mailer.Subjects, tpl); !ok {
+	if _, ok := lookupEmailContentConfig(&cfg.Mailer.Subjects, tpl); !ok {
 		return fmt.Errorf("templatemailer: template type: %s is invalid", tpl)
 	}
 
@@ -63,9 +82,9 @@ func (m *Mailer) mail(
 	if typ == ReauthenticationTemplate {
 		typ = "reauthenticate"
 	}
-	headers := m.Headers(typ)
+	headers := m.Headers(cfg, typ)
 
-	ent, err := m.tc.get(ctx, tpl)
+	ent, err := m.tc.get(ctx, cfg, tpl)
 	if err != nil {
 		return err
 	}
@@ -88,6 +107,7 @@ func (m *Mailer) mail(
 type tplCacheEntry struct {
 	createdAt time.Time
 	checkedAt time.Time
+	def       bool
 	typ       string
 	subject   *template.Template
 	body      *template.Template
@@ -102,8 +122,8 @@ func newTplCacheEntry(
 		createdAt: at,
 		checkedAt: at,
 		typ:       typ,
-		body:      subject,
-		subject:   body,
+		subject:   subject,
+		body:      body,
 	}
 }
 
@@ -129,76 +149,190 @@ func (ent *tplCacheEntry) execute(
 	return subject, body, nil
 }
 
-type tplCache struct {
-	cfg *conf.GlobalConfiguration
+type Cache struct {
 	sf  singleflight.Group
 	now func() time.Time
 
-	maxSize int
-	maxAge  time.Duration
-	maxIval time.Duration
-
-	// Must hold mu for below field access
-	mu sync.Mutex
-	m  map[string]*tplCacheEntry
+	// Must hold rw for below field access
+	rw sync.RWMutex
+	m  map[string]*tplCacheEntry // map[TemplateType]*tplCacheEntry
+	t  time.Time                 // Time of the most recent call to getEntry
 }
 
-func newTplCache(cfg *conf.GlobalConfiguration) *tplCache {
-	return &tplCache{
-		cfg:     cfg,
-		m:       make(map[string]*tplCacheEntry),
-		now:     time.Now,
-		maxSize: maxTemplateSize,
-		maxAge:  maxTemplateAge,
-		maxIval: maxTemplateIval,
+func NewCache() *Cache {
+	return &Cache{
+		m:   make(map[string]*tplCacheEntry),
+		now: time.Now,
 	}
 }
 
-func (o *tplCache) getEntry(typ string) (*tplCacheEntry, bool) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
+func (o *Cache) Reload(
+	ctx context.Context,
+	cfg *conf.GlobalConfiguration,
+) {
+	now := o.now()
+	touchedAt := o.getTouchedAt()
+
+	// If the touchedAt time is zero we will eagerly reload. Note we must set
+	// the touch time to prevent a server that has never had a request from
+	// from reloading indefinitely.
+	if touchedAt.IsZero() {
+		defer o.setTouchedAt(now)
+
+		o.reloadAt(ctx, cfg, now)
+		return
+	}
+
+	// If the server has been idle for maxIdle time, we stop updating the
+	// templates until the next mail request comes through.
+	maxIdle := cfg.Mailer.TemplateReloadingMaxIdle
+	if now.Sub(touchedAt) >= maxIdle {
+		return
+	}
+
+	o.reloadAt(ctx, cfg, now)
+}
+
+func (o *Cache) reloadAt(
+	ctx context.Context,
+	cfg *conf.GlobalConfiguration,
+	now time.Time,
+) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	wg := new(sync.WaitGroup)
+	defer wg.Wait()
+
+	for _, typ := range templateTypes {
+		ent, ok := o.getEntry(typ)
+		if !ok {
+			// Cache miss, straight to load with no current entry.
+			o.reloadType(ctx, cfg, wg, typ, nil)
+			continue
+		}
+
+		// Before we eagerly reload the template we first make sure we are
+		// approaching it's expiration. The goal is to never have the requests
+		// block on the singleflight during regular mail requests.
+		//
+		// The def flag signals that the template is the default template. We
+		// skip this check if it's currently set to true, as we want to get a
+		// new template as soon soon as possible.
+		maxAge := cfg.Mailer.TemplateMaxAge - (cfg.Mailer.TemplateMaxAge / 10)
+		if !ent.def && now.Sub(ent.createdAt) < maxAge {
+			continue
+		}
+
+		// We are approaching the expiration and need to eagerly reload. Before
+		// making the request we make sure we haven't recently checked the template
+		// using our ival configuration knob. This is just a simple way to give
+		// endpoints some breathing room instead of expo backoff with counters.
+		retryIval := cfg.Mailer.TemplateRetryInterval
+		if now.Sub(ent.checkedAt) < retryIval {
+			continue
+		}
+
+		// This template type is eligible for reload.
+		o.reloadType(ctx, cfg, wg, typ, ent)
+	}
+}
+
+func (o *Cache) reloadType(
+	ctx context.Context,
+	cfg *conf.GlobalConfiguration,
+	wg *sync.WaitGroup,
+	typ string,
+	cur *tplCacheEntry,
+) {
+	wg.Add(1)
+	go func(typ string) {
+		defer wg.Done()
+
+		ent, err := o.load(ctx, cfg, typ, cur)
+		if err != nil {
+			return
+		}
+
+		if cur == nil || cur.createdAt != ent.createdAt {
+			le := observability.GetLogEntryFromContext(ctx).Entry
+			le.WithFields(logrus.Fields{
+				"event":     "templatemailer_reloader_template_update",
+				"mail_type": typ,
+			}).Infof("mailer: reloaded template type: %v", typ)
+		}
+	}(typ)
+}
+
+func (o *Cache) getTouchedAt() time.Time {
+	o.rw.RLock()
+	defer o.rw.RUnlock()
+	return o.t
+}
+
+func (o *Cache) setTouchedAt(at time.Time) {
+	o.rw.Lock()
+	defer o.rw.Unlock()
+	o.t = at
+}
+
+func (o *Cache) getEntry(typ string) (*tplCacheEntry, bool) {
+	o.rw.RLock()
+	defer o.rw.RUnlock()
 	v, ok := o.m[typ]
 	return v, ok
 }
 
-func (o *tplCache) putEntry(typ string, ent *tplCacheEntry) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
+func (o *Cache) getEntryAndTouchAt(typ string, at time.Time) (*tplCacheEntry, bool) {
+	o.rw.Lock()
+	defer o.rw.Unlock()
+	o.t = at
+	v, ok := o.m[typ]
+	return v, ok
+}
+
+func (o *Cache) putEntry(typ string, ent *tplCacheEntry) {
+	o.rw.Lock()
+	defer o.rw.Unlock()
 	o.m[typ] = ent
 }
 
 // get is the method called to fetch an entry from the cache.
-func (o *tplCache) get(
+func (o *Cache) get(
 	ctx context.Context,
+	cfg *conf.GlobalConfiguration,
 	typ string,
 ) (*tplCacheEntry, error) {
-	ent, ok := o.getEntry(typ)
+	now := o.now()
+	ent, ok := o.getEntryAndTouchAt(typ, now)
 	if !ok {
 		// Cache miss, straight to load with no current entry.
-		return o.load(ctx, typ, nil)
+		return o.load(ctx, cfg, typ, nil)
 	}
 
-	now := o.now()
-	if now.Sub(ent.createdAt) < o.maxAge {
+	maxAge := cfg.Mailer.TemplateMaxAge
+	if now.Sub(ent.createdAt) < maxAge {
 		// Cache hit and the entry is not expired, return it.
 		return ent, nil
 	}
 
 	// Entry is expired, we check if the entry is ready for reloading. We do
 	// as much as we can outside of load to prevent synchronization on o.sf.
-	if now.Sub(ent.checkedAt) < o.maxIval {
+	retryIval := cfg.Mailer.TemplateRetryInterval
+	if now.Sub(ent.checkedAt) < retryIval {
 		// Entry was checked within maxIval, return it.
 		return ent, nil
 	}
 
 	// Call load with our most recent entry.
-	return o.load(ctx, typ, ent)
+	return o.load(ctx, cfg, typ, ent)
 }
 
 // load is what happens when "get" has a cache miss, the hit has expired or
 // the a previously failed check has elapsed the ival.
-func (o *tplCache) load(
+func (o *Cache) load(
 	ctx context.Context,
+	cfg *conf.GlobalConfiguration,
 	typ string,
 	cur *tplCacheEntry,
 ) (*tplCacheEntry, error) {
@@ -213,7 +347,7 @@ func (o *tplCache) load(
 	v, err, _ := o.sf.Do(typ, func() (any, error) {
 
 		// First try to load a fresh entry.
-		ent, err := o.loadEntry(ctx, typ)
+		ent, err := o.loadEntry(ctx, cfg, typ)
 		if err == nil {
 			// No error fetching fresh entry, put in cache & return it.
 			o.putEntry(typ, ent)
@@ -223,7 +357,7 @@ func (o *tplCache) load(
 		// We had an err loading a fresh entry. Check if we had a current entry
 		// and return a copy of that with a last checked time.
 		if cur != nil {
-			cpy := ent.copy()
+			cpy := cur.copy()
 			cpy.checkedAt = o.now()
 
 			o.putEntry(typ, cpy)
@@ -231,9 +365,7 @@ func (o *tplCache) load(
 		}
 
 		// We have no previous entry and no fresh entry, we will load the
-		// default templates so the user can continue serving requests.
-		//
-		// TODO(cstockton): These should be checked more eagerly than a cache hit
+		// default templates so the mailer can continue serving requests.
 		ent = o.loadEntryDefault(typ)
 		o.putEntry(typ, ent)
 		return ent, nil
@@ -250,16 +382,17 @@ func (o *tplCache) load(
 }
 
 // loadEntry returns the
-func (o *tplCache) loadEntry(
+func (o *Cache) loadEntry(
 	ctx context.Context,
+	cfg *conf.GlobalConfiguration,
 	typ string,
 ) (*tplCacheEntry, error) {
-	subjectTemp, err := o.loadEntrySubject(ctx, typ)
+	subjectTemp, err := o.loadEntrySubject(ctx, cfg, typ)
 	if err != nil {
 		return nil, err
 	}
 
-	bodyTemp, err := o.loadEntryBody(ctx, typ)
+	bodyTemp, err := o.loadEntryBody(ctx, cfg, typ)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +403,7 @@ func (o *tplCache) loadEntry(
 }
 
 // loadEntryDefault will never fail due to the checkDefaults() in init().
-func (o *tplCache) loadEntryDefault(
+func (o *Cache) loadEntryDefault(
 	typ string,
 ) *tplCacheEntry {
 	subjectStr := getEmailContentConfig(defaultTemplateSubjects, typ, "")
@@ -281,18 +414,20 @@ func (o *tplCache) loadEntryDefault(
 
 	now := o.now()
 	ent := newTplCacheEntry(now, typ, subjectTemp, bodyTemp)
+	ent.def = true
 	return ent
 }
 
-func (o *tplCache) loadEntrySubject(
+func (o *Cache) loadEntrySubject(
 	ctx context.Context,
+	cfg *conf.GlobalConfiguration,
 	typ string,
 ) (*template.Template, error) {
 
 	// This matches the existing behavior, which allow for a potential double
 	// parse of the default but it's a minor cost for clean control flow.
 	tempStr := getEmailContentConfig(
-		&o.cfg.Mailer.Subjects,
+		&cfg.Mailer.Subjects,
 		typ,
 		getEmailContentConfig(defaultTemplateSubjects, typ, ""))
 
@@ -304,11 +439,12 @@ func (o *tplCache) loadEntrySubject(
 	return temp, nil
 }
 
-func (o *tplCache) loadEntryBody(
+func (o *Cache) loadEntryBody(
 	ctx context.Context,
+	cfg *conf.GlobalConfiguration,
 	typ string,
 ) (*template.Template, error) {
-	url := getEmailContentConfig(&o.cfg.Mailer.Templates, typ, "")
+	url := getEmailContentConfig(&cfg.Mailer.Templates, typ, "")
 	if url == "" {
 
 		// We preserve the previous behavior of returning the default.
@@ -317,10 +453,10 @@ func (o *tplCache) loadEntryBody(
 		return temp, nil
 	}
 	if !strings.HasPrefix(url, "http") {
-		url = o.cfg.SiteURL + url
+		url = cfg.SiteURL + url
 	}
 
-	tempStr, err := o.fetch(ctx, url)
+	tempStr, err := o.fetch(ctx, cfg, url)
 	if err != nil {
 		err = wrapError(ctx, typ, "template_body_http_error", err)
 		return nil, err
@@ -334,7 +470,10 @@ func (o *tplCache) loadEntryBody(
 	return temp, nil
 }
 
-func (m *tplCache) fetch(ctx context.Context, url string) (string, error) {
+func (m *Cache) fetch(ctx context.Context, cfg *conf.GlobalConfiguration, url string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
@@ -346,7 +485,11 @@ func (m *tplCache) fetch(ctx context.Context, url string) (string, error) {
 	}
 	defer res.Body.Close()
 
-	rdr := io.LimitReader(res.Body, maxTemplateSize)
+	if code := res.StatusCode; code != http.StatusOK {
+		return "", fmt.Errorf("http: GET %v: status code %d", url, code)
+	}
+
+	rdr := io.LimitReader(res.Body, int64(cfg.Mailer.TemplateMaxSize))
 	data, err := io.ReadAll(rdr)
 	if err != nil {
 		return "", err
