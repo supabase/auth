@@ -1,10 +1,16 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 with lib;
 
 let
   cfg = config.auth;
-in {
+in
+{
   options.auth = {
     enable = mkEnableOption "Supabase Auth Service";
 
@@ -48,4 +54,4 @@ in {
   config = mkIf cfg.enable {
     # No NixOS-specific options here
   };
-} 
+}
