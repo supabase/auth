@@ -8,4 +8,4 @@ alter table {{ index .Options "Namespace" }}.sessions
 alter table {{ index .Options "Namespace" }}.sessions
   validate constraint sessions_oauth_client_id_fkey;
 
-create index concurrently if not exists sessions_oauth_client_id_idx on {{ index .Options "Namespace" }}.sessions (oauth_client_id);
+create index if not exists sessions_oauth_client_id_idx on {{ index .Options "Namespace" }}.sessions (oauth_client_id);
