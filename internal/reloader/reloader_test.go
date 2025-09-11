@@ -164,9 +164,10 @@ func TestWatchNotify(t *testing.T) {
 		rr := mockReloadRecorder()
 
 		cfg := e2e.Must(e2e.Config()).Reloading
-		rl := NewReloader(cfg, dir)
 		cfg.SignalEnabled = false
 		cfg.PollerEnabled = false
+
+		rl := NewReloader(cfg, dir)
 		rl.watchFn = func() (watcher, error) { return nil, sentinelErr }
 
 		err := rl.Watch(ctx, rr.configFn)
