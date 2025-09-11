@@ -1,14 +1,17 @@
 package oauthserver
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 )
 
 // ExtractClientCredentials extracts OAuth client credentials from the request
-// Supports both Basic auth header and form body parameters
+// Supports Basic auth header, form body parameters, and JSON body parameters
 func ExtractClientCredentials(r *http.Request) (clientID, clientSecret string, err error) {
 	// First, try Basic auth header: Authorization: Basic base64(client_id:client_secret)
 	authHeader := r.Header.Get("Authorization")
@@ -28,22 +31,40 @@ func ExtractClientCredentials(r *http.Request) (clientID, clientSecret string, e
 		return parts[0], parts[1], nil
 	}
 
-	// Fall back to form parameters
-	if err := r.ParseForm(); err != nil {
-		return "", "", errors.New("failed to parse form")
+	// Check Content-Type to determine how to parse body parameters
+	contentType := r.Header.Get("Content-Type")
+	if strings.Contains(contentType, "application/json") {
+		// Parse JSON body
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			return "", "", errors.New("failed to read request body")
+		}
+		// Restore the body so other handlers can read it
+		r.Body = io.NopCloser(bytes.NewBuffer(body))
+
+		var jsonData struct {
+			ClientID     string `json:"client_id"`
+			ClientSecret string `json:"client_secret"`
+		}
+		if err := json.Unmarshal(body, &jsonData); err != nil {
+			return "", "", errors.New("failed to parse JSON body")
+		}
+
+		clientID = jsonData.ClientID
+		clientSecret = jsonData.ClientSecret
+	} else {
+		// Fall back to form parameters
+		if err := r.ParseForm(); err != nil {
+			return "", "", errors.New("failed to parse form")
+		}
+
+		clientID = r.FormValue("client_id")
+		clientSecret = r.FormValue("client_secret")
 	}
 
-	clientID = r.FormValue("client_id")
-	clientSecret = r.FormValue("client_secret")
-
-	// Return empty credentials if both are empty (no client auth attempted)
-	if clientID == "" && clientSecret == "" {
-		return "", "", nil
-	}
-
-	// If only one is provided, it's an error
-	if clientID == "" || clientSecret == "" {
-		return "", "", errors.New("both client_id and client_secret must be provided")
+	// return error if client_id is not provided
+	if clientID == "" {
+		return "", "", errors.New("client_id is required")
 	}
 
 	return clientID, clientSecret, nil

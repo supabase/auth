@@ -89,7 +89,8 @@ type Session struct {
 	UserAgent   *string    `json:"user_agent,omitempty" db:"user_agent"`
 	IP          *string    `json:"ip,omitempty" db:"ip"`
 
-	Tag *string `json:"tag" db:"tag"`
+	Tag           *string    `json:"tag" db:"tag"`
+	OAuthClientID *uuid.UUID `json:"oauth_client_id" db:"oauth_client_id"`
 }
 
 func (Session) TableName() string {

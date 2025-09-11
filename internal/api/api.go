@@ -90,10 +90,9 @@ func (a *API) deprecationNotices() {
 // NewAPIWithVersion creates a new REST API using the specified version
 func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Connection, version string, opt ...Option) *API {
 	api := &API{
-		config:      globalConfig,
-		db:          db,
-		version:     version,
-		oauthServer: oauthserver.NewServer(globalConfig, db),
+		config:  globalConfig,
+		db:      db,
+		version: version,
 	}
 
 	for _, o := range opt {
@@ -119,6 +118,11 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 	// Connect token service to API's time function (supports test overrides)
 	api.tokenService.SetTimeFunc(api.Now)
+
+	// Initialize OAuth server (only if enabled)
+	if globalConfig.OAuthServer.Enabled {
+		api.oauthServer = oauthserver.NewServer(globalConfig, db, api.tokenService)
+	}
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
@@ -172,6 +176,10 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	r.Get("/health", api.HealthCheck)
 	r.Get("/.well-known/jwks.json", api.Jwks)
 
+	if globalConfig.OAuthServer.Enabled {
+		r.Get("/.well-known/oauth-authorization-server", api.oauthServer.OAuthServerMetadata)
+	}
+
 	r.Route("/callback", func(r *router) {
 		r.Use(api.isValidExternalHost)
 		r.Use(api.loadFlowState)
@@ -186,6 +194,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 
 		r.Get("/settings", api.Settings)
 
+		// `/authorize` to initiate OAuth2 authorization flow with the external providers
+		// where Supabase Auth is an OAuth2 Client
 		r.Get("/authorize", api.ExternalProviderRedirect)
 
 		r.With(api.requireAdminCredentials).Post("/invite", api.Invite)
@@ -228,7 +238,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			With(api.verifyCaptcha).Post("/otp", api.Otp)
 
 		// rate limiting applied in handler
-		r.With(api.verifyCaptcha).With(api.oauthClientAuth).Post("/token", api.Token)
+		r.With(api.verifyCaptcha).Post("/token", api.Token)
 
 		r.With(api.limitHandler(api.limiterOpts.Verify)).Route("/verify", func(r *router) {
 			r.Get("/", api.Verify)
@@ -326,27 +336,40 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			})
 
 			// Admin only oauth client management endpoints
-			r.Route("/oauth", func(r *router) {
-				r.Route("/clients", func(r *router) {
-					// Manual client registration
-					r.Post("/", api.oauthServer.AdminOAuthServerClientRegister)
+			if globalConfig.OAuthServer.Enabled {
+				r.Route("/oauth", func(r *router) {
+					r.Route("/clients", func(r *router) {
+						// Manual client registration
+						r.Post("/", api.oauthServer.AdminOAuthServerClientRegister)
 
-					r.Get("/", api.oauthServer.OAuthServerClientList)
+						r.Get("/", api.oauthServer.OAuthServerClientList)
 
-					r.Route("/{client_id}", func(r *router) {
-						r.Use(api.oauthServer.LoadOAuthServerClient)
-						r.Get("/", api.oauthServer.OAuthServerClientGet)
-						r.Delete("/", api.oauthServer.OAuthServerClientDelete)
+						r.Route("/{client_id}", func(r *router) {
+							r.Use(api.oauthServer.LoadOAuthServerClient)
+							r.Get("/", api.oauthServer.OAuthServerClientGet)
+							r.Delete("/", api.oauthServer.OAuthServerClientDelete)
+						})
 					})
 				})
-			})
+			}
 		})
 
 		// OAuth Dynamic Client Registration endpoint (public, rate limited)
-		r.Route("/oauth", func(r *router) {
-			r.With(api.limitHandler(api.limiterOpts.OAuthClientRegister)).
-				Post("/clients/register", api.oauthServer.OAuthServerClientDynamicRegister)
-		})
+		if globalConfig.OAuthServer.Enabled {
+			r.Route("/oauth", func(r *router) {
+				r.With(api.limitHandler(api.limiterOpts.OAuthClientRegister)).
+					Post("/clients/register", api.oauthServer.OAuthServerClientDynamicRegister)
+
+				// OAuth Token endpoint (public, with client authentication)
+				r.With(api.requireOAuthClientAuth).Post("/token", api.oauthServer.OAuthToken)
+
+				// OAuth 2.1 Authorization endpoints
+				// `/authorize` to initiate OAuth2 authorization code flow where Supabase Auth is the OAuth2 provider
+				r.Get("/authorize", api.oauthServer.OAuthServerAuthorize)
+				r.With(api.requireAuthentication).Get("/authorizations/{authorization_id}", api.oauthServer.OAuthServerGetAuthorization)
+				r.With(api.requireAuthentication).Post("/authorizations/{authorization_id}/consent", api.oauthServer.OAuthServerConsent)
+			})
+		}
 	})
 
 	corsHandler := cors.New(cors.Options{

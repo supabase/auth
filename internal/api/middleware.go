@@ -13,9 +13,11 @@ import (
 	"time"
 
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/gofrs/uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/oauthserver"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/security"
@@ -83,9 +85,9 @@ func (a *API) limitHandler(lmt *limiter.Limiter) middlewareHandler {
 	}
 }
 
-// oauthClientAuth optionally authenticates an OAuth client as middleware
-// This doesn't fail if no client credentials are provided, but validates them if present
-func (a *API) oauthClientAuth(w http.ResponseWriter, r *http.Request) (context.Context, error) {
+// requireOAuthClientAuth authenticates an OAuth client as middleware
+// Requires client_id to be present and validates client credentials
+func (a *API) requireOAuthClientAuth(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
 
 	clientID, clientSecret, err := oauthserver.ExtractClientCredentials(r)
@@ -98,9 +100,15 @@ func (a *API) oauthClientAuth(w http.ResponseWriter, r *http.Request) (context.C
 		return ctx, nil
 	}
 
+	// Parse client_id as UUID
+	clientUUID, err := uuid.FromString(clientID)
+	if err != nil {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client_id format")
+	}
+
 	// Validate client credentials
 	db := a.db.WithContext(ctx)
-	client, err := models.FindOAuthServerClientByClientID(db, clientID)
+	client, err := models.FindOAuthServerClientByID(db, clientUUID)
 	if err != nil {
 		if models.IsNotFoundError(err) {
 			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials")
@@ -108,13 +116,13 @@ func (a *API) oauthClientAuth(w http.ResponseWriter, r *http.Request) (context.C
 		return nil, apierrors.NewInternalServerError("Error validating client credentials").WithInternalError(err)
 	}
 
-	// Validate client secret
-	if !oauthserver.ValidateClientSecret(clientSecret, client.ClientSecretHash) {
-		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, "Invalid client credentials")
+	// Validate authentication using centralized logic
+	if err := oauthserver.ValidateClientAuthentication(client, clientSecret); err != nil {
+		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, err.Error())
 	}
 
 	// Add authenticated client to context
-	ctx = oauthserver.WithOAuthServerClient(ctx, client)
+	ctx = shared.WithOAuthServerClient(ctx, client)
 	return ctx, nil
 }
 

@@ -2,22 +2,30 @@ package oauthserver
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"fmt"
 	"net/url"
+	"slices"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/apierrors"
-	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
-	"github.com/supabase/auth/internal/storage"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/supabase/auth/internal/utilities"
 )
 
 // OAuthServerClientRegisterParams contains parameters for registering a new OAuth client
 type OAuthServerClientRegisterParams struct {
 	// Required fields
 	RedirectURIs []string `json:"redirect_uris"`
+
+	// Client type can be explicitly provided or inferred from token_endpoint_auth_method
+	ClientType              string `json:"client_type,omitempty"`                // models.OAuthServerClientTypePublic or models.OAuthServerClientTypeConfidential
+	TokenEndpointAuthMethod string `json:"token_endpoint_auth_method,omitempty"` // "none", "client_secret_basic", or "client_secret_post"
 
 	GrantTypes []string `json:"grant_types,omitempty"`
 	ClientName string   `json:"client_name,omitempty"`
@@ -77,6 +85,24 @@ func (p *OAuthServerClientRegisterParams) validate() error {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "registration_type must be 'dynamic' or 'manual'")
 	}
 
+	// Validate client_type if provided (defaults to confidential if not specified)
+	if p.ClientType != "" && p.ClientType != models.OAuthServerClientTypePublic && p.ClientType != models.OAuthServerClientTypeConfidential {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "client_type must be '%s' or '%s'", models.OAuthServerClientTypePublic, models.OAuthServerClientTypeConfidential)
+	}
+
+	// Validate token_endpoint_auth_method if provided
+	if p.TokenEndpointAuthMethod != "" {
+		validMethods := GetAllValidAuthMethods()
+		if !slices.Contains(validMethods, p.TokenEndpointAuthMethod) {
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "token_endpoint_auth_method must be one of: %v", validMethods)
+		}
+	}
+
+	// Validate consistency between client_type and token_endpoint_auth_method
+	if err := ValidateClientTypeConsistency(p.ClientType, p.TokenEndpointAuthMethod); err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
+	}
+
 	return nil
 }
 
@@ -115,31 +141,32 @@ func validateRedirectURI(uri string) error {
 	return nil
 }
 
-// generateClientID generates a URL-safe random client ID
-func generateClientID() string {
-	// Generate a 32-character alphanumeric client ID
-	return crypto.SecureAlphanumeric(32)
-}
 
 // generateClientSecret generates a secure random client secret
 func generateClientSecret() string {
-	// Generate a 64-character secure random secret
-	return crypto.SecureAlphanumeric(64)
-}
-
-// hashClientSecret hashes a client secret using bcrypt
-func hashClientSecret(secret string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to hash client secret")
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		// This should never happen, but fallback to panic for security
+		panic(fmt.Sprintf("failed to generate random bytes for client secret: %v", err))
 	}
-	return string(hash), nil
+	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-// ValidateClientSecret validates a client secret against its hash
-func ValidateClientSecret(secret, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(secret))
-	return err == nil
+// hashClientSecret hashes a client secret using SHA-256
+func hashClientSecret(secret string) (string, error) {
+	sum := sha256.Sum256([]byte(secret))
+	return base64.RawURLEncoding.EncodeToString(sum[:]), nil
+}
+
+// ValidateClientSecret validates a client secret against its hash using constant-time comparison
+func ValidateClientSecret(providedSecret, storedHash string) bool {
+	calc := sha256.Sum256([]byte(providedSecret))
+	stored, err := base64.RawURLEncoding.DecodeString(storedHash)
+	if err != nil {
+		return false
+	}
+
+	return subtle.ConstantTimeCompare(calc[:], stored) == 1
 }
 
 // registerOAuthServerClient creates a new OAuth server client with generated credentials
@@ -155,26 +182,33 @@ func (s *Server) registerOAuthServerClient(ctx context.Context, params *OAuthSer
 		grantTypes = []string{"authorization_code", "refresh_token"}
 	}
 
+	// Determine client type using centralized logic
+	clientType := DetermineClientType(params.ClientType, params.TokenEndpointAuthMethod)
+
 	db := s.db.WithContext(ctx)
 
 	client := &models.OAuthServerClient{
-		ClientID:         generateClientID(),
+		ID:               uuid.Must(uuid.NewV4()),
 		RegistrationType: params.RegistrationType,
-		ClientName:       storage.NullString(params.ClientName),
-		ClientURI:        storage.NullString(params.ClientURI),
-		LogoURI:          storage.NullString(params.LogoURI),
+		ClientType:       clientType,
+		ClientName:       utilities.StringPtr(params.ClientName),
+		ClientURI:        utilities.StringPtr(params.ClientURI),
+		LogoURI:          utilities.StringPtr(params.LogoURI),
 	}
 
 	client.SetRedirectURIs(params.RedirectURIs)
 	client.SetGrantTypes(grantTypes)
 
-	// Generate client secret for all clients
-	plaintextSecret := generateClientSecret()
-	hash, err := hashClientSecret(plaintextSecret)
-	if err != nil {
-		return nil, "", errors.Wrap(err, "failed to hash client secret")
+	var plaintextSecret string
+	// Only generate client secret for confidential clients
+	if client.IsConfidential() {
+		plaintextSecret = generateClientSecret()
+		hash, err := hashClientSecret(plaintextSecret)
+		if err != nil {
+			return nil, "", errors.Wrap(err, "failed to hash client secret")
+		}
+		client.ClientSecretHash = hash
 	}
-	client.ClientSecretHash = hash
 
 	if err := models.CreateOAuthServerClient(db, client); err != nil {
 		return nil, "", errors.Wrap(err, "failed to create OAuth client")
@@ -183,11 +217,11 @@ func (s *Server) registerOAuthServerClient(ctx context.Context, params *OAuthSer
 	return client, plaintextSecret, nil
 }
 
-// getOAuthServerClient retrieves an OAuth client by client_id
-func (s *Server) getOAuthServerClient(ctx context.Context, clientID string) (*models.OAuthServerClient, error) {
+// getOAuthServerClient retrieves an OAuth client by ID
+func (s *Server) getOAuthServerClient(ctx context.Context, clientID uuid.UUID) (*models.OAuthServerClient, error) {
 	db := s.db.WithContext(ctx)
 
-	client, err := models.FindOAuthServerClientByClientID(db, clientID)
+	client, err := models.FindOAuthServerClientByID(db, clientID)
 	if err != nil {
 		return nil, err
 	}
@@ -196,10 +230,10 @@ func (s *Server) getOAuthServerClient(ctx context.Context, clientID string) (*mo
 }
 
 // deleteOAuthServerClient soft-deletes an OAuth client
-func (s *Server) deleteOAuthServerClient(ctx context.Context, clientID string) error {
+func (s *Server) deleteOAuthServerClient(ctx context.Context, clientID uuid.UUID) error {
 	db := s.db.WithContext(ctx)
 
-	client, err := models.FindOAuthServerClientByClientID(db, clientID)
+	client, err := models.FindOAuthServerClientByID(db, clientID)
 	if err != nil {
 		return err
 	}
