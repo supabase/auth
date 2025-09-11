@@ -281,7 +281,7 @@ type ReloadingConfiguration struct {
 
 	// When notify reloading fails, fallback to filesystem polling if this
 	// setting is enabled.
-	PollerEnabled bool `json:"poller_enabled" split_words:"true" default:"false"`
+	PollerEnabled bool `json:"poller_enabled" split_words:"true" default:"true"`
 
 	// This determines how often to poll the filesystem when notify is disabled.
 	PollerInterval time.Duration `json:"poller_interval" split_words:"true" default:"10s"`
