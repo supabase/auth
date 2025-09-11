@@ -251,7 +251,7 @@
               pkgs.gopls
               pkgs.gotools
               pkgs.go-outline
-              pkgs.gocode
+              pkgs.gocode-gomod
               pkgs.gopkgs
               pkgs.godef
               pkgs.golint
