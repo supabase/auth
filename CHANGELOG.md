@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.180.0](https://github.com/supabase/auth/compare/v2.179.0...v2.180.0) (2025-09-12)
+
+
+### Features
+
+* add OAuth client type ([#2152](https://github.com/supabase/auth/issues/2152)) ([b118f1f](https://github.com/supabase/auth/commit/b118f1f00c3c846095c25c34092e38aeebfdf2db))
+* background template reloading p1 - baseline decomposition ([#2148](https://github.com/supabase/auth/issues/2148)) ([746c937](https://github.com/supabase/auth/commit/746c937f7c57ba256d942df334ab9ee354509587))
+* implement OAuth2 authorization endpoint ([#2107](https://github.com/supabase/auth/issues/2107)) ([5318552](https://github.com/supabase/auth/commit/53185526b07cb2c27f6a81782a6c24610e39d6fe))
+* **oauth2:** add `/oauth/token` endpoint ([#2159](https://github.com/supabase/auth/issues/2159)) ([a89a0b0](https://github.com/supabase/auth/commit/a89a0b054e87fee4e193aab4fff7677b56775386))
+* **oauth2:** use `id` field as the public client_id ([#2154](https://github.com/supabase/auth/issues/2154)) ([86b7de4](https://github.com/supabase/auth/commit/86b7de45c9432ea6ee9bd7c7e9cfe96e038fe2bc))
+
 ## [2.179.0](https://github.com/supabase/auth/compare/v2.178.0...v2.179.0) (2025-08-28)
 
 
