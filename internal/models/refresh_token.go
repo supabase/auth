@@ -45,6 +45,8 @@ type GrantParams struct {
 	SessionNotAfter *time.Time
 	SessionTag      *string
 
+	OAuthClientID *uuid.UUID
+
 	UserAgent string
 	IP        string
 }
@@ -147,6 +149,10 @@ func createRefreshToken(tx *storage.Connection, user *User, oldToken *RefreshTok
 
 		if params.SessionTag != nil && *params.SessionTag != "" {
 			session.Tag = params.SessionTag
+		}
+
+		if params.OAuthClientID != nil && *params.OAuthClientID != uuid.Nil {
+			session.OAuthClientID = params.OAuthClientID
 		}
 
 		if err := tx.Create(session); err != nil {

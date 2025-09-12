@@ -36,6 +36,7 @@ type AccessTokenClaims struct {
 	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
 	IsAnonymous                   bool                   `json:"is_anonymous"`
+	ClientID                      string                 `json:"client_id,omitempty"`
 }
 
 // AccessTokenResponse represents an OAuth2 success response
@@ -49,6 +50,20 @@ type AccessTokenResponse struct {
 	ProviderAccessToken  string       `json:"provider_token,omitempty"`
 	ProviderRefreshToken string       `json:"provider_refresh_token,omitempty"`
 	WeakPassword         interface{}  `json:"weak_password,omitempty"`
+}
+
+// GenerateAccessTokenParams contains parameters for generating access tokens
+type GenerateAccessTokenParams struct {
+	User                 *models.User
+	SessionID            *uuid.UUID
+	AuthenticationMethod models.AuthenticationMethod
+	ClientID             *uuid.UUID // OAuth2 server client ID if applicable
+}
+
+// RefreshTokenGrantParams contains parameters for refresh token grant
+type RefreshTokenGrantParams struct {
+	RefreshToken string
+	ClientID     *uuid.UUID // OAuth2 server client ID if applicable
 }
 
 // AsRedirectURL encodes the AccessTokenResponse as a redirect URL that
@@ -96,11 +111,11 @@ func (s *Service) SetTimeFunc(timeFunc func() time.Time) {
 }
 
 // RefreshTokenGrant implements the refresh_token grant type flow
-func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection, r *http.Request, refreshTokenString string) (*AccessTokenResponse, error) {
+func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection, r *http.Request, params RefreshTokenGrantParams) (*AccessTokenResponse, error) {
 	db = db.WithContext(ctx)
 	config := s.config
 
-	if refreshTokenString == "" {
+	if params.RefreshToken == "" {
 		return nil, apierrors.NewOAuthError("invalid_request", "refresh_token required")
 	}
 
@@ -115,7 +130,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 	for retry && time.Since(retryStart).Seconds() < retryLoopDuration {
 		retry = false
 
-		user, token, session, err := models.FindUserWithRefreshToken(db, refreshTokenString, false)
+		user, token, session, err := models.FindUserWithRefreshToken(db, params.RefreshToken, false)
 		if err != nil {
 			if models.IsNotFoundError(err) {
 				return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeRefreshTokenNotFound, "Invalid Refresh Token: Refresh Token Not Found")
@@ -134,6 +149,9 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 			}
 			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeSessionNotFound, "Invalid Refresh Token: No Valid Session Found")
 		}
+
+		// OAuth client validation will be done inside the transaction
+		var sessionClientID *uuid.UUID
 
 		sessionValidityConfig := models.SessionValidityConfig{
 			Timebox:           config.Sessions.Timebox,
@@ -169,7 +187,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 		var newTokenResponse *AccessTokenResponse
 
 		err = db.Transaction(func(tx *storage.Connection) error {
-			user, token, session, terr := models.FindUserWithRefreshToken(tx, refreshTokenString, true /* forUpdate */)
+			user, token, session, terr := models.FindUserWithRefreshToken(tx, params.RefreshToken, true /* forUpdate */)
 			if terr != nil {
 				if models.IsNotFoundError(terr) {
 					// because forUpdate was set, and the
@@ -184,6 +202,24 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 					return terr
 				}
 				return apierrors.NewInternalServerError(terr.Error())
+			}
+
+			// Validate OAuth client consistency between session and current request
+			if session.OAuthClientID != nil && *session.OAuthClientID != uuid.Nil {
+				// Session has an OAuth client, current request must have matching client
+				if params.ClientID == nil || *params.ClientID == uuid.Nil {
+					return apierrors.NewOAuthError("invalid_client", "Client authentication required for OAuth session")
+				}
+				if *params.ClientID != *session.OAuthClientID {
+					return apierrors.NewOAuthError("invalid_client", "Client does not match the session's OAuth client")
+				}
+				sessionClientID = session.OAuthClientID
+			} else {
+				// Session has no OAuth client, current request should not have one either
+				if params.ClientID != nil && *params.ClientID != uuid.Nil {
+					return apierrors.NewOAuthError("invalid_client", "Client authentication not allowed for non-OAuth session")
+				}
+				sessionClientID = nil
 			}
 
 			if config.Sessions.SinglePerUser {
@@ -294,7 +330,12 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 				issuedToken = newToken
 			}
 
-			tokenString, expiresAt, terr = s.GenerateAccessToken(r, tx, user, issuedToken.SessionId, models.TokenRefresh)
+			tokenString, expiresAt, terr = s.GenerateAccessToken(r, tx, GenerateAccessTokenParams{
+				User:                 user,
+				SessionID:            issuedToken.SessionId,
+				AuthenticationMethod: models.TokenRefresh,
+				ClientID:             sessionClientID,
+			})
 			if terr != nil {
 				httpErr, ok := terr.(*apierrors.HTTPError)
 				if ok {
@@ -354,49 +395,54 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 }
 
 // GenerateAccessToken generates an access token using shared logic
-func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, user *models.User, sessionId *uuid.UUID, authenticationMethod models.AuthenticationMethod) (string, int64, error) {
+func (s *Service) GenerateAccessToken(r *http.Request, tx *storage.Connection, params GenerateAccessTokenParams) (string, int64, error) {
 	config := s.config
-	if sessionId == nil {
+	if params.SessionID == nil {
 		return "", 0, apierrors.NewInternalServerError("Session is required to issue access token")
 	}
-	sid := sessionId.String()
-	session, terr := models.FindSessionByID(tx, *sessionId, false)
+	sid := params.SessionID.String()
+	session, terr := models.FindSessionByID(tx, *params.SessionID, false)
 	if terr != nil {
 		return "", 0, terr
 	}
-	aal, amr, terr := session.CalculateAALAndAMR(user)
+	aal, amr, terr := session.CalculateAALAndAMR(params.User)
 	if terr != nil {
 		return "", 0, terr
 	}
 
 	issuedAt := s.now().UTC()
 	expiresAt := issuedAt.Add(time.Second * time.Duration(config.JWT.Exp))
+	var clientID string
+	if params.ClientID != nil && *params.ClientID != uuid.Nil {
+		clientID = params.ClientID.String()
+	}
 
 	claims := &v0hooks.AccessTokenClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   user.ID.String(),
-			Audience:  jwt.ClaimStrings{user.Aud},
+			Subject:   params.User.ID.String(),
+			Audience:  jwt.ClaimStrings{params.User.Aud},
 			IssuedAt:  jwt.NewNumericDate(issuedAt),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			Issuer:    config.JWT.Issuer,
 		},
-		Email:                         user.GetEmail(),
-		Phone:                         user.GetPhone(),
-		AppMetaData:                   user.AppMetaData,
-		UserMetaData:                  user.UserMetaData,
-		Role:                          user.Role,
+		Email:                         params.User.GetEmail(),
+		Phone:                         params.User.GetPhone(),
+		AppMetaData:                   params.User.AppMetaData,
+		UserMetaData:                  params.User.UserMetaData,
+		Role:                          params.User.Role,
 		SessionId:                     sid,
 		AuthenticatorAssuranceLevel:   aal.String(),
 		AuthenticationMethodReference: amr,
-		IsAnonymous:                   user.IsAnonymous,
+		IsAnonymous:                   params.User.IsAnonymous,
+		ClientID:                      clientID,
 	}
 
 	var gotrueClaims jwt.Claims = claims
 	if config.Hook.CustomAccessToken.Enabled {
 		input := &v0hooks.CustomAccessTokenInput{
-			UserID:               user.ID,
+			UserID:               params.User.ID,
 			Claims:               claims,
-			AuthenticationMethod: authenticationMethod.String(),
+			AuthenticationMethod: params.AuthenticationMethod.String(),
 		}
 
 		output := &v0hooks.CustomAccessTokenOutput{}
@@ -428,6 +474,7 @@ func (s *Service) IssueRefreshToken(r *http.Request, conn *storage.Connection, u
 	var tokenString string
 	var expiresAt int64
 	var refreshToken *models.RefreshToken
+	var oAuthClientID *uuid.UUID
 
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		var terr error
@@ -436,13 +483,21 @@ func (s *Service) IssueRefreshToken(r *http.Request, conn *storage.Connection, u
 		if terr != nil {
 			return apierrors.NewInternalServerError("Database error granting user").WithInternalError(terr)
 		}
+		if grantParams.OAuthClientID != nil && *grantParams.OAuthClientID != uuid.Nil {
+			oAuthClientID = grantParams.OAuthClientID
+		}
 
 		terr = models.AddClaimToSession(tx, *refreshToken.SessionId, authenticationMethod)
 		if terr != nil {
 			return terr
 		}
 
-		tokenString, expiresAt, terr = s.GenerateAccessToken(r, tx, user, refreshToken.SessionId, authenticationMethod)
+		tokenString, expiresAt, terr = s.GenerateAccessToken(r, tx, GenerateAccessTokenParams{
+			User:                 user,
+			SessionID:            refreshToken.SessionId,
+			AuthenticationMethod: authenticationMethod,
+			ClientID:             oAuthClientID,
+		})
 		if terr != nil {
 			// Account for Hook Error
 			if httpErr, ok := terr.(*apierrors.HTTPError); ok {
@@ -577,6 +632,9 @@ const MinimumViableTokenSchema = `{
       }
     },
     "session_id": {
+      "type": "string"
+    },
+    "client_id": {
       "type": "string"
     }
   },
