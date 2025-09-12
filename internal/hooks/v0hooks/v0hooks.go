@@ -95,6 +95,7 @@ type AfterUserCreatedOutput struct{}
 type SMS struct {
 	OTP     string `json:"otp,omitempty"`
 	SMSType string `json:"sms_type,omitempty"`
+	Phone   string `json:"phone,omitempty"`
 }
 
 // AccessTokenClaims is a struct thats used for JWT claims
