@@ -449,12 +449,30 @@ type MailerConfiguration struct {
 
 	ExternalHosts []string `json:"external_hosts" split_words:"true"`
 
-	// EXPERIMENTAL: May be removed in a future release.
+	// EXPERIMENTAL: All config below here may be removed in a future release.
 	EmailBackgroundSending        bool   `json:"email_background_sending" split_words:"true" default:"false"`
 	EmailValidationExtended       bool   `json:"email_validation_extended" split_words:"true" default:"false"`
 	EmailValidationServiceURL     string `json:"email_validation_service_url" split_words:"true"`
 	EmailValidationServiceHeaders string `json:"email_validation_service_headers" split_words:"true"`
 	EmailValidationBlockedMX      string `json:"email_validation_blocked_mx" split_words:"true"`
+
+	// Max size in bytes we will read from a template endpoint
+	TemplateMaxSize int `json:"template_max_size" split_words:"true" default:"1000000"`
+
+	// The maximum age of a template before we consider it stale.
+	TemplateMaxAge time.Duration `json:"template_max_age" split_words:"true" default:"10m"`
+
+	// The time between retrying a failed template reload.
+	TemplateRetryInterval time.Duration `json:"template_retry_interval" split_words:"true" default:"10s"`
+
+	// If true enable background reloading of templates to avoid blocking
+	// IO in requests.
+	TemplateReloadingEnabled bool `json:"template_reloading_enabled" split_words:"true" default:"false"`
+
+	// The maximum time a server may be idle before template reloading stops.
+	// Note that even when the server is idle, a config reload will trigger a
+	// template reload.
+	TemplateReloadingMaxIdle time.Duration `json:"template_reloading_max_idle" split_words:"true" default:"20m"`
 
 	serviceHeaders   map[string][]string `json:"-"`
 	blockedMXRecords map[string]bool     `json:"-"`

@@ -16,6 +16,7 @@ import (
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/mailer/templatemailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -38,11 +39,11 @@ type API struct {
 	config  *conf.GlobalConfiguration
 	version string
 
-	hooksMgr         *v0hooks.Manager
-	hibpClient       *hibp.PwnedClient
-	oauthServer      *oauthserver.Server
-	mailerClientFunc func() mailer.MailClient
-	tokenService     *tokens.Service
+	hooksMgr     *v0hooks.Manager
+	hibpClient   *hibp.PwnedClient
+	oauthServer  *oauthserver.Server
+	tokenService *tokens.Service
+	mailer       mailer.Mailer
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
@@ -53,6 +54,7 @@ type API struct {
 func (a *API) GetConfig() *conf.GlobalConfiguration { return a.config }
 func (a *API) GetDB() *storage.Connection           { return a.db }
 func (a *API) GetTokenService() *tokens.Service     { return a.tokenService }
+func (a *API) Mailer() mailer.Mailer                { return a.mailer }
 
 func (a *API) Version() string {
 	return a.version
@@ -99,11 +101,6 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	if api.limiterOpts == nil {
 		api.limiterOpts = NewLimiterOptions(globalConfig)
 	}
-	if api.mailerClientFunc == nil {
-		api.mailerClientFunc = func() mailer.MailClient {
-			return mailer.NewMailClient(globalConfig)
-		}
-	}
 	if api.hooksMgr == nil {
 		httpDr := hookshttp.New()
 		pgfuncDr := hookspgfunc.New(db)
@@ -113,6 +110,10 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	// Initialize token service if not provided via options
 	if api.tokenService == nil {
 		api.tokenService = tokens.NewService(globalConfig, api.hooksMgr)
+	}
+	if api.mailer == nil {
+		tc := templatemailer.NewCache()
+		api.mailer = templatemailer.FromConfig(globalConfig, tc)
 	}
 
 	// Connect token service to API's time function (supports test overrides)
@@ -395,12 +396,6 @@ func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) error {
 		Name:        "GoTrue",
 		Description: "GoTrue is a user registration and authentication API",
 	})
-}
-
-// Mailer returns NewMailer with the current tenant config
-func (a *API) Mailer() mailer.Mailer {
-	config := a.config
-	return mailer.NewMailerWithClient(config, a.mailerClientFunc())
 }
 
 // ServeHTTP implements the http.Handler interface by passing the request along
