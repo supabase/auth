@@ -170,6 +170,8 @@ type AppleIDTokenClaims struct {
 
 	AuthTime       *float64        `json:"auth_time"`
 	IsPrivateEmail *IsPrivateEmail `json:"is_private_email"`
+
+	TransferSub string `json:"transfer_sub"`
 }
 
 func parseAppleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
@@ -199,6 +201,10 @@ func parseAppleIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 
 	if claims.AuthTime != nil {
 		data.Metadata.CustomClaims["auth_time"] = *claims.AuthTime
+	}
+
+	if claims.TransferSub != "" {
+		data.Metadata.CustomClaims["transfer_sub"] = claims.TransferSub
 	}
 
 	if len(data.Metadata.CustomClaims) < 1 {
