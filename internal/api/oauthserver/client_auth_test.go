@@ -298,7 +298,6 @@ func TestValidateClientAuthentication(t *testing.T) {
 	// Create test clients
 	publicClient := &models.OAuthServerClient{
 		ID:         uuid.Must(uuid.NewV4()),
-		ClientID:   "public_client",
 		ClientType: models.OAuthServerClientTypePublic,
 		// No client secret hash for public clients
 	}
@@ -307,7 +306,6 @@ func TestValidateClientAuthentication(t *testing.T) {
 	secretHash, _ := hashClientSecret("test_secret")
 	confidentialClient := &models.OAuthServerClient{
 		ID:               uuid.Must(uuid.NewV4()),
-		ClientID:         "confidential_client",
 		ClientType:       models.OAuthServerClientTypeConfidential,
 		ClientSecretHash: secretHash,
 	}

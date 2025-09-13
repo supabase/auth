@@ -28,20 +28,19 @@ const (
 
 // OAuthServerClient represents an OAuth client application registered with this OAuth server
 type OAuthServerClient struct {
-	ID               uuid.UUID `json:"-" db:"id"`
-	ClientID         string    `json:"client_id" db:"client_id"`
+	ID               uuid.UUID `json:"client_id" db:"id"`
 	ClientSecretHash string    `json:"-" db:"client_secret_hash"`
 	RegistrationType string    `json:"registration_type" db:"registration_type"`
 	ClientType       string    `json:"client_type" db:"client_type"`
 
-	RedirectURIs string             `json:"-" db:"redirect_uris"`
-	GrantTypes   string             `json:"grant_types" db:"grant_types"`
-	ClientName   *string `json:"client_name,omitempty" db:"client_name"`
-	ClientURI    *string `json:"client_uri,omitempty" db:"client_uri"`
-	LogoURI      *string `json:"logo_uri,omitempty" db:"logo_uri"`
-	CreatedAt    time.Time          `json:"created_at" db:"created_at"`
-	UpdatedAt    time.Time          `json:"updated_at" db:"updated_at"`
-	DeletedAt    *time.Time         `json:"deleted_at,omitempty" db:"deleted_at"`
+	RedirectURIs string     `json:"-" db:"redirect_uris"`
+	GrantTypes   string     `json:"grant_types" db:"grant_types"`
+	ClientName   *string    `json:"client_name,omitempty" db:"client_name"`
+	ClientURI    *string    `json:"client_uri,omitempty" db:"client_uri"`
+	LogoURI      *string    `json:"logo_uri,omitempty" db:"logo_uri"`
+	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
+	DeletedAt    *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 }
 
 // TableName returns the table name for the OAuthServerClient model
@@ -57,8 +56,8 @@ func (c *OAuthServerClient) BeforeSave(tx *pop.Connection) error {
 
 // Validate performs basic validation on the OAuth client
 func (c *OAuthServerClient) Validate() error {
-	if c.ClientID == "" {
-		return fmt.Errorf("client_id is required")
+	if c.ID == uuid.Nil {
+		return fmt.Errorf("id is required")
 	}
 
 	if c.RegistrationType != "dynamic" && c.RegistrationType != "manual" {
@@ -122,6 +121,17 @@ func (c *OAuthServerClient) IsConfidential() bool {
 	return c.ClientType == OAuthServerClientTypeConfidential
 }
 
+// IsGrantTypeAllowed returns true if the client is allowed to use the specified grant type
+func (c *OAuthServerClient) IsGrantTypeAllowed(grantType string) bool {
+	allowedTypes := c.GetGrantTypes()
+	for _, allowedType := range allowedTypes {
+		if strings.TrimSpace(allowedType) == grantType {
+			return true
+		}
+	}
+	return false
+}
+
 // validateRedirectURI validates a single redirect URI according to OAuth 2.1 spec
 func validateRedirectURI(uri string) error {
 	if uri == "" {
@@ -182,26 +192,10 @@ func FindOAuthServerClientByID(tx *storage.Connection, id uuid.UUID) (*OAuthServ
 	return client, nil
 }
 
-// FindOAuthServerClientByClientID finds an OAuth client by client_id
-func FindOAuthServerClientByClientID(tx *storage.Connection, clientID string) (*OAuthServerClient, error) {
-	client := &OAuthServerClient{}
-	if err := tx.Q().Where("client_id = ? AND deleted_at IS NULL", clientID).First(client); err != nil {
-		if errors.Cause(err) == sql.ErrNoRows {
-			return nil, OAuthServerClientNotFoundError{}
-		}
-		return nil, errors.Wrap(err, "error finding OAuth client")
-	}
-	return client, nil
-}
-
 // CreateOAuthServerClient creates a new OAuth client in the database
 func CreateOAuthServerClient(tx *storage.Connection, client *OAuthServerClient) error {
 	if err := client.Validate(); err != nil {
 		return err
-	}
-
-	if client.ID == uuid.Nil {
-		client.ID = uuid.Must(uuid.NewV4())
 	}
 
 	now := time.Now()

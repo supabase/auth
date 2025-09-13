@@ -15,11 +15,21 @@ type Option interface {
 	apply(*API)
 }
 
-type MailerOptions struct {
-	MailerClientFunc func() mailer.MailClient
+type optionFunc func(*API)
+
+func (f optionFunc) apply(a *API) { f(a) }
+
+func WithMailer(m mailer.Mailer) Option {
+	return optionFunc(func(a *API) {
+		a.mailer = m
+	})
 }
 
-func (mo *MailerOptions) apply(a *API) { a.mailerClientFunc = mo.MailerClientFunc }
+func WithTokenService(service *tokens.Service) Option {
+	return optionFunc(func(a *API) {
+		a.tokenService = service
+	})
+}
 
 type LimiterOptions struct {
 	Email ratelimit.Limiter
@@ -43,19 +53,6 @@ type LimiterOptions struct {
 }
 
 func (lo *LimiterOptions) apply(a *API) { a.limiterOpts = lo }
-
-// TokenServiceOption allows injecting a custom token service
-type TokenServiceOption struct {
-	service *tokens.Service
-}
-
-func WithTokenService(service *tokens.Service) *TokenServiceOption {
-	return &TokenServiceOption{service: service}
-}
-
-func (tso *TokenServiceOption) apply(a *API) {
-	a.tokenService = tso.service
-}
 
 func NewLimiterOptions(gc *conf.GlobalConfiguration) *LimiterOptions {
 	o := &LimiterOptions{}

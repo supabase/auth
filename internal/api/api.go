@@ -16,6 +16,7 @@ import (
 	"github.com/supabase/auth/internal/hooks/hookspgfunc"
 	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/mailer/templatemailer"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/storage"
@@ -38,11 +39,11 @@ type API struct {
 	config  *conf.GlobalConfiguration
 	version string
 
-	hooksMgr         *v0hooks.Manager
-	hibpClient       *hibp.PwnedClient
-	oauthServer      *oauthserver.Server
-	mailerClientFunc func() mailer.MailClient
-	tokenService     *tokens.Service
+	hooksMgr     *v0hooks.Manager
+	hibpClient   *hibp.PwnedClient
+	oauthServer  *oauthserver.Server
+	tokenService *tokens.Service
+	mailer       mailer.Mailer
 
 	// overrideTime can be used to override the clock used by handlers. Should only be used in tests!
 	overrideTime func() time.Time
@@ -53,6 +54,7 @@ type API struct {
 func (a *API) GetConfig() *conf.GlobalConfiguration { return a.config }
 func (a *API) GetDB() *storage.Connection           { return a.db }
 func (a *API) GetTokenService() *tokens.Service     { return a.tokenService }
+func (a *API) Mailer() mailer.Mailer                { return a.mailer }
 
 func (a *API) Version() string {
 	return a.version
@@ -93,21 +95,11 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 		version: version,
 	}
 
-	// Only initialize OAuth server if enabled
-	if globalConfig.OAuthServer.Enabled {
-		api.oauthServer = oauthserver.NewServer(globalConfig, db)
-	}
-
 	for _, o := range opt {
 		o.apply(api)
 	}
 	if api.limiterOpts == nil {
 		api.limiterOpts = NewLimiterOptions(globalConfig)
-	}
-	if api.mailerClientFunc == nil {
-		api.mailerClientFunc = func() mailer.MailClient {
-			return mailer.NewMailClient(globalConfig)
-		}
 	}
 	if api.hooksMgr == nil {
 		httpDr := hookshttp.New()
@@ -119,9 +111,18 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	if api.tokenService == nil {
 		api.tokenService = tokens.NewService(globalConfig, api.hooksMgr)
 	}
+	if api.mailer == nil {
+		tc := templatemailer.NewCache()
+		api.mailer = templatemailer.FromConfig(globalConfig, tc)
+	}
 
 	// Connect token service to API's time function (supports test overrides)
 	api.tokenService.SetTimeFunc(api.Now)
+
+	// Initialize OAuth server (only if enabled)
+	if globalConfig.OAuthServer.Enabled {
+		api.oauthServer = oauthserver.NewServer(globalConfig, db, api.tokenService)
+	}
 
 	if api.config.Password.HIBP.Enabled {
 		httpClient := &http.Client{
@@ -237,7 +238,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			With(api.verifyCaptcha).Post("/otp", api.Otp)
 
 		// rate limiting applied in handler
-		r.With(api.verifyCaptcha).With(api.oauthClientAuth).Post("/token", api.Token)
+		r.With(api.verifyCaptcha).Post("/token", api.Token)
 
 		r.With(api.limitHandler(api.limiterOpts.Verify)).Route("/verify", func(r *router) {
 			r.Get("/", api.Verify)
@@ -359,6 +360,9 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				r.With(api.limitHandler(api.limiterOpts.OAuthClientRegister)).
 					Post("/clients/register", api.oauthServer.OAuthServerClientDynamicRegister)
 
+				// OAuth Token endpoint (public, with client authentication)
+				r.With(api.requireOAuthClientAuth).Post("/token", api.oauthServer.OAuthToken)
+
 				// OAuth 2.1 Authorization endpoints
 				// `/authorize` to initiate OAuth2 authorization code flow where Supabase Auth is the OAuth2 provider
 				r.Get("/authorize", api.oauthServer.OAuthServerAuthorize)
@@ -392,12 +396,6 @@ func (a *API) HealthCheck(w http.ResponseWriter, r *http.Request) error {
 		Name:        "GoTrue",
 		Description: "GoTrue is a user registration and authentication API",
 	})
-}
-
-// Mailer returns NewMailer with the current tenant config
-func (a *API) Mailer() mailer.Mailer {
-	config := a.config
-	return mailer.NewMailerWithClient(config, a.mailerClientFunc())
 }
 
 // ServeHTTP implements the http.Handler interface by passing the request along

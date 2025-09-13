@@ -55,6 +55,7 @@ const (
 	TokenRefresh
 	Anonymous
 	Web3
+	OAuthProviderAuthorizationCode
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -89,6 +90,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "mfa/webauthn"
 	case Web3:
 		return "web3"
+	case OAuthProviderAuthorizationCode:
+		return "oauth_provider/authorization_code"
 	}
 	return ""
 }
@@ -126,6 +129,8 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return MFAWebAuthn, nil
 	case "web3":
 		return Web3, nil
+	case "oauth_provider/authorization_code":
+		return OAuthProviderAuthorizationCode, nil
 
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
