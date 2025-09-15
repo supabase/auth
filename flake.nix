@@ -34,7 +34,7 @@
             version = "0.1.0";
             src = ./.;
 
-            vendorHash = "sha256-QBQUUFWT3H3L7ajFV8cgi0QREXnm0ReIisD+4ACfLZQ=";
+            vendorHash = "sha256-knYvNkEVffWisvb4Dhm5qqtqQ4co9MGoNt6yH6dUll8=";
 
             buildFlags = [
               "-tags"
