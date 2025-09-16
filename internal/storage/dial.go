@@ -83,13 +83,13 @@ func Dial(config *conf.GlobalConfiguration) (*Connection, error) {
 	}
 
 	if config.Metrics.Enabled {
-		registerOpenTelemetryDatabaseStats(db)
+		registerOpenTelemetryDatabaseStats(db, config)
 	}
 
 	return &Connection{db}, nil
 }
 
-func registerOpenTelemetryDatabaseStats(db *pop.Connection) {
+func registerOpenTelemetryDatabaseStats(db *pop.Connection, config *conf.GlobalConfiguration) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			logrus.WithField("error", rec).Error("registerOpenTelemetryDatabaseStats is not able to determine database object with reflection -- panicked")
@@ -110,6 +110,15 @@ func registerOpenTelemetryDatabaseStats(db *pop.Connection) {
 		logrus.WithError(err).Error("unable to register OpenTelemetry stats metrics for databse")
 	} else {
 		logrus.Debug("registered OpenTelemetry stats metrics for database")
+	}
+
+	if config.DB.Advisor.Enabled {
+		advisor := Advisor{
+			DB:       sqldb,
+			Interval: config.DB.Advisor.SamplingInterval,
+		}
+
+		advisor.Start(config.DB.Advisor.ObservationInterval)
 	}
 }
 
