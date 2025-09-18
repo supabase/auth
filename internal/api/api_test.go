@@ -62,7 +62,7 @@ func TestOAuthServerDisabledByDefault(t *testing.T) {
 
 	// OAuth server should be disabled by default
 	require.False(t, api.config.OAuthServer.Enabled)
-	
+
 	// OAuth server instance should not be initialized when disabled
 	require.Nil(t, api.oauthServer)
 }
@@ -78,7 +78,7 @@ func TestOAuthServerCanBeEnabled(t *testing.T) {
 
 	// OAuth server should be enabled
 	require.True(t, api.config.OAuthServer.Enabled)
-	
+
 	// OAuth server instance should be initialized when enabled
 	require.NotNil(t, api.oauthServer)
 }
