@@ -94,9 +94,9 @@ type EmailProviderConfiguration struct {
 }
 
 type DBAdvisorConfiguration struct {
-	Enabled             bool          `json:"enabled"`
-	SamplingInterval    time.Duration `json:"sampling_interval" split_words:"true" default:"250ms"`
-	ObservationInterval time.Duration `json:"observation_interval" split_words:"true" default:"5s"`
+	Enabled             bool          `json:"enabled" default:"true"`
+	SamplingInterval    time.Duration `json:"sampling_interval" split_words:"true" default:"200ms"`
+	ObservationInterval time.Duration `json:"observation_interval" split_words:"true" default:"20s"`
 }
 
 // DBConfiguration holds all the database related configuration.

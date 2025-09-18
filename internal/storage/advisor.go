@@ -24,11 +24,15 @@ type Advisor struct {
 func (a *Advisor) Start(observeDuration time.Duration) {
 	nSamples := int(math.Round(observeDuration.Seconds() / a.Interval.Seconds()))
 
-	a.Stats = a.DB.Stats()
 	a.WaitDurationSamples = make([]time.Duration, nSamples)
 	a.WaitCountSamples = make([]int64, nSamples)
 
 	go func() {
+		// after server start the db stats are going to be worse, so ignore that period
+		time.Sleep(observeDuration)
+
+		a.Stats = a.DB.Stats()
+
 		for {
 			time.Sleep(a.Interval)
 			a.loop()
