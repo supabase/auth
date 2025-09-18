@@ -135,6 +135,7 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 		Emails: []provider.Email{},
 	}
 
+	var createdUser bool
 	var token *AccessTokenResponse
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
@@ -143,11 +144,15 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 		return err
 	}
 
+	var user *models.User
 	err = db.Transaction(func(tx *storage.Connection) error {
-		user, terr := a.createAccountFromExternalIdentity(tx, r, &userData, providerType, true)
+		var terr error
+		var decision models.AccountLinkingDecision
+		decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userData, providerType, true)
 		if terr != nil {
 			return terr
 		}
+		createdUser = decision == models.CreateAccount
 
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": providerType,
@@ -176,6 +181,11 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 			return err
 		default:
 			return apierrors.NewOAuthError("server_error", "Internal Server Error").WithInternalError(err)
+		}
+	}
+	if createdUser {
+		if err := a.triggerAfterUserCreated(r, db, user); err != nil {
+			return err
 		}
 	}
 
@@ -271,6 +281,7 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 		Emails: []provider.Email{},
 	}
 
+	var createdUser bool
 	var token *AccessTokenResponse
 	var grantParams models.GrantParams
 	grantParams.FillGrantParams(r)
@@ -279,11 +290,15 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 		return err
 	}
 
+	var user *models.User
 	err = db.Transaction(func(tx *storage.Connection) error {
-		user, terr := a.createAccountFromExternalIdentity(tx, r, &userData, providerType, true)
+		var terr error
+		var decision models.AccountLinkingDecision
+		decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userData, providerType, true)
 		if terr != nil {
 			return terr
 		}
+		createdUser = decision == models.CreateAccount
 
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
 			"provider": providerType,
@@ -315,5 +330,10 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 		}
 	}
 
+	if createdUser {
+		if err := a.triggerAfterUserCreated(r, db, user); err != nil {
+			return err
+		}
+	}
 	return sendJSON(w, http.StatusOK, token)
 }

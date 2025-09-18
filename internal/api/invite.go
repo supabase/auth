@@ -99,5 +99,8 @@ func (a *API) Invite(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	if err := a.triggerAfterUserCreated(r, db, user); err != nil {
+		return err
+	}
 	return sendJSON(w, http.StatusOK, user)
 }

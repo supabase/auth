@@ -94,8 +94,9 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
 
 	var (
-		signupUser *models.User
-		inviteUser *models.User
+		createdUser bool
+		signupUser  *models.User
+		inviteUser  *models.User
 	)
 	switch {
 	case params.Type == mail.SignupVerification && user == nil:
@@ -162,6 +163,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 				}
 			} else {
+				createdUser = true
 				user, terr = a.signupNewUser(tx, inviteUser)
 				if terr != nil {
 					return terr
@@ -207,6 +209,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				// password here to generate a new user, use
 				// signupUser which is a model generated from
 				// SignupParams above
+				createdUser = true
 				user, terr = a.signupNewUser(tx, signupUser)
 				if terr != nil {
 					return terr
@@ -288,9 +291,14 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
-
 	if err != nil {
 		return err
+	}
+
+	if createdUser {
+		if err := a.triggerAfterUserCreated(r, db, user); err != nil {
+			return err
+		}
 	}
 
 	resp := GenerateLinkResponse{
@@ -301,7 +309,6 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		VerificationType: params.Type,
 		RedirectTo:       referrer,
 	}
-
 	return sendJSON(w, http.StatusOK, resp)
 }
 

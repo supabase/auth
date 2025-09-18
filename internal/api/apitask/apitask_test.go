@@ -12,19 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type taskFunc struct {
-	typ string
-	fn  func(context.Context) error
-}
-
-func (o *taskFunc) Type() string { return o.typ }
-
-func (o *taskFunc) Run(ctx context.Context) error { return o.fn(ctx) }
-
-func taskFn(typ string, fn func(context.Context) error) Task {
-	return &taskFunc{typ: typ, fn: fn}
-}
-
 func TestContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
@@ -59,7 +46,7 @@ func TestRun(t *testing.T) {
 		expCalls := 0
 		for range 16 {
 			expCalls++
-			task := taskFn("test.run", func(ctx context.Context) error {
+			task := Func("test.run", func(ctx context.Context) error {
 				calls.Add(1)
 				return nil
 			})
@@ -85,7 +72,7 @@ func TestRun(t *testing.T) {
 			sentinel := errors.New("sentinel")
 			for range 16 {
 				expCalls++
-				task := taskFn("test.run", func(ctx context.Context) error {
+				task := Func("test.run", func(ctx context.Context) error {
 					calls.Add(1)
 					return sentinel
 				})
@@ -110,7 +97,7 @@ func TestRun(t *testing.T) {
 			sentinel := errors.New("sentinel")
 			for range 16 {
 				expCalls++
-				task := taskFn("test.run", func(ctx context.Context) error {
+				task := Func("test.run", func(ctx context.Context) error {
 					calls.Add(1)
 					return sentinel
 				})
@@ -137,7 +124,7 @@ func TestMiddleware(t *testing.T) {
 		hrFunc := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			for i := range 10 {
 				typ := fmt.Sprintf("test-task-%v", i)
-				task := taskFn(typ, func(ctx context.Context) error {
+				task := Func(typ, func(ctx context.Context) error {
 					return nil
 				})
 
@@ -164,7 +151,7 @@ func TestMiddleware(t *testing.T) {
 		hrFunc := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			for i := range 10 {
 				typ := fmt.Sprintf("test-task-%v", i)
-				task := taskFn(typ, func(ctx context.Context) error {
+				task := Func(typ, func(ctx context.Context) error {
 					return nil
 				})
 				err := Run(r.Context(), task)
