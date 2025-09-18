@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.180.0](https://github.com/supabase/auth/compare/v2.179.0...v2.180.0) (2025-09-18)
+
+
+### Features
+
+* add OAuth client type ([#2152](https://github.com/supabase/auth/issues/2152)) ([b118f1f](https://github.com/supabase/auth/commit/b118f1f00c3c846095c25c34092e38aeebfdf2db))
+* background template reloading p1 - baseline decomposition ([#2148](https://github.com/supabase/auth/issues/2148)) ([746c937](https://github.com/supabase/auth/commit/746c937f7c57ba256d942df334ab9ee354509587))
+* config reloading with fsnotify, poller fallback, and signals ([#2161](https://github.com/supabase/auth/issues/2161)) ([c77d512](https://github.com/supabase/auth/commit/c77d51203fc52c1c9a9f7dc56ca1c076e018fc54))
+* enhance issuer URL validation in OAuth server metadata ([#2164](https://github.com/supabase/auth/issues/2164)) ([a9424d2](https://github.com/supabase/auth/commit/a9424d25909e074db395b620dc9999724bf4a03c))
+* implement OAuth2 authorization endpoint ([#2107](https://github.com/supabase/auth/issues/2107)) ([5318552](https://github.com/supabase/auth/commit/53185526b07cb2c27f6a81782a6c24610e39d6fe))
+* **oauth2:** add `/oauth/token` endpoint ([#2159](https://github.com/supabase/auth/issues/2159)) ([a89a0b0](https://github.com/supabase/auth/commit/a89a0b054e87fee4e193aab4fff7677b56775386))
+* **oauth2:** add admin endpoint to regenerate OAuth client secrets ([#2170](https://github.com/supabase/auth/issues/2170)) ([0bd1c28](https://github.com/supabase/auth/commit/0bd1c285aaf3bbb3f3d6e2e131aabfe5cabf0fa5))
+* **oauth2:** use `id` field as the public client_id ([#2154](https://github.com/supabase/auth/issues/2154)) ([86b7de4](https://github.com/supabase/auth/commit/86b7de45c9432ea6ee9bd7c7e9cfe96e038fe2bc))
+* support `transfer_sub` in apple id tokens ([#2162](https://github.com/supabase/auth/issues/2162)) ([8a71006](https://github.com/supabase/auth/commit/8a71006486027c0850a58ec6e94f62a1607d1d48))
+
+
+### Bug Fixes
+
+* **makefile:** remove invalid @ symbol from shell commands ([#2168](https://github.com/supabase/auth/issues/2168)) ([e6afe45](https://github.com/supabase/auth/commit/e6afe4529859e1ee92ed5c259e04c9fe56de22cf))
+
 ## [2.179.0](https://github.com/supabase/auth/compare/v2.178.0...v2.179.0) (2025-08-28)
 
 
