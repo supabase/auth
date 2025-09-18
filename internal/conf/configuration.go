@@ -93,6 +93,12 @@ type EmailProviderConfiguration struct {
 	MagicLinkEnabled bool `json:"magic_link_enabled" default:"true" split_words:"true"`
 }
 
+type DBAdvisorConfiguration struct {
+	Enabled             bool          `json:"enabled" default:"true"`
+	SamplingInterval    time.Duration `json:"sampling_interval" split_words:"true" default:"200ms"`
+	ObservationInterval time.Duration `json:"observation_interval" split_words:"true" default:"20s"`
+}
+
 // DBConfiguration holds all the database related configuration.
 type DBConfiguration struct {
 	Driver    string `json:"driver" required:"true"`
@@ -106,6 +112,8 @@ type DBConfiguration struct {
 	HealthCheckPeriod time.Duration `json:"health_check_period" split_words:"true"`
 	MigrationsPath    string        `json:"migrations_path" split_words:"true" default:"./migrations"`
 	CleanupEnabled    bool          `json:"cleanup_enabled" split_words:"true" default:"false"`
+
+	Advisor DBAdvisorConfiguration `json:"advisor"`
 }
 
 func (c *DBConfiguration) Validate() error {
