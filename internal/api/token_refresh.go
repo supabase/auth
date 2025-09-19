@@ -19,7 +19,8 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return err
 	}
 
-	tokenResponse, err := a.tokenService.RefreshTokenGrant(ctx, a.db, r, tokens.RefreshTokenGrantParams{
+	db := a.db.WithContext(ctx)
+	tokenResponse, err := a.tokenService.RefreshTokenGrant(ctx, db, r, tokens.RefreshTokenGrantParams{
 		RefreshToken: params.RefreshToken,
 	})
 	if err != nil {

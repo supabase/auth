@@ -83,7 +83,7 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 
 	flowStateID := ""
 	if isPKCEFlow(flowType) {
-		flowState, err := generateFlowState(a.db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil)
+		flowState, err := generateFlowState(db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil)
 		if err != nil {
 			return "", err
 		}
@@ -200,7 +200,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	var flowState *models.FlowState
 	// if there's a non-empty FlowStateID we perform PKCE Flow
 	if flowStateID := getFlowStateID(ctx); flowStateID != "" {
-		flowState, err = models.FindFlowStateByID(a.db, flowStateID)
+		flowState, err = models.FindFlowStateByID(db, flowStateID)
 		if models.IsNotFoundError(err) {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeFlowStateNotFound, "Flow state not found").WithInternalError(err)
 		} else if err != nil {
@@ -506,7 +506,7 @@ func (a *API) processInvite(r *http.Request, tx *storage.Connection, userData *p
 	return user, nil
 }
 
-func (a *API) loadExternalState(ctx context.Context, r *http.Request) (context.Context, error) {
+func (a *API) loadExternalState(ctx context.Context, r *http.Request, db *storage.Connection) (context.Context, error) {
 	var state string
 	switch r.Method {
 	case http.MethodPost:
@@ -564,7 +564,7 @@ func (a *API) loadExternalState(ctx context.Context, r *http.Request) (context.C
 		if err != nil {
 			return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthState, "OAuth callback with invalid state (linking_target_id must be UUID)")
 		}
-		u, err := models.FindUserByID(a.db, linkingTargetUserID)
+		u, err := models.FindUserByID(db, linkingTargetUserID)
 		if err != nil {
 			if models.IsNotFoundError(err) {
 				return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeUserNotFound, "Linking target user not found")

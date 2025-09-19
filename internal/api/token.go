@@ -165,7 +165,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 				output.Message = v0hooks.DefaultPasswordHookRejectionMessage
 			}
 			if output.ShouldLogoutUser {
-				if err := models.Logout(a.db, user.ID); err != nil {
+				if err := models.Logout(db, user.ID); err != nil {
 					return err
 				}
 			}
