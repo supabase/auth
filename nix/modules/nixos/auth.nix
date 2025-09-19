@@ -7,7 +7,6 @@
 }:
 let
   cfg = config.services.auth;
-  gotrue = perSystem.self.default;
   default_settings = rec {
     API_EXTERNAL_URL = "http://localhost:9999";
     DB_HOST = "localhost";
@@ -60,7 +59,7 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.callPackage ../../package.nix { };
+      default = perSystem.self.default;
       description = "The Supabase Auth package to use.";
     };
 
@@ -93,7 +92,7 @@ in
       serviceConfig = {
         Type = "simple";
         WorkingDirectory = "/opt/gotrue";
-        ExecStart = "${gotrue}/bin/gotrue --config-dir /etc/auth.d";
+        ExecStart = "${cfg.package}/bin/gotrue --config-dir /etc/auth.d";
         User = "gotrue";
         Restart = "always";
         RestartSec = 3;
