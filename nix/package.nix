@@ -1,7 +1,7 @@
 { pkgs, ... }:
 pkgs.buildGoModule {
   pname = "supabase-auth";
-  version = "0.1.0";
+  version = "2.180.0";
   src = ./..;
 
   vendorHash = "sha256-knYvNkEVffWisvb4Dhm5qqtqQ4co9MGoNt6yH6dUll8=";
@@ -10,6 +10,8 @@ pkgs.buildGoModule {
     "-tags"
     "netgo"
   ];
+
+  # we cannot run test in the sandbox as tests rely on postgresql tcp connection
   doCheck = false;
 
   subPackages = [ "." ];
