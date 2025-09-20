@@ -145,9 +145,12 @@ comprehensive list of those features:
 3. Super admin via the `is_super_admin` column.
 4. Group information in JWTs via `GOTRUE_JWT_ADMIN_GROUP_NAME` and other
    configuration fields.
-5. Symmetric JWTs. In the future it is very likely that Auth will begin
-   issuing asymmetric JWTs (subject to configuration), so do not rely on the
-   assumption that only HS256 signed JWTs will be issued long term.
+5. JWT signing. Supabase Auth supports asymmetric keys (RS256 by default;
+   ECC/Ed25519 optional). HS256 is still supported for compatibility, but
+   migrating to asymmetric keys is recommended for easier validation and
+   rotation. Future deprecations will be announced in the changelog. See the
+   [JWT Signing Keys](https://supabase.com/docs/guides/auth/signing-keys) and
+   [JWTs guide](https://supabase.com/docs/guides/auth/jwts) for details.
 
 Note that this is not an exhaustive list and it may change.
 
