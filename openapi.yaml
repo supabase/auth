@@ -1951,6 +1951,48 @@ paths:
         403:
           $ref: "#/components/responses/ForbiddenResponse"
 
+  /admin/oauth/clients/{client_id}/regenerate_secret:
+    parameters:
+      - name: client_id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Regenerate OAuth client secret (admin)
+      description: >
+        Regenerates the client secret for a confidential OAuth client. Only available when OAuth server is enabled.
+        This endpoint can only be used for confidential clients, not public clients.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      responses:
+        200:
+          description: OAuth client secret regenerated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthClientSchema"
+        400:
+          description: Bad request - cannot regenerate secret for public client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        404:
+          description: OAuth client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+
   /oauth/clients/register:
     post:
       summary: Register a new OAuth client dynamically (public endpoint).
