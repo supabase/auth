@@ -2886,12 +2886,34 @@ components:
       type: object
       description: Represents an OAuth 2.1 client
       properties:
-        id:
+        client_id:
           type: string
           description: Unique client identifier
         client_name:
           type: string
           description: Human-readable name of the client application
+        client_secret:
+          type: string
+          description: Client secret for confidential clients (only returned on registration/regeneration)
+        client_type:
+          type: string
+          enum:
+            - public
+            - confidential
+          description: Type of the client
+        token_endpoint_auth_method:
+          type: string
+          enum:
+            - none
+            - client_secret_basic
+            - client_secret_post
+          description: Authentication method for the token endpoint
+        registration_type:
+          type: string
+          enum:
+            - dynamic
+            - manual
+          description: Registration type of the client
         client_uri:
           type: string
           format: uri
