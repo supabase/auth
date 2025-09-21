@@ -1938,12 +1938,8 @@ paths:
         - APIKeyAuth: []
           AdminAuth: []
       responses:
-        200:
+        204:
           description: OAuth client deleted
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OAuthClientSchema"
         404:
           description: OAuth client not found
           content:
