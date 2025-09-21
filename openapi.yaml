@@ -2149,7 +2149,6 @@ paths:
         required: true
         schema:
           type: string
-          format: uuid
     get:
       summary: Get OAuth authorization details
       description: >
@@ -2167,19 +2166,35 @@ paths:
               schema:
                 type: object
                 properties:
-                  id:
-                    type: string
-                    format: uuid
-                  client_id:
-                    type: string
-                  client_name:
-                    type: string
-                  scope:
+                  authorization_id:
                     type: string
                   redirect_uri:
                     type: string
                     format: uri
-                  state:
+                  client:
+                    type: object
+                    properties:
+                      client_id:
+                        type: string
+                        format: uuid
+                      client_name:
+                        type: string
+                      client_uri:
+                        type: string
+                        format: uri
+                      logo_uri:
+                        type: string
+                        format: uri
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      email:
+                        type: string
+                        format: email
+                  scope:
                     type: string
         404:
           description: Authorization not found
@@ -2197,7 +2212,6 @@ paths:
         required: true
         schema:
           type: string
-          format: uuid
     post:
       summary: Approve or deny OAuth authorization
       description: >
@@ -2222,13 +2236,16 @@ paths:
                     - deny
                   description: Whether to approve or deny the authorization
       responses:
-        302:
-          description: Redirect back to client with authorization code or error
-          headers:
-            Location:
+        200:
+          description: Authorization consent processed
+          content:
+            application/json:
               schema:
-                type: string
-                format: uri
+                type: object
+                properties:
+                  redirect_url:
+                    type: string
+                    format: uri
         400:
           $ref: "#/components/responses/BadRequestResponse"
         401:
