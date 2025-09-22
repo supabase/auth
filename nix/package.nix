@@ -2,7 +2,7 @@
 pkgs.buildGoModule {
   pname = "supabase-auth";
   version = "2.180.0";
-  src = ./..;
+  src = ./..; # TODO: better filters out what's not go files
 
   vendorHash = "sha256-knYvNkEVffWisvb4Dhm5qqtqQ4co9MGoNt6yH6dUll8=";
 
