@@ -141,7 +141,6 @@ func validateRedirectURI(uri string) error {
 	return nil
 }
 
-
 // generateClientSecret generates a secure random client secret
 func generateClientSecret() string {
 	b := make([]byte, 32)
@@ -247,4 +246,35 @@ func (s *Server) deleteOAuthServerClient(ctx context.Context, clientID uuid.UUID
 	}
 
 	return nil
+}
+
+// regenerateOAuthServerClientSecret regenerates a client secret for confidential clients
+func (s *Server) regenerateOAuthServerClientSecret(ctx context.Context, clientID uuid.UUID) (*models.OAuthServerClient, string, error) {
+	db := s.db.WithContext(ctx)
+
+	client, err := models.FindOAuthServerClientByID(db, clientID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// Only confidential clients can have their secrets regenerated
+	if !client.IsConfidential() {
+		return nil, "", errors.New("cannot regenerate secret for public client")
+	}
+
+	// Generate new client secret
+	plaintextSecret := generateClientSecret()
+	hash, err := hashClientSecret(plaintextSecret)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "failed to hash client secret")
+	}
+
+	// Update client with new secret hash
+	client.ClientSecretHash = hash
+
+	if err := models.UpdateOAuthServerClient(db, client); err != nil {
+		return nil, "", errors.Wrap(err, "failed to update OAuth client with new secret")
+	}
+
+	return client, plaintextSecret, nil
 }

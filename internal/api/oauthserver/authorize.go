@@ -35,6 +35,7 @@ type AuthorizeParams struct {
 // AuthorizationDetailsResponse represents the response for getting authorization details
 type AuthorizationDetailsResponse struct {
 	AuthorizationID string                `json:"authorization_id"`
+	RedirectURI     string                `json:"redirect_uri,omitempty"`
 	Client          ClientDetailsResponse `json:"client,omitempty"`
 	User            UserDetailsResponse   `json:"user,omitempty"`
 	Scope           string                `json:"scope,omitempty"`
@@ -234,6 +235,7 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 	// Build response with client and user details
 	response := AuthorizationDetailsResponse{
 		AuthorizationID: authorization.AuthorizationID,
+		RedirectURI:     authorization.RedirectURI,
 		Client: ClientDetailsResponse{
 			ClientID:   authorization.Client.ID.String(),
 			ClientName: utilities.StringValue(authorization.Client.ClientName),
@@ -369,13 +371,15 @@ func (s *Server) OAuthServerConsent(w http.ResponseWriter, r *http.Request) erro
 
 // validateRequestOrigin checks if the request is coming from an authorized origin
 func (s *Server) validateRequestOrigin(r *http.Request) error {
-	// Check referer header
-	referer := r.Referer()
-	if referer == "" {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "request must originate from authorized domain")
+	// Check Origin header
+	// browsers add this header by default, we can at least prevent some basic cross-origin attacks
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		// Empty Origin header is ok (e.g., for backend-originated requests or mobile apps)
+		return nil
 	}
 
-	if !utilities.IsRedirectURLValid(s.config, referer) {
+	if !utilities.IsRedirectURLValid(s.config, origin) {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "unauthorized request origin")
 	}
 

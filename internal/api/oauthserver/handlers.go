@@ -190,11 +190,33 @@ func (s *Server) OAuthServerClientDelete(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
+// OAuthServerClientRegenerateSecret handles POST /admin/oauth/clients/{client_id}/regenerate_secret
+func (s *Server) OAuthServerClientRegenerateSecret(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	client := shared.GetOAuthServerClient(ctx)
+
+	// Only confidential clients can have their secrets regenerated
+	if !client.IsConfidential() {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Cannot regenerate secret for public client")
+	}
+
+	updatedClient, plaintextSecret, err := s.regenerateOAuthServerClientSecret(ctx, client.ID)
+	if err != nil {
+		return apierrors.NewInternalServerError("Error regenerating OAuth client secret").WithInternalError(err)
+	}
+
+	response := oauthServerClientToResponse(updatedClient)
+	response.ClientSecret = plaintextSecret
+
+	return shared.SendJSON(w, http.StatusOK, response)
+}
+
 // OAuthServerClientList handles GET /admin/oauth/clients
 func (s *Server) OAuthServerClientList(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	db := s.db.WithContext(ctx)
 
+	// TODO(cemal) :: Add pagination, check the `/admin/users` endpoint for reference
 	var clients []models.OAuthServerClient
 	if err := db.Q().Where("deleted_at is null").Order("created_at desc").All(&clients); err != nil {
 		return apierrors.NewInternalServerError("Error listing OAuth clients").WithInternalError(err)

@@ -418,7 +418,7 @@ func (a *API) challengePhoneFactor(w http.ResponseWriter, r *http.Request) error
 			},
 		}
 		output := v0hooks.SendSMSOutput{}
-		err := a.hooksMgr.InvokeHook(a.db, r, &input, &output)
+		err := a.hooksMgr.InvokeHook(db, r, &input, &output)
 		if err != nil {
 			return apierrors.NewInternalServerError("error invoking hook")
 		}
