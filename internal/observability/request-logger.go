@@ -73,6 +73,11 @@ type logEntry struct {
 	Entry *logrus.Entry
 }
 
+// NewLogEntry returns a new chimiddleware.LogEntry from a *logrus.Entry.
+func NewLogEntry(le *logrus.Entry) chimiddleware.LogEntry {
+	return &logEntry{le}
+}
+
 func (e *logEntry) Write(status, bytes int, header http.Header, elapsed time.Duration, extra interface{}) {
 	fields := logrus.Fields{
 		"status":   status,

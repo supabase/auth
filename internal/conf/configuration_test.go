@@ -262,6 +262,30 @@ func TestGlobal(t *testing.T) {
 		err := populateGlobal(cfg)
 		require.NoError(t, err)
 	}
+
+	// ConnPercentage
+	{
+		tests := []struct {
+			from int
+			exp  int
+		}{
+			{-2, 0},
+			{-1, 0},
+			{0, 0},
+			{1, 1},
+			{25, 25},
+			{99, 99},
+			{100, 100},
+			{101, 100},
+			{102, 100},
+		}
+		for _, test := range tests {
+			cfg := &DBConfiguration{ConnPercentage: test.from}
+			err := cfg.Validate()
+			require.NoError(t, err)
+			require.Equal(t, test.exp, cfg.ConnPercentage)
+		}
+	}
 }
 
 func TestPasswordRequiredCharactersDecode(t *testing.T) {
