@@ -18,6 +18,9 @@ const (
 	EmailChangeCurrentVerification = "email_change_current"
 	EmailChangeNewVerification     = "email_change_new"
 	ReauthenticationVerification   = "reauthentication"
+
+	// Account Changes Notifications
+	PasswordChangedNotification = "password_changed_notification"
 )
 
 // Mailer defines the interface a mailer must implement.
@@ -29,6 +32,9 @@ type Mailer interface {
 	EmailChangeMail(r *http.Request, user *models.User, otpNew, otpCurrent, referrerURL string, externalURL *url.URL) error
 	ReauthenticateMail(r *http.Request, user *models.User, otp string) error
 	GetEmailActionLink(user *models.User, actionType, referrerURL string, externalURL *url.URL) (string, error)
+
+	// Account Changes Notifications
+	PasswordChangedNotificationMail(r *http.Request, user *models.User) error
 }
 
 // TODO(cstockton): Mail(...) -> Mail(Email{...}) ?

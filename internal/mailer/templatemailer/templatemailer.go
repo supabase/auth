@@ -18,6 +18,9 @@ const (
 	EmailChangeTemplate      = "email_change"
 	MagicLinkTemplate        = "magic_link"
 	ReauthenticationTemplate = "reauthentication"
+
+	// Account Changes Notifications
+	PasswordChangedNotificationTemplate = "password_changed_notification"
 )
 
 const defaultInviteMail = `<h2>You have been invited</h2>
@@ -55,6 +58,14 @@ const defaultReauthenticateMail = `<h2>Confirm reauthentication</h2>
 
 <p>Enter the code: {{ .Token }}</p>`
 
+// Account Changes Notifications
+
+// #nosec G101 -- No hardcoded credentials.
+const defaultPasswordChangedNotificationMail = `<h2>Your password has been changed</h2>
+
+<p>This is a confirmation that the password for your account {{ .Email }} has just been changed. If you did not make this change, please contact support immediately.</p>
+`
+
 var (
 	templateTypes = []string{
 		InviteTemplate,
@@ -63,6 +74,9 @@ var (
 		EmailChangeTemplate,
 		MagicLinkTemplate,
 		ReauthenticationTemplate,
+
+		// Account Changes Notifications
+		PasswordChangedNotificationTemplate,
 	}
 	defaultTemplateSubjects = &conf.EmailContentConfiguration{
 		Invite:           "You have been invited",
@@ -71,6 +85,9 @@ var (
 		MagicLink:        "Your Magic Link",
 		EmailChange:      "Confirm Email Change",
 		Reauthentication: "Confirm reauthentication",
+
+		// Account Changes Notifications
+		PasswordChangedNotification: "Your password has been changed",
 	}
 	defaultTemplateBodies = &conf.EmailContentConfiguration{
 		Invite:           defaultInviteMail,
@@ -79,6 +96,9 @@ var (
 		MagicLink:        defaultMagicLinkMail,
 		EmailChange:      defaultEmailChangeMail,
 		Reauthentication: defaultReauthenticateMail,
+
+		// Account Changes Notifications
+		PasswordChangedNotification: defaultPasswordChangedNotificationMail,
 	}
 )
 
@@ -341,6 +361,15 @@ func (m *Mailer) GetEmailActionLink(user *models.User, actionType, referrerURL s
 		return "", err
 	}
 	return externalURL.ResolveReference(path).String(), nil
+}
+
+func (m *Mailer) PasswordChangedNotificationMail(r *http.Request, user *models.User) error {
+	data := map[string]any{
+		"Email":     user.Email,
+		"Data":      user.UserMetaData,
+		"SendingTo": user.Email,
+	}
+	return m.mail(r.Context(), m.cfg, PasswordChangedNotificationTemplate, user.GetEmail(), data)
 }
 
 type emailParams struct {
