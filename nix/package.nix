@@ -1,8 +1,28 @@
-{ pkgs, ... }:
+{
+  flake,
+  inputs,
+  pkgs,
+  ...
+}:
+let
+  filter = inputs.nix-filter.lib;
+in
 pkgs.buildGoModule {
   pname = "supabase-auth";
   version = "2.180.0";
-  src = ./..; # TODO: better filters out what's not go files
+  src = filter {
+    root = flake;
+    include = [
+      (filter.matchExt "go")
+      "go.mod"
+      "go.sum"
+      "client"
+      "cmd"
+      "internal"
+      "migrations"
+      "tools"
+    ];
+  };
 
   vendorHash = "sha256-knYvNkEVffWisvb4Dhm5qqtqQ4co9MGoNt6yH6dUll8=";
 
