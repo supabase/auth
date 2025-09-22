@@ -370,7 +370,7 @@ func (s *Server) OAuthServerConsent(w http.ResponseWriter, r *http.Request) erro
 // validateRequestOrigin checks if the request is coming from an authorized origin
 func (s *Server) validateRequestOrigin(r *http.Request) error {
 	// Check Origin header
-	// browsers add this header by default, we can at least prevent some basic attacks
+	// browsers add this header by default, we can at least prevent some basic cross-origin attacks
 	origin := r.Header.Get("Origin")
 	if origin == "" {
 		// Empty Origin header is ok (e.g., for backend-originated requests or mobile apps)
