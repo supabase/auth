@@ -35,6 +35,7 @@ type AuthorizeParams struct {
 // AuthorizationDetailsResponse represents the response for getting authorization details
 type AuthorizationDetailsResponse struct {
 	AuthorizationID string                `json:"authorization_id"`
+	RedirectURI     string                `json:"redirect_uri,omitempty"`
 	Client          ClientDetailsResponse `json:"client,omitempty"`
 	User            UserDetailsResponse   `json:"user,omitempty"`
 	Scope           string                `json:"scope,omitempty"`
@@ -234,6 +235,7 @@ func (s *Server) OAuthServerGetAuthorization(w http.ResponseWriter, r *http.Requ
 	// Build response with client and user details
 	response := AuthorizationDetailsResponse{
 		AuthorizationID: authorization.AuthorizationID,
+		RedirectURI:     authorization.RedirectURI,
 		Client: ClientDetailsResponse{
 			ClientID:   authorization.Client.ID.String(),
 			ClientName: utilities.StringValue(authorization.Client.ClientName),
