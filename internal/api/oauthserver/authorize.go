@@ -369,13 +369,15 @@ func (s *Server) OAuthServerConsent(w http.ResponseWriter, r *http.Request) erro
 
 // validateRequestOrigin checks if the request is coming from an authorized origin
 func (s *Server) validateRequestOrigin(r *http.Request) error {
-	// Check referer header
-	referer := r.Referer()
-	if referer == "" {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "request must originate from authorized domain")
+	// Check Origin header
+	// browsers add this header by default, we can at least prevent some basic attacks
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		// Empty Origin header is ok (e.g., for backend-originated requests or mobile apps)
+		return nil
 	}
 
-	if !utilities.IsRedirectURLValid(s.config, referer) {
+	if !utilities.IsRedirectURLValid(s.config, origin) {
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "unauthorized request origin")
 	}
 
