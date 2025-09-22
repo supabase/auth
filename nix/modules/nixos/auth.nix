@@ -104,6 +104,7 @@ in
     systemd.services.gotrue = {
       description = "gotrue (auth)";
       wantedBy = [ "multi-user.target" ];
+      after = [ "postgresql.service" ];
       serviceConfig = {
         Type = "exec";
         WorkingDirectory = "/opt/gotrue";
