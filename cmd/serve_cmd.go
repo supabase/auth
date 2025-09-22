@@ -103,19 +103,40 @@ func serve(ctx context.Context) {
 		go func() {
 			defer wg.Done()
 
+			rc := config.Reloading
+			le := logrus.WithFields(logrus.Fields{
+				"component":             "reloader",
+				"notify_enabled":        rc.NotifyEnabled,
+				"poller_enabled":        rc.PollerEnabled,
+				"poller_interval":       rc.PollerInterval.String(),
+				"signal_enabled":        rc.SignalEnabled,
+				"signal_number":         rc.SignalNumber,
+				"grace_period_duration": rc.GracePeriodInterval.String(),
+			})
+			le.Info("starting configuration reloader")
+
+			var err error
+			defer func() {
+				exitFn := le.Info
+				if err != nil {
+					exitFn = le.WithError(err).Error
+				}
+				exitFn("config reloader is exiting")
+			}()
+
 			fn := func(latestCfg *conf.GlobalConfiguration) {
-				log.Info("reloading api with new configuration")
+				le.Info("reloading api with new configuration")
 
 				// When config is updated we notify the apiworker.
 				wrk.ReloadConfig(latestCfg)
 
 				// Create a new API version with the updated config.
 				latestAPI := api.NewAPIWithVersion(
-					config, db, utilities.Version,
+					latestCfg, db, utilities.Version,
 
 					// Create a new mailer with existing template cache.
 					api.WithMailer(
-						templatemailer.FromConfig(config, mrCache),
+						templatemailer.FromConfig(latestCfg, mrCache),
 					),
 
 					// Persist existing rate limiters.
@@ -128,9 +149,9 @@ func serve(ctx context.Context) {
 				ah.Store(latestAPI)
 			}
 
-			rl := reloader.NewReloader(watchDir)
-			if err := rl.Watch(ctx, fn); err != nil {
-				log.WithError(err).Error("watcher is exiting")
+			rl := reloader.NewReloader(rc, watchDir)
+			if err = rl.Watch(ctx, fn); err != nil {
+				log.WithError(err).Error("config reloader is exiting")
 			}
 		}()
 	}

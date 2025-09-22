@@ -266,6 +266,39 @@ type ExperimentalConfiguration struct {
 	ProvidersWithOwnLinkingDomain []string `split_words:"true"`
 }
 
+// ReloadingConfiguration holds the configuration values for runtime
+// configuration reloads. These are startup configuration values meaning
+// they do not react to live config reloads.
+//
+// IMPORTANT:
+// * You must provide the --config-dir flag for these settings to take effect.
+// * These config values are for startup, they remain static through reloads.
+type ReloadingConfiguration struct {
+
+	// If notify reloading is enabled the auth server will attempt to use the
+	// filesystems notification support to watch for config updates.
+	NotifyEnabled bool `json:"notify_enabled" split_words:"true" default:"true"`
+
+	// When notify reloading fails, fallback to filesystem polling if this
+	// setting is enabled.
+	PollerEnabled bool `json:"poller_enabled" split_words:"false" default:"false"`
+
+	// This determines how often to poll the filesystem when notify is disabled.
+	PollerInterval time.Duration `json:"poller_interval" split_words:"true" default:"10s"`
+
+	// If signal reloading is enabled the auth server will listen for the
+	// given SignalNumber and reload the config when received. This may be
+	// used to configure `systemd reload` support, by default the SIGUSR1 linux
+	// signal number of 10 is used.
+	SignalEnabled bool `json:"signal_enabled" split_words:"true" default:"false"`
+	SignalNumber  int  `json:"signal_number" split_words:"true" default:"10"`
+
+	// When at least one reloader is enabled this flag determines how much idle
+	// time must pass before triggering a reload. This ensures a single
+	// auth server config reload operation during a burst of config updates.
+	GracePeriodInterval time.Duration `json:"grace_period_interval" split_words:"true" default:"5s"`
+}
+
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
 	API           APIConfiguration
@@ -307,6 +340,7 @@ type GlobalConfiguration struct {
 	CORS            CORSConfiguration        `json:"cors"`
 
 	Experimental ExperimentalConfiguration `json:"experimental"`
+	Reloading    ReloadingConfiguration    `json:"reloading"`
 }
 
 type CORSConfiguration struct {

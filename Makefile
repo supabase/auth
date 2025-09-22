@@ -57,7 +57,7 @@ sec: check-gosec # Check for security vulnerabilities
 
 check-gosec:
 	@command -v gosec >/dev/null 2>&1 \
-		|| @go install github.com/securego/gosec/v2/cmd/gosec@latest
+		|| go install github.com/securego/gosec/v2/cmd/gosec@latest
 
 unused: | check-staticcheck # Look for unused code
 	@echo "Unused code:"
@@ -72,11 +72,11 @@ static: | check-staticcheck check-exhaustive
 
 check-staticcheck:
 	@command -v staticcheck >/dev/null 2>&1 \
-		|| @go install honnef.co/go/tools/cmd/staticcheck@latest
+		|| go install honnef.co/go/tools/cmd/staticcheck@latest
 
 check-exhaustive:
 	@command -v exhaustive >/dev/null 2>&1 \
-		|| @go install github.com/nishanths/exhaustive/cmd/exhaustive@latest
+		|| go install github.com/nishanths/exhaustive/cmd/exhaustive@latest
 
 generate: | check-oapi-codegen
 	go generate ./...
