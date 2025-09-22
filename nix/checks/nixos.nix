@@ -28,7 +28,10 @@ flake.inputs.nixpkgs.lib.nixos.runTest {
         enable = true;
       };
 
-      services.auth.enable = true;
+      services.auth = {
+        enable = true;
+        package = perSystem.self.default;
+      };
 
       services.postgresql = {
         enable = true;

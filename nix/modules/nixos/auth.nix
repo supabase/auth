@@ -2,7 +2,6 @@
   pkgs,
   lib,
   config,
-  perSystem,
   ...
 }:
 let
@@ -76,7 +75,6 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = perSystem.self.default;
       description = "The Supabase Auth package to use.";
     };
 
