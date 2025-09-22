@@ -27,6 +27,8 @@ type OAuthProviderData struct {
 // extracting the provider requested
 func (a *API) loadFlowState(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+
 	oauthToken := r.URL.Query().Get("oauth_token")
 	if oauthToken != "" {
 		ctx = withRequestToken(ctx, oauthToken)
@@ -37,7 +39,7 @@ func (a *API) loadFlowState(w http.ResponseWriter, r *http.Request) (context.Con
 	}
 
 	var err error
-	ctx, err = a.loadExternalState(ctx, r)
+	ctx, err = a.loadExternalState(ctx, r, db)
 	if err != nil {
 		u, uerr := url.ParseRequestURI(a.config.SiteURL)
 		if uerr != nil {
