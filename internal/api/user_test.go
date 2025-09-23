@@ -587,7 +587,7 @@ func (ts *UserTestSuite) TestUserUpdatePasswordSendsNotificationEmail() {
 		ts.Run(c.desc, func() {
 			ts.Config.Security.UpdatePasswordRequireReauthentication = false
 			ts.Config.Mailer.Autoconfirm = false
-			ts.Config.Mailer.NotificationConfigurations.PasswordChangedNotificationEnabled = c.notificationEnabled
+			ts.Config.Mailer.Notifications.PasswordChangedEnabled = c.notificationEnabled
 
 			u, err := models.FindUserByEmailAndAudience(ts.API.db, "test@example.com", ts.Config.JWT.Aud)
 			require.NoError(ts.T(), err)

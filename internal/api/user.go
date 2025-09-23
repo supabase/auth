@@ -200,7 +200,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 			}
 
 			// send a Password Changed email notification to the user to inform them that their password has been changed
-			if config.Mailer.NotificationConfigurations.PasswordChangedNotificationEnabled && user.GetEmail() != "" {
+			if config.Mailer.Notifications.PasswordChangedEnabled && user.GetEmail() != "" {
 				if err := a.sendPasswordChangedNotification(r, tx, user); err != nil {
 					// we don't want to fail the whole request if the email can't be sent
 					logrus.WithError(err).Warn("Unable to send password changed notification email")
