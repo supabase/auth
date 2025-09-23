@@ -555,6 +555,19 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 	return nil
 }
 
+func (a *API) sendPasswordChangedNotification(r *http.Request, tx *storage.Connection, u *models.User) error {
+	if err := a.sendEmail(r, tx, u, mail.PasswordChangedNotification, "", "", ""); err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending password changed notification email").WithInternalError(err)
+	}
+
+	return nil
+}
+
 func (a *API) validateEmail(email string) (string, error) {
 	if email == "" {
 		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "An email address is required")
@@ -708,6 +721,8 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		err = mr.InviteMail(r, u, otp, referrerURL, externalURL)
 	case mail.EmailChangeVerification:
 		err = mr.EmailChangeMail(r, u, otpNew, otp, referrerURL, externalURL)
+	case mail.PasswordChangedNotification:
+		err = mr.PasswordChangedNotificationMail(r, u)
 	default:
 		err = errors.New("invalid email action type")
 	}
