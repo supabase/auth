@@ -4,13 +4,17 @@ import (
 	"database/sql"
 	"math"
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
+type Advisory struct {
+	LongWaitDurationSamples int
+	Over2WaitingSamples     int
+}
+
 type Advisor struct {
-	DB       *sql.DB
-	Interval time.Duration
+	StatsFunc  func() sql.DBStats
+	AdviseFunc func(Advisory)
+	Interval   time.Duration
 
 	Stats         sql.DBStats
 	LastAdvisedAt time.Time
@@ -22,22 +26,26 @@ type Advisor struct {
 }
 
 func (a *Advisor) Start(observeDuration time.Duration) {
-	nSamples := int(math.Round(observeDuration.Seconds() / a.Interval.Seconds()))
-
-	a.WaitDurationSamples = make([]time.Duration, nSamples)
-	a.WaitCountSamples = make([]int64, nSamples)
+	a.setup()
 
 	go func() {
 		// after server start the db stats are going to be worse, so ignore that period
 		time.Sleep(observeDuration)
 
-		a.Stats = a.DB.Stats()
+		a.Stats = a.StatsFunc()
 
 		for {
 			time.Sleep(a.Interval)
 			a.loop()
 		}
 	}()
+}
+
+func (a *Advisor) setup(observeDuration time.Duration) {
+	nSamples := int(math.Round(observeDuration.Seconds() / a.Interval.Seconds()))
+
+	a.WaitDurationSamples = make([]time.Duration, nSamples)
+	a.WaitCountSamples = make([]int64, nSamples)
 }
 
 func (a *Advisor) loop() {
@@ -47,7 +55,7 @@ func (a *Advisor) loop() {
 	}
 
 	previousStats := a.Stats
-	a.Stats = a.DB.Stats()
+	a.Stats = a.StatsFunc()
 
 	a.WaitDurationSamples[a.Iterations%len(a.WaitDurationSamples)] = a.Stats.WaitDuration - previousStats.WaitDuration
 	a.WaitCountSamples[a.Iterations%len(a.WaitCountSamples)] = a.Stats.WaitCount - previousStats.WaitCount
@@ -62,7 +70,7 @@ func (a *Advisor) loop() {
 			}
 		}
 
-		// 1/3 of the observation time was spent waiting for over 1ms
+		// 1/3 of the observation time was spent waiting for over one sampling interval
 		advise = longWaitDurationSamples >= (len(a.WaitDurationSamples) / 3)
 	}
 
@@ -81,10 +89,10 @@ func (a *Advisor) loop() {
 	if advise && time.Since(a.LastAdvisedAt) >= time.Hour {
 		a.LastAdvisedAt = time.Now()
 
-		logrus.WithFields(logrus.Fields{
-			"component":                  "db.advisor",
-			"long_wait_duration_samples": longWaitDurationSamples,
-			"over_2_waiting_samples":     over2WaitingSamples,
-		}).Warn("Suboptimal database connection pool settings detected! Consider doubling the max DB pool size configuration")
+		a.AdviseFunc(Advisory{
+			LongWaitDurationSamples: longWaitDurationSamples,
+			Over2WaitingSamples:     over2WaitingSamples,
+		})
+
 	}
 }

@@ -114,8 +114,17 @@ func registerOpenTelemetryDatabaseStats(db *pop.Connection, config *conf.GlobalC
 
 	if config.DB.Advisor.Enabled {
 		advisor := Advisor{
-			DB:       sqldb,
+			StatsFunc: func() sql.DBStats {
+				return sqldb.Stats()
+			},
 			Interval: config.DB.Advisor.SamplingInterval,
+			AdviseFunc: func(advisory Advisory) {
+				logrus.WithFields(logrus.Fields{
+					"component":                  "db.advisor",
+					"long_wait_duration_samples": advisory.LongWaitDurationSamples,
+					"over_2_waiting_samples":     advisory.Over2WaitingSamples,
+				}).Warn("Suboptimal database connection pool settings detected! Consider doubling the max DB pool size configuration")
+			},
 		}
 
 		advisor.Start(config.DB.Advisor.ObservationInterval)
