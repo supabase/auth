@@ -14,6 +14,11 @@ info:
     - Rate limit errors are consistently raised with the HTTP 429 code.
     - Enums are used only in request bodies / parameters and not in responses to ensure wide compatibility with code generators that fail to include an unknown enum case.
 
+    **OAuth Support:**
+    - This service supports two OAuth modes:
+      - **OAuth Client**: Endpoints tagged `oauth-client` are used when this service connects to external OAuth providers (like Google, GitHub)
+      - **OAuth Server**: Endpoints tagged `oauth-server` are used when this service acts as an OAuth provider for other applications
+
     **Backward compatibility:**
     - Endpoints marked as _Experimental_ may change without notice.
     - Endpoints marked as _Deprecated_ will be supported for at least 3 months since being marked as deprecated.
@@ -41,8 +46,10 @@ tags:
     description: APIs for authentication and authorization.
   - name: user
     description: APIs used by a user to manage their account.
-  - name: oauth
-    description: APIs for dealing with OAuth flows.
+  - name: oauth-client
+    description: APIs for OAuth flows where this service acts as an OAuth client (connecting to external providers).
+  - name: oauth-server
+    description: APIs for OAuth 2.1 flows where this service acts as an OAuth provider/server for other applications. Requires `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard. (Experimental.)
   - name: sso
     description: APIs for authenticating using SSO providers (SAML). (Experimental.)
   - name: saml
@@ -303,7 +310,7 @@ paths:
     get:
       summary: Redirects to an external OAuth provider. Usually for use as clickable links.
       tags:
-        - oauth
+        - oauth-client
       security:
         - APIKeyAuth: []
       parameters:
@@ -1021,7 +1028,7 @@ paths:
       description: >
         When an OAuth sign-in flow fails for any reason, the error message needs to be delivered to the frontend app requesting the flow. This callback delivers the errors as `error` and `error_description` query params. Usually this request is not called directly.
       tags:
-        - oauth
+        - oauth-client
       security:
         - APIKeyAuth: []
       responses:
@@ -1032,7 +1039,7 @@ paths:
       description: >
         When an OAuth sign-in flow fails for any reason, the error message needs to be delivered to the frontend app requesting the flow. This callback delivers the errors as `error` and `error_description` query params. Usually this request is not called directly.
       tags:
-        - oauth
+        - oauth-client
       responses:
         302:
           $ref: "#/components/responses/OAuthCallbackRedirectResponse"
@@ -1788,6 +1795,504 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorSchema"
 
+  /admin/oauth/clients:
+    get:
+      summary: List OAuth clients (admin)
+      description: >
+        Retrieves a list of all registered OAuth clients. Only available when OAuth server is enabled.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
+      responses:
+        200:
+          description: List of OAuth clients
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clients:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/OAuthClientSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+    post:
+      summary: Register OAuth client (admin)
+      description: >
+        Manually register a new OAuth client (admin endpoint). Only available when OAuth server is enabled.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - client_name
+                - redirect_uris
+              properties:
+                client_name:
+                  type: string
+                client_uri:
+                  type: string
+                  format: uri
+                redirect_uris:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                grant_types:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - authorization_code
+                      - refresh_token
+                response_types:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - code
+                scope:
+                  type: string
+      responses:
+        201:
+          description: OAuth client created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthClientSchema"
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+
+  /admin/oauth/clients/{client_id}:
+    parameters:
+      - name: client_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get OAuth client details (admin)
+      description: >
+        Retrieves details of a specific OAuth client. Only available when OAuth server is enabled.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      responses:
+        200:
+          description: OAuth client details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthClientSchema"
+        404:
+          description: OAuth client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+    delete:
+      summary: Delete OAuth client (admin)
+      description: >
+        Removes an OAuth client registration. Only available when OAuth server is enabled.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      responses:
+        204:
+          description: OAuth client deleted
+        404:
+          description: OAuth client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+
+  /admin/oauth/clients/{client_id}/regenerate_secret:
+    parameters:
+      - name: client_id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Regenerate OAuth client secret (admin)
+      description: >
+        Regenerates the client secret for a confidential OAuth client. Only available when OAuth server is enabled.
+        This endpoint can only be used for confidential clients, not public clients.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      responses:
+        200:
+          description: OAuth client secret regenerated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthClientSchema"
+        400:
+          description: Bad request - cannot regenerate secret for public client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        404:
+          description: OAuth client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
+
+  /oauth/clients/register:
+    post:
+      summary: Register a new OAuth client dynamically (public endpoint).
+      description: >
+        Allows applications to register as OAuth clients with this server dynamically. This follows the OAuth 2.0 Dynamic Client Registration Protocol. Only available when OAuth server is enabled and dynamic registration is allowed (set `GOTRUE_OAUTH_SERVER_ENABLED=true` and `GOTRUE_OAUTH_SERVER_ALLOW_DYNAMIC_REGISTRATION=true` for self-hosted or enable both settings in Supabase Dashboard).
+      tags:
+        - oauth-server
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - client_name
+                - redirect_uris
+              properties:
+                client_name:
+                  type: string
+                  description: Human-readable name of the client application
+                client_uri:
+                  type: string
+                  format: uri
+                  description: URL of the client application's homepage
+                redirect_uris:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                  description: Array of redirect URIs used by the client
+                grant_types:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - authorization_code
+                      - refresh_token
+                  description: OAuth grant types the client will use
+                response_types:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - code
+                  description: OAuth response types the client will use
+                scope:
+                  type: string
+                  description: Space-separated list of scope values
+      responses:
+        201:
+          description: OAuth client registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthClientSchema"
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        429:
+          $ref: "#/components/responses/RateLimitResponse"
+
+  /oauth/token:
+    post:
+      summary: OAuth 2.1 Token endpoint
+      description: >
+        Issues access tokens in exchange for authorization codes or refresh tokens. Supports authorization_code and refresh_token grant types. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
+      tags:
+        - oauth-server
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - grant_type
+              properties:
+                grant_type:
+                  type: string
+                  enum:
+                    - authorization_code
+                    - refresh_token
+                  description: The grant type being used
+                code:
+                  type: string
+                  description: Authorization code (required for authorization_code grant)
+                redirect_uri:
+                  type: string
+                  format: uri
+                  description: Redirect URI (required for authorization_code grant)
+                code_verifier:
+                  type: string
+                  description: PKCE code verifier (required for authorization_code grant)
+                refresh_token:
+                  type: string
+                  description: Refresh token (required for refresh_token grant)
+                client_id:
+                  type: string
+                  description: OAuth client identifier
+                client_secret:
+                  type: string
+                  description: OAuth client secret (for confidential clients)
+      responses:
+        200:
+          description: Access token issued successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: The access token
+                  token_type:
+                    type: string
+                    example: Bearer
+                    description: Type of token issued
+                  expires_in:
+                    type: integer
+                    description: Lifetime in seconds of the access token
+                  refresh_token:
+                    type: string
+                    description: Refresh token (if applicable)
+                  scope:
+                    type: string
+                    description: Authorized scopes
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+
+  /oauth/authorize:
+    get:
+      summary: OAuth 2.1 Authorization endpoint
+      description: >
+        Initiates the OAuth authorization code flow. Redirects users to login and authorize the requesting application. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
+      tags:
+        - oauth-server
+      parameters:
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - code
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The client identifier
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uri
+          description: Client's redirect URI
+        - name: scope
+          in: query
+          schema:
+            type: string
+          description: Requested access scope
+        - name: state
+          in: query
+          schema:
+            type: string
+          description: State parameter for CSRF protection
+        - name: code_challenge
+          in: query
+          required: true
+          schema:
+            type: string
+          description: PKCE code challenge
+        - name: code_challenge_method
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - S256
+          description: PKCE code challenge method
+      responses:
+        302:
+          description: Redirect to login or authorization page
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+
+  /oauth/authorizations/{authorization_id}:
+    parameters:
+      - name: authorization_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Get OAuth authorization details
+      description: >
+        Retrieves details about a pending OAuth authorization request. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
+      tags:
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      responses:
+        200:
+          description: Authorization details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authorization_id:
+                    type: string
+                  redirect_uri:
+                    type: string
+                    format: uri
+                  client:
+                    type: object
+                    properties:
+                      client_id:
+                        type: string
+                        format: uuid
+                      client_name:
+                        type: string
+                      client_uri:
+                        type: string
+                        format: uri
+                      logo_uri:
+                        type: string
+                        format: uri
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      email:
+                        type: string
+                        format: email
+                  scope:
+                    type: string
+        404:
+          description: Authorization not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+
+  /oauth/authorizations/{authorization_id}/consent:
+    parameters:
+      - name: authorization_id
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      summary: Approve or deny OAuth authorization
+      description: >
+        User approves or denies authorization to the OAuth client. Only available when OAuth server is enabled (set `GOTRUE_OAUTH_SERVER_ENABLED=true` for self-hosted or enable in Supabase Dashboard).
+      tags:
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          UserAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum:
+                    - approve
+                    - deny
+                  description: Whether to approve or deny the authorization
+      responses:
+        200:
+          description: Authorization consent processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  redirect_url:
+                    type: string
+                    format: uri
+        400:
+          $ref: "#/components/responses/BadRequestResponse"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+
   /health:
     get:
       summary: Service healthcheck.
@@ -2432,6 +2937,73 @@ components:
             type: string
             enum: [usb, nfc, ble, internal]
 
+    OAuthClientSchema:
+      type: object
+      description: Represents an OAuth 2.1 client
+      properties:
+        client_id:
+          type: string
+          description: Unique client identifier
+        client_name:
+          type: string
+          description: Human-readable name of the client application
+        client_secret:
+          type: string
+          description: Client secret for confidential clients (only returned on registration/regeneration)
+        client_type:
+          type: string
+          enum:
+            - public
+            - confidential
+          description: Type of the client
+        token_endpoint_auth_method:
+          type: string
+          enum:
+            - none
+            - client_secret_basic
+            - client_secret_post
+          description: Authentication method for the token endpoint
+        registration_type:
+          type: string
+          enum:
+            - dynamic
+            - manual
+          description: Registration type of the client
+        client_uri:
+          type: string
+          format: uri
+          description: URL of the client application's homepage
+        redirect_uris:
+          type: array
+          items:
+            type: string
+            format: uri
+          description: Array of redirect URIs used by the client
+        grant_types:
+          type: array
+          items:
+            type: string
+            enum:
+              - authorization_code
+              - refresh_token
+          description: OAuth grant types the client is authorized to use
+        response_types:
+          type: array
+          items:
+            type: string
+            enum:
+              - code
+          description: OAuth response types the client can use
+        scope:
+          type: string
+          description: Space-separated list of scope values
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
   responses:
     OAuthCallbackRedirectResponse:
       description: >
@@ -2482,7 +3054,7 @@ components:
 
     UnauthorizedResponse:
       description: >
-        HTTP Unauthorizred response.
+        HTTP Unauthorized response.
       content:
         application/json:
           schema:

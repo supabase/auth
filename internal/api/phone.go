@@ -98,7 +98,8 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 			input := v0hooks.SendSMSInput{
 				User: user,
 				SMS: v0hooks.SMS{
-					OTP: otp,
+					OTP:   otp,
+					Phone: phone,
 				},
 			}
 			output := v0hooks.SendSMSOutput{}

@@ -381,6 +381,14 @@ type EmailContentConfiguration struct {
 	EmailChange      string `json:"email_change" split_words:"true"`
 	MagicLink        string `json:"magic_link" split_words:"true"`
 	Reauthentication string `json:"reauthentication"`
+
+	// Account Changes Notifications
+	PasswordChangedNotification string `json:"password_changed_notification" split_words:"true"`
+}
+
+// NotificationsConfiguration holds the configuration for notification email states to indicate whether they are enabled or disabled.
+type NotificationsConfiguration struct {
+	PasswordChangedEnabled bool `json:"password_changed_enabled" split_words:"true" default:"false"`
 }
 
 type ProviderConfiguration struct {
@@ -478,9 +486,10 @@ type MailerConfiguration struct {
 	Autoconfirm                 bool `json:"autoconfirm"`
 	AllowUnverifiedEmailSignIns bool `json:"allow_unverified_email_sign_ins" split_words:"true" default:"false"`
 
-	Subjects  EmailContentConfiguration `json:"subjects"`
-	Templates EmailContentConfiguration `json:"templates"`
-	URLPaths  EmailContentConfiguration `json:"url_paths"`
+	Subjects      EmailContentConfiguration  `json:"subjects"`
+	Templates     EmailContentConfiguration  `json:"templates"`
+	URLPaths      EmailContentConfiguration  `json:"url_paths"`
+	Notifications NotificationsConfiguration `json:"notifications" split_words:"true"`
 
 	SecureEmailChangeEnabled bool `json:"secure_email_change_enabled" split_words:"true" default:"true"`
 
