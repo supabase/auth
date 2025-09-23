@@ -12,6 +12,26 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
+func (a *API) triggerAfterUserCreated(
+	r *http.Request,
+	conn *storage.Connection,
+	user *models.User,
+) error {
+	if !a.hooksMgr.Enabled(v0hooks.AfterUserCreated) {
+		return nil
+	}
+
+	// We still check tx because we want to make sure we aren't calling this
+	// trigger in code paths that haven't actually created the user yet.
+	if err := checkTX(conn); err != nil {
+		return err
+	}
+
+	req := v0hooks.NewAfterUserCreatedInput(r, user)
+	res := new(v0hooks.AfterUserCreatedOutput)
+	return a.hooksMgr.InvokeHook(conn, r, req, res)
+}
+
 func (a *API) triggerBeforeUserCreated(
 	r *http.Request,
 	db *storage.Connection,

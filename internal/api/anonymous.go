@@ -53,6 +53,9 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return apierrors.NewInternalServerError("Database error creating anonymous user").WithInternalError(err)
 	}
+	if err := a.triggerAfterUserCreated(r, db, newUser); err != nil {
+		return err
+	}
 
 	metering.RecordLogin(metering.LoginTypeAnonymous, newUser.ID, nil)
 	return sendJSON(w, http.StatusOK, token)
