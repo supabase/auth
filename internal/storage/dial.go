@@ -192,12 +192,23 @@ func (c *Connection) ApplyConfig(
 	}
 
 	le.WithFields(logrus.Fields{
-		"max_open_conns":     cl.MaxOpenConns,
-		"max_idle_conns":     cl.MaxIdleConns,
-		"conn_max_lifetime":  cl.ConnMaxLifetime.String(),
-		"conn_max_idle_time": cl.ConnMaxIdleTime.String(),
-		"conn_percentage":    config.DB.ConnPercentage,
-	}).Info("applying connection limits to db")
+		// Config values
+		"config_max_pool_size":      config.DB.MaxPoolSize,
+		"config_max_idle_pool_size": config.DB.MaxIdlePoolSize,
+		"config_conn_max_lifetime":  config.DB.ConnMaxLifetime.String(),
+		"config_conn_max_idle_time": config.DB.ConnMaxIdleTime.String(),
+		"config_conn_percentage":    config.DB.ConnPercentage,
+
+		// Server values
+		"server_max_conns": cl.ServerMaxConns,
+
+		// Limit values
+		"limit_max_open_conns":     cl.MaxOpenConns,
+		"limit_max_idle_conns":     cl.MaxIdleConns,
+		"limit_conn_max_lifetime":  cl.ConnMaxLifetime.String(),
+		"limit_conn_max_idle_time": cl.ConnMaxIdleTime.String(),
+		"limit_strategy":           cl.Strategy,
+	}).Infof("applying connection limits to db using the %q strategy", cl.Strategy)
 
 	sqldb.SetMaxOpenConns(cl.MaxOpenConns)
 	sqldb.SetMaxIdleConns(cl.MaxIdleConns)
@@ -213,14 +224,17 @@ func (c *Connection) getConnLimits(
 	// Set the connection limits to the fixed values in config
 	cl := newConnLimitsFromConfig(dbCfg)
 
-	if dbCfg.ConnPercentage == 0 {
-		// pct based conn limits are disabled
-		return cl, nil
-	}
-
+	// Always fetch max conns because it is useful for logging.
 	maxConns, err := c.showMaxConns(ctx)
 	if err != nil {
 		return nil, err
+	}
+	cl.ServerMaxConns = maxConns
+
+	if dbCfg.ConnPercentage == 0 {
+		// pct based conn limits are disabled
+		cl.Strategy = connLimitsFixedStrategy
+		return cl, nil
 	}
 
 	// pct conn limits are enabled, try to determine what they should be
@@ -228,7 +242,6 @@ func (c *Connection) getConnLimits(
 		return nil, err
 	}
 
-	// return the percentage based conn limits
 	return cl, nil
 }
 
@@ -237,8 +250,11 @@ func (c *Connection) applyPercentageLimits(
 	maxConns int,
 	cl *ConnLimits,
 ) error {
+	cl.ServerMaxConns = maxConns // set this here too for unit tests
+
 	if dbCfg.ConnPercentage == 0 {
 		// pct based conn limits are disabled
+		cl.Strategy = connLimitsFixedStrategy
 		return nil
 	}
 
@@ -259,6 +275,9 @@ func (c *Connection) applyPercentageLimits(
 
 	// We set max idle conns to the max open conns.
 	cl.MaxIdleConns = cl.MaxOpenConns
+
+	// return the percentage based conn limits
+	cl.Strategy = connLimitsPercentageStrategy
 	return nil
 }
 
@@ -276,12 +295,20 @@ func (c *Connection) showMaxConns(ctx context.Context) (int, error) {
 	return maxConns, nil
 }
 
+const (
+	connLimitsErrorStrategy      = "error"
+	connLimitsFixedStrategy      = "fixed"
+	connLimitsPercentageStrategy = "percentage"
+)
+
 // ConnLimits represents the connection limits for the underlying *sql.DB.
 type ConnLimits struct {
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
 	ConnMaxIdleTime time.Duration
+	ServerMaxConns  int
+	Strategy        string
 }
 
 func newConnLimitsFromConfig(dbCfg *conf.DBConfiguration) *ConnLimits {
@@ -290,6 +317,7 @@ func newConnLimitsFromConfig(dbCfg *conf.DBConfiguration) *ConnLimits {
 		MaxIdleConns:    dbCfg.MaxIdlePoolSize,
 		ConnMaxLifetime: dbCfg.ConnMaxLifetime,
 		ConnMaxIdleTime: dbCfg.ConnMaxIdleTime,
+		Strategy:        connLimitsErrorStrategy,
 	}
 }
 

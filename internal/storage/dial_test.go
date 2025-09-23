@@ -229,11 +229,14 @@ func TestConnLimits(t *testing.T) {
 		require.NotNil(t, db)
 		defer db.Close()
 
-		maxConns, err := db.showMaxConns(ctx)
-		require.NoError(t, err)
+		const maxConns = 100
+		{
+			serverMaxConns, err := db.showMaxConns(ctx)
+			require.NoError(t, err)
 
-		// 100 is current default in local testing, we rely on it for unit tests
-		require.True(t, maxConns == 100)
+			// 100 is current default in local testing, we rely on it for unit tests
+			require.True(t, serverMaxConns == maxConns)
+		}
 
 		t.Run("PercentageEnabled", func(t *testing.T) {
 			dbCfg := conf.DBConfiguration{
@@ -248,6 +251,7 @@ func TestConnLimits(t *testing.T) {
 				MaxIdleConns:    10,
 				ConnMaxIdleTime: time.Second * 60,
 				ConnMaxLifetime: 0,
+				Strategy:        connLimitsPercentageStrategy,
 			}
 
 			cl, err := db.getConnLimits(ctx, &dbCfg)
@@ -258,6 +262,8 @@ func TestConnLimits(t *testing.T) {
 			require.Equal(t, exp.MaxIdleConns, cl.MaxIdleConns)
 			require.Equal(t, exp.ConnMaxLifetime, cl.ConnMaxLifetime)
 			require.Equal(t, exp.ConnMaxIdleTime, cl.ConnMaxIdleTime)
+			require.Equal(t, exp.Strategy, cl.Strategy)
+			require.Equal(t, maxConns, cl.ServerMaxConns)
 		})
 
 		t.Run("PercentageDisabled", func(t *testing.T) {
@@ -273,6 +279,7 @@ func TestConnLimits(t *testing.T) {
 				MaxIdleConns:    50,
 				ConnMaxIdleTime: time.Second * 60,
 				ConnMaxLifetime: 0,
+				Strategy:        connLimitsFixedStrategy,
 			}
 
 			cl, err := db.getConnLimits(ctx, &dbCfg)
@@ -283,6 +290,8 @@ func TestConnLimits(t *testing.T) {
 			require.Equal(t, exp.MaxIdleConns, cl.MaxIdleConns)
 			require.Equal(t, exp.ConnMaxLifetime, cl.ConnMaxLifetime)
 			require.Equal(t, exp.ConnMaxIdleTime, cl.ConnMaxIdleTime)
+			require.Equal(t, exp.Strategy, cl.Strategy)
+			require.Equal(t, maxConns, cl.ServerMaxConns)
 		})
 	})
 
@@ -296,11 +305,14 @@ func TestConnLimits(t *testing.T) {
 		require.NotNil(t, db)
 		defer db.Close()
 
-		maxConns, err := db.showMaxConns(ctx)
-		require.NoError(t, err)
+		const maxConns = 100
+		{
+			serverMaxConns, err := db.showMaxConns(ctx)
+			require.NoError(t, err)
 
-		// 100 is current default in local testing, we rely on it for unit tests
-		require.True(t, maxConns == 100)
+			// 100 is current default in local testing, we rely on it for unit tests
+			require.True(t, serverMaxConns == maxConns)
+		}
 
 		type testCase struct {
 			desc     string
@@ -312,8 +324,8 @@ func TestConnLimits(t *testing.T) {
 		tests := []testCase{
 
 			{
-				desc:     "exp fallback to maxpool size when max conns is 0",
-				maxConns: 100,
+				desc:     "exp fallback to maxpool size",
+				maxConns: maxConns,
 				cfg: conf.DBConfiguration{
 					ConnPercentage:  0,
 					MaxPoolSize:     50,
@@ -326,12 +338,14 @@ func TestConnLimits(t *testing.T) {
 					MaxIdleConns:    50,
 					ConnMaxIdleTime: time.Second * 60,
 					ConnMaxLifetime: 0,
+					ServerMaxConns:  maxConns,
+					Strategy:        connLimitsFixedStrategy,
 				},
 			},
 
 			{
 				desc:     "exp conn pct to take precedence over max pool size",
-				maxConns: 100,
+				maxConns: maxConns,
 				cfg: conf.DBConfiguration{
 					ConnPercentage:  30,
 					MaxPoolSize:     50,
@@ -344,12 +358,14 @@ func TestConnLimits(t *testing.T) {
 					MaxIdleConns:    30,
 					ConnMaxIdleTime: time.Second * 60,
 					ConnMaxLifetime: 0,
+					ServerMaxConns:  maxConns,
+					Strategy:        connLimitsPercentageStrategy,
 				},
 			},
 
 			{
 				desc:     "exp conn pct to ignore fixed values",
-				maxConns: 100,
+				maxConns: maxConns,
 				cfg: conf.DBConfiguration{
 					ConnPercentage:  30,
 					MaxPoolSize:     0,
@@ -362,6 +378,8 @@ func TestConnLimits(t *testing.T) {
 					MaxIdleConns:    30,
 					ConnMaxIdleTime: time.Second * 60,
 					ConnMaxLifetime: 0,
+					ServerMaxConns:  maxConns,
+					Strategy:        connLimitsPercentageStrategy,
 				},
 			},
 
@@ -380,26 +398,30 @@ func TestConnLimits(t *testing.T) {
 					MaxIdleConns:    1,
 					ConnMaxIdleTime: time.Second * 60,
 					ConnMaxLifetime: 0,
+					ServerMaxConns:  4,
+					Strategy:        connLimitsPercentageStrategy,
 				},
 			},
 
 			{
-				desc:     "exp err when conn percentage < 0",
+				desc:     "exp error",
 				err:      "percentage must be between 1 and 100",
-				maxConns: 100,
+				maxConns: maxConns,
 				cfg: conf.DBConfiguration{
 					ConnPercentage:  -1,
 					MaxPoolSize:     50,
 					MaxIdlePoolSize: 25,
 				},
 				exp: ConnLimits{
-					MaxOpenConns: 50,
-					MaxIdleConns: 50,
+					MaxOpenConns:   50,
+					MaxIdleConns:   50,
+					ServerMaxConns: maxConns,
+					Strategy:       connLimitsErrorStrategy,
 				},
 			},
 
 			{
-				desc:     "exp error when max conns is 0",
+				desc:     "exp error",
 				err:      "db reported a maximum of 0 connections",
 				maxConns: 0,
 				cfg: conf.DBConfiguration{
@@ -414,13 +436,15 @@ func TestConnLimits(t *testing.T) {
 					MaxIdleConns:    50,
 					ConnMaxIdleTime: time.Second * 60,
 					ConnMaxLifetime: 0,
+					ServerMaxConns:  0,
+					Strategy:        connLimitsErrorStrategy,
 				},
 			},
 		}
 
 		tcStr := func(tc testCase) string {
-			str := fmt.Sprintf("%v when maxConns is %d", tc.desc, tc.maxConns)
-			str += fmt.Sprintf(" and cfg(pct=%v max: %v)",
+			str := fmt.Sprintf("%v when server maxConns is %d", tc.desc, tc.maxConns)
+			str += fmt.Sprintf(" and cfg(pct: %v max: %v)",
 				tc.cfg.ConnPercentage, tc.cfg.MaxPoolSize)
 			str += fmt.Sprintf(" exp %v", tc.exp)
 			return str
@@ -445,6 +469,8 @@ func TestConnLimits(t *testing.T) {
 			require.Equal(t, tc.exp.MaxIdleConns, cl.MaxIdleConns)
 			require.Equal(t, tc.exp.ConnMaxLifetime, cl.ConnMaxLifetime)
 			require.Equal(t, tc.exp.ConnMaxIdleTime, cl.ConnMaxIdleTime)
+			require.Equal(t, tc.exp.Strategy, cl.Strategy)
+			require.Equal(t, tc.exp.ServerMaxConns, cl.ServerMaxConns)
 		}
 	})
 }
