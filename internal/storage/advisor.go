@@ -26,7 +26,7 @@ type Advisor struct {
 }
 
 func (a *Advisor) Start(observeDuration time.Duration) {
-	a.setup()
+	a.setup(observeDuration)
 
 	go func() {
 		// after server start the db stats are going to be worse, so ignore that period
