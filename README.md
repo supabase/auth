@@ -43,7 +43,7 @@ Create a `.env.docker` file to store your own custom env vars. See [`example.doc
 
 1. `make build`
 2. `make dev`
-3. `docker ps` should show 2 docker containers (`auth_postgresql` and `gotrue_gotrue`)
+3. `docker ps` should show 2 docker containers (`auth-auth-1` and `auth-postgres-1`)
 4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that auth is running.
 
 ## Running in production
@@ -584,6 +584,10 @@ Email subject to use for magic link email. Defaults to `Your Magic Link`.
 
 Email subject to use for email change confirmation. Defaults to `Confirm Email Change`.
 
+`MAILER_SUBJECTS_PASSWORD_CHANGED_NOTIFICATION` - `string`
+
+Email subject to use for password changed notification. Defaults to `Your password has been changed`.
+
 `MAILER_TEMPLATES_INVITE` - `string`
 
 URL path to an email template to use when inviting a user. (e.g. `https://www.example.com/path-to-email-template.html`)
@@ -659,6 +663,27 @@ Default Content (if template is unavailable):
 </p>
 <p><a href="{{ .ConfirmationURL }}">Change Email</a></p>
 ```
+
+`MAILER_TEMPLATES_PASSWORD_CHANGED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that their password has been changed. (e.g. `https://www.example.com/path-to-email-template.html`)
+`SiteURL` and `Email` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>Your password has been changed</h2>
+
+<p>
+  This is a confirmation that the password for your account {{ .Email }} has
+  just been changed. If you did not make this change, please contact support
+  immediately.
+</p>
+```
+
+`MAILER_NOTIFICATION_CONFIGURATIONS_PASSWORD_CHANGED_NOTIFICATION_ENABLED` - `bool`
+
+Whether to send a notification email when a user's password is changed. Defaults to `false`.
 
 ### Phone Auth
 
@@ -746,7 +771,7 @@ Returns the publicly available settings for this auth instance.
     "linkedin": true,
     "notion": true,
     "slack": true,
-    "snapchat":  true,
+    "snapchat": true,
     "spotify": true,
     "twitch": true,
     "twitter": true,
@@ -869,8 +894,8 @@ if AUTOCONFIRM is enabled and the sign up is a duplicate, then the endpoint will
 
 ```json
 {
-  "code":400,
-  "msg":"User already registered"
+  "code": 400,
+  "msg": "User already registered"
 }
 ```
 

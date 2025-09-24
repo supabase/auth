@@ -8,6 +8,7 @@ import (
 
 	"github.com/supabase/auth/internal/hooks/v0hooks"
 	mail "github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/mailer/validateclient"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
@@ -93,8 +94,9 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 	hashedToken := crypto.GenerateTokenHash(params.Email, otp)
 
 	var (
-		signupUser *models.User
-		inviteUser *models.User
+		createdUser bool
+		signupUser  *models.User
+		inviteUser  *models.User
 	)
 	switch {
 	case params.Type == mail.SignupVerification && user == nil:
@@ -161,6 +163,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 					return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
 				}
 			} else {
+				createdUser = true
 				user, terr = a.signupNewUser(tx, inviteUser)
 				if terr != nil {
 					return terr
@@ -206,6 +209,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 				// password here to generate a new user, use
 				// signupUser which is a model generated from
 				// SignupParams above
+				createdUser = true
 				user, terr = a.signupNewUser(tx, signupUser)
 				if terr != nil {
 					return terr
@@ -239,7 +243,7 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 			if terr != nil {
 				return terr
 			}
-			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud, user); terr != nil {
+			if duplicateUser, terr := models.IsDuplicatedEmail(tx, params.NewEmail, user.Aud, user, config.Experimental.ProvidersWithOwnLinkingDomain); terr != nil {
 				return apierrors.NewInternalServerError("Database error checking email").WithInternalError(terr)
 			} else if duplicateUser != nil {
 				return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
@@ -287,9 +291,14 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		}
 		return nil
 	})
-
 	if err != nil {
 		return err
+	}
+
+	if createdUser {
+		if err := a.triggerAfterUserCreated(r, db, user); err != nil {
+			return err
+		}
 	}
 
 	resp := GenerateLinkResponse{
@@ -300,7 +309,6 @@ func (a *API) adminGenerateLink(w http.ResponseWriter, r *http.Request) error {
 		VerificationType: params.Type,
 		RedirectTo:       referrer,
 	}
-
 	return sendJSON(w, http.StatusOK, resp)
 }
 
@@ -547,6 +555,19 @@ func (a *API) sendEmailChange(r *http.Request, tx *storage.Connection, u *models
 	return nil
 }
 
+func (a *API) sendPasswordChangedNotification(r *http.Request, tx *storage.Connection, u *models.User) error {
+	if err := a.sendEmail(r, tx, u, mail.PasswordChangedNotification, "", "", ""); err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending password changed notification email").WithInternalError(err)
+	}
+
+	return nil
+}
+
 func (a *API) validateEmail(email string) (string, error) {
 	if email == "" {
 		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "An email address is required")
@@ -700,14 +721,16 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		err = mr.InviteMail(r, u, otp, referrerURL, externalURL)
 	case mail.EmailChangeVerification:
 		err = mr.EmailChangeMail(r, u, otpNew, otp, referrerURL, externalURL)
+	case mail.PasswordChangedNotification:
+		err = mr.PasswordChangedNotificationMail(r, u)
 	default:
 		err = errors.New("invalid email action type")
 	}
 
 	switch {
-	case errors.Is(err, mail.ErrInvalidEmailAddress),
-		errors.Is(err, mail.ErrInvalidEmailFormat),
-		errors.Is(err, mail.ErrInvalidEmailDNS):
+	case errors.Is(err, validateclient.ErrInvalidEmailAddress),
+		errors.Is(err, validateclient.ErrInvalidEmailFormat),
+		errors.Is(err, validateclient.ErrInvalidEmailDNS):
 		return apierrors.NewBadRequestError(
 			apierrors.ErrorCodeEmailAddressInvalid,
 			"Email address %q is invalid",
