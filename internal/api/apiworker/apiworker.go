@@ -9,12 +9,15 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/mailer/templatemailer"
+	"github.com/supabase/auth/internal/storage"
+	"golang.org/x/sync/errgroup"
 )
 
 // Worker is a simple background worker for async tasks.
 type Worker struct {
 	le *logrus.Entry
 	tc *templatemailer.Cache
+	db *storage.Connection
 
 	// Notifies worker the cfg has been updated.
 	cfgCh chan struct{}
@@ -31,12 +34,14 @@ type Worker struct {
 func New(
 	cfg *conf.GlobalConfiguration,
 	tc *templatemailer.Cache,
+	db *storage.Connection,
 	le *logrus.Entry,
 ) *Worker {
 	return &Worker{
 		le:    le,
 		cfg:   cfg,
 		tc:    tc,
+		db:    db,
 		cfgCh: make(chan struct{}, 1),
 	}
 }
@@ -63,14 +68,85 @@ func (o *Worker) ReloadConfig(cfg *conf.GlobalConfiguration) {
 	}
 }
 
-// Work will periodically reload the templates in the background as long as the
-// system remains active.
+// Work will run background workers.
 func (o *Worker) Work(ctx context.Context) error {
 	if ok := o.workMu.TryLock(); !ok {
 		return errors.New("apiworker: concurrent calls to Work are invalid")
 	}
 	defer o.workMu.Unlock()
 
+	var (
+		eg        errgroup.Group
+		notifyTpl = make(chan struct{}, 1)
+		notifyDb  = make(chan struct{}, 1)
+	)
+	eg.Go(func() error {
+		return o.configNotifier(ctx, notifyTpl, notifyDb)
+	})
+	eg.Go(func() error {
+		return o.templateWorker(ctx, notifyTpl)
+	})
+	eg.Go(func() error {
+		return o.dbWorker(ctx, notifyDb)
+	})
+	return eg.Wait()
+}
+
+func (o *Worker) configNotifier(
+	ctx context.Context,
+	notifyCh ...chan<- struct{},
+) error {
+	le := o.le.WithFields(logrus.Fields{
+		"worker_type": "apiworker_config_notifier",
+	})
+	le.Info("apiworker: config notifier started")
+	defer le.Info("apiworker: config notifier exited")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-o.cfgCh:
+
+			// When we get a config update, notify each worker to wake up
+			for _, ch := range notifyCh {
+				select {
+				case ch <- struct{}{}:
+				default:
+				}
+			}
+		}
+	}
+}
+
+func (o *Worker) dbWorker(ctx context.Context, cfgCh <-chan struct{}) error {
+	le := o.le.WithFields(logrus.Fields{
+		"worker_type": "apiworker_db_worker",
+	})
+	le.Info("apiworker: db worker started")
+	defer le.Info("apiworker: db worker exited")
+
+	if err := o.db.ApplyConfig(ctx, o.getConfig(), le); err != nil {
+		le.WithError(err).Error(
+			"failure applying config connection limits to db")
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-cfgCh:
+			if err := o.db.ApplyConfig(ctx, o.getConfig(), le); err != nil {
+				le.WithError(err).Error(
+					"failure applying config connection limits to db")
+			}
+		}
+	}
+}
+
+// templateWorker will periodically reload the templates in the background as
+// long as the system remains active.
+func (o *Worker) templateWorker(ctx context.Context, cfgCh <-chan struct{}) error {
 	le := o.le.WithFields(logrus.Fields{
 		"worker_type": "apiworker_template_cache",
 	})
@@ -91,7 +167,7 @@ func (o *Worker) Work(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-o.cfgCh:
+		case <-cfgCh:
 			tr.Reset(ival())
 		case <-tr.C:
 		}

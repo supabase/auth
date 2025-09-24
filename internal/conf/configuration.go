@@ -104,6 +104,11 @@ type DBConfiguration struct {
 	Driver    string `json:"driver" required:"true"`
 	URL       string `json:"url" envconfig:"DATABASE_URL" required:"true"`
 	Namespace string `json:"namespace" envconfig:"DB_NAMESPACE" default:"auth"`
+
+	// Percentage of DB conns the auth server may use in
+	// integer form i.e.: [1, 100] -> [1%, 100%]
+	ConnPercentage int `json:"conn_percentage" split_words:"true"`
+
 	// MaxPoolSize defaults to 0 (unlimited).
 	MaxPoolSize       int           `json:"max_pool_size" split_words:"true"`
 	MaxIdlePoolSize   int           `json:"max_idle_pool_size" split_words:"true"`
@@ -117,6 +122,7 @@ type DBConfiguration struct {
 }
 
 func (c *DBConfiguration) Validate() error {
+	c.ConnPercentage = min(max(c.ConnPercentage, 0), 100)
 	return nil
 }
 
