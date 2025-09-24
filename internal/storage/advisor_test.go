@@ -36,13 +36,13 @@ func TestAdvisorZeroChanges(t *testing.T) {
 }
 
 func TestAdvisorWaitDuration(t *testing.T) {
-	advised := false
+	advised := 0
 
 	dbStats := sql.DBStats{}
 
 	advisor := Advisor{
 		AdviseFunc: func(advisory Advisory) {
-			advised = true
+			advised += 1
 		},
 		StatsFunc: func() sql.DBStats {
 			return dbStats
@@ -57,22 +57,22 @@ func TestAdvisorWaitDuration(t *testing.T) {
 
 	advisor.Stats = advisor.StatsFunc()
 
-	for i := 0; i < 3; i += 1 {
-		dbStats.WaitDuration += advisor.Interval
+	for i := 0; i < 20; i += 1 {
+		dbStats.WaitDuration += time.Millisecond
 		advisor.loop()
 	}
 
-	require.True(t, advised)
+	require.Equal(t, advised, 1)
 }
 
 func TestAdvisorWaitCount(t *testing.T) {
-	advised := false
+	advised := 0
 
 	dbStats := sql.DBStats{}
 
 	advisor := Advisor{
 		AdviseFunc: func(advisory Advisory) {
-			advised = true
+			advised += 1
 		},
 		StatsFunc: func() sql.DBStats {
 			return dbStats
@@ -87,10 +87,10 @@ func TestAdvisorWaitCount(t *testing.T) {
 
 	advisor.Stats = advisor.StatsFunc()
 
-	for i := 0; i < 3; i += 1 {
+	for i := 0; i < 20; i += 1 {
 		dbStats.WaitCount += 3
 		advisor.loop()
 	}
 
-	require.True(t, advised)
+	require.Equal(t, advised, 1)
 }
