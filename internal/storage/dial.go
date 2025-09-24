@@ -48,7 +48,7 @@ func DialContext(
 
 	sqldb, ok := popConnToStd(db)
 	if ok && config.Metrics.Enabled {
-		registerOpenTelemetryDatabaseStats(sqldb)
+		registerOpenTelemetryDatabaseStats(config, sqldb)
 	}
 
 	conn := &Connection{
@@ -321,7 +321,7 @@ func newConnLimitsFromConfig(dbCfg *conf.DBConfiguration) *ConnLimits {
 	}
 }
 
-func registerOpenTelemetryDatabaseStats(sqldb *sql.DB) {
+func registerOpenTelemetryDatabaseStats(config *conf.GlobalConfiguration, sqldb *sql.DB) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			logrus.WithField("error", rec).Error("registerOpenTelemetryDatabaseStats is not able to determine database object with reflection -- panicked")
@@ -332,6 +332,24 @@ func registerOpenTelemetryDatabaseStats(sqldb *sql.DB) {
 		logrus.WithError(err).Error("unable to register OpenTelemetry stats metrics for databse")
 	} else {
 		logrus.Debug("registered OpenTelemetry stats metrics for database")
+	}
+
+	if config.DB.Advisor.Enabled {
+		advisor := Advisor{
+			StatsFunc: func() sql.DBStats {
+				return sqldb.Stats()
+			},
+			Interval: config.DB.Advisor.SamplingInterval,
+			AdviseFunc: func(advisory Advisory) {
+				logrus.WithFields(logrus.Fields{
+					"component":                  "db.advisor",
+					"long_wait_duration_samples": advisory.LongWaitDurationSamples,
+					"over_2_waiting_samples":     advisory.Over2WaitingSamples,
+				}).Warn("Suboptimal database connection pool settings detected! Consider doubling the max DB pool size configuration")
+			},
+		}
+
+		advisor.Start(config.DB.Advisor.ObservationInterval)
 	}
 }
 

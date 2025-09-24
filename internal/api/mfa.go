@@ -54,40 +54,36 @@ type EnrollFactorResponse struct {
 
 type ChallengeFactorParams struct {
 	Channel  string          `json:"channel"`
-	WebAuthn *WebAuthnParams `json:"web_authn,omitempty"`
+	WebAuthn *WebAuthnParams `json:"webauthn,omitempty"`
 }
 
 type VerifyFactorParams struct {
 	ChallengeID uuid.UUID       `json:"challenge_id"`
 	Code        string          `json:"code"`
-	WebAuthn    *WebAuthnParams `json:"web_authn,omitempty"`
+	WebAuthn    *WebAuthnParams `json:"webauthn,omitempty"`
 }
 
 type ChallengeFactorResponse struct {
-	ID                        uuid.UUID                        `json:"id"`
-	Type                      string                           `json:"type"`
-	ExpiresAt                 int64                            `json:"expires_at,omitempty"`
-	CredentialRequestOptions  *wbnprotocol.CredentialAssertion `json:"credential_request_options,omitempty"`
-	CredentialCreationOptions *wbnprotocol.CredentialCreation  `json:"credential_creation_options,omitempty"`
+	ID        uuid.UUID              `json:"id"`
+	Type      string                 `json:"type"`
+	ExpiresAt int64                  `json:"expires_at,omitempty"`
+	WebAuthn  *WebAuthnChallengeData `json:"webauthn,omitempty"`
+}
+
+type WebAuthnChallengeData struct {
+	Type              string      `json:"type"` // "create" or "request"
+	CredentialOptions interface{} `json:"credential_options"`
+}
+
+type WebAuthnParams struct {
+	RPID               string          `json:"rpId,omitempty"`
+	RPOrigins          []string        `json:"rpOrigins,omitempty"`
+	Type               string          `json:"type"` // "create" or "request"
+	CredentialResponse json.RawMessage `json:"credential_response"`
 }
 
 type UnenrollFactorResponse struct {
 	ID uuid.UUID `json:"id"`
-}
-
-type WebAuthnParams struct {
-	RPID string `json:"rp_id,omitempty"`
-	// Can encode multiple origins as comma separated values like: "origin1,origin2"
-	RPOrigins         string          `json:"rp_origins,omitempty"`
-	AssertionResponse json.RawMessage `json:"assertion_response,omitempty"`
-	CreationResponse  json.RawMessage `json:"creation_response,omitempty"`
-}
-
-func (w *WebAuthnParams) GetRPOrigins() []string {
-	if w.RPOrigins == "" {
-		return nil
-	}
-	return strings.Split(w.RPOrigins, ",")
 }
 
 func (w *WebAuthnParams) ToConfig() (*webauthn.WebAuthn, error) {
@@ -95,15 +91,14 @@ func (w *WebAuthnParams) ToConfig() (*webauthn.WebAuthn, error) {
 		return nil, fmt.Errorf("webAuthn RP ID cannot be empty")
 	}
 
-	origins := w.GetRPOrigins()
-	if len(origins) == 0 {
+	if len(w.RPOrigins) == 0 {
 		return nil, fmt.Errorf("webAuthn RP Origins cannot be empty")
 	}
 
 	var validOrigins []string
 	var invalidOrigins []string
 
-	for _, origin := range origins {
+	for _, origin := range w.RPOrigins {
 		parsedURL, err := url.Parse(origin)
 		if err != nil || (parsedURL.Scheme != "https" && !(parsedURL.Scheme == "http" && parsedURL.Hostname() == "localhost")) || parsedURL.Host == "" {
 			invalidOrigins = append(invalidOrigins, origin)
@@ -514,7 +509,18 @@ func (a *API) challengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 	var ws *models.WebAuthnSessionData
 	var challenge *models.Challenge
 	if factor.IsUnverified() {
-		options, session, err := webAuthn.BeginRegistration(user)
+		// Get existing WebAuthn credentials to exclude duplicates
+		excludeList := []wbnprotocol.CredentialDescriptor{}
+		existingCredentials := user.WebAuthnCredentials()
+		for _, cred := range existingCredentials {
+			excludeList = append(excludeList, wbnprotocol.CredentialDescriptor{
+				Type:         wbnprotocol.PublicKeyCredentialType,
+				CredentialID: cred.ID,
+				Transport:    []wbnprotocol.AuthenticatorTransport{"usb", "nfc"},
+			})
+		}
+
+		options, session, err := webAuthn.BeginRegistration(user, webauthn.WithExclusions(excludeList))
 		if err != nil {
 			return apierrors.NewInternalServerError("Failed to generate WebAuthn registration data").WithInternalError(err)
 		}
@@ -524,9 +530,12 @@ func (a *API) challengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 		challenge = ws.ToChallenge(factor.ID, ipAddress)
 
 		response = &ChallengeFactorResponse{
-			CredentialCreationOptions: options,
-			Type:                      factor.FactorType,
-			ID:                        challenge.ID,
+			Type: factor.FactorType,
+			ID:   challenge.ID,
+			WebAuthn: &WebAuthnChallengeData{
+				Type:              "create",
+				CredentialOptions: options,
+			},
 		}
 
 	} else if factor.IsVerified() {
@@ -539,9 +548,12 @@ func (a *API) challengeWebAuthnFactor(w http.ResponseWriter, r *http.Request) er
 		}
 		challenge = ws.ToChallenge(factor.ID, ipAddress)
 		response = &ChallengeFactorResponse{
-			CredentialRequestOptions: options,
-			Type:                     factor.FactorType,
-			ID:                       challenge.ID,
+			Type: factor.FactorType,
+			ID:   challenge.ID,
+			WebAuthn: &WebAuthnChallengeData{
+				Type:              "request",
+				CredentialOptions: options,
+			},
 		}
 
 	}
@@ -878,10 +890,10 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 	switch {
 	case params.WebAuthn == nil:
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "WebAuthn config required")
-	case factor.IsVerified() && params.WebAuthn.AssertionResponse == nil:
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "creation_response required to login")
-	case factor.IsUnverified() && params.WebAuthn.CreationResponse == nil:
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "assertion_response required to login")
+	case params.WebAuthn.Type != "create" && params.WebAuthn.Type != "request":
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "WebAuthn type must be create or request")
+	case params.WebAuthn.CredentialResponse == nil:
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "credential_response required")
 	default:
 		webAuthn, err = params.WebAuthn.ToConfig()
 		if err != nil {
@@ -899,20 +911,21 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 		return apierrors.NewInternalServerError("Database error deleting challenge").WithInternalError(err)
 	}
 
-	if factor.IsUnverified() {
-		parsedResponse, err := wbnprotocol.ParseCredentialCreationResponseBody(bytes.NewReader(params.WebAuthn.CreationResponse))
+	switch params.WebAuthn.Type {
+	case "create":
+		parsedResponse, err := wbnprotocol.ParseCredentialCreationResponseBody(bytes.NewReader(params.WebAuthn.CredentialResponse))
 		if err != nil {
-			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid credential_creation_response")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid credential_response")
 		}
 		credential, err = webAuthn.CreateCredential(user, webAuthnSession, parsedResponse)
 		if err != nil {
 			return err
 		}
 
-	} else if factor.IsVerified() {
-		parsedResponse, err := wbnprotocol.ParseCredentialRequestResponseBody(bytes.NewReader(params.WebAuthn.AssertionResponse))
+	case "request":
+		parsedResponse, err := wbnprotocol.ParseCredentialRequestResponseBody(bytes.NewReader(params.WebAuthn.CredentialResponse))
 		if err != nil {
-			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid credential_request_response")
+			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid credential_response")
 		}
 		credential, err = webAuthn.ValidateLogin(user, webAuthnSession, parsedResponse)
 		if err != nil {
