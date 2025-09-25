@@ -423,6 +423,9 @@ func (a *API) createAccountFromExternalIdentity(tx *storage.Connection, r *http.
 					return 0, nil, terr
 				}
 				emailConfirmationSent = true
+			} else {
+				// empty email address is regarded as not verified
+				return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailNotConfirmed, "No email address provided by %v. Please add a verified email address to your account at %v and try again.", providerType, providerType)
 			}
 
 			if !config.Mailer.AllowUnverifiedEmailSignIns {

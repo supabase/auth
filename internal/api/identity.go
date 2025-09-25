@@ -134,6 +134,11 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 			return nil, terr
 		}
 		if !userData.Metadata.EmailVerified {
+			if targetUser.GetEmail() == "" {
+				// empty email address is regarded as not verified
+				return nil, apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailNotConfirmed, "No email address provided by %v. Please add a verified email address to your account at %v and try again.", providerType, providerType)
+			}
+
 			if terr := a.sendConfirmation(r, tx, targetUser, models.ImplicitFlow); terr != nil {
 				return nil, terr
 			}
