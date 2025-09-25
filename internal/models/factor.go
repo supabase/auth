@@ -139,19 +139,19 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 type Factor struct {
 	ID uuid.UUID `json:"id" db:"id"`
 	// TODO: Consider removing this nested user field. We don't use it.
-	User               User                `json:"-" belongs_to:"user"`
-	UserID             uuid.UUID           `json:"-" db:"user_id"`
-	CreatedAt          time.Time           `json:"created_at" db:"created_at"`
-	UpdatedAt          time.Time           `json:"updated_at" db:"updated_at"`
-	Status             string              `json:"status" db:"status"`
-	FriendlyName       string              `json:"friendly_name,omitempty" db:"friendly_name"`
-	Secret             string              `json:"-" db:"secret"`
-	FactorType         string              `json:"factor_type" db:"factor_type"`
-	Challenge          []Challenge         `json:"-" has_many:"challenges"`
-	Phone                     storage.NullString          `json:"phone" db:"phone"`
-	LastChallengedAt          *time.Time                  `json:"last_challenged_at" db:"last_challenged_at"`
-	WebAuthnCredential        *WebAuthnCredential         `json:"-" db:"web_authn_credential"`
-	WebAuthnAAGUID            *uuid.UUID                  `json:"web_authn_aaguid,omitempty" db:"web_authn_aaguid"`
+	User                      User                       `json:"-" belongs_to:"user"`
+	UserID                    uuid.UUID                  `json:"-" db:"user_id"`
+	CreatedAt                 time.Time                  `json:"created_at" db:"created_at"`
+	UpdatedAt                 time.Time                  `json:"updated_at" db:"updated_at"`
+	Status                    string                     `json:"status" db:"status"`
+	FriendlyName              string                     `json:"friendly_name,omitempty" db:"friendly_name"`
+	Secret                    string                     `json:"-" db:"secret"`
+	FactorType                string                     `json:"factor_type" db:"factor_type"`
+	Challenge                 []Challenge                `json:"-" has_many:"challenges"`
+	Phone                     storage.NullString         `json:"phone" db:"phone"`
+	LastChallengedAt          *time.Time                 `json:"last_challenged_at" db:"last_challenged_at"`
+	WebAuthnCredential        *WebAuthnCredential        `json:"-" db:"web_authn_credential"`
+	WebAuthnAAGUID            *uuid.UUID                 `json:"web_authn_aaguid,omitempty" db:"web_authn_aaguid"`
 	LastWebAuthnChallengeData *LastWebAuthnChallengeData `json:"last_webauthn_challenge_data,omitempty" db:"last_webauthn_challenge_data"`
 }
 
