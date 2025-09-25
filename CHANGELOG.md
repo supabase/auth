@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.181.0](https://github.com/supabase/auth/compare/v2.180.0...v2.181.0) (2025-09-25)
+
+
+### Features
+
+* add advisor to notify you when to double the max connection pool ([#2167](https://github.com/supabase/auth/issues/2167)) ([a72f5d9](https://github.com/supabase/auth/commit/a72f5d95795ac070e248007c0c38196f47ea5046))
+* add after-user-created hook ([#2169](https://github.com/supabase/auth/issues/2169)) ([bd80df8](https://github.com/supabase/auth/commit/bd80df8a888a7de023557a97b65b21419d3029e7))
+* store latest challenge/attestation data ([#2179](https://github.com/supabase/auth/issues/2179)) ([01ebce1](https://github.com/supabase/auth/commit/01ebce1bf01b563105d653ff168a16e72c12d481))
+* support percentage based db limits with reload support ([#2177](https://github.com/supabase/auth/issues/2177)) ([1731466](https://github.com/supabase/auth/commit/1731466903539569ec5b308db4e39eb33c653b94))
+* webauthn support schema changes, update openapi.yaml ([#2163](https://github.com/supabase/auth/issues/2163)) ([68cb8d2](https://github.com/supabase/auth/commit/68cb8d2ba3ded878c68d7cb76465bfaaac58436a))
+
 ## [2.180.0](https://github.com/supabase/auth/compare/v2.179.0...v2.180.0) (2025-09-23)
 
 
