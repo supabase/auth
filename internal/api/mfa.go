@@ -906,31 +906,33 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 		return err
 	}
 	webAuthnSession := *challenge.WebAuthnSessionData.SessionData
-	// Once the challenge is validated, we consume the challenge
-	if err := db.Destroy(challenge); err != nil {
-		return apierrors.NewInternalServerError("Database error deleting challenge").WithInternalError(err)
-	}
 
+	var parsedResponse interface{}
 	switch params.WebAuthn.Type {
 	case "create":
-		parsedResponse, err := wbnprotocol.ParseCredentialCreationResponseBody(bytes.NewReader(params.WebAuthn.CredentialResponse))
+		parsedResponse, err = wbnprotocol.ParseCredentialCreationResponseBody(bytes.NewReader(params.WebAuthn.CredentialResponse))
 		if err != nil {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid credential_response")
 		}
-		credential, err = webAuthn.CreateCredential(user, webAuthnSession, parsedResponse)
+		credential, err = webAuthn.CreateCredential(user, webAuthnSession, parsedResponse.(*wbnprotocol.ParsedCredentialCreationData))
 		if err != nil {
 			return err
 		}
 
 	case "request":
-		parsedResponse, err := wbnprotocol.ParseCredentialRequestResponseBody(bytes.NewReader(params.WebAuthn.CredentialResponse))
+		parsedResponse, err = wbnprotocol.ParseCredentialRequestResponseBody(bytes.NewReader(params.WebAuthn.CredentialResponse))
 		if err != nil {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid credential_response")
 		}
-		credential, err = webAuthn.ValidateLogin(user, webAuthnSession, parsedResponse)
+		credential, err = webAuthn.ValidateLogin(user, webAuthnSession, parsedResponse.(*wbnprotocol.ParsedCredentialAssertionData))
 		if err != nil {
 			return apierrors.NewInternalServerError("Failed to validate WebAuthn MFA response").WithInternalError(err)
 		}
+	}
+
+	// Once the challenge is validated, we consume the challenge
+	if err := db.Destroy(challenge); err != nil {
+		return apierrors.NewInternalServerError("Database error deleting challenge").WithInternalError(err)
 	}
 	var token *AccessTokenResponse
 	err = db.Transaction(func(tx *storage.Connection) error {
@@ -950,6 +952,10 @@ func (a *API) verifyWebAuthnFactor(w http.ResponseWriter, r *http.Request, param
 			if terr = factor.SaveWebAuthnCredential(tx, credential); terr != nil {
 				return terr
 			}
+		}
+
+		if terr = factor.UpdateLastWebAuthnChallenge(tx, challenge, params.WebAuthn.Type, parsedResponse); terr != nil {
+			return terr
 		}
 		user, terr = models.FindUserByID(tx, user.ID)
 		if terr != nil {
