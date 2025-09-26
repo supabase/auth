@@ -14,6 +14,7 @@ import (
 
 	"github.com/supabase/auth/internal/api/apierrors"
 	mail "github.com/supabase/auth/internal/mailer"
+	"github.com/supabase/auth/internal/mailer/mockclient"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,15 +28,18 @@ type VerifyTestSuite struct {
 	suite.Suite
 	API    *API
 	Config *conf.GlobalConfiguration
+	Mailer mail.Mailer
 }
 
 func TestVerify(t *testing.T) {
-	api, config, err := setupAPIForTest()
+	mockMailer := &mockclient.MockMailer{}
+	api, config, err := setupAPIForTest(WithMailer(mockMailer))
 	require.NoError(t, err)
 
 	ts := &VerifyTestSuite{
 		API:    api,
 		Config: config,
+		Mailer: mockMailer,
 	}
 	defer api.db.Close()
 
@@ -1276,6 +1280,132 @@ func (ts *VerifyTestSuite) TestVerifyValidateParams() {
 			req := httptest.NewRequest(c.method, "http://localhost", nil)
 			err := c.params.Validate(req, ts.API)
 			require.Equal(ts.T(), c.expected, err)
+		})
+	}
+}
+
+func (ts *VerifyTestSuite) TestVeryEmailChangeSendsNotificationEmail() {
+	currentEmail := "test@example.com"
+	newEmail := "new@example.com"
+
+	// Change from new email to current email and back to new email
+	cases := []struct {
+		desc                        string
+		body                        map[string]interface{}
+		currentEmail                string
+		newEmail                    string
+		notificationEnabled         bool
+		expectedNotificationsCalled int
+	}{
+		{
+			desc: "Email change notification enabled",
+			body: map[string]interface{}{
+				"email": newEmail,
+			},
+			currentEmail:                currentEmail,
+			newEmail:                    newEmail,
+			notificationEnabled:         true,
+			expectedNotificationsCalled: 1,
+		},
+		{
+			desc: "Email change notification disabled",
+			body: map[string]interface{}{
+				"email": currentEmail,
+			},
+			currentEmail:                newEmail,
+			newEmail:                    currentEmail,
+			notificationEnabled:         false,
+			expectedNotificationsCalled: 0,
+		},
+	}
+
+	for _, c := range cases {
+		ts.Run(c.desc, func() {
+			ts.Config.Mailer.Notifications.EmailChangedEnabled = c.notificationEnabled
+			u, err := models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+
+			// Get the mock mailer and reset it
+			mockMailer, ok := ts.Mailer.(*mockclient.MockMailer)
+			require.True(ts.T(), ok, "Mailer is not of type *MockMailer")
+			mockMailer.Reset()
+
+			// reset user
+			u.EmailChangeSentAt = nil
+			u.EmailChangeTokenCurrent = ""
+			u.EmailChangeTokenNew = ""
+			require.NoError(ts.T(), ts.API.db.Update(u))
+			require.NoError(ts.T(), models.ClearAllOneTimeTokensForUser(ts.API.db, u.ID))
+
+			// Request body
+			var buffer bytes.Buffer
+			require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(c.body))
+
+			// Setup request
+			req := httptest.NewRequest(http.MethodPut, "http://localhost/user", &buffer)
+			req.Header.Set("Content-Type", "application/json")
+
+			// Generate access token for request and a mock session
+			var token string
+			session, err := models.NewSession(u.ID, nil)
+			require.NoError(ts.T(), err)
+			require.NoError(ts.T(), ts.API.db.Create(session))
+
+			token, _, err = ts.API.generateAccessToken(req, ts.API.db, u, &session.ID, models.MagicLink)
+			require.NoError(ts.T(), err)
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+			// Setup response recorder
+			w := httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+
+			currentTokenHash := u.EmailChangeTokenCurrent
+			newTokenHash := u.EmailChangeTokenNew
+
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+
+			assert.WithinDuration(ts.T(), time.Now(), *u.EmailChangeSentAt, 1*time.Second)
+			assert.False(ts.T(), u.IsConfirmed())
+
+			// Verify new email
+			reqURL := fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.EmailChangeVerification, newTokenHash)
+			req = httptest.NewRequest(http.MethodGet, reqURL, nil)
+
+			w = httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, c.currentEmail, ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+			assert.Equal(ts.T(), singleConfirmation, u.EmailChangeConfirmStatus)
+
+			// Verify old email
+			reqURL = fmt.Sprintf("http://localhost/verify?type=%s&token=%s", mail.EmailChangeVerification, currentTokenHash)
+			req = httptest.NewRequest(http.MethodGet, reqURL, nil)
+
+			w = httptest.NewRecorder()
+			ts.API.handler.ServeHTTP(w, req)
+			require.Equal(ts.T(), http.StatusSeeOther, w.Code)
+
+			// user's email should've been updated to newEmail
+			u, err = models.FindUserByEmailAndAudience(ts.API.db, c.newEmail, ts.Config.JWT.Aud)
+			require.NoError(ts.T(), err)
+			require.Equal(ts.T(), zeroConfirmation, u.EmailChangeConfirmStatus)
+
+			// Assert that email change notification email was sent or not based on the instance's configuration
+			require.Len(ts.T(), mockMailer.EmailChangedMailCalls, c.expectedNotificationsCalled, fmt.Sprintf("Expected %d email change notification email(s) to be sent", c.expectedNotificationsCalled))
+			if c.expectedNotificationsCalled > 0 {
+				require.Equal(ts.T(), u.ID, mockMailer.EmailChangedMailCalls[0].User.ID, "Email should be sent to the correct user")
+				require.Equal(ts.T(), currentEmail, mockMailer.EmailChangedMailCalls[0].OldEmail, "Old email should match")
+			}
+
+			// Reset confirmation status after each test
+			u.EmailConfirmedAt = nil
+			require.NoError(ts.T(), ts.API.db.Update(u))
 		})
 	}
 }

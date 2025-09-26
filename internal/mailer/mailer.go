@@ -21,6 +21,7 @@ const (
 
 	// Account Changes Notifications
 	PasswordChangedNotification = "password_changed_notification"
+	EmailChangedNotification    = "email_changed_notification"
 )
 
 // Mailer defines the interface a mailer must implement.
@@ -35,6 +36,7 @@ type Mailer interface {
 
 	// Account Changes Notifications
 	PasswordChangedNotificationMail(r *http.Request, user *models.User) error
+	EmailChangedNotificationMail(r *http.Request, user *models.User, oldEmail string) error
 }
 
 // TODO(cstockton): Mail(...) -> Mail(Email{...}) ?
