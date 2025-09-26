@@ -9,14 +9,16 @@ import (
 
 // MockMailer implements the mailer.Mailer interface for testing
 type MockMailer struct {
-	InviteMailCalls          []InviteMailCall
-	ConfirmationMailCalls    []ConfirmationMailCall
-	RecoveryMailCalls        []RecoveryMailCall
-	MagicLinkMailCalls       []MagicLinkMailCall
-	EmailChangeMailCalls     []EmailChangeMailCall
-	ReauthenticateMailCalls  []ReauthenticateMailCall
-	GetEmailActionLinkCalls  []GetEmailActionLinkCall
+	InviteMailCalls         []InviteMailCall
+	ConfirmationMailCalls   []ConfirmationMailCall
+	RecoveryMailCalls       []RecoveryMailCall
+	MagicLinkMailCalls      []MagicLinkMailCall
+	EmailChangeMailCalls    []EmailChangeMailCall
+	ReauthenticateMailCalls []ReauthenticateMailCall
+	GetEmailActionLinkCalls []GetEmailActionLinkCall
+
 	PasswordChangedMailCalls []PasswordChangedMailCall
+	EmailChangedMailCalls    []EmailChangedMailCall
 }
 
 type InviteMailCall struct {
@@ -71,6 +73,11 @@ type GetEmailActionLinkCall struct {
 
 type PasswordChangedMailCall struct {
 	User *models.User
+}
+
+type EmailChangedMailCall struct {
+	User     *models.User
+	OldEmail string
 }
 
 func (m *MockMailer) InviteMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
@@ -152,6 +159,14 @@ func (m *MockMailer) PasswordChangedNotificationMail(r *http.Request, user *mode
 	return nil
 }
 
+func (m *MockMailer) EmailChangedNotificationMail(r *http.Request, user *models.User, oldEmail string) error {
+	m.EmailChangedMailCalls = append(m.EmailChangedMailCalls, EmailChangedMailCall{
+		User:     user,
+		OldEmail: oldEmail,
+	})
+	return nil
+}
+
 func (m *MockMailer) Reset() {
 	m.InviteMailCalls = nil
 	m.ConfirmationMailCalls = nil
@@ -160,5 +175,7 @@ func (m *MockMailer) Reset() {
 	m.EmailChangeMailCalls = nil
 	m.ReauthenticateMailCalls = nil
 	m.GetEmailActionLinkCalls = nil
+
 	m.PasswordChangedMailCalls = nil
+	m.EmailChangedMailCalls = nil
 }

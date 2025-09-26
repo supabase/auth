@@ -21,6 +21,7 @@ const (
 
 	// Account Changes Notifications
 	PasswordChangedNotificationTemplate = "password_changed_notification"
+	EmailChangedNotificationTemplate    = "email_changed_notification"
 )
 
 const defaultInviteMail = `<h2>You have been invited</h2>
@@ -63,7 +64,13 @@ const defaultReauthenticateMail = `<h2>Confirm reauthentication</h2>
 // #nosec G101 -- No hardcoded credentials.
 const defaultPasswordChangedNotificationMail = `<h2>Your password has been changed</h2>
 
-<p>This is a confirmation that the password for your account {{ .Email }} has just been changed. If you did not make this change, please contact support immediately.</p>
+<p>This is a confirmation that the password for your account {{ .Email }} has just been changed.</p>
+<p>If you did not make this change, please contact support.</p>
+`
+const defaultEmailChangedNotificationMail = `<h2>Your email address has been changed</h2>
+
+<p>The email address for your account has been changed from {{ .OldEmail }} to {{ .Email }}.</p>
+<p>If you did not make this change, please contact support.</p>
 `
 
 var (
@@ -77,6 +84,7 @@ var (
 
 		// Account Changes Notifications
 		PasswordChangedNotificationTemplate,
+		EmailChangedNotificationTemplate,
 	}
 	defaultTemplateSubjects = &conf.EmailContentConfiguration{
 		Invite:           "You have been invited",
@@ -99,6 +107,7 @@ var (
 
 		// Account Changes Notifications
 		PasswordChangedNotification: defaultPasswordChangedNotificationMail,
+		EmailChangedNotification:    defaultEmailChangedNotificationMail,
 	}
 )
 
@@ -365,11 +374,19 @@ func (m *Mailer) GetEmailActionLink(user *models.User, actionType, referrerURL s
 
 func (m *Mailer) PasswordChangedNotificationMail(r *http.Request, user *models.User) error {
 	data := map[string]any{
-		"Email":     user.Email,
-		"Data":      user.UserMetaData,
-		"SendingTo": user.Email,
+		"Email": user.Email,
+		"Data":  user.UserMetaData,
 	}
 	return m.mail(r.Context(), m.cfg, PasswordChangedNotificationTemplate, user.GetEmail(), data)
+}
+
+func (m *Mailer) EmailChangedNotificationMail(r *http.Request, user *models.User, oldEmail string) error {
+	data := map[string]any{
+		"Email":    user.GetEmail(), // the new email address that has been set on the account
+		"OldEmail": oldEmail,        // the old email address that was on the account before the change
+		"Data":     user.UserMetaData,
+	}
+	return m.mail(r.Context(), m.cfg, EmailChangedNotificationTemplate, oldEmail, data)
 }
 
 type emailParams struct {

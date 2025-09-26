@@ -11,6 +11,7 @@ import (
 
 	"github.com/fatih/structs"
 	"github.com/sethvargo/go-password/password"
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/api/sms_provider"
@@ -559,6 +560,7 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 	}
 
 	// one email is confirmed at this point if GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED is enabled
+	oldEmail := user.GetEmail()
 	err := conn.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserModifiedAction, "", nil); terr != nil {
 			return terr
@@ -601,6 +603,14 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// send an Email Changed email notification to the user
+	if config.Mailer.Notifications.EmailChangedEnabled && user.GetEmail() != "" {
+		if err := a.sendEmailChangedNotification(r, conn, user, oldEmail); err != nil {
+			// we don't want to fail the whole request if the email can't be sent
+			logrus.WithError(err).Warn("Unable to send email changed notification")
+		}
 	}
 
 	return user, nil

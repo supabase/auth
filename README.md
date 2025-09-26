@@ -588,6 +588,10 @@ Email subject to use for email change confirmation. Defaults to `Confirm Email C
 
 Email subject to use for password changed notification. Defaults to `Your password has been changed`.
 
+`MAILER_SUBJECTS_EMAIL_CHANGED_NOTIFICATION` - `string`
+
+Email subject to use for email changed notification. Defaults to `Your email address has been changed`.
+
 `MAILER_TEMPLATES_INVITE` - `string`
 
 URL path to an email template to use when inviting a user. (e.g. `https://www.example.com/path-to-email-template.html`)
@@ -667,7 +671,7 @@ Default Content (if template is unavailable):
 `MAILER_TEMPLATES_PASSWORD_CHANGED_NOTIFICATION` - `string`
 
 URL path to an email template to use when notifying a user that their password has been changed. (e.g. `https://www.example.com/path-to-email-template.html`)
-`SiteURL` and `Email` variables are available.
+`Email` variables are available.
 
 Default Content (if template is unavailable):
 
@@ -679,11 +683,33 @@ Default Content (if template is unavailable):
   just been changed. If you did not make this change, please contact support
   immediately.
 </p>
+<p>If you did not make this change, please contact support.</p>
 ```
 
-`MAILER_NOTIFICATION_CONFIGURATIONS_PASSWORD_CHANGED_NOTIFICATION_ENABLED` - `bool`
+`GOTRUE_MAILER_NOTIFICATIONS_PASSWORD_CHANGED_ENABLED` - `bool`
 
 Whether to send a notification email when a user's password is changed. Defaults to `false`.
+
+`MAILER_TEMPLATES_EMAIL_CHANGED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that their email has been changed. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` and `OldEmail` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>Your email address has been changed</h2>
+
+<p>
+  The email address for your account has been changed from {{ .OldEmail }} to {{
+  .Email }}.
+</p>
+<p>If you did not make this change, please contact support.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_EMAIL_CHANGED_ENABLED` - `bool`
+
+Whether to send a notification email when a user's email is changed. Defaults to `false`.
 
 ### Phone Auth
 

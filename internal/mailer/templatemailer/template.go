@@ -537,6 +537,8 @@ func lookupEmailContentConfig(
 	// Account Changes Notifications
 	case PasswordChangedNotificationTemplate:
 		return cfg.PasswordChangedNotification, true
+	case EmailChangedNotificationTemplate:
+		return cfg.EmailChangedNotification, true
 	}
 }
 
