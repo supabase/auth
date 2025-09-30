@@ -17,8 +17,10 @@ type MockMailer struct {
 	ReauthenticateMailCalls []ReauthenticateMailCall
 	GetEmailActionLinkCalls []GetEmailActionLinkCall
 
-	PasswordChangedMailCalls []PasswordChangedMailCall
-	EmailChangedMailCalls    []EmailChangedMailCall
+	PasswordChangedMailCalls     []PasswordChangedMailCall
+	EmailChangedMailCalls        []EmailChangedMailCall
+	MFAFactorEnrolledMailCalls   []MFAFactorEnrolledMailCall
+	MFAFactorUnenrolledMailCalls []MFAFactorUnenrolledMailCall
 }
 
 type InviteMailCall struct {
@@ -78,6 +80,16 @@ type PasswordChangedMailCall struct {
 type EmailChangedMailCall struct {
 	User     *models.User
 	OldEmail string
+}
+
+type MFAFactorEnrolledMailCall struct {
+	User       *models.User
+	FactorType string
+}
+
+type MFAFactorUnenrolledMailCall struct {
+	User       *models.User
+	FactorType string
 }
 
 func (m *MockMailer) InviteMail(r *http.Request, user *models.User, otp, referrerURL string, externalURL *url.URL) error {
@@ -167,6 +179,22 @@ func (m *MockMailer) EmailChangedNotificationMail(r *http.Request, user *models.
 	return nil
 }
 
+func (m *MockMailer) MFAFactorEnrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
+	m.MFAFactorEnrolledMailCalls = append(m.MFAFactorEnrolledMailCalls, MFAFactorEnrolledMailCall{
+		User:       user,
+		FactorType: factorType,
+	})
+	return nil
+}
+
+func (m *MockMailer) MFAFactorUnenrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
+	m.MFAFactorUnenrolledMailCalls = append(m.MFAFactorUnenrolledMailCalls, MFAFactorUnenrolledMailCall{
+		User:       user,
+		FactorType: factorType,
+	})
+	return nil
+}
+
 func (m *MockMailer) Reset() {
 	m.InviteMailCalls = nil
 	m.ConfirmationMailCalls = nil
@@ -178,4 +206,6 @@ func (m *MockMailer) Reset() {
 
 	m.PasswordChangedMailCalls = nil
 	m.EmailChangedMailCalls = nil
+	m.MFAFactorEnrolledMailCalls = nil
+	m.MFAFactorUnenrolledMailCalls = nil
 }
