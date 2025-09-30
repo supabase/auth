@@ -20,8 +20,10 @@ const (
 	ReauthenticationTemplate = "reauthentication"
 
 	// Account Changes Notifications
-	PasswordChangedNotificationTemplate = "password_changed_notification"
-	EmailChangedNotificationTemplate    = "email_changed_notification"
+	PasswordChangedNotificationTemplate     = "password_changed_notification"
+	EmailChangedNotificationTemplate        = "email_changed_notification"
+	MFAFactorEnrolledNotificationTemplate   = "mfa_factor_enrolled_notification"
+	MFAFactorUnenrolledNotificationTemplate = "mfa_factor_unenrolled_notification"
 )
 
 const defaultInviteMail = `<h2>You have been invited</h2>
@@ -73,6 +75,18 @@ const defaultEmailChangedNotificationMail = `<h2>Your email address has been cha
 <p>If you did not make this change, please contact support.</p>
 `
 
+const defaultMFAFactorEnrolledNotificationMail = `<h2>MFA factor has been enrolled</h2>
+
+<p>A new factor ({{ .FactorType }}) has been enrolled for your account {{ .Email }}.</p>
+<p>If you did not make this change, please contact support immediately.</p>
+`
+
+const defaultMFAFactorUnenrolledNotificationMail = `<h2>MFA factor has been unenrolled</h2>
+
+<p>A factor ({{ .FactorType }}) has been unenrolled from your account {{ .Email }}.</p>
+<p>If you did not make this change, please contact support immediately.</p>
+`
+
 var (
 	templateTypes = []string{
 		InviteTemplate,
@@ -85,6 +99,8 @@ var (
 		// Account Changes Notifications
 		PasswordChangedNotificationTemplate,
 		EmailChangedNotificationTemplate,
+		MFAFactorEnrolledNotificationTemplate,
+		MFAFactorUnenrolledNotificationTemplate,
 	}
 	defaultTemplateSubjects = &conf.EmailContentConfiguration{
 		Invite:           "You have been invited",
@@ -95,7 +111,9 @@ var (
 		Reauthentication: "Confirm reauthentication",
 
 		// Account Changes Notifications
-		PasswordChangedNotification: "Your password has been changed",
+		PasswordChangedNotification:     "Your password has been changed",
+		MFAFactorEnrolledNotification:   "MFA factor enrolled",
+		MFAFactorUnenrolledNotification: "MFA factor unenrolled",
 	}
 	defaultTemplateBodies = &conf.EmailContentConfiguration{
 		Invite:           defaultInviteMail,
@@ -106,8 +124,10 @@ var (
 		Reauthentication: defaultReauthenticateMail,
 
 		// Account Changes Notifications
-		PasswordChangedNotification: defaultPasswordChangedNotificationMail,
-		EmailChangedNotification:    defaultEmailChangedNotificationMail,
+		PasswordChangedNotification:     defaultPasswordChangedNotificationMail,
+		EmailChangedNotification:        defaultEmailChangedNotificationMail,
+		MFAFactorEnrolledNotification:   defaultMFAFactorEnrolledNotificationMail,
+		MFAFactorUnenrolledNotification: defaultMFAFactorUnenrolledNotificationMail,
 	}
 )
 
@@ -387,6 +407,24 @@ func (m *Mailer) EmailChangedNotificationMail(r *http.Request, user *models.User
 		"Data":     user.UserMetaData,
 	}
 	return m.mail(r.Context(), m.cfg, EmailChangedNotificationTemplate, oldEmail, data)
+}
+
+func (m *Mailer) MFAFactorEnrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
+	data := map[string]any{
+		"Email":      user.GetEmail(),
+		"FactorType": factorType,
+		"Data":       user.UserMetaData,
+	}
+	return m.mail(r.Context(), m.cfg, MFAFactorEnrolledNotificationTemplate, user.GetEmail(), data)
+}
+
+func (m *Mailer) MFAFactorUnenrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
+	data := map[string]any{
+		"Email":      user.GetEmail(),
+		"FactorType": factorType,
+		"Data":       user.UserMetaData,
+	}
+	return m.mail(r.Context(), m.cfg, MFAFactorUnenrolledNotificationTemplate, user.GetEmail(), data)
 }
 
 type emailParams struct {

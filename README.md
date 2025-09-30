@@ -592,6 +592,14 @@ Email subject to use for password changed notification. Defaults to `Your passwo
 
 Email subject to use for email changed notification. Defaults to `Your email address has been changed`.
 
+`GOTRUE_MAILER_SUBJECTS_MFA_FACTOR_ENROLLED_NOTIFICATION` - `string`
+
+Email subject to use for MFA factor enrolled notification. Defaults to `MFA factor enrolled`.
+
+`GOTRUE_MAILER_SUBJECTS_MFA_FACTOR_UNENROLLED_NOTIFICATION` - `string`
+
+Email subject to use for MFA factor unenrolled notification. Defaults to `MFA factor unenrolled`.
+
 `MAILER_TEMPLATES_INVITE` - `string`
 
 URL path to an email template to use when inviting a user. (e.g. `https://www.example.com/path-to-email-template.html`)
@@ -710,6 +718,48 @@ Default Content (if template is unavailable):
 `GOTRUE_MAILER_NOTIFICATIONS_EMAIL_CHANGED_ENABLED` - `bool`
 
 Whether to send a notification email when a user's email is changed. Defaults to `false`.
+
+`GOTRUE_MAILER_TEMPLATES_MFA_FACTOR_ENROLLED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that they have enrolled in a new MFA factor. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` and `FactorType` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>MFA factor has been enrolled</h2>
+
+<p>
+  A new factor ({{ .FactorType }}) has been enrolled for your account {{ .Email
+  }}.
+</p>
+<p>If you did not make this change, please contact support immediately.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_MFA_FACTOR_ENROLLED_ENABLED` - `bool`
+
+Whether to send a notification email when a user enrolls in a new MFA factor. Defaults to `false`.
+
+`GOTRUE_MAILER_TEMPLATES_MFA_FACTOR_UNENROLLED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that they have unenrolled from an MFA factor. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` and `FactorType` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>MFA factor has been unenrolled</h2>
+
+<p>
+  A factor ({{ .FactorType }}) has been unenrolled from your account {{ .Email
+  }}.
+</p>
+<p>If you did not make this change, please contact support immediately.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_MFA_FACTOR_UNENROLLED_ENABLED` - `bool`
+
+Whether to send a notification email when a user unenrolls from an MFA factor. Defaults to `false`.
 
 ### Phone Auth
 

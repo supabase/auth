@@ -539,6 +539,10 @@ func lookupEmailContentConfig(
 		return cfg.PasswordChangedNotification, true
 	case EmailChangedNotificationTemplate:
 		return cfg.EmailChangedNotification, true
+	case MFAFactorEnrolledNotificationTemplate:
+		return cfg.MFAFactorEnrolledNotification, true
+	case MFAFactorUnenrolledNotificationTemplate:
+		return cfg.MFAFactorUnenrolledNotification, true
 	}
 }
 

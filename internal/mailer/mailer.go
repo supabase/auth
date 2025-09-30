@@ -20,8 +20,10 @@ const (
 	ReauthenticationVerification   = "reauthentication"
 
 	// Account Changes Notifications
-	PasswordChangedNotification = "password_changed_notification"
-	EmailChangedNotification    = "email_changed_notification"
+	PasswordChangedNotification     = "password_changed_notification"
+	EmailChangedNotification        = "email_changed_notification"
+	MFAFactorEnrolledNotification   = "mfa_factor_enrolled_notification"
+	MFAFactorUnenrolledNotification = "mfa_factor_unenrolled_notification"
 )
 
 // Mailer defines the interface a mailer must implement.
@@ -37,6 +39,8 @@ type Mailer interface {
 	// Account Changes Notifications
 	PasswordChangedNotificationMail(r *http.Request, user *models.User) error
 	EmailChangedNotificationMail(r *http.Request, user *models.User, oldEmail string) error
+	MFAFactorEnrolledNotificationMail(r *http.Request, user *models.User, factorType string) error
+	MFAFactorUnenrolledNotificationMail(r *http.Request, user *models.User, factorType string) error
 }
 
 // TODO(cstockton): Mail(...) -> Mail(Email{...}) ?

@@ -617,6 +617,40 @@ func (a *API) sendEmailChangedNotification(r *http.Request, tx *storage.Connecti
 	return nil
 }
 
+func (a *API) sendMFAFactorEnrolledNotification(r *http.Request, tx *storage.Connection, u *models.User, factorType string) error {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType: mail.MFAFactorEnrolledNotification,
+		factorType:      factorType,
+	})
+	if err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending MFA factor enrolled notification email").WithInternalError(err)
+	}
+
+	return nil
+}
+
+func (a *API) sendMFAFactorUnenrolledNotification(r *http.Request, tx *storage.Connection, u *models.User, factorType string) error {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType: mail.MFAFactorUnenrolledNotification,
+		factorType:      factorType,
+	})
+	if err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending MFA factor unenrolled notification email").WithInternalError(err)
+	}
+
+	return nil
+}
+
 func (a *API) validateEmail(email string) (string, error) {
 	if email == "" {
 		return "", apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "An email address is required")
@@ -663,6 +697,7 @@ type sendEmailParams struct {
 	otpNew              string
 	tokenHashWithPrefix string
 	oldEmail            string
+	factorType          string
 }
 
 func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User, params sendEmailParams) error {
@@ -783,6 +818,10 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		err = mr.PasswordChangedNotificationMail(r, u)
 	case mail.EmailChangedNotification:
 		err = mr.EmailChangedNotificationMail(r, u, params.oldEmail)
+	case mail.MFAFactorEnrolledNotification:
+		err = mr.MFAFactorEnrolledNotificationMail(r, u, params.factorType)
+	case mail.MFAFactorUnenrolledNotification:
+		err = mr.MFAFactorUnenrolledNotificationMail(r, u, params.factorType)
 	default:
 		err = errors.New("invalid email action type")
 	}
