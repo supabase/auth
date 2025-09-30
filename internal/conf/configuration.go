@@ -392,11 +392,13 @@ type EmailContentConfiguration struct {
 
 	// Account Changes Notifications
 	PasswordChangedNotification string `json:"password_changed_notification" split_words:"true"`
+	EmailChangedNotification    string `json:"email_changed_notification" split_words:"true"`
 }
 
 // NotificationsConfiguration holds the configuration for notification email states to indicate whether they are enabled or disabled.
 type NotificationsConfiguration struct {
 	PasswordChangedEnabled bool `json:"password_changed_enabled" split_words:"true" default:"false"`
+	EmailChangedEnabled    bool `json:"email_changed_enabled" split_words:"true" default:"false"`
 }
 
 type ProviderConfiguration struct {
