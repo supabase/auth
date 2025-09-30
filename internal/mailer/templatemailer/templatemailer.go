@@ -83,7 +83,7 @@ const defaultMFAFactorEnrolledNotificationMail = `<h2>MFA factor has been enroll
 
 const defaultMFAFactorUnenrolledNotificationMail = `<h2>MFA factor has been unenrolled</h2>
 
-<p>A factor ({{ .FactorType }}) has been unenrolled from your account {{ .Email }}.</p>
+<p>A factor ({{ .FactorType }}) has been unenrolled for your account {{ .Email }}.</p>
 <p>If you did not make this change, please contact support immediately.</p>
 `
 
