@@ -617,6 +617,23 @@ func (a *API) sendEmailChangedNotification(r *http.Request, tx *storage.Connecti
 	return nil
 }
 
+func (a *API) sendPhoneChangedNotification(r *http.Request, tx *storage.Connection, u *models.User, oldPhone string) error {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType: mail.PhoneChangedNotification,
+		oldPhone:        oldPhone,
+	})
+	if err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending phone changed notification email").WithInternalError(err)
+	}
+
+	return nil
+}
+
 func (a *API) sendMFAFactorEnrolledNotification(r *http.Request, tx *storage.Connection, u *models.User, factorType string) error {
 	err := a.sendEmail(r, tx, u, sendEmailParams{
 		emailActionType: mail.MFAFactorEnrolledNotification,
@@ -697,6 +714,7 @@ type sendEmailParams struct {
 	otpNew              string
 	tokenHashWithPrefix string
 	oldEmail            string
+	oldPhone            string
 	factorType          string
 }
 
@@ -818,6 +836,8 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		err = mr.PasswordChangedNotificationMail(r, u)
 	case mail.EmailChangedNotification:
 		err = mr.EmailChangedNotificationMail(r, u, params.oldEmail)
+	case mail.PhoneChangedNotification:
+		err = mr.PhoneChangedNotificationMail(r, u, params.oldPhone)
 	case mail.MFAFactorEnrolledNotification:
 		err = mr.MFAFactorEnrolledNotificationMail(r, u, params.factorType)
 	case mail.MFAFactorUnenrolledNotification:

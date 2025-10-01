@@ -22,6 +22,7 @@ const (
 	// Account Changes Notifications
 	PasswordChangedNotificationTemplate     = "password_changed_notification"
 	EmailChangedNotificationTemplate        = "email_changed_notification"
+	PhoneChangedNotificationTemplate        = "phone_changed_notification"
 	MFAFactorEnrolledNotificationTemplate   = "mfa_factor_enrolled_notification"
 	MFAFactorUnenrolledNotificationTemplate = "mfa_factor_unenrolled_notification"
 )
@@ -75,6 +76,12 @@ const defaultEmailChangedNotificationMail = `<h2>Your email address has been cha
 <p>If you did not make this change, please contact support.</p>
 `
 
+const defaultPhoneChangedNotificationMail = `<h2>Your phone number has been changed</h2>
+
+<p>The phone number for your account {{ .Email }} has been changed from {{ .OldPhone }} to {{ .Phone }}.</p>
+<p>If you did not make this change, please contact support immediately.</p>
+`
+
 const defaultMFAFactorEnrolledNotificationMail = `<h2>MFA factor has been enrolled</h2>
 
 <p>A new factor ({{ .FactorType }}) has been enrolled for your account {{ .Email }}.</p>
@@ -99,6 +106,7 @@ var (
 		// Account Changes Notifications
 		PasswordChangedNotificationTemplate,
 		EmailChangedNotificationTemplate,
+		PhoneChangedNotificationTemplate,
 		MFAFactorEnrolledNotificationTemplate,
 		MFAFactorUnenrolledNotificationTemplate,
 	}
@@ -112,6 +120,8 @@ var (
 
 		// Account Changes Notifications
 		PasswordChangedNotification:     "Your password has been changed",
+		EmailChangedNotification:        "Email address changed",
+		PhoneChangedNotification:        "Phone number changed",
 		MFAFactorEnrolledNotification:   "MFA factor enrolled",
 		MFAFactorUnenrolledNotification: "MFA factor unenrolled",
 	}
@@ -126,6 +136,7 @@ var (
 		// Account Changes Notifications
 		PasswordChangedNotification:     defaultPasswordChangedNotificationMail,
 		EmailChangedNotification:        defaultEmailChangedNotificationMail,
+		PhoneChangedNotification:        defaultPhoneChangedNotificationMail,
 		MFAFactorEnrolledNotification:   defaultMFAFactorEnrolledNotificationMail,
 		MFAFactorUnenrolledNotification: defaultMFAFactorUnenrolledNotificationMail,
 	}
@@ -407,6 +418,16 @@ func (m *Mailer) EmailChangedNotificationMail(r *http.Request, user *models.User
 		"Data":     user.UserMetaData,
 	}
 	return m.mail(r.Context(), m.cfg, EmailChangedNotificationTemplate, oldEmail, data)
+}
+
+func (m *Mailer) PhoneChangedNotificationMail(r *http.Request, user *models.User, oldPhone string) error {
+	data := map[string]any{
+		"Email":    user.GetEmail(),
+		"Phone":    user.GetPhone(), // the new phone number that has been set on the account
+		"OldPhone": oldPhone,        // the old phone number that was on the account before the change
+		"Data":     user.UserMetaData,
+	}
+	return m.mail(r.Context(), m.cfg, PhoneChangedNotificationTemplate, user.GetEmail(), data)
 }
 
 func (m *Mailer) MFAFactorEnrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
