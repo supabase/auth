@@ -19,6 +19,7 @@ type MockMailer struct {
 
 	PasswordChangedMailCalls     []PasswordChangedMailCall
 	EmailChangedMailCalls        []EmailChangedMailCall
+	PhoneChangedMailCalls        []PhoneChangedMailCall
 	MFAFactorEnrolledMailCalls   []MFAFactorEnrolledMailCall
 	MFAFactorUnenrolledMailCalls []MFAFactorUnenrolledMailCall
 }
@@ -80,6 +81,11 @@ type PasswordChangedMailCall struct {
 type EmailChangedMailCall struct {
 	User     *models.User
 	OldEmail string
+}
+
+type PhoneChangedMailCall struct {
+	User     *models.User
+	OldPhone string
 }
 
 type MFAFactorEnrolledMailCall struct {
@@ -179,6 +185,14 @@ func (m *MockMailer) EmailChangedNotificationMail(r *http.Request, user *models.
 	return nil
 }
 
+func (m *MockMailer) PhoneChangedNotificationMail(r *http.Request, user *models.User, oldPhone string) error {
+	m.PhoneChangedMailCalls = append(m.PhoneChangedMailCalls, PhoneChangedMailCall{
+		User:     user,
+		OldPhone: oldPhone,
+	})
+	return nil
+}
+
 func (m *MockMailer) MFAFactorEnrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
 	m.MFAFactorEnrolledMailCalls = append(m.MFAFactorEnrolledMailCalls, MFAFactorEnrolledMailCall{
 		User:       user,
@@ -206,6 +220,7 @@ func (m *MockMailer) Reset() {
 
 	m.PasswordChangedMailCalls = nil
 	m.EmailChangedMailCalls = nil
+	m.PhoneChangedMailCalls = nil
 	m.MFAFactorEnrolledMailCalls = nil
 	m.MFAFactorUnenrolledMailCalls = nil
 }

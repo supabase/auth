@@ -719,6 +719,27 @@ Default Content (if template is unavailable):
 
 Whether to send a notification email when a user's email is changed. Defaults to `false`.
 
+`GOTRUE_MAILER_TEMPLATES_PHONE_CHANGED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that their phone number has been changed. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email`, `Phone`, and `OldPhone` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>Your phone number has been changed</h2>
+
+<p>
+  The phone number for your account {{ .Email }} has been changed from {{
+  .OldPhone }} to {{ .Phone }}.
+</p>
+<p>If you did not make this change, please contact support immediately.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_PHONE_CHANGED_ENABLED` - `bool`
+
+Whether to send a notification email when a user's phone number is changed. Defaults to `false`.
+
 `GOTRUE_MAILER_TEMPLATES_MFA_FACTOR_ENROLLED_NOTIFICATION` - `string`
 
 URL path to an email template to use when notifying a user that they have enrolled in a new MFA factor. (e.g. `https://www.example.com/path-to-email-template.html`)

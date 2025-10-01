@@ -22,6 +22,7 @@ const (
 	// Account Changes Notifications
 	PasswordChangedNotification     = "password_changed_notification"
 	EmailChangedNotification        = "email_changed_notification"
+	PhoneChangedNotification        = "phone_changed_notification"
 	MFAFactorEnrolledNotification   = "mfa_factor_enrolled_notification"
 	MFAFactorUnenrolledNotification = "mfa_factor_unenrolled_notification"
 )
@@ -39,6 +40,7 @@ type Mailer interface {
 	// Account Changes Notifications
 	PasswordChangedNotificationMail(r *http.Request, user *models.User) error
 	EmailChangedNotificationMail(r *http.Request, user *models.User, oldEmail string) error
+	PhoneChangedNotificationMail(r *http.Request, user *models.User, oldPhone string) error
 	MFAFactorEnrolledNotificationMail(r *http.Request, user *models.User, factorType string) error
 	MFAFactorUnenrolledNotificationMail(r *http.Request, user *models.User, factorType string) error
 }

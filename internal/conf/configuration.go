@@ -393,6 +393,7 @@ type EmailContentConfiguration struct {
 	// Account Changes Notifications
 	PasswordChangedNotification     string `json:"password_changed_notification" split_words:"true"`
 	EmailChangedNotification        string `json:"email_changed_notification" split_words:"true"`
+	PhoneChangedNotification        string `json:"phone_changed_notification" split_words:"true"`
 	MFAFactorEnrolledNotification   string `json:"mfa_factor_enrolled_notification" split_words:"true"`
 	MFAFactorUnenrolledNotification string `json:"mfa_factor_unenrolled_notification" split_words:"true"`
 }
@@ -401,6 +402,7 @@ type EmailContentConfiguration struct {
 type NotificationsConfiguration struct {
 	PasswordChangedEnabled     bool `json:"password_changed_enabled" split_words:"true" default:"false"`
 	EmailChangedEnabled        bool `json:"email_changed_enabled" split_words:"true" default:"false"`
+	PhoneChangedEnabled        bool `json:"phone_changed_enabled" split_words:"true" default:"false"`
 	MFAFactorEnrolledEnabled   bool `json:"mfa_factor_enrolled_enabled" split_words:"true" default:"false"`
 	MFAFactorUnenrolledEnabled bool `json:"mfa_factor_unenrolled_enabled" split_words:"true" default:"false"`
 }

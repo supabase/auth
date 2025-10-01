@@ -402,6 +402,7 @@ func (a *API) recoverVerify(r *http.Request, conn *storage.Connection, user *mod
 func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.User, params *VerifyParams) (*models.User, error) {
 	config := a.config
 
+	oldPhone := user.GetPhone()
 	err := conn.Transaction(func(tx *storage.Connection) error {
 
 		if params.Type == smsVerification {
@@ -457,6 +458,15 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 	if err != nil {
 		return nil, err
 	}
+
+	// Send phone changed notification email if enabled and phone was changed
+	if params.Type == phoneChangeVerification && config.Mailer.Notifications.PhoneChangedEnabled && user.GetEmail() != "" && phoneNumberChanged(oldPhone, user.GetPhone()) {
+		if err := a.sendPhoneChangedNotification(r, conn, user, oldPhone); err != nil {
+			// Log the error but don't fail the verification
+			logrus.WithError(err).Warn("Unable to send phone changed notification email")
+		}
+	}
+
 	return user, nil
 }
 
@@ -605,8 +615,8 @@ func (a *API) emailChangeVerify(r *http.Request, conn *storage.Connection, param
 		return nil, err
 	}
 
-	// send an Email Changed email notification to the user
-	if config.Mailer.Notifications.EmailChangedEnabled && user.GetEmail() != "" {
+	// send an Email Changed email notification to the user's old email address
+	if config.Mailer.Notifications.EmailChangedEnabled && emailAddressChanged(oldEmail, user.GetEmail()) {
 		if err := a.sendEmailChangedNotification(r, conn, user, oldEmail); err != nil {
 			// we don't want to fail the whole request if the email can't be sent
 			logrus.WithError(err).Warn("Unable to send email changed notification")
@@ -780,4 +790,14 @@ func isEmailOtpVerification(params *VerifyParams) bool {
 
 func isUsingTokenHash(params *VerifyParams) bool {
 	return params.TokenHash != "" && params.Token == "" && params.Phone == "" && params.Email == ""
+}
+
+// emailAddressChanged checks if the email address has changed, ensuring neither is empty
+func emailAddressChanged(oldEmail, newEmail string) bool {
+	return oldEmail != "" && newEmail != "" && oldEmail != newEmail
+}
+
+// phoneNumberChanged checks if the phone number has changed, ensuring neither is empty
+func phoneNumberChanged(oldPhone, newPhone string) bool {
+	return oldPhone != "" && newPhone != "" && oldPhone != newPhone
 }
