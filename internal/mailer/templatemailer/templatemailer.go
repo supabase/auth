@@ -120,8 +120,8 @@ var (
 
 		// Account Changes Notifications
 		PasswordChangedNotification:     "Your password has been changed",
-		EmailChangedNotification:        "Email address changed",
-		PhoneChangedNotification:        "Phone number changed",
+		EmailChangedNotification:        "Your email address has been changed",
+		PhoneChangedNotification:        "Your phone number has been changed",
 		MFAFactorEnrolledNotification:   "MFA factor enrolled",
 		MFAFactorUnenrolledNotification: "MFA factor unenrolled",
 	}
