@@ -740,6 +740,48 @@ Default Content (if template is unavailable):
 
 Whether to send a notification email when a user's phone number is changed. Defaults to `false`.
 
+`GOTRUE_MAILER_TEMPLATES_IDENTITY_LINKED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that a new identity has been linked to their account. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` and `IdentityProvider` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>A new identity has been linked</h2>
+
+<p>
+  A new identity ({{ .IdentityProvider }}) has been linked to your account {{
+  .Email }}.
+</p>
+<p>If you did not make this change, please contact support immediately.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_IDENTITY_LINKED_ENABLED` - `bool`
+
+Whether to send a notification email when a new identity is linked to a user's account. Defaults to `false`.
+
+`GOTRUE_MAILER_TEMPLATES_IDENTITY_UNLINKED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that an identity has been unlinked from their account. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` and `IdentityProvider` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>An identity has been unlinked</h2>
+
+<p>
+  An identity ({{ .IdentityProvider }}) has been unlinked from your account {{
+  .Email }}.
+</p>
+<p>If you did not make this change, please contact support immediately.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_IDENTITY_UNLINKED_ENABLED` - `bool`
+
+Whether to send a notification email when an identity is unlinked from a user's account. Defaults to `false`.
+
 `GOTRUE_MAILER_TEMPLATES_MFA_FACTOR_ENROLLED_NOTIFICATION` - `string`
 
 URL path to an email template to use when notifying a user that they have enrolled in a new MFA factor. (e.g. `https://www.example.com/path-to-email-template.html`)

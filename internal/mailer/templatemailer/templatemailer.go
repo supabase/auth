@@ -20,11 +20,13 @@ const (
 	ReauthenticationTemplate = "reauthentication"
 
 	// Account Changes Notifications
-	PasswordChangedNotificationTemplate     = "password_changed_notification"
-	EmailChangedNotificationTemplate        = "email_changed_notification"
-	PhoneChangedNotificationTemplate        = "phone_changed_notification"
-	MFAFactorEnrolledNotificationTemplate   = "mfa_factor_enrolled_notification"
-	MFAFactorUnenrolledNotificationTemplate = "mfa_factor_unenrolled_notification"
+	PasswordChangedNotificationTemplate       = "password_changed_notification"
+	EmailChangedNotificationTemplate          = "email_changed_notification"
+	PhoneChangedNotificationTemplate          = "phone_changed_notification"
+	IdentityLinkedNotificationTemplate        = "identity_linked_notification"
+	IdentityUnlinkedNotificationTemplate      = "identity_unlinked_notification"
+	MFAFactorEnrolledNotificationTemplate     = "mfa_factor_enrolled_notification"
+	MFAFactorUnenrolledNotificationTemplate   = "mfa_factor_unenrolled_notification"
 )
 
 const defaultInviteMail = `<h2>You have been invited</h2>
@@ -82,6 +84,18 @@ const defaultPhoneChangedNotificationMail = `<h2>Your phone number has been chan
 <p>If you did not make this change, please contact support immediately.</p>
 `
 
+const defaultIdentityLinkedNotificationMail = `<h2>A new identity has been linked</h2>
+
+<p>A new identity ({{ .IdentityProvider }}) has been linked to your account {{ .Email }}.</p>
+<p>If you did not make this change, please contact support immediately.</p>
+`
+
+const defaultIdentityUnlinkedNotificationMail = `<h2>An identity has been unlinked</h2>
+
+<p>An identity ({{ .IdentityProvider }}) has been unlinked from your account {{ .Email }}.</p>
+<p>If you did not make this change, please contact support immediately.</p>
+`
+
 const defaultMFAFactorEnrolledNotificationMail = `<h2>MFA factor has been enrolled</h2>
 
 <p>A new factor ({{ .FactorType }}) has been enrolled for your account {{ .Email }}.</p>
@@ -107,6 +121,8 @@ var (
 		PasswordChangedNotificationTemplate,
 		EmailChangedNotificationTemplate,
 		PhoneChangedNotificationTemplate,
+		IdentityLinkedNotificationTemplate,
+		IdentityUnlinkedNotificationTemplate,
 		MFAFactorEnrolledNotificationTemplate,
 		MFAFactorUnenrolledNotificationTemplate,
 	}
@@ -122,6 +138,8 @@ var (
 		PasswordChangedNotification:     "Your password has been changed",
 		EmailChangedNotification:        "Your email address has been changed",
 		PhoneChangedNotification:        "Your phone number has been changed",
+		IdentityLinkedNotification:      "A new identity has been linked",
+		IdentityUnlinkedNotification:    "An identity has been unlinked",
 		MFAFactorEnrolledNotification:   "MFA factor enrolled",
 		MFAFactorUnenrolledNotification: "MFA factor unenrolled",
 	}
@@ -137,6 +155,8 @@ var (
 		PasswordChangedNotification:     defaultPasswordChangedNotificationMail,
 		EmailChangedNotification:        defaultEmailChangedNotificationMail,
 		PhoneChangedNotification:        defaultPhoneChangedNotificationMail,
+		IdentityLinkedNotification:      defaultIdentityLinkedNotificationMail,
+		IdentityUnlinkedNotification:    defaultIdentityUnlinkedNotificationMail,
 		MFAFactorEnrolledNotification:   defaultMFAFactorEnrolledNotificationMail,
 		MFAFactorUnenrolledNotification: defaultMFAFactorUnenrolledNotificationMail,
 	}
@@ -428,6 +448,24 @@ func (m *Mailer) PhoneChangedNotificationMail(r *http.Request, user *models.User
 		"Data":     user.UserMetaData,
 	}
 	return m.mail(r.Context(), m.cfg, PhoneChangedNotificationTemplate, user.GetEmail(), data)
+}
+
+func (m *Mailer) IdentityLinkedNotificationMail(r *http.Request, user *models.User, identityProvider string) error {
+	data := map[string]any{
+		"Email":            user.GetEmail(),
+		"IdentityProvider": identityProvider, // the provider of the newly linked identity
+		"Data":             user.UserMetaData,
+	}
+	return m.mail(r.Context(), m.cfg, IdentityLinkedNotificationTemplate, user.GetEmail(), data)
+}
+
+func (m *Mailer) IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, identityProvider string) error {
+	data := map[string]any{
+		"Email":            user.GetEmail(),
+		"IdentityProvider": identityProvider, // the provider of the unlinked identity
+		"Data":             user.UserMetaData,
+	}
+	return m.mail(r.Context(), m.cfg, IdentityUnlinkedNotificationTemplate, user.GetEmail(), data)
 }
 
 func (m *Mailer) MFAFactorEnrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
