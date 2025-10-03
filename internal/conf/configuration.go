@@ -391,13 +391,13 @@ type EmailContentConfiguration struct {
 	Reauthentication string `json:"reauthentication"`
 
 	// Account Changes Notifications
-	PasswordChangedNotification       string `json:"password_changed_notification" split_words:"true"`
-	EmailChangedNotification          string `json:"email_changed_notification" split_words:"true"`
-	PhoneChangedNotification          string `json:"phone_changed_notification" split_words:"true"`
-	IdentityLinkedNotification        string `json:"identity_linked_notification" split_words:"true"`
-	IdentityUnlinkedNotification      string `json:"identity_unlinked_notification" split_words:"true"`
-	MFAFactorEnrolledNotification     string `json:"mfa_factor_enrolled_notification" split_words:"true"`
-	MFAFactorUnenrolledNotification   string `json:"mfa_factor_unenrolled_notification" split_words:"true"`
+	PasswordChangedNotification     string `json:"password_changed_notification" split_words:"true"`
+	EmailChangedNotification        string `json:"email_changed_notification" split_words:"true"`
+	PhoneChangedNotification        string `json:"phone_changed_notification" split_words:"true"`
+	IdentityLinkedNotification      string `json:"identity_linked_notification" split_words:"true"`
+	IdentityUnlinkedNotification    string `json:"identity_unlinked_notification" split_words:"true"`
+	MFAFactorEnrolledNotification   string `json:"mfa_factor_enrolled_notification" split_words:"true"`
+	MFAFactorUnenrolledNotification string `json:"mfa_factor_unenrolled_notification" split_words:"true"`
 }
 
 // NotificationsConfiguration holds the configuration for notification email states to indicate whether they are enabled or disabled.
