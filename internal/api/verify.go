@@ -403,6 +403,7 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 	config := a.config
 
 	oldPhone := user.GetPhone()
+	phoneIdentityWasCreated := false
 	err := conn.Transaction(func(tx *storage.Connection) error {
 
 		if params.Type == smsVerification {
@@ -430,6 +431,7 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 				})); terr != nil {
 					return terr
 				}
+				phoneIdentityWasCreated = true
 			} else {
 				if terr := identity.UpdateIdentityData(tx, map[string]interface{}{
 					"phone":          params.Phone,
@@ -464,6 +466,14 @@ func (a *API) smsVerify(r *http.Request, conn *storage.Connection, user *models.
 		if err := a.sendPhoneChangedNotification(r, conn, user, oldPhone); err != nil {
 			// Log the error but don't fail the verification
 			logrus.WithError(err).Warn("Unable to send phone changed notification email")
+		}
+	}
+
+	// Send identity linked notification email if a new phone identity was created
+	if phoneIdentityWasCreated && config.Mailer.Notifications.IdentityLinkedEnabled && user.GetEmail() != "" {
+		if err := a.sendIdentityLinkedNotification(r, conn, user, "phone"); err != nil {
+			// Log the error but don't fail the verification
+			logrus.WithError(err).Warn("Unable to send identity linked notification email")
 		}
 	}
 

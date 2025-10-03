@@ -20,6 +20,8 @@ type MockMailer struct {
 	PasswordChangedMailCalls     []PasswordChangedMailCall
 	EmailChangedMailCalls        []EmailChangedMailCall
 	PhoneChangedMailCalls        []PhoneChangedMailCall
+	IdentityLinkedMailCalls      []IdentityLinkedMailCall
+	IdentityUnlinkedMailCalls    []IdentityUnlinkedMailCall
 	MFAFactorEnrolledMailCalls   []MFAFactorEnrolledMailCall
 	MFAFactorUnenrolledMailCalls []MFAFactorUnenrolledMailCall
 }
@@ -86,6 +88,16 @@ type EmailChangedMailCall struct {
 type PhoneChangedMailCall struct {
 	User     *models.User
 	OldPhone string
+}
+
+type IdentityLinkedMailCall struct {
+	User     *models.User
+	Provider string
+}
+
+type IdentityUnlinkedMailCall struct {
+	User     *models.User
+	Provider string
 }
 
 type MFAFactorEnrolledMailCall struct {
@@ -193,6 +205,22 @@ func (m *MockMailer) PhoneChangedNotificationMail(r *http.Request, user *models.
 	return nil
 }
 
+func (m *MockMailer) IdentityLinkedNotificationMail(r *http.Request, user *models.User, provider string) error {
+	m.IdentityLinkedMailCalls = append(m.IdentityLinkedMailCalls, IdentityLinkedMailCall{
+		User:     user,
+		Provider: provider,
+	})
+	return nil
+}
+
+func (m *MockMailer) IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, provider string) error {
+	m.IdentityUnlinkedMailCalls = append(m.IdentityUnlinkedMailCalls, IdentityUnlinkedMailCall{
+		User:     user,
+		Provider: provider,
+	})
+	return nil
+}
+
 func (m *MockMailer) MFAFactorEnrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
 	m.MFAFactorEnrolledMailCalls = append(m.MFAFactorEnrolledMailCalls, MFAFactorEnrolledMailCall{
 		User:       user,
@@ -221,6 +249,8 @@ func (m *MockMailer) Reset() {
 	m.PasswordChangedMailCalls = nil
 	m.EmailChangedMailCalls = nil
 	m.PhoneChangedMailCalls = nil
+	m.IdentityLinkedMailCalls = nil
+	m.IdentityUnlinkedMailCalls = nil
 	m.MFAFactorEnrolledMailCalls = nil
 	m.MFAFactorUnenrolledMailCalls = nil
 }
