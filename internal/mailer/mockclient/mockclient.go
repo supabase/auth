@@ -91,13 +91,13 @@ type PhoneChangedMailCall struct {
 }
 
 type IdentityLinkedMailCall struct {
-	User             *models.User
-	IdentityProvider string
+	User     *models.User
+	Provider string
 }
 
 type IdentityUnlinkedMailCall struct {
-	User             *models.User
-	IdentityProvider string
+	User     *models.User
+	Provider string
 }
 
 type MFAFactorEnrolledMailCall struct {
@@ -205,18 +205,18 @@ func (m *MockMailer) PhoneChangedNotificationMail(r *http.Request, user *models.
 	return nil
 }
 
-func (m *MockMailer) IdentityLinkedNotificationMail(r *http.Request, user *models.User, identityProvider string) error {
+func (m *MockMailer) IdentityLinkedNotificationMail(r *http.Request, user *models.User, provider string) error {
 	m.IdentityLinkedMailCalls = append(m.IdentityLinkedMailCalls, IdentityLinkedMailCall{
-		User:             user,
-		IdentityProvider: identityProvider,
+		User:     user,
+		Provider: provider,
 	})
 	return nil
 }
 
-func (m *MockMailer) IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, identityProvider string) error {
+func (m *MockMailer) IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, provider string) error {
 	m.IdentityUnlinkedMailCalls = append(m.IdentityUnlinkedMailCalls, IdentityUnlinkedMailCall{
-		User:             user,
-		IdentityProvider: identityProvider,
+		User:     user,
+		Provider: provider,
 	})
 	return nil
 }

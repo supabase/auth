@@ -743,7 +743,7 @@ Whether to send a notification email when a user's phone number is changed. Defa
 `GOTRUE_MAILER_TEMPLATES_IDENTITY_LINKED_NOTIFICATION` - `string`
 
 URL path to an email template to use when notifying a user that a new identity has been linked to their account. (e.g. `https://www.example.com/path-to-email-template.html`)
-`Email` and `IdentityProvider` variables are available.
+`Email` and `Provider` variables are available.
 
 Default Content (if template is unavailable):
 
@@ -751,8 +751,7 @@ Default Content (if template is unavailable):
 <h2>A new identity has been linked</h2>
 
 <p>
-  A new identity ({{ .IdentityProvider }}) has been linked to your account {{
-  .Email }}.
+  A new identity ({{ .Provider }}) has been linked to your account {{ .Email }}.
 </p>
 <p>If you did not make this change, please contact support immediately.</p>
 ```
@@ -764,7 +763,7 @@ Whether to send a notification email when a new identity is linked to a user's a
 `GOTRUE_MAILER_TEMPLATES_IDENTITY_UNLINKED_NOTIFICATION` - `string`
 
 URL path to an email template to use when notifying a user that an identity has been unlinked from their account. (e.g. `https://www.example.com/path-to-email-template.html`)
-`Email` and `IdentityProvider` variables are available.
+`Email` and `Provider` variables are available.
 
 Default Content (if template is unavailable):
 
@@ -772,8 +771,8 @@ Default Content (if template is unavailable):
 <h2>An identity has been unlinked</h2>
 
 <p>
-  An identity ({{ .IdentityProvider }}) has been unlinked from your account {{
-  .Email }}.
+  An identity ({{ .Provider }}) has been unlinked from your account {{ .Email
+  }}.
 </p>
 <p>If you did not make this change, please contact support immediately.</p>
 ```

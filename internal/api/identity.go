@@ -51,7 +51,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityNotFound, "Identity doesn't exist")
 	}
 
-	identityProvider := identityToBeDeleted.Provider
+	provider := identityToBeDeleted.Provider
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityUnlinkAction, "", map[string]interface{}{
 			"identity_id": identityToBeDeleted.ID,
@@ -92,7 +92,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 
 	// Send identity unlinked notification email if enabled and user has an email
 	if config.Mailer.Notifications.IdentityUnlinkedEnabled && user.GetEmail() != "" {
-		if err := a.sendIdentityUnlinkedNotification(r, db, user, identityProvider); err != nil {
+		if err := a.sendIdentityUnlinkedNotification(r, db, user, provider); err != nil {
 			// Log the error but don't fail the unlinking
 			logrus.WithError(err).Warn("Unable to send identity unlinked notification email")
 		}

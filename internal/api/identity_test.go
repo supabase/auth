@@ -257,7 +257,7 @@ func (ts *IdentityTestSuite) TestLinkIdentitySendsNotificationEmailEnabled() {
 	// Assert that identity linked notification email was sent
 	require.Len(ts.T(), mockMailer.IdentityLinkedMailCalls, 1, "Expected 1 identity linked notification email(s) to be sent")
 	require.Equal(ts.T(), u.ID, mockMailer.IdentityLinkedMailCalls[0].User.ID, "Email should be sent to the correct user")
-	require.Equal(ts.T(), "google", mockMailer.IdentityLinkedMailCalls[0].IdentityProvider, "Provider should match")
+	require.Equal(ts.T(), "google", mockMailer.IdentityLinkedMailCalls[0].Provider, "Provider should match")
 	require.Equal(ts.T(), "one@example.com", mockMailer.IdentityLinkedMailCalls[0].User.GetEmail(), "Email should be sent to the correct email address")
 }
 
@@ -313,7 +313,7 @@ func (ts *IdentityTestSuite) TestUnlinkIdentitySendsNotificationEmailEnabled() {
 	// Assert that identity unlinked notification email was sent
 	require.Len(ts.T(), mockMailer.IdentityUnlinkedMailCalls, 1, "Expected 1 identity unlinked notification email(s) to be sent")
 	require.Equal(ts.T(), u.ID, mockMailer.IdentityUnlinkedMailCalls[0].User.ID, "Email should be sent to the correct user")
-	require.Equal(ts.T(), "phone", mockMailer.IdentityUnlinkedMailCalls[0].IdentityProvider, "Provider should match")
+	require.Equal(ts.T(), "phone", mockMailer.IdentityUnlinkedMailCalls[0].Provider, "Provider should match")
 	require.Equal(ts.T(), "two@example.com", mockMailer.IdentityUnlinkedMailCalls[0].User.GetEmail(), "Email should be sent to the correct email address")
 }
 

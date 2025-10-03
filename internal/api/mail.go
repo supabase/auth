@@ -634,10 +634,10 @@ func (a *API) sendPhoneChangedNotification(r *http.Request, tx *storage.Connecti
 	return nil
 }
 
-func (a *API) sendIdentityLinkedNotification(r *http.Request, tx *storage.Connection, u *models.User, identityProvider string) error {
+func (a *API) sendIdentityLinkedNotification(r *http.Request, tx *storage.Connection, u *models.User, provider string) error {
 	err := a.sendEmail(r, tx, u, sendEmailParams{
-		emailActionType:  mail.IdentityLinkedNotification,
-		identityProvider: identityProvider,
+		emailActionType: mail.IdentityLinkedNotification,
+		provider:        provider,
 	})
 	if err != nil {
 		if errors.Is(err, EmailRateLimitExceeded) {
@@ -651,10 +651,10 @@ func (a *API) sendIdentityLinkedNotification(r *http.Request, tx *storage.Connec
 	return nil
 }
 
-func (a *API) sendIdentityUnlinkedNotification(r *http.Request, tx *storage.Connection, u *models.User, identityProvider string) error {
+func (a *API) sendIdentityUnlinkedNotification(r *http.Request, tx *storage.Connection, u *models.User, provider string) error {
 	err := a.sendEmail(r, tx, u, sendEmailParams{
-		emailActionType:  mail.IdentityUnlinkedNotification,
-		identityProvider: identityProvider,
+		emailActionType: mail.IdentityUnlinkedNotification,
+		provider:        provider,
 	})
 	if err != nil {
 		if errors.Is(err, EmailRateLimitExceeded) {
@@ -749,7 +749,7 @@ type sendEmailParams struct {
 	tokenHashWithPrefix string
 	oldEmail            string
 	oldPhone            string
-	identityProvider    string
+	provider            string
 	factorType          string
 }
 
@@ -874,9 +874,9 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 	case mail.PhoneChangedNotification:
 		err = mr.PhoneChangedNotificationMail(r, u, params.oldPhone)
 	case mail.IdentityLinkedNotification:
-		err = mr.IdentityLinkedNotificationMail(r, u, params.identityProvider)
+		err = mr.IdentityLinkedNotificationMail(r, u, params.provider)
 	case mail.IdentityUnlinkedNotification:
-		err = mr.IdentityUnlinkedNotificationMail(r, u, params.identityProvider)
+		err = mr.IdentityUnlinkedNotificationMail(r, u, params.provider)
 	case mail.MFAFactorEnrolledNotification:
 		err = mr.MFAFactorEnrolledNotificationMail(r, u, params.factorType)
 	case mail.MFAFactorUnenrolledNotification:

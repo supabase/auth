@@ -43,8 +43,8 @@ type Mailer interface {
 	PasswordChangedNotificationMail(r *http.Request, user *models.User) error
 	EmailChangedNotificationMail(r *http.Request, user *models.User, oldEmail string) error
 	PhoneChangedNotificationMail(r *http.Request, user *models.User, oldPhone string) error
-	IdentityLinkedNotificationMail(r *http.Request, user *models.User, identityProvider string) error
-	IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, identityProvider string) error
+	IdentityLinkedNotificationMail(r *http.Request, user *models.User, provider string) error
+	IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, provider string) error
 	MFAFactorEnrolledNotificationMail(r *http.Request, user *models.User, factorType string) error
 	MFAFactorUnenrolledNotificationMail(r *http.Request, user *models.User, factorType string) error
 }

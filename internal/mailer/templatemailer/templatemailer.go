@@ -20,13 +20,13 @@ const (
 	ReauthenticationTemplate = "reauthentication"
 
 	// Account Changes Notifications
-	PasswordChangedNotificationTemplate       = "password_changed_notification"
-	EmailChangedNotificationTemplate          = "email_changed_notification"
-	PhoneChangedNotificationTemplate          = "phone_changed_notification"
-	IdentityLinkedNotificationTemplate        = "identity_linked_notification"
-	IdentityUnlinkedNotificationTemplate      = "identity_unlinked_notification"
-	MFAFactorEnrolledNotificationTemplate     = "mfa_factor_enrolled_notification"
-	MFAFactorUnenrolledNotificationTemplate   = "mfa_factor_unenrolled_notification"
+	PasswordChangedNotificationTemplate     = "password_changed_notification"
+	EmailChangedNotificationTemplate        = "email_changed_notification"
+	PhoneChangedNotificationTemplate        = "phone_changed_notification"
+	IdentityLinkedNotificationTemplate      = "identity_linked_notification"
+	IdentityUnlinkedNotificationTemplate    = "identity_unlinked_notification"
+	MFAFactorEnrolledNotificationTemplate   = "mfa_factor_enrolled_notification"
+	MFAFactorUnenrolledNotificationTemplate = "mfa_factor_unenrolled_notification"
 )
 
 const defaultInviteMail = `<h2>You have been invited</h2>
@@ -86,13 +86,13 @@ const defaultPhoneChangedNotificationMail = `<h2>Your phone number has been chan
 
 const defaultIdentityLinkedNotificationMail = `<h2>A new identity has been linked</h2>
 
-<p>A new identity ({{ .IdentityProvider }}) has been linked to your account {{ .Email }}.</p>
+<p>A new identity ({{ .Provider }}) has been linked to your account {{ .Email }}.</p>
 <p>If you did not make this change, please contact support immediately.</p>
 `
 
 const defaultIdentityUnlinkedNotificationMail = `<h2>An identity has been unlinked</h2>
 
-<p>An identity ({{ .IdentityProvider }}) has been unlinked from your account {{ .Email }}.</p>
+<p>An identity ({{ .Provider }}) has been unlinked from your account {{ .Email }}.</p>
 <p>If you did not make this change, please contact support immediately.</p>
 `
 
@@ -450,20 +450,20 @@ func (m *Mailer) PhoneChangedNotificationMail(r *http.Request, user *models.User
 	return m.mail(r.Context(), m.cfg, PhoneChangedNotificationTemplate, user.GetEmail(), data)
 }
 
-func (m *Mailer) IdentityLinkedNotificationMail(r *http.Request, user *models.User, identityProvider string) error {
+func (m *Mailer) IdentityLinkedNotificationMail(r *http.Request, user *models.User, provider string) error {
 	data := map[string]any{
-		"Email":            user.GetEmail(),
-		"IdentityProvider": identityProvider, // the provider of the newly linked identity
-		"Data":             user.UserMetaData,
+		"Email":    user.GetEmail(),
+		"Provider": provider, // the provider of the newly linked identity
+		"Data":     user.UserMetaData,
 	}
 	return m.mail(r.Context(), m.cfg, IdentityLinkedNotificationTemplate, user.GetEmail(), data)
 }
 
-func (m *Mailer) IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, identityProvider string) error {
+func (m *Mailer) IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, provider string) error {
 	data := map[string]any{
-		"Email":            user.GetEmail(),
-		"IdentityProvider": identityProvider, // the provider of the unlinked identity
-		"Data":             user.UserMetaData,
+		"Email":    user.GetEmail(),
+		"Provider": provider, // the provider of the unlinked identity
+		"Data":     user.UserMetaData,
 	}
 	return m.mail(r.Context(), m.cfg, IdentityUnlinkedNotificationTemplate, user.GetEmail(), data)
 }
