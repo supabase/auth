@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -318,35 +317,24 @@ func getSCIMProvider(ctx context.Context) string {
 			return providerID
 		}
 	}
-	return "default"
+	return ""
 }
 
-// requireSCIMAuth authenticates SCIM requests via Bearer token or Basic auth
+// requireSCIMAuth authenticates SCIM requests via Bearer token from scim_providers table
 func (a *API) requireSCIMAuth(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
-	cfg := a.config.SCIM
+	db := a.db.WithContext(ctx)
 
-	// Bearer token
+	// Extract Bearer token
 	authz := req.Header.Get("Authorization")
 	if m := bearerRegexp.FindStringSubmatch(authz); len(m) == 2 {
 		token := m[1]
-		for i, t := range cfg.Tokens {
-			if t != "" && t == token {
-				// Use token index as provider ID for isolation
-				providerID := fmt.Sprintf("token_%d", i)
-				return withSCIMProvider(ctx, providerID), nil
-			}
-		}
-	}
 
-	// Basic auth
-	user, pass, ok := req.BasicAuth()
-	if ok && cfg.BasicUser != "" && cfg.BasicPassword != "" {
-		if subtle.ConstantTimeCompare([]byte(user), []byte(cfg.BasicUser)) == 1 &&
-			subtle.ConstantTimeCompare([]byte(pass), []byte(cfg.BasicPassword)) == 1 {
-			// Use basic auth username as provider ID
-			providerID := fmt.Sprintf("basic_%s", user)
-			return withSCIMProvider(ctx, providerID), nil
+		// Look up provider by token in database
+		provider, err := models.FindSCIMProviderByToken(db, token)
+		if err == nil && provider != nil {
+			// Use provider UUID as the stable provider ID
+			return withSCIMProvider(ctx, provider.ID.String()), nil
 		}
 	}
 

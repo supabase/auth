@@ -259,20 +259,20 @@ func (a *API) SCIMUsersGet(w http.ResponseWriter, r *http.Request) error {
 	idStr := chi.URLParam(r, "scim_user_id")
 	userID, err := uuid.FromString(idStr)
 	if err != nil {
-		return a.scimNotFound()
+		return SCIMNotFound("User not found")
 	}
 	u, err := models.FindUserByID(db, userID)
 	if err != nil {
-		return a.scimNotFound()
+		return SCIMNotFound("User not found")
 	}
 	if u.Aud != a.scimAudience() {
-		return a.scimNotFound()
+		return SCIMNotFound("User not found")
 	}
 
 	// Check provider isolation
 	providerID := getSCIMProvider(ctx)
 	if len(u.SCIMProviderID) > 0 && u.SCIMProviderID.String() != providerID {
-		return a.scimNotFound()
+		return SCIMNotFound("User not found")
 	}
 	return scimSendJSON(w, http.StatusOK, a.toSCIMUser(u))
 }
@@ -361,20 +361,20 @@ func (a *API) SCIMUsersPatch(w http.ResponseWriter, r *http.Request) error {
 	idStr := chi.URLParam(r, "scim_user_id")
 	userID, err := uuid.FromString(idStr)
 	if err != nil {
-		return a.scimNotFound()
+		return SCIMNotFound("User not found")
 	}
 	user, err := models.FindUserByID(db, userID)
 	if err != nil {
-		return a.scimNotFound()
+		return SCIMNotFound("User not found")
 	}
 	if user.Aud != a.scimAudience() {
-		return a.scimNotFound()
+		return SCIMNotFound("User not found")
 	}
 
 	// Check provider isolation
 	providerID := getSCIMProvider(ctx)
 	if len(user.SCIMProviderID) > 0 && user.SCIMProviderID.String() != providerID {
-		return a.scimNotFound()
+		return SCIMNotFound("User not found")
 	}
 
 	var body map[string]any
@@ -449,20 +449,20 @@ func (a *API) SCIMUsersDelete(w http.ResponseWriter, r *http.Request) error {
 	idStr := chi.URLParam(r, "scim_user_id")
 	userID, err := uuid.FromString(idStr)
 	if err != nil {
-		return a.scimNotFound()
+		return SCIMNotFound("User not found")
 	}
 	user, err := models.FindUserByID(db, userID)
 	if err != nil {
-		return a.scimNotFound()
+		return SCIMNotFound("User not found")
 	}
 	if user.Aud != a.scimAudience() {
-		return a.scimNotFound()
+		return SCIMNotFound("User not found")
 	}
 
 	// Check provider isolation
 	providerID := getSCIMProvider(ctx)
 	if len(user.SCIMProviderID) > 0 && user.SCIMProviderID.String() != providerID {
-		return a.scimNotFound()
+		return SCIMNotFound("User not found")
 	}
 
 	if a.config.SCIM.BanOnDeactivate {
@@ -530,12 +530,6 @@ func (a *API) toSCIMUser(u *models.User) map[string]any {
 		},
 	}
 }
-
-func (a *API) scimNotFound() error { return apiNoopError{} }
-
-type apiNoopError struct{}
-
-func (apiNoopError) Error() string { return "noop" }
 
 func scimSendJSON(w http.ResponseWriter, status int, obj any) error {
 	w.Header().Set("Content-Type", "application/scim+json")

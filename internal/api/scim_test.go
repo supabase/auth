@@ -17,12 +17,11 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
-func setupSCIMAPIForTest(t *testing.T) *API {
+func setupSCIMAPIForTest(t *testing.T) (*API, string) {
 	t.Helper()
 	api, cfg, err := setupAPIForTestWithCallback(func(c *conf.GlobalConfiguration, _ *storage.Connection) {
 		if c != nil {
 			c.SCIM.Enabled = true
-			c.SCIM.Tokens = []string{"testtoken"}
 			if c.API.ExternalURL == "" {
 				c.API.ExternalURL = "http://localhost"
 			}
@@ -35,14 +34,20 @@ func setupSCIMAPIForTest(t *testing.T) *API {
 	// Ensure DB clean
 	require.NoError(t, models.TruncateAll(api.db))
 	_ = cfg
-	return api
+
+	// Create a test SCIM provider
+	provider, err := models.NewSCIMProvider("test-provider", "testtoken", "authenticated")
+	require.NoError(t, err)
+	require.NoError(t, api.db.Create(provider))
+
+	return api, "testtoken"
 }
 
 func TestSCIM_ServiceProviderConfig(t *testing.T) {
-	api := setupSCIMAPIForTest(t)
+	api, token := setupSCIMAPIForTest(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/scim/v2/ServiceProviderConfig", nil)
-	req.Header.Set("Authorization", "Bearer testtoken")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)
 
@@ -54,7 +59,7 @@ func TestSCIM_ServiceProviderConfig(t *testing.T) {
 }
 
 func TestSCIM_UsersLifecycle(t *testing.T) {
-	api := setupSCIMAPIForTest(t)
+	api, token := setupSCIMAPIForTest(t)
 
 	// Create user
 	create := map[string]any{
@@ -69,7 +74,7 @@ func TestSCIM_UsersLifecycle(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, json.NewEncoder(&buf).Encode(create))
 	req := httptest.NewRequest(http.MethodPost, "/scim/v2/Users", &buf)
-	req.Header.Set("Authorization", "Bearer testtoken")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -81,7 +86,7 @@ func TestSCIM_UsersLifecycle(t *testing.T) {
 
 	// Get user and assert active=true
 	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/scim/v2/Users/%s", id), nil)
-	req.Header.Set("Authorization", "Bearer testtoken")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -102,7 +107,7 @@ func TestSCIM_UsersLifecycle(t *testing.T) {
 	buf.Reset()
 	require.NoError(t, json.NewEncoder(&buf).Encode(patch))
 	req = httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/scim/v2/Users/%s", id), &buf)
-	req.Header.Set("Authorization", "Bearer testtoken")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -112,7 +117,7 @@ func TestSCIM_UsersLifecycle(t *testing.T) {
 
 	// Delete (ban / soft deprovision)
 	req = httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/scim/v2/Users/%s", id), nil)
-	req.Header.Set("Authorization", "Bearer testtoken")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)
 	require.Equal(t, http.StatusNoContent, w.Code)
@@ -126,7 +131,7 @@ func TestSCIM_UsersLifecycle(t *testing.T) {
 
 	// GET should still return the user with active=false (soft state)
 	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/scim/v2/Users/%s", id), nil)
-	req.Header.Set("Authorization", "Bearer testtoken")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -144,25 +149,25 @@ func TestSCIM_AuthRequired(t *testing.T) {
 }
 
 func TestSCIM_SchemasAndResourceTypes(t *testing.T) {
-	api := setupSCIMAPIForTest(t)
+	api, token := setupSCIMAPIForTest(t)
 
 	// Schemas
 	req := httptest.NewRequest(http.MethodGet, "/scim/v2/Schemas", nil)
-	req.Header.Set("Authorization", "Bearer testtoken")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 
 	// ResourceTypes
 	req = httptest.NewRequest(http.MethodGet, "/scim/v2/ResourceTypes", nil)
-	req.Header.Set("Authorization", "Bearer testtoken")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 }
 
 func TestSCIM_UsersPagination(t *testing.T) {
-	api := setupSCIMAPIForTest(t)
+	api, token := setupSCIMAPIForTest(t)
 
 	createUser := func(email string) {
 		body := map[string]any{
@@ -171,7 +176,7 @@ func TestSCIM_UsersPagination(t *testing.T) {
 		var buf bytes.Buffer
 		_ = json.NewEncoder(&buf).Encode(body)
 		req := httptest.NewRequest(http.MethodPost, "/scim/v2/Users", &buf)
-		req.Header.Set("Authorization", "Bearer testtoken")
+		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 		api.handler.ServeHTTP(w, req)
 		require.Equal(t, http.StatusCreated, w.Code)
@@ -180,7 +185,7 @@ func TestSCIM_UsersPagination(t *testing.T) {
 	createUser("b@example.com")
 
 	req := httptest.NewRequest(http.MethodGet, "/scim/v2/Users?startIndex=1&count=1", nil)
-	req.Header.Set("Authorization", "Bearer testtoken")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -190,39 +195,12 @@ func TestSCIM_UsersPagination(t *testing.T) {
 	require.Equal(t, float64(1), list["itemsPerPage"]) // JSON numbers decode to float64
 }
 
-func TestSCIM_BasicAuth(t *testing.T) {
-	api, _, err := setupAPIForTestWithCallback(func(c *conf.GlobalConfiguration, _ *storage.Connection) {
-		if c != nil {
-			c.SCIM.Enabled = true
-			c.SCIM.Tokens = nil
-			c.SCIM.BasicUser = "u"
-			c.SCIM.BasicPassword = "p"
-			if c.API.ExternalURL == "" {
-				c.API.ExternalURL = "http://localhost"
-			}
-			c.DB.URL = "postgres://supabase_auth_admin:root@localhost:5432/postgres"
-		}
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = api.db.Close() })
-	require.NoError(t, models.TruncateAll(api.db))
-
-	var buf bytes.Buffer
-	_ = json.NewEncoder(&buf).Encode(map[string]any{"userName": "c@example.com"})
-	req := httptest.NewRequest(http.MethodPost, "/scim/v2/Users", &buf)
-	req.SetBasicAuth("u", "p")
-	w := httptest.NewRecorder()
-	api.handler.ServeHTTP(w, req)
-	require.Equal(t, http.StatusCreated, w.Code)
-}
-
 // Sets up API with SCIM enabled and a fixed DefaultAudience.
-func setupSCIMSecurityAPI(t *testing.T) *API {
+func setupSCIMSecurityAPI(t *testing.T) (*API, string) {
 	t.Helper()
 	api, _, err := setupAPIForTestWithCallback(func(c *conf.GlobalConfiguration, _ *storage.Connection) {
 		if c != nil {
 			c.SCIM.Enabled = true
-			c.SCIM.Tokens = []string{"secr"}
 			c.SCIM.DefaultAudience = "tenantA"
 			if c.API.ExternalURL == "" {
 				c.API.ExternalURL = "http://localhost"
@@ -233,18 +211,24 @@ func setupSCIMSecurityAPI(t *testing.T) *API {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = api.db.Close() })
 	require.NoError(t, models.TruncateAll(api.db))
-	return api
+
+	// Create a test SCIM provider
+	provider, err := models.NewSCIMProvider("test-provider-security", "secr", "tenantA")
+	require.NoError(t, err)
+	require.NoError(t, api.db.Create(provider))
+
+	return api, "secr"
 }
 
 // Ensure listing via SCIM does not return users belonging to another audience.
 func TestSCIM_ListDoesNotLeakOtherAudience(t *testing.T) {
-	api := setupSCIMSecurityAPI(t)
+	api, token := setupSCIMSecurityAPI(t)
 
 	// Create a user in tenantA via SCIM
 	var buf bytes.Buffer
 	_ = json.NewEncoder(&buf).Encode(map[string]any{"userName": "a@example.com"})
 	req := httptest.NewRequest(http.MethodPost, "/scim/v2/Users", &buf)
-	req.Header.Set("Authorization", "Bearer secr")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)
 	require.Equal(t, http.StatusCreated, w.Code)
@@ -256,7 +240,7 @@ func TestSCIM_ListDoesNotLeakOtherAudience(t *testing.T) {
 
 	// List via SCIM should only include tenantA user
 	req = httptest.NewRequest(http.MethodGet, "/scim/v2/Users?startIndex=1&count=50", nil)
-	req.Header.Set("Authorization", "Bearer secr")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -269,7 +253,7 @@ func TestSCIM_ListDoesNotLeakOtherAudience(t *testing.T) {
 
 // Ensure filters cannot fetch a user from another audience.
 func TestSCIM_FilterOtherAudienceNoResults(t *testing.T) {
-	api := setupSCIMSecurityAPI(t)
+	api, token := setupSCIMSecurityAPI(t)
 
 	// Create user in other audience directly
 	other, err := models.NewUser("", "cross@example.com", "", "tenantB", nil)
@@ -278,7 +262,7 @@ func TestSCIM_FilterOtherAudienceNoResults(t *testing.T) {
 
 	// Filter by userName eq other email should return 0 for tenantA-scoped SCIM
 	req := httptest.NewRequest(http.MethodGet, "/scim/v2/Users?filter="+url.QueryEscape("userName eq \"cross@example.com\""), nil)
-	req.Header.Set("Authorization", "Bearer secr")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -290,12 +274,12 @@ func TestSCIM_FilterOtherAudienceNoResults(t *testing.T) {
 
 // Ensure request headers cannot force audience switching during SCIM operations.
 func TestSCIM_HeaderAudIgnored(t *testing.T) {
-	api := setupSCIMSecurityAPI(t)
+	api, token := setupSCIMSecurityAPI(t)
 
 	var buf bytes.Buffer
 	_ = json.NewEncoder(&buf).Encode(map[string]any{"userName": "hdr@example.com"})
 	req := httptest.NewRequest(http.MethodPost, "/scim/v2/Users", &buf)
-	req.Header.Set("Authorization", "Bearer secr")
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set(audHeaderName, "tenantB")
 	w := httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)

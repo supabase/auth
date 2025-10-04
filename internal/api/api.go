@@ -336,6 +336,18 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				})
 			})
 
+			// SCIM provider management endpoints
+			r.Route("/scim-providers", func(r *router) {
+				r.Get("/", api.AdminSCIMProviderList)
+				r.Post("/", api.AdminSCIMProviderCreate)
+
+				r.Route("/{provider_id}", func(r *router) {
+					r.Get("/", api.AdminSCIMProviderGet)
+					r.Post("/rotate-token", api.AdminSCIMProviderRotateToken)
+					r.Delete("/", api.AdminSCIMProviderDelete)
+				})
+			})
+
 			// Admin only oauth client management endpoints
 			if globalConfig.OAuthServer.Enabled {
 				r.Route("/oauth", func(r *router) {
