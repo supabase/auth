@@ -56,6 +56,7 @@ const (
 	Anonymous
 	Web3
 	OAuthProviderAuthorizationCode
+	Passkey
 )
 
 func (authMethod AuthenticationMethod) String() string {
@@ -92,6 +93,8 @@ func (authMethod AuthenticationMethod) String() string {
 		return "web3"
 	case OAuthProviderAuthorizationCode:
 		return "oauth_provider/authorization_code"
+	case Passkey:
+		return "passkey"
 	}
 	return ""
 }
@@ -131,6 +134,8 @@ func ParseAuthenticationMethod(authMethod string) (AuthenticationMethod, error) 
 		return Web3, nil
 	case "oauth_provider/authorization_code":
 		return OAuthProviderAuthorizationCode, nil
+	case "passkey":
+		return Passkey, nil
 
 	}
 	return 0, fmt.Errorf("unsupported authentication method %q", authMethod)
@@ -152,7 +157,9 @@ type Factor struct {
 	LastChallengedAt          *time.Time                 `json:"last_challenged_at" db:"last_challenged_at"`
 	WebAuthnCredential        *WebAuthnCredential        `json:"-" db:"web_authn_credential"`
 	WebAuthnAAGUID            *uuid.UUID                 `json:"web_authn_aaguid,omitempty" db:"web_authn_aaguid"`
+	WebAuthnCredentialID      []byte                     `json:"-" db:"web_authn_credential_id"`
 	LastWebAuthnChallengeData *LastWebAuthnChallengeData `json:"last_webauthn_challenge_data,omitempty" db:"last_webauthn_challenge_data"`
+	IsPasskey                 bool                       `json:"is_passkey" db:"is_passkey"`
 }
 
 type WebAuthnCredential struct {
@@ -255,6 +262,12 @@ func NewWebAuthnFactor(user *User, friendlyName string) *Factor {
 	return factor
 }
 
+func NewPasskeyFactor(user *User, friendlyName string) *Factor {
+	factor := NewWebAuthnFactor(user, friendlyName)
+	factor.IsPasskey = true
+	return factor
+}
+
 func (f *Factor) SetSecret(secret string, encrypt bool, encryptionKeyID, encryptionKey string) error {
 	f.Secret = secret
 	if encrypt {
@@ -297,7 +310,9 @@ func (f *Factor) SaveWebAuthnCredential(tx *storage.Connection, credential *weba
 		f.WebAuthnAAGUID = nil
 	}
 
-	return tx.UpdateOnly(f, "web_authn_credential", "web_authn_aaguid", "updated_at")
+	f.WebAuthnCredentialID = credential.ID
+
+	return tx.UpdateOnly(f, "web_authn_credential", "web_authn_aaguid", "web_authn_credential_id", "updated_at")
 }
 
 func (f *Factor) UpdateLastWebAuthnChallenge(tx *storage.Connection, challenge *Challenge, challengeType string, credentialResponse interface{}) error {
@@ -324,6 +339,31 @@ func FindFactorByFactorID(conn *storage.Connection, factorID uuid.UUID) (*Factor
 		return nil, err
 	}
 	return &factor, nil
+}
+
+func FindPasskeyFactorByCredentialID(conn *storage.Connection, userID uuid.UUID, credentialID []byte) (*Factor, error) {
+	var factor Factor
+	err := conn.Q().Where("user_id = ? AND factor_type = ? AND is_passkey IS TRUE AND status = ?", userID, WebAuthn, FactorStateVerified.String()).
+		Where("web_authn_credential_id = ?", credentialID).
+		First(&factor)
+	if err != nil {
+		if errors.Cause(err) == sql.ErrNoRows {
+			return nil, &FactorNotFoundError{}
+		}
+		return nil, err
+	}
+	return &factor, nil
+}
+
+func DeleteUnverifiedPasskeyFactors(tx *storage.Connection, user *User) error {
+	if err := tx.RawQuery("DELETE FROM "+(&pop.Model{Value: Factor{}}).TableName()+" WHERE user_id = ? and status = ? and factor_type = ? and is_passkey is true", user.ID, FactorStateUnverified.String(), WebAuthn).Exec(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (f *Factor) IsPasskeyFactor() bool {
+	return f.IsPasskey
 }
 
 func DeleteUnverifiedFactors(tx *storage.Connection, user *User, factorType string) error {

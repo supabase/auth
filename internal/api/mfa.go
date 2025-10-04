@@ -133,10 +133,14 @@ func validateFactors(db *storage.Connection, user *models.User, newFactorName st
 	if err := db.Load(user, "Factors"); err != nil {
 		return err
 	}
-	factorCount := len(user.Factors)
+	factorCount := 0
 	numVerifiedFactors := 0
 
 	for _, factor := range user.Factors {
+		if factor.IsPasskeyFactor() {
+			continue
+		}
+		factorCount++
 		if factor.FriendlyName == newFactorName {
 			return apierrors.NewUnprocessableEntityError(
 				apierrors.ErrorCodeMFAFactorNameConflict,

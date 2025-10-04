@@ -70,6 +70,10 @@ type RequestParams interface {
 		adminUserDeleteParams |
 		security.GotrueRequest |
 		ChallengeFactorParams |
+		PasskeyRegistrationRequest |
+		PasskeyVerifyRequest |
+		PasskeySignInRequest |
+		PasskeySignInVerifyRequest |
 
 		struct {
 			Email string `json:"email"`

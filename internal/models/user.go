@@ -954,6 +954,17 @@ func (u *User) FindOwnedFactorByID(tx *storage.Connection, factorID uuid.UUID) (
 	return &factor, nil
 }
 
+func (u *User) FindOwnedPasskeyByID(tx *storage.Connection, passkeyID uuid.UUID) (*Factor, error) {
+	factor, err := u.FindOwnedFactorByID(tx, passkeyID)
+	if err != nil {
+		return nil, err
+	}
+	if !factor.IsPasskeyFactor() {
+		return nil, &FactorNotFoundError{}
+	}
+	return factor, nil
+}
+
 func (user *User) WebAuthnID() []byte {
 	return []byte(user.ID.String())
 }
@@ -970,13 +981,40 @@ func (user *User) WebAuthnCredentials() []webauthn.Credential {
 	var credentials []webauthn.Credential
 
 	for _, factor := range user.Factors {
-		if factor.IsVerified() && factor.FactorType == WebAuthn {
+		if factor.IsVerified() && factor.FactorType == WebAuthn && factor.WebAuthnCredential != nil {
 			credential := factor.WebAuthnCredential.Credential
 			credentials = append(credentials, credential)
 		}
 	}
 
 	return credentials
+}
+
+func (user *User) PasskeyCredentials() []webauthn.Credential {
+	var credentials []webauthn.Credential
+
+	for _, factor := range user.Factors {
+		if !factor.IsPasskeyFactor() {
+			continue
+		}
+		if factor.IsVerified() && factor.FactorType == WebAuthn && factor.WebAuthnCredential != nil {
+			credentials = append(credentials, factor.WebAuthnCredential.Credential)
+		}
+	}
+
+	return credentials
+}
+
+func (user *User) PasskeyFactors() []Factor {
+	var factors []Factor
+
+	for _, factor := range user.Factors {
+		if factor.IsPasskeyFactor() {
+			factors = append(factors, factor)
+		}
+	}
+
+	return factors
 }
 
 func obfuscateValue(id uuid.UUID, value string) string {
