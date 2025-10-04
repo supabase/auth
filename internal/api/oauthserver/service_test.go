@@ -8,9 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/hooks/v0hooks"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/storage/test"
+	"github.com/supabase/auth/internal/tokens"
 )
 
 const serviceTestConfig = "../../../hack/test.env"
@@ -30,10 +32,15 @@ func TestOAuthService(t *testing.T) {
 	conn, err := test.SetupDBConnection(globalConfig)
 	require.NoError(t, err)
 
-	// Enable OAuth dynamic client registration for tests
+	// Enable OAuth server and dynamic client registration for tests
+	globalConfig.OAuthServer.Enabled = true
 	globalConfig.OAuthServer.AllowDynamicRegistration = true
 
-	server := NewServer(globalConfig, conn)
+	// Create a mock hooks manager for token service
+	hooksMgr := &v0hooks.Manager{} // minimal mock for testing
+	tokenService := tokens.NewService(globalConfig, hooksMgr)
+
+	server := NewServer(globalConfig, conn, tokenService)
 
 	ts := &OAuthServiceTestSuite{
 		Server: server,
@@ -49,7 +56,8 @@ func (ts *OAuthServiceTestSuite) SetupTest() {
 	if ts.DB != nil {
 		models.TruncateAll(ts.DB)
 	}
-	// Enable OAuth dynamic client registration for tests
+	// Enable OAuth server and dynamic client registration for tests
+	ts.Config.OAuthServer.Enabled = true
 	ts.Config.OAuthServer.AllowDynamicRegistration = true
 }
 
@@ -86,13 +94,13 @@ func (ts *OAuthServiceTestSuite) TestOAuthServerClientServiceMethods() {
 	require.NoError(ts.T(), err)
 	require.NotNil(ts.T(), client)
 	require.NotEmpty(ts.T(), secret)
-	assert.Equal(ts.T(), "Test Client", client.ClientName.String())
+	assert.Equal(ts.T(), "Test Client", *client.ClientName)
 	assert.Equal(ts.T(), "dynamic", client.RegistrationType)
 
 	// Test getOAuthServerClient
-	retrievedClient, err := ts.Server.getOAuthServerClient(ctx, client.ClientID)
+	retrievedClient, err := ts.Server.getOAuthServerClient(ctx, client.ID)
 	require.NoError(ts.T(), err)
-	assert.Equal(ts.T(), client.ClientID, retrievedClient.ClientID)
+	assert.Equal(ts.T(), client.ID, retrievedClient.ID)
 
 }
 
@@ -131,11 +139,11 @@ func (ts *OAuthServiceTestSuite) TestDeleteOAuthServerClient() {
 
 	// Delete the client
 	ctx := context.Background()
-	err := ts.Server.deleteOAuthServerClient(ctx, client.ClientID)
+	err := ts.Server.deleteOAuthServerClient(ctx, client.ID)
 	require.NoError(ts.T(), err)
 
 	// Verify client was soft-deleted
-	deletedClient, err := ts.Server.getOAuthServerClient(ctx, client.ClientID)
+	deletedClient, err := ts.Server.getOAuthServerClient(ctx, client.ID)
 	assert.Error(ts.T(), err) // it was soft-deleted
 	assert.Nil(ts.T(), deletedClient)
 }

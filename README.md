@@ -43,7 +43,7 @@ Create a `.env.docker` file to store your own custom env vars. See [`example.doc
 
 1. `make build`
 2. `make dev`
-3. `docker ps` should show 2 docker containers (`auth_postgresql` and `gotrue_gotrue`)
+3. `docker ps` should show 2 docker containers (`auth-auth-1` and `auth-postgres-1`)
 4. That's it! Visit the [health checkendpoint](http://localhost:9999/health) to confirm that auth is running.
 
 ## Running in production
@@ -584,6 +584,22 @@ Email subject to use for magic link email. Defaults to `Your Magic Link`.
 
 Email subject to use for email change confirmation. Defaults to `Confirm Email Change`.
 
+`MAILER_SUBJECTS_PASSWORD_CHANGED_NOTIFICATION` - `string`
+
+Email subject to use for password changed notification. Defaults to `Your password has been changed`.
+
+`MAILER_SUBJECTS_EMAIL_CHANGED_NOTIFICATION` - `string`
+
+Email subject to use for email changed notification. Defaults to `Your email address has been changed`.
+
+`GOTRUE_MAILER_SUBJECTS_MFA_FACTOR_ENROLLED_NOTIFICATION` - `string`
+
+Email subject to use for MFA factor enrolled notification. Defaults to `MFA factor enrolled`.
+
+`GOTRUE_MAILER_SUBJECTS_MFA_FACTOR_UNENROLLED_NOTIFICATION` - `string`
+
+Email subject to use for MFA factor unenrolled notification. Defaults to `MFA factor unenrolled`.
+
 `MAILER_TEMPLATES_INVITE` - `string`
 
 URL path to an email template to use when inviting a user. (e.g. `https://www.example.com/path-to-email-template.html`)
@@ -659,6 +675,112 @@ Default Content (if template is unavailable):
 </p>
 <p><a href="{{ .ConfirmationURL }}">Change Email</a></p>
 ```
+
+`MAILER_TEMPLATES_PASSWORD_CHANGED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that their password has been changed. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>Your password has been changed</h2>
+
+<p>
+  This is a confirmation that the password for your account {{ .Email }} has
+  just been changed. If you did not make this change, please contact support
+  immediately.
+</p>
+<p>If you did not make this change, please contact support.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_PASSWORD_CHANGED_ENABLED` - `bool`
+
+Whether to send a notification email when a user's password is changed. Defaults to `false`.
+
+`MAILER_TEMPLATES_EMAIL_CHANGED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that their email has been changed. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` and `OldEmail` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>Your email address has been changed</h2>
+
+<p>
+  The email address for your account has been changed from {{ .OldEmail }} to {{
+  .Email }}.
+</p>
+<p>If you did not make this change, please contact support.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_EMAIL_CHANGED_ENABLED` - `bool`
+
+Whether to send a notification email when a user's email is changed. Defaults to `false`.
+
+`GOTRUE_MAILER_TEMPLATES_PHONE_CHANGED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that their phone number has been changed. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email`, `Phone`, and `OldPhone` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>Your phone number has been changed</h2>
+
+<p>
+  The phone number for your account {{ .Email }} has been changed from {{
+  .OldPhone }} to {{ .Phone }}.
+</p>
+<p>If you did not make this change, please contact support immediately.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_PHONE_CHANGED_ENABLED` - `bool`
+
+Whether to send a notification email when a user's phone number is changed. Defaults to `false`.
+
+`GOTRUE_MAILER_TEMPLATES_MFA_FACTOR_ENROLLED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that they have enrolled in a new MFA factor. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` and `FactorType` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>MFA factor has been enrolled</h2>
+
+<p>
+  A new factor ({{ .FactorType }}) has been enrolled for your account {{ .Email
+  }}.
+</p>
+<p>If you did not make this change, please contact support immediately.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_MFA_FACTOR_ENROLLED_ENABLED` - `bool`
+
+Whether to send a notification email when a user enrolls in a new MFA factor. Defaults to `false`.
+
+`GOTRUE_MAILER_TEMPLATES_MFA_FACTOR_UNENROLLED_NOTIFICATION` - `string`
+
+URL path to an email template to use when notifying a user that they have unenrolled from an MFA factor. (e.g. `https://www.example.com/path-to-email-template.html`)
+`Email` and `FactorType` variables are available.
+
+Default Content (if template is unavailable):
+
+```html
+<h2>MFA factor has been unenrolled</h2>
+
+<p>
+  A factor ({{ .FactorType }}) has been unenrolled for your account {{ .Email
+  }}.
+</p>
+<p>If you did not make this change, please contact support immediately.</p>
+```
+
+`GOTRUE_MAILER_NOTIFICATIONS_MFA_FACTOR_UNENROLLED_ENABLED` - `bool`
+
+Whether to send a notification email when a user unenrolls from an MFA factor. Defaults to `false`.
 
 ### Phone Auth
 
@@ -746,7 +868,7 @@ Returns the publicly available settings for this auth instance.
     "linkedin": true,
     "notion": true,
     "slack": true,
-    "snapchat":  true,
+    "snapchat": true,
     "spotify": true,
     "twitch": true,
     "twitter": true,
@@ -869,8 +991,8 @@ if AUTOCONFIRM is enabled and the sign up is a duplicate, then the endpoint will
 
 ```json
 {
-  "code":400,
-  "msg":"User already registered"
+  "code": 400,
+  "msg": "User already registered"
 }
 ```
 

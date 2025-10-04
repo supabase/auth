@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid"
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/sms_provider"
 	"github.com/supabase/auth/internal/mailer"
@@ -115,6 +116,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	// TODO: Check if a user is SSO via rows in identities table, not via this flag.
 	if user.IsSSOUser {
 		updatingForbiddenFields := false
 
@@ -129,7 +131,7 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Email != "" && user.GetEmail() != params.Email {
-		if duplicateUser, err := models.IsDuplicatedEmail(db, params.Email, aud, user); err != nil {
+		if duplicateUser, err := models.IsDuplicatedEmail(db, params.Email, aud, user, config.Experimental.ProvidersWithOwnLinkingDomain); err != nil {
 			return apierrors.NewInternalServerError("Database error checking email").WithInternalError(err)
 		} else if duplicateUser != nil {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeEmailExists, DuplicateEmailMsg)
@@ -195,6 +197,14 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 
 			if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.UserUpdatePasswordAction, "", nil); terr != nil {
 				return terr
+			}
+
+			// send a Password Changed email notification to the user to inform them that their password has been changed
+			if config.Mailer.Notifications.PasswordChangedEnabled && user.GetEmail() != "" {
+				if err := a.sendPasswordChangedNotification(r, tx, user); err != nil {
+					// we don't want to fail the whole request if the email can't be sent
+					logrus.WithError(err).Warn("Unable to send password changed notification email")
+				}
 			}
 		}
 

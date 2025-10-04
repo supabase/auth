@@ -87,6 +87,43 @@ func runVerifyBeforeUserCreatedHook(
 	return latest
 }
 
+func runVerifyAfterUserCreatedHook(
+	t *testing.T,
+	inst *e2ehooks.Instance,
+	expUser *models.User,
+) *models.User {
+	var latest *models.User
+	t.Run("VerifyAfterUserCreatedHook", func(t *testing.T) {
+		defer inst.HookRecorder.AfterUserCreated.ClearCalls()
+
+		calls := inst.HookRecorder.AfterUserCreated.GetCalls()
+		require.Equal(t, 1, len(calls))
+		call := calls[0]
+
+		hookReq := &v0hooks.AfterUserCreatedInput{}
+		err := call.Unmarshal(hookReq)
+		require.NoError(t, err)
+		require.Equal(t, v0hooks.AfterUserCreated, hookReq.Metadata.Name)
+
+		u := hookReq.User
+		require.Equal(t, expUser.ID, u.ID)
+		require.Equal(t, expUser.Aud, u.Aud)
+		require.Equal(t, expUser.Email, u.Email)
+		require.Equal(t, expUser.AppMetaData, u.AppMetaData)
+
+		require.False(t, u.CreatedAt.IsZero())
+		require.False(t, u.UpdatedAt.IsZero())
+
+		err = expUser.Confirm(inst.Conn)
+		require.NoError(t, err)
+
+		latest, err = models.FindUserByID(inst.Conn, expUser.ID)
+		require.NoError(t, err)
+		require.NotNil(t, latest)
+	})
+	return latest
+}
+
 func getAccessToken(
 	ctx context.Context,
 	t *testing.T,
@@ -208,6 +245,7 @@ func TestE2EHooks(t *testing.T) {
 			require.Equal(t, email, res.Email.String())
 
 			runVerifyBeforeUserCreatedHook(t, inst, res)
+			runVerifyAfterUserCreatedHook(t, inst, res)
 		})
 
 		t.Run("SignupPhone", func(t *testing.T) {
@@ -224,6 +262,8 @@ func TestE2EHooks(t *testing.T) {
 			require.Equal(t, phone, res.Phone.String())
 
 			runVerifyBeforeUserCreatedHook(t, inst, res)
+			runVerifyAfterUserCreatedHook(t, inst, res)
+
 		})
 
 		t.Run("SignupAnonymously", func(t *testing.T) {
@@ -235,6 +275,8 @@ func TestE2EHooks(t *testing.T) {
 			require.NoError(t, err)
 
 			runVerifyBeforeUserCreatedHook(t, inst, res.User)
+			runVerifyAfterUserCreatedHook(t, inst, res.User)
+
 		})
 
 		t.Run("ExternalCallback", func(t *testing.T) {
@@ -246,6 +288,8 @@ func TestE2EHooks(t *testing.T) {
 			require.NoError(t, err)
 
 			runVerifyBeforeUserCreatedHook(t, inst, res.User)
+			runVerifyAfterUserCreatedHook(t, inst, res.User)
+
 		})
 
 		t.Run("AdminEndpoints", func(t *testing.T) {
@@ -273,6 +317,8 @@ func TestE2EHooks(t *testing.T) {
 				require.NoError(t, err)
 
 				runVerifyBeforeUserCreatedHook(t, inst, res)
+				runVerifyAfterUserCreatedHook(t, inst, res)
+
 			})
 
 			t.Run("AdminGenerateLink", func(t *testing.T) {
@@ -304,6 +350,7 @@ func TestE2EHooks(t *testing.T) {
 					require.NoError(t, err)
 
 					runVerifyBeforeUserCreatedHook(t, inst, &res.User)
+					runVerifyAfterUserCreatedHook(t, inst, &res.User)
 				})
 
 				t.Run("InviteVerification", func(t *testing.T) {
@@ -332,6 +379,7 @@ func TestE2EHooks(t *testing.T) {
 					require.NoError(t, err)
 
 					runVerifyBeforeUserCreatedHook(t, inst, &res.User)
+					runVerifyAfterUserCreatedHook(t, inst, &res.User)
 				})
 			})
 		})
@@ -372,6 +420,7 @@ func TestE2EHooks(t *testing.T) {
 					require.Equal(t, email, mfaUser.Email.String())
 
 					mfaUser = runVerifyBeforeUserCreatedHook(t, inst, mfaUser)
+					runVerifyAfterUserCreatedHook(t, inst, mfaUser)
 					require.NotNil(t, mfaUser)
 					mfaUserAccessToken = getAccessToken(
 						ctx, t, inst, string(mfaUser.Email), defaultPassword)
@@ -562,6 +611,7 @@ func TestE2EHooks(t *testing.T) {
 			require.Equal(t, email, res.Email.String())
 
 			currentUser = runVerifyBeforeUserCreatedHook(t, inst, res)
+			runVerifyAfterUserCreatedHook(t, inst, res)
 			require.NotNil(t, currentUser)
 			inst.HookRecorder.CustomizeAccessToken.ClearCalls()
 		}
