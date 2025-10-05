@@ -35,8 +35,9 @@ func setupSCIMAPIForTest(t *testing.T) (*API, string) {
 	require.NoError(t, models.TruncateAll(api.db))
 	_ = cfg
 
-	// Create a test SCIM provider
-	provider, err := models.NewSCIMProvider("test-provider", "testtoken", "authenticated")
+	// Create a test SCIM provider with unique name per test
+	providerName := "test-provider-" + t.Name()
+	provider, err := models.NewSCIMProvider(providerName, "testtoken", "authenticated")
 	require.NoError(t, err)
 	require.NoError(t, api.db.Create(provider))
 
@@ -141,7 +142,7 @@ func TestSCIM_UsersLifecycle(t *testing.T) {
 }
 
 func TestSCIM_AuthRequired(t *testing.T) {
-	api := setupSCIMAPIForTest(t)
+	api, _ := setupSCIMAPIForTest(t)
 	req := httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
 	w := httptest.NewRecorder()
 	api.handler.ServeHTTP(w, req)
@@ -212,8 +213,9 @@ func setupSCIMSecurityAPI(t *testing.T) (*API, string) {
 	t.Cleanup(func() { _ = api.db.Close() })
 	require.NoError(t, models.TruncateAll(api.db))
 
-	// Create a test SCIM provider
-	provider, err := models.NewSCIMProvider("test-provider-security", "secr", "tenantA")
+	// Create a test SCIM provider with unique name per test
+	providerName := "test-provider-security-" + t.Name()
+	provider, err := models.NewSCIMProvider(providerName, "secr", "tenantA")
 	require.NoError(t, err)
 	require.NoError(t, api.db.Create(provider))
 
@@ -301,7 +303,6 @@ func TestSCIMSAML_UserSeparationAndDeprovision(t *testing.T) {
 	api, _, err := setupAPIForTestWithCallback(func(c *conf.GlobalConfiguration, _ *storage.Connection) {
 		if c != nil {
 			c.SCIM.Enabled = true
-			c.SCIM.Tokens = []string{"tok"}
 			if c.API.ExternalURL == "" {
 				c.API.ExternalURL = "http://localhost"
 			}
@@ -311,6 +312,12 @@ func TestSCIMSAML_UserSeparationAndDeprovision(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = api.db.Close() })
 	require.NoError(t, models.TruncateAll(api.db))
+
+	// Create a test SCIM provider with token "tok" and unique name
+	providerName := "test-provider-saml-" + t.Name()
+	scimProvider, err := models.NewSCIMProvider(providerName, "tok", "authenticated")
+	require.NoError(t, err)
+	require.NoError(t, api.db.Create(scimProvider))
 
 	// 1) Provision user via SCIM
 	email := "samlscim@example.com"

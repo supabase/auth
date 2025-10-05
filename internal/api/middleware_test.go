@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/storage"
 )
 
@@ -525,37 +526,28 @@ func TestRequireSCIMEnabled(t *testing.T) {
 }
 
 func TestRequireSCIMAuth_BearerAndBasic(t *testing.T) {
-	api := &API{config: &conf.GlobalConfiguration{}}
+	api, _, err := setupAPIForTest()
+	require.NoError(t, err)
+	defer api.db.Close()
+	require.NoError(t, models.TruncateAll(api.db))
+
 	api.config.SCIM.Enabled = true
 
+	// Create a test SCIM provider with token "tok"
+	provider, err := models.NewSCIMProvider("test-provider", "tok", "authenticated")
+	require.NoError(t, err)
+	require.NoError(t, api.db.Create(provider))
+
 	// Bearer token success
-	api.config.SCIM.Tokens = []string{"tok"}
 	req := httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
 	req.Header.Set("Authorization", "Bearer tok")
 	w := httptest.NewRecorder()
-	_, err := api.requireSCIMAuth(w, req)
+	_, err = api.requireSCIMAuth(w, req)
 	require.NoError(t, err)
 
 	// Bearer token failure
 	req = httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
 	req.Header.Set("Authorization", "Bearer wrong")
-	w = httptest.NewRecorder()
-	_, err = api.requireSCIMAuth(w, req)
-	require.Error(t, err)
-
-	// Basic success
-	api.config.SCIM.Tokens = nil
-	api.config.SCIM.BasicUser = "u"
-	api.config.SCIM.BasicPassword = "p"
-	req = httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
-	req.SetBasicAuth("u", "p")
-	w = httptest.NewRecorder()
-	_, err = api.requireSCIMAuth(w, req)
-	require.NoError(t, err)
-
-	// Basic failure
-	req = httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
-	req.SetBasicAuth("u", "wrong")
 	w = httptest.NewRecorder()
 	_, err = api.requireSCIMAuth(w, req)
 	require.Error(t, err)
