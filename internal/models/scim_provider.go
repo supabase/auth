@@ -146,6 +146,10 @@ func FindAllSCIMProviders(conn *storage.Connection, page, perPage uint64) ([]*SC
 	q := conn.Q().Where("deleted_at IS NULL").Order("created_at DESC")
 
 	if page > 0 && perPage > 0 {
+		// Validate bounds before converting to int to prevent overflow
+		if page > uint64(^uint(0)>>1) || perPage > uint64(^uint(0)>>1) {
+			return nil, errors.New("page or perPage value exceeds maximum int value")
+		}
 		q = q.Paginate(int(page), int(perPage))
 	}
 

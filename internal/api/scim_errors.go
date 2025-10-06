@@ -114,14 +114,14 @@ func WriteSCIMError(w http.ResponseWriter, err error) {
 	if scimErr, ok := err.(*scimError); ok {
 		w.Header().Set("Content-Type", "application/scim+json")
 		w.WriteHeader(scimErr.StatusCode())
-		json.NewEncoder(w).Encode(scimErr.SCIMError())
+		_ = json.NewEncoder(w).Encode(scimErr.SCIMError())
 		return
 	}
 
 	// Fallback for non-SCIM errors
 	w.Header().Set("Content-Type", "application/scim+json")
 	w.WriteHeader(http.StatusInternalServerError)
-	json.NewEncoder(w).Encode(NewSCIMError(http.StatusInternalServerError, "", "Internal server error"))
+	_ = json.NewEncoder(w).Encode(NewSCIMError(http.StatusInternalServerError, "", "Internal server error"))
 }
 
 // IsSCIMError checks if an error is a SCIM error
