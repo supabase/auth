@@ -69,4 +69,8 @@ type EmailData struct {
 	SiteURL         string `json:"site_url"`
 	TokenNew        string `json:"token_new"`
 	TokenHashNew    string `json:"token_hash_new"`
+	OldEmail        string `json:"old_email"`
+	OldPhone        string `json:"old_phone"`
+	Provider        string `json:"provider"`
+	FactorType      string `json:"factor_type"`
 }

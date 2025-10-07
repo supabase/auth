@@ -844,6 +844,19 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 				emailData.Token = params.otpNew
 			}
 		}
+
+		// Augment the email data for the email send hook with notification-specific fields
+		switch params.emailActionType {
+		case mail.EmailChangedNotification:
+			emailData.OldEmail = params.oldEmail
+		case mail.PhoneChangedNotification:
+			emailData.OldPhone = params.oldPhone
+		case mail.IdentityLinkedNotification, mail.IdentityUnlinkedNotification:
+			emailData.Provider = params.provider
+		case mail.MFAFactorEnrolledNotification, mail.MFAFactorUnenrolledNotification:
+			emailData.FactorType = params.factorType
+		}
+
 		input := v0hooks.SendEmailInput{
 			User:      u,
 			EmailData: emailData,
