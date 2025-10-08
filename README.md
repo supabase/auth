@@ -594,11 +594,11 @@ Email subject to use for email changed notification. Defaults to `Your email add
 
 `GOTRUE_MAILER_SUBJECTS_MFA_FACTOR_ENROLLED_NOTIFICATION` - `string`
 
-Email subject to use for MFA factor enrolled notification. Defaults to `MFA factor enrolled`.
+Email subject to use for MFA factor enrolled notification. Defaults to `A new MFA factor has been enrolled`.
 
 `GOTRUE_MAILER_SUBJECTS_MFA_FACTOR_UNENROLLED_NOTIFICATION` - `string`
 
-Email subject to use for MFA factor unenrolled notification. Defaults to `MFA factor unenrolled`.
+Email subject to use for MFA factor unenrolled notification. Defaults to `An MFA factor has been unenrolled`.
 
 `MAILER_TEMPLATES_INVITE` - `string`
 
