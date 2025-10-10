@@ -11,7 +11,7 @@ type JwksResponse struct {
 	Keys []jwk.Key `json:"keys"`
 }
 
-func (a *API) Jwks(w http.ResponseWriter, r *http.Request) error {
+func (a *API) WellKnownJwks(w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 	resp := JwksResponse{
 		Keys: []jwk.Key{},
@@ -27,4 +27,20 @@ func (a *API) Jwks(w http.ResponseWriter, r *http.Request) error {
 
 	w.Header().Set("Cache-Control", "public, max-age=600")
 	return sendJSON(w, http.StatusOK, resp)
+}
+
+type OpenIDConfigurationResponse struct {
+	Issuer  string `json:"issuer"`
+	JWKSURL string `json:"jwks_uri"`
+}
+
+func (a *API) WellKnownOpenID(w http.ResponseWriter, r *http.Request) error {
+	config := a.config
+
+	w.Header().Set("Cache-Control", "public, max-age=600")
+
+	return sendJSON(w, http.StatusOK, OpenIDConfigurationResponse{
+		Issuer:  config.JWT.Issuer,
+		JWKSURL: config.JWT.Issuer + "/.well-known/jwks.json",
+	})
 }

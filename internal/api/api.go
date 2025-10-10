@@ -174,7 +174,8 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 	}
 
 	r.Get("/health", api.HealthCheck)
-	r.Get("/.well-known/jwks.json", api.Jwks)
+	r.Get("/.well-known/jwks.json", api.WellKnownJwks)
+	r.Get("/.well-known/openid-configuration", api.WellKnownOpenID)
 
 	if globalConfig.OAuthServer.Enabled {
 		r.Get("/.well-known/oauth-authorization-server", api.oauthServer.OAuthServerMetadata)
