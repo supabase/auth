@@ -79,6 +79,13 @@ func (a *API) Otp(w http.ResponseWriter, r *http.Request) error {
 		params.Data = make(map[string]interface{})
 	}
 
+	// 🔥 Fix: If session user exists and email is provided, treat as email change request
+	if currentUser := getUserFromContext(r.Context()); currentUser != nil {
+		if params.Email != "" && !params.CreateUser {
+			return a.startEmailChangeVerification(currentUser, params.Email)
+		}
+	}
+
 	if ok, err := a.shouldCreateUser(r, params); !ok {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeOTPDisabled, "Signups not allowed for otp")
 	} else if err != nil {
@@ -235,4 +242,26 @@ func (a *API) shouldCreateUser(r *http.Request, params *OtpParams) (bool, error)
 		}
 	}
 	return true, nil
+}
+
+// startEmailChangeVerification initiates email change confirmation flow for phone-first users
+func (a *API) startEmailChangeVerification(user *models.User, newEmail string) error {
+	db := a.db.WithContext(user.Context())
+	config := a.config
+
+	normalizedEmail, err := a.validateEmail(newEmail)
+	if err != nil {
+		return err
+	}
+
+	// Generate confirmation token for email change
+	if err := user.GenerateEmailChange(db, normalizedEmail, config.Security.EmailMaxFrequency); err != nil {
+		return apierrors.NewInternalServerError("Could not generate email change token").WithInternalError(err)
+	}
+
+	if err := a.sendEmailChange(db, user, normalizedEmail); err != nil {
+		return err
+	}
+
+	return nil
 }
