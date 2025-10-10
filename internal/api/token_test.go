@@ -435,8 +435,10 @@ func (ts *TokenTestSuite) TestRefreshTokenReuseRevocation() {
 
 	// ensure that the 4 refresh tokens are setup correctly
 	for i, refreshToken := range refreshTokens {
-		_, token, _, err := models.FindUserWithRefreshToken(ts.API.db, refreshToken, false)
+		_, anyToken, _, err := models.FindUserWithRefreshToken(ts.API.db, ts.Config.Security.DBEncryption, refreshToken, false)
 		require.NoError(ts.T(), err)
+
+		token := anyToken.(*models.RefreshToken)
 
 		if i == len(refreshTokens)-1 {
 			require.False(ts.T(), token.Revoked)
@@ -470,9 +472,10 @@ func (ts *TokenTestSuite) TestRefreshTokenReuseRevocation() {
 
 	// ensure that the refresh tokens are marked as revoked in the database
 	for _, refreshToken := range refreshTokens {
-		_, token, _, err := models.FindUserWithRefreshToken(ts.API.db, refreshToken, false)
+		_, anyToken, _, err := models.FindUserWithRefreshToken(ts.API.db, ts.Config.Security.DBEncryption, refreshToken, false)
 		require.NoError(ts.T(), err)
 
+		token := anyToken.(*models.RefreshToken)
 		require.True(ts.T(), token.Revoked)
 	}
 
