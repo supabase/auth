@@ -723,8 +723,10 @@ func (c *DatabaseEncryptionConfiguration) Validate() error {
 
 type SecurityConfiguration struct {
 	Captcha                               CaptchaConfiguration `json:"captcha"`
+	RefreshTokenAlgorithmVersion          int                  `json:"refresh_token_algorithm_version" split_words:"true"`
 	RefreshTokenRotationEnabled           bool                 `json:"refresh_token_rotation_enabled" split_words:"true" default:"true"`
 	RefreshTokenReuseInterval             int                  `json:"refresh_token_reuse_interval" split_words:"true"`
+	RefreshTokenAllowReuse                bool                 `json:"refresh_token_allow_reuse" split_words:"true"`
 	UpdatePasswordRequireReauthentication bool                 `json:"update_password_require_reauthentication" split_words:"true"`
 	ManualLinkingEnabled                  bool                 `json:"manual_linking_enabled" split_words:"true" default:"false"`
 
