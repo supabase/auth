@@ -93,11 +93,22 @@ type EmailProviderConfiguration struct {
 	MagicLinkEnabled bool `json:"magic_link_enabled" default:"true" split_words:"true"`
 }
 
+type DBAdvisorConfiguration struct {
+	Enabled             bool          `json:"enabled" default:"true"`
+	SamplingInterval    time.Duration `json:"sampling_interval" split_words:"true" default:"200ms"`
+	ObservationInterval time.Duration `json:"observation_interval" split_words:"true" default:"20s"`
+}
+
 // DBConfiguration holds all the database related configuration.
 type DBConfiguration struct {
 	Driver    string `json:"driver" required:"true"`
 	URL       string `json:"url" envconfig:"DATABASE_URL" required:"true"`
 	Namespace string `json:"namespace" envconfig:"DB_NAMESPACE" default:"auth"`
+
+	// Percentage of DB conns the auth server may use in
+	// integer form i.e.: [1, 100] -> [1%, 100%]
+	ConnPercentage int `json:"conn_percentage" split_words:"true"`
+
 	// MaxPoolSize defaults to 0 (unlimited).
 	MaxPoolSize       int           `json:"max_pool_size" split_words:"true"`
 	MaxIdlePoolSize   int           `json:"max_idle_pool_size" split_words:"true"`
@@ -106,9 +117,12 @@ type DBConfiguration struct {
 	HealthCheckPeriod time.Duration `json:"health_check_period" split_words:"true"`
 	MigrationsPath    string        `json:"migrations_path" split_words:"true" default:"./migrations"`
 	CleanupEnabled    bool          `json:"cleanup_enabled" split_words:"true" default:"false"`
+
+	Advisor DBAdvisorConfiguration `json:"advisor"`
 }
 
 func (c *DBConfiguration) Validate() error {
+	c.ConnPercentage = min(max(c.ConnPercentage, 0), 100)
 	return nil
 }
 
@@ -375,6 +389,26 @@ type EmailContentConfiguration struct {
 	EmailChange      string `json:"email_change" split_words:"true"`
 	MagicLink        string `json:"magic_link" split_words:"true"`
 	Reauthentication string `json:"reauthentication"`
+
+	// Account Changes Notifications
+	PasswordChangedNotification     string `json:"password_changed_notification" split_words:"true"`
+	EmailChangedNotification        string `json:"email_changed_notification" split_words:"true"`
+	PhoneChangedNotification        string `json:"phone_changed_notification" split_words:"true"`
+	IdentityLinkedNotification      string `json:"identity_linked_notification" split_words:"true"`
+	IdentityUnlinkedNotification    string `json:"identity_unlinked_notification" split_words:"true"`
+	MFAFactorEnrolledNotification   string `json:"mfa_factor_enrolled_notification" split_words:"true"`
+	MFAFactorUnenrolledNotification string `json:"mfa_factor_unenrolled_notification" split_words:"true"`
+}
+
+// NotificationsConfiguration holds the configuration for notification email states to indicate whether they are enabled or disabled.
+type NotificationsConfiguration struct {
+	PasswordChangedEnabled     bool `json:"password_changed_enabled" split_words:"true" default:"false"`
+	EmailChangedEnabled        bool `json:"email_changed_enabled" split_words:"true" default:"false"`
+	PhoneChangedEnabled        bool `json:"phone_changed_enabled" split_words:"true" default:"false"`
+	IdentityLinkedEnabled      bool `json:"identity_linked_enabled" split_words:"true" default:"false"`
+	IdentityUnlinkedEnabled    bool `json:"identity_unlinked_enabled" split_words:"true" default:"false"`
+	MFAFactorEnrolledEnabled   bool `json:"mfa_factor_enrolled_enabled" split_words:"true" default:"false"`
+	MFAFactorUnenrolledEnabled bool `json:"mfa_factor_unenrolled_enabled" split_words:"true" default:"false"`
 }
 
 type ProviderConfiguration struct {
@@ -472,9 +506,10 @@ type MailerConfiguration struct {
 	Autoconfirm                 bool `json:"autoconfirm"`
 	AllowUnverifiedEmailSignIns bool `json:"allow_unverified_email_sign_ins" split_words:"true" default:"false"`
 
-	Subjects  EmailContentConfiguration `json:"subjects"`
-	Templates EmailContentConfiguration `json:"templates"`
-	URLPaths  EmailContentConfiguration `json:"url_paths"`
+	Subjects      EmailContentConfiguration  `json:"subjects"`
+	Templates     EmailContentConfiguration  `json:"templates"`
+	URLPaths      EmailContentConfiguration  `json:"url_paths"`
+	Notifications NotificationsConfiguration `json:"notifications" split_words:"true"`
 
 	SecureEmailChangeEnabled bool `json:"secure_email_change_enabled" split_words:"true" default:"true"`
 

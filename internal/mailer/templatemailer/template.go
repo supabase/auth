@@ -533,6 +533,22 @@ func lookupEmailContentConfig(
 		return cfg.Reauthentication, true
 	case MagicLinkTemplate:
 		return cfg.MagicLink, true
+
+	// Account Changes Notifications
+	case PasswordChangedNotificationTemplate:
+		return cfg.PasswordChangedNotification, true
+	case EmailChangedNotificationTemplate:
+		return cfg.EmailChangedNotification, true
+	case PhoneChangedNotificationTemplate:
+		return cfg.PhoneChangedNotification, true
+	case IdentityLinkedNotificationTemplate:
+		return cfg.IdentityLinkedNotification, true
+	case IdentityUnlinkedNotificationTemplate:
+		return cfg.IdentityUnlinkedNotification, true
+	case MFAFactorEnrolledNotificationTemplate:
+		return cfg.MFAFactorEnrolledNotification, true
+	case MFAFactorUnenrolledNotificationTemplate:
+		return cfg.MFAFactorUnenrolledNotification, true
 	}
 }
 

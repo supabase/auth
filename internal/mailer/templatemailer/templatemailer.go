@@ -18,6 +18,15 @@ const (
 	EmailChangeTemplate      = "email_change"
 	MagicLinkTemplate        = "magic_link"
 	ReauthenticationTemplate = "reauthentication"
+
+	// Account Changes Notifications
+	PasswordChangedNotificationTemplate     = "password_changed_notification"
+	EmailChangedNotificationTemplate        = "email_changed_notification"
+	PhoneChangedNotificationTemplate        = "phone_changed_notification"
+	IdentityLinkedNotificationTemplate      = "identity_linked_notification"
+	IdentityUnlinkedNotificationTemplate    = "identity_unlinked_notification"
+	MFAFactorEnrolledNotificationTemplate   = "mfa_factor_enrolled_notification"
+	MFAFactorUnenrolledNotificationTemplate = "mfa_factor_unenrolled_notification"
 )
 
 const defaultInviteMail = `<h2>You have been invited</h2>
@@ -55,6 +64,50 @@ const defaultReauthenticateMail = `<h2>Confirm reauthentication</h2>
 
 <p>Enter the code: {{ .Token }}</p>`
 
+// Account Changes Notifications
+
+// #nosec G101 -- No hardcoded credentials.
+const defaultPasswordChangedNotificationMail = `<h2>Your password has been changed</h2>
+
+<p>This is a confirmation that the password for your account {{ .Email }} has just been changed.</p>
+<p>If you did not make this change, please contact support.</p>
+`
+const defaultEmailChangedNotificationMail = `<h2>Your email address has been changed</h2>
+
+<p>The email address for your account has been changed from {{ .OldEmail }} to {{ .Email }}.</p>
+<p>If you did not make this change, please contact support.</p>
+`
+
+const defaultPhoneChangedNotificationMail = `<h2>Your phone number has been changed</h2>
+
+<p>The phone number for your account {{ .Email }} has been changed from {{ .OldPhone }} to {{ .Phone }}.</p>
+<p>If you did not make this change, please contact support immediately.</p>
+`
+
+const defaultIdentityLinkedNotificationMail = `<h2>A new identity has been linked</h2>
+
+<p>A new identity ({{ .Provider }}) has been linked to your account {{ .Email }}.</p>
+<p>If you did not make this change, please contact support immediately.</p>
+`
+
+const defaultIdentityUnlinkedNotificationMail = `<h2>An identity has been unlinked</h2>
+
+<p>An identity ({{ .Provider }}) has been unlinked from your account {{ .Email }}.</p>
+<p>If you did not make this change, please contact support immediately.</p>
+`
+
+const defaultMFAFactorEnrolledNotificationMail = `<h2>MFA factor has been enrolled</h2>
+
+<p>A new factor ({{ .FactorType }}) has been enrolled for your account {{ .Email }}.</p>
+<p>If you did not make this change, please contact support immediately.</p>
+`
+
+const defaultMFAFactorUnenrolledNotificationMail = `<h2>MFA factor has been unenrolled</h2>
+
+<p>A factor ({{ .FactorType }}) has been unenrolled for your account {{ .Email }}.</p>
+<p>If you did not make this change, please contact support immediately.</p>
+`
+
 var (
 	templateTypes = []string{
 		InviteTemplate,
@@ -63,6 +116,15 @@ var (
 		EmailChangeTemplate,
 		MagicLinkTemplate,
 		ReauthenticationTemplate,
+
+		// Account Changes Notifications
+		PasswordChangedNotificationTemplate,
+		EmailChangedNotificationTemplate,
+		PhoneChangedNotificationTemplate,
+		IdentityLinkedNotificationTemplate,
+		IdentityUnlinkedNotificationTemplate,
+		MFAFactorEnrolledNotificationTemplate,
+		MFAFactorUnenrolledNotificationTemplate,
 	}
 	defaultTemplateSubjects = &conf.EmailContentConfiguration{
 		Invite:           "You have been invited",
@@ -71,6 +133,15 @@ var (
 		MagicLink:        "Your Magic Link",
 		EmailChange:      "Confirm Email Change",
 		Reauthentication: "Confirm reauthentication",
+
+		// Account Changes Notifications
+		PasswordChangedNotification:     "Your password has been changed",
+		EmailChangedNotification:        "Your email address has been changed",
+		PhoneChangedNotification:        "Your phone number has been changed",
+		IdentityLinkedNotification:      "A new identity has been linked",
+		IdentityUnlinkedNotification:    "An identity has been unlinked",
+		MFAFactorEnrolledNotification:   "MFA factor enrolled",
+		MFAFactorUnenrolledNotification: "MFA factor unenrolled",
 	}
 	defaultTemplateBodies = &conf.EmailContentConfiguration{
 		Invite:           defaultInviteMail,
@@ -79,6 +150,15 @@ var (
 		MagicLink:        defaultMagicLinkMail,
 		EmailChange:      defaultEmailChangeMail,
 		Reauthentication: defaultReauthenticateMail,
+
+		// Account Changes Notifications
+		PasswordChangedNotification:     defaultPasswordChangedNotificationMail,
+		EmailChangedNotification:        defaultEmailChangedNotificationMail,
+		PhoneChangedNotification:        defaultPhoneChangedNotificationMail,
+		IdentityLinkedNotification:      defaultIdentityLinkedNotificationMail,
+		IdentityUnlinkedNotification:    defaultIdentityUnlinkedNotificationMail,
+		MFAFactorEnrolledNotification:   defaultMFAFactorEnrolledNotificationMail,
+		MFAFactorUnenrolledNotification: defaultMFAFactorUnenrolledNotificationMail,
 	}
 )
 
@@ -341,6 +421,69 @@ func (m *Mailer) GetEmailActionLink(user *models.User, actionType, referrerURL s
 		return "", err
 	}
 	return externalURL.ResolveReference(path).String(), nil
+}
+
+func (m *Mailer) PasswordChangedNotificationMail(r *http.Request, user *models.User) error {
+	data := map[string]any{
+		"Email": user.Email,
+		"Data":  user.UserMetaData,
+	}
+	return m.mail(r.Context(), m.cfg, PasswordChangedNotificationTemplate, user.GetEmail(), data)
+}
+
+func (m *Mailer) EmailChangedNotificationMail(r *http.Request, user *models.User, oldEmail string) error {
+	data := map[string]any{
+		"Email":    user.GetEmail(), // the new email address that has been set on the account
+		"OldEmail": oldEmail,        // the old email address that was on the account before the change
+		"Data":     user.UserMetaData,
+	}
+	return m.mail(r.Context(), m.cfg, EmailChangedNotificationTemplate, oldEmail, data)
+}
+
+func (m *Mailer) PhoneChangedNotificationMail(r *http.Request, user *models.User, oldPhone string) error {
+	data := map[string]any{
+		"Email":    user.GetEmail(),
+		"Phone":    user.GetPhone(), // the new phone number that has been set on the account
+		"OldPhone": oldPhone,        // the old phone number that was on the account before the change
+		"Data":     user.UserMetaData,
+	}
+	return m.mail(r.Context(), m.cfg, PhoneChangedNotificationTemplate, user.GetEmail(), data)
+}
+
+func (m *Mailer) IdentityLinkedNotificationMail(r *http.Request, user *models.User, provider string) error {
+	data := map[string]any{
+		"Email":    user.GetEmail(),
+		"Provider": provider, // the provider of the newly linked identity
+		"Data":     user.UserMetaData,
+	}
+	return m.mail(r.Context(), m.cfg, IdentityLinkedNotificationTemplate, user.GetEmail(), data)
+}
+
+func (m *Mailer) IdentityUnlinkedNotificationMail(r *http.Request, user *models.User, provider string) error {
+	data := map[string]any{
+		"Email":    user.GetEmail(),
+		"Provider": provider, // the provider of the unlinked identity
+		"Data":     user.UserMetaData,
+	}
+	return m.mail(r.Context(), m.cfg, IdentityUnlinkedNotificationTemplate, user.GetEmail(), data)
+}
+
+func (m *Mailer) MFAFactorEnrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
+	data := map[string]any{
+		"Email":      user.GetEmail(),
+		"FactorType": factorType,
+		"Data":       user.UserMetaData,
+	}
+	return m.mail(r.Context(), m.cfg, MFAFactorEnrolledNotificationTemplate, user.GetEmail(), data)
+}
+
+func (m *Mailer) MFAFactorUnenrolledNotificationMail(r *http.Request, user *models.User, factorType string) error {
+	data := map[string]any{
+		"Email":      user.GetEmail(),
+		"FactorType": factorType,
+		"Data":       user.UserMetaData,
+	}
+	return m.mail(r.Context(), m.cfg, MFAFactorUnenrolledNotificationTemplate, user.GetEmail(), data)
 }
 
 type emailParams struct {

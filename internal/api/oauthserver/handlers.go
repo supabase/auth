@@ -216,6 +216,7 @@ func (s *Server) OAuthServerClientList(w http.ResponseWriter, r *http.Request) e
 	ctx := r.Context()
 	db := s.db.WithContext(ctx)
 
+	// TODO(cemal) :: Add pagination, check the `/admin/users` endpoint for reference
 	var clients []models.OAuthServerClient
 	if err := db.Q().Where("deleted_at is null").Order("created_at desc").All(&clients); err != nil {
 		return apierrors.NewInternalServerError("Error listing OAuth clients").WithInternalError(err)

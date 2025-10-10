@@ -39,6 +39,19 @@ type Task interface {
 	Run(context.Context) error
 }
 
+type taskFunc struct {
+	typ string
+	fn  func(context.Context) error
+}
+
+func (o *taskFunc) Type() string { return o.typ }
+
+func (o *taskFunc) Run(ctx context.Context) error { return o.fn(ctx) }
+
+func Func(typ string, fn func(context.Context) error) Task {
+	return &taskFunc{typ: typ, fn: fn}
+}
+
 // Run will run a request-scoped background task in a separate goroutine
 // immediately if the current context supports it. Otherwise it makes an
 // immediate blocking call to task.Run(ctx).
