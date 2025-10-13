@@ -36,7 +36,31 @@ func TestOtp(t *testing.T) {
 
 func (ts *OtpTestSuite) SetupTest() {
 	models.TruncateAll(ts.API.db)
+}
 
+// ✅ New test for attaching email to phone-first user
+func (ts *OtpTestSuite) TestAttachEmailToPhoneUser() {
+	// Create a phone-only user
+	user := &models.User{Phone: "1234567890"}
+	require.NoError(ts.T(), ts.API.db.Create(user))
+
+	// Simulate logged-in request with this user
+	token := ts.API.createAccessTokenForUser(user)
+	body := map[string]interface{}{
+		"email":       "foo@example.com",
+		"create_user": false,
+	}
+	var buffer bytes.Buffer
+	require.NoError(ts.T(), json.NewEncoder(&buffer).Encode(body))
+
+	req := httptest.NewRequest(http.MethodPost, "/otp", &buffer)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	w := httptest.NewRecorder()
+	ts.API.handler.ServeHTTP(w, req)
+
+	require.Equal(ts.T(), http.StatusOK, w.Code)
 }
 
 func (ts *OtpTestSuite) TestOtpPKCE() {
@@ -139,7 +163,6 @@ func (ts *OtpTestSuite) TestOtpPKCE() {
 			require.Equal(ts.T(), c.expected.code, w.Code)
 			data := make(map[string]interface{})
 			require.NoError(ts.T(), json.NewDecoder(w.Body).Decode(&data))
-
 		})
 	}
 }
