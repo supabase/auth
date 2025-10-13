@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"net/http"
+	"slices"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/supabase/auth/internal/api/apierrors"
@@ -18,15 +19,16 @@ import (
 
 // IdTokenGrantParams are the parameters the IdTokenGrant method accepts
 type IdTokenGrantParams struct {
-	IdToken     string `json:"id_token"`
-	AccessToken string `json:"access_token"`
-	Nonce       string `json:"nonce"`
-	Provider    string `json:"provider"`
-	ClientID    string `json:"client_id"`
-	Issuer      string `json:"issuer"`
+	IdToken      string `json:"id_token"`
+	AccessToken  string `json:"access_token"`
+	Nonce        string `json:"nonce"`
+	Provider     string `json:"provider"`
+	ClientID     string `json:"client_id"`
+	Issuer       string `json:"issuer"`
+	LinkIdentity bool   `json:"link_identity"`
 }
 
-func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, bool, string, []string, error) {
+func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.GlobalConfiguration, r *http.Request) (*oidc.Provider, bool, string, []string, bool, error) {
 	log := observability.GetLogEntry(r).Entry
 
 	var cfg *conf.OAuthProviderConfiguration
@@ -42,13 +44,13 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		if issuer == "" {
 			detectedIssuer, err := provider.DetectAppleIDTokenIssuer(ctx, p.IdToken)
 			if err != nil {
-				return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Apple provider").WithInternalError(err)
+				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Apple provider").WithInternalError(err)
 			}
 
 			if provider.IsAppleIssuer(detectedIssuer) {
 				issuer = detectedIssuer
 			} else {
-				return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Apple ID token issuer")
+				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Detected ID token issuer is not an Apple ID token issuer")
 			}
 		}
 		acceptableClientIDs = append(acceptableClientIDs, config.External.Apple.ClientID...)
@@ -68,7 +70,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		if issuer == "" || !provider.IsAzureIssuer(issuer) {
 			detectedIssuer, err := provider.DetectAzureIDTokenIssuer(ctx, p.IdToken)
 			if err != nil {
-				return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
+				return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Unable to detect issuer in ID token for Azure provider").WithInternalError(err)
 			}
 			issuer = detectedIssuer
 		}
@@ -102,22 +104,25 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 		issuer = provider.IssuerVercelMarketplace
 		acceptableClientIDs = append(acceptableClientIDs, config.External.VercelMarketplace.ClientID...)
 
+	case p.Provider == "snapchat" || p.Issuer == provider.IssuerSnapchat:
+		cfg = &config.External.Snapchat
+		providerType = "snapchat"
+		issuer = provider.IssuerSnapchat
+		acceptableClientIDs = append(acceptableClientIDs, config.External.Snapchat.ClientID...)
+
 	default:
 		log.WithField("issuer", p.Issuer).WithField("client_id", p.ClientID).Warn("Use of POST /token with arbitrary issuer and client_id is deprecated for security reasons. Please switch to using the API with provider only!")
 
 		allowed := false
-		for _, allowedIssuer := range config.External.AllowedIdTokenIssuers {
-			if p.Issuer == allowedIssuer {
-				allowed = true
-				providerType = allowedIssuer
-				acceptableClientIDs = []string{p.ClientID}
-				issuer = allowedIssuer
-				break
-			}
+		if slices.Contains(config.External.AllowedIdTokenIssuers, p.Issuer) {
+			allowed = true
+			providerType = p.Issuer
+			acceptableClientIDs = []string{p.ClientID}
+			issuer = p.Issuer
 		}
 
 		if !allowed {
-			return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Custom OIDC provider %q not allowed", p.Provider))
+			return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, fmt.Sprintf("Custom OIDC provider %q not allowed", p.Provider))
 		}
 
 		cfg = &conf.OAuthProviderConfiguration{
@@ -127,7 +132,7 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 	}
 
 	if !cfg.Enabled {
-		return nil, false, "", nil, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
+		return nil, false, "", nil, false, apierrors.NewBadRequestError(apierrors.ErrorCodeProviderDisabled, fmt.Sprintf("Provider (issuer %q) is not enabled", issuer))
 	}
 
 	oidcCtx := ctx
@@ -137,10 +142,10 @@ func (p *IdTokenGrantParams) getProvider(ctx context.Context, config *conf.Globa
 
 	oidcProvider, err := oidc.NewProvider(oidcCtx, issuer)
 	if err != nil {
-		return nil, false, "", nil, err
+		return nil, false, "", nil, cfg.EmailOptional, err
 	}
 
-	return oidcProvider, cfg.SkipNonceCheck, providerType, acceptableClientIDs, nil
+	return oidcProvider, cfg.SkipNonceCheck, providerType, acceptableClientIDs, cfg.EmailOptional, nil
 }
 
 // IdTokenGrant implements the id_token grant type flow
@@ -163,7 +168,26 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		return apierrors.NewOAuthError("invalid request", "provider or client_id and issuer required")
 	}
 
-	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, err := params.getProvider(ctx, config, r)
+	if params.LinkIdentity {
+		if r.Header.Get("Authorization") == "" {
+			return apierrors.NewOAuthError("invalid request", "Linking requires a valid user access token in Authorization")
+		}
+
+		requireAuthCtx, err := a.requireAuthentication(w, r)
+		if err != nil {
+			return err
+		}
+
+		targetUser := getUser(requireAuthCtx)
+		if targetUser == nil {
+			return apierrors.NewOAuthError("invalid request", "Linking requires a valid user authentication")
+		}
+
+		// set it so linkIdentityToUser works below
+		ctx = withTargetUser(ctx, targetUser)
+	}
+
+	oidcProvider, skipNonceCheck, providerType, acceptableClientIDs, emailOptional, err := params.getProvider(ctx, config, r)
 	if err != nil {
 		return err
 	}
@@ -207,14 +231,8 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			continue
 		}
 
-		for _, aud := range idToken.Audience {
-			if aud == clientID {
-				correctAudience = true
-				break
-			}
-		}
-
-		if correctAudience {
+		if slices.Contains(idToken.Audience, clientID) {
+			correctAudience = true
 			break
 		}
 	}
@@ -248,20 +266,29 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 		}
 	}
 
+	var createdUser bool
 	var token *AccessTokenResponse
 	var grantParams models.GrantParams
 
 	grantParams.FillGrantParams(r)
 
-	if err := a.triggerBeforeUserCreatedExternal(r, db, userData, providerType); err != nil {
-		return err
+	if !params.LinkIdentity {
+		if err := a.triggerBeforeUserCreatedExternal(r, db, userData, providerType); err != nil {
+			return err
+		}
 	}
 
+	var user *models.User
 	if err := db.Transaction(func(tx *storage.Connection) error {
-		var user *models.User
 		var terr error
 
-		user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType)
+		var decision models.AccountLinkingDecision
+		if params.LinkIdentity {
+			user, terr = a.linkIdentityToUser(r, ctx, tx, userData, providerType)
+		} else {
+			decision, user, terr = a.createAccountFromExternalIdentity(tx, r, userData, providerType, emailOptional)
+		}
+		createdUser = decision == models.CreateAccount
 		if terr != nil {
 			return terr
 		}
@@ -280,6 +307,11 @@ func (a *API) IdTokenGrant(ctx context.Context, w http.ResponseWriter, r *http.R
 			return err
 		default:
 			return apierrors.NewOAuthError("server_error", "Internal Server Error").WithInternalError(err)
+		}
+	}
+	if createdUser {
+		if err := a.triggerAfterUserCreated(r, db, user); err != nil {
+			return err
 		}
 	}
 

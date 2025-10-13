@@ -300,14 +300,18 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
+	var createdUser bool
+	var user *models.User
 	if err := db.Transaction(func(tx *storage.Connection) error {
 		var terr error
-		var user *models.User
 
 		// accounts potentially created via SAML can contain non-unique email addresses in the auth.users table
-		if user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, providerType); terr != nil {
+		var decision models.AccountLinkingDecision
+		if decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userProvidedData, providerType, false); terr != nil {
 			return terr
 		}
+		createdUser = decision == models.CreateAccount
+
 		if flowState != nil {
 			// This means that the callback is using PKCE
 			flowState.UserID = &(user.ID)
@@ -325,6 +329,11 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}); err != nil {
 		return err
+	}
+	if createdUser {
+		if err := a.triggerAfterUserCreated(r, db, user); err != nil {
+			return err
+		}
 	}
 
 	if !utilities.IsRedirectURLValid(config, redirectTo) {

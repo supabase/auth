@@ -1,22 +1,17 @@
 package models
 
 import (
-	"crypto/sha256"
-	"crypto/subtle"
 	"database/sql"
-	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/security"
 	"github.com/supabase/auth/internal/storage"
 
 	"github.com/gofrs/uuid"
 )
-
-const InvalidCodeChallengeError = "code challenge does not match previously saved code verifier"
-const InvalidCodeMethodError = "code challenge method not supported"
 
 type FlowState struct {
 	ID                   uuid.UUID  `json:"id" db:"id"`
@@ -134,22 +129,7 @@ func FindFlowStateByUserID(tx *storage.Connection, id string, authenticationMeth
 }
 
 func (f *FlowState) VerifyPKCE(codeVerifier string) error {
-	switch f.CodeChallengeMethod {
-	case SHA256.String():
-		hashedCodeVerifier := sha256.Sum256([]byte(codeVerifier))
-		encodedCodeVerifier := base64.RawURLEncoding.EncodeToString(hashedCodeVerifier[:])
-		if subtle.ConstantTimeCompare([]byte(f.CodeChallenge), []byte(encodedCodeVerifier)) != 1 {
-			return errors.New(InvalidCodeChallengeError)
-		}
-	case Plain.String():
-		if subtle.ConstantTimeCompare([]byte(f.CodeChallenge), []byte(codeVerifier)) != 1 {
-			return errors.New(InvalidCodeChallengeError)
-		}
-	default:
-		return errors.New(InvalidCodeMethodError)
-
-	}
-	return nil
+	return security.VerifyPKCEChallenge(f.CodeChallenge, f.CodeChallengeMethod, codeVerifier)
 }
 
 func (f *FlowState) IsExpired(expiryDuration time.Duration) bool {

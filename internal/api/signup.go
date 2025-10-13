@@ -146,7 +146,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud, nil)
+		user, err = models.IsDuplicatedEmail(db, params.Email, params.Aud, nil, config.Experimental.ProvidersWithOwnLinkingDomain)
 	case "phone":
 		if !config.External.Phone.Enabled {
 			return apierrors.NewBadRequestError(apierrors.ErrorCodePhoneProviderDisabled, "Phone signups are disabled")
@@ -336,6 +336,11 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 		user.UserMetaData = map[string]interface{}{}
 		user.Identities = []models.Identity{}
 	}
+
+	// Trigger the after user created hook.
+	if err := a.triggerAfterUserCreated(r, db, user); err != nil {
+		return apierrors.NewInternalServerError("Error invoking hook").WithInternalError(err)
+	}
 	return sendJSON(w, http.StatusOK, user)
 }
 
@@ -395,6 +400,5 @@ func (a *API) signupNewUser(conn *storage.Connection, user *models.User) (*model
 	if err := conn.Reload(user); err != nil {
 		return nil, apierrors.NewInternalServerError("Database error loading user after sign-up").WithInternalError(err)
 	}
-
 	return user, nil
 }

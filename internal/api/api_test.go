@@ -22,8 +22,18 @@ func init() {
 // setupAPIForTest creates a new API to run tests with.
 // Using this function allows us to keep track of the database connection
 // and cleaning up data between tests.
-func setupAPIForTest() (*API, *conf.GlobalConfiguration, error) {
-	return setupAPIForTestWithCallback(nil)
+func setupAPIForTest(opts ...Option) (*API, *conf.GlobalConfiguration, error) {
+	config, err := conf.LoadGlobal(apiTestConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	conn, err := test.SetupDBConnection(config)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return NewAPIWithVersion(config, conn, apiTestVersion, opts...), config, nil
 }
 
 func setupAPIForTestWithCallback(cb func(*conf.GlobalConfiguration, *storage.Connection)) (*API, *conf.GlobalConfiguration, error) {
@@ -54,4 +64,31 @@ func TestEmailEnabledByDefault(t *testing.T) {
 	require.NoError(t, err)
 
 	require.True(t, api.config.External.Email.Enabled)
+}
+
+func TestOAuthServerDisabledByDefault(t *testing.T) {
+	api, _, err := setupAPIForTest()
+	require.NoError(t, err)
+
+	// OAuth server should be disabled by default
+	require.False(t, api.config.OAuthServer.Enabled)
+
+	// OAuth server instance should not be initialized when disabled
+	require.Nil(t, api.oauthServer)
+}
+
+func TestOAuthServerCanBeEnabled(t *testing.T) {
+	api, _, err := setupAPIForTestWithCallback(func(config *conf.GlobalConfiguration, conn *storage.Connection) {
+		if config != nil {
+			// Enable OAuth server
+			config.OAuthServer.Enabled = true
+		}
+	})
+	require.NoError(t, err)
+
+	// OAuth server should be enabled
+	require.True(t, api.config.OAuthServer.Enabled)
+
+	// OAuth server instance should be initialized when enabled
+	require.NotNil(t, api.oauthServer)
 }

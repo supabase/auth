@@ -1,4 +1,4 @@
-package mailer
+package templatemailer
 
 import (
 	"net/url"
@@ -15,7 +15,7 @@ func enforceRelativeURL(url string) string {
 }
 
 func TestGetPath(t *testing.T) {
-	params := EmailParams{
+	params := emailParams{
 		Token:      "token",
 		Type:       "signup",
 		RedirectTo: "https://example.com",
@@ -23,7 +23,7 @@ func TestGetPath(t *testing.T) {
 	cases := []struct {
 		SiteURL  string
 		Path     string
-		Params   *EmailParams
+		Params   *emailParams
 		Expected string
 	}{
 		{
