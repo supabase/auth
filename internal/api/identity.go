@@ -7,6 +7,7 @@ import (
 	"github.com/fatih/structs"
 	"github.com/go-chi/chi/v5"
 	"github.com/gofrs/uuid"
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/models"
@@ -50,6 +51,7 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeIdentityNotFound, "Identity doesn't exist")
 	}
 
+	provider := identityToBeDeleted.Provider
 	err = db.Transaction(func(tx *storage.Connection) error {
 		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.IdentityUnlinkAction, "", map[string]interface{}{
 			"identity_id": identityToBeDeleted.ID,
@@ -86,6 +88,14 @@ func (a *API) DeleteIdentity(w http.ResponseWriter, r *http.Request) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	// Send identity unlinked notification email if enabled and user has an email
+	if config.Mailer.Notifications.IdentityUnlinkedEnabled && user.GetEmail() != "" {
+		if err := a.sendIdentityUnlinkedNotification(r, db, user, provider); err != nil {
+			// Log the error but don't fail the unlinking
+			logrus.WithError(err).Warn("Unable to send identity unlinked notification email")
+		}
 	}
 
 	return sendJSON(w, http.StatusOK, map[string]interface{}{})
@@ -154,5 +164,14 @@ func (a *API) linkIdentityToUser(r *http.Request, ctx context.Context, tx *stora
 	if terr := targetUser.UpdateAppMetaDataProviders(tx); terr != nil {
 		return nil, terr
 	}
+
+	// Send identity linked notification email if enabled and user has an email
+	if a.config.Mailer.Notifications.IdentityLinkedEnabled && targetUser.GetEmail() != "" {
+		if terr := a.sendIdentityLinkedNotification(r, tx, targetUser, providerType); terr != nil {
+			// Log the error but don't fail the linking
+			logrus.WithError(terr).Warn("Unable to send identity linked notification email")
+		}
+	}
+
 	return targetUser, nil
 }
