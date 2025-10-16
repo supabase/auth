@@ -634,6 +634,40 @@ func (a *API) sendPhoneChangedNotification(r *http.Request, tx *storage.Connecti
 	return nil
 }
 
+func (a *API) sendIdentityLinkedNotification(r *http.Request, tx *storage.Connection, u *models.User, provider string) error {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType: mail.IdentityLinkedNotification,
+		provider:        provider,
+	})
+	if err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending identity linked notification email").WithInternalError(err)
+	}
+
+	return nil
+}
+
+func (a *API) sendIdentityUnlinkedNotification(r *http.Request, tx *storage.Connection, u *models.User, provider string) error {
+	err := a.sendEmail(r, tx, u, sendEmailParams{
+		emailActionType: mail.IdentityUnlinkedNotification,
+		provider:        provider,
+	})
+	if err != nil {
+		if errors.Is(err, EmailRateLimitExceeded) {
+			return apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverEmailSendRateLimit, EmailRateLimitExceeded.Error())
+		} else if herr, ok := err.(*HTTPError); ok {
+			return herr
+		}
+		return apierrors.NewInternalServerError("Error sending identity unlinked notification email").WithInternalError(err)
+	}
+
+	return nil
+}
+
 func (a *API) sendMFAFactorEnrolledNotification(r *http.Request, tx *storage.Connection, u *models.User, factorType string) error {
 	err := a.sendEmail(r, tx, u, sendEmailParams{
 		emailActionType: mail.MFAFactorEnrolledNotification,
@@ -715,6 +749,7 @@ type sendEmailParams struct {
 	tokenHashWithPrefix string
 	oldEmail            string
 	oldPhone            string
+	provider            string
 	factorType          string
 }
 
@@ -809,6 +844,19 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 				emailData.Token = params.otpNew
 			}
 		}
+
+		// Augment the email data for the email send hook with notification-specific fields
+		switch params.emailActionType {
+		case mail.EmailChangedNotification:
+			emailData.OldEmail = params.oldEmail
+		case mail.PhoneChangedNotification:
+			emailData.OldPhone = params.oldPhone
+		case mail.IdentityLinkedNotification, mail.IdentityUnlinkedNotification:
+			emailData.Provider = params.provider
+		case mail.MFAFactorEnrolledNotification, mail.MFAFactorUnenrolledNotification:
+			emailData.FactorType = params.factorType
+		}
+
 		input := v0hooks.SendEmailInput{
 			User:      u,
 			EmailData: emailData,
@@ -838,6 +886,10 @@ func (a *API) sendEmail(r *http.Request, tx *storage.Connection, u *models.User,
 		err = mr.EmailChangedNotificationMail(r, u, params.oldEmail)
 	case mail.PhoneChangedNotification:
 		err = mr.PhoneChangedNotificationMail(r, u, params.oldPhone)
+	case mail.IdentityLinkedNotification:
+		err = mr.IdentityLinkedNotificationMail(r, u, params.provider)
+	case mail.IdentityUnlinkedNotification:
+		err = mr.IdentityUnlinkedNotificationMail(r, u, params.provider)
 	case mail.MFAFactorEnrolledNotification:
 		err = mr.MFAFactorEnrolledNotificationMail(r, u, params.factorType)
 	case mail.MFAFactorUnenrolledNotification:
