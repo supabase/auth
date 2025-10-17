@@ -531,7 +531,7 @@ func (ts *MFATestSuite) TestMFAVerifyFactor() {
 			} else if v.factorType == models.Phone {
 				friendlyName := uuid.Must(uuid.NewV4()).String()
 				numDigits := 10
-				otp := crypto.GenerateOtp(numDigits)
+				otp := crypto.GenerateOtp(numDigits, "numeric")
 				require.NoError(ts.T(), err)
 				phone := fmt.Sprintf("+%s", otp)
 				f = models.NewPhoneFactor(ts.TestUser, phone, friendlyName)

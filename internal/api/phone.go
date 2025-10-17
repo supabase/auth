@@ -92,7 +92,7 @@ func (a *API) sendPhoneConfirmation(r *http.Request, tx *storage.Connection, use
 				return "", apierrors.NewTooManyRequestsError(apierrors.ErrorCodeOverSMSSendRateLimit, "SMS rate limit exceeded")
 			}
 		}
-		otp = crypto.GenerateOtp(config.Sms.OtpLength)
+		otp = crypto.GenerateOtp(config.Sms.OtpLength, config.Sms.OtpCharset)
 
 		if config.Hook.SendSMS.Enabled {
 			input := v0hooks.SendSMSInput{
