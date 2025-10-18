@@ -19,6 +19,12 @@ func sendJSON(w http.ResponseWriter, status int, obj interface{}) error {
 	return shared.SendJSON(w, status, obj)
 }
 
+func sendTokenJSON(w http.ResponseWriter, status int, obj interface{}) error {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	return shared.SendJSON(w, status, obj)
+}
+
 func isAdmin(u *models.User, config *conf.GlobalConfiguration) bool {
 	return config.JWT.Aud == u.Aud && u.HasRole(config.JWT.AdminGroupName)
 }

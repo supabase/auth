@@ -329,7 +329,7 @@ func (a *API) Signup(w http.ResponseWriter, r *http.Request) error {
 				"immediate_login_after_signup": true,
 			},
 		})
-		return sendJSON(w, http.StatusOK, token)
+		return sendTokenJSON(w, http.StatusOK, token)
 	}
 	if user.HasBeenInvited() {
 		// Remove sensitive fields
