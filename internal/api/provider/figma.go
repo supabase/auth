@@ -38,7 +38,7 @@ func NewFigmaProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuth
 	apiHost := chooseHost(ext.URL, defaultFigmaAPIBase)
 
 	oauthScopes := []string{
-		"files:read",
+		"current_user:read",
 	}
 
 	if scopes != "" {
