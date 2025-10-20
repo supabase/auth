@@ -18,6 +18,7 @@ import (
 type UserUpdateParams struct {
 	Email               string                 `json:"email"`
 	Password            *string                `json:"password"`
+	CurrentPassword     *string                `json:"current_password"`
 	Nonce               string                 `json:"nonce"`
 	Data                map[string]interface{} `json:"data"`
 	AppData             map[string]interface{} `json:"app_metadata,omitempty"`
@@ -147,6 +148,22 @@ func (a *API) UserUpdate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if params.Password != nil {
+		if config.Security.UpdatePasswordRequireCurrentPassword {
+			if params.CurrentPassword == nil || *params.CurrentPassword == "" {
+				return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Current password is required to update password")
+			}
+
+			if user.HasPassword() {
+				authenticated, _, err := user.Authenticate(ctx, db, *params.CurrentPassword, config.Security.DBEncryption.DecryptionKeys, false, "")
+				if err != nil {
+					return apierrors.NewInternalServerError("Error verifying current password").WithInternalError(err)
+				}
+				if !authenticated {
+					return apierrors.NewBadRequestError(apierrors.ErrorCodeInvalidCredentials, InvalidLoginMessage)
+				}
+			}
+		}
+
 		if config.Security.UpdatePasswordRequireReauthentication {
 			now := time.Now()
 			// we require reauthentication if the user hasn't signed in recently in the current session
