@@ -58,5 +58,5 @@ func (a *API) SignupAnonymously(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	metering.RecordLogin(metering.LoginTypeAnonymous, newUser.ID, nil)
-	return sendJSON(w, http.StatusOK, token)
+	return sendTokenJSON(w, http.StatusOK, token)
 }

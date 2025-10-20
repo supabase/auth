@@ -27,5 +27,5 @@ func (a *API) RefreshTokenGrant(ctx context.Context, w http.ResponseWriter, r *h
 		return err
 	}
 
-	return sendJSON(w, http.StatusOK, tokenResponse)
+	return sendTokenJSON(w, http.StatusOK, tokenResponse)
 }
