@@ -96,13 +96,13 @@ const defaultIdentityUnlinkedNotificationMail = `<h2>An identity has been unlink
 <p>If you did not make this change, please contact support immediately.</p>
 `
 
-const defaultMFAFactorEnrolledNotificationMail = `<h2>MFA factor has been enrolled</h2>
+const defaultMFAFactorEnrolledNotificationMail = `<h2>A new MFA factor has been enrolled</h2>
 
 <p>A new factor ({{ .FactorType }}) has been enrolled for your account {{ .Email }}.</p>
 <p>If you did not make this change, please contact support immediately.</p>
 `
 
-const defaultMFAFactorUnenrolledNotificationMail = `<h2>MFA factor has been unenrolled</h2>
+const defaultMFAFactorUnenrolledNotificationMail = `<h2>An MFA factor has been unenrolled</h2>
 
 <p>A factor ({{ .FactorType }}) has been unenrolled for your account {{ .Email }}.</p>
 <p>If you did not make this change, please contact support immediately.</p>
@@ -140,8 +140,8 @@ var (
 		PhoneChangedNotification:        "Your phone number has been changed",
 		IdentityLinkedNotification:      "A new identity has been linked",
 		IdentityUnlinkedNotification:    "An identity has been unlinked",
-		MFAFactorEnrolledNotification:   "MFA factor enrolled",
-		MFAFactorUnenrolledNotification: "MFA factor unenrolled",
+		MFAFactorEnrolledNotification:   "A new MFA factor has been enrolled",
+		MFAFactorUnenrolledNotification: "An MFA factor has been unenrolled",
 	}
 	defaultTemplateBodies = &conf.EmailContentConfiguration{
 		Invite:           defaultInviteMail,
