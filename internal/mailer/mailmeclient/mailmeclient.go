@@ -4,6 +4,7 @@ package mailmeclient
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 
 	"gopkg.in/gomail.v2"
@@ -69,19 +70,34 @@ func (m *Client) Mail(
 		dial.LocalName = m.LocalName
 	}
 
-	if m.MailLogging {
-		defer func() {
-			fields := logrus.Fields{
-				"event":     "mail.send",
-				"mail_type": typ,
-				"mail_from": m.From,
-				"mail_to":   to,
-			}
-			m.Logger.WithFields(fields).Info("mail.send")
-		}()
+	// structured fields for logging
+	fields := logrus.Fields{
+		"event":     "mail.send",
+		"mail_type": typ,
+		"mail_from": m.From,
+		"mail_to":   to,
+		"smtp_host": m.Host,
+		"smtp_port": m.Port,
 	}
+
+	// attempt send
 	if err := dial.DialAndSend(mail); err != nil {
-		return err
+		// log failure with error and return wrapped error for context
+		if m.Logger != nil {
+			m.Logger.WithFields(fields).WithError(err).Error("mail.send.failed")
+		} else {
+			logrus.WithFields(fields).WithError(err).Error("mail.send.failed")
+		}
+		return fmt.Errorf("mailmeclient: send failed: %w", err)
+	}
+
+	// success
+	if m.MailLogging {
+		if m.Logger != nil {
+			m.Logger.WithFields(fields).Info("mail.send.success")
+		} else {
+			logrus.WithFields(fields).Info("mail.send.success")
+		}
 	}
 	return nil
 }
