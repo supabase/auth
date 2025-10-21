@@ -5,7 +5,9 @@ package taskclient
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apitask"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/mailer"
@@ -52,10 +54,14 @@ func (o *Task) Run(ctx context.Context) error {
 
 type backgroundMailClient struct {
 	mc mailer.Client
+	logger logrus.FieldLogger
 }
 
 // Mail implements mailer.MailClient interface by sending the call to the
-// wrapped mail client to the background.
+// wrapped mail client to the background. This implementation first tries a
+// short synchronous send to detect immediate errors. If that fails it will
+// enqueue the task for background retries. If enqueueing fails, it returns an
+// error so the caller (HTTP API) does not return success falsely.
 func (o *backgroundMailClient) Mail(
 	ctx context.Context,
 	to string,
@@ -64,6 +70,31 @@ func (o *backgroundMailClient) Mail(
 	headers map[string][]string,
 	typ string,
 ) error {
+	// Attempt a short synchronous send first to detect immediate failures.
+	shortCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	if err := o.mc.Mail(shortCtx, to, subject, body, headers, typ); err == nil {
+		// immediate success
+		return nil
+	} else {
+		// log the sync failure and attempt enqueue
+		if o.logger != nil {
+			o.logger.WithFields(logrus.Fields{
+				"event":     "mail.taskclient.sync_failed",
+				"mail_type": typ,
+				"mail_to":   to,
+			}).WithError(err).Warn("sync mail send failed; attempting enqueue")
+		} else {
+			logrus.WithFields(logrus.Fields{
+				"event":     "mail.taskclient.sync_failed",
+				"mail_type": typ,
+				"mail_to":   to,
+			}).WithError(err).Warn("sync mail send failed; attempting enqueue")
+		}
+	}
+
+	// Create the task and attempt to enqueue it for background delivery.
 	tk := &Task{
 		mc:      o.mc,
 		To:      to,
@@ -72,5 +103,38 @@ func (o *backgroundMailClient) Mail(
 		Headers: headers,
 		Typ:     typ,
 	}
-	return apitask.Run(ctx, tk)
+
+	if err := apitask.Run(ctx, tk); err != nil {
+		// enqueue failed — return error so API surfaces failure
+		if o.logger != nil {
+			o.logger.WithFields(logrus.Fields{
+				"event":     "mail.taskclient.enqueue_failed",
+				"mail_type": typ,
+				"mail_to":   to,
+			}).WithError(err).Error("enqueue failed")
+		} else {
+			logrus.WithFields(logrus.Fields{
+				"event":     "mail.taskclient.enqueue_failed",
+				"mail_type": typ,
+				"mail_to":   to,
+			}).WithError(err).Error("enqueue failed")
+		}
+		return fmt.Errorf("taskclient: enqueue failed: %w", err)
+	}
+
+	// Enqueued successfully — return nil (background worker will retry/send).
+	if o.logger != nil {
+		o.logger.WithFields(logrus.Fields{
+			"event":     "mail.taskclient.enqueued",
+			"mail_type": typ,
+			"mail_to":   to,
+		}).Info("mail enqueued for background delivery")
+	} else {
+		logrus.WithFields(logrus.Fields{
+			"event":     "mail.taskclient.enqueued",
+			"mail_type": typ,
+			"mail_to":   to,
+		}).Info("mail enqueued for background delivery")
+	}
+	return nil
 }
