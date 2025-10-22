@@ -4,12 +4,21 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
 	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSafeIntegers(t *testing.T) {
+	require.Equal(t, int64(math.MaxInt64), safeInt64(math.MaxUint64))
+	require.Equal(t, int64(math.MaxInt64), safeInt64(math.MaxInt64))
+
+	require.Equal(t, int64(0), safeUint64(-1))
+	require.Equal(t, int64(math.MaxInt64), safeInt64(math.MaxInt64))
+}
 
 func TestRefreshTokenParse(t *testing.T) {
 	negativeExamples := []struct {
@@ -83,4 +92,10 @@ func TestRefreshTokenParse(t *testing.T) {
 	require.Equal(t, original.Counter, parsed.Counter)
 	require.Equal(t, original.Raw, parsed.Raw)
 	require.Equal(t, original.Signature, parsed.Signature)
+}
+
+func TestRefreshTokenTableName(t *testing.T) {
+	require.Panics(t, func() {
+		RefreshToken{}.TableName()
+	})
 }

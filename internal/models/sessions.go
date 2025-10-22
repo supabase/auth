@@ -167,6 +167,23 @@ func (s *Session) UpdateOnlyRefreshToken(tx *storage.Connection) error {
 	return tx.UpdateOnly(s, "refresh_token_counter")
 }
 
+func (s *Session) ReEncryptRefreshTokenHmacKey(tx *storage.Connection, dbEncryption conf.DatabaseEncryptionConfiguration) error {
+	key, _, err := s.GetRefreshTokenHmacKey(dbEncryption)
+	if err != nil {
+		return err
+	}
+
+	es, err := crypto.NewEncryptedString(s.ID.String(), []byte(base64.RawURLEncoding.EncodeToString(key)), dbEncryption.EncryptionKeyID, dbEncryption.EncryptionKey)
+	if err != nil {
+		return err
+	}
+
+	encryptedValue := es.String()
+	s.RefreshTokenHmacKey = &encryptedValue
+
+	return tx.UpdateOnly(s, "refresh_token_hmac_key")
+}
+
 type SessionValidityReason = int
 
 const (
