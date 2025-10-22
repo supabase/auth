@@ -636,8 +636,13 @@ func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
 // lock will only be acquired if there's no other lock. In case there is a
 // lock, a IsNotFound(err) error will be returned.
 //
-// Second value returned is either *models.RefreshToken or *models.TODO.
+// Second value returned is either *models.RefreshToken or *crypto.RefreshToken.
 func FindUserWithRefreshToken(tx *storage.Connection, dbEncryption conf.DatabaseEncryptionConfiguration, token string, forUpdate bool) (*User, any, *Session, error) {
+	if len(token) < 12 {
+		// not a valid refresh token so don't bother looking it up in the database
+		return nil, nil, nil, SessionNotFoundError{}
+	}
+
 	if len(token) == 12 {
 		return findUserWithLegacyRefreshToken(tx, token, forUpdate)
 	}
@@ -648,11 +653,11 @@ func FindUserWithRefreshToken(tx *storage.Connection, dbEncryption conf.Database
 func findUserWithRefreshToken(tx *storage.Connection, dbEncryption conf.DatabaseEncryptionConfiguration, token string, forUpdate bool) (*User, *crypto.RefreshToken, *Session, error) {
 	refreshToken, err := crypto.ParseRefreshToken(token)
 	if err != nil {
-		return nil, nil, nil, err
+		// refresh token is not valid
+		return nil, nil, nil, SessionNotFoundError{}
 	}
 
-	// first find the session to check the token's signature
-	session, err := FindSessionByID(tx, refreshToken.SessionID, false)
+	session, err := FindSessionByID(tx, refreshToken.SessionID, forUpdate)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -663,26 +668,26 @@ func findUserWithRefreshToken(tx *storage.Connection, dbEncryption conf.Database
 		return nil, nil, nil, SessionNotFoundError{}
 	}
 
-	key, _, err := session.GetRefreshTokenHmacKey(dbEncryption)
+	key, shouldReEncrypt, err := session.GetRefreshTokenHmacKey(dbEncryption)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	if !refreshToken.CheckSignature(key) {
-		// TODO: return SessionNotFound, log informational
-		return nil, nil, nil, fmt.Errorf("refresh token for session %s with counter %v has invalid signature", session.ID.String(), refreshToken.Counter)
+		// refresh token signature is not valid for this session
+		return nil, nil, nil, SessionNotFoundError{}
+	}
+
+	if shouldReEncrypt && forUpdate {
+		err := session.ReEncryptRefreshTokenHmacKey(tx, dbEncryption)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 	}
 
 	user, err := FindUserByID(tx, session.UserID)
 	if err != nil {
 		return nil, nil, nil, err
-	}
-
-	if forUpdate {
-		session, err = FindSessionByID(tx, refreshToken.SessionID, forUpdate)
-		if err != nil {
-			return nil, nil, nil, err
-		}
 	}
 
 	return user, refreshToken, session, nil

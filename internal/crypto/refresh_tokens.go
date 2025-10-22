@@ -61,7 +61,7 @@ func (r *RefreshToken) Encode(hmacSha256Key []byte) string {
 
 	result = append(result, 0)
 	result = append(result, r.SessionID.Bytes()...)
-	result = binary.AppendUvarint(result, uint64(r.Counter))
+	result = binary.AppendUvarint(result, safeUint64(r.Counter))
 
 	// Note on truncating the HMAC-SHA-256 output:
 	// This does not impact security as the brute-force space is 2^128 and
@@ -90,6 +90,22 @@ var (
 	ErrRefreshTokenCounterInvalid  = errors.New("crypto: refresh token's counter is not valid")
 )
 
+func safeInt64(v uint64) int64 {
+	if v > math.MaxInt64 {
+		return math.MaxInt64
+	}
+
+	return int64(v)
+}
+
+func safeUint64(v int64) uint64 {
+	if v < 0 {
+		return 0
+	}
+
+	return uint64(v)
+}
+
 func ParseRefreshToken(token string) (*RefreshToken, error) {
 	bytes, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil {
@@ -111,19 +127,12 @@ func ParseRefreshToken(token string) (*RefreshToken, error) {
 		return nil, ErrRefreshTokenChecksumInvalid
 	}
 
-	sessionID, err := uuid.FromBytes(parseFrom[0:16])
-	if err != nil {
-		return nil, err
-	}
+	sessionID := uuid.FromBytesOrNil(parseFrom[0:16])
 
 	parseFrom = parseFrom[16:]
 
 	counter, counterBytes := binary.Uvarint(parseFrom)
 	if counterBytes <= 0 {
-		return nil, ErrRefreshTokenCounterInvalid
-	}
-
-	if counter > math.MaxInt64 {
 		return nil, ErrRefreshTokenCounterInvalid
 	}
 
@@ -140,7 +149,7 @@ func ParseRefreshToken(token string) (*RefreshToken, error) {
 
 		Version:   0,
 		SessionID: sessionID,
-		Counter:   int64(counter),
+		Counter:   safeInt64(counter),
 		Signature: signature,
 	}, nil
 }
