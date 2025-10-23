@@ -355,7 +355,7 @@ func (s *Service) RefreshTokenGrant(ctx context.Context, db *storage.Connection,
 
 				if counterDifference < 0 {
 					// refresh token was not issued by this server
-					apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid Refresh Token: Not Issued By This Server").WithInternalMessage("Refresh token for session %s has a counter that's ahead %d of the database state", session.ID.String(), counterDifference)
+					return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "Invalid Refresh Token: Not Issued By This Server").WithInternalMessage("Refresh token for session %s has a counter that's ahead %d of the database state", session.ID.String(), -counterDifference)
 				} else if counterDifference == 0 || config.Security.RefreshTokenAllowReuse {
 					// normal refresh token use
 					counter := *session.RefreshTokenCounter + 1

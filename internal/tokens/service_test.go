@@ -684,3 +684,84 @@ func (ts *RefreshTokenV2Suite) TestDBEncryption() {
 	require.True(ts.T(), strings.Contains(encryptedStrings[0], "\"key_id\":\"B\""))
 	require.True(ts.T(), strings.Contains(encryptedStrings[1], "\"key_id\":\"A\""))
 }
+
+func (ts *RefreshTokenV2Suite) TestInvalidRefreshTokens() {
+	config := ts.config()
+	require.Equal(ts.T(), 2, config.Security.RefreshTokenAlgorithmVersion)
+
+	config.Security.RefreshTokenRotationEnabled = false
+	config.Security.RefreshTokenReuseInterval = 1
+	config.Security.RefreshTokenAllowReuse = false
+
+	clock := time.Now()
+
+	srv := NewService(config, &panicHookManager{})
+	srv.SetTimeFunc(func() time.Time {
+		return clock
+	})
+
+	req, err := http.NewRequest("POST", "https://example.com/", nil)
+	require.NoError(ts.T(), err)
+
+	req = req.WithContext(context.Background())
+	responseHeaders := make(http.Header)
+
+	at, err := srv.IssueRefreshToken(
+		req,
+		responseHeaders,
+		ts.Conn,
+		ts.User,
+		models.PasswordGrant,
+		models.GrantParams{},
+	)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), at)
+
+	prt, err := crypto.ParseRefreshToken(at.RefreshToken)
+	require.NoError(ts.T(), err)
+
+	session, err := models.FindSessionByID(ts.Conn, prt.SessionID, false)
+	require.NoError(ts.T(), err)
+
+	key, _, err := session.GetRefreshTokenHmacKey(config.Security.DBEncryption)
+	require.NoError(ts.T(), err)
+
+	// tamper with counter
+	prt.Counter += 1
+	tamperedRefreshToken := prt.Encode(key)
+
+	responseHeaders = make(http.Header)
+	nrt, err := srv.RefreshTokenGrant(context.Background(), ts.Conn, req, responseHeaders, RefreshTokenGrantParams{
+		RefreshToken: tamperedRefreshToken,
+	})
+	require.Error(ts.T(), err)
+	require.Nil(ts.T(), nrt)
+
+	require.Equal(ts.T(), prt.SessionID.String(), responseHeaders.Get("sb-auth-session-id"))
+
+	// tamper with signature
+	prt.Counter = 0
+	tamperedRefreshToken = prt.Encode(make([]byte, 32))
+
+	responseHeaders = make(http.Header)
+	nrt, err = srv.RefreshTokenGrant(context.Background(), ts.Conn, req, responseHeaders, RefreshTokenGrantParams{
+		RefreshToken: tamperedRefreshToken,
+	})
+	require.Error(ts.T(), err)
+	require.Nil(ts.T(), nrt)
+
+	require.Equal(ts.T(), "", responseHeaders.Get("sb-auth-session-id"))
+
+	// remove the session
+	err = models.LogoutSession(ts.Conn, prt.SessionID)
+	require.NoError(ts.T(), err)
+
+	responseHeaders = make(http.Header)
+	nrt, err = srv.RefreshTokenGrant(context.Background(), ts.Conn, req, responseHeaders, RefreshTokenGrantParams{
+		RefreshToken: at.RefreshToken,
+	})
+	require.Error(ts.T(), err)
+	require.Nil(ts.T(), nrt)
+
+	require.Equal(ts.T(), "", responseHeaders.Get("sb-auth-session-id"))
+}
