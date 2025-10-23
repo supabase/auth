@@ -123,10 +123,6 @@ func (s *Session) GetRefreshTokenHmacKey(dbEncryption conf.DatabaseEncryptionCon
 		return hmacKey, dbEncryption.Encrypt && es.ShouldReEncrypt(dbEncryption.EncryptionKeyID), nil
 	}
 
-	if s.RefreshTokenHmacKey == nil {
-		return nil, false, nil
-	}
-
 	hmacKey, err := base64.RawURLEncoding.DecodeString(*s.RefreshTokenHmacKey)
 	if err != nil {
 		return nil, false, err

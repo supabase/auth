@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/models"
 )
 
@@ -889,4 +890,27 @@ $$;`
 			ts.Config.Hook.CustomAccessToken.Enabled = false
 		})
 	}
+}
+
+func TestRefreshTokenGrantParamsValidate(t *testing.T) {
+	examples := []string{
+		"",
+		"01234567890",
+		"AAAAAAAAAAAA",
+		"------------",
+		"0000000000000",
+	}
+
+	p := &RefreshTokenGrantParams{}
+
+	for _, example := range examples {
+		p.RefreshToken = example
+		require.Error(t, p.Validate())
+	}
+
+	p.RefreshToken = "0123456abcde"
+	require.NoError(t, p.Validate())
+
+	p.RefreshToken = (&crypto.RefreshToken{}).Encode(make([]byte, 32))
+	require.NoError(t, p.Validate())
 }
