@@ -16,8 +16,8 @@ func TestSafeIntegers(t *testing.T) {
 	require.Equal(t, int64(math.MaxInt64), safeInt64(math.MaxUint64))
 	require.Equal(t, int64(math.MaxInt64), safeInt64(math.MaxInt64))
 
-	require.Equal(t, int64(0), safeUint64(-1))
-	require.Equal(t, int64(math.MaxInt64), safeUint64(math.MaxInt64))
+	require.Equal(t, uint64(0), safeUint64(-1))
+	require.Equal(t, uint64(math.MaxInt64), safeUint64(math.MaxInt64))
 }
 
 func TestRefreshTokenParse(t *testing.T) {
