@@ -54,8 +54,10 @@ func (ts *RefreshTokenTestSuite) TestGrantRefreshTokenSwap() {
 	s, err := GrantRefreshTokenSwap(ts.config.AuditLog, &http.Request{}, ts.db, u, r)
 	require.NoError(ts.T(), err)
 
-	_, nr, _, err := FindUserWithRefreshToken(ts.db, r.Token, false)
+	_, anyNR, _, err := FindUserWithRefreshToken(ts.db, ts.config.Security.DBEncryption, r.Token, false)
 	require.NoError(ts.T(), err)
+
+	nr := anyNR.(*RefreshToken)
 
 	require.Equal(ts.T(), r.ID, nr.ID)
 	require.True(ts.T(), nr.Revoked, "expected old token to be revoked")
@@ -69,9 +71,11 @@ func (ts *RefreshTokenTestSuite) TestLogout() {
 	r, err := GrantAuthenticatedUser(ts.db, u, GrantParams{})
 	require.NoError(ts.T(), err)
 
+	var anyR any
+
 	require.NoError(ts.T(), Logout(ts.db, u.ID))
-	u, r, _, err = FindUserWithRefreshToken(ts.db, r.Token, false)
-	require.Errorf(ts.T(), err, "expected error when there are no refresh tokens to authenticate. user: %v token: %v", u, r)
+	u, anyR, _, err = FindUserWithRefreshToken(ts.db, ts.config.Security.DBEncryption, r.Token, false)
+	require.Errorf(ts.T(), err, "expected error when there are no refresh tokens to authenticate. user: %v token: %v", u, anyR)
 
 	require.True(ts.T(), IsNotFoundError(err), "expected NotFoundError")
 }
