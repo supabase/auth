@@ -199,7 +199,7 @@ func (a *API) handleSamlAcs(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
-	serviceProvider := a.getSAMLServiceProvider(idpMetadata, initiatedBy == "idp")
+	serviceProvider := a.getSAMLServiceProvider(idpMetadata, ssoProvider.SAMLProvider.EntityID, initiatedBy == "idp")
 	spAssertion, err := serviceProvider.ParseResponse(r, requestIds)
 	if err != nil {
 		if ire, ok := err.(*saml.InvalidResponseError); ok {

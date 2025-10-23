@@ -13,7 +13,7 @@ import (
 
 // getSAMLServiceProvider generates a new service provider object with the
 // (optionally) provided descriptor (metadata) for the identity provider.
-func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor, idpInitiated bool) *saml.ServiceProvider {
+func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor, entityID string, idpInitiated bool) *saml.ServiceProvider {
 	var externalURL *url.URL
 
 	if a.config.SAML.ExternalURL != "" {
@@ -47,6 +47,7 @@ func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 		SignRequest:       true,
 		AllowIDPInitiated: idpInitiated,
 		IDPMetadata:       identityProvider,
+		EntityID:          entityID,
 	})
 
 	provider.AuthnNameIDFormat = saml.PersistentNameIDFormat
@@ -56,7 +57,7 @@ func (a *API) getSAMLServiceProvider(identityProvider *saml.EntityDescriptor, id
 
 // SAMLMetadata serves GoTrue's SAML Service Provider metadata file.
 func (a *API) SAMLMetadata(w http.ResponseWriter, r *http.Request) error {
-	serviceProvider := a.getSAMLServiceProvider(nil, true)
+	serviceProvider := a.getSAMLServiceProvider(nil, "", true)
 
 	metadata := serviceProvider.Metadata()
 
