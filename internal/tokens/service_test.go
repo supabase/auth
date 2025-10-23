@@ -376,7 +376,8 @@ func (ts *RefreshTokenV2Suite) TestConcurrentReuse() {
 	endTimeChan := make(chan time.Time)
 	defer close(endTimeChan)
 
-	concurrency := 50 // going too large might use too many database connections
+	// in CI this can cause quite a bit of issues due to the limited number of connections to the database
+	concurrency := 20
 	wg.Add(concurrency + 2)
 
 	endTimes := make([]time.Time, 0, concurrency+1)
