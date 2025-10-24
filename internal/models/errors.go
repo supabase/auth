@@ -31,6 +31,8 @@ func IsNotFoundError(err error) bool {
 		return true
 	case OAuthServerAuthorizationNotFoundError, *OAuthServerAuthorizationNotFoundError:
 		return true
+	case PasskeyChallengeNotFoundError, *PasskeyChallengeNotFoundError:
+		return true
 	}
 	return false
 }
@@ -88,6 +90,12 @@ type ChallengeNotFoundError struct{}
 
 func (e ChallengeNotFoundError) Error() string {
 	return "Challenge not found"
+}
+
+type PasskeyChallengeNotFoundError struct{}
+
+func (e PasskeyChallengeNotFoundError) Error() string {
+	return "Passkey challenge not found"
 }
 
 // SSOProviderNotFoundError represents an error when a SSO Provider can't be
