@@ -99,6 +99,12 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	// Create FlowState if user is using PKCE OR provider requires PKCE
 	// This ensures we can store provider's code_verifier even for implicit flows
 	if isPKCEFlow(flowType) || providerRequiresPKCE {
+		// a bit hacky but we have a db constraint on code challenge method,
+		// so we default to s256 if the provider requires PKCE and the code challenge method is not provided
+		if providerRequiresPKCE && codeChallengeMethod == "" {
+			codeChallengeMethod = "s256"
+		}
+
 		flowState, err = generateFlowState(db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil, providerCodeVerifier)
 		if err != nil {
 			return "", err
