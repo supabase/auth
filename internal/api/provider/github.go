@@ -70,8 +70,8 @@ func NewGithubProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 	}, nil
 }
 
-func (g githubProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g githubProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(context.Background(), code, opts...)
 }
 
 func (g githubProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -107,4 +107,8 @@ func (g githubProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	}
 
 	return data, nil
+}
+// RequiresPKCE returns false as this provider does not require PKCE
+func (p *githubProvider) RequiresPKCE() bool {
+	return false
 }

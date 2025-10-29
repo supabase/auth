@@ -11,8 +11,10 @@ import (
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/utilities"
+	"golang.org/x/oauth2"
 )
 
 // OAuthProviderData contains the userData and token returned by the oauth provider
@@ -83,7 +85,19 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		"code":     oauthCode,
 	}).Debug("Exchanging oauth code")
 
-	token, err := oAuthProvider.GetOAuthToken(oauthCode)
+	// Build token exchange options, including PKCE code verifier if available
+	var tokenOpts []oauth2.AuthCodeOption
+	flowStateID := getFlowStateID(ctx)
+	if flowStateID != "" {
+		db := a.db.WithContext(ctx)
+		flowState, fsErr := models.FindFlowStateByID(db, flowStateID)
+		if fsErr == nil && flowState.ProviderCodeVerifier != "" {
+			// Pass PKCE code verifier for token exchange
+			tokenOpts = append(tokenOpts, oauth2.VerifierOption(flowState.ProviderCodeVerifier))
+		}
+	}
+
+	token, err := oAuthProvider.GetOAuthToken(oauthCode, tokenOpts...)
 	if err != nil {
 		return nil, apierrors.NewInternalServerError("Unable to exchange external code: %s", oauthCode).WithInternalError(err)
 	}

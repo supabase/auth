@@ -102,9 +102,20 @@ type Provider interface {
 
 // OAuthProvider specifies additional methods needed for providers using OAuth
 type OAuthProvider interface {
+	// AuthCodeURL returns the URL for the authorization code flow
 	AuthCodeURL(string, ...oauth2.AuthCodeOption) string
+
+	// GetUserData retrieves user information from the provider using the access token
 	GetUserData(context.Context, *oauth2.Token) (*UserProvidedData, error)
-	GetOAuthToken(string) (*oauth2.Token, error)
+
+	// GetOAuthToken exchanges the authorization code for an access token
+	// The opts parameter can include PKCE verifier for providers that require it
+	GetOAuthToken(string, ...oauth2.AuthCodeOption) (*oauth2.Token, error)
+
+	// RequiresPKCE indicates whether this provider requires PKCE for its OAuth authorization code flow
+	// When true, the auth instance will automatically generate and manage PKCE parameters
+	// for communication with this provider, regardless of whether the end user requested PKCE
+	RequiresPKCE() bool
 }
 
 func chooseHost(base, defaultHost string) string {

@@ -81,9 +81,25 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 	}
 	flowType := getFlowFromChallenge(codeChallenge)
 
+	// Check if this provider requires PKCE for its own authorization flow
+	// Generate a separate PKCE pair for communication with the external provider
+	// This is separate from the user's PKCE and is used for provider-to-provider auth
+	providerRequiresPKCE := false
+	providerCodeVerifier := ""
+	if oauthProvider, ok := p.(provider.OAuthProvider); ok {
+		providerRequiresPKCE = oauthProvider.RequiresPKCE()
+		if providerRequiresPKCE {
+			// Uses oauth2 library's built-in PKCE support
+			providerCodeVerifier = oauth2.GenerateVerifier()
+		}
+	}
+
 	flowStateID := ""
-	if isPKCEFlow(flowType) {
-		flowState, err := generateFlowState(db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil)
+	var flowState *models.FlowState
+	// Create FlowState if user is using PKCE OR provider requires PKCE
+	// This ensures we can store provider's code_verifier even for implicit flows
+	if isPKCEFlow(flowType) || providerRequiresPKCE {
+		flowState, err = generateFlowState(db, providerType, models.OAuth, codeChallengeMethod, codeChallenge, nil, providerCodeVerifier)
 		if err != nil {
 			return "", err
 		}
@@ -127,6 +143,13 @@ func (a *API) GetExternalProviderRedirectURL(w http.ResponseWriter, r *http.Requ
 		} else {
 			authUrlParams = append(authUrlParams, oauth2.SetAuthURLParam(key, query.Get(key)))
 		}
+	}
+
+	// Pass the GENERATED PKCE parameters (not user's PKCE) to the external provider's
+	// authorization URL using oauth2 library's built-in PKCE support
+	// This works for any OAuth provider that supports/requires PKCE
+	if flowState != nil && flowState.ProviderCodeVerifier != "" {
+		authUrlParams = append(authUrlParams, oauth2.S256ChallengeOption(flowState.ProviderCodeVerifier))
 	}
 
 	authURL := p.AuthCodeURL(tokenString, authUrlParams...)
@@ -237,8 +260,10 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 				return terr
 			}
 		}
-		if flowState != nil {
-			// This means that the callback is using PKCE
+		// Check if USER requested PKCE (not just if FlowState exists)
+		// FlowState might exist only because provider requires PKCE
+		if flowState.IsUserPKCEFlow() {
+			// User wants PKCE flow - store tokens and return auth code
 			flowState.ProviderAccessToken = providerAccessToken
 			flowState.ProviderRefreshToken = providerRefreshToken
 			flowState.UserID = &(user.ID)
@@ -247,6 +272,7 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 
 			terr = tx.Update(flowState)
 		} else {
+			// User wants implicit flow - issue token directly
 			token, terr = a.issueRefreshToken(r, tx, user, models.OAuth, grantParams)
 		}
 
@@ -272,14 +298,15 @@ func (a *API) internalExternalProviderCallback(w http.ResponseWriter, r *http.Re
 	}
 
 	rurl := a.getExternalRedirectURL(r)
-	if flowState != nil {
-		// This means that the callback is using PKCE
-		// Set the flowState.AuthCode to the query param here
+	// Check if USER requested PKCE (not just if FlowState exists)
+	if flowState.IsUserPKCEFlow() {
+		// User wants PKCE - return auth code
 		rurl, err = a.prepPKCERedirectURL(rurl, flowState.AuthCode)
 		if err != nil {
 			return err
 		}
 	} else if token != nil {
+		// User wants implicit flow - return token directly
 		q := url.Values{}
 		q.Set("provider_token", providerAccessToken)
 		// Because not all providers give out a refresh token
@@ -644,6 +671,9 @@ func (a *API) Provider(ctx context.Context, name string, scopes string) (provide
 	case "spotify":
 		pConfig = config.External.Spotify
 		p, err = provider.NewSpotifyProvider(pConfig, scopes)
+	case "supabase":
+		pConfig = config.External.Supabase
+		p, err = provider.NewSupabaseProvider(ctx, pConfig, scopes)
 	case "slack":
 		pConfig = config.External.Slack
 		p, err = provider.NewSlackProvider(pConfig, scopes)

@@ -72,8 +72,8 @@ func NewGoogleProvider(ctx context.Context, ext conf.OAuthProviderConfiguration,
 	}, nil
 }
 
-func (g googleProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g googleProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(context.Background(), code, opts...)
 }
 
 const UserInfoEndpointGoogle = "https://www.googleapis.com/userinfo/v2/me"
@@ -141,4 +141,8 @@ func ResetGoogleProvider() {
 func OverrideGoogleProvider(issuer, userInfo string) {
 	internalIssuerGoogle = issuer
 	internalUserInfoEndpointGoogle = userInfo
+}
+// RequiresPKCE returns false as this provider does not require PKCE
+func (p *googleProvider) RequiresPKCE() bool {
+	return false
 }

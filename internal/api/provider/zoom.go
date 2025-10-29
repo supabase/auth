@@ -51,8 +51,8 @@ func NewZoomProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, error)
 	}, nil
 }
 
-func (g zoomProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g zoomProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(context.Background(), code, opts...)
 }
 
 func (g zoomProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -88,4 +88,8 @@ func (g zoomProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*User
 		ProviderId: u.ID,
 	}
 	return data, nil
+}
+// RequiresPKCE returns false as this provider does not require PKCE
+func (p *zoomProvider) RequiresPKCE() bool {
+	return false
 }

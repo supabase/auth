@@ -13,6 +13,8 @@ const PKCEInvalidCodeMethodError = "code challenge method not supported"
 
 // VerifyPKCEChallenge performs PKCE verification using the provided challenge, method, and verifier
 // This is a shared utility function used by both FlowState and OAuthServerAuthorization
+// Note: For generating PKCE verifiers and challenges, use golang.org/x/oauth2.GenerateVerifier()
+// and oauth2.S256ChallengeFromVerifier() instead of custom implementations
 func VerifyPKCEChallenge(codeChallenge, codeChallengeMethod, codeVerifier string) error {
 	switch strings.ToLower(codeChallengeMethod) {
 	case "s256":

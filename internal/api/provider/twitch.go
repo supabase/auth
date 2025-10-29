@@ -75,8 +75,8 @@ func NewTwitchProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAut
 	}, nil
 }
 
-func (t twitchProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return t.Exchange(context.Background(), code)
+func (t twitchProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return t.Exchange(context.Background(), code, opts...)
 }
 
 func (t twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -151,4 +151,8 @@ func (t twitchProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*Us
 	}
 
 	return data, nil
+}
+// RequiresPKCE returns false as this provider does not require PKCE
+func (p *twitchProvider) RequiresPKCE() bool {
+	return false
 }
