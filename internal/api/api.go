@@ -348,6 +348,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 						r.Route("/{client_id}", func(r *router) {
 							r.Use(api.oauthServer.LoadOAuthServerClient)
 							r.Get("/", api.oauthServer.OAuthServerClientGet)
+							r.Put("/", api.oauthServer.OAuthServerClientUpdate)
 							r.Delete("/", api.oauthServer.OAuthServerClientDelete)
 							r.Post("/regenerate_secret", api.oauthServer.OAuthServerClientRegenerateSecret)
 						})

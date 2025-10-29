@@ -177,6 +177,33 @@ func (s *Server) OAuthServerClientGet(w http.ResponseWriter, r *http.Request) er
 	return shared.SendJSON(w, http.StatusOK, response)
 }
 
+// OAuthServerClientUpdate handles PUT /admin/oauth/clients/{client_id}
+func (s *Server) OAuthServerClientUpdate(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	client := shared.GetOAuthServerClient(ctx)
+
+	var params OAuthServerClientUpdateParams
+	if err := json.NewDecoder(r.Body).Decode(&params); err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeBadJSON, "Invalid JSON body")
+	}
+
+	// Return early if no fields are provided for update
+	if params.isEmpty() {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "No fields provided for update")
+	}
+
+	updatedClient, err := s.updateOAuthServerClient(ctx, client.ID, &params)
+	if err != nil {
+		if httpErr, ok := err.(*apierrors.HTTPError); ok {
+			return httpErr
+		}
+		return apierrors.NewInternalServerError("Error updating OAuth client").WithInternalError(err)
+	}
+
+	response := oauthServerClientToResponse(updatedClient)
+	return shared.SendJSON(w, http.StatusOK, response)
+}
+
 // OAuthServerClientDelete handles DELETE /admin/oauth/clients/{client_id}
 func (s *Server) OAuthServerClientDelete(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
