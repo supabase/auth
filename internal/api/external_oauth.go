@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/supabase/auth/internal/api/apierrors"
 	"github.com/supabase/auth/internal/api/provider"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/observability"
 	"github.com/supabase/auth/internal/utilities"
 )
@@ -26,6 +27,8 @@ type OAuthProviderData struct {
 // extracting the provider requested
 func (a *API) loadFlowState(w http.ResponseWriter, r *http.Request) (context.Context, error) {
 	ctx := r.Context()
+	db := a.db.WithContext(ctx)
+
 	oauthToken := r.URL.Query().Get("oauth_token")
 	if oauthToken != "" {
 		ctx = withRequestToken(ctx, oauthToken)
@@ -36,7 +39,7 @@ func (a *API) loadFlowState(w http.ResponseWriter, r *http.Request) (context.Con
 	}
 
 	var err error
-	ctx, err = a.loadExternalState(ctx, r)
+	ctx, err = a.loadExternalState(ctx, r, db)
 	if err != nil {
 		u, uerr := url.ParseRequestURI(a.config.SiteURL)
 		if uerr != nil {
@@ -69,7 +72,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeBadOAuthCallback, "OAuth callback with missing authorization code missing")
 	}
 
-	oAuthProvider, err := a.OAuthProvider(ctx, providerType)
+	oAuthProvider, _, err := a.OAuthProvider(ctx, providerType)
 	if err != nil {
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthProviderNotSupported, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
@@ -111,7 +114,7 @@ func (a *API) oAuthCallback(ctx context.Context, r *http.Request, providerType s
 }
 
 func (a *API) oAuth1Callback(ctx context.Context, providerType string) (*OAuthProviderData, error) {
-	oAuthProvider, err := a.OAuthProvider(ctx, providerType)
+	oAuthProvider, _, err := a.OAuthProvider(ctx, providerType)
 	if err != nil {
 		return nil, apierrors.NewBadRequestError(apierrors.ErrorCodeOAuthProviderNotSupported, "Unsupported provider: %+v", err).WithInternalError(err)
 	}
@@ -141,16 +144,16 @@ func (a *API) oAuth1Callback(ctx context.Context, providerType string) (*OAuthPr
 }
 
 // OAuthProvider returns the corresponding oauth provider as an OAuthProvider interface
-func (a *API) OAuthProvider(ctx context.Context, name string) (provider.OAuthProvider, error) {
-	providerCandidate, err := a.Provider(ctx, name, "")
+func (a *API) OAuthProvider(ctx context.Context, name string) (provider.OAuthProvider, conf.OAuthProviderConfiguration, error) {
+	providerCandidate, pConfig, err := a.Provider(ctx, name, "")
 	if err != nil {
-		return nil, err
+		return nil, pConfig, err
 	}
 
 	switch p := providerCandidate.(type) {
 	case provider.OAuthProvider:
-		return p, nil
+		return p, pConfig, nil
 	default:
-		return nil, fmt.Errorf("Provider %v cannot be used for OAuth", name)
+		return nil, pConfig, fmt.Errorf("Provider %v cannot be used for OAuth", name)
 	}
 }

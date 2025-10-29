@@ -95,6 +95,7 @@ type AfterUserCreatedOutput struct{}
 type SMS struct {
 	OTP     string `json:"otp,omitempty"`
 	SMSType string `json:"sms_type,omitempty"`
+	Phone   string `json:"phone,omitempty"`
 }
 
 // AccessTokenClaims is a struct thats used for JWT claims
@@ -109,6 +110,7 @@ type AccessTokenClaims struct {
 	AuthenticationMethodReference []models.AMREntry      `json:"amr,omitempty"`
 	SessionId                     string                 `json:"session_id,omitempty"`
 	IsAnonymous                   bool                   `json:"is_anonymous"`
+	ClientID                      string                 `json:"client_id,omitempty"`
 }
 
 type MFAVerificationAttemptInput struct {

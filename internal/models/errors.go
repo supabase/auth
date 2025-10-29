@@ -27,6 +27,10 @@ func IsNotFoundError(err error) bool {
 		return true
 	case OneTimeTokenNotFoundError, *OneTimeTokenNotFoundError:
 		return true
+	case OAuthServerClientNotFoundError, *OAuthServerClientNotFoundError:
+		return true
+	case OAuthServerAuthorizationNotFoundError, *OAuthServerAuthorizationNotFoundError:
+		return true
 	}
 	return false
 }

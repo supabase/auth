@@ -59,15 +59,26 @@ func (t *Time) UnmarshalText(text []byte) error {
 
 // OAuthProviderConfiguration holds all config related to external account providers.
 type OAuthProviderConfiguration struct {
-	ClientID    []string `json:"client_id" split_words:"true"`
-	Secret      string   `json:"secret"`
-	RedirectURI string   `json:"redirect_uri" split_words:"true"`
-	URL         string   `json:"url"`
-	ApiURL      string   `json:"api_url" split_words:"true"`
-	Enabled     bool     `json:"enabled"`
+	ClientID      []string `json:"client_id" split_words:"true"`
+	Secret        string   `json:"secret"`
+	RedirectURI   string   `json:"redirect_uri" split_words:"true"`
+	URL           string   `json:"url"`
+	ApiURL        string   `json:"api_url" split_words:"true"`
+	Enabled       bool     `json:"enabled"`
+	EmailOptional bool     `json:"email_optional" split_words:"true"`
 	// SkipNonceCheck bypasses nonce verification during OIDC token validation.
 	// Note: Nonce verification helps prevent replay attacks; only disable when necessary.
 	SkipNonceCheck bool `json:"skip_nonce_check" split_words:"true"`
+}
+
+// OAuthServerConfiguration holds OAuth server configuration
+type OAuthServerConfiguration struct {
+	Enabled                  bool          `json:"enabled" default:"false"`
+	AllowDynamicRegistration bool          `json:"allow_dynamic_registration" split_words:"true"`
+	AuthorizationPath        string        `json:"authorization_path" split_words:"true"`
+	AuthorizationTimeout     time.Duration `json:"authorization_timeout" split_words:"true" default:"5m"`
+	// Placeholder for now, for (near) future extensibility
+	DefaultScope string `json:"default_scope" split_words:"true" default:"email"`
 }
 
 type AnonymousProviderConfiguration struct {
@@ -82,11 +93,22 @@ type EmailProviderConfiguration struct {
 	MagicLinkEnabled bool `json:"magic_link_enabled" default:"true" split_words:"true"`
 }
 
+type DBAdvisorConfiguration struct {
+	Enabled             bool          `json:"enabled" default:"true"`
+	SamplingInterval    time.Duration `json:"sampling_interval" split_words:"true" default:"200ms"`
+	ObservationInterval time.Duration `json:"observation_interval" split_words:"true" default:"20s"`
+}
+
 // DBConfiguration holds all the database related configuration.
 type DBConfiguration struct {
 	Driver    string `json:"driver" required:"true"`
 	URL       string `json:"url" envconfig:"DATABASE_URL" required:"true"`
 	Namespace string `json:"namespace" envconfig:"DB_NAMESPACE" default:"auth"`
+
+	// Percentage of DB conns the auth server may use in
+	// integer form i.e.: [1, 100] -> [1%, 100%]
+	ConnPercentage int `json:"conn_percentage" split_words:"true"`
+
 	// MaxPoolSize defaults to 0 (unlimited).
 	MaxPoolSize       int           `json:"max_pool_size" split_words:"true"`
 	MaxIdlePoolSize   int           `json:"max_idle_pool_size" split_words:"true"`
@@ -95,9 +117,12 @@ type DBConfiguration struct {
 	HealthCheckPeriod time.Duration `json:"health_check_period" split_words:"true"`
 	MigrationsPath    string        `json:"migrations_path" split_words:"true" default:"./migrations"`
 	CleanupEnabled    bool          `json:"cleanup_enabled" split_words:"true" default:"false"`
+
+	Advisor DBAdvisorConfiguration `json:"advisor"`
 }
 
 func (c *DBConfiguration) Validate() error {
+	c.ConnPercentage = min(max(c.ConnPercentage, 0), 100)
 	return nil
 }
 
@@ -248,28 +273,70 @@ type AuditLogConfiguration struct {
 	DisablePostgres bool `split_words:"true" default:"false"`
 }
 
+type ExperimentalConfiguration struct {
+	// Names of providers (e.g. "google") which have their own identity
+	// linking domain, meaning that the ones listed here _will not
+	// participate_ in email similarity linking with other accounts.
+	ProvidersWithOwnLinkingDomain []string `split_words:"true"`
+}
+
+// ReloadingConfiguration holds the configuration values for runtime
+// configuration reloads. These are startup configuration values meaning
+// they do not react to live config reloads.
+//
+// IMPORTANT:
+// * You must provide the --config-dir flag for these settings to take effect.
+// * These config values are for startup, they remain static through reloads.
+type ReloadingConfiguration struct {
+
+	// If notify reloading is enabled the auth server will attempt to use the
+	// filesystems notification support to watch for config updates.
+	NotifyEnabled bool `json:"notify_enabled" split_words:"true" default:"true"`
+
+	// When notify reloading fails, fallback to filesystem polling if this
+	// setting is enabled.
+	PollerEnabled bool `json:"poller_enabled" split_words:"false" default:"false"`
+
+	// This determines how often to poll the filesystem when notify is disabled.
+	PollerInterval time.Duration `json:"poller_interval" split_words:"true" default:"10s"`
+
+	// If signal reloading is enabled the auth server will listen for the
+	// given SignalNumber and reload the config when received. This may be
+	// used to configure `systemd reload` support, by default the SIGUSR1 linux
+	// signal number of 10 is used.
+	SignalEnabled bool `json:"signal_enabled" split_words:"true" default:"false"`
+	SignalNumber  int  `json:"signal_number" split_words:"true" default:"10"`
+
+	// When at least one reloader is enabled this flag determines how much idle
+	// time must pass before triggering a reload. This ensures a single
+	// auth server config reload operation during a burst of config updates.
+	GracePeriodInterval time.Duration `json:"grace_period_interval" split_words:"true" default:"5s"`
+}
+
 // GlobalConfiguration holds all the configuration that applies to all instances.
 type GlobalConfiguration struct {
 	API           APIConfiguration
 	DB            DBConfiguration
 	External      ProviderConfiguration
-	Logging       LoggingConfig  `envconfig:"LOG"`
-	Profiler      ProfilerConfig `envconfig:"PROFILER"`
-	OperatorToken string         `split_words:"true" required:"false"`
+	OAuthServer   OAuthServerConfiguration `envconfig:"OAUTH_SERVER"`
+	Logging       LoggingConfig            `envconfig:"LOG"`
+	Profiler      ProfilerConfig           `envconfig:"PROFILER"`
+	OperatorToken string                   `split_words:"true" required:"false"`
 	Tracing       TracingConfig
 	Metrics       MetricsConfig
 	SMTP          SMTPConfiguration
 	AuditLog      AuditLogConfiguration `split_words:"true"`
 
-	RateLimitHeader         string  `split_words:"true"`
-	RateLimitEmailSent      Rate    `split_words:"true" default:"30"`
-	RateLimitSmsSent        Rate    `split_words:"true" default:"30"`
-	RateLimitVerify         float64 `split_words:"true" default:"30"`
-	RateLimitTokenRefresh   float64 `split_words:"true" default:"150"`
-	RateLimitSso            float64 `split_words:"true" default:"30"`
-	RateLimitAnonymousUsers float64 `split_words:"true" default:"30"`
-	RateLimitOtp            float64 `split_words:"true" default:"30"`
-	RateLimitWeb3           float64 `split_words:"true" default:"30"`
+	RateLimitHeader                     string  `split_words:"true"`
+	RateLimitEmailSent                  Rate    `split_words:"true" default:"30"`
+	RateLimitSmsSent                    Rate    `split_words:"true" default:"30"`
+	RateLimitVerify                     float64 `split_words:"true" default:"30"`
+	RateLimitTokenRefresh               float64 `split_words:"true" default:"150"`
+	RateLimitSso                        float64 `split_words:"true" default:"30"`
+	RateLimitAnonymousUsers             float64 `split_words:"true" default:"30"`
+	RateLimitOtp                        float64 `split_words:"true" default:"30"`
+	RateLimitWeb3                       float64 `split_words:"true" default:"30"`
+	RateLimitOAuthDynamicClientRegister float64 `split_words:"true" default:"10"`
 
 	SiteURL         string   `json:"site_url" split_words:"true" required:"true"`
 	URIAllowList    []string `json:"uri_allow_list" split_words:"true"`
@@ -285,6 +352,9 @@ type GlobalConfiguration struct {
 	MFA             MFAConfiguration         `json:"MFA"`
 	SAML            SAMLConfiguration        `json:"saml"`
 	CORS            CORSConfiguration        `json:"cors"`
+
+	Experimental ExperimentalConfiguration `json:"experimental"`
+	Reloading    ReloadingConfiguration    `json:"reloading"`
 }
 
 type CORSConfiguration struct {
@@ -319,6 +389,26 @@ type EmailContentConfiguration struct {
 	EmailChange      string `json:"email_change" split_words:"true"`
 	MagicLink        string `json:"magic_link" split_words:"true"`
 	Reauthentication string `json:"reauthentication"`
+
+	// Account Changes Notifications
+	PasswordChangedNotification     string `json:"password_changed_notification" split_words:"true"`
+	EmailChangedNotification        string `json:"email_changed_notification" split_words:"true"`
+	PhoneChangedNotification        string `json:"phone_changed_notification" split_words:"true"`
+	IdentityLinkedNotification      string `json:"identity_linked_notification" split_words:"true"`
+	IdentityUnlinkedNotification    string `json:"identity_unlinked_notification" split_words:"true"`
+	MFAFactorEnrolledNotification   string `json:"mfa_factor_enrolled_notification" split_words:"true"`
+	MFAFactorUnenrolledNotification string `json:"mfa_factor_unenrolled_notification" split_words:"true"`
+}
+
+// NotificationsConfiguration holds the configuration for notification email states to indicate whether they are enabled or disabled.
+type NotificationsConfiguration struct {
+	PasswordChangedEnabled     bool `json:"password_changed_enabled" split_words:"true" default:"false"`
+	EmailChangedEnabled        bool `json:"email_changed_enabled" split_words:"true" default:"false"`
+	PhoneChangedEnabled        bool `json:"phone_changed_enabled" split_words:"true" default:"false"`
+	IdentityLinkedEnabled      bool `json:"identity_linked_enabled" split_words:"true" default:"false"`
+	IdentityUnlinkedEnabled    bool `json:"identity_unlinked_enabled" split_words:"true" default:"false"`
+	MFAFactorEnrolledEnabled   bool `json:"mfa_factor_enrolled_enabled" split_words:"true" default:"false"`
+	MFAFactorUnenrolledEnabled bool `json:"mfa_factor_unenrolled_enabled" split_words:"true" default:"false"`
 }
 
 type ProviderConfiguration struct {
@@ -416,9 +506,10 @@ type MailerConfiguration struct {
 	Autoconfirm                 bool `json:"autoconfirm"`
 	AllowUnverifiedEmailSignIns bool `json:"allow_unverified_email_sign_ins" split_words:"true" default:"false"`
 
-	Subjects  EmailContentConfiguration `json:"subjects"`
-	Templates EmailContentConfiguration `json:"templates"`
-	URLPaths  EmailContentConfiguration `json:"url_paths"`
+	Subjects      EmailContentConfiguration  `json:"subjects"`
+	Templates     EmailContentConfiguration  `json:"templates"`
+	URLPaths      EmailContentConfiguration  `json:"url_paths"`
+	Notifications NotificationsConfiguration `json:"notifications" split_words:"true"`
 
 	SecureEmailChangeEnabled bool `json:"secure_email_change_enabled" split_words:"true" default:"true"`
 
@@ -427,11 +518,30 @@ type MailerConfiguration struct {
 
 	ExternalHosts []string `json:"external_hosts" split_words:"true"`
 
-	// EXPERIMENTAL: May be removed in a future release.
+	// EXPERIMENTAL: All config below here may be removed in a future release.
+	EmailBackgroundSending        bool   `json:"email_background_sending" split_words:"true" default:"false"`
 	EmailValidationExtended       bool   `json:"email_validation_extended" split_words:"true" default:"false"`
 	EmailValidationServiceURL     string `json:"email_validation_service_url" split_words:"true"`
 	EmailValidationServiceHeaders string `json:"email_validation_service_headers" split_words:"true"`
 	EmailValidationBlockedMX      string `json:"email_validation_blocked_mx" split_words:"true"`
+
+	// Max size in bytes we will read from a template endpoint
+	TemplateMaxSize int `json:"template_max_size" split_words:"true" default:"1000000"`
+
+	// The maximum age of a template before we consider it stale.
+	TemplateMaxAge time.Duration `json:"template_max_age" split_words:"true" default:"10m"`
+
+	// The time between retrying a failed template reload.
+	TemplateRetryInterval time.Duration `json:"template_retry_interval" split_words:"true" default:"10s"`
+
+	// If true enable background reloading of templates to avoid blocking
+	// IO in requests.
+	TemplateReloadingEnabled bool `json:"template_reloading_enabled" split_words:"true" default:"false"`
+
+	// The maximum time a server may be idle before template reloading stops.
+	// Note that even when the server is idle, a config reload will trigger a
+	// template reload.
+	TemplateReloadingMaxIdle time.Duration `json:"template_reloading_max_idle" split_words:"true" default:"20m"`
 
 	serviceHeaders   map[string][]string `json:"-"`
 	blockedMXRecords map[string]bool     `json:"-"`

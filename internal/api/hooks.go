@@ -12,33 +12,53 @@ import (
 	"github.com/supabase/auth/internal/storage"
 )
 
-func (a *API) triggerBeforeUserCreated(
+func (a *API) triggerAfterUserCreated(
 	r *http.Request,
 	conn *storage.Connection,
+	user *models.User,
+) error {
+	if !a.hooksMgr.Enabled(v0hooks.AfterUserCreated) {
+		return nil
+	}
+
+	// We still check tx because we want to make sure we aren't calling this
+	// trigger in code paths that haven't actually created the user yet.
+	if err := checkTX(conn); err != nil {
+		return err
+	}
+
+	req := v0hooks.NewAfterUserCreatedInput(r, user)
+	res := new(v0hooks.AfterUserCreatedOutput)
+	return a.hooksMgr.InvokeHook(conn, r, req, res)
+}
+
+func (a *API) triggerBeforeUserCreated(
+	r *http.Request,
+	db *storage.Connection,
 	user *models.User,
 ) error {
 	if !a.hooksMgr.Enabled(v0hooks.BeforeUserCreated) {
 		return nil
 	}
-	if err := checkTX(conn); err != nil {
+	if err := checkTX(db); err != nil {
 		return err
 	}
 
 	req := v0hooks.NewBeforeUserCreatedInput(r, user)
 	res := new(v0hooks.BeforeUserCreatedOutput)
-	return a.hooksMgr.InvokeHook(conn, r, req, res)
+	return a.hooksMgr.InvokeHook(db, r, req, res)
 }
 
 func (a *API) triggerBeforeUserCreatedExternal(
 	r *http.Request,
-	conn *storage.Connection,
+	db *storage.Connection,
 	userData *provider.UserProvidedData,
 	providerType string,
 ) error {
 	if !a.hooksMgr.Enabled(v0hooks.BeforeUserCreated) {
 		return nil
 	}
-	if err := checkTX(conn); err != nil {
+	if err := checkTX(db); err != nil {
 		return err
 	}
 
@@ -55,7 +75,7 @@ func (a *API) triggerBeforeUserCreatedExternal(
 		err      error
 		decision models.AccountLinkingResult
 	)
-	err = a.db.Transaction(func(tx *storage.Connection) error {
+	err = db.Transaction(func(tx *storage.Connection) error {
 		decision, err = models.DetermineAccountLinking(
 			tx, config, userData.Emails, aud,
 			providerType, userData.Metadata.Subject)
@@ -93,7 +113,7 @@ func (a *API) triggerBeforeUserCreatedExternal(
 	if err != nil {
 		return err
 	}
-	return a.triggerBeforeUserCreated(r, conn, user)
+	return a.triggerBeforeUserCreated(r, db, user)
 }
 
 func checkTX(conn *storage.Connection) error {

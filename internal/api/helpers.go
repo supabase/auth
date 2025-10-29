@@ -3,11 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
+	"slices"
 
-	"github.com/pkg/errors"
 	"github.com/supabase/auth/internal/api/apierrors"
+	"github.com/supabase/auth/internal/api/shared"
 	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/models"
 	"github.com/supabase/auth/internal/security"
@@ -16,14 +16,7 @@ import (
 )
 
 func sendJSON(w http.ResponseWriter, status int, obj interface{}) error {
-	w.Header().Set("Content-Type", "application/json")
-	b, err := json.Marshal(obj)
-	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("Error encoding json response: %v", obj))
-	}
-	w.WriteHeader(status)
-	_, err = w.Write(b)
-	return err
+	return shared.SendJSON(w, status, obj)
 }
 
 func isAdmin(u *models.User, config *conf.GlobalConfiguration) bool {
@@ -42,7 +35,7 @@ func (a *API) requestAud(ctx context.Context, r *http.Request) string {
 
 	// ignore the JWT's aud claim if the role is admin
 	// this is because anon, service_role never had an aud claim to begin with
-	if claims != nil && !isStringInSlice(claims.Role, config.JWT.AdminRoles) {
+	if claims != nil && !slices.Contains(config.JWT.AdminRoles, claims.Role) {
 		aud, _ := claims.GetAudience()
 		if len(aud) != 0 && aud[0] != "" {
 			return aud[0]
@@ -51,15 +44,6 @@ func (a *API) requestAud(ctx context.Context, r *http.Request) string {
 
 	// Finally, return the default if none of the above methods are successful
 	return config.JWT.Aud
-}
-
-func isStringInSlice(checkValue string, list []string) bool {
-	for _, val := range list {
-		if val == checkValue {
-			return true
-		}
-	}
-	return false
 }
 
 type RequestParams interface {

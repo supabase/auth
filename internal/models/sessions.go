@@ -3,6 +3,7 @@ package models
 import (
 	"database/sql"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -88,7 +89,8 @@ type Session struct {
 	UserAgent   *string    `json:"user_agent,omitempty" db:"user_agent"`
 	IP          *string    `json:"ip,omitempty" db:"ip"`
 
-	Tag *string `json:"tag" db:"tag"`
+	Tag           *string    `json:"tag" db:"tag"`
+	OAuthClientID *uuid.UUID `json:"oauth_client_id" db:"oauth_client_id"`
 }
 
 func (Session) TableName() string {
@@ -174,10 +176,8 @@ func (s *Session) DetermineTag(tags []string) string {
 		return tags[0]
 	}
 
-	for _, t := range tags {
-		if t == tag {
-			return tag
-		}
+	if slices.Contains(tags, tag) {
+		return tag
 	}
 
 	return tags[0]

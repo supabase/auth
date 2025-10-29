@@ -1,4 +1,4 @@
-package mailer
+package validateclient
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/supabase/auth/internal/conf"
+	"github.com/supabase/auth/internal/mailer"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -77,15 +78,75 @@ var (
 	ErrInvalidEmailMX      = errors.New("invalid_email_mx")
 )
 
-type EmailValidator struct {
+// New will return a Client that first calls an email validator before passing
+// the mail along to given Client. If email validation is disabled then it
+// returns the same Client passed in mc.
+func New(globalConfig *conf.GlobalConfiguration, mc mailer.Client) mailer.Client {
+
+	// Check if email validation is enabled
+	ev := newEmailValidator(globalConfig.Mailer)
+	if ev.isEnabled() {
+		mc = &emailValidatorMailClient{ev: ev, mc: mc}
+	}
+	return mc
+}
+
+type emailValidatorMailClient struct {
+	ev *emailValidator
+	mc mailer.Client
+}
+
+// Mail implements mailer.MailClient interface by calling validate before
+// passing the mail request to the next MailClient.
+func (o *emailValidatorMailClient) Mail(
+	ctx context.Context,
+	to string,
+	subject string,
+	body string,
+	headers map[string][]string,
+	typ string,
+) error {
+	if err := o.ev.Validate(ctx, to); err != nil {
+		return err
+	}
+	return o.mc.Mail(
+		ctx,
+		to,
+		subject,
+		body,
+		headers,
+		typ,
+	)
+}
+
+type emailValidator struct {
 	extended         bool
 	serviceURL       string
 	serviceHeaders   map[string][]string
 	blockedMXRecords map[string]bool
 }
 
-func newEmailValidator(mc conf.MailerConfiguration) *EmailValidator {
-	return &EmailValidator{
+func (m *emailValidator) MailNew(
+	ctx context.Context,
+	to, subject, body string,
+	headers map[string][]string,
+	typ string,
+) error {
+	return nil
+}
+
+func (m *emailValidator) Mail(
+	ctx context.Context,
+	to, subjectTemplate, templateURL, defaultTemplate string,
+	templateData map[string]any,
+	headers map[string][]string,
+	typ string,
+) error {
+	return nil
+}
+
+func newEmailValidator(mc conf.MailerConfiguration) *emailValidator {
+	return &emailValidator{
 		extended:         mc.EmailValidationExtended,
 		serviceURL:       mc.EmailValidationServiceURL,
 		serviceHeaders:   mc.GetEmailValidationServiceHeaders(),
@@ -93,8 +154,12 @@ func newEmailValidator(mc conf.MailerConfiguration) *EmailValidator {
 	}
 }
 
-func (ev *EmailValidator) isExtendedEnabled() bool { return ev.extended }
-func (ev *EmailValidator) isServiceEnabled() bool  { return ev.serviceURL != "" }
+func (ev *emailValidator) isEnabled() bool {
+	return ev.isExtendedEnabled() || ev.isServiceEnabled()
+}
+
+func (ev *emailValidator) isExtendedEnabled() bool { return ev.extended }
+func (ev *emailValidator) isServiceEnabled() bool  { return ev.serviceURL != "" }
 
 // Validate performs validation on the given email.
 //
@@ -104,8 +169,8 @@ func (ev *EmailValidator) isServiceEnabled() bool  { return ev.serviceURL != "" 
 //
 // When serviceURL AND serviceKey are non-empty strings it uses the remote
 // service to determine if the email is valid.
-func (ev *EmailValidator) Validate(ctx context.Context, email string) error {
-	if !ev.isExtendedEnabled() && !ev.isServiceEnabled() {
+func (ev *emailValidator) Validate(ctx context.Context, email string) error {
+	if !ev.isEnabled() {
 		return nil
 	}
 
@@ -147,7 +212,7 @@ func (ev *EmailValidator) Validate(ctx context.Context, email string) error {
 
 // validateStatic will validate the format and do the static checks before
 // returning the host portion of the email.
-func (ev *EmailValidator) validateStatic(email string) (string, error) {
+func (ev *emailValidator) validateStatic(email string) (string, error) {
 	if !ev.isExtendedEnabled() {
 		return "", nil
 	}
@@ -185,7 +250,7 @@ func (ev *EmailValidator) validateStatic(email string) (string, error) {
 	return host, nil
 }
 
-func (ev *EmailValidator) validateService(ctx context.Context, email string) error {
+func (ev *emailValidator) validateService(ctx context.Context, email string) error {
 	if !ev.isServiceEnabled() {
 		return nil
 	}
@@ -240,7 +305,7 @@ func (ev *EmailValidator) validateService(ctx context.Context, email string) err
 	return ErrInvalidEmailAddress
 }
 
-func (ev *EmailValidator) validateProviders(name, host string) error {
+func (ev *emailValidator) validateProviders(name, host string) error {
 	switch host {
 	case "gmail.com":
 		// Based on a sample of internal data, this reduces the number of
@@ -255,7 +320,7 @@ func (ev *EmailValidator) validateProviders(name, host string) error {
 	return nil
 }
 
-func (ev *EmailValidator) validateHost(ctx context.Context, host string) error {
+func (ev *emailValidator) validateHost(ctx context.Context, host string) error {
 	mxs, err := validateEmailResolver.LookupMX(ctx, host)
 	if !isHostNotFound(err) {
 		return ev.validateMXRecords(mxs, nil)
@@ -270,7 +335,7 @@ func (ev *EmailValidator) validateHost(ctx context.Context, host string) error {
 	return ErrInvalidEmailDNS
 }
 
-func (ev *EmailValidator) validateMXRecords(mxs []*net.MX, hosts []string) error {
+func (ev *emailValidator) validateMXRecords(mxs []*net.MX, hosts []string) error {
 	for _, mx := range mxs {
 		if ev.blockedMXRecords[mx.Host] {
 			return ErrInvalidEmailMX
