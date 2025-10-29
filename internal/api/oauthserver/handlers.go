@@ -511,3 +511,133 @@ func (s *Server) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWri
 func (s *Server) getTokenService() *tokens.Service {
 	return s.tokenService
 }
+
+// UserAuthorizedClientResponse represents an OAuth client that a user has authorized
+type UserAuthorizedClientResponse struct {
+	ClientID   string    `json:"client_id"`
+	ClientName string    `json:"client_name,omitempty"`
+	ClientURI  string    `json:"client_uri,omitempty"`
+	LogoURI    string    `json:"logo_uri,omitempty"`
+	Scopes     []string  `json:"scopes"`
+	GrantedAt  time.Time `json:"granted_at"`
+}
+
+// UserAuthorizedClientsListResponse represents the response for listing authorized OAuth clients
+type UserAuthorizedClientsListResponse struct {
+	AuthorizedClients []UserAuthorizedClientResponse `json:"authorized_clients"`
+}
+
+// UserListAuthorizedClients handles GET /user/oauth/authorizations
+// Lists all OAuth clients that the authenticated user has authorized (active consents)
+func (s *Server) UserListAuthorizedClients(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := shared.GetUser(ctx)
+
+	if user == nil {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "authentication required")
+	}
+
+	db := s.db.WithContext(ctx)
+
+	// Get all active (non-revoked) consents for this user
+	consents, err := models.FindOAuthServerConsentsByUser(db, user.ID, false)
+	if err != nil {
+		return apierrors.NewInternalServerError("Error fetching authorized clients").WithInternalError(err)
+	}
+
+	// Build response with client information
+	authorizedClients := make([]UserAuthorizedClientResponse, 0, len(consents))
+
+	for _, consent := range consents {
+		// Fetch client details
+		client, err := models.FindOAuthServerClientByID(db, consent.ClientID)
+		if err != nil {
+			// Skip clients that no longer exist or are deleted
+			if models.IsNotFoundError(err) {
+				continue
+			}
+			return apierrors.NewInternalServerError("Error fetching client details").WithInternalError(err)
+		}
+
+		response := UserAuthorizedClientResponse{
+			ClientID:   client.ID.String(),
+			ClientName: utilities.StringValue(client.ClientName),
+			ClientURI:  utilities.StringValue(client.ClientURI),
+			LogoURI:    utilities.StringValue(client.LogoURI),
+			Scopes:     consent.GetScopeList(),
+			GrantedAt:  consent.GrantedAt,
+		}
+
+		authorizedClients = append(authorizedClients, response)
+	}
+
+	response := UserAuthorizedClientsListResponse{
+		AuthorizedClients: authorizedClients,
+	}
+
+	return shared.SendJSON(w, http.StatusOK, response)
+}
+
+// UserRevokeAuthorizedClient handles DELETE /user/oauth/authorizations/{client_id}
+// Revokes the user's authorization for a specific OAuth client
+func (s *Server) UserRevokeAuthorizedClient(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	user := shared.GetUser(ctx)
+
+	if user == nil {
+		return apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "authentication required")
+	}
+
+	clientIDStr := chi.URLParam(r, "client_id")
+	if clientIDStr == "" {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "client_id is required")
+	}
+
+	// Parse client_id as UUID
+	clientID, err := uuid.FromString(clientIDStr)
+	if err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "invalid client_id format")
+	}
+
+	db := s.db.WithContext(ctx)
+
+	// Find the active consent for this user and client
+	consent, err := models.FindActiveOAuthServerConsentByUserAndClient(db, user.ID, clientID)
+	if err != nil {
+		return apierrors.NewInternalServerError("Error finding consent").WithInternalError(err)
+	}
+
+	if consent == nil {
+		return apierrors.NewNotFoundError(apierrors.ErrorCodeOAuthConsentNotFound, "No active authorization found for this client")
+	}
+
+	// Revoke the consent in a transaction
+	err = db.Transaction(func(tx *storage.Connection) error {
+		if terr := consent.Revoke(tx); terr != nil {
+			return terr
+		}
+
+		// Delete all sessions associated with this OAuth client for this user
+		// This will invalidate all refresh tokens for those sessions
+		if terr := models.RevokeOAuthSessions(tx, user.ID, clientID); terr != nil {
+			return terr
+		}
+
+		// Create audit log entry
+		if terr := models.NewAuditLogEntry(s.config.AuditLog, r, tx, user, models.TokenRevokedAction, "", map[string]interface{}{
+			"oauth_client_id": clientID.String(),
+			"action":          "revoke_oauth_authorization",
+		}); terr != nil {
+			return terr
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return apierrors.NewInternalServerError("Error revoking authorization").WithInternalError(err)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return nil
+}

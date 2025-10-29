@@ -261,6 +261,14 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 				r.Get("/authorize", api.LinkIdentity)
 				r.Delete("/{identity_id}", api.DeleteIdentity)
 			})
+
+			// OAuth authorization management endpoints (only if OAuth server is enabled)
+			if globalConfig.OAuthServer.Enabled {
+				r.Route("/oauth/authorizations", func(r *router) {
+					r.Get("/", api.oauthServer.UserListAuthorizedClients)
+					r.Delete("/{client_id}", api.oauthServer.UserRevokeAuthorizedClient)
+				})
+			}
 		})
 
 		r.With(api.requireAuthentication).Route("/factors", func(r *router) {

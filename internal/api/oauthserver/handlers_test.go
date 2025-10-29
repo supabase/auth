@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/gofrs/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -277,4 +279,250 @@ func (ts *OAuthClientTestSuite) TestHandlerValidation() {
 	err = ts.Server.AdminOAuthServerClientRegister(w, req)
 	require.Error(ts.T(), err)
 	assert.Contains(ts.T(), err.Error(), "invalid redirect_uri")
+}
+
+// Helper function to create a test user
+func (ts *OAuthClientTestSuite) createTestUser(email string) *models.User {
+	user, err := models.NewUser("", email, "password123", "authenticated", nil)
+	require.NoError(ts.T(), err)
+	require.NotNil(ts.T(), user)
+
+	err = ts.DB.Create(user)
+	require.NoError(ts.T(), err)
+
+	return user
+}
+
+// Helper function to create a test OAuth consent
+func (ts *OAuthClientTestSuite) createTestConsent(userID, clientID string, scopes []string) *models.OAuthServerConsent {
+	userUUID, err := uuid.FromString(userID)
+	require.NoError(ts.T(), err)
+
+	clientUUID, err := uuid.FromString(clientID)
+	require.NoError(ts.T(), err)
+
+	consent := models.NewOAuthServerConsent(userUUID, clientUUID, scopes)
+	require.NoError(ts.T(), models.UpsertOAuthServerConsent(ts.DB, consent))
+
+	return consent
+}
+
+// Helper function to create a test session for OAuth
+func (ts *OAuthClientTestSuite) createTestSession(userID, clientID string) *models.Session {
+	userUUID, err := uuid.FromString(userID)
+	require.NoError(ts.T(), err)
+
+	clientUUID, err := uuid.FromString(clientID)
+	require.NoError(ts.T(), err)
+
+	session, err := models.NewSession(userUUID, nil)
+	require.NoError(ts.T(), err)
+	session.OAuthClientID = &clientUUID
+
+	err = ts.DB.Create(session)
+	require.NoError(ts.T(), err)
+
+	return session
+}
+
+func (ts *OAuthClientTestSuite) TestUserListAuthorizedClients() {
+	// Create test user
+	user := ts.createTestUser("test@example.com")
+
+	// Create test OAuth clients
+	client1, _ := ts.createTestOAuthClient()
+	client2, _ := ts.createTestOAuthClient()
+
+	// Create consents for the user
+	ts.createTestConsent(user.ID.String(), client1.ID.String(), []string{"read", "write"})
+	ts.createTestConsent(user.ID.String(), client2.ID.String(), []string{"read"})
+
+	// Create HTTP request
+	req := httptest.NewRequest(http.MethodGet, "/user/oauth/authorizations", nil)
+
+	// Add user to context (normally done by requireAuthentication middleware)
+	ctx := shared.WithUser(req.Context(), user)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	// Call handler
+	err := ts.Server.UserListAuthorizedClients(w, req)
+	require.NoError(ts.T(), err)
+
+	// Check response
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var response UserAuthorizedClientsListResponse
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(ts.T(), err)
+
+	// Should have 2 authorized clients
+	assert.Len(ts.T(), response.AuthorizedClients, 2)
+
+	// Verify client details are included
+	for _, client := range response.AuthorizedClients {
+		assert.NotEmpty(ts.T(), client.ClientID)
+		assert.Equal(ts.T(), "Test Client", client.ClientName)
+		assert.NotEmpty(ts.T(), client.Scopes)
+		assert.NotEmpty(ts.T(), client.GrantedAt)
+	}
+
+	// Check that client1 (with read and write scopes) is in the response
+	found := false
+	for _, client := range response.AuthorizedClients {
+		if client.ClientID == client1.ID.String() {
+			found = true
+			assert.Contains(ts.T(), client.Scopes, "read")
+			assert.Contains(ts.T(), client.Scopes, "write")
+		}
+	}
+	assert.True(ts.T(), found, "client1 should be in the authorized clients list")
+}
+
+func (ts *OAuthClientTestSuite) TestUserListAuthorizedClientsEmpty() {
+	// Create test user with no authorizations
+	user := ts.createTestUser("test2@example.com")
+
+	req := httptest.NewRequest(http.MethodGet, "/user/oauth/authorizations", nil)
+	ctx := shared.WithUser(req.Context(), user)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	err := ts.Server.UserListAuthorizedClients(w, req)
+	require.NoError(ts.T(), err)
+
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var response UserAuthorizedClientsListResponse
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(ts.T(), err)
+
+	// Should have 0 authorized clients
+	assert.Len(ts.T(), response.AuthorizedClients, 0)
+}
+
+func (ts *OAuthClientTestSuite) TestUserListAuthorizedClientsNoAuth() {
+	// Test without user in context (unauthenticated)
+	req := httptest.NewRequest(http.MethodGet, "/user/oauth/authorizations", nil)
+	w := httptest.NewRecorder()
+
+	err := ts.Server.UserListAuthorizedClients(w, req)
+	require.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "authentication required")
+}
+
+func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClient() {
+	// Create test user
+	user := ts.createTestUser("test3@example.com")
+
+	// Create a client and consent
+	client, _ := ts.createTestOAuthClient()
+	ts.createTestConsent(user.ID.String(), client.ID.String(), []string{"read", "write"})
+
+	// Create a session for this OAuth client
+	session := ts.createTestSession(user.ID.String(), client.ID.String())
+
+	// Create HTTP request
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/authorizations/"+client.ID.String(), nil)
+
+	// Add user to context
+	ctx := shared.WithUser(req.Context(), user)
+
+	// Mock chi URL param
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("client_id", client.ID.String())
+	ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	// Call handler - should succeed
+	err := ts.Server.UserRevokeAuthorizedClient(w, req)
+	require.NoError(ts.T(), err)
+
+	// Check response
+	assert.Equal(ts.T(), http.StatusNoContent, w.Code)
+	assert.Empty(ts.T(), w.Body.String())
+
+	// Verify consent was revoked
+	consent, err := models.FindOAuthServerConsentByUserAndClient(ts.DB, user.ID, client.ID)
+	require.NoError(ts.T(), err)
+	assert.NotNil(ts.T(), consent.RevokedAt, "consent should be revoked")
+
+	// Verify session was deleted
+	deletedSession, err := models.FindSessionByID(ts.DB, session.ID, false)
+	assert.Error(ts.T(), err, "session should be deleted")
+	assert.Nil(ts.T(), deletedSession)
+}
+
+func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClientNotFound() {
+	// Create test user
+	user := ts.createTestUser("test4@example.com")
+
+	// Create a client but don't create a consent
+	client, _ := ts.createTestOAuthClient()
+
+	// Create HTTP request
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/authorizations/"+client.ID.String(), nil)
+
+	// Add user to context
+	ctx := shared.WithUser(req.Context(), user)
+
+	// Mock chi URL param
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("client_id", client.ID.String())
+	ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	// Call handler - should return error
+	err := ts.Server.UserRevokeAuthorizedClient(w, req)
+	require.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "No active authorization found")
+}
+
+func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClientInvalidClientID() {
+	// Create test user
+	user := ts.createTestUser("test5@example.com")
+
+	// Create HTTP request with invalid client ID
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/authorizations/invalid-uuid", nil)
+
+	// Add user to context
+	ctx := shared.WithUser(req.Context(), user)
+
+	// Mock chi URL param with invalid UUID
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("client_id", "invalid-uuid")
+	ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	// Call handler - should return error
+	err := ts.Server.UserRevokeAuthorizedClient(w, req)
+	require.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "invalid client_id format")
+}
+
+func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClientNoAuth() {
+	// Test without user in context (unauthenticated)
+	client, _ := ts.createTestOAuthClient()
+
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/authorizations/"+client.ID.String(), nil)
+
+	// Mock chi URL param
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("client_id", client.ID.String())
+	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	err := ts.Server.UserRevokeAuthorizedClient(w, req)
+	require.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "authentication required")
 }
