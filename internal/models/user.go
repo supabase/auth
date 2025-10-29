@@ -13,6 +13,7 @@ import (
 	"github.com/gobuffalo/pop/v6"
 	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
+	"github.com/supabase/auth/internal/conf"
 	"github.com/supabase/auth/internal/crypto"
 	"github.com/supabase/auth/internal/storage"
 	"golang.org/x/crypto/bcrypt"
@@ -634,7 +635,65 @@ func FindUserByID(tx *storage.Connection, id uuid.UUID) (*User, error) {
 // the form SELECT ... FOR UPDATE SKIP LOCKED. This means that a FOR UPDATE
 // lock will only be acquired if there's no other lock. In case there is a
 // lock, a IsNotFound(err) error will be returned.
-func FindUserWithRefreshToken(tx *storage.Connection, token string, forUpdate bool) (*User, *RefreshToken, *Session, error) {
+//
+// Second value returned is either *models.RefreshToken or *crypto.RefreshToken.
+func FindUserWithRefreshToken(tx *storage.Connection, dbEncryption conf.DatabaseEncryptionConfiguration, token string, forUpdate bool) (*User, any, *Session, error) {
+	if len(token) < 12 {
+		// not a valid refresh token so don't bother looking it up in the database
+		return nil, nil, nil, SessionNotFoundError{}
+	}
+
+	if len(token) == 12 {
+		return findUserWithLegacyRefreshToken(tx, token, forUpdate)
+	}
+
+	return findUserWithRefreshToken(tx, dbEncryption, token, forUpdate)
+}
+
+func findUserWithRefreshToken(tx *storage.Connection, dbEncryption conf.DatabaseEncryptionConfiguration, token string, forUpdate bool) (*User, *crypto.RefreshToken, *Session, error) {
+	refreshToken, err := crypto.ParseRefreshToken(token)
+	if err != nil {
+		// refresh token is not valid
+		return nil, nil, nil, SessionNotFoundError{}
+	}
+
+	session, err := FindSessionByID(tx, refreshToken.SessionID, forUpdate)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if session.RefreshTokenHmacKey == nil || session.RefreshTokenCounter == nil {
+		// if the session is not set up to support these encoded refresh tokens it's as if it doesn't exist
+		// meaning someone is hand-crafting tokens for uuids that exist
+		return nil, nil, nil, SessionNotFoundError{}
+	}
+
+	key, shouldReEncrypt, err := session.GetRefreshTokenHmacKey(dbEncryption)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if !refreshToken.CheckSignature(key) {
+		// refresh token signature is not valid for this session
+		return nil, nil, nil, SessionNotFoundError{}
+	}
+
+	if shouldReEncrypt && forUpdate {
+		err := session.ReEncryptRefreshTokenHmacKey(tx, dbEncryption)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	user, err := FindUserByID(tx, session.UserID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return user, refreshToken, session, nil
+}
+
+func findUserWithLegacyRefreshToken(tx *storage.Connection, token string, forUpdate bool) (*User, any, *Session, error) {
 	refreshToken := &RefreshToken{}
 
 	if forUpdate {
