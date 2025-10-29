@@ -1895,14 +1895,40 @@ paths:
               properties:
                 client_name:
                   type: string
+                  description: Human-readable name of the client application
                 client_uri:
                   type: string
                   format: uri
+                  description: URL of the client application's homepage
+                logo_uri:
+                  type: string
+                  format: uri
+                  description: URL of the client application's logo
                 redirect_uris:
                   type: array
                   items:
                     type: string
                     format: uri
+                  description: Array of redirect URIs used by the client (maximum 10)
+                client_type:
+                  type: string
+                  enum:
+                    - public
+                    - confidential
+                  description: >
+                    Type of the client. Optional. If not provided, will be inferred from token_endpoint_auth_method or defaults to 'confidential'.
+                    Public clients are used for applications that cannot securely store credentials (e.g., SPAs, mobile apps).
+                    Confidential clients can securely store credentials (e.g., server-side applications).
+                token_endpoint_auth_method:
+                  type: string
+                  enum:
+                    - none
+                    - client_secret_basic
+                    - client_secret_post
+                  description: >
+                    Authentication method for the token endpoint. Optional.
+                    'none' is for public clients, 'client_secret_basic' and 'client_secret_post' are for confidential clients.
+                    If provided, must be consistent with client_type. If not provided, will be inferred from client_type.
                 grant_types:
                   type: array
                   items:
@@ -1910,14 +1936,17 @@ paths:
                     enum:
                       - authorization_code
                       - refresh_token
+                  description: OAuth grant types the client will use (defaults to both if not specified)
                 response_types:
                   type: array
                   items:
                     type: string
                     enum:
                       - code
+                  description: OAuth response types the client can use
                 scope:
                   type: string
+                  description: Space-separated list of scope values
       responses:
         201:
           description: OAuth client created
@@ -2055,12 +2084,35 @@ paths:
                   type: string
                   format: uri
                   description: URL of the client application's homepage
+                logo_uri:
+                  type: string
+                  format: uri
+                  description: URL of the client application's logo
                 redirect_uris:
                   type: array
                   items:
                     type: string
                     format: uri
-                  description: Array of redirect URIs used by the client
+                  description: Array of redirect URIs used by the client (maximum 10)
+                client_type:
+                  type: string
+                  enum:
+                    - public
+                    - confidential
+                  description: >
+                    Type of the client. Optional. If not provided, will be inferred from token_endpoint_auth_method or defaults to 'confidential'.
+                    Public clients are used for applications that cannot securely store credentials (e.g., SPAs, mobile apps).
+                    Confidential clients can securely store credentials (e.g., server-side applications).
+                token_endpoint_auth_method:
+                  type: string
+                  enum:
+                    - none
+                    - client_secret_basic
+                    - client_secret_post
+                  description: >
+                    Authentication method for the token endpoint. Optional.
+                    'none' is for public clients, 'client_secret_basic' and 'client_secret_post' are for confidential clients.
+                    If provided, must be consistent with client_type. If not provided, will be inferred from client_type.
                 grant_types:
                   type: array
                   items:
@@ -2068,7 +2120,7 @@ paths:
                     enum:
                       - authorization_code
                       - refresh_token
-                  description: OAuth grant types the client will use
+                  description: OAuth grant types the client will use (defaults to both if not specified)
                 response_types:
                   type: array
                   items:
@@ -3003,6 +3055,10 @@ components:
           type: string
           format: uri
           description: URL of the client application's homepage
+        logo_uri:
+          type: string
+          format: uri
+          description: URL of the client application's logo
         redirect_uris:
           type: array
           items:
