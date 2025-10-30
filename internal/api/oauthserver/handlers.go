@@ -464,7 +464,7 @@ func (s *Server) handleAuthorizationCodeGrant(ctx context.Context, w http.Respon
 
 		// Issue the refresh token and access token
 		var terr error
-		tokenResponse, terr = tokenService.IssueRefreshToken(r, tx, user, authMethod, grantParams)
+		tokenResponse, terr = tokenService.IssueRefreshToken(r, w.Header(), tx, user, authMethod, grantParams)
 		if terr != nil {
 			return terr
 		}
@@ -515,7 +515,7 @@ func (s *Server) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWri
 	}
 
 	db := s.db.WithContext(ctx)
-	tokenResponse, err := tokenService.RefreshTokenGrant(ctx, db, r, tokens.RefreshTokenGrantParams{
+	tokenResponse, err := tokenService.RefreshTokenGrant(ctx, db, r, w.Header(), tokens.RefreshTokenGrantParams{
 		RefreshToken: params.RefreshToken,
 		ClientID:     clientID,
 	})
