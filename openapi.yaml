@@ -2092,6 +2092,71 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
           $ref: "#/components/responses/ForbiddenResponse"
+    put:
+      summary: Update OAuth client (admin)
+      description: >
+        Updates an existing OAuth client registration. Only the provided fields will be updated.
+        Only available when OAuth server is enabled.
+      tags:
+        - admin
+        - oauth-server
+      security:
+        - APIKeyAuth: []
+          AdminAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                client_name:
+                  type: string
+                  description: Human-readable name of the client application
+                client_uri:
+                  type: string
+                  format: uri
+                  description: URL of the client application's homepage
+                logo_uri:
+                  type: string
+                  format: uri
+                  description: URL of the client application's logo
+                redirect_uris:
+                  type: array
+                  items:
+                    type: string
+                    format: uri
+                  description: Array of redirect URIs used by the client
+                grant_types:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - authorization_code
+                      - refresh_token
+                  description: OAuth grant types the client is authorized to use
+      responses:
+        200:
+          description: OAuth client updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthClientSchema"
+        400:
+          description: Bad request - validation failed or no fields provided for update
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        404:
+          description: OAuth client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+        401:
+          $ref: "#/components/responses/UnauthorizedResponse"
+        403:
+          $ref: "#/components/responses/ForbiddenResponse"
     delete:
       summary: Delete OAuth client (admin)
       description: >

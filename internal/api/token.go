@@ -190,7 +190,7 @@ func (a *API) ResourceOwnerPasswordGrant(ctx context.Context, w http.ResponseWri
 		}); terr != nil {
 			return terr
 		}
-		token, terr = a.tokenService.IssueRefreshToken(r, tx, user, models.PasswordGrant, grantParams)
+		token, terr = a.tokenService.IssueRefreshToken(r, w.Header(), tx, user, models.PasswordGrant, grantParams)
 		if terr != nil {
 			return terr
 		}
@@ -260,7 +260,7 @@ func (a *API) PKCE(ctx context.Context, w http.ResponseWriter, r *http.Request) 
 		}); terr != nil {
 			return terr
 		}
-		token, terr = a.tokenService.IssueRefreshToken(r, tx, user, authMethod, grantParams)
+		token, terr = a.tokenService.IssueRefreshToken(r, w.Header(), tx, user, authMethod, grantParams)
 		if terr != nil {
 			// error type is already handled in issueRefreshToken
 			return terr
@@ -295,7 +295,7 @@ func (a *API) generateAccessToken(r *http.Request, tx *storage.Connection, user 
 }
 
 func (a *API) issueRefreshToken(r *http.Request, conn *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*tokens.AccessTokenResponse, error) {
-	return a.tokenService.IssueRefreshToken(r, conn, user, authenticationMethod, grantParams)
+	return a.tokenService.IssueRefreshToken(r, make(http.Header), conn, user, authenticationMethod, grantParams)
 }
 
 func (a *API) updateMFASessionAndClaims(r *http.Request, tx *storage.Connection, user *models.User, authenticationMethod models.AuthenticationMethod, grantParams models.GrantParams) (*tokens.AccessTokenResponse, error) {
