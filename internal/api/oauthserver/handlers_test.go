@@ -251,6 +251,165 @@ func (ts *OAuthClientTestSuite) TestOAuthServerClientListHandler() {
 	}
 }
 
+func (ts *OAuthClientTestSuite) TestOAuthServerClientUpdateHandler() {
+	// Create a test client first
+	client, _ := ts.createTestOAuthClient()
+
+	// Test updating all fields
+	newRedirectURIs := []string{"https://newapp.example.com/callback"}
+	newGrantTypes := []string{"authorization_code", "refresh_token"}
+	newClientName := "Updated Client Name"
+	newClientURI := "https://newapp.example.com"
+	newLogoURI := "https://newapp.example.com/logo.png"
+
+	payload := OAuthServerClientUpdateParams{
+		RedirectURIs: &newRedirectURIs,
+		GrantTypes:   &newGrantTypes,
+		ClientName:   &newClientName,
+		ClientURI:    &newClientURI,
+		LogoURI:      &newLogoURI,
+	}
+
+	body, err := json.Marshal(payload)
+	require.NoError(ts.T(), err)
+
+	req := httptest.NewRequest(http.MethodPut, "/admin/oauth/clients/"+client.ID.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx := shared.WithOAuthServerClient(req.Context(), client)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	err = ts.Server.OAuthServerClientUpdate(w, req)
+	require.NoError(ts.T(), err)
+
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var response OAuthServerClientResponse
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(ts.T(), err)
+
+	assert.Equal(ts.T(), client.ID.String(), response.ClientID)
+	assert.Equal(ts.T(), newClientName, response.ClientName)
+	assert.Equal(ts.T(), newRedirectURIs, response.RedirectURIs)
+	assert.Equal(ts.T(), newGrantTypes, response.GrantTypes)
+	assert.Equal(ts.T(), newClientURI, response.ClientURI)
+	assert.Equal(ts.T(), newLogoURI, response.LogoURI)
+	assert.Empty(ts.T(), response.ClientSecret) // Should NOT be included in update response
+}
+
+func (ts *OAuthClientTestSuite) TestOAuthServerClientUpdateHandlerPartial() {
+	// Create a test client first
+	client, _ := ts.createTestOAuthClient()
+
+	// Test updating only client name
+	newClientName := "Partially Updated Name"
+	payload := OAuthServerClientUpdateParams{
+		ClientName: &newClientName,
+	}
+
+	body, err := json.Marshal(payload)
+	require.NoError(ts.T(), err)
+
+	req := httptest.NewRequest(http.MethodPut, "/admin/oauth/clients/"+client.ID.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx := shared.WithOAuthServerClient(req.Context(), client)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	err = ts.Server.OAuthServerClientUpdate(w, req)
+	require.NoError(ts.T(), err)
+
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+
+	var response OAuthServerClientResponse
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(ts.T(), err)
+
+	// Verify only client name was updated
+	assert.Equal(ts.T(), newClientName, response.ClientName)
+	// Verify other fields remained unchanged
+	assert.Equal(ts.T(), client.GetRedirectURIs(), response.RedirectURIs)
+}
+
+func (ts *OAuthClientTestSuite) TestOAuthServerClientUpdateHandlerEmptyBody() {
+	// Create a test client first
+	client, _ := ts.createTestOAuthClient()
+
+	// Test with empty body
+	payload := OAuthServerClientUpdateParams{}
+
+	body, err := json.Marshal(payload)
+	require.NoError(ts.T(), err)
+
+	req := httptest.NewRequest(http.MethodPut, "/admin/oauth/clients/"+client.ID.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx := shared.WithOAuthServerClient(req.Context(), client)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	err = ts.Server.OAuthServerClientUpdate(w, req)
+	require.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "No fields provided for update")
+}
+
+func (ts *OAuthClientTestSuite) TestOAuthServerClientUpdateHandlerInvalidValidation() {
+	// Create a test client first
+	client, _ := ts.createTestOAuthClient()
+
+	// Test with invalid redirect URI
+	invalidRedirectURIs := []string{"invalid-uri"}
+	payload := OAuthServerClientUpdateParams{
+		RedirectURIs: &invalidRedirectURIs,
+	}
+
+	body, err := json.Marshal(payload)
+	require.NoError(ts.T(), err)
+
+	req := httptest.NewRequest(http.MethodPut, "/admin/oauth/clients/"+client.ID.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx := shared.WithOAuthServerClient(req.Context(), client)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	err = ts.Server.OAuthServerClientUpdate(w, req)
+	require.Error(ts.T(), err)
+	assert.Contains(ts.T(), err.Error(), "invalid redirect_uri")
+}
+
+func (ts *OAuthClientTestSuite) TestOAuthServerClientUpdateHandlerSameValues() {
+	// Create a test client first
+	client, _ := ts.createTestOAuthClient()
+
+	// Update with same values (should succeed)
+	currentName := "Test Client"
+	payload := OAuthServerClientUpdateParams{
+		ClientName: &currentName,
+	}
+
+	body, err := json.Marshal(payload)
+	require.NoError(ts.T(), err)
+
+	req := httptest.NewRequest(http.MethodPut, "/admin/oauth/clients/"+client.ID.String(), bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	ctx := shared.WithOAuthServerClient(req.Context(), client)
+	req = req.WithContext(ctx)
+
+	w := httptest.NewRecorder()
+
+	err = ts.Server.OAuthServerClientUpdate(w, req)
+	require.NoError(ts.T(), err)
+	assert.Equal(ts.T(), http.StatusOK, w.Code)
+}
+
 func (ts *OAuthClientTestSuite) TestHandlerValidation() {
 	// Test invalid JSON body
 	req := httptest.NewRequest(http.MethodPost, "/admin/oauth/clients", bytes.NewReader([]byte("invalid json")))
