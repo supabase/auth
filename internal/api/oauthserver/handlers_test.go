@@ -484,7 +484,7 @@ func (ts *OAuthClientTestSuite) createTestSession(userID, clientID string) *mode
 	return session
 }
 
-func (ts *OAuthClientTestSuite) TestUserListAuthorizedClients() {
+func (ts *OAuthClientTestSuite) TestUserListOAuthGrants() {
 	// Create test user
 	user := ts.createTestUser("test@example.com")
 
@@ -497,7 +497,7 @@ func (ts *OAuthClientTestSuite) TestUserListAuthorizedClients() {
 	ts.createTestConsent(user.ID.String(), client2.ID.String(), []string{"read"})
 
 	// Create HTTP request
-	req := httptest.NewRequest(http.MethodGet, "/user/oauth/authorizations", nil)
+	req := httptest.NewRequest(http.MethodGet, "/user/oauth/grants", nil)
 
 	// Add user to context (normally done by requireAuthentication middleware)
 	ctx := shared.WithUser(req.Context(), user)
@@ -506,73 +506,73 @@ func (ts *OAuthClientTestSuite) TestUserListAuthorizedClients() {
 	w := httptest.NewRecorder()
 
 	// Call handler
-	err := ts.Server.UserListAuthorizedClients(w, req)
+	err := ts.Server.UserListOAuthGrants(w, req)
 	require.NoError(ts.T(), err)
 
 	// Check response
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-	var response UserAuthorizedClientsListResponse
+	var response UserOAuthGrantsListResponse
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(ts.T(), err)
 
-	// Should have 2 authorized clients
-	assert.Len(ts.T(), response.AuthorizedClients, 2)
+	// Should have 2 grants
+	assert.Len(ts.T(), response.Grants, 2)
 
 	// Verify client details are included
-	for _, client := range response.AuthorizedClients {
-		assert.NotEmpty(ts.T(), client.ClientID)
-		assert.Equal(ts.T(), "Test Client", client.ClientName)
-		assert.NotEmpty(ts.T(), client.Scopes)
-		assert.NotEmpty(ts.T(), client.GrantedAt)
+	for _, grant := range response.Grants {
+		assert.NotEmpty(ts.T(), grant.ClientID)
+		assert.Equal(ts.T(), "Test Client", grant.ClientName)
+		assert.NotEmpty(ts.T(), grant.Scopes)
+		assert.NotEmpty(ts.T(), grant.GrantedAt)
 	}
 
 	// Check that client1 (with read and write scopes) is in the response
 	found := false
-	for _, client := range response.AuthorizedClients {
-		if client.ClientID == client1.ID.String() {
+	for _, grant := range response.Grants {
+		if grant.ClientID == client1.ID.String() {
 			found = true
-			assert.Contains(ts.T(), client.Scopes, "read")
-			assert.Contains(ts.T(), client.Scopes, "write")
+			assert.Contains(ts.T(), grant.Scopes, "read")
+			assert.Contains(ts.T(), grant.Scopes, "write")
 		}
 	}
-	assert.True(ts.T(), found, "client1 should be in the authorized clients list")
+	assert.True(ts.T(), found, "client1 should be in the grants list")
 }
 
-func (ts *OAuthClientTestSuite) TestUserListAuthorizedClientsEmpty() {
-	// Create test user with no authorizations
+func (ts *OAuthClientTestSuite) TestUserListOAuthGrantsEmpty() {
+	// Create test user with no grants
 	user := ts.createTestUser("test2@example.com")
 
-	req := httptest.NewRequest(http.MethodGet, "/user/oauth/authorizations", nil)
+	req := httptest.NewRequest(http.MethodGet, "/user/oauth/grants", nil)
 	ctx := shared.WithUser(req.Context(), user)
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()
 
-	err := ts.Server.UserListAuthorizedClients(w, req)
+	err := ts.Server.UserListOAuthGrants(w, req)
 	require.NoError(ts.T(), err)
 
 	assert.Equal(ts.T(), http.StatusOK, w.Code)
 
-	var response UserAuthorizedClientsListResponse
+	var response UserOAuthGrantsListResponse
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(ts.T(), err)
 
-	// Should have 0 authorized clients
-	assert.Len(ts.T(), response.AuthorizedClients, 0)
+	// Should have 0 grants
+	assert.Len(ts.T(), response.Grants, 0)
 }
 
-func (ts *OAuthClientTestSuite) TestUserListAuthorizedClientsNoAuth() {
+func (ts *OAuthClientTestSuite) TestUserListOAuthGrantsNoAuth() {
 	// Test without user in context (unauthenticated)
-	req := httptest.NewRequest(http.MethodGet, "/user/oauth/authorizations", nil)
+	req := httptest.NewRequest(http.MethodGet, "/user/oauth/grants", nil)
 	w := httptest.NewRecorder()
 
-	err := ts.Server.UserListAuthorizedClients(w, req)
+	err := ts.Server.UserListOAuthGrants(w, req)
 	require.Error(ts.T(), err)
 	assert.Contains(ts.T(), err.Error(), "authentication required")
 }
 
-func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClient() {
+func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrant() {
 	// Create test user
 	user := ts.createTestUser("test3@example.com")
 
@@ -584,7 +584,7 @@ func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClient() {
 	session := ts.createTestSession(user.ID.String(), client.ID.String())
 
 	// Create HTTP request
-	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/authorizations/"+client.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants/"+client.ID.String(), nil)
 
 	// Add user to context
 	ctx := shared.WithUser(req.Context(), user)
@@ -598,7 +598,7 @@ func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClient() {
 	w := httptest.NewRecorder()
 
 	// Call handler - should succeed
-	err := ts.Server.UserRevokeAuthorizedClient(w, req)
+	err := ts.Server.UserRevokeOAuthGrant(w, req)
 	require.NoError(ts.T(), err)
 
 	// Check response
@@ -616,7 +616,7 @@ func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClient() {
 	assert.Nil(ts.T(), deletedSession)
 }
 
-func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClientNotFound() {
+func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrantNotFound() {
 	// Create test user
 	user := ts.createTestUser("test4@example.com")
 
@@ -624,7 +624,7 @@ func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClientNotFound() {
 	client, _ := ts.createTestOAuthClient()
 
 	// Create HTTP request
-	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/authorizations/"+client.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants/"+client.ID.String(), nil)
 
 	// Add user to context
 	ctx := shared.WithUser(req.Context(), user)
@@ -638,17 +638,17 @@ func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClientNotFound() {
 	w := httptest.NewRecorder()
 
 	// Call handler - should return error
-	err := ts.Server.UserRevokeAuthorizedClient(w, req)
+	err := ts.Server.UserRevokeOAuthGrant(w, req)
 	require.Error(ts.T(), err)
-	assert.Contains(ts.T(), err.Error(), "No active authorization found")
+	assert.Contains(ts.T(), err.Error(), "No active grant found")
 }
 
-func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClientInvalidClientID() {
+func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrantInvalidClientID() {
 	// Create test user
 	user := ts.createTestUser("test5@example.com")
 
 	// Create HTTP request with invalid client ID
-	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/authorizations/invalid-uuid", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants/invalid-uuid", nil)
 
 	// Add user to context
 	ctx := shared.WithUser(req.Context(), user)
@@ -662,16 +662,16 @@ func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClientInvalidClientID() 
 	w := httptest.NewRecorder()
 
 	// Call handler - should return error
-	err := ts.Server.UserRevokeAuthorizedClient(w, req)
+	err := ts.Server.UserRevokeOAuthGrant(w, req)
 	require.Error(ts.T(), err)
 	assert.Contains(ts.T(), err.Error(), "invalid client_id format")
 }
 
-func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClientNoAuth() {
+func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrantNoAuth() {
 	// Test without user in context (unauthenticated)
 	client, _ := ts.createTestOAuthClient()
 
-	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/authorizations/"+client.ID.String(), nil)
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants/"+client.ID.String(), nil)
 
 	// Mock chi URL param
 	rctx := chi.NewRouteContext()
@@ -681,7 +681,7 @@ func (ts *OAuthClientTestSuite) TestUserRevokeAuthorizedClientNoAuth() {
 
 	w := httptest.NewRecorder()
 
-	err := ts.Server.UserRevokeAuthorizedClient(w, req)
+	err := ts.Server.UserRevokeOAuthGrant(w, req)
 	require.Error(ts.T(), err)
 	assert.Contains(ts.T(), err.Error(), "authentication required")
 }

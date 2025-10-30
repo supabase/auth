@@ -539,8 +539,8 @@ func (s *Server) getTokenService() *tokens.Service {
 	return s.tokenService
 }
 
-// UserAuthorizedClientResponse represents an OAuth client that a user has authorized
-type UserAuthorizedClientResponse struct {
+// UserOAuthGrantResponse represents an OAuth grant that a user has authorized
+type UserOAuthGrantResponse struct {
 	ClientID   string    `json:"client_id"`
 	ClientName string    `json:"client_name,omitempty"`
 	ClientURI  string    `json:"client_uri,omitempty"`
@@ -549,14 +549,14 @@ type UserAuthorizedClientResponse struct {
 	GrantedAt  time.Time `json:"granted_at"`
 }
 
-// UserAuthorizedClientsListResponse represents the response for listing authorized OAuth clients
-type UserAuthorizedClientsListResponse struct {
-	AuthorizedClients []UserAuthorizedClientResponse `json:"authorized_clients"`
+// UserOAuthGrantsListResponse represents the response for listing user's OAuth grants
+type UserOAuthGrantsListResponse struct {
+	Grants []UserOAuthGrantResponse `json:"grants"`
 }
 
-// UserListAuthorizedClients handles GET /user/oauth/authorizations
-// Lists all OAuth clients that the authenticated user has authorized (active consents)
-func (s *Server) UserListAuthorizedClients(w http.ResponseWriter, r *http.Request) error {
+// UserListOAuthGrants handles GET /user/oauth/grants
+// Lists all OAuth grants that the authenticated user has authorized (active consents)
+func (s *Server) UserListOAuthGrants(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := shared.GetUser(ctx)
 
@@ -569,11 +569,11 @@ func (s *Server) UserListAuthorizedClients(w http.ResponseWriter, r *http.Reques
 	// Get all active (non-revoked) consents for this user
 	consents, err := models.FindOAuthServerConsentsByUser(db, user.ID, false)
 	if err != nil {
-		return apierrors.NewInternalServerError("Error fetching authorized clients").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error fetching OAuth grants").WithInternalError(err)
 	}
 
 	// Build response with client information
-	authorizedClients := make([]UserAuthorizedClientResponse, 0, len(consents))
+	grants := make([]UserOAuthGrantResponse, 0, len(consents))
 
 	for _, consent := range consents {
 		// Fetch client details
@@ -586,7 +586,7 @@ func (s *Server) UserListAuthorizedClients(w http.ResponseWriter, r *http.Reques
 			return apierrors.NewInternalServerError("Error fetching client details").WithInternalError(err)
 		}
 
-		response := UserAuthorizedClientResponse{
+		response := UserOAuthGrantResponse{
 			ClientID:   client.ID.String(),
 			ClientName: utilities.StringValue(client.ClientName),
 			ClientURI:  utilities.StringValue(client.ClientURI),
@@ -595,19 +595,19 @@ func (s *Server) UserListAuthorizedClients(w http.ResponseWriter, r *http.Reques
 			GrantedAt:  consent.GrantedAt,
 		}
 
-		authorizedClients = append(authorizedClients, response)
+		grants = append(grants, response)
 	}
 
-	response := UserAuthorizedClientsListResponse{
-		AuthorizedClients: authorizedClients,
+	response := UserOAuthGrantsListResponse{
+		Grants: grants,
 	}
 
 	return shared.SendJSON(w, http.StatusOK, response)
 }
 
-// UserRevokeAuthorizedClient handles DELETE /user/oauth/authorizations/{client_id}
-// Revokes the user's authorization for a specific OAuth client
-func (s *Server) UserRevokeAuthorizedClient(w http.ResponseWriter, r *http.Request) error {
+// UserRevokeOAuthGrant handles DELETE /user/oauth/grants/{client_id}
+// Revokes the user's OAuth grant for a specific client
+func (s *Server) UserRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	user := shared.GetUser(ctx)
 
@@ -635,7 +635,7 @@ func (s *Server) UserRevokeAuthorizedClient(w http.ResponseWriter, r *http.Reque
 	}
 
 	if consent == nil {
-		return apierrors.NewNotFoundError(apierrors.ErrorCodeOAuthConsentNotFound, "No active authorization found for this client")
+		return apierrors.NewNotFoundError(apierrors.ErrorCodeOAuthConsentNotFound, "No active grant found for this client")
 	}
 
 	// Revoke the consent in a transaction
@@ -653,7 +653,7 @@ func (s *Server) UserRevokeAuthorizedClient(w http.ResponseWriter, r *http.Reque
 		// Create audit log entry
 		if terr := models.NewAuditLogEntry(s.config.AuditLog, r, tx, user, models.TokenRevokedAction, "", map[string]interface{}{
 			"oauth_client_id": clientID.String(),
-			"action":          "revoke_oauth_authorization",
+			"action":          "revoke_oauth_grant",
 		}); terr != nil {
 			return terr
 		}
@@ -662,7 +662,7 @@ func (s *Server) UserRevokeAuthorizedClient(w http.ResponseWriter, r *http.Reque
 	})
 
 	if err != nil {
-		return apierrors.NewInternalServerError("Error revoking authorization").WithInternalError(err)
+		return apierrors.NewInternalServerError("Error revoking grant").WithInternalError(err)
 	}
 
 	w.WriteHeader(http.StatusNoContent)

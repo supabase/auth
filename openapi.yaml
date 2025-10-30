@@ -820,11 +820,11 @@ paths:
                   value:
                     error_code: email_conflict_identity_not_deletable
 
-  /user/oauth/authorizations:
+  /user/oauth/grants:
     get:
-      summary: List authorized OAuth clients
+      summary: List OAuth grants
       description: >
-        Retrieves a list of all OAuth clients that the authenticated user has authorized. Only available when OAuth server is enabled.
+        Retrieves a list of all OAuth grants that the authenticated user has authorized. Only available when OAuth server is enabled.
       tags:
         - user
         - oauth-server
@@ -833,13 +833,13 @@ paths:
           UserAuth: []
       responses:
         200:
-          description: List of authorized OAuth clients
+          description: List of user's OAuth grants
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  authorized_clients:
+                  grants:
                     type: array
                     items:
                       type: object
@@ -867,13 +867,13 @@ paths:
                         granted_at:
                           type: string
                           format: date-time
-                          description: Timestamp when authorization was granted
+                          description: Timestamp when grant was authorized
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
           $ref: "#/components/responses/ForbiddenResponse"
 
-  /user/oauth/authorizations/{client_id}:
+  /user/oauth/grants/{client_id}:
     parameters:
       - name: client_id
         in: path
@@ -883,9 +883,9 @@ paths:
           type: string
           format: uuid
     delete:
-      summary: Revoke OAuth client authorization
+      summary: Revoke OAuth grant
       description: >
-        Revokes the user's authorization for a specific OAuth client. This will:
+        Revokes the user's OAuth grant for a specific client. This will:
         - Mark the consent as revoked
         - Delete all active sessions associated with this OAuth client
         - Invalidate all refresh tokens for those sessions
@@ -899,13 +899,13 @@ paths:
           UserAuth: []
       responses:
         204:
-          description: Authorization successfully revoked
+          description: Grant successfully revoked
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
           $ref: "#/components/responses/ForbiddenResponse"
         404:
-          description: No active authorization found for this client
+          description: No active grant found for this client
           content:
             application/json:
               schema:
@@ -915,7 +915,7 @@ paths:
                   summary: oauth_consent_not_found
                   value:
                     error_code: oauth_consent_not_found
-                    msg: No active authorization found for this client
+                    msg: No active grant found for this client
 
   /reauthenticate:
     post:
