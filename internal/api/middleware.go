@@ -296,6 +296,51 @@ func (a *API) requireSAMLEnabled(w http.ResponseWriter, req *http.Request) (cont
 	return ctx, nil
 }
 
+// requireSCIMEnabled ensures SCIM is enabled
+func (a *API) requireSCIMEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	if !a.config.SCIM.Enabled {
+		return nil, apierrors.NewNotFoundError(apierrors.ErrorCodeValidationFailed, "SCIM is disabled")
+	}
+	return ctx, nil
+}
+
+const scimProviderContextKey = contextKey("scim_provider_id")
+
+func withSCIMProvider(ctx context.Context, providerID string) context.Context {
+	return context.WithValue(ctx, scimProviderContextKey, providerID)
+}
+
+func getSCIMProvider(ctx context.Context) string {
+	if val := ctx.Value(scimProviderContextKey); val != nil {
+		if providerID, ok := val.(string); ok {
+			return providerID
+		}
+	}
+	return ""
+}
+
+// requireSCIMAuth authenticates SCIM requests via Bearer token from scim_providers table
+func (a *API) requireSCIMAuth(w http.ResponseWriter, req *http.Request) (context.Context, error) {
+	ctx := req.Context()
+	db := a.db.WithContext(ctx)
+
+	// Extract Bearer token
+	authz := req.Header.Get("Authorization")
+	if m := bearerRegexp.FindStringSubmatch(authz); len(m) == 2 {
+		token := m[1]
+
+		// Look up provider by token in database
+		provider, err := models.FindSCIMProviderByToken(db, token)
+		if err == nil && provider != nil {
+			// Use provider UUID as the stable provider ID
+			return withSCIMProvider(ctx, provider.ID.String()), nil
+		}
+	}
+
+	return nil, apierrors.NewForbiddenError(apierrors.ErrorCodeInvalidCredentials, "Invalid SCIM credentials")
+}
+
 func (a *API) requireManualLinkingEnabled(w http.ResponseWriter, req *http.Request) (context.Context, error) {
 	ctx := req.Context()
 	if !a.config.Security.ManualLinkingEnabled {

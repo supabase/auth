@@ -352,6 +352,7 @@ type GlobalConfiguration struct {
 	MFA             MFAConfiguration         `json:"MFA"`
 	SAML            SAMLConfiguration        `json:"saml"`
 	CORS            CORSConfiguration        `json:"cors"`
+	SCIM            SCIMConfiguration        `json:"scim"`
 
 	Experimental ExperimentalConfiguration `json:"experimental"`
 	Reloading    ReloadingConfiguration    `json:"reloading"`
@@ -380,6 +381,16 @@ func (c *CORSConfiguration) AllAllowedHeaders(defaults []string) []string {
 
 	return result
 }
+
+// SCIMConfiguration holds configuration for the SCIM server.
+type SCIMConfiguration struct {
+	Enabled         bool   `json:"enabled"`
+	BaseURL         string `json:"base_url" split_words:"true"`
+	DefaultAudience string `json:"default_audience" split_words:"true"`
+	BanOnDeactivate bool   `json:"ban_on_deactivate" split_words:"true" default:"true"`
+}
+
+func (c *SCIMConfiguration) Validate() error { return nil }
 
 // EmailContentConfiguration holds the configuration for emails, both subjects and template URLs.
 type EmailContentConfiguration struct {
@@ -1254,6 +1265,7 @@ func (c *GlobalConfiguration) Validate() error {
 		&c.Sessions,
 		&c.Hook,
 		&c.JWT.Keys,
+		&c.SCIM,
 	}
 
 	for _, validatable := range validatables {

@@ -78,6 +78,12 @@ func HandleResponseError(err error, w http.ResponseWriter, r *http.Request) {
 	log := observability.GetLogEntry(r).Entry
 	errorID := utilities.GetRequestID(r.Context())
 
+	// Handle SCIM errors first (before API versioning)
+	if IsSCIMError(err) {
+		WriteSCIMError(w, err)
+		return
+	}
+
 	apiVersion, averr := DetermineClosestAPIVersion(r.Header.Get(APIVersionHeaderName))
 	if averr != nil {
 		log.WithError(averr).Warn("Invalid version passed to " + APIVersionHeaderName + " header, defaulting to initial version")
