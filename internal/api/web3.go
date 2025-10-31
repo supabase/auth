@@ -200,7 +200,7 @@ func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *htt
 		},
 	})
 
-	return sendJSON(w, http.StatusOK, token)
+	return sendTokenJSON(w, http.StatusOK, token)
 }
 
 func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *http.Request, params *Web3GrantParams) error {
@@ -335,5 +335,5 @@ func (a *API) web3GrantEthereum(ctx context.Context, w http.ResponseWriter, r *h
 			return err
 		}
 	}
-	return sendJSON(w, http.StatusOK, token)
+	return sendTokenJSON(w, http.StatusOK, token)
 }
