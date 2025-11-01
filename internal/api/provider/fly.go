@@ -65,8 +65,8 @@ func NewFlyProvider(ext conf.OAuthProviderConfiguration, scopes string) (OAuthPr
 	}, nil
 }
 
-func (p flyProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return p.Exchange(context.Background(), code)
+func (p flyProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return p.Exchange(context.Background(), code, opts...)
 }
 
 func (p flyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -100,4 +100,8 @@ func (p flyProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserP
 		},
 	}
 	return data, nil
+}
+// RequiresPKCE returns false as this provider does not require PKCE
+func (p *flyProvider) RequiresPKCE() bool {
+	return false
 }

@@ -59,8 +59,8 @@ func NewBitbucketProvider(ext conf.OAuthProviderConfiguration) (OAuthProvider, e
 	}, nil
 }
 
-func (g bitbucketProvider) GetOAuthToken(code string) (*oauth2.Token, error) {
-	return g.Exchange(context.Background(), code)
+func (g bitbucketProvider) GetOAuthToken(code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
+	return g.Exchange(context.Background(), code, opts...)
 }
 
 func (g bitbucketProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (*UserProvidedData, error) {
@@ -101,4 +101,8 @@ func (g bitbucketProvider) GetUserData(ctx context.Context, tok *oauth2.Token) (
 	}
 
 	return data, nil
+}
+// RequiresPKCE returns false as this provider does not require PKCE
+func (p *bitbucketProvider) RequiresPKCE() bool {
+	return false
 }

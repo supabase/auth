@@ -23,6 +23,7 @@ type FlowState struct {
 	ProviderType         string     `json:"provider_type" db:"provider_type"`
 	ProviderAccessToken  string     `json:"provider_access_token" db:"provider_access_token"`
 	ProviderRefreshToken string     `json:"provider_refresh_token" db:"provider_refresh_token"`
+	ProviderCodeVerifier string     `json:"provider_code_verifier" db:"provider_code_verifier"` // PKCE code_verifier for external provider communication
 	AuthCodeIssuedAt     *time.Time `json:"auth_code_issued_at" db:"auth_code_issued_at"`
 	CreatedAt            time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at" db:"updated_at"`
@@ -77,7 +78,7 @@ func (FlowState) TableName() string {
 	return tableName
 }
 
-func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID) *FlowState {
+func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeChallengeMethod, authenticationMethod AuthenticationMethod, userID *uuid.UUID, providerCodeVerifier string) *FlowState {
 	id := uuid.Must(uuid.NewV4())
 	authCode := uuid.Must(uuid.NewV4())
 	flowState := &FlowState{
@@ -88,6 +89,7 @@ func NewFlowState(providerType, codeChallenge string, codeChallengeMethod CodeCh
 		AuthCode:             authCode.String(),
 		AuthenticationMethod: authenticationMethod.String(),
 		UserID:               userID,
+		ProviderCodeVerifier: providerCodeVerifier,
 	}
 	return flowState
 }
@@ -130,6 +132,13 @@ func FindFlowStateByUserID(tx *storage.Connection, id string, authenticationMeth
 
 func (f *FlowState) VerifyPKCE(codeVerifier string) error {
 	return security.VerifyPKCEChallenge(f.CodeChallenge, f.CodeChallengeMethod, codeVerifier)
+}
+
+// IsUserPKCEFlow returns true if the user explicitly requested PKCE flow
+// by providing a code_challenge. This is different from FlowState simply
+// existing, which might be due to the provider requiring PKCE internally.
+func (f *FlowState) IsUserPKCEFlow() bool {
+	return f != nil && f.CodeChallenge != ""
 }
 
 func (f *FlowState) IsExpired(expiryDuration time.Duration) bool {
