@@ -58,6 +58,8 @@ func ParseIDToken(ctx context.Context, provider *oidc.Provider, config *oidc.Con
 		token, data, err = parseLinkedinIDToken(token)
 	case IssuerKakao:
 		token, data, err = parseKakaoIDToken(token)
+	case IssuerLine:
+		token, data, err = parseLineIDToken(token)
 	case IssuerVercelMarketplace:
 		token, data, err = parseVercelMarketplaceIDToken(token)
 	case IssuerFacebook:
@@ -396,6 +398,49 @@ func parseKakaoIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, e
 		PreferredUsername: claims.Nickname,
 		ProviderId:        token.Subject,
 		Picture:           claims.Picture,
+	}
+
+	return token, &data, nil
+}
+
+type LineIDTokenClaims struct {
+	jwt.RegisteredClaims
+
+	Email         string `json:"email"`
+	EmailVerified bool   `json:"email_verified"`
+	Name          string `json:"name"`
+	Picture       string `json:"picture"`
+}
+
+func parseLineIDToken(token *oidc.IDToken) (*oidc.IDToken, *UserProvidedData, error) {
+	var claims LineIDTokenClaims
+	if err := token.Claims(&claims); err != nil {
+		return nil, nil, err
+	}
+
+	var data UserProvidedData
+
+	if claims.Email != "" {
+		data.Emails = append(data.Emails, Email{
+			Email:    claims.Email,
+			Verified: claims.EmailVerified,
+			Primary:  true,
+		})
+	}
+
+	data.Metadata = &Claims{
+		Issuer:            token.Issuer,
+		Subject:           token.Subject,
+		Name:              claims.Name,
+		PreferredUsername: claims.Name,
+		Picture:           claims.Picture,
+		Email:             claims.Email,
+		EmailVerified:     claims.EmailVerified,
+		ProviderId:        token.Subject,
+
+		// To be deprecated
+		AvatarURL: claims.Picture,
+		FullName:  claims.Name,
 	}
 
 	return token, &data, nil
