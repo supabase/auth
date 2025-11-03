@@ -605,7 +605,7 @@ func (s *Server) UserListOAuthGrants(w http.ResponseWriter, r *http.Request) err
 	return shared.SendJSON(w, http.StatusOK, response)
 }
 
-// UserRevokeOAuthGrant handles DELETE /user/oauth/grants/{client_id}
+// UserRevokeOAuthGrant handles DELETE /user/oauth/grants?client_id=...
 // Revokes the user's OAuth grant for a specific client
 func (s *Server) UserRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
@@ -615,9 +615,9 @@ func (s *Server) UserRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) er
 		return apierrors.NewForbiddenError(apierrors.ErrorCodeBadJWT, "authentication required")
 	}
 
-	clientIDStr := chi.URLParam(r, "client_id")
+	clientIDStr := r.URL.Query().Get("client_id")
 	if clientIDStr == "" {
-		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "client_id is required")
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "client_id query parameter is required")
 	}
 
 	// Parse client_id as UUID

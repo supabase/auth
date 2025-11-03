@@ -266,7 +266,7 @@ func NewAPIWithVersion(globalConfig *conf.GlobalConfiguration, db *storage.Conne
 			if globalConfig.OAuthServer.Enabled {
 				r.Route("/oauth/grants", func(r *router) {
 					r.Get("/", api.oauthServer.UserListOAuthGrants)
-					r.Delete("/{client_id}", api.oauthServer.UserRevokeOAuthGrant)
+					r.Delete("/", api.oauthServer.UserRevokeOAuthGrant)
 				})
 			}
 		})

@@ -583,16 +583,11 @@ func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrant() {
 	// Create a session for this OAuth client
 	session := ts.createTestSession(user.ID.String(), client.ID.String())
 
-	// Create HTTP request
-	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants/"+client.ID.String(), nil)
+	// Create HTTP request with query parameter
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants?client_id="+client.ID.String(), nil)
 
 	// Add user to context
 	ctx := shared.WithUser(req.Context(), user)
-
-	// Mock chi URL param
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("client_id", client.ID.String())
-	ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()
@@ -623,16 +618,11 @@ func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrantNotFound() {
 	// Create a client but don't create a consent
 	client, _ := ts.createTestOAuthClient()
 
-	// Create HTTP request
-	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants/"+client.ID.String(), nil)
+	// Create HTTP request with query parameter
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants?client_id="+client.ID.String(), nil)
 
 	// Add user to context
 	ctx := shared.WithUser(req.Context(), user)
-
-	// Mock chi URL param
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("client_id", client.ID.String())
-	ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()
@@ -647,16 +637,11 @@ func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrantInvalidClientID() {
 	// Create test user
 	user := ts.createTestUser("test5@example.com")
 
-	// Create HTTP request with invalid client ID
-	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants/invalid-uuid", nil)
+	// Create HTTP request with invalid client ID query parameter
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants?client_id=invalid-uuid", nil)
 
 	// Add user to context
 	ctx := shared.WithUser(req.Context(), user)
-
-	// Mock chi URL param with invalid UUID
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("client_id", "invalid-uuid")
-	ctx = context.WithValue(ctx, chi.RouteCtxKey, rctx)
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()
@@ -671,13 +656,7 @@ func (ts *OAuthClientTestSuite) TestUserRevokeOAuthGrantNoAuth() {
 	// Test without user in context (unauthenticated)
 	client, _ := ts.createTestOAuthClient()
 
-	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants/"+client.ID.String(), nil)
-
-	// Mock chi URL param
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("client_id", client.ID.String())
-	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
-	req = req.WithContext(ctx)
+	req := httptest.NewRequest(http.MethodDelete, "/user/oauth/grants?client_id="+client.ID.String(), nil)
 
 	w := httptest.NewRecorder()
 

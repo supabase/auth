@@ -872,16 +872,6 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
           $ref: "#/components/responses/ForbiddenResponse"
-
-  /user/oauth/grants/{client_id}:
-    parameters:
-      - name: client_id
-        in: path
-        required: true
-        description: The OAuth client identifier
-        schema:
-          type: string
-          format: uuid
     delete:
       summary: Revoke OAuth grant
       description: >
@@ -897,9 +887,29 @@ paths:
       security:
         - APIKeyAuth: []
           UserAuth: []
+      parameters:
+        - name: client_id
+          in: query
+          required: true
+          description: The OAuth client identifier
+          schema:
+            type: string
+            format: uuid
       responses:
         204:
           description: Grant successfully revoked
+        400:
+          description: Missing or invalid client_id parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorSchema"
+              examples:
+                validation_failed:
+                  summary: validation_failed
+                  value:
+                    error_code: validation_failed
+                    msg: client_id query parameter is required
         401:
           $ref: "#/components/responses/UnauthorizedResponse"
         403:
