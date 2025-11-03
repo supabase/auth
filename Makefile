@@ -42,10 +42,10 @@ deps: ## Install dependencies.
 	@go mod verify
 
 migrate_dev: ## Run database migrations for development.
-	hack/migrate.sh postgres
+	GOFLAGS=-tags=purego,gofuzz hack/migrate.sh postgres
 
 migrate_test: ## Run database migrations for test.
-	hack/migrate.sh postgres
+	GOFLAGS=-tags=purego,gofuzz hack/migrate.sh postgres
 
 test: build ## Run tests.
 	go test $(CHECK_FILES) -coverprofile=coverage.out -coverpkg ./... -p 1 -race -v -count=1

@@ -10,6 +10,7 @@ services:
       - '9100:9100'
     environment:
       - GOTRUE_DB_MIGRATIONS_PATH=/go/src/github.com/supabase/auth/migrations
+      - GOFLAGS=-tags=purego,gofuzz
     volumes:
       - ./:/go/src/github.com/supabase/auth
     command: CompileDaemon --build="make build" --directory=/go/src/github.com/supabase/auth --recursive=true -pattern="(.+\.go|.+\.env)" -exclude=auth -exclude=auth-arm64 -exclude=.env --command="/go/src/github.com/supabase/auth/auth -c=.env.docker"
