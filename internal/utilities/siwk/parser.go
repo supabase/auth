@@ -175,7 +175,7 @@ func ParseMessage(raw string) (*SIWKMessage, error) {
 		}
 	}
 
-	if msg.Version != "1" {
+	if msg.Version != "1" && msg.Version != "0" {
 		return nil, errUnsupportedVersion(msg.Version)
 	}
 
@@ -243,7 +243,6 @@ func (m *SIWKMessage) VerifySignature(signatureHex string) bool {
 
 func (m *SIWKMessage) VerifySignatureSchnorr(signatureHex string) bool {
 	sigBytes, err := hex.DecodeString(signatureHex)
-
 	if err != nil {
 		panic("siwk: invalid signature hex: " + err.Error())
 	}
@@ -274,6 +273,11 @@ func (m *SIWKMessage) VerifySignatureSchnorr(signatureHex string) bool {
 	if version == 0 {
 		// gt signature bytes from hex
 		var signature secp256k1.SerializedSchnorrSignature
+
+		_, err = hex.Decode(signature[:], []byte(signatureHex))
+		if err != nil {
+			panic("siwk: failed to decode signature hex: " + err.Error())
+		}
 
 		// Verify using Schnorr
 		ok, err = VerifySchnorr([]byte(m.Raw), signature[:], pkBytes)
