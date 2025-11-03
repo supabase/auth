@@ -29,7 +29,7 @@ func errUnparsableLine(index int) error {
 }
 
 func errUnsupportedVersion(got string) error {
-	return fmt.Errorf("siwk: Version value is not supported, expected 0 or 1 got %q", got)
+	return fmt.Errorf("siwk: Version value is not supported, expected 1 got %q", got)
 }
 
 func errInvalidResource(position int) error {

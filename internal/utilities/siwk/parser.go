@@ -2,15 +2,12 @@ package siwk
 
 import (
 	"encoding/hex"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/kaspanet/go-secp256k1"
 	"github.com/kaspanet/kaspad/util/bech32"
 )
@@ -175,7 +172,7 @@ func ParseMessage(raw string) (*SIWKMessage, error) {
 		}
 	}
 
-	if msg.Version != "1" && msg.Version != "0" {
+	if msg.Version != "1" {
 		return nil, errUnsupportedVersion(msg.Version)
 	}
 
@@ -202,46 +199,30 @@ func ParseMessage(raw string) (*SIWKMessage, error) {
 	return msg, nil
 }
 
-// VerifySignature validates that the signature was created by the private key
-// corresponding to the address in the message. This performs ECDSA recovery
-// which is computationally expensive, so it should be called only after
-// ParseMessage has validated the message structure.
+// VerifySignature validates a cryptographic signature against the SIWK message using the appropriate
+// signature algorithm based on the Kaspa address version. The method supports two signature schemes:
+// - Version 0 addresses: Uses Schnorr signatures with 32-byte public keys
+// - Version 1 addresses: Uses ECDSA signatures with 33-byte public keys
 //
-// The signature must be a 65-byte hex string in the format: 0x{R}{S}{V}
-// where R and S are 32 bytes each and V is 1 byte.
+// The method performs comprehensive validation including:
+// - Signature hex decoding and length validation (must be 64 bytes)
+// - Kaspa address parsing and version checking (supports versions 0 and 1)
+// - Public key length validation based on address version
+// - Cryptographic signature verification using the raw message content
 //
-// Returns true if the recovered address matches the message address (case-insensitive).
+// Parameters:
+//   - signatureHex: A hexadecimal string representation of the signature (must decode to 64 bytes)
+//
+// Returns:
+//   - bool: true if the signature is valid for the message and address, false otherwise
+//
+// Panics:
+//   - If signature hex is invalid or not 64 bytes long
+//   - If the Kaspa address format is invalid
+//   - If the address version is unsupported (not 0 or 1)
+//   - If public key length doesn't match the expected length for the address version
+//   - If signature verification operations fail
 func (m *SIWKMessage) VerifySignature(signatureHex string) bool {
-	sig, err := hexutil.Decode(signatureHex)
-	if err != nil || len(sig) != 64 {
-		panic("siwk: signature must be a 64-byte hex string")
-	}
-
-	// Create signature in [R || S || V] format
-	signature := make([]byte, 64)
-	copy(signature, sig)
-
-	// Normalize V if needed
-	// #nosec G602
-	if signature[64] >= 27 {
-		signature[64] -= 27 // #nosec G602
-	}
-
-	hash := accounts.TextHash([]byte(m.Raw))
-
-	// Recover public key
-	pubKey, err := crypto.Ecrecover(hash, signature)
-	if err != nil {
-		panic("siwk: failed to recover public key: " + err.Error())
-	}
-
-	// Convert to address
-	recoveredAddr := common.BytesToAddress(crypto.Keccak256(pubKey[1:])[12:])
-
-	return strings.EqualFold(recoveredAddr.Hex(), m.Address)
-}
-
-func (m *SIWKMessage) VerifySignatureSchnorr(signatureHex string) bool {
 	sigBytes, err := hex.DecodeString(signatureHex)
 	if err != nil {
 		panic("siwk: invalid signature hex: " + err.Error())
@@ -261,11 +242,11 @@ func (m *SIWKMessage) VerifySignatureSchnorr(signatureHex string) bool {
 	}
 
 	if version == 0 && len(pkBytes) != 32 {
-		panic("siwk: invalid schnorr public key length for version 0, expected 32 bytes, found:" + string(len(pkBytes)))
+		panic(fmt.Sprintf("siwk: invalid schnorr public key length for version 0, expected 32 bytes, found: %d", len(pkBytes)))
 	}
 
 	if version == 1 && len(pkBytes) != 33 {
-		panic("siwk: invalid schnorr public key length for version 1, expected 33 bytes, found:" + string(len(pkBytes)))
+		panic(fmt.Sprintf("siwk: invalid schnorr public key length for version 1, expected 33 bytes, found: %d", len(pkBytes)))
 	}
 
 	var ok bool

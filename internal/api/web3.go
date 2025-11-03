@@ -76,7 +76,7 @@ func (a *API) web3GrantKaspa(ctx context.Context, w http.ResponseWriter, r *http
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
 	}
 
-	if !parsedMessage.VerifySignatureSchnorr(params.Signature) {
+	if !parsedMessage.VerifySignature(params.Signature) {
 		return apierrors.NewOAuthError("invalid_grant", "Signature does not match address in message")
 	}
 
