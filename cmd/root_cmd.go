@@ -17,14 +17,19 @@ var (
 var rootCmd = cobra.Command{
 	Use: "gotrue",
 	Run: func(cmd *cobra.Command, args []string) {
+		// Always run migrate first
 		migrate(cmd, args)
+
+		// Run createIndexes in a goroutine so it doesn't block serve
+		go createIndexes(cmd, args)
+
 		serve(cmd.Context())
 	},
 }
 
 // RootCommand will setup and return the root command
 func RootCommand() *cobra.Command {
-	rootCmd.AddCommand(&serveCmd, &migrateCmd, &versionCmd, adminCmd())
+	rootCmd.AddCommand(&serveCmd, &migrateCmd, &versionCmd, adminCmd(), &createIndexesCmd)
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "base configuration file to load")
 	rootCmd.PersistentFlags().StringVarP(&watchDir, "config-dir", "d", "", "directory containing a sorted list of config files to watch for changes")
 	return &rootCmd

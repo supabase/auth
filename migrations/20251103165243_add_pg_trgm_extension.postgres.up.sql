@@ -1,0 +1,2 @@
+/* auth_migration: 20251103165243 */
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
