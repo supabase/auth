@@ -446,6 +446,7 @@ type ProviderConfiguration struct {
 
 	Web3Solana   SolanaConfiguration   `json:"web3_solana" split_words:"true"`
 	Web3Ethereum EthereumConfiguration `json:"web3_ethereum" split_words:"true"`
+	Web3Kaspa    KaspaConfiguration    `json:"web3_kaspa" split_words:"true"`
 }
 
 type SolanaConfiguration struct {
@@ -454,6 +455,11 @@ type SolanaConfiguration struct {
 }
 
 type EthereumConfiguration struct {
+	Enabled                 bool          `json:"enabled,omitempty" split_words:"true"`
+	MaximumValidityDuration time.Duration `json:"maximum_validity_duration,omitempty" default:"10m" split_words:"true"`
+}
+
+type KaspaConfiguration struct {
 	Enabled                 bool          `json:"enabled,omitempty" split_words:"true"`
 	MaximumValidityDuration time.Duration `json:"maximum_validity_duration,omitempty" default:"10m" split_words:"true"`
 }

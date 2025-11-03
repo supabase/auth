@@ -13,6 +13,7 @@ import (
 	"github.com/supabase/auth/internal/storage"
 	"github.com/supabase/auth/internal/utilities"
 	"github.com/supabase/auth/internal/utilities/siwe"
+	"github.com/supabase/auth/internal/utilities/siwk"
 	"github.com/supabase/auth/internal/utilities/siws"
 )
 
@@ -25,7 +26,7 @@ type Web3GrantParams struct {
 func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	config := a.config
 
-	if !config.External.Web3Solana.Enabled && !config.External.Web3Ethereum.Enabled {
+	if !config.External.Web3Kaspa.Enabled && !config.External.Web3Solana.Enabled && !config.External.Web3Ethereum.Enabled {
 		return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeWeb3ProviderDisabled, "Web3 provider is disabled")
 	}
 
@@ -35,6 +36,11 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	}
 
 	switch params.Chain {
+	case "kaspa":
+		if !config.External.Web3Kaspa.Enabled {
+			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeWeb3ProviderDisabled, "Kaspa Web3 provider is disabled")
+		}
+		return a.web3GrantKaspa(ctx, w, r, params)
 	case "solana":
 		if !config.External.Web3Solana.Enabled {
 			return apierrors.NewUnprocessableEntityError(apierrors.ErrorCodeWeb3ProviderDisabled, "Solana Web3 provider is disabled")
@@ -49,6 +55,141 @@ func (a *API) Web3Grant(ctx context.Context, w http.ResponseWriter, r *http.Requ
 		return apierrors.NewBadRequestError(apierrors.ErrorCodeWeb3UnsupportedChain, "Unsupported chain")
 	}
 
+}
+
+func (a *API) web3GrantKaspa(ctx context.Context, w http.ResponseWriter, r *http.Request, params *Web3GrantParams) error {
+	config := a.config
+	db := a.db.WithContext(ctx)
+
+	if len(params.Message) < 64 {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "message is too short")
+	} else if len(params.Message) > 20*1024 {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "message must not exceed 20KB")
+	}
+
+	if len(strings.TrimSpace(params.Signature)) != 128 {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, "signature must be 64 bytes long, encoded as a 128 character-long hexadecimal string")
+	}
+
+	parsedMessage, err := siwk.ParseMessage(params.Message)
+	if err != nil {
+		return apierrors.NewBadRequestError(apierrors.ErrorCodeValidationFailed, err.Error())
+	}
+
+	if !parsedMessage.VerifySignatureSchnorr(params.Signature) {
+		return apierrors.NewOAuthError("invalid_grant", "Signature does not match address in message")
+	}
+
+	if parsedMessage.URI.Scheme != "https" && parsedMessage.URI.Hostname() != "localhost" {
+		return apierrors.NewOAuthError("invalid_grant", "Signed Kaspa message is using URI which does not use HTTPS")
+	}
+
+	if !utilities.IsRedirectURLValid(config, parsedMessage.URI.String()) {
+		return apierrors.NewOAuthError("invalid_grant", "Signed Kaspa message is using URI which is not allowed on this server, message was signed for another app")
+	}
+
+	if parsedMessage.URI.Hostname() != "localhost" && (parsedMessage.URI.Host != parsedMessage.Domain || !utilities.IsRedirectURLValid(config, "https://"+parsedMessage.Domain+"/")) {
+		return apierrors.NewOAuthError("invalid_grant", "Signed Kaspa message is using a Domain that does not match the one in URI which is not allowed on this server")
+	}
+
+	now := a.Now()
+
+	if parsedMessage.NotBefore != nil && !parsedMessage.NotBefore.IsZero() && now.Before(*parsedMessage.NotBefore) {
+		return apierrors.NewOAuthError("invalid_grant", "Signed Kaspa message becomes valid in the future")
+	}
+
+	if parsedMessage.NotBefore != nil && parsedMessage.ExpirationTime != nil && !parsedMessage.ExpirationTime.IsZero() && now.After(*parsedMessage.ExpirationTime) {
+		return apierrors.NewOAuthError("invalid_grant", "Signed Kaspa message is expired")
+	}
+
+	latestExpiryAt := parsedMessage.IssuedAt.Add(config.External.Web3Kaspa.MaximumValidityDuration)
+
+	if now.After(latestExpiryAt) {
+		return apierrors.NewOAuthError("invalid_grant", "Kaspa message was issued too long ago")
+	}
+
+	earliestIssuedAt := parsedMessage.IssuedAt.Add(-config.External.Web3Kaspa.MaximumValidityDuration)
+
+	if now.Before(earliestIssuedAt) {
+		return apierrors.NewOAuthError("invalid_grant", "Kaspa message was issued too far in the future")
+	}
+
+	const providerType = "web3"
+	providerId := strings.Join([]string{
+		providerType,
+		params.Chain,
+		parsedMessage.Address,
+	}, ":")
+
+	userData := provider.UserProvidedData{
+		Metadata: &provider.Claims{
+			CustomClaims: map[string]interface{}{
+				"address":   parsedMessage.Address,
+				"chain":     params.Chain,
+				"network":   parsedMessage.NetworkID,
+				"domain":    parsedMessage.Domain,
+				"statement": parsedMessage.Statement,
+			},
+			Subject: providerId,
+		},
+		Emails: []provider.Email{},
+	}
+
+	var createdUser bool
+	var token *AccessTokenResponse
+	var grantParams models.GrantParams
+	grantParams.FillGrantParams(r)
+
+	if err := a.triggerBeforeUserCreatedExternal(r, db, &userData, providerType); err != nil {
+		return err
+	}
+
+	var user *models.User
+	err = db.Transaction(func(tx *storage.Connection) error {
+		var terr error
+		var decision models.AccountLinkingDecision
+		decision, user, terr = a.createAccountFromExternalIdentity(tx, r, &userData, providerType, true)
+		if terr != nil {
+			return terr
+		}
+		createdUser = decision == models.CreateAccount
+
+		if terr := models.NewAuditLogEntry(config.AuditLog, r, tx, user, models.LoginAction, "", map[string]interface{}{
+			"provider": providerType,
+			"chain":    params.Chain,
+			"network":  parsedMessage.NetworkID,
+			"address":  parsedMessage.Address,
+			"domain":   parsedMessage.Domain,
+			"uri":      parsedMessage.URI,
+		}); terr != nil {
+			return terr
+		}
+
+		token, terr = a.issueRefreshToken(r, tx, user, models.Web3, grantParams)
+		if terr != nil {
+			return terr
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		switch err.(type) {
+		case *storage.CommitWithError:
+			return err
+		case *HTTPError:
+			return err
+		default:
+			return apierrors.NewOAuthError("server_error", "Internal Server Error").WithInternalError(err)
+		}
+	}
+
+	if createdUser {
+		if err := a.triggerAfterUserCreated(r, db, user); err != nil {
+			return err
+		}
+	}
+	return sendJSON(w, http.StatusOK, token)
 }
 
 func (a *API) web3GrantSolana(ctx context.Context, w http.ResponseWriter, r *http.Request, params *Web3GrantParams) error {
