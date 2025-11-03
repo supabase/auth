@@ -8,7 +8,7 @@ else
 	VERSION=$(shell git describe --tags)
 endif
 
-FLAGS=-ldflags "-X github.com/supabase/auth/internal/utilities.Version=$(VERSION)" -buildvcs=false
+FLAGS=-tags "purego gofuzz" -ldflags "-X github.com/supabase/auth/internal/utilities.Version=$(VERSION)" -buildvcs=false
 
 ifneq ($(shell docker compose version 2>/dev/null),)
   DOCKER_COMPOSE=docker compose
@@ -24,7 +24,10 @@ help: ## Show this help.
 all: vet sec static build ## Run the tests and build the binary.
 
 build: deps ## Build the binary.
-	CGO_ENABLED=0 go build $(FLAGS)
+	CGO_ENABLED=1 go build $(FLAGS)
+# 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o auth-arm64
+
+build-linux-nocgo:
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(FLAGS) -o auth-arm64
 
 build-strip: deps ## Build a stripped binary, for which the version file needs to be rewritten.
