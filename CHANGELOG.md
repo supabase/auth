@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.182.0](https://github.com/supabase/auth/compare/v2.181.0...v2.182.0) (2025-11-05)
+
+
+### Features
+
+* **oauthserver:** add authorization list and revoke endpoints ([#2232](https://github.com/supabase/auth/issues/2232)) ([cc640b2](https://github.com/supabase/auth/commit/cc640b277989d57b39f3805cd9433ef4fe16bf83))
+
+
+### Bug Fixes
+
+* hostname can be empty with redirect urls ([#2241](https://github.com/supabase/auth/issues/2241)) ([f5a4cba](https://github.com/supabase/auth/commit/f5a4cbac73de28cc4b04c5c9725b70517cb131d3))
+
 ## [2.181.0](https://github.com/supabase/auth/compare/v2.180.0...v2.181.0) (2025-10-31)
 
 
