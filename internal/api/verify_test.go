@@ -674,7 +674,7 @@ func (ts *VerifyTestSuite) TestVerifySignupWithRedirectURLContainedPath() {
 		{
 			desc:                "redirect with allowed deep-link url correctly without a hostname",
 			siteURL:             "http://localhost:3000",
-			uriAllowList:        []string{"com.myapp://**"},
+			uriAllowList:        []string{"com.myapp://", "com.myapp://**"},
 			requestredirectURL:  "com.myapp://",
 			expectedredirectURL: "com.myapp://",
 		},
