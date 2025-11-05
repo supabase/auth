@@ -671,6 +671,13 @@ func (ts *VerifyTestSuite) TestVerifySignupWithRedirectURLContainedPath() {
 			requestredirectURL:  "http://japanese。.example.com/abc",
 			expectedredirectURL: "http://localhost:3000",
 		},
+		{
+			desc:                "redirect with allowed deep-link url correctly without a hostname",
+			siteURL:             "http://localhost:3000",
+			uriAllowList:        []string{"com.myapp://**"},
+			requestredirectURL:  "com.myapp://",
+			expectedredirectURL: "com.myapp://",
+		},
 	}
 
 	for _, tC := range testCases {
