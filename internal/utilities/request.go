@@ -106,7 +106,7 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 		return false
 	} else if ip := net.ParseIP(refurl.Hostname()); ip != nil {
 		return ip.IsLoopback()
-	} else if regularHostname != "" && !regularHostname.MatchString(refurl.Hostname()) {
+	} else if refurl.Scheme != "" && strings.HasPrefix(strings.ToLower(refurl.Scheme), "http") && !regularHostname.MatchString(refurl.Hostname()) {
 		// hostname uses characters that are not typically used
 		return false
 	}
