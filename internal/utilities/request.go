@@ -101,7 +101,7 @@ func IsRedirectURLValid(config *conf.GlobalConfiguration, redirectURL string) bo
 		return false
 	}
 
-	scheme := strings.ToLower()
+	scheme := strings.ToLower(refurl.Scheme)
 	isHTTP := scheme == "http:" || scheme == "https:"
 
 	if decimalIPAddressPattern.MatchString(refurl.Hostname()) {
